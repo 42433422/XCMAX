@@ -11,6 +11,8 @@ import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { useModsStore } from '@/stores/mods'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
@@ -55,11 +57,11 @@ export interface ChatOrchestrationRemoteRoundDeps {
 }
 
 export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRoundDeps) {
+  const modsStore = useModsStore()
   const {
     sessionId,
     messages,
     addMessage,
-    saveMessage,
     queueVoice,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
@@ -143,7 +145,18 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
   async function executeRemoteChatRound(remoteMessages: string[], opts?: { fromWriteUnlock?: boolean }, scope?: ChatRequestScope) {
     if (!remoteMessages.length) return
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
-    const round = chatSessionActivity.forSession(requestScope.sessionId)
+    const identity = requestScope.identity ?? resolveChatIdentity(String(modsStore.activeModId || ''))
+    const isOwnerCurrent = () => identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    if (!isOwnerCurrent()) return
+    const activity = chatSessionActivity.forSession(requestScope.sessionId)
+    const round = {
+      isActive: () => isOwnerCurrent() && activity.isActive(),
+      setLoading: (value: boolean) => { if (isOwnerCurrent()) activity.setLoading(value) },
+      setStreaming: (value: boolean) => { if (isOwnerCurrent()) activity.setStreaming(value) },
+    }
+    const saveMessage: ChatMessagesApi['saveMessage'] = async (...args) => {
+      if (isOwnerCurrent()) await deps.saveMessage(...args)
+    }
     const addRoundMessage = async (text: string, extras?: UiChatMessageExtras) => {
       if (round.isActive()) addMessage(text, 'ai', extras, { speak: ttsEnabled.value })
     }
@@ -160,8 +173,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       startWaitProgressTimer(requestScope.sessionId)
       try {
         const result = await generateAndInstallAiMod(aiModBrief, {
-          onProgress: (progress) => setLoadingProgress(progress.label, requestScope.sessionId),
+          isCurrent: isOwnerCurrent,
+          onProgress: (progress) => { if (isOwnerCurrent()) setLoadingProgress(progress.label, requestScope.sessionId) },
         })
+        if (!isOwnerCurrent()) return
         const responseText = `已生成并安装自用 MOD「${result.modId}」。${result.installMessage}`
         const extras: UiChatMessageExtras = {
           workflowAction: 'mod_generated_and_installed',
@@ -185,7 +200,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         ])
       } finally {
         round.setLoading(false)
-        stopLoadingProgress(requestScope.sessionId)
+        if (isOwnerCurrent()) stopLoadingProgress(requestScope.sessionId)
       }
       return
     }
@@ -208,6 +223,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       startWaitProgressTimer(requestScope.sessionId)
       try {
         const resp = await productsApi.searchProducts(kwFast)
+        if (!isOwnerCurrent()) return
         const respRow = asRecord(resp)
         if (resp && resp.success === false) {
           throw new Error(String(resp.message || '产品库查询失败'))
@@ -269,10 +285,11 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         /* 回退到下方 unified / chat 全链路 */
       } finally {
         round.setLoading(false)
-        stopLoadingProgress(requestScope.sessionId)
+        if (isOwnerCurrent()) stopLoadingProgress(requestScope.sessionId)
       }
     }
 
+    if (!isOwnerCurrent()) return
     if (remoteMessages.length === 1 && isChatStreamEnabled()) {
       const primaryForStream = remoteMessages[0] || ''
       round.setStreaming(true)
@@ -286,6 +303,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
       const syncStreamRun = (payload: unknown, attachTrace = false) => {
+        if (!isOwnerCurrent()) return
         void syncAgentRunFromPayload(payload, primaryText).then(() => {
           if (attachTrace && round.isActive() && messages.value[msgIndex] === streamMessage
             && !messages.value.slice(msgIndex + 1).some(message => message?.role === 'ai')) {
@@ -333,10 +351,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
           { ...body, message: String(body.message || primaryForStream) } as ChatRequest & Record<string, unknown>,
           { signal: controller.signal },
         )
+        if (!isOwnerCurrent()) { controller.abort(); return }
         if (!res.ok) {
           throw new Error(await parseChatStreamErrorResponse(res))
         }
         await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+          if (!isOwnerCurrent()) { controller.abort(); return }
           if (ev.type === 'token' || ev.type === 'tool_progress') {
             window.clearTimeout(killTimer)
             killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
@@ -368,6 +388,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             }
           }
         })
+        if (!isOwnerCurrent()) return
         if (sseError) {
           throw new Error(sseError)
         }
@@ -380,7 +401,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             applyPlainTextToMessageIndex(msgIndex, finalText)
           }
         }
-        if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
+        if (round.isActive() && ttsShouldSpeakThisMessage && ttsEnabled.value) {
           if (finalText.length >= ttsSpokenOffset) {
             const tail = finalText.slice(ttsSpokenOffset).trim()
             if (tail) queueVoice(tail)
@@ -429,7 +450,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         round.setStreaming(false)
         window.clearTimeout(killTimer)
         round.setLoading(false)
-        stopLoadingProgress(requestScope.sessionId)
+        if (isOwnerCurrent()) stopLoadingProgress(requestScope.sessionId)
       }
       return
     }
@@ -460,6 +481,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       } else {
         rawData = await requestChatByModeBatchWithTimeout(remoteMessages, timeoutMs, requestScope)
       }
+      if (!isOwnerCurrent()) return
       data = asPlannerPayload(rawData)
       const head = remoteMessages.length === 1 ? data : asPlannerPayload(data.results?.[0])
       const headData = asRecord(head.data)
@@ -479,9 +501,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
     } finally {
       round.setStreaming(false)
       round.setLoading(false)
-      stopLoadingProgress(requestScope.sessionId)
+      if (isOwnerCurrent()) stopLoadingProgress(requestScope.sessionId)
     }
 
+    if (!isOwnerCurrent()) return
     if (!round.isActive()) return persistDetachedPlannerResult(data, requestScope.sessionId, saveMessage)
     if (data.batch && Array.isArray(data.results)) {
       const results = data.results.map((part) => asPlannerPayload(part))
@@ -492,8 +515,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               handleChatRequiresToken(part.token_name || '', part.token_description || '', remoteMessages)
             }
             await addRoundMessage(part.response || '', responseCameFromCache(part) ? { sameAsPrevious: true } : undefined)
+            if (!round.isActive()) return
             syncTaskFromChatResponse(part, primaryText)
             await syncAgentRunFromPayload(part, primaryText)
+            if (!round.isActive()) return
             attachAgentRunTraceToLastAiMessage()
           } else {
             await addRoundMessage('处理失败: ' + (part.message || '未知错误'))
@@ -541,8 +566,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         handleChatRequiresToken(data.token_name || '', data.token_description || '', remoteMessages)
       }
       await addRoundMessage(data.response || '', responseCameFromCache(data) ? { sameAsPrevious: true } : undefined)
+      if (!round.isActive()) return
       syncTaskFromChatResponse(data, primaryText)
       await syncAgentRunFromPayload(data, primaryText)
+      if (!round.isActive()) return
       attachAgentRunTraceToLastAiMessage()
       consumeStateUpdates(data)
       attachContextSummaryToLastAiMessage()

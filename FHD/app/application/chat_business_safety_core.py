@@ -265,8 +265,8 @@ def _resolve_actor_identity(
 
     Desktop chat ``body.user_id`` values such as ``web_normal_<session>`` are
     conversation namespaces, not personnel identifiers.  They are never used
-    for employee matching.  A plain client id is retained only for trusted
-    direct/internal callers where no HTTP identity exists.
+    for employee matching. Context identity and plain client ids are retained
+    only for trusted internal callers that do not supply an HTTP request.
     """
 
     user = _authenticated_user_from_request(request)
@@ -281,6 +281,9 @@ def _resolve_actor_identity(
             display_name=str(getattr(user, "display_name", "") or "").strip(),
             workspace_scope=resolve_workspace_owner_id(request, user) or "",
         )
+
+    if request is not None:
+        return BusinessActorIdentity(authenticated=False)
 
     ctx = runtime_context if isinstance(runtime_context, dict) else {}
     local_id = str(ctx.get("authenticated_local_user_id") or ctx.get("local_user_id") or "").strip()

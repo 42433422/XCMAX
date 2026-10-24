@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from typing import Any, AsyncIterator, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -32,18 +33,15 @@ from modstore_server.multimodal_llm import messages_use_openai_multipart_content
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 _MODEL_ALIASES: dict[tuple[str, str], str] = {
-    # 小米 2026-05 模型目录已不再接受 mimo-v2-base；兼容前端/账户缓存中的旧选择。
-    ("xiaomi", "mimo-v2-base"): "mimo-v2.5-pro",
-    # 旧基准默认 / 历史 env 仍写此 ID 时，映射到当前网关支持的对话模型。
-    ("xiaomi", "MiMo-7B-RL-Think"): "mimo-v2.5-pro",
-    # 部分区域网关不报 flash；统一映射到 pro（与 services.llm 基准默认一致）
-    ("xiaomi", "mimo-v2-flash"): "mimo-v2.5-pro",
-    # 2026-06-30 下线的 V2 系列（官方替换表：platform.xiaomimimo.com/docs/.../deprecate）
-    ("xiaomi", "mimo-v2-pro"): "mimo-v2.5-pro",
-    ("xiaomi", "mimo-v2-omni"): "mimo-v2.5",
+    # 官方 V2.5 于 2026-10-21 下线；保留原账号凭证和私有兼容端点。
+    ("xiaomi", "mimo-v2.5-pro"): "mimo-v2.6-pro",
+    ("xiaomi", "mimo-v2.5"): "mimo-v2.6-flash",
+    ("xiaomi", "mimo-v2-base"): "mimo-v2.6-pro",
+    ("xiaomi", "MiMo-7B-RL-Think"): "mimo-v2.6-pro",
+    ("xiaomi", "mimo-v2-flash"): "mimo-v2.6-pro",
+    ("xiaomi", "mimo-v2-pro"): "mimo-v2.6-pro",
+    ("xiaomi", "mimo-v2-omni"): "mimo-v2.6-flash",
     ("xiaomi", "mimo-v2-tts"): "mimo-v2.5-tts",
-    # MiniMax legacy ABAB ids are no longer the platform default; keep stale
-    # account/env selections working by routing them to the current agent model.
     ("minimax", "abab6.5s-chat"): "MiniMax-M2.7",
 }
 
@@ -61,7 +59,11 @@ def _normalize_openai_base(provider: str, base_url: Optional[str]) -> str:
     return b
 
 
-def normalize_model(provider: str, model: str) -> str:
+def normalize_model(provider: str, model: str, base_url: str | None = None) -> str:
+    if provider == "xiaomi" and base_url:
+        host = (urlsplit(base_url).hostname or "").lower()
+        if host != "xiaomimimo.com" and not host.endswith(".xiaomimimo.com"):
+            return model
     return _MODEL_ALIASES.get((provider, model), model)
 
 
@@ -137,7 +139,7 @@ async def chat_dispatch(
     fallback_api_key: Optional[str] = None,
     fallback_base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    model = normalize_model(provider, model)
+    model = normalize_model(provider, model, base_url)
     has_fallback = bool(timeout_fallback_s and fallback_provider and fallback_model)
 
     async def _primary() -> Dict[str, Any]:
@@ -233,7 +235,7 @@ async def chat_dispatch(
 
     # ---- fallback
     fb_provider = str(fallback_provider)
-    fb_model = normalize_model(fb_provider, str(fallback_model))
+    fb_model = normalize_model(fb_provider, str(fallback_model), fallback_base_url or base_url)
     fb_key = str(fallback_api_key or api_key)
     fb_base = fallback_base_url or base_url
     try:
@@ -288,7 +290,7 @@ async def chat_dispatch_stream(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Any = None,
 ) -> AsyncIterator[Dict[str, Any]]:
-    model = normalize_model(provider, model)
+    model = normalize_model(provider, model, base_url)
     if messages_use_openai_multipart_content(messages) and (
         provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
         or (provider == "minimax" and is_minimax_token_plan_key(api_key))

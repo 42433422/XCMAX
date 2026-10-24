@@ -1,15 +1,9 @@
-"""员工 agent handler：多轮工具调用循环（委托 agent_loop）。
-
-历史上这里是单轮 ``_chat_completion``；现在 ``run_agent_handler`` 委托
-``agent_loop.run_employee_agent_loop`` 做真正的多轮 function-calling。
-``_chat_completion`` / ``_run_async`` 仍保留，供 executor 的认知层（cognition）单轮补全复用。
-"""
+"""Employee Agent loop and cognition completion through the shared model route."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from collections.abc import Callable
 from contextvars import copy_context
 from typing import Any
@@ -30,114 +24,22 @@ def _run_async(coro):
         return pool.submit(copy_context().run, asyncio.run, coro).result()
 
 
-def _resolve_employee_llm_config() -> dict[str, str | None]:
-    provider_override = (os.environ.get("FHD_EMPLOYEE_LLM_PROVIDER") or "").strip()
-    model_override = (os.environ.get("FHD_EMPLOYEE_LLM_MODEL") or "").strip()
-    if provider_override:
-        return {
-            "provider": provider_override,
-            "model": model_override or None,
-            "api_key": None,
-            "base_url": None,
-        }
-
-    from app.infrastructure.llm.providers.credentials import (
-        resolve_default_chat_model,
-        resolve_default_openai_provider,
-        resolve_openai_env_credentials,
-    )
-
-    api_key, base_url = resolve_openai_env_credentials()
-    return {
-        "provider": resolve_default_openai_provider(),
-        "model": model_override or resolve_default_chat_model(),
-        "api_key": api_key or None,
-        "base_url": base_url,
-    }
-
-
-def _resolve_employee_llm_fallback_config(
-    primary_provider: str,
-) -> dict[str, str | None] | None:
-    provider = (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_PROVIDER") or "").strip()
-    if not provider or provider.lower() == primary_provider.lower():
-        return None
-    return {
-        "provider": provider,
-        "model": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_MODEL") or "").strip() or None,
-        "api_key": None,
-        "base_url": (os.environ.get("FHD_EMPLOYEE_LLM_FALLBACK_BASE_URL") or "").strip() or None,
-    }
-
-
 async def _chat_completion(
     messages: list[dict[str, Any]], max_tokens: int = 4000
 ) -> dict[str, Any]:
-    """认知层单轮补全（内部 API）。
+    """Cognition uses the same owner-bound route as Planner and the Agent loop."""
+    from app.infrastructure.llm.providers.registry import get_active_provider
 
-    .. deprecated::
-        agent handler 已迁移至 ``agent_loop.run_employee_agent_loop`` 多轮循环；
-        本函数仅供 ``executor._cognition_fhd`` 认知阶段使用，勿在新代码中直接调用。
-    """
-    cfg = _resolve_employee_llm_config()
-    provider = str(cfg.get("provider") or "").strip() or "xcauto"
-    model = cfg.get("model")
-    from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
-
-    primary_error = ""
-    primary_model = str(model) if model else None
     try:
-        adapter = OpenAICompatibleAdapter(
-            provider=provider,
-            model=primary_model,
-            api_key=cfg.get("api_key"),
-            base_url=cfg.get("base_url"),
-        )
-        if not adapter.is_configured:
-            primary_error = "未配置 LLM API Key，请在设置中配置模型服务后再使用 agent 员工。"
-            primary_model = adapter.model_name
-        else:
-            return await adapter.chat_completion(messages, max_tokens=max_tokens)
-    except RECOVERABLE_ERRORS:
-        primary_error = "主模型服务暂不可用"
-        logger.warning("employee primary LLM failed; trying configured fallback")
-
-    fallback_cfg = _resolve_employee_llm_fallback_config(provider)
-    if fallback_cfg:
-        fallback_provider = str(fallback_cfg.get("provider") or "").strip()
-        fallback_model = fallback_cfg.get("model")
-        try:
-            fallback = OpenAICompatibleAdapter(
-                provider=fallback_provider,
-                model=str(fallback_model) if fallback_model else None,
-                api_key=fallback_cfg.get("api_key"),
-                base_url=fallback_cfg.get("base_url"),
-            )
-            if fallback.is_configured:
-                result = await fallback.chat_completion(messages, max_tokens=max_tokens)
-                result["_fallback_used"] = True
-                result["_primary_provider"] = provider
-                result["_primary_error"] = primary_error
-                result["_fallback_provider"] = fallback_provider
-                result["_fallback_model"] = fallback.model_name
+        provider = get_active_provider()
+        if provider is not None:
+            result = await provider.chat_completion(messages, max_tokens=max_tokens)
+            if isinstance(result, dict):
                 return result
-        except RECOVERABLE_ERRORS:
-            logger.exception("employee fallback LLM failed")
-            return {"error": f"{primary_error}；备用模型服务也暂不可用"}
-
-    if primary_error:
-        logger.warning("employee agent LLM unavailable")
-        return {
-            "error": primary_error,
-            "provider": provider,
-            "model": primary_model,
-            "error_code": "employee_llm_not_configured",
-            "retryable": False,
-        }
+    except RECOVERABLE_ERRORS:
+        logger.warning("employee model request failed")
     return {
-        "error": "employee LLM unavailable",
-        "provider": provider,
-        "model": primary_model,
+        "error": "当前会话的模型服务不可用，请检查模型配置或重新登录。",
         "error_code": "employee_llm_not_configured",
         "retryable": False,
     }

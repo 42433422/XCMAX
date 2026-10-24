@@ -1,6 +1,5 @@
 <template>
   <div class="im-messenger">
-    <SharedIssueAcceptancePanel />
     <p v-if="isCustomerEnterpriseCs() && (enterpriseCsError || enterpriseCsUnconfirmed)" role="alert">
       {{ enterpriseCsError || '发送结果待核对，请先检查会话，勿重复发送。' }} <router-link to="/settings">检查账号与连接</router-link>
       <button v-if="enterpriseCsUnconfirmed" type="button" @click="confirmCsReconciliation">已核对会话，解除重复发送保护</button>
@@ -82,7 +81,9 @@
         @load-older="loadOlderMessages"
         @send="onSend"
         @change-cs-mode="onChangeCsMode"
-      />
+      >
+        <template #ticket-results><SharedIssueAcceptancePanel v-if="activeCustomerCsConversation" /></template>
+      </ConversationChat>
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
         <p>选择左侧会话开始聊天</p>
@@ -188,7 +189,7 @@ const {
   activeConversationId,
   messages,
   playIncoming,
-  scrollToBottom,
+  scrollEl,
 })
 useEnterpriseCsRecovery({ draft, error: enterpriseCsSendError, uncertain: enterpriseCsUnconfirmed,
   conversationId: activeConversationId, active: () => isCustomerEnterpriseCs() })
@@ -203,7 +204,7 @@ const { refreshCsInbox, startCsInboxPolling, stopCsInboxPolling } = useCsInboxBr
   activeConversationId,
   messages,
   playIncoming,
-  scrollToBottom,
+  scrollEl,
 })
 const { onImMessage, onImReadState } = useXcmaxSync()
 
@@ -364,7 +365,7 @@ const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImR
   messages,
   wsConnected,
   wsConnecting,
-  scrollToBottom,
+  scrollEl,
   loadConversations,
   playIncoming,
 })

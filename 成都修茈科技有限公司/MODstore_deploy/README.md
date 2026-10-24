@@ -21,6 +21,17 @@ bash FHD/scripts/dev/run_modstore_daily_local.sh restart
 
 默认使用本目录（工作区 `成都修茈科技有限公司/MODstore_deploy`）；若目录缺失则回退 `~/XCMAX-archives/.../MODstore_deploy`。
 
+治理与员工包构建共用仓库包。在仓库根安装开发依赖：
+
+```bash
+python -m pip install -e packages/retort_engine -e packages/xcagi_common \
+  -e './成都修茈科技有限公司/MODstore_deploy[web,governance]'
+```
+
+员工目录内的 `build_xcemp.py` 与资产流水线共用 `xcagi_common.employee_pack`，
+保留原来的包内目录和各员工的文件包含规则。仓库内可直接运行入口；导出到仓库外的
+员工源码需要在构建环境安装 `xcagi-common`，生成的 `.xcemp` 无此构建依赖。
+
 ## 前端看板
 
 `XCAGI-Full-Pipeline.html` → `#s-gaps` / `#s-roadmap` 由 `docs/xcagi-dashboard/emp-wf-action-items.js` 拉取本栈 `:8788` API 动态渲染。

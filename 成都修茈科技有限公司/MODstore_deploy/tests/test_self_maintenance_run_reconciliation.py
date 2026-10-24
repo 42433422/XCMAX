@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from modstore_server import self_maintenance_loop_runner as runner
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.schedule as _maintenance_schedule
+import modstore_server.maintenance_loop.store as _maintenance_store
+import modstore_server.self_evolution_knowledge as _maintenance_self_evolution_knowledge
 
 
 def _start(run_id: str, started_at: datetime) -> dict:
@@ -20,11 +23,13 @@ def test_reacquired_lease_closes_recent_interrupted_run(monkeypatch) -> None:
     rows = [_start("recent-run", now - timedelta(minutes=5))]
     appended: list[dict] = []
 
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_append_ledger", appended.append)
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", appended.append)
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
 
-    result = runner.reconcile_stale_self_maintenance_runs(exclusive_lease_reacquired=True)
+    result = _maintenance_schedule.reconcile_stale_self_maintenance_runs(
+        exclusive_lease_reacquired=True
+    )
 
     assert result["reconciled"] == ["recent-run"]
     assert result["exclusive_lease_reacquired"] is True
@@ -56,11 +61,11 @@ def test_without_lease_recent_run_remains_open(monkeypatch) -> None:
     rows = [_start("active-run", now - timedelta(minutes=5))]
     appended: list[dict] = []
 
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_append_ledger", appended.append)
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", appended.append)
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
 
-    result = runner.reconcile_stale_self_maintenance_runs()
+    result = _maintenance_schedule.reconcile_stale_self_maintenance_runs()
 
     assert result["reconciled"] == []
     assert result["exclusive_lease_reacquired"] is False
@@ -72,11 +77,11 @@ def test_age_based_reconciliation_preserves_existing_contract(monkeypatch) -> No
     rows = [_start("stale-run", now - timedelta(minutes=181))]
     appended: list[dict] = []
 
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_append_ledger", appended.append)
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", appended.append)
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
 
-    result = runner.reconcile_stale_self_maintenance_runs()
+    result = _maintenance_schedule.reconcile_stale_self_maintenance_runs()
 
     assert result["reconciled"] == ["stale-run"]
     assert appended[-1]["status"] == "abandoned_stale"
@@ -102,19 +107,21 @@ def test_same_trigger_interruption_bypasses_cooldown_and_signal_threshold(
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
             "signal_count": 0,
         },
     )
-    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+    monkeypatch.setattr(
+        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+    )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="automated_remediation",
     )
@@ -144,19 +151,21 @@ def test_interruption_does_not_bypass_cooldown_for_another_trigger(monkeypatch) 
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
             "signal_count": 10,
         },
     )
-    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+    monkeypatch.setattr(
+        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+    )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="scheduler",
     )
@@ -180,9 +189,9 @@ def test_interruption_recovery_does_not_bypass_evolution_pause(monkeypatch) -> N
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
@@ -190,12 +199,12 @@ def test_interruption_recovery_does_not_bypass_evolution_pause(monkeypatch) -> N
         },
     )
     monkeypatch.setattr(
-        runner,
+        _maintenance_self_evolution_knowledge,
         "evolution_metrics_gate",
         lambda: {"pause": True, "reason": "verified_regression"},
     )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="automated_remediation",
     )
@@ -227,19 +236,21 @@ def test_same_trigger_transient_para_failure_bypasses_cooldown_and_threshold(
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
             "signal_count": 0,
         },
     )
-    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+    monkeypatch.setattr(
+        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+    )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="automated_remediation",
     )
@@ -271,19 +282,21 @@ def test_non_infrastructure_failure_keeps_cooldown(monkeypatch) -> None:
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
             "signal_count": 10,
         },
     )
-    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+    monkeypatch.setattr(
+        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+    )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="automated_remediation",
     )
@@ -311,19 +324,21 @@ def test_transient_failure_recovery_requires_same_trigger(monkeypatch) -> None:
             "triggered_by": "automated_remediation",
         },
     ]
-    monkeypatch.setattr(runner, "_read_ledger", lambda limit=300: rows[-limit:])
-    monkeypatch.setattr(runner, "_utc_now", lambda: now)
+    monkeypatch.setattr(_maintenance_store, "_read_ledger", lambda limit=300: rows[-limit:])
+    monkeypatch.setattr(_maintenance_config, "_utc_now", lambda: now)
     monkeypatch.setattr(
-        runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {"ok": True},
             "signal_count": 10,
         },
     )
-    monkeypatch.setattr(runner, "evolution_metrics_gate", lambda: {"pause": False})
+    monkeypatch.setattr(
+        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+    )
 
-    gate = runner.should_run_self_maintenance_loop(
+    gate = _maintenance_schedule.should_run_self_maintenance_loop(
         force=False,
         triggered_by="scheduler",
     )

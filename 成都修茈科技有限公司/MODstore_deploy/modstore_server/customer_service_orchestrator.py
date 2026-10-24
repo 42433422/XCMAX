@@ -37,7 +37,12 @@ from modstore_server.models_cs import (
     CustomerServiceTicket,
 )
 
-ORDER_RE = re.compile(r"(?:订单号|order[_ -]?no|订单)[:：\s]*([A-Za-z0-9_-]{6,64})", re.I)
+ORDER_RE = re.compile(
+    r"(?:订单号|order[_ -]?no|订单)[:：\s]*"
+    r"((?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{2,5}|"
+    r"[A-Za-z0-9_-]{6,64})(?![A-Za-z0-9_-])",
+    re.I,
+)
 CATALOG_RE = re.compile(r"(?:商品\s*ID|catalog[_ -]?id|商品)[:：\s#]*([0-9]{1,12})", re.I)
 LLM_PROVIDER_RE = re.compile(r"(?:厂商|provider)\s*[:：]\s*([a-z0-9_-]+)", re.I)
 LLM_MODEL_RE = re.compile(r"(?:模型|model)\s*[:：]\s*(\S+)", re.I)

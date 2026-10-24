@@ -118,6 +118,10 @@ def test_employee_override_trust(
     from app.infrastructure.mods.package import compute_directory_hash
     from app.mod_sdk import edition_policy
 
+    # The configured operator root makes this isolated workspace a valid input
+    # root for the perception sandbox; an arbitrary payload root alone is not trusted.
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     user_pack = _write_csv_read_pack(employee_mods_root)
     bundled_mods = tmp_path / "bundled-mods"
     bundled_pack = _write_csv_read_pack(bundled_mods)
@@ -194,6 +198,23 @@ def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_p
     outputs = result.get("result", {}).get("outputs") or []
     assert outputs and outputs[0].get("ok") is False
     assert outputs[0].get("error_code") == "employee_python_pack_untrusted"
+
+
+def test_employee_csv_input_rejects_symlink_to_outside_workspace(tmp_path, monkeypatch):
+    from app.application.employee_runtime.executor import _resolve_file_path
+
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+    outside = tmp_path / "private.csv"
+    outside.write_text("private data", encoding="utf-8")
+    link = workspace / "redirect.csv"
+    try:
+        link.symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    assert _resolve_file_path({"file_path": str(link)}, str(workspace)) is None
 
 
 def test_workflow_registry_includes_employee_tools(employee_mods_root):

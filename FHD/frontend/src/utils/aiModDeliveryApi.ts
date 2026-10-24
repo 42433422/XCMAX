@@ -1,5 +1,6 @@
 import { apiFetch } from '@/utils/apiBase'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 
 export type AiModDeliveryProgress = {
   sessionId: string
@@ -83,14 +84,22 @@ export async function generateAndInstallAiMod(
     intervalMs?: number
     maxRounds?: number
     onProgress?: (progress: AiModDeliveryProgress) => void
+    isCurrent?: () => boolean
   } = {},
 ): Promise<AiModDeliveryResult> {
+  const identity = resolveChatIdentity()
+  const ensureCurrent = () => {
+    if (identity !== resolveChatIdentity() || options.isCurrent?.() === false) throw new Error('账号或 MOD 已切换，生成会话已保留，请返回原账号继续')
+  }
+  ensureCurrent()
   const { sessionId } = await startAiModDelivery(brief)
   const intervalMs = Math.max(10, options.intervalMs ?? 2000)
   const maxRounds = Math.max(1, options.maxRounds ?? 300)
   let latest: AiModDeliveryProgress | null = null
   for (let round = 0; round < maxRounds; round += 1) {
+    ensureCurrent()
     latest = await getAiModDeliveryProgress(sessionId)
+    ensureCurrent()
     options.onProgress?.(latest)
     if (latest.status === 'done') break
     if (latest.status === 'error' || latest.status === 'failed') {
@@ -102,6 +111,7 @@ export async function generateAndInstallAiMod(
   const artifact = asRecord(latest.snapshot.artifact)
   const modId = asString(artifact.mod_id).trim()
   if (!modId) throw new Error('MOD 生成结果缺少 mod_id')
+  ensureCurrent()
   const installed = await installAiModDelivery(sessionId)
   return {
     sessionId,

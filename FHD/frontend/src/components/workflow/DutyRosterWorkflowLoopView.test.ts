@@ -23,6 +23,8 @@ const statusRef = ref({
   plannedCount: 2,
   catalogRegisteredCount: 2,
   localInstalledCount: 2,
+  localKnown: true,
+  catalogKnown: true,
   missingCatalogIds: [],
   missingLocalIds: [],
   extraIds: [],
@@ -105,6 +107,8 @@ describe('DutyRosterWorkflowLoopView', () => {
       plannedCount: 2,
       catalogRegisteredCount: 2,
       localInstalledCount: 2,
+      localKnown: true,
+      catalogKnown: true,
       missingCatalogIds: [],
       missingLocalIds: [],
       extraIds: [],
@@ -300,7 +304,7 @@ describe('DutyRosterWorkflowLoopView', () => {
     const wrapper = await mountView({ surface: 'workflow-visualization', compact: false })
     const status = wrapper.find('.drlv-employee-status')
     expect(status.classes()).toContain('drlv-employee-status--ok')
-    expect(status.text()).toBe('已对齐')
+    expect(status.text()).toBe('包已对齐')
   })
 
   it('marks employee as warn when missing locally', async () => {
@@ -383,17 +387,17 @@ describe('DutyRosterWorkflowLoopView', () => {
     expect(metas).toContain('观测')
   })
 
-  it('renders "可运行" meta when ready', async () => {
+  it('describes package alignment without claiming execution readiness', async () => {
     readyRef.value = true
     const wrapper = await mountView()
     const metas = wrapper.findAll('.drlv-node-meta').map((m) => m.text())
-    expect(metas).toContain('可运行')
+    expect(metas).toContain('包已对齐')
   })
 
-  it('renders "待对齐" meta when not ready', async () => {
+  it('leaves runtime unverified when packages are not aligned', async () => {
     readyRef.value = false
     const wrapper = await mountView()
     const metas = wrapper.findAll('.drlv-node-meta').map((m) => m.text())
-    expect(metas).toContain('待对齐')
+    expect(metas).toContain('待核实')
   })
 })
