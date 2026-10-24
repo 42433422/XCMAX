@@ -81,7 +81,7 @@ dev = [
   "pytest-asyncio>=1.4.0",
   "PyYAML>=6.0",
   "black==26.10.1",
-  "isort==6.1.0",
+  "isort==9.0.2",
   "jsonschema>=4.21",
   # 工具精确固定；升级必须同时验证格式和类型检查。
   "mypy==2.4.0",
