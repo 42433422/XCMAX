@@ -1,5 +1,5 @@
 {
-  "lines": 2370859,
+  "lines": 2370024,
   "updated": "2026-10-24",
-  "note": "merge main; keep CodeQL/ratchet/brotli fixes"
+  "note": "resolve main excel domain merge conflicts; bump structure routes_total 307; keep brotli/CodeQL"
 }
