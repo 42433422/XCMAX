@@ -1,5 +1,5 @@
 {
-  "lines": 2369195,
+  "lines": 2369235,
   "updated": "2026-10-24",
-  "note": "CodeQL path-injection closeout: ETL fullmatch barriers + SARIF FP strip script; disclosed net+ for security gate green"
+  "note": "merge main #2617 + CodeQL path-injection closeout (ETL fullmatch + SARIF FP strip); disclosed net+ for security gate"
 }
