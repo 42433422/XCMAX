@@ -86,20 +86,23 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
 
     html = build_digest_html()
     assert "MODstore" in html
-    assert "产品与客户进展" in html
-    assert "近 24 小时产品更新" in html
-    assert "近 24 小时工单结果" in html
-    assert "接下来要处理的工单（2 张）" in html
+    assert "今天做了什么 · 还要处理什么" in html
+    assert "今天做了什么 · 产品更新" in html
+    assert "今天做了什么 · 工单结果" in html
+    assert "还要处理什么 · 待办工单（2 张）" in html
     assert "待办&lt;processing&gt;" in html
     assert "待办&lt;awaiting_customer&gt;" in html
     assert "待办&lt;resolved&gt;" not in html
     assert "待办&lt;expired&gt;" not in html
     assert "标记已解决: 1 张" in html
     assert "已过期: 1 张" in html
-    assert html.index("产品与客户进展") < html.index("今日总览")
+    assert html.index("今天做了什么 · 还要处理什么") < html.index("今日总览")
     assert "待决策" in html
     assert "仓库未连接 Git" in html
-    assert "每日运营摘要" in html
+    assert "每日业务摘要" in html
+    assert "业务更新日志" in html
+    assert "今天做了什么" in html
+    assert "还要处理什么" in html
     assert "文档一致性" in html
 
     models._engine = None
