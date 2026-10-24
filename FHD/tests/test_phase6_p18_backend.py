@@ -2349,6 +2349,11 @@ class TestMobileExtSyncRoutes:
         body = ext_mod.SyncPullBody(since_cursor=0)
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
+            patch(
+                "app.application.employee_circle_sync.sync_modstore_reports",
+                new_callable=AsyncMock,
+                return_value={},
+            ) as report_sync,
             patch.object(ext_mod, "_approval_items", return_value=[]),
             patch.object(ext_mod, "_shipment_items", return_value=[]),
         ):
@@ -2358,6 +2363,7 @@ class TestMobileExtSyncRoutes:
         else:
             data = result
         assert data.get("success") is True
+        report_sync.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_sync_pull_error(self, ext_mod):

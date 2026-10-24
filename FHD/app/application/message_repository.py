@@ -13,6 +13,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from cryptography.fernet import Fernet, InvalidToken
+
+from app.application.group_chat.storage import GroupChatRepository
+
 
 def _safe_json_line(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -84,29 +88,48 @@ class MessageRepository:
         return row
 
     def append_messages(self, messages: list[dict[str, Any]]) -> None:
+        cipher = self._message_cipher()
         with self._messages_path.open("a", encoding="utf-8") as fh:
             for msg in messages:
-                fh.write(_safe_json_line(msg))
+                fh.write(self._encrypted_json_line(msg, cipher))
 
     def read_all_message_rows(self) -> list[dict[str, Any]]:
         if not self._messages_path.exists():
             return []
         rows: list[dict[str, Any]] = []
+        cipher = self._message_cipher()
+        prefix = GroupChatRepository._ENCRYPTED_MESSAGE_PREFIX
         for line in self._messages_path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
+                if line.startswith(prefix):
+                    payload = cipher.decrypt(line.removeprefix(prefix).encode("ascii"))
+                    item = json.loads(payload.decode("utf-8"))
+                else:
+                    # Read existing plaintext JSONL without rewriting it. New writes are
+                    # encrypted, so a read does not mutate a user's historical messages.
+                    item = json.loads(line)
+            except (InvalidToken, UnicodeDecodeError, json.JSONDecodeError, ValueError):
                 continue
             if isinstance(item, dict):
                 rows.append(item)
         return rows
 
     def write_all_message_rows(self, rows: list[dict[str, Any]]) -> None:
+        cipher = self._message_cipher()
         with self._messages_path.open("w", encoding="utf-8") as fh:
             for row in rows:
-                fh.write(_safe_json_line(row))
+                fh.write(self._encrypted_json_line(row, cipher))
+
+    def _message_cipher(self) -> Fernet:
+        return GroupChatRepository.message_cipher(data_dir=str(self._root.parent))
+
+    @staticmethod
+    def _encrypted_json_line(payload: dict[str, Any], cipher: Fernet) -> str:
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        token = cipher.encrypt(raw).decode("ascii")
+        return f"{GroupChatRepository._ENCRYPTED_MESSAGE_PREFIX}{token}\n"
 
     def public_message(self, item: dict[str, Any]) -> dict[str, Any]:
         return {

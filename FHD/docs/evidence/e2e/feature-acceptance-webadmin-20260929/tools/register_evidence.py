@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import runpy
 import sys
 from datetime import date
 from pathlib import Path
@@ -30,6 +31,9 @@ EVID_ROOT = "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/ru
 
 
 def sha256_file(p: Path) -> str:
+    if not p.exists():
+        resolver = runpy.run_path(str(REPO_ROOT / "成都修茈科技有限公司/scripts/evidence_assets.py"))["resolve_source"]
+        p = resolver(REPO_ROOT, p.relative_to(REPO_ROOT).as_posix())
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 

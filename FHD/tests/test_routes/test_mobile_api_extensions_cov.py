@@ -18,6 +18,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _fake_circle_report_transport(monkeypatch):
+    monkeypatch.setattr(
+        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
+
+
 @pytest.fixture(autouse=True, scope="module")
 def _load_ext_module():
     if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
@@ -503,7 +510,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
@@ -533,7 +540,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),
@@ -557,7 +564,7 @@ class TestMobilePairingIssue:
 
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions_part02_part01._trusted_desktop_pairing_request",
+                "app.fastapi_routes.mobile_api_extensions._trusted_desktop_pairing_request",
                 return_value=True,
             ),
             patch.object(m, "_pairing_issue_host", return_value="192.168.1.1"),

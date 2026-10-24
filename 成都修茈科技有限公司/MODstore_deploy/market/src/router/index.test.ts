@@ -17,6 +17,13 @@ afterEach(() => {
 })
 
 describe('router index behavior', () => {
+  it('exposes the market overview behind the existing admin guard', async () => {
+    const router = (await import('./index')).default
+    expect(router.getRoutes().find((route) => route.path === '/admin')?.redirect).toBe('/admin/overview')
+    expect(router.resolve({ name: 'admin-overview' }).meta).toMatchObject({ auth: true, admin: true })
+    expect(router.resolve({ name: 'admin-database' }).path).toBe('/admin/database')
+  })
+
   it('applies scroll behavior and document metadata', async () => {
     const router = (await import('./index')).default as UnsafeTestValue
     const scrollBehavior = router.options.scrollBehavior

@@ -17,7 +17,7 @@ from app.application.agent_orchestrator.chat_trace import (
     _append_legacy_tool_records_to_run,
 )
 from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-from app.application.planner_compat_service_part03 import compat_chat_stream_async
+from app.application.planner_compat_service import compat_chat_stream_async
 
 FACADE = "app.application.planner_compat_service"
 

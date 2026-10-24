@@ -18,6 +18,7 @@ from app.infrastructure.llm.structured_output import StructuredResult
 @pytest.fixture(autouse=True)
 def _reset_llm_env(monkeypatch, tmp_path):
     clear_assist_cache()
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_HEURISTIC", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))

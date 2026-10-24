@@ -60,6 +60,32 @@ def _preserve_tool_registry_state():
         TOOL_REGISTRY[k] = fn
 
 
+@pytest.fixture
+def offline_provider_http(monkeypatch):
+    """Exercise provider requests with synthetic credentials and deterministic unavailable responses."""
+    import httpx
+
+    for profile in _PROVIDER_PROFILES:
+        for key in profile["env_keys"]:
+            monkeypatch.delenv(key, raising=False)
+        base_key = profile.get("base_url_env")
+        if base_key:
+            monkeypatch.delenv(base_key, raising=False)
+    requests_seen: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests_seen.append(request)
+        return httpx.Response(503, json={"error": "synthetic provider unavailable"})
+
+    client_type = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: client_type(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    return requests_seen
+
+
 # ---------------------------------------------------------------------------
 # 工具注册验证
 # ---------------------------------------------------------------------------
@@ -379,7 +405,7 @@ class TestTestLlmKeyHealth:
         assert isinstance(health["latency_ms"], (int, float))
         assert health["latency_ms"] > 0
 
-    def test_returns_error_when_no_key(self, monkeypatch):
+    def test_returns_error_when_no_key(self, monkeypatch, offline_provider_http):
         """没有 key 时返回明确错误。"""
         for key in (
             "OPENAI_API_KEY",
@@ -398,6 +424,8 @@ class TestTestLlmKeyHealth:
         # ollama 是 no_auth 仍会尝试，所以可能 ok=True（但连不上 localhost）
         # 或 ok=False 如果只有 ollama 且连不上
         assert "results" in result or "error" in result
+
+        assert offline_provider_http
 
     def test_healthy_count_field_present(self):
         """结果包含 healthy_count 字段。"""
@@ -440,7 +468,7 @@ class TestQueryProviderUsage:
         for f in result["findings"]:
             assert "endpoint" in f or "error" in f
 
-    def test_returns_error_when_no_key(self, monkeypatch):
+    def test_returns_error_when_no_key(self, monkeypatch, offline_provider_http):
         """没有任何 provider key 时返回错误或空结果。"""
         for key in (
             "OPENAI_API_KEY",
@@ -459,7 +487,9 @@ class TestQueryProviderUsage:
         # 没有 key 时，ollama 仍会被检查（no_auth），所以可能 ok=True 但 findings 为空或只有 ollama
         assert "findings" in result
 
-    def test_supports_multiple_providers(self, monkeypatch):
+        assert offline_provider_http
+
+    def test_supports_multiple_providers(self, monkeypatch, offline_provider_http):
         """配了多个 provider key 时能查多家 billing。"""
         monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
@@ -471,7 +501,9 @@ class TestQueryProviderUsage:
         providers_checked = {f.get("provider") for f in result.get("findings", [])}
         assert "b.ai" in providers_checked or "deepseek" in providers_checked
 
-    def test_filter_single_provider(self, monkeypatch):
+        assert offline_provider_http
+
+    def test_filter_single_provider(self, monkeypatch, offline_provider_http):
         """provider 过滤生效，只查指定 provider。"""
         monkeypatch.setenv("OPENAI_API_KEY", _fake_api_key())
         monkeypatch.setenv("OPENAI_BASE_URL", "https://api.b.ai/v1")
@@ -481,6 +513,8 @@ class TestQueryProviderUsage:
         assert result["ok"] is True
         providers_checked = {f.get("provider") for f in result.get("findings", [])}
         assert providers_checked == {"deepseek"}
+
+        assert offline_provider_http
 
 
 # ---------------------------------------------------------------------------

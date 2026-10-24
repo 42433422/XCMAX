@@ -17,7 +17,7 @@ DURATION = 18.0
 
 
 def prepare_logo() -> None:
-    source = Image.open(ASSETS / "logo-source.png").convert("RGB")
+    source = Image.open(ROOT.parents[1] / "assets/xiu-ci-logo.png").convert("RGB")
     rgb = np.asarray(source, dtype=np.float32)
     distance_from_white = 255.0 - rgb.min(axis=2)
     alpha = np.clip((distance_from_white - 6.0) * 2.2, 0.0, 255.0).astype(np.uint8)

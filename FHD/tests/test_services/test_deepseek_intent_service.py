@@ -42,6 +42,31 @@ class TestDeepSeekIntentRecognizer:
         assert hasattr(recognizer, "recognize")
         assert callable(getattr(recognizer, "recognize", None))
 
+    @pytest.mark.asyncio
+    async def test_oversized_message_uses_local_fallback_without_llm(self, recognizer, monkeypatch):
+        from app.infrastructure.llm import structured_output
+
+        complete = AsyncMock(side_effect=AssertionError("LLM must not be called"))
+        monkeypatch.setattr(structured_output, "complete_structured", complete)
+        monkeypatch.setattr(
+            ds, "_make_intent_cache_key", lambda _message: pytest.fail("cache key should not run")
+        )
+
+        result = await recognizer.recognize("型号 " + "0" * 100_000)
+
+        assert result["intent"] is None
+        complete.assert_not_awaited()
+
+    def test_oversized_model_response_is_rejected_before_regex_parsing(self, recognizer):
+        result = recognizer._parse_response("{" * 100_000, "ordinary request")
+
+        assert result["intent"] is None
+
+    def test_hybrid_slot_extractor_declines_oversized_message(self):
+        hybrid = HybridIntentWithDeepSeek(use_deepseek=False)
+
+        assert hybrid._extract_slots_from_rule("编号 " + "0" * 100_000, {}) == {}
+
 
 # --------------------------------------------------------------------------- #
 # 模块级纯函数

@@ -32,7 +32,7 @@ usePrivateDeliverySync()
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
-          <component :is="Component" :key="route.fullPath" class="route-view-shell" />
+          <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
         </RouteErrorBoundary>
       </router-view>
     </MainLayout>

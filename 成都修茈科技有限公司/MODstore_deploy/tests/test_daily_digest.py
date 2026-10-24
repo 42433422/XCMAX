@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import modstore_server.models as models
+from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket
 
 
 def test_parse_daily_digest_recipient_emails() -> None:
@@ -50,6 +51,25 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "digest.sqlite"))
     monkeypatch.setenv("MODSTORE_REPO_ROOT", str(tmp_path))
     models.init_db()
+    with models.get_session_factory()() as session:
+        user = models.User(username="digest-reader", password_hash="test")
+        session.add(user)
+        session.flush()
+        conversation = CustomerServiceSession(user_id=user.id)
+        session.add(conversation)
+        session.flush()
+        for index, status in enumerate(["processing", "awaiting_customer", "resolved", "expired"]):
+            session.add(
+                CustomerServiceTicket(
+                    session_id=conversation.id,
+                    user_id=user.id,
+                    ticket_no=f"DIGEST-{index}",
+                    title=f"待办<{status}>",
+                    status=status,
+                    updated_at=datetime.now(timezone.utc) - timedelta(days=3 if index < 2 else 0),
+                )
+            )
+        session.commit()
 
     from modstore_server.daily_digest import build_digest_html
     from modstore_server.tools import doc_consistency_checker
@@ -66,12 +86,23 @@ def test_build_digest_html_contains_sections(tmp_path, monkeypatch):
 
     html = build_digest_html()
     assert "MODstore" in html
-    assert "产品与客户进展" in html
-    assert "近 24 小时产品更新" in html
-    assert "近 24 小时工单结果" in html
+    assert "今天做了什么 · 还要处理什么" in html
+    assert "今天做了什么 · 产品更新" in html
+    assert "今天做了什么 · 工单结果" in html
+    assert "还要处理什么 · 待办工单（2 张）" in html
+    assert "待办&lt;processing&gt;" in html
+    assert "待办&lt;awaiting_customer&gt;" in html
+    assert "待办&lt;resolved&gt;" not in html
+    assert "待办&lt;expired&gt;" not in html
+    assert "标记已解决: 1 张" in html
+    assert "已过期: 1 张" in html
+    assert html.index("今天做了什么 · 还要处理什么") < html.index("今日总览")
     assert "待决策" in html
     assert "仓库未连接 Git" in html
-    assert "每日运营摘要" in html
+    assert "每日业务摘要" in html
+    assert "业务更新日志" in html
+    assert "今天做了什么" in html
+    assert "还要处理什么" in html
     assert "文档一致性" in html
 
     models._engine = None

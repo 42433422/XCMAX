@@ -216,7 +216,7 @@ def _register_mods_endpoints(router) -> None:
             from app.infrastructure.mods.mod_manager import get_mod_manager
 
             mm = get_mod_manager()
-            routes = mm.get_routes()
+            routes: list[dict[str, Any]] = list(mm.get_routes())
             from fastapi import HTTPException
 
             from app.mod_sdk.runtime_frontend import runtime_metadata, visible_mod_rows

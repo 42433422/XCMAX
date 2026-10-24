@@ -322,8 +322,10 @@ def test_plan_with_llm_success() -> None:
     client = MagicMock()
     client.post.return_value = _llm_response("```json\n" + plan_json + "\n```")
     with patch(
-        "app.application.workflow.planner._get_planner_http_client",
-        return_value=client,
+        "app.application.workflow.planner.request_planner_completion",
+        side_effect=lambda **_: (
+            client.post.return_value.json() if client.post.return_value.status_code < 400 else None
+        ),
     ):
         plan = planner._plan_with_llm("pid", "u1", "查 9803", _TOOL_REGISTRY, {})
     assert plan is not None
@@ -344,8 +346,10 @@ def test_plan_with_llm_http_error() -> None:
     client = MagicMock()
     client.post.return_value = _llm_response("{}", status=500)
     with patch(
-        "app.application.workflow.planner._get_planner_http_client",
-        return_value=client,
+        "app.application.workflow.planner.request_planner_completion",
+        side_effect=lambda **_: (
+            client.post.return_value.json() if client.post.return_value.status_code < 400 else None
+        ),
     ):
         plan = planner._plan_with_llm("pid", "u1", "msg", _TOOL_REGISTRY, {})
     assert plan is None
@@ -356,8 +360,10 @@ def test_plan_with_llm_empty_content() -> None:
     client = MagicMock()
     client.post.return_value = _llm_response("")
     with patch(
-        "app.application.workflow.planner._get_planner_http_client",
-        return_value=client,
+        "app.application.workflow.planner.request_planner_completion",
+        side_effect=lambda **_: (
+            client.post.return_value.json() if client.post.return_value.status_code < 400 else None
+        ),
     ):
         plan = planner._plan_with_llm("pid", "u1", "msg", _TOOL_REGISTRY, {})
     assert plan is None

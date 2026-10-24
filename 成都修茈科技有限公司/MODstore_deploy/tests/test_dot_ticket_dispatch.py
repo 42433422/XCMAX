@@ -1,6 +1,7 @@
 """派给 dot（Para 工具 dolt）的客服工单：控制标记、模式、脱敏；其他工具不变。"""
 
 import re
+import uuid
 
 import pytest
 
@@ -13,10 +14,10 @@ DOT_REJECT = re.compile(
     r"(?i)(?:bearer\s+\S+|-----BEGIN .*PRIVATE KEY|(?:password|passwd|api[_-]?key|secret|token)"
     r"\s*[:=]\s*\S+|https?://[^/\s:@]+:[^/\s@]+@)"
 )
-# dot 侧 classify（devfleet-private scripts/lib/dot-session.mjs）
+# dot 侧 classify（devfleet-private PR #14；仍须安装与目标会话验收）
 DOT_ACCOUNT = re.compile(
     r"(账号|帐号|账户|帐户|登录|登陆|密码|验证码|注册|实名|权限|封号|解封|account|login|log in"
-    r"|sign[ -]?in|password|credential|2fa|otp)",
+    r"|sign[ -]?in|password|credential|(?<![a-z0-9])2fa(?![a-z0-9])|otp)",
     re.I,
 )
 DOT_REPORT_ONLY = re.compile(
@@ -115,8 +116,11 @@ def _dot_mode(payload):
     return "code_fix"
 
 
-def test_product_issue_gets_control_marker_and_code_fix_mode():
-    req = _req()
+@pytest.mark.parametrize("attempt", ["0" * 32, "2fa" + "0" * 29])
+@pytest.mark.parametrize("summary", ["导出报表时返回 500", "复现编号2fa" + "0" * 29 + "，导出失败"])
+def test_product_issue_gets_control_marker_and_code_fix_mode(monkeypatch, attempt, summary):
+    monkeypatch.setattr(dot.uuid, "uuid4", lambda: uuid.UUID(hex=attempt))
+    req = _req(_incident(summary=summary))
     out = dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
     assert MARKER.match(out["title"])
     assert "[dot:code_fix]" in out["title"] and TICKET_NO in out["title"]
@@ -144,6 +148,9 @@ def test_marker_task_part_is_stable_per_ticket_and_attempt_part_unique():
         {"intent": "account_support"},
         {"summary": "登录后一直转圈"},
         {"summary": "忘记密码收不到验证码"},
+        {"summary": "开启2FA验证失败"},
+        {"summary": "2fa_reset 无法完成"},
+        {"summary": "OTP 验证失败"},
         {"title": "子账号权限不对"},
         {"summary": "sign in fails with 403 forbidden"},
         {"intent": "refund"},

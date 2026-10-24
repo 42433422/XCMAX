@@ -1,4 +1,4 @@
-"""JSONL persistence mixin for AiGroupChatStorageMixin."""
+"""Tenant-scoped JSONL groups and encrypted conversation persistence."""
 
 from __future__ import annotations
 
@@ -8,198 +8,31 @@ import hashlib
 import json
 import os
 import secrets
-import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
-from app.application.group_chat.constants import (
-    _BROKEN_MARKDOWN_LINK_RE,
-    _MARKDOWN_LINK_RE,
-    _RELAY_TASK_ID_RE,
-    _TEMP_PATH_RE,
-    PUBLIC_ACCEPTANCE_BODY_MAX_CHARS,
-    PUBLIC_CHAT_BODY_MAX_CHARS,
-)
-from app.application.group_chat.employee_registry import (
-    _member_public_shape,
-    _safe_json_line,
-    _utc_now,
-)
+from app.application.group_chat.employee_registry import _safe_json_line
 
 
-class AiGroupChatStorageMixin:
-    if TYPE_CHECKING:
-        _canonical_group_name: Any
-        _groups_path: Any
-        _messages_path: Path
-
-        @staticmethod
-        def _chat_friendly_summary(
-            value: str, limit: int, *, include_detail_note: bool = True
-        ) -> str:
-            raise NotImplementedError
-
+class GroupChatRepository:
     _ENCRYPTED_MESSAGE_PREFIX = "enc:v1:"
+    _SECRET_FILE_NAME = ".group-chat-secret"
+    _process_secret: str | None = None
 
-    # ── 持久化 ──
+    def __init__(self, root: Path) -> None:
+        self.root = root / "ai_group_chat"
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._groups_path = self.root / "groups.jsonl"
+        self._messages_path = self.root / "messages.jsonl"
 
-    def _public_group(
-        self, group: dict[str, Any], preview: dict[str, Any] | None
-    ) -> dict[str, Any]:
-        members = [m for m in group.get("members", []) if isinstance(m, dict)]
-        return {
-            "id": str(group.get("id")),
-            "name": self._canonical_group_name(group),
-            "department_key": str(group.get("department_key") or ""),
-            "member_count": len(members),
-            "members": [_member_public_shape(m) for m in members],
-            "is_pinned": bool(group.get("is_pinned")),
-            "is_hidden": bool(group.get("is_hidden")),
-            "is_followed": bool(group.get("is_followed", True)),
-            "unread_count": int(group.get("unread_count") or 0),
-            "created_at": str(group.get("created_at") or ""),
-            "last_message_preview": str((preview or {}).get("preview") or ""),
-            "last_message_at": str((preview or {}).get("created_at") or ""),
-        }
-
-    def _public_message(self, row: dict[str, Any]) -> dict[str, Any]:
-        kind = str(row.get("kind") or "")
-        body = str(row.get("body") or "")
-        if kind in {"work_report", "work_progress", "relay_work_report", "work_acceptance"}:
-            body = self._clean_public_chat_body(body)
-            if kind == "work_acceptance":
-                body = self._compact_public_acceptance_body(body)
-            body = self._cap_public_chat_body(
-                body,
-                limit=PUBLIC_ACCEPTANCE_BODY_MAX_CHARS
-                if kind == "work_acceptance"
-                else PUBLIC_CHAT_BODY_MAX_CHARS,
-            )
-        out: dict[str, Any] = {
-            "id": str(row.get("id") or ""),
-            "group_id": str(row.get("group_id") or ""),
-            "role": str(row.get("role") or "ai"),
-            "sender_id": str(row.get("sender_id") or ""),
-            "sender_name": str(row.get("sender_name") or ""),
-            "sender_avatar": str(row.get("sender_avatar") or ""),
-            "body": body,
-            "created_at": str(row.get("created_at") or ""),
-        }
-        for key in ("kind", "status", "work_order_id"):
-            if row.get(key):
-                out[key] = str(row.get(key) or "")
-        payload = row.get("payload")
-        if isinstance(payload, dict):
-            out["payload"] = payload
-        return out
+    def user_groups(self, user_id: int) -> list[dict[str, Any]]:
+        rows = [g for g in self.all_groups() if int(g.get("user_id") or 0) == int(user_id)]
+        return GroupChatRepository.dedupe_groups_by_id(rows)
 
     @staticmethod
-    def _cap_public_chat_body(body: str, limit: int = PUBLIC_CHAT_BODY_MAX_CHARS) -> str:
-        text = str(body or "").strip()
-        if len(text) <= limit:
-            return text
-        return text[:limit].rstrip() + "\n\n（聊天里已折叠长执行输出；完整内容保留在执行端记录。）"
-
-    @classmethod
-    def _clean_public_chat_body(cls, body: str) -> str:
-        lines = []
-        for raw_line in str(body or "").replace("\r\n", "\n").replace("\r", "\n").splitlines():
-            line = _TEMP_PATH_RE.sub("临时执行工作区", raw_line)
-            line = _MARKDOWN_LINK_RE.sub(r"\1", line)
-            line = _BROKEN_MARKDOWN_LINK_RE.sub(r"\1", line)
-            line = _RELAY_TASK_ID_RE.sub("。", line)
-            for token in ("**", "__", "`"):
-                line = line.replace(token, "")
-            lines.append(line.rstrip())
-        return "\n".join(lines).strip()
-
-    @classmethod
-    def _compact_public_acceptance_body(cls, body: str) -> str:
-        lines = [line.strip() for line in str(body or "").splitlines() if line.strip()]
-        if not lines:
-            return ""
-        title = next(
-            (line for line in lines if line.startswith("【小C验收】")), "【小C验收】这单已收口"
-        )
-        conclusion = next((line for line in lines if line.startswith("结论：")), "")
-        task = next((line for line in lines if line.startswith("任务：")), "")
-        risk = next((line for line in lines if line.startswith("风险：")), "")
-        member_lines = [line for line in lines if line.startswith("- ")][:4]
-        compact_members = [
-            f"- {cls._chat_friendly_summary(line, limit=70, include_detail_note=False)}"
-            for line in member_lines
-        ]
-        out = [title]
-        if conclusion:
-            out.append(conclusion)
-        if task:
-            out.append(cls._chat_friendly_summary(task, limit=72, include_detail_note=False))
-        if compact_members:
-            out.append("成员：")
-            out.extend(compact_members)
-        if risk:
-            out.append(risk)
-        out.append("下一步：满意就继续派下一步；不满意就直接说要谁补什么。")
-        return "\n".join(out)
-
-    def _message_row(
-        self,
-        *,
-        user_id: int,
-        group_id: str,
-        role: str,
-        sender_id: str,
-        sender_name: str,
-        sender_avatar: str,
-        body: str,
-        kind: str = "chat",
-        status: str = "",
-        work_order_id: str = "",
-        payload: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        row: dict[str, Any] = {
-            "id": uuid.uuid4().hex,
-            "user_id": int(user_id),
-            "group_id": str(group_id),
-            "role": role,
-            "sender_id": sender_id,
-            "sender_name": sender_name,
-            "sender_avatar": sender_avatar,
-            "body": body,
-            "created_at": _utc_now(),
-        }
-        if kind and kind != "chat":
-            row["kind"] = kind
-        if status:
-            row["status"] = status
-        if work_order_id:
-            row["work_order_id"] = work_order_id
-        if payload:
-            row["payload"] = payload
-        return row
-
-    def _latest_previews(self, user_id: int) -> dict[str, dict[str, Any]]:
-        previews: dict[str, dict[str, Any]] = {}
-        for r in self._read_messages():
-            if int(r.get("user_id") or 0) != int(user_id):
-                continue
-            gid = str(r.get("group_id"))
-            sender = str(r.get("sender_name") or "")
-            body = str(r.get("body") or "")
-            previews[gid] = {
-                "preview": f"{sender}：{body}"[:60] if sender else body[:60],
-                "created_at": str(r.get("created_at") or ""),
-            }
-        return previews
-
-    def _user_groups(self, user_id: int) -> list[dict[str, Any]]:
-        rows = [g for g in self._all_groups() if int(g.get("user_id") or 0) == int(user_id)]
-        return self._dedupe_groups_by_id(rows)
-
-    @staticmethod
-    def _dedupe_groups_by_id(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def dedupe_groups_by_id(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """同一 group id 仅保留一条(合并成员去重 + 置顶/关注取或)。
 
         历史上 ``_append_group`` 纯追加,部门群 seed 多次会在 JSONL 里累积同 id 重复条目,
@@ -235,9 +68,9 @@ class AiGroupChatStorageMixin:
                 keep["is_followed"] = True
         return out
 
-    def _compact_groups_file_if_needed(self) -> None:
+    def compact_groups_file_if_needed(self) -> None:
         """groups 存储出现同 (user_id, id) 重复条目时,去重重写文件(自愈历史脏数据)。"""
-        all_groups = self._all_groups()
+        all_groups = self.all_groups()
         seen: set[tuple[int, str]] = set()
         has_dup = False
         for g in all_groups:
@@ -265,20 +98,20 @@ class AiGroupChatStorageMixin:
             by_user[uid].append(g)
         compacted: list[dict[str, Any]] = []
         for uid in order:
-            compacted.extend(self._dedupe_groups_by_id(by_user[uid]))
-        self._rewrite_groups(compacted)
+            compacted.extend(GroupChatRepository.dedupe_groups_by_id(by_user[uid]))
+        self.rewrite_groups(compacted)
 
-    def _all_groups(self) -> list[dict[str, Any]]:
-        return self._read_jsonl(self._groups_path)
+    def all_groups(self) -> list[dict[str, Any]]:
+        return self.read_jsonl(self._groups_path)
 
-    def _read_messages(self) -> list[dict[str, Any]]:
+    def read_messages(self) -> list[dict[str, Any]]:
         if not self._messages_path.exists():
             return []
         rows: list[dict[str, Any]] = []
         saw_plaintext = False
         saw_legacy_key = False
-        cipher = self._message_cipher()
-        legacy_cipher = self._legacy_derived_cipher()
+        cipher = self.message_cipher()
+        legacy_cipher = self.legacy_derived_cipher()
         for line in self._messages_path.read_text(encoding="utf-8").splitlines():
             raw = line.strip()
             if not raw:
@@ -291,7 +124,6 @@ class AiGroupChatStorageMixin:
                     except InvalidToken:
                         if legacy_cipher is None:
                             raise
-                        # 旧派生密钥加密的历史消息：解密成功则标记重写（迁移到新密钥）
                         item = json.loads(legacy_cipher.decrypt(token).decode("utf-8"))
                         saw_legacy_key = True
                 else:
@@ -302,19 +134,24 @@ class AiGroupChatStorageMixin:
             if isinstance(item, dict):
                 rows.append(item)
         if saw_plaintext or saw_legacy_key:
-            self._rewrite_messages(rows)
+            self.rewrite_messages(rows)
         return rows
 
     @staticmethod
-    def _message_cipher() -> Fernet:
+    def message_cipher(*, data_dir: str | None = None) -> Fernet:
         secret = (
             os.environ.get("SECRET_KEY", "").strip()
             or os.environ.get("XCAGI_SECRET_KEY", "").strip()
         )
         if not secret:
             data_dir = (
-                os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
-            ).strip()
+                data_dir
+                or (
+                    os.environ.get("XCAGI_DATA_DIR")
+                    or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
+                    or ""
+                ).strip()
+            )
             desktop = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
                 "1",
                 "true",
@@ -322,28 +159,23 @@ class AiGroupChatStorageMixin:
                 "on",
             }
             if data_dir:
-                # 桌面单机：随机密钥持久化到数据目录（0600），稳定且不可预测
-                secret = AiGroupChatStorageMixin._desktop_data_dir_secret(data_dir)
+                secret = GroupChatRepository.desktop_data_dir_secret(data_dir)
             elif desktop:
-                # 无数据目录的桌面兜底：进程级随机密钥（不持久化；绝不用可预测字面量）
-                secret = AiGroupChatStorageMixin._process_local_secret()
+                secret = GroupChatRepository.process_local_secret()
             else:
                 raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
         digest = hashlib.sha256(secret.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
 
-    _SECRET_FILE_NAME = ".group-chat-secret"
-    _process_secret: str | None = None
-
     @staticmethod
-    def _desktop_data_dir_secret(data_dir: str) -> str:
+    def desktop_data_dir_secret(data_dir: str) -> str:
         """从数据目录读取/生成持久化随机密钥（0600）。
 
         2026-08-01 前使用「可预测派生密钥」（data_dir 路径字面量 sha256），任何能猜到
         路径的人都可离线解密群聊内容；现改为首次启动生成 secrets.token_urlsafe(32) 并
         持久化。旧消息由 _legacy_derived_cipher 透明迁移（见 _read_messages）。
         """
-        key_path = Path(data_dir).expanduser().resolve() / AiGroupChatStorageMixin._SECRET_FILE_NAME
+        key_path = Path(data_dir).expanduser().resolve() / GroupChatRepository._SECRET_FILE_NAME
         try:
             if key_path.is_file():
                 existing = key_path.read_text(encoding="utf-8").strip()
@@ -353,20 +185,20 @@ class AiGroupChatStorageMixin:
             generated = secrets.token_urlsafe(32)
             key_path.write_text(generated + "\n", encoding="utf-8")
             with contextlib.suppress(OSError):
-                os.chmod(key_path, 0o600)
+                os.chmod(key_path, 384)
             return generated
         except OSError:
-            return AiGroupChatStorageMixin._process_local_secret()
+            return GroupChatRepository.process_local_secret()
 
     @classmethod
-    def _process_local_secret(cls) -> str:
+    def process_local_secret(cls) -> str:
         """进程级随机兜底密钥：本进程生命周期内稳定，重启后历史加密消息不可解密。"""
         if cls._process_secret is None:
             cls._process_secret = "process-local:" + secrets.token_urlsafe(32)
         return cls._process_secret
 
     @staticmethod
-    def _legacy_derived_cipher() -> Fernet | None:
+    def legacy_derived_cipher() -> Fernet | None:
         """旧的「可预测派生密钥」解密器，仅用于读取并迁移 2026-08-01 前加密的历史消息。
 
         禁止用于加密。配置了 SECRET_KEY 时返回 None（无 legacy 数据场景）。
@@ -394,12 +226,12 @@ class AiGroupChatStorageMixin:
         digest = hashlib.sha256(legacy.encode("utf-8")).digest()
         return Fernet(base64.urlsafe_b64encode(digest))
 
-    def _encrypted_message_line(self, message: dict[str, Any]) -> str:
+    def encrypted_message_line(self, message: dict[str, Any]) -> str:
         payload = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        token = self._message_cipher().encrypt(payload).decode("ascii")
+        token = self.message_cipher().encrypt(payload).decode("ascii")
         return f"{self._ENCRYPTED_MESSAGE_PREFIX}{token}\n"
 
-    def _read_jsonl(self, path: Path) -> list[dict[str, Any]]:
+    def read_jsonl(self, path: Path) -> list[dict[str, Any]]:
         if not path.exists():
             return []
         rows: list[dict[str, Any]] = []
@@ -414,40 +246,46 @@ class AiGroupChatStorageMixin:
                 rows.append(item)
         return rows
 
-    def _append_group(self, group: dict[str, Any]) -> None:
+    def append_group(self, group: dict[str, Any]) -> None:
         with self._groups_path.open("a", encoding="utf-8") as fh:
             fh.write(_safe_json_line(group))
 
-    def _rewrite_groups(self, groups: list[dict[str, Any]]) -> None:
+    def rewrite_groups(self, groups: list[dict[str, Any]]) -> None:
         with self._groups_path.open("w", encoding="utf-8") as fh:
             for g in groups:
                 fh.write(_safe_json_line(g))
 
-    def _append_messages(self, messages: list[dict[str, Any]]) -> None:
+    def append_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("a", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(self._encrypted_message_line(m))
+                fh.write(self.encrypted_message_line(m))
 
-    def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
+    def rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("w", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(self._encrypted_message_line(m))
+                fh.write(self.encrypted_message_line(m))
 
-    def _resolve_group_id(self, *, user_id: int, group_id: str) -> str:
+    def resolve_group_id(self, *, user_id: int, group_id: str) -> str:
         raw = str(group_id or "").strip()
         if not raw:
             return raw
-        group = self._find(self._user_groups(user_id), raw)
+        group = GroupChatRepository.find(self.user_groups(user_id), raw)
         alias = str((group or {}).get("alias_group_id") or "").strip()
         if not alias:
             return raw
-        target = self._find(self._user_groups(user_id), alias)
+        target = GroupChatRepository.find(self.user_groups(user_id), alias)
         return alias if target is not None else raw
 
     @staticmethod
-    def _find(groups: list[dict[str, Any]], group_id: str) -> dict[str, Any] | None:
+    def find(groups: list[dict[str, Any]], group_id: str) -> dict[str, Any] | None:
         return next((g for g in groups if str(g.get("id")) == str(group_id)), None)
 
     @staticmethod
-    def _replace(groups: list[dict[str, Any]], updated: dict[str, Any]) -> list[dict[str, Any]]:
-        return [updated if str(g.get("id")) == str(updated.get("id")) else g for g in groups]
+    def replace(groups: list[dict[str, Any]], updated: dict[str, Any]) -> list[dict[str, Any]]:
+        key = GroupChatRepository.group_key(updated)
+        return [updated if GroupChatRepository.group_key(g) == key else g for g in groups]
+
+    @staticmethod
+    def group_key(group: dict[str, Any]) -> tuple[int, str]:
+        """Department IDs are shared across users; every mutation needs the owner."""
+        return int(group.get("user_id") or 0), str(group.get("id"))

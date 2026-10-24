@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import os
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 
+from app.application.mobile_relay_ports import TaskPorts
 from app.services.mobile_relay_utils import _json_dumps, _row_dict, _utc_now
 
 
-class MobileRelayTaskMixin:
-    def __getattr__(self, name: str) -> Any:
-        raise AttributeError(name)
+@dataclass(frozen=True, eq=False)
+class RelayTaskQueue:
+    ports: TaskPorts
 
     def create_task(
         self,
@@ -24,13 +27,13 @@ class MobileRelayTaskMixin:
         kind: str,
         payload: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
-        if not self._desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
+        if not self.ports.desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
             return None
         task_id = uuid.uuid4().hex
         now = _utc_now()
         safe_kind = (kind or "codex.invoke").strip()[:64] or "codex.invoke"
-        with self._get_db() as db:
-            self.ensure_tables(db)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
             db.execute(
                 text(
                     """
@@ -53,11 +56,11 @@ class MobileRelayTaskMixin:
                     "updated_at": now,
                 },
             )
-        return self.get_task(user_id=user_id, task_id=task_id)
+        return self.ports.get_task(user_id=user_id, task_id=task_id)
 
     def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
-        with self._get_db() as db:
-            self.ensure_tables(db)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
             row = (
                 db.execute(
                     text(
@@ -79,8 +82,8 @@ class MobileRelayTaskMixin:
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
         now = _utc_now()
-        with self._get_db() as db:
-            self.ensure_tables(db)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
             row = (
                 db.execute(
                     text(
@@ -124,9 +127,11 @@ class MobileRelayTaskMixin:
         max_tasks: int = 5,
     ) -> dict[str, Any] | None:
         now = _utc_now()
-        with self._get_db() as db:
-            self.ensure_tables(db)
-            desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
+            desktop = self.ports.desktop_for_token(
+                db, relay_id=relay_id, desktop_token=desktop_token
+            )
             if not desktop:
                 return None
             db.execute(
@@ -193,7 +198,7 @@ class MobileRelayTaskMixin:
                 task["status"] = "running"
                 task["claimed_at"] = now
         return {
-            "desktop": self._public_desktop(desktop),
+            "desktop": self.ports.public_desktop(desktop),
             "tasks": tasks,
             "task_count": len(tasks),
         }
@@ -216,12 +221,14 @@ class MobileRelayTaskMixin:
             if requested_status in {"completed", "failed", "blocked", "cancelled"}
             else "completed"
         )
-        with self._get_db() as db:
-            self.ensure_tables(db)
-            desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
+            desktop = self.ports.desktop_for_token(
+                db, relay_id=relay_id, desktop_token=desktop_token
+            )
             if not desktop:
                 return None
-            db.execute(
+            updated = db.execute(
                 text(
                     """
                     UPDATE mobile_relay_tasks
@@ -240,10 +247,14 @@ class MobileRelayTaskMixin:
                     "relay_id": relay_id.strip(),
                 },
             )
+            if cast(CursorResult[Any], updated).rowcount != 1:
+                return None
             row = (
                 db.execute(
-                    text("SELECT * FROM mobile_relay_tasks WHERE task_id = :task_id"),
-                    {"task_id": task_id.strip()},
+                    text(
+                        "SELECT * FROM mobile_relay_tasks WHERE task_id = :task_id AND relay_id = :relay_id"
+                    ),
+                    {"task_id": task_id.strip(), "relay_id": relay_id.strip()},
                 )
                 .mappings()
                 .first()
@@ -253,5 +264,5 @@ class MobileRelayTaskMixin:
         # 不让推送网络耗时拖住 complete 回写。此前任务完成只写库，手机要等下次打开
         # App 轮询才知道结果，"超级员工干完活"对老板完全无感。
         if task_row:
-            self._notify_task_creator(task_row)
+            self.ports.notify_task_creator(task_row)
         return task_row
