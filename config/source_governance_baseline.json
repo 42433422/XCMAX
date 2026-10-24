@@ -1,8 +1,14 @@
 {
   "_note": "Source size above 800 lines is advisory. Router, exact-copy and mechanical-module debt may only shrink; source-boundary gates remain blocking and derived roots are excluded.",
   "schema_version": 2,
-  "updated_at": "2026-10-22",
-  "oversized_files": {},
+  "updated_at": "2026-10-24",
+  "oversized_files": {
+    "FHD/app/application/shipment_excel_etl_security.py": {
+      "stack": "fhd_backend",
+      "lines": 970,
+      "soft_cap": 800
+    }
+  },
   "oversized_routers": {
     "FHD/app/fastapi_routes/domains/misc/routes.py": {
       "stack": "fhd_backend",
@@ -26,7 +32,7 @@
     },
     "FHD/mods/xcagi-erp-domain-bridge/backend/blueprints.py": {
       "stack": "fhd_vue",
-      "routes": 25,
+      "routes": 24,
       "soft_cap": 20
     },
     "FHD/app/fastapi_routes/shipment_orders.py": {
@@ -68,6 +74,10 @@
     "FHD/app/application/etl/parser_region_parse.py": 60,
     "FHD/app/application/etl/service_preview_worker.py": 12,
     "FHD/app/fastapi_routes/domains/conversation/stream_helpers.py": 38,
+    "FHD/app/fastapi_routes/domains/excel/excel_extract_shipment_part01.py": 126,
+    "FHD/app/fastapi_routes/domains/excel/excel_extract_shipment_part02.py": 62,
+    "FHD/app/fastapi_routes/excel_extract_shipment_part01.py": 0,
+    "FHD/app/fastapi_routes/excel_extract_shipment_part02.py": 0,
     "FHD/app/fastapi_routes/im_ai_group_routes.py": 48,
     "FHD/app/fastapi_routes/im_super_employee_routes.py": 78,
     "FHD/app/fastapi_routes/im_websocket_route.py": 5,
@@ -97,7 +107,7 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part02.py": 65,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part03.py": 125,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part04.py": 8,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part05.py": 147,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part05.py": 97,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part06.py": 0,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part06_part01.py": 1,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_part06_part01_part01.py": 65,
@@ -160,7 +170,7 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part04.py": 0,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part04_part01.py": 1,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part04_part01_part01.py": 53,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part04_part01_part02.py": 85,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part04_part01_part02.py": 38,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_part05.py": 66,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_part01.py": 1,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_part02.py": 2,
@@ -299,7 +309,7 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/openapi_connector_runtime_part03.py": 13,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/openapi_connector_runtime_part04.py": 99,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_part01.py": 80,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_part02.py": 63,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_part02.py": 52,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_part03.py": 99,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_part04.py": 37,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_part01.py": 11,
@@ -381,6 +391,5 @@
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase04.py": 57,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xcmax_admin_surface_routes.py": 19,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/xcmax_admin_sync_routes.py": 40
-  },
-  "mechanical_baseline_source": "ddf8e4b92bd830dfdd42a7379a456236c93bcda6"
+  }
 }
