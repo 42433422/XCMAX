@@ -1,152 +1,249 @@
-# ruff: noqa: F401, I001
-"""职责分组工具的公共兼容入口；写入及命令/网络访问保留实现中的授权门禁。"""
+"""Public employee tools assemble explicit execution, workspace, policy and usage collaborators."""
 
 from __future__ import annotations
 
-import asyncio
-import inspect
-import json
+import asyncio as asyncio
+import inspect as inspect
+import json as json
 import os
-from pathlib import Path
 import shutil
+import subprocess
 import sys
-from typing import Any, cast
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
+from typing import cast as cast
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERRORS
 
-try:
+from .employee_specialized_tools_employee_map import EMPLOYEE_TOOLS as EMPLOYEE_TOOLS
+from .employee_specialized_tools_provider_catalog import _LLM_ENV_KEYS as _LLM_ENV_KEYS
+from .employee_specialized_tools_provider_catalog import _MODEL_PRICES as _MODEL_PRICES
+from .employee_specialized_tools_provider_catalog import _PROVIDER_PROFILES as _PROVIDER_PROFILES
+from .employee_tools import (
+    adapters,
+    codex_usage,
+    configuration,
+    cursor_usage,
+    dispatch,
+    employees,
+    providers,
+    quality,
+    release,
+    status,
+    trae_usage,
+    usage,
+    workspace,
+)
+from .employee_tools.configuration import _detect_provider_name as _detect_provider_name
+from .employee_tools.configuration import _mask_secret as _mask_secret
+from .employee_tools.configuration import _provider_base_url as _provider_base_url
+from .employee_tools.configuration import _provider_has_key as _provider_has_key
+from .employee_tools.configuration import _provider_model as _provider_model
+from .employee_tools.configuration import _read_env_file as _read_env_file
+from .employee_tools.policy import _check_write_gate as _check_write_gate
+from .employee_tools.ports import (
+    Configuration,
+    CursorPorts,
+    DispatchPorts,
+    EmployeeFiles,
+    ModelCatalog,
+    Payload,
+    ProviderPorts,
+    QualityPorts,
+    ReleasePorts,
+    StatusPorts,
+    Tool,
+    TraePorts,
+    WorkspacePorts,
+)
+from .employee_tools.processes import CommandRunner
+from .employee_tools.results import _err as _err
+from .employee_tools.results import _ok as _ok
+
+if TYPE_CHECKING:
     import httpx
-except ImportError:  # pragma: no cover
-    httpx = None  # type: ignore[assignment]
-
-# ---------------------------------------------------------------------------
-# 路径常量
-# ---------------------------------------------------------------------------
-
-_FHD_ROOT = Path(__file__).resolve().parents[2]  # .../FHD
+else:
+    try:
+        import httpx
+    except ImportError:
+        httpx = None
+_FHD_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS = _FHD_ROOT / "scripts"
 _VENV_PYTHON = str(_FHD_ROOT / ".venv" / "bin" / "python")
 _PYTHON = _VENV_PYTHON if os.path.isfile(_VENV_PYTHON) else sys.executable
 _EMPLOYEES_DIR = _FHD_ROOT / "mods" / "_employees"
 _DUTY_ROSTER = _FHD_ROOT / "config" / "duty_roster.json"
-
-# 本机 API base（executor 注入的 ctx 可覆盖）
 _DEFAULT_API_BASE = os.environ.get("XCAGI_EMPLOYEE_API_BASE", "http://127.0.0.1:5102")
-
-# subprocess 超时（秒）
 _DEFAULT_TIMEOUT = 120
-
-
-# ---------------------------------------------------------------------------
-# 工具结果构造
-# ---------------------------------------------------------------------------
-
-from app.mod_sdk.employee_specialized_tools_part01_part01 import (
-    _api_call as _api_call,
-    _err as _err,
-    _ok as _ok,
-    _run_cmd as _run_cmd,
-    _run_python_script as _run_python_script,
-    tool_check_coverage as tool_check_coverage,
-    tool_count_raw_sql as tool_count_raw_sql,
-    tool_count_type_debt as tool_count_type_debt,
-    tool_git_branch as tool_git_branch,
-    tool_git_diff as tool_git_diff,
-    tool_git_log as tool_git_log,
-    tool_git_status as tool_git_status,
-    tool_list_deploy_scripts as tool_list_deploy_scripts,
-    tool_mutation_kill_report as tool_mutation_kill_report,
-    tool_pack_release as tool_pack_release,
-    tool_run_arch_fitness as tool_run_arch_fitness,
-    tool_run_mypy as tool_run_mypy,
-    tool_run_pytest as tool_run_pytest,
-    tool_run_ruff_check as tool_run_ruff_check,
-    tool_run_ruff_format as tool_run_ruff_format,
-    tool_verify_employee_contract as tool_verify_employee_contract,
-    tool_verify_version_anchors as tool_verify_version_anchors,
-)
-from app.mod_sdk.employee_specialized_tools_part01_part02 import (
-    tool_api_health as tool_api_health,
-    tool_disk_usage as tool_disk_usage,
-    tool_duty_graph_health as tool_duty_graph_health,
-    tool_employee_autonomy_dashboard as tool_employee_autonomy_dashboard,
-    tool_employee_status as tool_employee_status,
-    tool_list_action_items as tool_list_action_items,
-    tool_list_docs as tool_list_docs,
-    tool_list_employee_packs as tool_list_employee_packs,
-    tool_list_employees as tool_list_employees,
-    tool_list_mods as tool_list_mods,
-    tool_list_scripts as tool_list_scripts,
-    tool_mod_loading_status as tool_mod_loading_status,
-    tool_nginx_test as tool_nginx_test,
-    tool_performance_status as tool_performance_status,
-    tool_read_file as tool_read_file,
-    tool_tail_logs as tool_tail_logs,
-    tool_trigger_gh_workflow as tool_trigger_gh_workflow,
-    tool_validate_employee_pack as tool_validate_employee_pack,
-)
-from app.mod_sdk.employee_specialized_tools_part02_part01 import (
-    _check_write_gate as _check_write_gate,
-    _code_write_tools as _code_write_tools,
-    _mask_secret as _mask_secret,
-    _provider_base_url as _provider_base_url,
-    _provider_has_key as _provider_has_key,
-    _read_env_file as _read_env_file,
-    tool_android_gradle_build as tool_android_gradle_build,
-    tool_check_transactions as tool_check_transactions,
-    tool_frontend_lint as tool_frontend_lint,
-    tool_frontend_test as tool_frontend_test,
-    tool_frontend_typecheck as tool_frontend_typecheck,
-    tool_list_enterprise_mods as tool_list_enterprise_mods,
-    tool_list_invoices as tool_list_invoices,
-    tool_list_users as tool_list_users,
-    tool_list_workbench_sessions as tool_list_workbench_sessions,
-    tool_patch_file as tool_patch_file,
-    tool_sandbox_python as tool_sandbox_python,
-    tool_write_file as tool_write_file,
-)
-from app.mod_sdk.employee_specialized_tools_part02_part02 import (
-    _detect_provider_name as _detect_provider_name,
-    _provider_model as _provider_model,
-    tool_list_configured_providers as tool_list_configured_providers,
-    tool_read_llm_env_config as tool_read_llm_env_config,
-    tool_test_llm_key_health as tool_test_llm_key_health,
-)
-from app.mod_sdk.employee_specialized_tools_part03_part01 import (
-    tool_compare_model_prices as tool_compare_model_prices,
-    tool_get_vlm_route as tool_get_vlm_route,
-    tool_list_vlm_models as tool_list_vlm_models,
-    tool_query_local_token_usage as tool_query_local_token_usage,
-    tool_query_provider_usage as tool_query_provider_usage,
-)
-from app.mod_sdk.employee_specialized_tools_part03_part02 import (
-    tool_query_cursor_usage as tool_query_cursor_usage,
-)
-from app.mod_sdk.employee_specialized_tools_part03_part03 import (
-    tool_query_codex_usage as tool_query_codex_usage,
-)
-from app.mod_sdk.employee_specialized_tools_part04 import (
-    get_employee_tools as get_employee_tools,
-    handle_specialized as handle_specialized,
-    list_all_tool_names as list_all_tool_names,
-    tool_query_trae_usage as tool_query_trae_usage,
-)
-
 _CODE_WRITE_TOOLS_LAZY: frozenset[str] | None = None
-
-from app.mod_sdk.employee_specialized_tools_provider_catalog import (
-    _PROVIDER_PROFILES as _PROVIDER_PROFILES,
-    _LLM_ENV_KEYS as _LLM_ENV_KEYS,
-    _MODEL_PRICES as _MODEL_PRICES,
-)
-
-
-_LLM_SECRET_KEYS: frozenset[str] = frozenset(
+_LLM_SECRET_KEYS = frozenset(
     k for k in _LLM_ENV_KEYS if "API_KEY" in k or "PAT" in k or "SECRET" in k
 )
 
 
-TOOL_REGISTRY: dict[str, Any] = {
+async def _run_cmd(
+    args: list[str],
+    *,
+    cwd: str | Path | None = None,
+    timeout: int = _DEFAULT_TIMEOUT,
+    env: dict[str, str] | None = None,
+) -> Payload:
+    """执行命令并返回结构化结果。"""
+    return await CommandRunner(asyncio.create_subprocess_exec, dict(os.environ)).run(
+        args, cwd=cwd, timeout=timeout, env=env
+    )
+
+
+async def _run_python_script(script: str | Path, *extra_args: str, **kw: Any) -> Payload:
+    """用项目 venv python 跑一个脚本。"""
+    return await _run_cmd([_PYTHON, str(script), *extra_args], **kw)
+
+
+async def _api_call(method: str, path: str, *, api_base: str | None = None, **kw: Any) -> Payload:
+    if httpx is None:
+        return {"ok": False, "error": "httpx 未安装"}
+    from app.application.tool_execution_deadline import build_http_request
+
+    base = (api_base or _DEFAULT_API_BASE).rstrip("/")
+    url = f"{base}{path}" if path.startswith("/") else f"{base}/{path}"
+    return await build_http_request(httpx.AsyncClient)(method, url, **kw)
+
+
+def _quality() -> QualityPorts:
+    return QualityPorts(_FHD_ROOT, _SCRIPTS, _PYTHON, _run_cmd, _run_python_script)
+
+
+def _release() -> ReleasePorts:
+    return ReleasePorts(_FHD_ROOT, _run_cmd)
+
+
+def _workspace() -> WorkspacePorts:
+    return WorkspacePorts(_FHD_ROOT, _run_cmd)
+
+
+def _status() -> StatusPorts:
+    return StatusPorts(_DEFAULT_API_BASE, _api_call)
+
+
+def _employees() -> EmployeeFiles:
+    return EmployeeFiles(_EMPLOYEES_DIR, _DUTY_ROSTER)
+
+
+def _configuration() -> Configuration:
+    return Configuration(_FHD_ROOT, _PROVIDER_PROFILES, _LLM_ENV_KEYS, _LLM_SECRET_KEYS)
+
+
+def _providers() -> ProviderPorts:
+    return ProviderPorts(_PROVIDER_PROFILES, httpx.AsyncClient if httpx is not None else None)
+
+
+def _usage() -> ModelCatalog:
+    return ModelCatalog(_MODEL_PRICES)
+
+
+def _cursor_usage() -> CursorPorts:
+    return CursorPorts(Path.home(), shutil.which, subprocess.run, adapters.http_get)
+
+
+def _trae_usage() -> TraePorts:
+    return TraePorts(Path.home(), adapters.http_get)
+
+
+def _code_write_tools() -> frozenset[str]:
+    global _CODE_WRITE_TOOLS_LAZY
+    if _CODE_WRITE_TOOLS_LAZY is None:
+        try:
+            from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS
+
+            _CODE_WRITE_TOOLS_LAZY = CODE_WRITE_TOOLS
+        except ImportError:
+            _CODE_WRITE_TOOLS_LAZY = frozenset({"patch_file", "write_file"})
+    return _CODE_WRITE_TOOLS_LAZY
+
+
+def get_employee_tools(employee_id: str) -> list[str]:
+    """返回某员工注册的专属工具名列表。"""
+    return list(EMPLOYEE_TOOLS.get(employee_id, []))
+
+
+def list_all_tool_names() -> list[str]:
+    """返回全部已注册工具名。"""
+    return sorted(TOOL_REGISTRY)
+
+
+async def handle_specialized(employee_id: str, payload: Payload, ctx: Payload) -> Payload:
+    """专属工具调度入口。
+
+    payload 形如：
+        {"handler": "specialized", "tool": "run_pytest", "params": {...}}
+    或：
+        {"handler": "specialized", "tool": "list_tools"}
+    """
+    ports = DispatchPorts(TOOL_REGISTRY, get_employee_tools, _code_write_tools, _check_write_gate)
+    return await dispatch.handle_specialized(ports, employee_id, payload, ctx)
+
+
+tool_run_pytest = dispatch.bind_tool(quality.run_pytest, _quality)
+tool_run_ruff_check = dispatch.bind_tool(quality.run_ruff_check, _quality)
+tool_run_ruff_format = dispatch.bind_tool(quality.run_ruff_format, _quality)
+tool_run_mypy = dispatch.bind_tool(quality.run_mypy, _quality)
+tool_check_coverage = dispatch.bind_tool(quality.check_coverage, _quality)
+tool_count_type_debt = dispatch.bind_tool(quality.count_type_debt, _quality)
+tool_count_raw_sql = dispatch.bind_tool(quality.count_raw_sql, _quality)
+tool_run_arch_fitness = dispatch.bind_tool(quality.run_arch_fitness, _quality)
+tool_verify_version_anchors = dispatch.bind_tool(quality.verify_version_anchors, _quality)
+tool_verify_employee_contract = dispatch.bind_tool(quality.verify_employee_contract, _quality)
+tool_mutation_kill_report = dispatch.bind_tool(quality.mutation_kill_report, _quality)
+tool_git_status = dispatch.bind_tool(release.git_status, _release)
+tool_git_log = dispatch.bind_tool(release.git_log, _release)
+tool_git_diff = dispatch.bind_tool(release.git_diff, _release)
+tool_git_branch = dispatch.bind_tool(release.git_branch, _release)
+tool_pack_release = dispatch.bind_tool(release.pack_release, _release)
+tool_list_deploy_scripts = dispatch.bind_tool(release.list_deploy_scripts, _release)
+tool_trigger_gh_workflow = dispatch.bind_tool(release.trigger_gh_workflow, _release)
+tool_nginx_test = dispatch.bind_tool(release.nginx_test, _release)
+tool_api_health = dispatch.bind_tool(status.api_health, _status)
+tool_mod_loading_status = dispatch.bind_tool(status.mod_loading_status, _status)
+tool_disk_usage = dispatch.bind_tool(release.disk_usage, _release)
+tool_tail_logs = dispatch.bind_tool(workspace.tail_logs, _workspace)
+tool_performance_status = dispatch.bind_tool(status.performance_status, _status)
+tool_list_mods = dispatch.bind_tool(status.list_mods, _status)
+tool_list_employee_packs = dispatch.bind_tool(employees.list_employee_packs, _employees)
+tool_validate_employee_pack = dispatch.bind_tool(employees.validate_employee_pack, _employees)
+tool_duty_graph_health = dispatch.bind_tool(status.duty_graph_health, _status)
+tool_list_docs = dispatch.bind_tool(workspace.list_docs, _workspace)
+tool_read_file = dispatch.bind_tool(workspace.read_file, _workspace)
+tool_list_scripts = dispatch.bind_tool(workspace.list_scripts, _workspace)
+tool_list_employees = dispatch.bind_tool(employees.list_employees, _employees)
+tool_employee_status = dispatch.bind_tool(status.employee_status, _status)
+tool_list_action_items = dispatch.bind_tool(status.list_action_items, _status)
+tool_employee_autonomy_dashboard = dispatch.bind_tool(status.employee_autonomy_dashboard, _status)
+tool_list_workbench_sessions = dispatch.bind_tool(workspace.list_workbench_sessions, _workspace)
+tool_sandbox_python = dispatch.bind_tool(quality.sandbox_python, _quality)
+tool_check_transactions = dispatch.bind_tool(status.check_transactions, _status)
+tool_list_invoices = dispatch.bind_tool(status.list_invoices, _status)
+tool_list_enterprise_mods = dispatch.bind_tool(status.list_enterprise_mods, _status)
+tool_list_users = dispatch.bind_tool(status.list_users, _status)
+tool_frontend_lint = dispatch.bind_tool(quality.frontend_lint, _quality)
+tool_frontend_typecheck = dispatch.bind_tool(quality.frontend_typecheck, _quality)
+tool_frontend_test = dispatch.bind_tool(quality.frontend_test, _quality)
+tool_android_gradle_build = dispatch.bind_tool(quality.android_gradle_build, _quality)
+tool_write_file = dispatch.bind_tool(workspace.write_file, _workspace)
+tool_patch_file = dispatch.bind_tool(workspace.patch_file, _workspace)
+tool_read_llm_env_config = dispatch.bind_tool(configuration.read_llm_env_config, _configuration)
+tool_list_configured_providers = dispatch.bind_tool(
+    configuration.list_configured_providers, _configuration
+)
+tool_test_llm_key_health = dispatch.bind_tool(providers.test_llm_key_health, _providers)
+tool_query_provider_usage = dispatch.bind_tool(providers.query_provider_usage, _providers)
+tool_compare_model_prices = dispatch.bind_tool(usage.compare_model_prices, _usage)
+tool_list_vlm_models = dispatch.bind_tool(usage.list_vlm_models, _usage)
+tool_get_vlm_route = dispatch.bind_tool(usage.get_vlm_route, _usage)
+tool_query_local_token_usage = dispatch.bind_tool(usage.query_local_token_usage, _usage)
+tool_query_cursor_usage = dispatch.bind_tool(cursor_usage.query_cursor_usage, _cursor_usage)
+tool_query_codex_usage = dispatch.bind_tool(codex_usage.query_codex_usage, lambda: Path.home())
+tool_query_trae_usage = dispatch.bind_tool(trae_usage.query_trae_usage, _trae_usage)
+TOOL_REGISTRY: dict[str, Tool] = {
     "run_pytest": tool_run_pytest,
     "run_ruff_check": tool_run_ruff_check,
     "run_ruff_format": tool_run_ruff_format,
@@ -206,7 +303,3 @@ TOOL_REGISTRY: dict[str, Any] = {
     "query_codex_usage": tool_query_codex_usage,
     "query_trae_usage": tool_query_trae_usage,
 }
-
-from app.mod_sdk.employee_specialized_tools_employee_map import (
-    EMPLOYEE_TOOLS as EMPLOYEE_TOOLS,
-)

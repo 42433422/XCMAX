@@ -5,7 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from modstore_server import self_maintenance_loop_runner as loop_runner
+import modstore_server.maintenance_loop.schedule as _maintenance_schedule
+import modstore_server.maintenance_loop.store as _maintenance_store
 from modstore_server.runtime_provenance import collect_runtime_provenance
 
 
@@ -173,7 +174,7 @@ def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> N
     ledger = tmp_path / "ledger.jsonl"
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
 
-    loop_runner._append_ledger({"phase": "start", "run_id": "run-123"})
+    _maintenance_store._append_ledger({"phase": "start", "run_id": "run-123"})
 
     record = json.loads(ledger.read_text(encoding="utf-8"))
     assert record["correlation_id"] == "run-123"
@@ -182,7 +183,7 @@ def test_ledger_adds_correlation_id_and_schema(monkeypatch, tmp_path: Path) -> N
 
 def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_schedule,
         "evaluate_self_maintenance_need",
         lambda: {
             "runtime_provenance": {
@@ -193,7 +194,7 @@ def test_force_cannot_bypass_untrusted_runtime_provenance(monkeypatch) -> None:
         },
     )
 
-    result = loop_runner.should_run_self_maintenance_loop(force=True)
+    result = _maintenance_schedule.should_run_self_maintenance_loop(force=True)
 
     assert result["should_run"] is False
     assert result["reason"] == "runtime_provenance_blocked"
@@ -206,7 +207,7 @@ def test_loop_lease_is_exclusive(monkeypatch, tmp_path: Path) -> None:
         str(tmp_path / "loop.lock"),
     )
 
-    with loop_runner._exclusive_loop_lease() as first:
-        with loop_runner._exclusive_loop_lease() as second:
+    with _maintenance_store._exclusive_loop_lease() as first:
+        with _maintenance_store._exclusive_loop_lease() as second:
             assert first is True
             assert second is False

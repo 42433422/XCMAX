@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from app.application.workflow.planner_llmworkflowplanner_mixin02 import (
+from app.application.workflow.onboarding_slots import (
     _onboarding_first_order_slots,
 )
 
@@ -53,10 +53,7 @@ def test_both_onboarding_markers_are_required(prefix):
     "marker", ["查询客户「", "查询商品「", "查询产品「", "查询客户「」", "查询商品「」"]
 )
 def test_many_invalid_candidates_finish_in_isolated_process(marker):
-    source = (
-        Path(__file__).resolve().parents[2]
-        / "app/application/workflow/planner_llmworkflowplanner_mixin02.py"
-    )
+    source = Path(__file__).resolve().parents[2] / "app/application/workflow/onboarding_slots.py"
     code = """
 import json, runpy, sys
 parse = runpy.run_path(sys.argv[1])["_onboarding_first_order_slots"]

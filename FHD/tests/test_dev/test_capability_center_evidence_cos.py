@@ -25,6 +25,11 @@ INDEX = json.loads((SITE / "data/capabilities/evidence-index.json").read_text(en
 ]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def rebuild_publication_files():
+    MODULE.prepare_evidence_assets()
+
+
 def test_media_routes_through_backend_and_other_files_stay_local() -> None:
     MODULE._EVIDENCE_INDEX.clear()
     png = "FHD/docs/evidence/capabilities/ai-employee-pack-01-employee-market.png"
@@ -49,10 +54,26 @@ def test_cos_key_uses_repo_path_or_public_copy() -> None:
         MODULE.evidence_cos_key("FHD/docs/evidence/e2e/a.png", "f-a.png")
         == "FHD/docs/evidence/e2e/a.png"
     )
+
     assert (
         MODULE.evidence_cos_key("docs/elsewhere/a.png", "f-a.png")
         == "成都修茈科技有限公司/capabilities/assets/evidence/f-a.png"
     )
+
+
+def test_external_provenance_is_not_read_as_a_repository_file() -> None:
+    url = "https://xiu-ci.com/download-release.json"
+    assert MODULE.evidence_paths({"release": url}) == set()
+    assert MODULE.privacy_exclusions({"release": url}) == set()
+    assert not MODULE.path_exists(url)
+    assert not MODULE.path_exists("")
+
+
+def test_windows_receipts_resolve_without_generated_files(tmp_path, monkeypatch) -> None:
+    expected = MODULE.windows_delivery_panel()
+    monkeypatch.setattr(MODULE, "EVIDENCE_ASSET_DIR", tmp_path / "absent")
+    assert MODULE.windows_delivery_panel() == expected
+    assert not MODULE.EVIDENCE_ASSET_DIR.exists()
 
 
 def _page_refs() -> dict[str, set[str]]:

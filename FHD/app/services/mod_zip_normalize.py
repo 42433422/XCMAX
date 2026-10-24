@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import zipfile
@@ -34,12 +35,23 @@ def normalize_package_zip_path(src: str) -> str:
             return src
         fd, normalized = tempfile.mkstemp(prefix="xcagi-mod-flat-", suffix=".zip")
         os.close(fd)
-        with zipfile.ZipFile(normalized, "w", zipfile.ZIP_DEFLATED) as out:
-            for info in zf.infolist():
-                if info.is_dir() or not info.filename.startswith(f"{root_name}/"):
-                    continue
-                arc = info.filename[len(root_name) + 1 :]
-                if not arc:
-                    continue
-                out.writestr(arc, zf.read(info.filename))
-        return normalized
+        returned = False
+        try:
+            with zipfile.ZipFile(normalized, "w", zipfile.ZIP_DEFLATED) as out:
+                for info in zf.infolist():
+                    if info.is_dir() or not info.filename.startswith(f"{root_name}/"):
+                        continue
+                    arc = info.filename[len(root_name) + 1 :]
+                    if not arc:
+                        continue
+                    out.writestr(arc, zf.read(info.filename))
+            returned = True
+            return normalized
+        finally:
+            if not returned:
+                try:
+                    os.unlink(normalized)
+                except OSError:
+                    logging.getLogger(__name__).warning(
+                        "无法删除未完成的规范化 Mod 包: %s", normalized
+                    )

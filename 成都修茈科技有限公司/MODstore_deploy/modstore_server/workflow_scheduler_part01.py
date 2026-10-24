@@ -273,7 +273,7 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
     ):
         return
     try:
-        from modstore_server.self_maintenance_loop_runner import (
+        from modstore_server.maintenance_loop.coordinator import (
             run_self_maintenance_loop,
         )
 

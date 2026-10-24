@@ -7,13 +7,14 @@
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
   2. 校验 LICENSE 为 MIT (含关键字检查)。
-  3. 在线模式：在临时目录 (tempfile.TemporaryDirectory) 中从远端 clone 精确 tag
+  3. 本地反向重放记录的补丁，与上游哈希清单比对，无需保留第二份源码。
+  4. 在线模式：在临时目录 (tempfile.TemporaryDirectory) 中从远端 clone 精确 tag
      `1.2.10`（无 v 前缀），把 tag 解析为 commit 并断言等于锁定 SHA `413414...`，
-     再对 `libs/langgraph/langgraph` + LICENSE 做字节级比对（原样吸收），不使用任何本地 /tmp 检出。
+     再对 `libs/langgraph/langgraph` + LICENSE 的上游哈希做比对。
 
 用法:
   python verify_vendor.py            # 本地清单 + LICENSE + 在线上游比对
-  python verify_vendor.py --offline  # 仅本地清单 + LICENSE, 跳过在线比对
+  python verify_vendor.py --offline  # 本地清单 + LICENSE + 补丁重放，跳过在线比对
   python verify_vendor.py --gen      # 重新生成 MANIFEST.sha256
 
 退出码: 0=全部通过; 1=校验失败。
@@ -24,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -71,16 +73,17 @@ def _walk_files(root: Path) -> list[Path]:
     return out
 
 
-def collect_files() -> dict[str, str]:
+def collect_files(root: Path | None = None) -> dict[str, str]:
     """返回 {相对路径(正斜杠): sha256}, 覆盖 TOPNODE 下的所有源文件。"""
+    root = root or HERE
     result: dict[str, str] = {}
     for node in TOPNODE:
-        p = HERE / node
+        p = root / node
         if p.is_file():
             result[node] = sha256_of(p)
         elif p.is_dir():
             for f in _walk_files(p):
-                result[f.relative_to(HERE).as_posix()] = sha256_of(f)
+                result[f.relative_to(root).as_posix()] = sha256_of(f)
     return result
 
 
@@ -91,12 +94,13 @@ def write_manifest() -> None:
     print(f"[gen] wrote {len(files)} entries -> {MANIFEST.name}")
 
 
-def read_manifest() -> dict[str, str]:
-    if not MANIFEST.exists():
-        print(f"[FAIL] manifest 缺失: {MANIFEST.name}")
+def read_manifest(path: Path | None = None) -> dict[str, str]:
+    path = path or MANIFEST
+    if not path.exists():
+        print(f"[FAIL] manifest 缺失: {path.name}")
         sys.exit(1)
     out: dict[str, str] = {}
-    for line in MANIFEST.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -147,6 +151,49 @@ def verify_license() -> bool:
     ok = "MIT License" in text and "LangChain, Inc." in text
     print(f"[{'OK' if ok else 'FAIL'}] LICENSE 为 MIT (LangChain, Inc.)")
     return ok
+
+
+def verify_local_patches(prov: dict) -> bool:
+    """Reconstruct the pinned upstream bytes from the only maintained runtime copy."""
+    baseline = HERE / "UPSTREAM_MANIFEST.sha256"
+    if (
+        prov.get("upstream_sha256_manifest") != baseline.name
+        or not baseline.is_file()
+        or sha256_of(baseline) != prov.get("upstream_manifest_sha256")
+    ):
+        print("[FAIL] upstream manifest identity mismatch")
+        return False
+    records = prov.get("local_patches")
+    if not isinstance(records, list) or not records:
+        print("[FAIL] local patch provenance missing")
+        return False
+    patches: list[Path] = []
+    for record in records:
+        if not isinstance(record, dict):
+            return False
+        patch = (HERE / str(record.get("path", ""))).resolve()
+        if (
+            not patch.is_relative_to((HERE / "patches").resolve())
+            or not patch.is_file()
+            or sha256_of(patch) != record.get("sha256")
+        ):
+            print("[FAIL] local patch identity mismatch")
+            return False
+        patches.append(patch)
+    with tempfile.TemporaryDirectory(prefix="langgraph-provenance-") as tmp:
+        restored = Path(tmp)
+        shutil.copytree(HERE / "langgraph", restored / "langgraph")
+        shutil.copy2(HERE / "LICENSE", restored / "LICENSE")
+        for patch in reversed(patches):
+            result = _git(["apply", "--reverse", str(patch)], cwd=restored)
+            if result.returncode:
+                print(f"[FAIL] patch cannot reconstruct upstream: {patch.name}")
+                return False
+        if collect_files(restored) != read_manifest(baseline):
+            print("[FAIL] reconstructed upstream differs from pinned manifest")
+            return False
+    print("[OK] local patches reconstruct the pinned upstream bytes")
+    return True
 
 
 def _git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -217,7 +264,7 @@ def verify_upstream(prov: dict) -> bool:
             return False
 
         mismatches: list[str] = []
-        for rel, digest in collect_files().items():
+        for rel, digest in read_manifest(HERE / "UPSTREAM_MANIFEST.sha256").items():
             upstream = (
                 upstream_root / "LICENSE" if rel == "LICENSE" else upstream_root / rel
             )
@@ -230,7 +277,7 @@ def verify_upstream(prov: dict) -> bool:
     ok = not mismatches
     if ok:
         print(
-            f"[OK] 与远端 tag {EXPECTED_TAG} ({sha[:12]}) 的 {src}/langgraph + LICENSE 字节级一致"
+            f"[OK] 上游清单与远端 tag {EXPECTED_TAG} ({sha[:12]}) 的 {src} 字节级一致"
         )
     else:
         for m in mismatches:
@@ -251,7 +298,7 @@ def main() -> int:
         return 0
 
     prov = load_provenance()
-    results = [verify_license(), verify_manifest()]
+    results = [verify_license(), verify_manifest(), verify_local_patches(prov)]
     if not args.offline:
         results.append(verify_upstream(prov))
     else:

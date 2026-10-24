@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -19,11 +20,8 @@ TOKENS = ROOT / "config" / "mobile_design_tokens.json"
 OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
 FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
-FASTAPI_MOBILE_EXT_PART03 = ROOT / "app/fastapi_routes/mobile_api_extensions_part03.py"
+FASTAPI_MOBILE_ADMIN = ROOT / "app/fastapi_routes/mobile_extensions/routes_admin.py"
 FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
-
-# /admin/home 允许以主文件直接写法或 part03 拆分（含二级拆分）写法存在，引号风格兼容。
-_ADMIN_HOME_FACADE_RE = re.compile(r"@_facade\(\)\.extension_router\.get\([\"']/admin/home[\"']\)")
 
 FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
 FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/FLUTTER_UNIFICATION.md"
@@ -186,35 +184,62 @@ def _check_unified_stack(errors: list[str]) -> None:
                 errors.append(f"contracts/openapi.json 缺少移动契约路径: {path}")
 
     fastapi_mobile = _read_text(FASTAPI_MOBILE, errors)
-    if fastapi_mobile:
-        for snippet in (
-            'APIRouter(prefix="/api/mobile/v1"',
-            "router.include_router(extension_router)",
-        ):
-            if snippet not in fastapi_mobile:
-                errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
+    if fastapi_mobile and 'APIRouter(prefix="/api/mobile/v1"' not in fastapi_mobile:
+        errors.append("mobile_api.py 缺少 FastAPI mobile 路由前缀: /api/mobile/v1")
+
+    # Route ownership lives in focused route components; the composition root
+    # assembles them. Check the current public structure instead of retired
+    # numbered-part filenames, which made this gate drift after module moves.
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
-    fastapi_ext_part03 = _read_text(FASTAPI_MOBILE_EXT_PART03, errors)
-    fastapi_ext_part03_deep = _read_text(
-        ROOT / "app/fastapi_routes/mobile_api_extensions_part03_part01.py", errors
-    )
-    if fastapi_ext:
-        for snippet in (
-            '@extension_router.get("/admin/home")',
-            "extension_router.include_router(_ai_groups_router)",
-        ):
-            # /admin/home 允许以主文件直接写法或 part03 拆分（含二级拆分）写法存在。
-            if snippet not in fastapi_ext and (
-                snippet != '@extension_router.get("/admin/home")'
-                or (
-                    _ADMIN_HOME_FACADE_RE.search(fastapi_ext_part03 or "") is None
-                    and _ADMIN_HOME_FACADE_RE.search(fastapi_ext_part03_deep or "") is None
-                )
-            ):
-                errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
+    for snippet in (
+        "extension_router.include_router(_admin.router)",
+        "extension_router.include_router(_ai_groups.router)",
+    ):
+        if fastapi_ext and snippet not in fastapi_ext:
+            errors.append(f"mobile_api_extensions.py 缺少移动路由组合: {snippet}")
+    if fastapi_ext and not _has_mobile_router_composition(fastapi_ext):
+        errors.append(
+            "mobile_api_extensions.py 缺少移动路由组合: _mobile_router.include_router(extension_router)"
+        )
+
+    fastapi_admin = _read_text(FASTAPI_MOBILE_ADMIN, errors)
+    if fastapi_admin and '@router.get("/admin/home"' not in fastapi_admin:
+        errors.append('routes_admin.py 缺少移动业务路由: @router.get("/admin/home")')
+
     fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
-    if fastapi_ai_groups and '@router.get("/ai-groups")' not in fastapi_ai_groups:
-        errors.append('routes_ai_groups.py 缺少移动 AI 群组路由片段: @router.get("/ai-groups")')
+    if fastapi_ai_groups and '@router.get("/ai-groups"' not in fastapi_ai_groups:
+        errors.append('routes_ai_groups.py 缺少移动 AI 群组路由: @router.get("/ai-groups")')
+
+
+def _has_mobile_router_composition(source: str) -> bool:
+    """Require the extension router to be mounted on the mobile API router."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "include_router" or not node.args:
+            continue
+        if not isinstance(node.args[0], ast.Name) or node.args[0].id != "extension_router":
+            continue
+        target = node.func.value
+        if isinstance(target, ast.Name) and target.id == "_mobile_router":
+            return True
+        if (
+            isinstance(target, ast.Call)
+            and isinstance(target.func, ast.Name)
+            and target.func.id == "cast"
+            and len(target.args) == 2
+            and isinstance(target.args[0], ast.Name)
+            and target.args[0].id == "APIRouter"
+            and isinstance(target.args[1], ast.Name)
+            and target.args[1].id == "_mobile_router"
+        ):
+            return True
+    return False
 
 
 def _check_tokens(errors: list[str]) -> None:

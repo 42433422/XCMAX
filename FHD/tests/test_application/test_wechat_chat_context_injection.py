@@ -10,9 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application import wechat_ingest_service
-from app.application.ai_chat_app_service_aichatapplicationservice_mixin01__aichatapplicationservicepart01mixin_mixin02 import (
-    __AIChatApplicationServicePart01MixinPart02Mixin as _ChatMixin,
-)
+from app.application.ai_chat.context_enrichment import inject_wechat_contact_context
 from app.application.wechat_chat_context import resolve_wechat_chat_context
 from app.db.base import Base
 from app.db.models.customer import Customer
@@ -110,8 +108,7 @@ def test_resolver_swallows_errors(monkeypatch) -> None:
 
 def test_inject_mixin_sets_none_on_miss(wechat_db) -> None:
     _seed_linked_contact(wechat_db)
-    mixin = object.__new__(_ChatMixin)
-    enriched = mixin._inject_wechat_contact_context("无关消息", {"tenant_id": 7, "keep": 1})
+    enriched = inject_wechat_contact_context("无关消息", {"tenant_id": 7, "keep": 1})
     # 未命中显式置 None：防止 request_context 跨轮合并时残留上一轮情报
     assert enriched["wechat_contact_context"] is None
     assert enriched["keep"] == 1
@@ -119,8 +116,7 @@ def test_inject_mixin_sets_none_on_miss(wechat_db) -> None:
 
 def test_inject_mixin_enriches_on_hit(wechat_db) -> None:
     _seed_linked_contact(wechat_db)
-    mixin = object.__new__(_ChatMixin)
-    enriched = mixin._inject_wechat_contact_context("白龙马^_^李秋林问到尾款了", {"tenant_id": 7})
+    enriched = inject_wechat_contact_context("白龙马^_^李秋林问到尾款了", {"tenant_id": 7})
     assert isinstance(enriched["wechat_contact_context"], dict)
     assert enriched["wechat_contact_context"]["customer"]["name"] == "白龙马实业"
 

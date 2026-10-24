@@ -25,6 +25,7 @@ from langgraph.store.base import (
     BaseStore,
     GetOp,
     IndexConfig,
+    InvalidNamespaceError,
     Item,
     ListNamespacesOp,
     Op,
@@ -36,7 +37,6 @@ from langgraph.store.base import (
     ensure_embeddings,
     get_text_at_path,
     tokenize_path,
-    validate_op_namespace,
 )
 from psycopg import Capabilities, Connection, Cursor, Pipeline
 from psycopg.rows import DictRow, dict_row
@@ -1390,10 +1390,39 @@ def _group_ops(ops: Iterable[Op]) -> tuple[dict[type, list[tuple[int, Op]]], int
     grouped_ops: dict[type, list[tuple[int, Op]]] = defaultdict(list)
     tot = 0
     for idx, op in enumerate(ops):
-        validate_op_namespace(op)
+        _validate_postgres_op_namespace(op)
         grouped_ops[type(op)].append((idx, op))
         tot += 1
     return grouped_ops, tot
+
+
+def _validate_postgres_op_namespace(op: Op) -> None:
+    """Validate batch namespaces before PostgreSQL's dotted serialization."""
+    if isinstance(op, (GetOp, PutOp)):
+        _validate_postgres_namespace_labels(op.namespace)
+    elif isinstance(op, SearchOp):
+        _validate_postgres_namespace_labels(op.namespace_prefix)
+    elif isinstance(op, ListNamespacesOp):
+        for condition in op.match_conditions or ():
+            _validate_postgres_namespace_labels(condition.path)
+
+
+def _validate_postgres_namespace_labels(namespace: tuple[str, ...]) -> None:
+    """Match upstream op validation without changing reserved-root semantics."""
+    for label in namespace:
+        if not isinstance(label, str):
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels"
+                f" must be strings, but got {type(label).__name__}."
+            )
+        if "." in label:
+            raise InvalidNamespaceError(
+                f"Invalid namespace label '{label}' found in {namespace}. Namespace labels cannot contain periods ('.')."
+            )
+        elif not label:
+            raise InvalidNamespaceError(
+                f"Namespace labels cannot be empty strings. Got {label} in {namespace}"
+            )
 
 
 def _json_loads(content: bytes | orjson.Fragment) -> Any:
