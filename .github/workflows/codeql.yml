@@ -86,7 +86,7 @@ jobs:
 
       - name: Retain source locations and data flows for review
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: codeql-sarif-${{ matrix.language }}
           path: codeql-sarif-out/**/*.sarif
@@ -156,7 +156,7 @@ jobs:
           }
       - name: Retain the no-new-alert decision
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-no-new-critical-high-${{ github.event.pull_request.number }}
           path: security-no-new-critical-high.json

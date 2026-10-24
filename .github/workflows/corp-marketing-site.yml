@@ -109,7 +109,7 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y ffmpeg
           python3 scripts/build_capability_center.py --check-videos --video-report "$RUNNER_TEMP/capability-video-integrity.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: capability-video-integrity

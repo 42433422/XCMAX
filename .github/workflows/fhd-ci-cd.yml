@@ -118,7 +118,7 @@ jobs:
           uv run --no-sync pytest tests/test_application/test_approval_session_renewal.py -q -o addopts= --junitxml=agent-postgres-results.xml
       - name: Retain transaction test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: agent-postgres-transactions
           path: FHD/agent-postgres-results.xml
@@ -200,7 +200,7 @@ jobs:
         env:
           SHARD_TOTAL: ${{ inputs.backend_shards || '8' }}
         run: python FHD/scripts/ci/backend_shards.py plan --total "$SHARD_TOTAL"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ci-classification-${{ github.run_attempt }}
           path: FHD/classification.json
@@ -411,7 +411,7 @@ jobs:
           python scripts/ci/backend_shards.py seal shard-evidence
       - name: Preserve shard evidence even on failure
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
           path: FHD/shard-evidence/
@@ -489,7 +489,7 @@ jobs:
         run: |
           python scripts/ci/backend_shard_aggregate.py shards \
             --artifact-prefix "backend-shard-${GITHUB_RUN_ATTEMPT}-"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && needs.classify.outputs.backend == 'true'
         with:
           name: backend-combined-${{ github.run_attempt }}
@@ -576,7 +576,7 @@ jobs:
         run: node ../scripts/ci/frontend_shards.mjs run shard-evidence
       - name: Preserve frontend shard evidence even on failure
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-shard-${{ github.run_attempt }}-${{ matrix.shard }}
           path: FHD/frontend/shard-evidence/
@@ -650,7 +650,7 @@ jobs:
         run: python ../scripts/dev/coverage_ratchet.py --check --require-frontend
       - name: Upload frontend coverage and partition summary
         if: always() && needs.classify.outputs.frontend == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: frontend-coverage-${{ github.run_attempt }}
           path: |
@@ -929,7 +929,7 @@ jobs:
         run: bash scripts/deploy/fhd-pack-release.sh
 
       - name: Upload server release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fhd-server-release
           path: |
@@ -1052,7 +1052,7 @@ jobs:
 
       - name: Upload SBOM artifact
         if: steps.build_fhd.outputs.digest != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fhd-api-sbom
           path: ${{ runner.temp }}/fhd-api-sbom.spdx.json
@@ -1081,7 +1081,7 @@ jobs:
 
       - name: Upload manifest with image digest
         if: steps.build_fhd.outputs.digest != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fhd-server-release-with-image
           path: |

@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload ledger
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: evolution-ledger-scan
           path: FHD/evolution_decisions.jsonl
@@ -315,7 +315,7 @@ jobs:
 
       - name: Upload ledger
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: evolution-ledger-build
           path: FHD/evolution_decisions.jsonl

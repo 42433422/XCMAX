@@ -62,7 +62,7 @@ jobs:
             --output FHD/test_reports/modstore_publish/source-plan.json)
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "count=$(jq '.include | length' <<< "$matrix")" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mod-source-plan
@@ -145,7 +145,7 @@ jobs:
             --source-repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
             --workflow-run-id "$GITHUB_RUN_ID" --duty-roster FHD/config/duty_roster.json \
             --receipt "FHD/test_reports/modstore_publish/${MOD_ID}.receipt.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: mod-package-${{ matrix.id }}
