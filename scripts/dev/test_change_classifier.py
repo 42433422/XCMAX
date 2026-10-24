@@ -20,11 +20,24 @@ from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, decide
 from scripts.dev.change_classifier import main as classifier_main
 
 DOCS_ONLY = ["docs/CI_SSOT.md", "FHD/docs/WINDOWS_RELEASE_SSOT.md"]
-FRONTEND_ONLY = ["FHD/frontend/src/views/ApprovalHubView.vue", "FHD/frontend/package-lock.json"]
-BACKEND_ONLY = ["FHD/app/application/rbac_app_service.py", "FHD/app/fastapi_routes/desktop_runtime.py"]
-WINDOWS_ONLY = ["FHD/scripts/package/acceptance-windows.ps1", "FHD/desktop/build/windows-sign.cjs"]
-MACOS_ONLY = ["FHD/desktop/autonomy/controller.ts", "FHD/scripts/package/build-installer.sh"]
+FRONTEND_ONLY = [
+    "FHD/frontend/src/views/ApprovalHubView.vue",
+    "FHD/frontend/package-lock.json",
+]
+BACKEND_ONLY = [
+    "FHD/app/application/rbac_app_service.py",
+    "FHD/app/fastapi_routes/desktop_runtime.py",
+]
+WINDOWS_ONLY = [
+    "FHD/scripts/package/acceptance-windows.ps1",
+    "FHD/desktop/build/windows-sign.cjs",
+]
+MACOS_ONLY = [
+    "FHD/desktop/autonomy/controller.ts",
+    "FHD/scripts/package/build-installer.sh",
+]
 MOBILE_ONLY = ["FHD/mobile-flutter-poc/lib/main.dart"]
+ETL_OUTPUT_SECURITY = ["FHD/app/application/shipment_excel_etl_security.py"]
 
 
 class SkipIfAllIrrelevantTests(unittest.TestCase):
@@ -90,6 +103,9 @@ class RunIfAnyRelevantTests(unittest.TestCase):
             with self.subTest(category=category):
                 self.assertFalse(decide(category, BACKEND_ONLY))
 
+    def test_shipment_etl_output_security_runs_cross_platform_contract(self) -> None:
+        self.assertTrue(decide("runtime_contract", ETL_OUTPUT_SECURITY))
+
 
 class FailOpenTests(unittest.TestCase):
     def test_no_changed_files_runs_full(self) -> None:
@@ -134,16 +150,41 @@ class CliContractTests(unittest.TestCase):
         self.assertIn("skip=false", lines)
 
     def test_all_categories_share_one_diff_and_bind_checkout(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
-            "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
-            "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "2",
-        }), patch("scripts.dev.change_classifier._changed_files", return_value=FRONTEND_ONLY) as diff:
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(
+                os.environ,
+                {
+                    "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
+                    "GITHUB_RUN_ID": "123",
+                    "GITHUB_RUN_ATTEMPT": "2",
+                },
+            ),
+            patch(
+                "scripts.dev.change_classifier._changed_files",
+                return_value=FRONTEND_ONLY,
+            ) as diff,
+        ):
             report = Path(tmp) / "classification.json"
-            source = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
-            self.assertEqual(classifier_main([
-                "--all", "--base", "base", "--head", "head", "--source-sha", source,
-                "--report", str(report),
-            ]), 0)
+            source = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], text=True
+            ).strip()
+            self.assertEqual(
+                classifier_main(
+                    [
+                        "--all",
+                        "--base",
+                        "base",
+                        "--head",
+                        "head",
+                        "--source-sha",
+                        source,
+                        "--report",
+                        str(report),
+                    ]
+                ),
+                0,
+            )
             data = json.loads(report.read_text())
             diff.assert_called_once_with("base", "head")
             self.assertEqual(set(data["decisions"]), set(CATEGORY_MODE))
@@ -160,18 +201,34 @@ class CliContractTests(unittest.TestCase):
     def test_unavailable_diff_runs_every_category(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             report = Path(tmp) / "classification.json"
-            self.assertEqual(classifier_main([
-                "--all", "--base", "missing-base-ref", "--head", "missing-head-ref",
-                "--report", str(report),
-            ]), 0)
+            self.assertEqual(
+                classifier_main(
+                    [
+                        "--all",
+                        "--base",
+                        "missing-base-ref",
+                        "--head",
+                        "missing-head-ref",
+                        "--report",
+                        str(report),
+                    ]
+                ),
+                0,
+            )
             data = json.loads(report.read_text())
             self.assertTrue(all(data["decisions"].values()))
             self.assertEqual(data["reason"], "empty_or_unavailable_diff_run_all")
 
     def test_wrong_source_cannot_emit_valid_skip(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {
-            "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
-        }):
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.dict(
+                os.environ,
+                {
+                    "GITHUB_OUTPUT": str(Path(tmp) / "outputs"),
+                },
+            ),
+        ):
             with self.assertRaises(SystemExit):
                 classifier_main(["--all", "--source-sha", "0" * 40])
             self.assertFalse((Path(tmp) / "outputs").exists())

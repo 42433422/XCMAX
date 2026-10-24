@@ -20,7 +20,7 @@ from app.fastapi_routes.private_mod_delivery_context import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-router = APIRouter(tags=["mod-store", "private-delivery"])
+router: APIRouter = APIRouter(tags=["mod-store", "private-delivery"])
 
 
 async def _market_token(request: Request) -> str:
@@ -296,10 +296,3 @@ async def mod_store_install_private_delivery_request(
         message=str(data.get("message") or "定制产物已安装"),
         data=data,
     )
-
-
-from app.fastapi_routes.private_mod_delivery_progress_routes import (
-    router as progress_router,
-)
-
-router.include_router(progress_router)

@@ -9,6 +9,10 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: [
+      { find: '@host', replacement: path.resolve(__dirname, './src') },
+      { find: '@/utils/dutyRosterEmployeeList', replacement: path.resolve(__dirname, '../admin-console/src/utils/dutyRosterEmployeeList.ts') },
+      { find: '@/utils/automationPolicyLines', replacement: path.resolve(__dirname, '../admin-console/src/utils/automationPolicyLines.ts') },
+      { find: '@/utils/marketOverviewMetrics', replacement: path.resolve(__dirname, '../admin-console/src/utils/marketOverviewMetrics.ts') },
       { find: '@/api/xcmaxOps', replacement: path.resolve(__dirname, '../admin-console/src/api/xcmaxOps.ts') },
       { find: '@/constants/personnelModApi', replacement: path.resolve(__dirname, '../admin-console/src/constants/personnelModApi.ts') },
       {

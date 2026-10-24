@@ -47,19 +47,35 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 IRRELEVANT = {
     "backend": {
         "prefixes": [
-            "docs/", "FHD/docs/", "FHD/frontend/", "FHD/admin-console/",
-            "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
-            "FHD/desktop/", "FHD/desktop-shell/", "FHD/tools/",
-            "FHD/package/", "FHD/scripts/package/",
+            "docs/",
+            "FHD/docs/",
+            "FHD/frontend/",
+            "FHD/admin-console/",
+            "成都修茈科技有限公司/",
+            "FHD/mobile-flutter-poc/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/tools/",
+            "FHD/package/",
+            "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
     },
     "frontend": {
         "prefixes": [
-            "docs/", "FHD/docs/", "FHD/app/", "FHD/tests/", "FHD/alembic/",
-            "FHD/config/", "成都修茈科技有限公司/", "FHD/mobile-flutter-poc/",
-            "FHD/desktop/", "FHD/desktop-shell/", "FHD/tools/",
-            "FHD/package/", "FHD/scripts/package/",
+            "docs/",
+            "FHD/docs/",
+            "FHD/app/",
+            "FHD/tests/",
+            "FHD/alembic/",
+            "FHD/config/",
+            "成都修茈科技有限公司/",
+            "FHD/mobile-flutter-poc/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/tools/",
+            "FHD/package/",
+            "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
     },
@@ -84,8 +100,12 @@ RELEVANT = {
     # exclude_*：Windows 专属产物（.ps1、windows/win32 命名、Authenticode）不算 macOS 改动。
     "macos": {
         "prefixes": [
-            "FHD/desktop/", "FHD/desktop-shell/", "FHD/package/",
-            "FHD/scripts/package/", "FHD/scripts/deploy/", "FHD/scripts/autonomy/",
+            "FHD/desktop/",
+            "FHD/desktop-shell/",
+            "FHD/package/",
+            "FHD/scripts/package/",
+            "FHD/scripts/deploy/",
+            "FHD/scripts/autonomy/",
             "FHD/tools/",
         ],
         "suffixes": [".entitlements", ".plist"],
@@ -126,7 +146,11 @@ RELEVANT = {
         "contains": [],
     },
     "runtime_contract": {
-        "prefixes": ["FHD/scripts/autonomy/runtime_tools/"],
+        "prefixes": [
+            "FHD/scripts/autonomy/runtime_tools/",
+            "FHD/app/application/shipment_excel_etl_security.py",
+            "FHD/tests/test_application/test_shipment_excel_etl_production_ready.py",
+        ],
         "suffixes": [],
         "exact": [".github/workflows/fhd-mac-control-contract.yml"],
         "contains": [],
@@ -151,7 +175,9 @@ def _changed_files(base: str, head: str) -> list[str]:
     """返回 base..head 间改动文件（仓库根相对路径）。取不到则返回 []。"""
     proc = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "diff", "--name-only", base, head],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if proc.returncode != 0:
         return []
@@ -195,7 +221,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     scope = parser.add_mutually_exclusive_group(required=True)
     scope.add_argument("--category", choices=sorted(CATEGORY_MODE))
-    scope.add_argument("--all", action="store_true", help="一次读取 diff 并输出全部分类")
+    scope.add_argument(
+        "--all", action="store_true", help="一次读取 diff 并输出全部分类"
+    )
     parser.add_argument("--base", default="", help="base SHA/ref（PR 用 base.sha）")
     parser.add_argument("--head", default="", help="head SHA/ref（PR 用 head.sha）")
     parser.add_argument("--json", action="store_true", help="打印机器可读结果")
@@ -209,17 +237,25 @@ def main(argv: list[str] | None = None) -> int:
     if args.all:
         source = subprocess.run(
             ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         if args.source_sha and source != args.source_sha:
             parser.error("classification source SHA differs from the tested checkout")
         decisions = {category: decide(category, changed) for category in CATEGORY_MODE}
         report = {
-            "schema": 1, "source_sha": source, "base_sha": args.base,
-            "pr_head_sha": args.head, "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+            "schema": 1,
+            "source_sha": source,
+            "base_sha": args.base,
+            "pr_head_sha": args.head,
+            "run_id": os.environ.get("GITHUB_RUN_ID", ""),
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
-            "changed_count": len(changed), "decisions": decisions,
-            "reason": "changed_paths" if changed else "empty_or_unavailable_diff_run_all",
+            "changed_count": len(changed),
+            "decisions": decisions,
+            "reason": "changed_paths"
+            if changed
+            else "empty_or_unavailable_diff_run_all",
         }
         outputs = {"valid": "true", "source_sha": source}
         for category, run in decisions.items():

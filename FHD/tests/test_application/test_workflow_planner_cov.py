@@ -15,7 +15,6 @@ from app.application.workflow.planner import (
     _extract_business_db_write_node,
     _extract_named_slot,
     _filter_tool_registry_for_profile,
-    _get_planner_http_client,
     _infer_business_db_entity,
     _looks_like_business_db_write,
 )
@@ -521,15 +520,19 @@ class TestPlanWithLLM(_PlannerFixture):
         return resp
 
     def _run_planner(self, planner, response, message="test", context=None):
-        with patch("app.application.workflow.planner._get_planner_http_client") as client:
-            client.return_value.post.return_value = response
-            return planner._plan_with_llm(
+        with patch(
+            "app.application.workflow.planner.request_planner_completion",
+            return_value=response.json() if response.status_code < 400 else None,
+        ) as completion:
+            result = planner._plan_with_llm(
                 plan_id="pid",
                 user_id="u1",
                 message=message,
                 tool_registry=_SAMPLE_REGISTRY,
                 context=context or {},
             )
+            completion.assert_called_once()
+            return result
 
     def test_returns_none_when_no_api_key(self) -> None:
         planner = self._make_planner()
@@ -679,14 +682,3 @@ class TestPlanMethod(_PlannerFixture):
                 context={},
             )
         assert result is not None
-
-
-class TestGetPlannerHttpClient:
-    def test_returns_same_instance(self) -> None:
-        import app.application.workflow.planner as planner_mod
-
-        planner_mod._planner_http_client = None
-        client1 = _get_planner_http_client()
-        client2 = _get_planner_http_client()
-        assert client1 is client2
-        planner_mod._planner_http_client = None

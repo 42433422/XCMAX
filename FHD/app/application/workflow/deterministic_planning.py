@@ -1,0 +1,503 @@
+"""Deterministic business planning with injected database parsing and graph policies."""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
+
+from app.application.workflow.clarification_node import build_clarify_node
+from app.application.workflow.onboarding_slots import _onboarding_first_order_slots
+from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+_INTENT_TOOL_KEY_TO_WORKFLOW: dict[str, tuple[str, str]] = {
+    "products": ("products", "query"),
+    "customers": ("customers", "query"),
+    "materials": ("materials", "query"),
+    "shipment_records": ("shipment_records", "query"),
+}
+
+
+def _route_by_intent_service(message: str, tool_registry: dict[str, Any]):
+    """调用共享规则意图服务，命中带 tool_key 的明确意图时返回 (tool_id, action)。
+
+    识别失败/异常一律返回 None（fail-safe 交给 clarify，绝不回退 products.query）。
+    """
+    try:
+        # 延迟 import：intent_service 依赖链较重，且避免模块级 application↔services 环。
+        from app.services.intent_service import recognize_intents
+
+        result = recognize_intents(message)
+    except RECOVERABLE_ERRORS:
+        return None
+    if not isinstance(result, dict):
+        return None
+    # 否定式指令（如「不要新建客户」）不得路由到任何查询/写工具。
+    if result.get("is_negated") or result.get("is_negation_intent"):
+        return None
+    tool_key = str(result.get("tool_key") or "").strip()
+    if not tool_key:
+        return None
+    mapped = _INTENT_TOOL_KEY_TO_WORKFLOW.get(tool_key)
+    if mapped is None:
+        return None
+    tool_id, action = mapped
+    if tool_id not in tool_registry:
+        return None
+    return tool_id, action
+
+
+def desktop_action_plan(
+    plan_id: str, route: dict[str, Any], tool_registry: dict[str, Any]
+) -> PlanGraph:
+    slots = route["slots"]
+    action = slots["workflow"]
+    if (
+        slots["app_id"]
+        and action in {"open_app", "app_status"}
+        and action in (tool_registry.get("desktop_automation", {}).get("actions") or {})
+    ):
+        risk = normalize_workflow_risk("medium" if action == "open_app" else "low")
+        node = WorkflowNode(
+            node_id="desktop_action",
+            tool_id="desktop_automation",
+            action=action,
+            params={"app_id": slots["app_id"]},
+            risk=risk,
+            idempotent=action == "app_status",
+            description=f"{'打开应用' if action == 'open_app' else '查询运行状态'}：{slots['app_id']}",
+        )
+    else:
+        node = build_clarify_node(
+            "请指定一个已登记应用；当前支持打开应用或查询运行状态，不支持关闭或切换。"
+        )
+        risk = "low"
+    return PlanGraph(plan_id=plan_id, intent="desktop_action", nodes=[node], risk_level=risk)
+
+
+@dataclass(frozen=True)
+class DeterministicDependencies:
+    looks_like_write: Callable[[str, str], bool]
+    write_node: Callable[[str], WorkflowNode | None]
+    entity: Callable[[str], str]
+    read_keyword: Callable[[str, str], str]
+    conditional_edges: Callable[[PlanGraph, str, dict[str, Any]], PlanGraph]
+    clarification: Callable[[PlanGraph, dict[str, Any]], PlanGraph]
+
+
+class DeterministicPlanner:
+    def __init__(self, dependencies: DeterministicDependencies) -> None:
+        self.dependencies = dependencies
+
+    def plan(self, plan_id: str, message: str, tool_registry: dict[str, Any]) -> PlanGraph:
+        from app.application.normal_chat_dispatch import route_normal_mode_message
+        from app.application.workflow.sql_execution_policy import (
+            database_maintenance_plan,
+            rejected_sql_plan,
+        )
+
+        rejected = rejected_sql_plan(message, plan_id)
+        if rejected is not None:
+            return rejected
+        restore = database_maintenance_plan(message, plan_id, tool_registry)
+        if restore is not None:
+            return restore
+        route = route_normal_mode_message(message)
+        if route.get("intent") == "desktop":
+            return desktop_action_plan(plan_id, route, tool_registry)
+        lower = (message or "").lower()
+        nodes: list[WorkflowNode] = []
+        todo = ["理解用户目标", "执行可用工具", "输出执行结果"]
+        intent = "generic_workflow"
+        first_order_slots = _onboarding_first_order_slots(message)
+        if first_order_slots and "business_db" in tool_registry:
+            customer, product = first_order_slots
+            intent = "onboarding_first_order"
+            todo = ["查询演示客户", "查询演示商品", "确认后创建演示出货单"]
+            nodes.extend(
+                [
+                    WorkflowNode(
+                        node_id="find_onboarding_customer",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": "customers", "keyword": customer},
+                        risk="low",
+                        description=f"查询客户 {customer}",
+                        idempotent=True,
+                    ),
+                    WorkflowNode(
+                        node_id="find_onboarding_product",
+                        tool_id="business_db",
+                        action="read",
+                        params={"entity": "products", "keyword": product},
+                        risk="low",
+                        description=f"查询商品 {product}",
+                        idempotent=True,
+                        depends_on=["find_onboarding_customer"],
+                    ),
+                    WorkflowNode(
+                        node_id="create_onboarding_first_order",
+                        tool_id="business_db",
+                        action="write",
+                        params={
+                            "entity": "shipment_records",
+                            "operation": "create",
+                            "payload": {
+                                "product_source_node": "find_onboarding_product",
+                                "unit_name": customer,
+                                "products": [
+                                    {
+                                        "product_name": product,
+                                        "name": product,
+                                        "quantity_tins": 1,
+                                    }
+                                ],
+                            },
+                        },
+                        risk="medium",
+                        description=f"为 {customer} 创建首张演示出货单",
+                        idempotent=False,
+                        depends_on=["find_onboarding_product"],
+                    ),
+                ]
+            )
+        if (
+            not nodes
+            and any(k in message for k in ("员工", "employee", "调用", "交给"))
+            and "employee" in tool_registry
+        ):
+            intent = "employee_dispatch"
+            todo = ["识别目标员工", "调用本机员工运行时", "返回员工执行结果"]
+            employee_id = ""
+            try:
+                from app.mod_sdk.employee_tool_registry import build_employee_tools_status
+
+                status = build_employee_tools_status()
+                for item in status.get("employee_pack_tools") or []:
+                    if not isinstance(item, dict):
+                        continue
+                    pid = str(item.get("pack_id") or "").strip()
+                    if pid and pid in message:
+                        employee_id = pid
+                        break
+            except (ImportError, RuntimeError):
+                employee_id = ""
+            if employee_id:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="run_employee",
+                        tool_id="employee",
+                        action="execute",
+                        params={"employee_id": employee_id, "task": message},
+                        risk="medium",
+                        description=f"调用员工 {employee_id}",
+                        idempotent=False,
+                    )
+                )
+            else:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="list_employees",
+                        tool_id="employee",
+                        action="list",
+                        params={},
+                        risk="low",
+                        description="列出可调用员工",
+                        idempotent=True,
+                    )
+                )
+        if not nodes:
+            from app.application.workflow.shipment_plan import shipment_document_node
+
+            shipment_node = shipment_document_node(message, tool_registry)
+            if shipment_node is not None:
+                nodes.append(shipment_node)
+                intent = "shipment_generate"
+        if not nodes:
+            from app.application.workflow.inventory_write_plan import stock_in_node
+
+            inventory_node = stock_in_node(message, tool_registry)
+            if inventory_node is not None:
+                nodes.append(inventory_node)
+                intent = "inventory_stock_in"
+        if not nodes:
+            from app.application.workflow.sales_quote_plan import sales_quote_node
+
+            quote_node = sales_quote_node(message, tool_registry)
+            if quote_node is not None:
+                nodes.append(quote_node)
+                intent = f"sales_{quote_node.action}"
+        if (
+            not nodes
+            and self.dependencies.looks_like_write(message, lower)
+            and ("business_db" in tool_registry)
+        ):
+            node = self.dependencies.write_node(message)
+            if node is not None:
+                intent = "business_db_write"
+                todo = ["识别业务实体与写入字段", "通过受控业务服务写入数据库", "返回写入结果"]
+                nodes.append(node)
+        if not nodes:
+            from app.application.workflow.finance_write_plan import finance_transaction_node
+
+            finance_node = finance_transaction_node(message, tool_registry)
+            if finance_node is not None:
+                nodes.append(finance_node)
+                intent = "finance_write"
+        route = route_normal_mode_message(message)
+        if (
+            not nodes
+            and "sales" in tool_registry
+            and (str(route.get("intent") or "") == "sales_write")
+            and (str(route.get("action") or "") == "execute_closed_loop")
+            and isinstance(route.get("payload"), dict)
+            and bool(route.get("payload"))
+        ):
+            intent = "sales_write"
+            todo = ["解析销售到收款闭环写载荷", "高风险审批后执行销售闭环", "返回执行结果"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="sales_execute_closed_loop",
+                    tool_id="sales",
+                    action="execute_closed_loop",
+                    params={"payload": route["payload"]},
+                    risk="high",
+                    idempotent=True,
+                    description="执行销售到收款闭环",
+                )
+            )
+        if not nodes and (
+            any(k in lower for k in ("db", "database"))
+            or any(k in message for k in ("数据库", "查数据库", "读数据库"))
+        ):
+            if "business_db" in tool_registry:
+                intent = "business_db_read"
+                entity = self.dependencies.entity(message)
+                keyword = self.dependencies.read_keyword(message, entity)
+                record_id = re.search(r"(?i)\bID[ \t]{0,8}[:：]?[ \t]{0,8}(\d+)", message)
+                nodes.append(
+                    WorkflowNode(
+                        node_id="read_business_db",
+                        tool_id="business_db",
+                        action="read",
+                        params={
+                            "entity": entity,
+                            "keyword": keyword,
+                            **({"id": int(record_id[1])} if record_id else {}),
+                        },
+                        risk="low",
+                        description="读取受控业务数据库",
+                        idempotent=True,
+                    )
+                )
+        if (
+            not nodes
+            and "products" in tool_registry
+            and any(word in message for word in ("新增产品", "添加产品"))
+        ):
+            parsed = self.dependencies.write_node(message)
+            payload = parsed.params.get("payload", {}) if parsed is not None else {}
+            if payload.get("model_number") and not any(
+                word in message for word in ("客户", "购买单位")
+            ):
+                params = {
+                    "name_or_model": payload["model_number"],
+                    "model_number": payload["model_number"],
+                }
+                for key in ("price", "specification", "unit"):
+                    if key in payload:
+                        params[key] = payload[key]
+                nodes.append(
+                    WorkflowNode(
+                        node_id="create_product",
+                        tool_id="products",
+                        action="create",
+                        params=params,
+                        risk="medium",
+                        idempotent=False,
+                        description="新增产品资料",
+                    )
+                )
+                intent = "product_create"
+        if (
+            not nodes
+            and "products" in tool_registry
+            and not any(word in message for word in ("客户", "购买单位"))
+            and re.fullmatch(
+                r"(?:(?:请|帮我|请帮我)[ \t]{0,8}(?:新增|添加)[ \t]{0,8}(?:(?:一个|一款|一种)[ \t]{0,8})?"
+                r"|(?:新增|添加)[ \t]{0,8}(?:一个|一款|一种)[ \t]{0,8})产品[。！!]?",
+                message.strip(),
+            )
+        ):
+            nodes.append(
+                WorkflowNode(
+                    node_id="create_product",
+                    tool_id="products",
+                    action="create",
+                    params={},
+                    risk="medium",
+                    idempotent=False,
+                    description="新增产品资料",
+                )
+            )
+            intent = "product_create"
+        if not nodes and (
+            ("添加" in message or "新增" in message or "create" in lower) and "产品" in message
+        ):
+            intent = "add_product_to_unit"
+            todo = [
+                "意图分析：识别产品新增任务",
+                "全局检查单位是否存在",
+                "单位不存在则先创建",
+                "新增产品并绑定单位",
+                "返回执行明细",
+            ]
+            if "customers" in tool_registry:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="check_or_create_unit",
+                        tool_id="customers",
+                        action="ensure_exists",
+                        params={},
+                        risk="medium",
+                        description="确保客户存在",
+                    )
+                )
+            if "products" in tool_registry:
+                nodes.append(
+                    WorkflowNode(
+                        node_id="create_product",
+                        tool_id="products",
+                        action="create",
+                        params={},
+                        risk="medium",
+                        description="创建产品",
+                        depends_on=["check_or_create_unit"] if nodes else [],
+                    )
+                )
+        if not nodes and any(k in message for k in ("删除", "移除", "删掉", "delete", "del")):
+            entity = self.dependencies.entity(message)
+            keyword = self.dependencies.read_keyword(message, entity)
+            intent = "business_db_read"
+            todo = ["识别要删除的目标", "查询确认目标信息"]
+            nodes.append(
+                WorkflowNode(
+                    node_id="query_for_delete",
+                    tool_id="business_db",
+                    action="read",
+                    params={"entity": entity, "keyword": keyword},
+                    risk="low",
+                    description=f"查询要删除的{entity}",
+                    idempotent=True,
+                )
+            )
+        if (
+            not nodes
+            and any(k in message for k in ("库存", "stock", "Stock"))
+            and any(k in message for k in ("采购", "购买", "补充", "备货", "进货"))
+        ):
+            intent = "inventory_purchase"
+            todo = ["检查库存", "按 low_stock 决定是否采购", "输出采购建议"]
+            purchase_node = WorkflowNode(
+                node_id="purchase_advice",
+                tool_id="purchase",
+                action="advice",
+                params={},
+                risk="low",
+                description="采购建议",
+                idempotent=True,
+                depends_on=["check_stock"],
+            )
+            nodes.append(
+                WorkflowNode(
+                    node_id="check_stock",
+                    tool_id="inventory",
+                    action="check_stock",
+                    params={},
+                    risk="low",
+                    description="检查库存",
+                    idempotent=True,
+                    branches=[
+                        Branch(
+                            target="purchase_advice", condition={"key": "low_stock", "equals": True}
+                        )
+                    ],
+                )
+            )
+            nodes.append(purchase_node)
+        if not nodes:
+            from app.application.workflow.read_query_plan import customer_read_node
+
+            read_node = customer_read_node(message, route, tool_registry)
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = "customers_query"
+        if not nodes:
+            from app.application.workflow.read_query_plan import report_read_node, sales_export_node
+
+            read_node = sales_export_node(message, tool_registry) or report_read_node(
+                message, tool_registry
+            )
+            if read_node is not None:
+                nodes.append(read_node)
+                intent = f"{read_node.tool_id}_query"
+        if not nodes:
+            # 两级兜底（审计根因 2）：先走共享规则意图服务按 tool_key 路由到正确业务域；
+            # 未命中/异常一律 clarify.ask，绝不静默 products.query。
+            # #1815 的 customer/sales/report 读取路由保留在前（确定性规则优先），此处为其后的通用兜底。
+            routed = _route_by_intent_service(message, tool_registry)
+            if routed is not None:
+                tool_id, action = routed
+                intent = f"intent_route_{tool_id}"
+                todo = ["规则意图服务识别业务域", f"执行 {tool_id} 查询", "输出查询结果"]
+                nodes.append(
+                    WorkflowNode(
+                        node_id=f"query_{tool_id}",
+                        tool_id=tool_id,
+                        action=action,
+                        params={"keyword": message},
+                        risk="low",
+                        description=f"按规则意图路由到 {tool_id} 查询",
+                        idempotent=True,
+                    )
+                )
+            else:
+                intent = "clarify_ask"
+                todo = ["向用户澄清业务目标", "获得明确意图后重新规划"]
+                nodes.append(
+                    WorkflowNode(
+                        node_id="clarify_intent",
+                        tool_id="clarify",
+                        action="ask",
+                        params={
+                            "question": (
+                                f"无法将「{message}」解析为可执行的业务操作，"
+                                "请提供完整的业务对象和参数（如客户、产品、数量等）。"
+                            ),
+                            "answer_key": "confirmed",
+                            "target_node_id": "",
+                            "original_message": str(message or ""),
+                        },
+                        risk="low",
+                        idempotent=True,
+                        description="反问澄清：未命中业务意图，不再默认查询产品",
+                    )
+                )
+        risk = "low"
+        if any(node.risk == "high" for node in nodes):
+            risk = "high"
+        elif any(node.risk == "medium" for node in nodes):
+            risk = "medium"
+        plan = PlanGraph(
+            plan_id=plan_id,
+            intent=intent,
+            todo_steps=todo,
+            nodes=nodes,
+            risk_level=normalize_workflow_risk(risk),
+            metadata={"planner": "fallback", "message": message},
+        )
+        return self.dependencies.clarification(
+            self.dependencies.conditional_edges(plan, message, tool_registry), tool_registry
+        )

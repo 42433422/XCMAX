@@ -31,6 +31,7 @@ def test_universal_profile_loads_from_kb(tmp_path, monkeypatch):
 
 def test_custom_profile_dir_switches_column_aliases(tmp_path, monkeypatch):
     """换 YAML 列别名即可解析非默认表头，无需改引擎。"""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()

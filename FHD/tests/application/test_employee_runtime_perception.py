@@ -83,8 +83,9 @@ class TestVision:
         assert vis is not None
         assert vis["status"] == "skipped"
 
-    def test_vision_image_existing_file_handled(self, tmp_path):
+    def test_vision_image_existing_file_handled(self, tmp_path, monkeypatch):
         # 创建假 png；PIL/OCR 缺失或无法解码 → unavailable/degraded/error（均为合法降级分支）
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
         f = tmp_path / "img.png"
         f.write_bytes(b"\x89PNG\r\n\x1a\n not a real png")
         pipe = PerceptionPipeline({"perception": {"vision": {"enabled": True}}})

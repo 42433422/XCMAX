@@ -104,7 +104,8 @@ def test_planner_registry_includes_installed_employee_pack(employee_mods_root):
     assert pack_id in names
 
 
-def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path):
+def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     pack_id = "csv-full-read-employee"
     _write_csv_read_pack(employee_mods_root, pack_id)
     csv_file = tmp_path / "sample.csv"

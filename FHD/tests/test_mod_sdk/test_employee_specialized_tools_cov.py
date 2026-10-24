@@ -1286,7 +1286,7 @@ class TestPatchFile:
         target = ws / "file.txt"
         target.write_text("original content\n", encoding="utf-8")
         # First call (check) ok, second call (apply) fails
-        call_results = [_GOOD_RUN, _BAD_RUN]
+        call_results = [{**_GOOD_RUN, "stdout": "1\t1\tfile.txt\0"}, _BAD_RUN]
         call_idx = 0
 
         async def side_effect(*args, **kwargs):
@@ -1302,13 +1302,16 @@ class TestPatchFile:
             )
         assert r["ok"] is False
         assert "应用失败" in r["error"]
+        assert call_idx == 2
 
     async def test_patch_success(self, tmp_path):
         ws = tmp_path / "ws"
         ws.mkdir()
         target = ws / "file.txt"
         target.write_text("original content\n", encoding="utf-8")
-        with patch.object(module, "_run_cmd", AsyncMock(return_value=_GOOD_RUN)):
+        with patch.object(
+            module, "_run_cmd", AsyncMock(return_value={**_GOOD_RUN, "stdout": "1\t1\tfile.txt\0"})
+        ):
             r = await tool_patch_file(
                 {"confirm": True, "path": "file.txt", "patch": "valid diff"},
                 {"workspace_root": str(ws)},
@@ -1507,9 +1510,33 @@ class TestTestLlmKeyHealth:
         assert r["ok"] is False
 
     async def test_no_keys_configured(self):
-        with patch("os.environ", {}):
+        import httpx
+
+        # Ollama is intentionally probed without a key; keep that path offline.
+        requests_seen: list[httpx.Request] = []
+
+        def offline(request: httpx.Request) -> httpx.Response:
+            requests_seen.append(request)
+            return httpx.Response(503, json={"error": "offline"})
+
+        client_type = httpx.AsyncClient
+        with (
+            patch("os.environ", {}),
+            patch.object(
+                module.httpx,
+                "AsyncClient",
+                side_effect=lambda **kwargs: client_type(
+                    transport=httpx.MockTransport(offline), **kwargs
+                ),
+            ),
+        ):
             r = await tool_test_llm_key_health({}, {})
         assert r["ok"] is False or len(r.get("results", [])) >= 0
+        assert r["healthy_count"] == 0
+        assert [(item["provider"], item["status"]) for item in r["results"]] == [("ollama", 503)]
+        assert len(requests_seen) == 1
+        assert str(requests_seen[0].url) == "http://localhost:11434/v1/chat/completions"
+        assert "Authorization" not in requests_seen[0].headers
 
     async def test_filter_by_provider(self):
         # With a target that doesn't match any provider

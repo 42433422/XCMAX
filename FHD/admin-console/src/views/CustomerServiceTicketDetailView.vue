@@ -1,5 +1,5 @@
 <template>
-  <main class="cs-view" id="view-customer-service-ticket-detail">
+  <main class="cs-view page-content" id="view-customer-service-ticket-detail">
     <nav class="cs-back"><button type="button" class="cs-btn" @click="backToList">← 返回工单列表</button></nav>
     <p v-if="!validId" role="alert" class="cs-banner-error">工单 ID 无效：{{ route.params.ticketId }}。请从工单列表打开。</p>
     <p v-else-if="loading" role="status" class="cs-card cs-state">正在读取原单证据…</p>
@@ -64,11 +64,12 @@
             <div><dt>修复核验来源</dt><dd>{{ overview.verificationSource }}</dd></div>
             <div><dt>正式版本与客户确认</dt><dd>{{ overview.release }} · {{ overview.customer }}</dd></div>
           </dl>
-          <p v-if="!overview.receipts.length" class="cs-hint">当前事件尚无可核验的任务接单回执。</p>
-          <ul v-else class="cs-chips" aria-label="实际接单凭证">
+          <p v-if="!overview.receipts.length" class="cs-hint">当前事件尚无可核验的任务派发回执。</p>
+          <ul v-else class="cs-chips" aria-label="派发与执行凭证">
             <li v-for="receipt in overview.receipts" :key="receipt.key">
               {{ receipt.kind }} · {{ receipt.role }} · <code>{{ receipt.taskId }}</code>
               <span class="cs-badge" :class="`is-${receipt.badge.tone}`">{{ receipt.badge.label }}</span>
+              · 领取：{{ receipt.claim }} · 执行：{{ receipt.execution }}
             </li>
           </ul>
         </template>

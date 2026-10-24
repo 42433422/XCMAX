@@ -6,6 +6,7 @@ import {
   CHAT_SESSION_META_PREFIX,
   buildChatMessagesKey,
   buildChatSessionMetaKey,
+  buildChatScopedKey,
   extractSessionIdForActiveMod,
 } from '@/utils/chatStorageKeys'
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
@@ -49,7 +50,7 @@ export type LinkedExcelSheet = { sheet_name: string; sheet_index: number }
 export function readPersistedExcelAnalysisContext(sessionKey: string): Record<string, unknown> | null {
   if (typeof sessionStorage === 'undefined') return null
   try {
-    const raw = sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX + sessionKey)
+    const raw = sessionStorage.getItem(buildChatScopedKey(EXCEL_ANALYSIS_STORAGE_PREFIX, sessionKey))
     if (!raw) return null
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? parsed : null
@@ -61,7 +62,7 @@ export function readPersistedExcelAnalysisContext(sessionKey: string): Record<st
 export function persistExcelAnalysisContext(sessionKey: string, ctx: Record<string, unknown> | null) {
   if (typeof sessionStorage === 'undefined') return
   try {
-    const key = EXCEL_ANALYSIS_STORAGE_PREFIX + sessionKey
+    const key = buildChatScopedKey(EXCEL_ANALYSIS_STORAGE_PREFIX, sessionKey)
     if (!ctx) sessionStorage.removeItem(key)
     else sessionStorage.setItem(key, JSON.stringify(ctx))
   } catch {
@@ -188,7 +189,7 @@ export function readPersistedTaskPanelState(sessionKey: string): PersistedTaskPa
   const sid = String(sessionKey || '').trim()
   if (!sid || typeof sessionStorage === 'undefined') return null
   try {
-    const raw = sessionStorage.getItem(CHAT_TASK_PANEL_STORAGE_PREFIX + sid)
+    const raw = sessionStorage.getItem(buildChatScopedKey(CHAT_TASK_PANEL_STORAGE_PREFIX, sid))
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
@@ -222,7 +223,7 @@ export function persistTaskPanelState(sessionKey: string, state: PersistedTaskPa
   const sid = String(sessionKey || '').trim()
   if (!sid || typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.setItem(CHAT_TASK_PANEL_STORAGE_PREFIX + sid, JSON.stringify(state))
+    sessionStorage.setItem(buildChatScopedKey(CHAT_TASK_PANEL_STORAGE_PREFIX, sid), JSON.stringify(state))
   } catch {
     /* ignore quota/private mode */
   }
@@ -232,7 +233,7 @@ export function clearPersistedTaskPanelState(sessionKey: string): void {
   const sid = String(sessionKey || '').trim()
   if (!sid || typeof sessionStorage === 'undefined') return
   try {
-    sessionStorage.removeItem(CHAT_TASK_PANEL_STORAGE_PREFIX + sid)
+    sessionStorage.removeItem(buildChatScopedKey(CHAT_TASK_PANEL_STORAGE_PREFIX, sid))
   } catch {
     /* ignore */
   }

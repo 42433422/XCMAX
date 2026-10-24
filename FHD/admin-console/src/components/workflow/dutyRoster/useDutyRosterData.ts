@@ -10,6 +10,7 @@ import { YUANGON_PKG_ROLE_LABELS } from '@host/domain/yuangonDutyRoster'
 import { BUTLER_PROFILE, butlerCapabilityView, extractEmployeeCapabilityView } from '@host/domain/butlerEmployeeProfile'
 import { providerRowHasUsableKey } from '@host/domain/llm/providerCredential'
 import type { LlmProviderStatus } from '@host/domain/llm/types'
+import { normalizeDutyRosterLoopStatus } from '@host/composables/useDutyRosterLoopStatus'
 import api from '@/api/xcmaxMarketProxy'
 import { ALL_PLANNED_IDS, CRAFT_PIPELINE_ORDER, craftEmployeeDependsOn } from './dutyRosterConstants'
 
@@ -77,29 +78,20 @@ async function load() {
   try {
     const health = (await api.adminDutyGraphHealth()) as Record<string, unknown>
     api.assertDutyGraphHealth(health)
-    const staffing = health?.staffing as Record<string, unknown> | undefined
-    const missingCatalogRaw = Array.isArray(staffing?.missing_employees)
-      ? staffing!.missing_employees
-      : []
-    const missingCatalogIds = new Set(
-      (missingCatalogRaw as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
-    )
-    const missingLocalRaw = Array.isArray(staffing?.missing_local_employee_packs)
-      ? staffing!.missing_local_employee_packs
-      : []
-    missingLocalPackIds.value = new Set(
-      (missingLocalRaw as unknown[]).map((x) => String(x ?? '').trim()).filter(Boolean),
-    )
+    s.rosterHealth.value = normalizeDutyRosterLoopStatus(health)
+    const missingCatalogIds = new Set(s.rosterHealth.value.missingCatalogIds)
+    missingLocalPackIds.value = new Set(s.rosterHealth.value.missingLocalIds)
     employees.value = [...buildRosterEmployeeRows(missingCatalogIds), butlerEmployeeRow()]
     const localGap = missingLocalPackIds.value.size
     if (localGap > 0 && String(health?.source || '') === 'local') {
       loadWarning.value =
-        `本机 mods/_employees 未安装 ${localGap} 个编制员工包（图谱仍展示）；可在运维闭环执行 install-local 或启动 MODstore :8788 后从 Catalog 安装。`
+        `当前运行端缺少 ${localGap} 个编制员工包，图谱仍保留岗位。可打开“包与目录状态”查看编号与影响，再核对市场权益和平台后安装需要的包。`
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     // 健康检查失败仍展示本机编制矩阵（六部门视图可离线浏览）
     missingLocalPackIds.value = new Set()
+    s.rosterHealth.value = null
     employees.value = [...buildRosterEmployeeRows(new Set()), butlerEmployeeRow()]
     loadWarning.value = msg
   } finally {

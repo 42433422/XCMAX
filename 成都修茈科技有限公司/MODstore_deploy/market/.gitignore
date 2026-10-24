@@ -28,3 +28,8 @@ err.txt
 test-results.json
 test-*.wav
 voice-e2e-result.png
+
+# Exact generated media aliases; sources and checksums live in config/media-aliases.json.
+/public/ai-butler-female-avatar-v1.png
+/public/ai-butler-male-avatar-v1.jpg
+/public/brand-xc-logo.jpg

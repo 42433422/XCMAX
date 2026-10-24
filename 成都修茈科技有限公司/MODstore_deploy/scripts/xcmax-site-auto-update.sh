@@ -84,6 +84,7 @@ git_sync_repo() {
 
 # Vite build 会把 public/ 根文件复制到 dist/；服务器常无法 npm build，需手动同步避免 SPA 回退 index.html
 sync_market_public_assets() {
+  node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" market || return $?
   local pub="${MODSTORE_ROOT}/market/public"
   local dist="${MODSTORE_ROOT}/market/dist"
   if [[ ! -d "$pub" || ! -d "$dist" ]]; then
@@ -94,6 +95,11 @@ sync_market_public_assets() {
     cp -af "$f" "$dist/"
     n=$((n + 1))
   done < <(find "$pub" -maxdepth 1 -type f -print0)
+  # The live release may carry an older public directory; shared brand files come from Git sources.
+  local brand
+  for brand in ai-butler-female-avatar-v1.png ai-butler-male-avatar-v1.jpg brand-xc-logo.jpg; do
+    cp -f "${XCMAX_ROOT}/${MODSTORE_PREFIX}/market/public/${brand}" "${dist}/${brand}"
+  done
   if [[ "$n" -gt 0 ]]; then
     log "market public 根资源已同步到 dist（${n} 个文件）"
   fi
@@ -141,6 +147,7 @@ sync_corp_pages_to_dist_fallback() {
 
 # 官网 widget：nginx alias /corp-butler/ → 成都修茈科技有限公司/corp-butler/
 sync_corp_butler_assets() {
+  node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" market || return $?
   local corp_dir="${XCMAX_ROOT}/${SITE_SUBDIR}/corp-butler"
   # Build from the Git worktree. MODSTORE_ROOT may point at the immutable live
   # release, which is published only after this function completes.
@@ -333,6 +340,15 @@ publish_site_static_to_live() {
     log "WARN: git site tree missing: $git_site"
     return 0
   fi
+  # Restore exact legacy URLs before exposing either the Git tree or a live copy.
+  if ! python3 "$git_site/scripts/evidence_assets.py" materialize; then
+    log "ERROR: evidence reconstruction failed; stop before publishing static pages"
+    return 1
+  fi
+  if ! node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing; then
+    log "ERROR: shared media reconstruction failed; stop before publishing static pages"
+    return 1
+  fi
   if [[ -z "$live_site" || ! -d "$live_site" ]]; then
     log "WARN: live site root missing: $SITE_ROOT"
     return 0
@@ -390,6 +406,12 @@ publish_site_static_to_live() {
   if [[ -d "$git_site/corp-butler" ]]; then
     cp -af "$git_site/corp-butler/." "$live_site/corp-butler/"
   fi
+  for base in capabilities data/capabilities site/data; do
+    if [[ -d "$git_site/$base" ]]; then
+      mkdir -p "$live_site/$base"
+      cp -af "$git_site/$base/." "$live_site/$base/"
+    fi
+  done
   # Keep release root traversable for unprivileged nginx after chmod u+w above.
   chmod a+rx "$live_site" 2>/dev/null || true
   log "live root 静态发布完成"

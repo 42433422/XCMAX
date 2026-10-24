@@ -59,6 +59,7 @@ def test_word_generator_writes_an_actual_document_from_a_chat_request(
     tmp_path, monkeypatch
 ) -> None:
     """A forced chat call must yield a file, even when no JSON was uploaded."""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     from app.mod_sdk.employee_tool_registry import execute_employee_tool
 
     def unexpected_cognition(*_args, **_kwargs):
@@ -100,8 +101,9 @@ def test_word_generator_writes_an_actual_document_from_a_chat_request(
     ],
 )
 def test_other_document_generators_write_files_without_modstore_source(
-    tmp_path, tool_name: str, reader_name: str, suffix: str
+    tmp_path, monkeypatch, tool_name: str, reader_name: str, suffix: str
 ) -> None:
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
     from app.mod_sdk.employee_tool_registry import execute_employee_tool
 
     result = json.loads(

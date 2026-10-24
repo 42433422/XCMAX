@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any, Dict
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -148,41 +149,40 @@ async def butler_chat(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """非流式 Butler 对话。"""
-    provider, model, api_key, key_source, base_url = _facade()._resolve_butler_credentials(
-        db, user.id
-    )
+    _api = _facade()
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
     is_byok = key_source == "user_override"
-    msgs = _facade()._build_messages(body, body.page_context, user=user, db=db)
+    msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     if not msgs:
-        raise _facade().HTTPException(400, "messages 不能为空")
-    request_id = _facade().new_request_id()
-    _facade().enforce_risk_limits(db, user.id, provider, model, msgs, request)
-    wallet = _facade().JavaWalletClient()
+        raise _api.HTTPException(400, "messages 不能为空")
+    request_id = _api.new_request_id()
+    _api.enforce_risk_limits(db, user.id, provider, model, msgs, request)
+    wallet = _api.JavaWalletClient()
     if is_byok:
-        hold = _facade().WalletHold(
-            hold_no=f"byok-{request_id}", amount=_facade().Decimal("0"), enabled=False
+        hold = _api.WalletHold(
+            hold_no=f"byok-{request_id}", amount=_api.Decimal("0"), enabled=False
         )
     else:
-        preauth = _facade().estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
+        preauth = _api.estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
         hold = await wallet.preauthorize(
-            _facade().authorization_header(request),
+            _api.authorization_header(request),
             preauth,
             provider,
             model,
             request_id,
         )
-    conv = _facade()._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
+    conv = _api._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
     try:
         from modstore_server.infrastructure.http_clients import get_external_client
         from modstore_server.llm_chat_proxy import _normalize_openai_base
 
         tool_resp = None
-        tools_schema = _facade()._butler_tools_for_user(user)
-        if provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
+        tools_schema = _api._butler_tools_for_user(user)
+        if provider in _api.OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
             try:
                 base = _normalize_openai_base(provider, base_url)
                 url = f"{base}/chat/completions"
-                req_body: _facade().Dict[str, _facade().Any] = {
+                req_body: Dict[str, Any] = {
                     "model": model,
                     "messages": msgs,
                     "tools": tools_schema,
@@ -202,7 +202,7 @@ async def butler_chat(
                 if r.status_code < 400:
                     tool_resp = r.json()
             except RECOVERABLE_ERRORS as e:
-                _facade().logger.warning("butler tool call failed, fallback to plain: %s", e)
+                _api.logger.warning("butler tool call failed, fallback to plain: %s", e)
         if tool_resp:
             raw_response = tool_resp
             choice0 = (tool_resp.get("choices") or [{}])[0]
@@ -213,13 +213,13 @@ async def butler_chat(
                 {
                     "id": tc.get("id", ""),
                     "name": tc.get("function", {}).get("name", ""),
-                    "args": _facade()._safe_json(tc.get("function", {}).get("arguments", "{}")),
+                    "args": _api._safe_json(tc.get("function", {}).get("arguments", "{}")),
                 }
                 for tc in tool_calls_raw
             ]
             usage = tool_resp.get("usage") or {}
         else:
-            raw_response = await _facade().chat_dispatch(
+            raw_response = await _api.chat_dispatch(
                 provider,
                 api_key=api_key,
                 base_url=base_url,
@@ -232,42 +232,45 @@ async def butler_chat(
             text = raw_response.get("content", "")
             tool_calls = []
             usage = raw_response.get("usage") or {}
-        page_tool_calls, readonly_brief = _facade()._partition_butler_tool_calls(
+        page_tool_calls, readonly_brief = _api._partition_butler_tool_calls(
             tool_calls, user=user, db=db
         )
         tool_calls = page_tool_calls
         if readonly_brief:
             text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
     except RECOVERABLE_ERRORS as exc:
-        await wallet.release(hold)
-        _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
-        raise _facade().HTTPException(500, f"LLM 调用失败：{exc}")
-    usage_obj = _facade().usage_from_response({"usage": usage}, msgs, [text])
-    charge = _facade().calculate_charge(db, provider, model, usage_obj)
-    if not is_byok:
-        await wallet.settle(
-            hold,
-            _facade().authorization_header(request),
-            charge,
-            provider,
-            model,
-            request_id,
-        )
-    _facade().save_success_log(
-        db, user.id, provider, model, request_id, usage_obj, float(charge), conv.id
-    )
-    db.add(
-        _facade().ChatMessage(
-            conversation_id=conv.id,
+        await wallet.release(_api.authorization_header(request), hold, str(exc), request_id)
+        _api.save_failure_log(
+            db,
             user_id=user.id,
-            role="assistant",
-            content=text,
             provider=provider,
             model=model,
-            charge_amount=float(charge),
+            error=str(exc),
+            hold_no=hold.hold_no,
         )
+        raise _api.HTTPException(500, f"LLM 调用失败：{exc}")
+    usage_obj = _api.usage_from_response(usage, msgs, text)
+    charge = _api.Decimal("0")
+    if not is_byok:
+        charge = _api.calculate_charge(db, provider, model, usage_obj)
+        await wallet.settle(
+            _api.authorization_header(request),
+            hold,
+            charge,
+            request_id,
+        )
+    _api.save_success_log(
+        db,
+        user_id=user.id,
+        provider=provider,
+        model=model,
+        messages=[m for m in msgs if m.get("role") == "user"][-1:],
+        content=text,
+        usage=usage_obj,
+        charge=charge,
+        hold_no=hold.hold_no,
+        conversation_id=conv.id,
     )
-    db.commit()
     return {
         "text": text,
         "tool_calls": tool_calls,
@@ -285,98 +288,98 @@ async def butler_chat_stream(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """SSE 流式 Butler 对话（管理员工具路径降级为一次非流式完成后再 SSE）。"""
+    _api = _facade()
     if bool(getattr(user, "is_admin", False)):
-        result = await _facade().butler_chat(request, body, db=db, user=user)
+        result = await _api.butler_chat(request, body, db=db, user=user)
 
         async def admin_event_stream():
             text = str(result.get("text") or "")
             if text:
-                yield f"data: {_facade().json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
-            yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
+                yield f"data: {_api.json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
+            yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
 
-        return _facade().StreamingResponse(admin_event_stream(), media_type="text/event-stream")
-    provider, model, api_key, key_source, base_url = _facade()._resolve_butler_credentials(
-        db, user.id
-    )
-    msgs = _facade()._build_messages(body, body.page_context, user=user, db=db)
+        return _api.StreamingResponse(admin_event_stream(), media_type="text/event-stream")
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
+    msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     is_byok = key_source == "user_override"
     if not msgs:
-        raise _facade().HTTPException(400, "messages 不能为空")
-    request_id = _facade().new_request_id()
-    _facade().enforce_risk_limits(db, user.id, provider, model, msgs, request)
-    wallet = _facade().JavaWalletClient()
+        raise _api.HTTPException(400, "messages 不能为空")
+    request_id = _api.new_request_id()
+    _api.enforce_risk_limits(db, user.id, provider, model, msgs, request)
+    wallet = _api.JavaWalletClient()
     if is_byok:
-        hold = _facade().WalletHold(
-            hold_no=f"byok-{request_id}", amount=_facade().Decimal("0"), enabled=False
+        hold = _api.WalletHold(
+            hold_no=f"byok-{request_id}", amount=_api.Decimal("0"), enabled=False
         )
     else:
-        preauth = _facade().estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
+        preauth = _api.estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
         hold = await wallet.preauthorize(
-            _facade().authorization_header(request),
+            _api.authorization_header(request),
             preauth,
             provider,
             model,
             request_id,
         )
-    conv = _facade()._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
+    conv = _api._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
 
     async def event_stream():
         collected = []
+        usage = {}
         try:
-            async for chunk in _facade().chat_dispatch_stream(
+            async for chunk in _api.chat_dispatch_stream(
                 provider,
-                api_key,
-                model,
-                msgs,
+                api_key=api_key,
+                model=model,
+                messages=msgs,
                 base_url=base_url,
                 max_tokens=body.max_tokens,
             ):
-                if isinstance(chunk, str):
-                    collected.append(chunk)
-                    yield f"data: {_facade().json.dumps({'text': chunk, 'done': False}, ensure_ascii=False)}\n\n"
-                elif isinstance(chunk, dict) and chunk.get("done"):
+                if chunk.get("type") == "error":
+                    raise RuntimeError(str(chunk.get("error") or "upstream error"))
+                if chunk.get("type") == "usage":
                     usage = chunk.get("usage") or {}
-                    usage_obj = _facade().usage_from_response({"usage": usage}, msgs, collected)
-                    charge = _facade().calculate_charge(db, provider, model, usage_obj)
-                    if not is_byok:
-                        await wallet.settle(
-                            hold,
-                            _facade().authorization_header(request),
-                            charge,
-                            provider,
-                            model,
-                            request_id,
-                        )
-                    full_text = "".join(collected)
-                    _facade().save_success_log(
-                        db,
-                        user.id,
-                        provider,
-                        model,
-                        request_id,
-                        usage_obj,
-                        float(charge),
-                        conv.id,
-                    )
-                    db.add(
-                        _facade().ChatMessage(
-                            conversation_id=conv.id,
-                            user_id=user.id,
-                            role="assistant",
-                            content=full_text,
-                            provider=provider,
-                            model=model,
-                            charge_amount=float(charge),
-                        )
-                    )
-                    db.commit()
-                    yield f"data: {_facade().json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
+                elif chunk.get("type") == "delta":
+                    text = str(chunk.get("delta") or "")
+                    if text:
+                        collected.append(text)
+                        yield f"data: {_api.json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
+            full_text = "".join(collected)
+            usage_obj = _api.usage_from_response(usage, msgs, full_text)
+            charge = _api.Decimal("0")
+            if not is_byok:
+                charge = _api.calculate_charge(db, provider, model, usage_obj)
+                await wallet.settle(
+                    _api.authorization_header(request),
+                    hold,
+                    charge,
+                    request_id,
+                )
+            _api.save_success_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                messages=[m for m in msgs if m.get("role") == "user"][-1:],
+                content=full_text,
+                usage=usage_obj,
+                charge=charge,
+                hold_no=hold.hold_no,
+                conversation_id=conv.id,
+            )
+            yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
         except RECOVERABLE_ERRORS as exc:
-            await wallet.release(hold)
-            _facade().save_failure_log(db, user.id, provider, model, request_id, str(exc), conv.id)
-            yield f"data: {_facade().json.dumps({'error': str(exc), 'done': True}, ensure_ascii=False)}\n\n"
+            await wallet.release(_api.authorization_header(request), hold, str(exc), request_id)
+            _api.save_failure_log(
+                db,
+                user_id=user.id,
+                provider=provider,
+                model=model,
+                error=str(exc),
+                hold_no=hold.hold_no,
+            )
+            yield f"data: {_api.json.dumps({'error': str(exc), 'done': True}, ensure_ascii=False)}\n\n"
 
-    return _facade().StreamingResponse(event_stream(), media_type="text/event-stream")
+    return _api.StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 @_facade().router.post("/actions")

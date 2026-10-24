@@ -30,6 +30,11 @@ on:
       - '成都修茈科技有限公司/site/**'
       - '成都修茈科技有限公司/data/**'
       - '成都修茈科技有限公司/scripts/build_public_site.py'
+      - '成都修茈科技有限公司/scripts/evidence_assets.py'
+      - 'scripts/dev/materialize_media_assets.mjs'
+      - 'config/media-aliases.json'
+      - 'FHD/frontend/public/**'
+      - 'FHD/docs/evidence/**'
       - '成都修茈科技有限公司/scripts/site_acceptance.py'
       # 下列两条被 test_immutable_release_contract 明确断言，保留显式声明。
       - '成都修茈科技有限公司/world-will-ticker.js'
@@ -113,6 +118,8 @@ jobs:
             LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
             if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
             GIT_SITE="${SITE_ROOT}"
+            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
+            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -146,6 +153,10 @@ jobs:
               fi
               if [ -d "${GIT_SITE}/assets" ]; then
                 cp -af "${GIT_SITE}/assets/." "${LIVE_SITE}/assets/"
+              fi
+              if [ -d "${GIT_SITE}/corp-butler" ]; then
+                mkdir -p "${LIVE_SITE}/corp-butler"
+                cp -af "${GIT_SITE}/corp-butler/." "${LIVE_SITE}/corp-butler/"
               fi
               # 产品能力中心（#1951）：整目录发布，漏发即线上 404。
               if [ -d "${GIT_SITE}/capabilities" ]; then

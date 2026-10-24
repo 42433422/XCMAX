@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from app.application.workflow.ports.events import (
+from app.application.workflow.ports import (
     EventBusPort,
     StateEventPublisher,
     StateUpdateEvent,

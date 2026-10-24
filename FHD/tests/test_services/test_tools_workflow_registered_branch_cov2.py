@@ -1866,7 +1866,7 @@ class TestExcelImportRouter:
         with (
             patch("app.application.get_ai_chat_app_service") as mock_get,
             patch(
-                "app.services.tools_workflow_registered._execute_excel_import_records",
+                "app.services.tools_workflow_excel_ocr_ops._execute_excel_import_records",
                 return_value={"success": True},
             ) as mock_exec,
         ):
@@ -1879,6 +1879,7 @@ class TestExcelImportRouter:
                 "execute_import", {"pending_import_id": "x1"}, {}, "admin", ""
             )
         assert result["success"] is True
+        mock_exec.assert_called_once_with([{"unit_name": "Co"}])
         # The pending import should have been popped
         assert "x1" not in pending
 
@@ -1890,13 +1891,14 @@ class TestExcelImportRouter:
 
     def test_import_records_success(self):
         with patch(
-            "app.services.tools_workflow_registered._execute_excel_import_records",
+            "app.services.tools_workflow_excel_ocr_ops._execute_excel_import_records",
             return_value={"success": True},
-        ):
+        ) as mock_exec:
             result = _registered_router_excel_import(
                 "import_records", {"records": [{"unit_name": "Co"}]}, {}, "admin", ""
             )
         assert result["success"] is True
+        mock_exec.assert_called_once_with([{"unit_name": "Co"}])
 
     def test_unknown_action(self):
         result = _registered_router_excel_import("fly", {}, {}, "admin", "")

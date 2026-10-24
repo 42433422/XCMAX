@@ -22,6 +22,56 @@ UPGRADE_DATABASE_SCRIPT = ROOT / "scripts/upgrade_database.py"
 PYPROJECT = ROOT / "pyproject.toml"
 
 
+def test_private_delivery_migration_uses_persistent_library_and_stopped_window():
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    assert 'LIBRARY_DIR="${MODMAN_LIBRARY:-${RUNTIME_DIR%/}/library}"' in script
+    assert "MODMAN_LIBRARY=%s" in script
+    preflight = script.index("migrate_delivery_state true")
+    stop = script.index("systemctl stop modstore.service modstore-scheduler.service", preflight)
+    copied = script.index("migrate_delivery_state false", stop)
+    promote = script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    final_verify = script.rindex("verify_fixed_release_approval", 0, stop)
+    assert preflight < final_verify < stop < copied < promote
+    assert "verify_fixed_release_approval" not in script[stop:promote]
+    assert (
+        'TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units'
+        in script
+    )
+    assert 'if [[ "$status" != 0 && "$CATALOG_SERVICES_STOPPED" == 1 ]]' in script
+    helper = script[script.index("migrate_delivery_state() {") : preflight]
+    assert "systemctl stop" not in helper
+    assert 'dry_run=mode == "true"' in helper
+    assert "legacy_library=Path(previous_library)" in helper
+
+
+@pytest.mark.parametrize("external", [False, True], ids=["release-library", "stable-library"])
+def test_delivery_library_selector_preserves_existing_stable_root(tmp_path, external):
+    script = RELEASE_SCRIPT.read_text(encoding="utf-8")
+    start = script.index("select_library_target() {")
+    end = script.index("\n}\n", start) + 3
+    releases = tmp_path / "releases"
+    previous = releases / ("a" * 40)
+    wanted = tmp_path / "runtime/library"
+    active = tmp_path / "existing/library" if external else previous / "library"
+    result = subprocess.run(
+        [
+            "bash",
+            "-c",
+            script[start:end] + '\nselect_library_target "$1" "$2" "$3" "$4"\n',
+            "library-probe",
+            str(wanted),
+            str(active),
+            str(previous),
+            str(releases),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(active if external else wanted)
+    assert not wanted.exists() and not active.exists()
+
+
 def _compiler_probe(release: Path, node: str) -> subprocess.CompletedProcess[str]:
     script = RELEASE_SCRIPT.read_text(encoding="utf-8")
     start = script.index("verify_runtime_mod_compiler() {")
@@ -156,7 +206,12 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
-    assert ".[web,knowledge,evolution-metrics]" in script
+    assert ".[web,knowledge,evolution-metrics,governance]" in script
+    assert '"$BUILD_ROOT/packages/retort_engine"' in script
+    assert '"$BUILD_ROOT/packages/xcagi_common"' in script
+    assert (
+        "retort-engine>=0.4.0,<0.5" in pyproject["project"]["optional-dependencies"]["governance"]
+    )
     assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
     assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script

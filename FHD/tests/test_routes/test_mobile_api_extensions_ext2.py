@@ -19,6 +19,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _fake_market_profiles(monkeypatch):
+    monkeypatch.setattr(
+        "app.fastapi_routes.mobile_api_extensions._load_market_ai_employee_profile_index",
+        AsyncMock(return_value=({}, False, "")),
+    )
+
+
+@pytest.fixture(autouse=True)
+def _fake_circle_report_transport(monkeypatch):
+    # Sync projections exercise local data; the upstream MODstore feed is external.
+    monkeypatch.setattr(
+        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+    )
+
+
 @pytest.fixture(autouse=True, scope="module")
 def _resolve_circular_import():
     if "app.fastapi_routes.mobile_api_extensions" not in sys.modules:
