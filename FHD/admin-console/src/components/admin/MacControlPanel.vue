@@ -108,7 +108,7 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 </script>
 
 <style scoped>
-.mac-control { padding: 18px 20px; margin: 16px 0 0; border: 1px solid rgba(15, 111, 198, 0.12); border-radius: 16px; background: var(--bg-card, #fff); color: #172033; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); font-size: 13px; }
+.mac-control { padding: 18px 20px; margin: 16px 0 0; border: 1px solid; color: #172033; font-size: 13px; }
 header { display: flex; gap: 12px; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 header h3 { margin: 0; font-size: 15px; font-weight: 700; }
 header p, .mac-control > p { margin: 4px 0 0; color: #64748b; line-height: 1.6; }

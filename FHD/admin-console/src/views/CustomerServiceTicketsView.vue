@@ -1,6 +1,6 @@
 <template>
-  <main class="cs-view" id="view-customer-service-tickets">
-    <header class="cs-page-head">
+  <main class="cs-view page-content" id="view-customer-service-tickets">
+    <header class="cs-page-head page-header">
       <div>
         <h2>客服工单 · 客户反馈</h2>
         <p>来源：市场客服原单（当前登录市场账号的可见范围）。研发 Work Order 与客户交付单在各自入口查看。时间均为北京时间。</p>
@@ -16,6 +16,7 @@
         <select v-model="intentFilter" aria-label="问题分类" :disabled="loading">
           <option value="">全部分类</option>
           <option value="product_issue">产品问题</option>
+          <option value="custom_delivery">定制交付</option>
           <option value="account_support">账号支持</option>
           <option value="refund">退款</option>
           <option value="general">一般咨询</option>
@@ -43,7 +44,7 @@
       <label>
         <span>提交人身份</span>
         <select v-model="submitterType" aria-label="提交人身份" :disabled="loading">
-          <option value="">全部</option><option value="admin">管理员提交</option><option value="customer">客户提交</option>
+          <option value="">全部</option><option value="admin">管理员提交</option><option value="customer">客户提交</option><option value="unknown">提交人待确认</option>
         </select>
       </label>
       <button class="cs-btn cs-btn-primary" :disabled="loading">搜索 / 刷新</button>

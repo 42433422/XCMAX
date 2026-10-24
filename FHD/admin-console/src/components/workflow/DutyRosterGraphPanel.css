@@ -923,7 +923,7 @@
 
 /* Office 浅色主题：与 admin-console office-theme.css 对齐 */
 .dg-page-root--office {
-  --color-primary: var(--primary-color, #0b72d9);
+  --color-primary: var(--admin-primary, var(--primary-color, #0b72d9));
   --dg-panel-bg: rgba(255, 255, 255, 0.92);
   --dg-chip-accent: #0f766e;
   --dg-chip-background: #eef6ff;
@@ -936,10 +936,10 @@
   --color-bg-card: #ffffff;
   --color-bg-elevated: #f8fafc;
   --color-bg-base: #f1f5f9;
-  --color-text-primary: var(--text-primary, #172033);
+  --color-text-primary: var(--admin-text, var(--text-primary, #172033));
   --color-text-secondary: var(--text-secondary, #475569);
-  --color-text-muted: var(--app-text-muted, #64748b);
-  --color-border-subtle: rgba(213, 222, 235, 0.78);
+  --color-text-muted: var(--admin-muted, var(--app-text-muted, #64748b));
+  --color-border-subtle: var(--admin-border, #d7dee9);
   --dg-stat-bg: rgba(226, 232, 240, 0.65);
   --dg-stat-bg-ok: rgba(18, 138, 58, 0.12);
   --dg-stat-bg-warn: rgba(217, 119, 6, 0.12);
@@ -948,20 +948,19 @@
   --dg-stat-bg-err: rgba(197, 48, 48, 0.1);
   --dg-btn-hover: rgba(226, 237, 250, 0.9);
   --dg-menu-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-  --dg-panel-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  --dg-panel-shadow: var(--admin-card-shadow, 0 8px 24px rgba(15, 23, 42, 0.08));
 }
 .dg-page-root--office .dg-panel--page {
-  border: 1px solid rgba(213, 222, 235, 0.78);
-  border-radius: 18px;
-  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--admin-card-radius, 18px);
+  box-shadow: var(--admin-card-shadow, 0 18px 44px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72));
   background: var(--dg-panel-bg);
 }
+.duty-roster-graph-view .dg-title { font-size: 20px; line-height: 1.35; }
+.dg-page-root--office .dg-toggle-group { flex-wrap: wrap; border-radius: var(--admin-control-radius, 7px); }
+.dg-page-root--office .dg-toggle { min-height: 32px; font-size: var(--admin-control-size, 13px); }
 .dg-page-root--office .dg-stat--ok,
 .dg-page-root--office .dg-stat--healthy { color: #128a3a; }
-.dg-page-root--office .dg-toggle.active { background: var(--primary-color, #0b72d9); }
-.dg-page-root--office .dg-btn--primary {
-  background: linear-gradient(135deg, #0b72d9 0%, #1394df 100%);
-}
 .dg-page-root--office .dg-detail-health,
 .dg-page-root--office .dg-detail-capability,
 .dg-page-root--office .dg-detail-run-node {

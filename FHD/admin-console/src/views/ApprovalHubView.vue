@@ -1,5 +1,5 @@
 <template>
-  <main class="approval-hub-view" id="view-autonomy-approval-hub">
+  <main class="approval-hub-view page-content" id="view-autonomy-approval-hub">
     <header class="page-header">
       <div><h2>产品问题工单审批</h2><p>共享 Work Order 与完整闸门时间线；每 30 秒刷新</p></div>
       <div class="header-actions">

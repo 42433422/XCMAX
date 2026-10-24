@@ -1,5 +1,5 @@
 <template>
-  <main class="cs-view" id="view-customer-service-ticket-detail">
+  <main class="cs-view page-content" id="view-customer-service-ticket-detail">
     <nav class="cs-back"><button type="button" class="cs-btn" @click="backToList">← 返回工单列表</button></nav>
     <p v-if="!validId" role="alert" class="cs-banner-error">工单 ID 无效：{{ route.params.ticketId }}。请从工单列表打开。</p>
     <p v-else-if="loading" role="status" class="cs-card cs-state">正在读取原单证据…</p>

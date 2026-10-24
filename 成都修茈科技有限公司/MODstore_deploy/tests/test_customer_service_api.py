@@ -903,6 +903,32 @@ def test_custom_delivery_requires_quality_acceptance_and_install_receipt(
         assert paid["custom_delivery"]["stage"] == "production"
 
 
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("订单号 RF999 想退款，原因是重复购买", "RF999"),
+        ("订单号 RF123456 想退款，原因是重复购买", "RF123456"),
+        ("order_no: RF999 refund duplicate purchase", "RF999"),
+        ("ORDER NO：A1 想退款", "A1"),
+        ("订单 RF999 想退款", "RF999"),
+        ("订单 123456 想退款", "123456"),
+        ("订单号 ABCDEF 想退款", "ABCDEF"),
+        ("我有123456元余额，想退款", None),
+        ("RF999 想退款", None),
+        ("订单号 abc 想退款", None),
+        ("订单号 12345 想退款", None),
+        ("订单没有编号，想退款", None),
+        ("订单号：" + "R" * 64, "R" * 64),
+        ("订单号：" + "R" * 65, None),
+    ],
+)
+def test_order_field_extract_keeps_short_mixed_ids_and_rejects_ambiguous_text(message, expected):
+    from modstore_server.customer_service_orchestrator import extract_fields
+
+    assert extract_fields(message, {}).get("order_no") == expected
+    assert extract_fields(message, {"order_no": "CONTEXT-123"})["order_no"] == "CONTEXT-123"
+
+
 def test_infer_intent_order_no_alone_is_not_refund():
     from modstore_server.customer_service_orchestrator import (
         infer_intent,
