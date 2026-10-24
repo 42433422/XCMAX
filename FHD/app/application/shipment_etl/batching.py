@@ -73,7 +73,12 @@ def _scan(
             common = os.path.commonpath((root_text, allowed_text))
         except ValueError:
             continue
-        if os.path.normcase(common) == os.path.normcase(allowed_text):
+        root_key = os.path.normcase(os.path.normpath(root_text))
+        allowed_key = os.path.normcase(os.path.normpath(allowed_text))
+        allowed_prefix = allowed_key.rstrip(os.sep) + os.sep
+        if os.path.normcase(common) == allowed_key and (
+            root_key == allowed_key or root_key.startswith(allowed_prefix)
+        ):
             root_is_allowed = True
             break
     if not root_is_allowed:

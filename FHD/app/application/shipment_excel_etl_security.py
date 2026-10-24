@@ -402,6 +402,10 @@ def _reject_output_symlink(name: str, parent_fd: int, parent_path: Path) -> None
         raise ShipmentEtlPathError("output file escaped its approved directory") from exc
     if os.path.normcase(common) != os.path.normcase(parent_text):
         raise ShipmentEtlPathError("output file escaped its approved directory")
+    candidate_key = os.path.normcase(os.path.normpath(candidate_text))
+    parent_key = os.path.normcase(os.path.normpath(parent_text))
+    if not candidate_key.startswith(parent_key.rstrip(os.sep) + os.sep):
+        raise ShipmentEtlPathError("output file escaped its approved directory")
     try:
         metadata = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except FileNotFoundError:
@@ -595,7 +599,9 @@ def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> 
     if not nofollow or not getattr(os, "O_DIRECTORY", 0):
         raise ShipmentEtlPathError("safe directory access is unavailable")
     directory_flags |= nofollow | getattr(os, "O_CLOEXEC", 0)
-    fd = os.open(root.anchor, directory_flags)
+    if root.anchor != os.sep:
+        raise ShipmentEtlPathError("managed path has an unsupported filesystem anchor")
+    fd = os.open(os.sep, directory_flags)
     try:
         for part in (*root.parts[1:], *parts):
             component = _validated_path_component(part)
@@ -696,7 +702,10 @@ def open_etl_input_file(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        if os.path.normcase(common) == os.path.normcase(root_text):
+        path_key = os.path.normcase(os.path.normpath(path_text))
+        root_key = os.path.normcase(os.path.normpath(root_text))
+        root_prefix = root_key.rstrip(os.sep) + os.sep
+        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
             root = Path(root_text)
             break
     if root is None:
@@ -748,7 +757,10 @@ def prepare_etl_output_path(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        if os.path.normcase(common) == os.path.normcase(root_text):
+        path_key = os.path.normcase(os.path.normpath(path_text))
+        root_key = os.path.normcase(os.path.normpath(root_text))
+        root_prefix = root_key.rstrip(os.sep) + os.sep
+        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
             root = Path(root_text)
             break
     if root is None or Path(os.path.realpath(path_text)) != path:
@@ -781,7 +793,10 @@ def open_etl_output_file(
             common = os.path.commonpath((path_text, root_text))
         except ValueError:
             continue
-        if os.path.normcase(common) == os.path.normcase(root_text):
+        path_key = os.path.normcase(os.path.normpath(path_text))
+        root_key = os.path.normcase(os.path.normpath(root_text))
+        root_prefix = root_key.rstrip(os.sep) + os.sep
+        if os.path.normcase(common) == root_key and path_key.startswith(root_prefix):
             root = Path(root_text)
             break
     if root is None:
