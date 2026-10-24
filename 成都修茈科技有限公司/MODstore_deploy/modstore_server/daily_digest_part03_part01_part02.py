@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 import importlib
 
@@ -243,7 +245,7 @@ def _digest_product_work_summary_html(
     ticket_outcomes: _facade().Sequence[str],
     pending_decisions: _facade().Sequence[str],
     pending_decision_count: int,
-    pending_tickets: _facade().Sequence[str] = (),
+    pending_tickets: Sequence[str] = (),
     pending_ticket_count: int = 0,
 ) -> str:
     """把产品变更、工单结果和待决事项放到日报主摘要。"""
