@@ -216,9 +216,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
 
         with (
             tenant_scope(authenticated_tenant_id),
-            llm_client_factory_scope(
-                lambda: create_modstore_openai_client_from_request(request)
-            ),
+            llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)),
         ):
             payload = chat_service.process_chat(
                 user_id=scoped_user_id,

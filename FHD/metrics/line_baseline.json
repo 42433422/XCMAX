@@ -1,5 +1,5 @@
 {
-  "lines": 2370025,
+  "lines": 2370023,
   "updated": "2026-10-25",
-  "note": "fix(#2544): route critic repair via scoped completion; ruff I001"
+  "note": "fix(#2544): ruff format xcagi_compat_chat_stream"
 }
