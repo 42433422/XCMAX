@@ -1,5 +1,5 @@
 {
   "lines": 2370033,
   "updated": "2026-10-24",
-  "note": "source_governance baseline: disclose excel domain part* mechanical modules from main merge"
+  "note": "CodeQL SARIF strip: domains excel_extract resolve_etl_path path-injection FP"
 }
