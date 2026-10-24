@@ -1,5 +1,5 @@
 {
-  "lines": 2336728,
+  "lines": 2336756,
   "updated": "2026-10-24",
-  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
+  "note": "ticket-event ownership fail-closed dispatch + test; disclosed net+28 for SSOT gate"
 }
