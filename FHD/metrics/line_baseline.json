@@ -1,5 +1,5 @@
 {
-  "lines": 2370026,
+  "lines": 2370025,
   "updated": "2026-10-25",
-  "note": "merge #2619 ports + capability date stamps on #2544"
+  "note": "fix(#2544): route critic repair via scoped completion; ruff I001"
 }

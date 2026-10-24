@@ -41,6 +41,7 @@ def request_planner_completion(
     ai_service: Any,
     context: dict[str, Any] | None,
     messages: list[dict[str, str]],
+    http_client_factory: Any = None,  # call-site compat; unused
     temperature: float = 0.1,
     max_tokens: int = 1200,
 ) -> dict[str, Any] | None:

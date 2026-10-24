@@ -209,10 +209,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             and _looks_like_business_db_write(message_text, message_text.lower())
         )
     ):
-        from app.infrastructure.llm.client import llm_client_factory_scope
         from app.fastapi_routes.xcagi_compat_chat_helpers import (
             create_modstore_openai_client_from_request,
         )
+        from app.infrastructure.llm.client import llm_client_factory_scope
 
         with (
             tenant_scope(authenticated_tenant_id),

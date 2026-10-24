@@ -29,7 +29,7 @@ class PlannerCompletion(Protocol):
         ai_service: PlannerConversation,
         context: dict[str, Any] | None,
         messages: list[dict[str, str]],
-        http_client_factory: Callable[[], httpx.Client],
+        http_client_factory: Callable[[], httpx.Client] | None = None,
         temperature: float = 0.1,
         max_tokens: int = 1200,
     ) -> dict[str, Any] | None: ...
@@ -105,9 +105,6 @@ class LlmPlanGeneration:
         invalid_plan: PlanGraph,
     ) -> PlanGraph | None:
         """CriticAgent：LLM 修复无效 PlanGraph（只重试一次）。"""
-        api_key = getattr(self.conversation, "api_key", "") or ""
-        if not api_key:
-            return None
         try:
             tool_specs = _tool_specs(tool_registry, repair=True)
             invalid_dict = {
@@ -167,25 +164,16 @@ class LlmPlanGeneration:
                 {"role": "system", "content": "你是工作流计划修复器，只输出可执行 JSON。"},
                 {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
             ]
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-            api_url = getattr(self.conversation, "api_url", "") or default_chat_completions_url()
-            response = self.http_client().post(
-                api_url,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": getattr(self.conversation, "model", "") or "deepseek-chat",
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 1000,
-                },
+            response_data = self.completion(
+                ai_service=self.conversation,
+                context=context,
+                messages=messages,
+                http_client_factory=self.http_client,
+                temperature=0.2,
+                max_tokens=1000,
             )
-            if response.status_code >= 400:
+            if response_data is None:
                 return None
-            response_data = response.json()
             decoded = _decode_completion(response_data)
             if decoded is None:
                 return None

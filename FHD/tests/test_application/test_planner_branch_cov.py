@@ -1661,7 +1661,7 @@ class TestCriticRepairWithLLM:
         return planner
 
     def test_no_api_key_returns_none(self) -> None:
-        """无 api_key 时返回 None。"""
+        """无可用模型通道时返回 None。"""
         with patch("app.application.workflow.planner.get_ai_conversation_service") as mock_svc:
             ai = MagicMock()
             ai.api_key = ""
@@ -1669,15 +1669,19 @@ class TestCriticRepairWithLLM:
             planner = LLMWorkflowPlanner()
 
         invalid_plan = PlanGraph(plan_id="pid", intent="i", nodes=[])
-        result = planner._critic_repair_with_llm(
-            plan_id="pid",
-            user_id="u1",
-            message="test",
-            tool_registry={},
-            context={},
-            error="err",
-            invalid_plan=invalid_plan,
-        )
+        with patch(
+            "app.application.workflow.planner.request_planner_completion",
+            return_value=None,
+        ):
+            result = planner._critic_repair_with_llm(
+                plan_id="pid",
+                user_id="u1",
+                message="test",
+                tool_registry={},
+                context={},
+                error="err",
+                invalid_plan=invalid_plan,
+            )
         assert result is None
 
     def test_http_error_returns_none(self) -> None:
