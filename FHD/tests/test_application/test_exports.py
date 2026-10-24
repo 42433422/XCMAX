@@ -58,6 +58,8 @@ class TestHandlePriceListExport:
         assert "价格表生成失败" in result["message"]
 
     def test_file_write_error_returns_failure(self, tmp_path):
+        from app.infrastructure.documents import price_list_export
+
         mock_svc = MagicMock()
         mock_svc.get_all_products.return_value = [{"name": "P"}]
         with (
@@ -65,16 +67,19 @@ class TestHandlePriceListExport:
                 "app.application.get_product_app_service",
                 return_value=mock_svc,
             ),
-            patch(
-                "app.infrastructure.documents.price_list_export.resolve_price_list_docx_template",
+            patch.object(
+                price_list_export,
+                "resolve_price_list_docx_template",
                 return_value=(MagicMock(), None),
             ),
-            patch(
-                "app.infrastructure.documents.price_list_export.build_price_list_docx_bytes",
+            patch.object(
+                price_list_export,
+                "build_price_list_docx_bytes",
                 return_value=b"doc-bytes",
             ),
-            patch(
-                "app.application.tools.exports.Path.write_bytes",
+            patch.object(
+                etl_security,
+                "open_etl_output_file",
                 side_effect=OSError("disk full"),
             ),
         ):

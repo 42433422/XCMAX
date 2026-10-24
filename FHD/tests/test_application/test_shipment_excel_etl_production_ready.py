@@ -379,6 +379,72 @@ def test_etl_output_resolver_rejects_symlink_escape_without_writing(tmp_path, mo
     assert outside.read_bytes() == b"preserve this file"
 
 
+def test_etl_output_writer_rejects_leaf_symlink_replaced_after_validation(tmp_path, monkeypatch):
+    """The final open must reject a symlink inserted after path validation."""
+    import os
+
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside.xlsx"
+    outside.write_bytes(b"preserve this file")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    destination = security.resolve_etl_output_path(allowed / "result.xlsx")
+    real_open = os.open
+    inserted_link = False
+
+    def insert_leaf_link_before_open(path, flags, mode=0o777, *, dir_fd=None):
+        nonlocal inserted_link
+        if path == destination.name and dir_fd is not None and not inserted_link:
+            destination.symlink_to(outside)
+            inserted_link = True
+        return real_open(path, flags, mode, dir_fd=dir_fd)
+
+    monkeypatch.setattr(security.os, "open", insert_leaf_link_before_open)
+    monkeypatch.setattr(
+        security.os,
+        "supports_dir_fd",
+        set(os.supports_dir_fd) | {insert_leaf_link_before_open},
+    )
+    with pytest.raises(security.ShipmentEtlPathError):
+        with security.open_etl_output_file(destination):
+            pytest.fail("a swapped symlink must not be opened")
+    assert inserted_link is True
+    assert outside.read_bytes() == b"preserve this file"
+
+
+def test_etl_output_writer_rejects_parent_symlink_replaced_after_validation(tmp_path, monkeypatch):
+    """Directory-descriptor traversal must reject a swapped parent link."""
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    parent = allowed / "nested"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+    destination = security.resolve_etl_output_path(parent / "result.xlsx")
+    open_directory = security._open_directory_under_root
+    calls = 0
+
+    def replace_parent_before_open(root, directory, *, create):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            directory.rmdir()
+            directory.symlink_to(outside, target_is_directory=True)
+        return open_directory(root, directory, create=create)
+
+    monkeypatch.setattr(security, "_open_directory_under_root", replace_parent_before_open)
+    with pytest.raises(security.ShipmentEtlPathError):
+        with security.open_etl_output_file(destination):
+            pytest.fail("a swapped parent symlink must not be traversed")
+    assert not (outside / destination.name).exists()
+
+
 def test_etl_path_resolver_does_not_trust_cwd_or_global_temp(tmp_path, monkeypatch):
     from app.application import shipment_excel_etl_security as security
 

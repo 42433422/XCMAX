@@ -86,7 +86,6 @@ def write_delivery(
             "message": "非法输出路径",
             "error_code": "unsafe_path",
         }
-    path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     default = cast("Worksheet", workbook.active or workbook.create_sheet(default_sheet[:31]))
     created = 0
@@ -135,7 +134,8 @@ def write_delivery(
                 default, 4, dict(config.get("demo_item") or {}), columns, aliases=False
             )
             created = 1
-        workbook.save(path)
+        with etl_security.open_etl_output_file(path) as output_file:
+            workbook.save(output_file)
     finally:
         workbook.close()
     return {
@@ -177,7 +177,6 @@ def write_ledger(
             "message": "非法输出路径",
             "error_code": "unsafe_path",
         }
-    path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     sheet = cast("Worksheet", workbook.active)
     assert sheet is not None
@@ -194,7 +193,8 @@ def write_ledger(
                 sheet.cell(row_index, int(column), value)
         if extra_sheet and extra_sheet not in workbook.sheetnames:
             workbook.create_sheet(extra_sheet[:31])
-        workbook.save(path)
+        with etl_security.open_etl_output_file(path) as output_file:
+            workbook.save(output_file)
     finally:
         workbook.close()
     return {

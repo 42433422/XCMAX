@@ -91,7 +91,10 @@ def handle_price_list_export(
         out_path = etl_security.resolve_etl_output_path(
             out_dir / suffix, workspace_root=workspace_root
         )
-        out_path.write_bytes(doc_bytes)
+        with etl_security.open_etl_output_file(
+            out_path, workspace_root=workspace_root
+        ) as output_file:
+            output_file.write(doc_bytes)
         return {
             "success": True,
             "file_path": str(out_path),

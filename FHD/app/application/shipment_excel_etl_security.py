@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from typing import BinaryIO, Iterator
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -128,6 +131,55 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
     raise ShipmentEtlPathError("path not under allowed dirs")
 
 
+def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> int | None:
+    """Open a managed directory by walking components without following links."""
+    root = Path(os.path.realpath(str(root)))
+    directory = Path(os.path.normpath(str(directory)))
+    try:
+        relative = directory.relative_to(root)
+    except ValueError as exc:
+        raise ShipmentEtlPathError("path not under allowed dirs") from exc
+    parts = relative.parts
+    if any(part in ("", ".", "..") or "\\" in part for part in parts):
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
+    if os.name != "posix" or os.open not in getattr(os, "supports_dir_fd", set()):
+        # Keep Windows and other platforms working. Their path-based fallback
+        # revalidates the canonical parent immediately before each filesystem
+        # operation; POSIX uses directory descriptors and O_NOFOLLOW below.
+        if create:
+            directory.mkdir(parents=True, exist_ok=True)
+        if Path(os.path.realpath(str(directory))) != directory:
+            raise ShipmentEtlPathError("output directory changed during validation")
+        return None
+
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow or not getattr(os, "O_DIRECTORY", 0):
+        raise ShipmentEtlPathError("safe directory access is unavailable")
+    directory_flags |= nofollow | getattr(os, "O_CLOEXEC", 0)
+    fd = os.open(root.anchor, directory_flags)
+    try:
+        for part in (*root.parts[1:], *parts):
+            if create:
+                try:
+                    os.mkdir(part, 0o777, dir_fd=fd)
+                except FileExistsError:
+                    pass
+            next_fd = os.open(part, directory_flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except OSError as exc:
+        os.close(fd)
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ShipmentEtlPathError("output directory contains a link or non-directory") from exc
+        raise
+    except BaseException:
+        os.close(fd)
+        raise
+
+
 def resolve_etl_path(
     file_path: str | Path,
     *,
@@ -161,24 +213,84 @@ def resolve_etl_output_path(
     if not raw:
         raise ShipmentEtlPathError("empty output path")
     name = Path(raw).name
-    if not name or name in (".", ".."):
+    if not name or name in (".", "..") or "\\" in name or "\x00" in name:
         raise ShipmentEtlPathError("invalid output name")
     parent_raw = str(Path(raw).parent) if Path(raw).parent.as_posix() not in (".", "") else "."
     if parent_raw in (".", ""):
         # 仅文件名：落到第一个受信根
         roots = etl_allowed_roots(workspace_root)
+        if not roots:
+            raise ShipmentEtlPathError("path not under allowed dirs")
         parent = roots[0]
     else:
         parent = _safe_under_roots(parent_raw, etl_allowed_roots(workspace_root))
-    parent.mkdir(parents=True, exist_ok=True)
-    # 文件名只用 basename；归一化后再次验证最终路径仍在已批准父目录内。
+    # Derive the leaf only from the validated canonical parent, never from the
+    # original output path after validating its parent.
     parent_path = Path(os.path.realpath(str(parent)))
-    candidate = Path(os.path.realpath(os.path.join(str(parent_path), name)))
+    candidate = Path(os.path.normpath(os.path.join(str(parent_path), name)))
     parent_text = str(parent_path)
     candidate_text = str(candidate)
-    if candidate_text == parent_text or not candidate_text.startswith(parent_text + os.sep):
+    if candidate.parent != parent_path or candidate_text == parent_text:
         raise ShipmentEtlPathError("output path not under allowed dirs")
+    resolved_candidate = Path(os.path.realpath(candidate_text))
+    if resolved_candidate != candidate:
+        raise ShipmentEtlPathError("output path resolves through a symbolic link")
+    # Create parent components only after validating the complete destination;
+    # the descriptor walk rejects links inserted during directory creation.
+    root = next(
+        (
+            Path(os.path.realpath(str(allowed_root)))
+            for allowed_root in etl_allowed_roots(workspace_root)
+            if parent_path == Path(os.path.realpath(str(allowed_root)))
+            or Path(os.path.realpath(str(allowed_root))) in parent_path.parents
+        ),
+        None,
+    )
+    if root is None:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+    parent_fd = _open_directory_under_root(root, parent_path, create=True)
+    if parent_fd is not None:
+        os.close(parent_fd)
     return candidate
+
+
+@contextmanager
+def open_etl_output_file(
+    output_path: str | Path,
+    *,
+    workspace_root: str | Path | None = None,
+) -> Iterator[BinaryIO]:
+    """Open an approved output without following a replaced parent or leaf link."""
+    path = resolve_etl_output_path(output_path, workspace_root=workspace_root)
+    roots = etl_allowed_roots(workspace_root)
+    root = next(
+        (
+            Path(os.path.realpath(str(allowed_root)))
+            for allowed_root in roots
+            if path.parent == Path(os.path.realpath(str(allowed_root)))
+            or Path(os.path.realpath(str(allowed_root))) in path.parent.parents
+        ),
+        None,
+    )
+    if root is None:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+    parent_fd = _open_directory_under_root(root, path.parent, create=True)
+    if parent_fd is None:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags, 0o666)
+    else:
+        try:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+            flags |= getattr(os, "O_CLOEXEC", 0)
+            descriptor = os.open(path.name, flags, 0o666, dir_fd=parent_fd)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, errno.EISDIR):
+                raise ShipmentEtlPathError("output file was replaced by a link") from exc
+            raise
+        finally:
+            os.close(parent_fd)
+    with os.fdopen(descriptor, "wb") as stream:
+        yield stream
 
 
 def tenant_key_for_etl() -> str:

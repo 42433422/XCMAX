@@ -106,7 +106,6 @@ def grid_to_workbook_path(
         os.close(descriptor)
         raw_output_path = Path(temp_name)
     path = etl_security.resolve_etl_output_path(raw_output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -122,7 +121,8 @@ def grid_to_workbook_path(
         for col, value in enumerate(row, start=1):
             ws.cell(row_idx, col, value)
         row_idx += 1
-    wb.save(path)
+    with etl_security.open_etl_output_file(path) as output_file:
+        wb.save(output_file)
     wb.close()
     return path
 

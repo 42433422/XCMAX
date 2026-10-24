@@ -12,7 +12,11 @@ from openpyxl.utils import get_column_letter
 
 from app.application.etl.errors import EtlError
 from app.application.etl.parser_structure import clean_cell_text, semantic_key
-from app.application.shipment_excel_etl_security import resolve_etl_output_path, resolve_etl_path
+from app.application.shipment_excel_etl_security import (
+    open_etl_output_file,
+    resolve_etl_output_path,
+    resolve_etl_path,
+)
 
 
 def _last_nonempty_row(worksheet: Any, start: int, end: int, last_col: int) -> int:
@@ -177,8 +181,8 @@ def extract_shipment_template(
     header_row = int(region.get("header_row") or 0) - start_row + 1
     _clear_example_lines(output.active, header_row=header_row, last_col=last_col)
     destination_path = resolve_etl_output_path(destination)
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    output.save(destination_path)
+    with open_etl_output_file(destination_path) as output_file:
+        output.save(output_file)
     output.close()
     return {
         "file_path": str(destination_path),

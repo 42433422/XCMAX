@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.application.shipment_excel_etl_security import (
     ShipmentEtlPathError,
+    open_etl_output_file,
     resolve_etl_output_path,
     resolve_etl_path,
 )
@@ -143,7 +144,8 @@ def _generate_excel(data, filename=None, sheet_name="Sheet1") -> tuple[dict, int
             for col_idx, header in enumerate(headers, 1):
                 ws.cell(row_idx, col_idx, row_data.get(header))
 
-        wb.save(file_path)
+        with open_etl_output_file(file_path) as output_file:
+            wb.save(output_file)
 
         return {
             "success": True,
@@ -266,7 +268,7 @@ async def extract_upload(
         filename = f"extract_{timestamp}_{upload_name}"
         file_path = resolve_etl_output_path(Path(TEMP_EXCEL_DIR) / filename)
         body = await excel_file.read()
-        with open(file_path, "wb") as f:
+        with open_etl_output_file(file_path) as f:
             f.write(body)
         mode = (parse_mode or "").strip().lower()
         if mode in ("attendance_detail", "attendance", "考勤明细"):
