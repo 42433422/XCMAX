@@ -977,6 +977,10 @@ print(json.dumps(result, ensure_ascii=False))
 PY
 }
 migrate_delivery_state true
+# Re-check approval/live identity while MODstore still serves :9999.
+# Must run before systemctl stop; a post-stop curl would Connection-refuse
+# and abort promotion with current left unchanged.
+verify_fixed_release_approval
 CATALOG_SERVICES_STOPPED=1
 systemctl stop modstore.service modstore-scheduler.service
 if [[ "$ACTIVE_CATALOG_DIR" != "$(canonical_path "$CATALOG_DIR")" ]]; then
@@ -1020,7 +1024,6 @@ assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
 migrate_delivery_state false
 
-verify_fixed_release_approval
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1
