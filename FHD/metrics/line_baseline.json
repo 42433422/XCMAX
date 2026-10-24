@@ -1,5 +1,5 @@
 {
-  "lines": 2370483,
+  "lines": 2370485,
   "updated": "2026-10-25",
-  "note": "hygiene#2627: restore capability-required FHD evidence + appstore alias sources + SSOT regen"
+  "note": "hygiene#2627: +2 lines from ind-szqsm materialization pin"
 }
