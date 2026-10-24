@@ -276,7 +276,7 @@ class DeterministicPlanner:
                 intent = "business_db_read"
                 entity = self.dependencies.entity(message)
                 keyword = self.dependencies.read_keyword(message, entity)
-                record_id = re.search(r"\bID\s*[:：]?\s*(\d+)", message, re.I)
+                record_id = re.search(r"(?i)\bID[ \t]{0,8}[:：]?[ \t]{0,8}(\d+)", message)
                 nodes.append(
                     WorkflowNode(
                         node_id="read_business_db",
@@ -326,8 +326,8 @@ class DeterministicPlanner:
             and "products" in tool_registry
             and not any(word in message for word in ("客户", "购买单位"))
             and re.fullmatch(
-                r"(?:(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:(?:一个|一款|一种)\s*)?"
-                r"|(?:新增|添加)\s*(?:一个|一款|一种)\s*)产品[。！!]?",
+                r"(?:(?:请|帮我|请帮我)[ \t]{0,8}(?:新增|添加)[ \t]{0,8}(?:(?:一个|一款|一种)[ \t]{0,8})?"
+                r"|(?:新增|添加)[ \t]{0,8}(?:一个|一款|一种)[ \t]{0,8})产品[。！!]?",
                 message.strip(),
             )
         ):
