@@ -29,13 +29,13 @@
       "routes": 25,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/shipment_orders.py": {
-      "stack": "fhd_backend",
+    "FHD/mods/xcagi-lan-license-bridge/backend/blueprints.py": {
+      "stack": "fhd_vue",
       "routes": 23,
       "soft_cap": 20
     },
-    "FHD/mods/xcagi-lan-license-bridge/backend/blueprints.py": {
-      "stack": "fhd_vue",
+    "FHD/app/fastapi_routes/domains/shipment/shipment_orders.py": {
+      "stack": "fhd_backend",
       "routes": 23,
       "soft_cap": 20
     }
