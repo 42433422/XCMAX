@@ -156,6 +156,7 @@ def test_empty_search_prefix_wildcards_and_write_only_restrictions_stay_compatib
                 PutOp(("langgraph", "internal"), "key", {}),
             ]
         )[:2]
+        assert isinstance(found, list)
         assert [item.namespace for item in found] == [("tenant", "a_%")]
         assert listed == [("tenant", "a_%")]
         for namespace in [(), ("langgraph", "internal")]:
