@@ -157,7 +157,7 @@ jobs:
 
       - name: Upload macOS OTA artifacts for recovery
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ format('mac-acceptance-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
           path: FHD/release/xcagi-v${{ github.event.inputs.version }}/enterprise
@@ -166,7 +166,7 @@ jobs:
 
       - name: Preserve failed staple candidate for diagnosis only
         if: ${{ failure() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ format('mac-staple-recovery-{0}-{1}', inputs.release_sha, inputs.architecture || 'arm64') }}
           path: |

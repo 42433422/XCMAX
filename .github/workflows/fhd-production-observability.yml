@@ -76,7 +76,7 @@ jobs:
           fi
       - name: Upload target readback and rollback pointer
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-production-observability-readback
           path: ${{ runner.temp }}/production-observability-readback.log

@@ -48,7 +48,7 @@ jobs:
           test "$expected" = "$current"
           gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/snapshots" \
             --method POST --input "${RUNNER_TEMP}/locked-dependencies.json"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: locked-dependencies-${{ github.run_id }}

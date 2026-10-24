@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload smoke evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-smoke-evidence
           path: /tmp/android-smoke-screen.png

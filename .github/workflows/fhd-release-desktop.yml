@@ -169,7 +169,7 @@ jobs:
             warning = $(if ($state -eq 'unsigned') { '未签名安装包，Windows 可能显示未知发布者或安全提示；不进入稳定自动更新。' } else { '' })
           } | ConvertTo-Json | Set-Content delivery/delivery-receipt.json -Encoding utf8
           Get-Content delivery/delivery-receipt.json >> $env:GITHUB_STEP_SUMMARY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
           path: |
@@ -563,7 +563,7 @@ jobs:
             -ExpectedBuildSha "${{ inputs.release_sha }}" `
             -ExpectedProductVersion $v `
             -ReadyTimeoutSeconds 240
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xcagi-desktop-windows-enterprise
           path: |
@@ -678,7 +678,7 @@ jobs:
           dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
           bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: xcagi-desktop-macos-enterprise
           path: |
@@ -795,7 +795,7 @@ jobs:
             --output "${RUNNER_TEMP}/manifest.json" \
             --download-release-output "${RUNNER_TEMP}/download-release.json"
       - name: Upload manifest artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcagi-download-manifest
           path: |
