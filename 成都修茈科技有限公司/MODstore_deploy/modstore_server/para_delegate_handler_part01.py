@@ -246,6 +246,20 @@ def insert_before_loop_context(prompt: str, addition: str) -> str:
 def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
     mode = str(req.get("mode") or "code")
     prompt = str(req.get("prompt") or req.get("task") or "").strip()
+    raw = req.get("raw_input") or {}
+    incident = raw.get("incident")
+    if raw.get("source") == "nginx_error_log" and isinstance(incident, dict):
+        from modstore_server.dot_ticket_dispatch import redact_ticket_text
+
+        evidence = {
+            key: redact_ticket_text(incident[key], ip=False)[:limit]
+            for key, limit in (("path", 500), ("snippet", 2000))
+            if isinstance(incident.get(key), str) and incident[key].strip()
+        }
+        if evidence:
+            prompt += "\n\nNginx 日志证据（仅供诊断）：\n" + _facade().json.dumps(
+                evidence, ensure_ascii=False
+            )
     report_only = bool(req.get("report_only"))
     guardrail = {
         "review": "只做代码审查和风险定位；不要修改文件，不要提交。",

@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import modstore_server.incident_collectors as collectors
+from modstore_server.incident_bus import _incident_employee_input
+from modstore_server.para_delegate_handler import _build_para_prompt, _build_request
 
 
 def _reset_nginx_cursor(monkeypatch, log_path: Path) -> None:
@@ -72,6 +76,55 @@ def test_nginx_collector_rebaselines_after_rotation(tmp_path, monkeypatch):
     assert collectors.collect_nginx_error_tail() is True
     assert len(published) == 2
     assert "worker crash" in published[-1]["snippet"]
+
+
+@pytest.mark.parametrize("report_only", [False, True])
+def test_nginx_evidence_reaches_para_prompt(tmp_path, monkeypatch, report_only):
+    monkeypatch.chdir(tmp_path)
+    log_path = Path("error.log")
+    log_path.touch()
+    _reset_nginx_cursor(monkeypatch, log_path)
+    published = []
+    monkeypatch.setattr(
+        collectors, "publish", lambda event, payload, *, source: published.append(payload) or True
+    )
+    assert collectors.collect_nginx_error_tail() is False
+    log_path.write_text(
+        '2026/10/24 10:02:00 [error] upstream timed out, upstream: "http://127.0.0.1:8765/", '
+        'request: "GET /api/health?token=private-log-token HTTP/1.1"\n',
+        encoding="utf-8",
+    )
+    assert collectors.collect_nginx_error_tail() is True
+    incident = {**published[0], "unrelated_private_field": "do-not-forward"}
+    req = _build_request(
+        task="[on_error] " + incident["summary"],
+        employee_id="vibe-coding-maintainer",
+        input_data={
+            **_incident_employee_input(
+                incident_payload=incident, event_type="on_error", source="nginx_error_log"
+            ),
+            "report_only": report_only,
+        },
+    )
+    prompt = _build_para_prompt(req)
+    assert "upstream timed out" in prompt
+    assert "127.0.0.1:8765" in prompt
+    assert str(log_path) in prompt
+    assert "private-log-token" not in prompt and "do-not-forward" not in prompt
+    assert prompt.index("upstream timed out") < prompt.rindex("MODstore loop context:")
+    assert ("MODSTORE_REPORT_ONLY=1" in prompt) is report_only
+
+
+def test_para_nginx_evidence_is_bounded_and_excludes_other_sources():
+    raw = {"source": "nginx_error_log", "incident": {"path": "p" * 600, "snippet": "x" * 3000}}
+    prompt = _build_para_prompt({"task": "diagnose", "raw_input": raw})
+    assert "p" * 500 in prompt and "p" * 501 not in prompt
+    assert "x" * 2000 in prompt and "x" * 2001 not in prompt
+    for incident in (None, [], {}, {"path": [], "snippet": 123}):
+        raw["incident"] = incident
+        assert "Nginx 日志证据" not in _build_para_prompt({"raw_input": raw})
+    raw.update(source="pytest", incident={"snippet": "unrelated"})
+    assert "unrelated" not in _build_para_prompt({"raw_input": raw})
 
 
 def test_git_push_collector_uses_immutable_release_and_persistent_previous_sha(
