@@ -144,6 +144,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.application.workflow.planner import _looks_like_business_db_write
+    from app.domain.services.conversation.chat_tool_intent import references_recent_business_record
 
     chat_service = get_ai_chat_app_service()
     from app.application.agent_task_context import scoped_conversation_user_id
@@ -200,6 +201,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         return
     if (
         has_pending_workflow
+        or references_recent_business_record(message_text)
         or message_text.strip().lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS
         or sales_closed_loop_route
         # #2067：开单与 /api/ai/chat 同一套规则识别（process_chat），不交给 LLM 规划器。

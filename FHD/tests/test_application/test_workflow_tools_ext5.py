@@ -130,12 +130,27 @@ class TestHandleExcelAnalysisActions:
         from app.application.tools.workflow import handle_excel_analysis
 
         p = tmp_path / "data.xlsx"
-        pd.DataFrame({"a": [1, 2]}).to_excel(p, index=False)
+        pd.DataFrame({"数量": range(1, 206), "金额": [2 * n for n in range(1, 206)]}).to_excel(
+            p, index=False
+        )
         result = handle_excel_analysis(
-            {"file_path": str(p), "action": "aggregate"}, workspace_root=str(tmp_path)
+            {
+                "file_path": str(p),
+                "action": "aggregate",
+                "group_by": [],
+                "metrics": [
+                    {"column": "数量", "op": "sum"},
+                    {"column": "金额", "op": "sum"},
+                    {"column": "数量", "op": "count"},
+                ],
+            },
+            workspace_root=str(tmp_path),
         )
         assert result["success"] is True
-        assert result["row_count"] == 2
+        assert result["row_count"] == 1
+        assert result["source_row_count"] == 205
+        assert result["records"] == [{"数量_sum": 21115, "数量_count": 205, "金额_sum": 42230}]
+        assert result["truncated"] is False
 
     def test_action_aggregate_invalid_metrics(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis
@@ -151,7 +166,7 @@ class TestHandleExcelAnalysisActions:
             },
             workspace_root=str(tmp_path),
         )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_statistics(self, tmp_path: Path):
         from app.application.tools.workflow import handle_excel_analysis

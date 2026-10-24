@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, cast
@@ -180,33 +181,58 @@ def build_customers_query_response_dict(
     if route_result.get("intent") != "customers_query":
         return None
     keyword = _keyword(route_result)
+    customer_id = None
+    slots = route_result.get("slots") or {}
+    if "id" in slots:
+        value = str(slots["id"]).strip()
+        if not re.fullmatch(r"[1-9]\d*", value):
+            return slot_reply(
+                "customers_query", "请提供一个有效的客户 ID（正整数）。", success=False
+            )
+        customer_id = int(value)
 
     def fetch() -> object:
+        from starlette.responses import JSONResponse
+
         from app.infrastructure.tenant_scope import tenant_scope
-        from app.mod_sdk.erp_customers_facade import customers_list
+        from app.mod_sdk.erp_customers_facade import customers_get, customers_list
         from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
 
+        params = (
+            {"customer_id": customer_id}
+            if customer_id is not None
+            else {"page": 1, "per_page": 50, "keyword": keyword or None}
+        )
         with tenant_scope(_request_tenant_id(request)):
             result = try_invoke_erp_domain_handler(
                 "customers",
-                "list",
+                "get" if customer_id is not None else "list",
                 request=request,
-                page=1,
-                per_page=50,
-                keyword=keyword or None,
+                **params,
             )
-            return (
-                customers_list(request, page=1, per_page=50, keyword=keyword or None)
-                if result is None
-                else result
-            )
+            if result is None:
+                result = (
+                    customers_get(request, customer_id)
+                    if customer_id is not None
+                    else customers_list(request, page=1, per_page=50, keyword=keyword or None)
+                )
+        if isinstance(result, JSONResponse):
+            result = json.loads(result.body)
+        if customer_id is not None and isinstance(result, dict) and result.get("success"):
+            record = result.get("data")
+            if not isinstance(record, dict) or record.get("id") != customer_id:
+                return {"success": False, "message": "客户查询工具未返回指定 ID 的记录。"}
+            result = {**result, "data": [record], "total": 1}
+        return result
 
     return QueryExecutor(logger).run(
         route_result,
         intent="customers_query",
         fetch=fetch,
-        present=lambda result: presentation.customers(result, keyword),
-        reject=lambda result: presentation.rejected_customers(result, keyword),
+        present=lambda result: presentation.customers(result, keyword, customer_id=customer_id),
+        reject=lambda result: presentation.rejected_customers(
+            result, keyword, customer_id=customer_id
+        ),
         failed="客户查询工具执行失败",
         unavailable="客户查询工具暂时不可用，请稍后重试。",
         log_name="customers.query 工具",

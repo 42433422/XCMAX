@@ -213,7 +213,12 @@ def route_message(message: str, ports: RoutingPorts) -> dict[str, Any]:
     if _requires_llm_planning(text, customer_entity_markers):
         return {"intent": "unknown", "slots": {}}
     if any(k in text for k in customer_entity_markers):
-        return {"intent": "customers_query", "slots": {"keyword": ""}}
+        customer_slots = {"keyword": ""}
+        id_marker = r"(?<![A-Za-z0-9_])(?:ID|编号|#)"
+        if re.search(id_marker, text, re.I):
+            ids = re.findall(id_marker + r"\s*[:：为是]?\s*([A-Za-z0-9_.+-]+)", text, re.I)
+            customer_slots["id"] = ids[0] if len(ids) == 1 else ""
+        return {"intent": "customers_query", "slots": customer_slots}
     delete_keywords = ("删除", "移除", "删掉", "删了")
     if any(k in text for k in delete_keywords):
         del_target = ""

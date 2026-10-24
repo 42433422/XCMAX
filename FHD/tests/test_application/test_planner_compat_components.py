@@ -59,7 +59,15 @@ def _bind(monkeypatch: pytest.MonkeyPatch, facade: ModuleType, label: str) -> Si
         "planner_workflow_interrupt_reply": lambda _message: None,
         "_ensure_vector_index_if_needed": lambda *_a: None,
         "_xcagi_chat_timeout_seconds": lambda: 5.0,
-        "_xcagi_compat_reply_payload": lambda reply, **_kw: {"success": True, "response": reply},
+        "_xcagi_compat_reply_payload": lambda reply, **kw: {
+            "success": True,
+            "response": reply,
+            **(
+                {"data": {"runtime_context": kw["runtime_context_update"]}}
+                if "runtime_context_update" in kw
+                else {}
+            ),
+        },
         "_clear_legacy_tool_result_if_reply_has_no_records": lambda _reply: None,
         "create_modstore_openai_client_from_request": ports.client,
         "start_legacy_chat_run": ports.start,
@@ -166,7 +174,8 @@ async def test_batch_interrupt_updates_context_and_failed_turn_does_not_stop_nex
     assert result["results"][-1]["response"] == "completed"
     assert all(context["cleared"] and "pending" not in context for context in contexts)
     assert all(context["_mod_authorization"] is authorization for context in contexts)
-    ports.client.assert_called_once()
+    assert ports.client.call_count == 2  # Each executed turn uses the shared single-turn API.
+    assert all(call.args[0].state.label == "test" for call in ports.client.call_args_list)
     assert ports.start.call_count == ports.finish.call_count == 2
 
 

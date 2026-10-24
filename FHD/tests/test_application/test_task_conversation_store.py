@@ -119,6 +119,67 @@ def test_clear_removes_only_current_users_sessions(store: TaskConversationStore)
     assert store.get_conversation(session_id="owner-b", user_id=42)["messages"][0]["content"] == "B"
 
 
+def test_compat_persistence_cannot_append_to_another_owners_session(store: TaskConversationStore):
+    from app.services.conversation_service import ConversationService
+
+    store.save_message(session_id="private-session", user_id=41, role="user", content="本人内容")
+    with pytest.raises(PermissionError):
+        ConversationService().save_message(
+            session_id="private-session",
+            user_id="42",
+            role="assistant",
+            content="越权回复",
+        )
+    assert len(store.get_conversation(session_id="private-session", user_id=41)["messages"]) == 1
+
+
+@pytest.mark.parametrize("action", ["read", "rename", "delete", "append"])
+def test_legacy_history_routes_cannot_access_other_owners_session(store, monkeypatch, action):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes.domains.conversation.routes import router
+
+    store.save_message(session_id="private-route", user_id=41, role="user", content="本人内容")
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda request: SimpleNamespace(id=42),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        if action == "read":
+            result = client.get("/api/conversations/private-route")
+            assert result.json()["messages"] == []
+        elif action == "rename":
+            assert (
+                client.put("/api/conversations/private-route/title", json={"title": "越权"}).json()[
+                    "success"
+                ]
+                is False
+            )
+        elif action == "delete":
+            assert client.delete("/api/conversations/private-route").json()["success"] is False
+        else:
+            assert (
+                client.post(
+                    "/api/ai/message/save",
+                    json={
+                        "session_id": "private-route",
+                        "user_id": "41",
+                        "role": "user",
+                        "content": "越权",
+                    },
+                ).status_code
+                == 403
+            )
+    original = store.get_conversation(session_id="private-route", user_id=41)
+    assert original["session"]["title"] == "本人内容"
+    assert [m["content"] for m in original["messages"]] == ["本人内容"]
+
+
 @pytest.mark.parametrize("actor_context", [{"local_user_id": 41, "actor_id": 42}, {"actor_id": 41}])
 def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
     store: TaskConversationStore, monkeypatch, actor_context

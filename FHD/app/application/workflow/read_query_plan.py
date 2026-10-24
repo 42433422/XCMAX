@@ -73,6 +73,17 @@ def customer_read_node(
     ):
         return None
     text = message.strip().rstrip("。？！?!")
+    slots = route.get("slots") or {}
+    if "id" in slots:
+        return WorkflowNode(
+            node_id="query_customers",
+            tool_id="customers",
+            action="query",
+            params={"id": slots["id"]},
+            risk="low",
+            idempotent=True,
+            description="按 ID 查询客户信息",
+        )
     listing = False
     value = text
     for polite in ("请", "帮我"):

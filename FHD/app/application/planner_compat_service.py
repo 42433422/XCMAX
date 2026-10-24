@@ -6,6 +6,7 @@ import asyncio as asyncio
 import json as json
 import logging
 import os
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import aclosing
 from typing import Any
@@ -295,6 +296,7 @@ def _application() -> CompatChatApplication:
         assert_p2_elevated_claim_or_raise,
         resolve_ai_tier,
         _xcagi_chat_timeout_seconds,
+        single_turn=execute_compat_chat,
     )
 
 
@@ -308,9 +310,37 @@ async def _execute_compat_chat_batch_impl(
     return await _application().batch(request, body)
 
 
+def _prepare_compat_chat_body(request: Request, body: XcagiCompatChatBody) -> XcagiCompatChatBody:
+    context = _runtime_context_with_authenticated_actor(request, body.context or {})
+    if not str(context.get("turn_id") or "").strip():
+        context["turn_id"] = uuid.uuid4().hex
+    return body.model_copy(update={"context": context})
+
+
+def _persist_compat_chat_turn(body: XcagiCompatChatBody, payload: dict[str, Any]) -> None:
+    from app.application import get_ai_chat_app_service
+    from app.application.task_conversation_store import durable_user_id
+
+    context = body.context or {}
+    owner = durable_user_id(context.get("local_user_id"))
+    if (
+        owner is None
+        or context.get("tenant_id") is None
+        or not (context.get("session_id") or context.get("conversation_id"))
+    ):
+        return
+    try:
+        get_ai_chat_app_service()._persist_chat_turn(str(owner), body.message, context, payload)
+    except RECOVERABLE_ERRORS:
+        logger.warning("compat chat history persistence failed", exc_info=True)
+
+
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> Payload:
+    body = _prepare_compat_chat_body(request, body)
     with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
-        return await _execute_compat_chat_impl(request, body)
+        payload = await _execute_compat_chat_impl(request, body)
+    _persist_compat_chat_turn(body, payload)
+    return payload
 
 
 async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatchBody) -> Payload:
@@ -321,6 +351,7 @@ async def execute_compat_chat_batch(request: Request, body: XcagiCompatChatBatch
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ) -> AsyncGenerator[bytes, None]:
+    body = _prepare_compat_chat_body(request, body)
     stream = CompatStream(
         _admission(),
         _fast_paths(),
@@ -338,6 +369,30 @@ async def compat_chat_stream_async(
         _xcagi_planner_stream_bytes_async,
         logger,
     )
-    async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
-        async for chunk in chunks:
-            yield chunk
+    pending = b""
+    with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+        async with aclosing(stream.run(request, body, ai_tier=ai_tier)) as chunks:
+            async for chunk in chunks:
+                pending += chunk
+                while b"\n\n" in pending:
+                    event, pending = pending.split(b"\n\n", 1)
+                    for line in event.splitlines():
+                        if not line.startswith(b"data: "):
+                            continue
+                        try:
+                            item = json.loads(line[6:])
+                        except (ValueError, UnicodeError):
+                            continue
+                        if not isinstance(item, dict):
+                            continue
+                        if item.get("type") == "done" and isinstance(item.get("result"), dict):
+                            _persist_compat_chat_turn(body, item["result"])
+                        elif item.get("type") == "error":
+                            _persist_compat_chat_turn(
+                                body,
+                                {
+                                    "success": False,
+                                    "response": str(item.get("message") or "对话执行失败"),
+                                },
+                            )
+                yield chunk
