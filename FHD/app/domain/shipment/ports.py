@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Any
+
 from app.domain.shipment.aggregates import Shipment
+
 
 class ShipmentDocumentGeneratorPort(ABC):
     """发货单文档生成端口（Port）。

@@ -128,216 +128,199 @@ def _build_etl_http():
 
 
 
-# --- inlined from excel_extract_shipment_part01 ---
-def _facade():
-    return importlib.import_module("app.fastapi_routes.domains.excel.excel_extract_shipment")
-
-
-def _adapters():
-    return _facade()._build_etl_http()
-
-
-@_facade().router.post(
+# --- shipment ETL HTTP handlers (formerly part01/part02; no dynamic facade) ---
+@router.post(
     "/shipment-etl/preview",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_preview(
-    file: _facade().UploadFile | None = _facade().File(default=None),
-    file_path: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    include_ledger: str = _facade().Form("auto"),
-    save_as_template: str = _facade().Form("0"),
-    template_name: str = _facade().Form(""),
-    template_scope: str = _facade().Form(""),
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
 ):
     from app.fastapi_routes.shipment_etl.ports import TemplateCapture
 
-    imports, *_rest = _adapters()
+    imports, *_rest = _build_etl_http()
     return await imports.preview(
         file,
         file_path,
         str(workspace_root or "").strip() or None,
-        _facade()._form_include_ledger(include_ledger),
+        _form_include_ledger(include_ledger),
         TemplateCapture(
-            enabled=_facade()._form_truthy(save_as_template, False),
+            enabled=_form_truthy(save_as_template, False),
             name=str(template_name or "").strip(),
             scope=str(template_scope or "").strip(),
         ),
     )
 
 
-@_facade().router.post(
+@router.post(
     "/shipment-etl/execute",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_execute(
-    file: _facade().UploadFile | None = _facade().File(default=None),
-    file_path: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    notes_json: str = _facade().Form(""),
-    import_products: str = _facade().Form("1"),
-    import_shipments: str = _facade().Form("1"),
-    idempotent: str = _facade().Form("1"),
-    include_ledger: str = _facade().Form("0"),
-    confirm_ledger: str = _facade().Form("0"),
-    dry_run: str = _facade().Form("0"),
-    direct: str = _facade().Form("0"),
-    force_shipment_target: str = _facade().Form("0"),
-    save_as_template: str = _facade().Form("0"),
-    template_name: str = _facade().Form(""),
-    template_scope: str = _facade().Form(""),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    notes_json: str = Form(""),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+    idempotent: str = Form("1"),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
+    dry_run: str = Form("0"),
+    direct: str = Form("0"),
+    force_shipment_target: str = Form("0"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
+    _user: Any = Depends(require_identified_user),
 ):
     from app.fastapi_routes.shipment_etl.ports import TemplateCapture
 
-    imports, *_rest = _adapters()
+    imports, *_rest = _build_etl_http()
     return await imports.execute(
         file,
         file_path,
         str(workspace_root or "").strip() or None,
         notes_json,
-        import_products=_facade()._form_truthy(import_products, True),
-        import_shipments=_facade()._form_truthy(import_shipments, True),
-        idempotent=_facade()._form_truthy(idempotent, True),
-        include_ledger=_facade()._form_include_ledger(include_ledger, default="0"),
-        confirm_ledger=_facade()._form_truthy(confirm_ledger, False),
-        dry_run=_facade()._form_truthy(dry_run, False),
-        direct=_facade()._form_truthy(direct, False),
-        force_shipment_target=_facade()._form_truthy(force_shipment_target, False),
+        import_products=_form_truthy(import_products, True),
+        import_shipments=_form_truthy(import_shipments, True),
+        idempotent=_form_truthy(idempotent, True),
+        include_ledger=_form_include_ledger(include_ledger, default="0"),
+        confirm_ledger=_form_truthy(confirm_ledger, False),
+        dry_run=_form_truthy(dry_run, False),
+        direct=_form_truthy(direct, False),
+        force_shipment_target=_form_truthy(force_shipment_target, False),
         template=TemplateCapture(
-            enabled=_facade()._form_truthy(save_as_template, False),
+            enabled=_form_truthy(save_as_template, False),
             name=str(template_name or "").strip(),
             scope=str(template_scope or "").strip(),
         ),
     )
 
 
-@_facade().router.post(
+@router.post(
     "/shipment-etl/ocr-preview",
-    dependencies=[_facade().Depends(_facade().require_tenant_etl_preview)],
+    dependencies=[Depends(require_tenant_etl_preview)],
 )
 async def shipment_etl_ocr_preview(
-    file: _facade().UploadFile | None = _facade().File(default=None),
-    file_path: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    include_ledger: str = _facade().Form("auto"),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
 ):
-    _imports, ocr, *_rest = _adapters()
+    _imports, ocr, *_rest = _build_etl_http()
     return await ocr.run(
         file,
         file_path,
         str(workspace_root or "").strip() or None,
-        _facade()._form_include_ledger(include_ledger),
+        _form_include_ledger(include_ledger),
     )
 
 
-@_facade().router.post(
+@router.post(
     "/shipment-etl/batch-preview",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_batch_preview(
-    directory: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    include_ledger: str = _facade().Form("auto"),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    directory: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
 ):
-    imports, *_rest = _adapters()
+    imports, *_rest = _build_etl_http()
     return imports.batch_preview(
         directory,
         str(workspace_root or "").strip() or None,
-        _facade()._form_include_ledger(include_ledger),
+        _form_include_ledger(include_ledger),
     )
 
 
-@_facade().router.post(
+@router.post(
     "/shipment-etl/batch-execute",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_batch_execute(
-    directory: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    include_ledger: str = _facade().Form("0"),
-    confirm_ledger: str = _facade().Form("0"),
-    idempotent: str = _facade().Form("1"),
-    import_products: str = _facade().Form("1"),
-    import_shipments: str = _facade().Form("1"),
-    dry_run: str = _facade().Form("0"),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    directory: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
+    idempotent: str = Form("1"),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+    dry_run: str = Form("0"),
+    _user: Any = Depends(require_identified_user),
 ):
-    imports, *_rest = _adapters()
+    imports, *_rest = _build_etl_http()
     return imports.batch_execute(
         directory,
         str(workspace_root or "").strip() or None,
-        include_ledger=_facade()._form_include_ledger(include_ledger, default="0"),
-        confirm_ledger=_facade()._form_truthy(confirm_ledger, False),
-        idempotent=_facade()._form_truthy(idempotent, True),
-        import_products=_facade()._form_truthy(import_products, True),
-        import_shipments=_facade()._form_truthy(import_shipments, True),
-        dry_run=_facade()._form_truthy(dry_run, False),
+        include_ledger=_form_include_ledger(include_ledger, default="0"),
+        confirm_ledger=_form_truthy(confirm_ledger, False),
+        idempotent=_form_truthy(idempotent, True),
+        import_products=_form_truthy(import_products, True),
+        import_shipments=_form_truthy(import_shipments, True),
+        dry_run=_form_truthy(dry_run, False),
     )
 
-# --- inlined from excel_extract_shipment_part02 ---
-def _facade():
-    return importlib.import_module("app.fastapi_routes.domains.excel.excel_extract_shipment")
-
-
-def _adapters():
-    return _facade()._build_etl_http()
-
-
-@_facade().router.post(
+@router.post(
     "/shipment-etl/generate-template",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_generate_template(
-    kind: str = _facade().Form("delivery"),
-    output_path: str = _facade().Form(""),
-    unit_name: str = _facade().Form("闭环测试客户"),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    kind: str = Form("delivery"),
+    output_path: str = Form(""),
+    unit_name: str = Form("闭环测试客户"),
+    _user: Any = Depends(require_identified_user),
 ):
-    _i, _o, _h, templates = _adapters()
+    _i, _o, _h, templates = _build_etl_http()
     return templates.generate(kind, output_path, unit_name)
 
 
-@_facade().router.post(
+@router.post(
     "/shipment-etl/regenerate",
-    dependencies=[_facade().Depends(_facade().require_legacy_shipment_etl_access)],
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
 async def shipment_etl_regenerate(
-    file_path: str = _facade().Form(""),
-    output_path: str = _facade().Form(""),
-    workspace_root: str = _facade().Form(""),
-    include_ledger: str = _facade().Form("auto"),
-    _user: Any = _facade().Depends(_facade().require_identified_user),
+    file_path: str = Form(""),
+    output_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
 ):
-    _i, _o, _h, templates = _adapters()
+    _i, _o, _h, templates = _build_etl_http()
     return templates.regenerate(
         file_path,
         output_path,
         str(workspace_root or "").strip() or None,
-        _facade()._form_include_ledger(include_ledger),
+        _form_include_ledger(include_ledger),
     )
 
 
-@_facade().router.get("/logs")
+@router.get("/logs")
 def get_extract_logs(
-    data_type: str | None = _facade().Query(default=None),
-    status: str | None = _facade().Query(default=None),
-    limit: int = _facade().Query(default=50),
-    offset: int = _facade().Query(default=0),
+    data_type: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50),
+    offset: int = Query(default=0),
 ):
-    _i, _o, history, _t = _adapters()
+    _i, _o, history, _t = _build_etl_http()
     return history.list(data_type, status, limit, offset)
 
 
-@_facade().router.get("/logs/{log_id}")
+@router.get("/logs/{log_id}")
 def get_extract_log(log_id: int):
-    _i, _o, history, _t = _adapters()
+    _i, _o, history, _t = _build_etl_http()
     return history.detail(log_id)
 
 
-@_facade().router.get("/preview/{log_id}")
+@router.get("/preview/{log_id}")
 def get_preview(log_id: int):
-    _i, _o, history, _t = _adapters()
+    _i, _o, history, _t = _build_etl_http()
     return history.detail(log_id, preview=True)

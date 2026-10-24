@@ -33,10 +33,10 @@ from app.application.workflow.ports import (
     Callback,
     PlanGraph,
     StateSchema,
+    ToolDispatcher,
     WorkflowRunResult,
     WorkflowRuntime,
 )
-from app.application.workflow.ports import ToolDispatcher
 from app.application.workflow.runtime.shadow_canary_diff import (
     ShadowDiff,
     compute_normalized_diff,

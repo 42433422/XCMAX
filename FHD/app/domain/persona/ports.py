@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+
 from app.domain.persona.entities import PersonaProfile
+
 
 class PersonaProfileRepository(ABC):
     """Persona 画像仓储接口。"""

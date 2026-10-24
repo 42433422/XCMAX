@@ -40,8 +40,7 @@ from pathlib import Path
 import pytest
 from langgraph.graph.state import StateGraph
 
-from app.application.workflow.ports import StateUpdateEvent
-from app.application.workflow.ports import WorkflowRuntime
+from app.application.workflow.ports import StateUpdateEvent, WorkflowRuntime
 from app.application.workflow.types import (
     Branch,
     NodeExecutionResult,

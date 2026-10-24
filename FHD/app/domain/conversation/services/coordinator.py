@@ -33,11 +33,12 @@ from app.domain.conversation.services.slot_validator import SlotValidator
 logger = logging.getLogger(__name__)
 
 from app.domain.conversation.services.coordinator_types import (
-    ProcessingAction,
-    PendingIntent,
     IntentResult,
+    PendingIntent,
+    ProcessingAction,
     ProcessingResult,
 )
+
 
 class UnifiedConversationCoordinator:
     """

@@ -25,7 +25,10 @@ from app.application.material_app_service import MaterialApplicationService
 from app.application.product_app_service import ProductApplicationService
 from app.application.shipment_app_service import ShipmentApplicationService
 from app.domain.product.services.pricing_engine import CustomerType, PricingEngine
-from app.domain.product.services.product_import_validator import ProductImportValidator, ValidationResult
+from app.domain.product.services.product_import_validator import (
+    ProductImportValidator,
+    ValidationResult,
+)
 from app.domain.shipment.services.shipment_rules_engine import ShipmentRulesEngine
 
 

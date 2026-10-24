@@ -3,8 +3,8 @@ from datetime import datetime
 import pytest
 
 from app.domain.shipment.aggregates import Shipment, ShipmentItem
-from app.infrastructure.mappers.shipment_mapper import shipment_to_db
 from app.domain.shipment.value_objects import ContactInfo, Money, OrderNumber, Quantity
+from app.infrastructure.mappers.shipment_mapper import shipment_to_db
 
 
 class TestShipmentItem:
