@@ -123,7 +123,7 @@ class CompatChatApplication:
             single = XcagiCompatChatBody(message=message, context=context, **values)
             try:
                 result = await self.single_turn(request, single)
-            except (HTTPException, *RECOVERABLE_ERRORS) as exc:
+            except (HTTPException,) + RECOVERABLE_ERRORS as exc:
                 error = (
                     exc
                     if isinstance(exc, HTTPException)
