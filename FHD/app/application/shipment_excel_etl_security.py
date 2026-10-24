@@ -213,9 +213,9 @@ def _windows_open_relative(
     result = wintypes.HANDLE()
     if for_output:
         access, disposition = (
-            0x40000000 | 0x10000 | 0x100000,
+            0x40000000 | 0x10000 | 0x100000 | 0x80,
             2,
-        )  # WRITE | DELETE | SYNCHRONIZE, CREATE
+        )  # WRITE | DELETE | SYNCHRONIZE | READ_ATTRIBUTES, CREATE
         options = 0x40 | 0x00200000 | 0x20  # NON_DIRECTORY | OPEN_REPARSE_POINT | SYNCHRONOUS
         attributes_on_create = 0x80
         fd_flags = os.O_WRONLY | _windows_binary_flag()
