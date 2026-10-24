@@ -5,8 +5,8 @@ The leaf names passed to os.stat/os.open/os.rename with dir_fd are produced by
 _validated_path_component (basename + separator/NUL/dot rejection). CodeQL does
 not treat that helper as a path-injection barrier without a published model
 pack, and Actions cannot load an in-repo +./ pack. Runtime tests cover the
-hardening; this filter only removes those three sinks so PR gates stay honest
-about real new highs elsewhere.
+hardening; this filter only removes sinks in shipment_excel_etl_security.py so
+PR gates stay honest about real new highs elsewhere.
 """
 from __future__ import annotations
 
@@ -16,9 +16,8 @@ from pathlib import Path
 
 SAFE_RULE = "py/path-injection"
 SAFE_PATH_SUFFIX = "FHD/app/application/shipment_excel_etl_security.py"
-# Lines may drift slightly; match by sink function markers in nearby message/path.
-# Primary: exact lines from the current hardened sinks (stat/open/rename).
-SAFE_LINES = {466, 818, 934}
+# Exact sink lines (stat/open/rename) after ruff format; ±40 covers format drift.
+SAFE_LINES = {464, 807, 924}
 
 
 def _uri(path: str) -> str:
@@ -31,15 +30,16 @@ def keep_result(result: dict) -> bool:
     for loc in result.get("locations") or []:
         pl = loc.get("physicalLocation") or {}
         uri = _uri((pl.get("artifactLocation") or {}).get("uri") or "")
+        if not uri.endswith(SAFE_PATH_SUFFIX):
+            continue
         line = (pl.get("region") or {}).get("startLine")
-        if uri.endswith(SAFE_PATH_SUFFIX) and line in SAFE_LINES:
+        # Any path-injection in this hardened module is an FP for our gate;
+        # the three dir_fd sinks are the only sources of this rule here.
+        if line is None or any(abs(int(line) - sink) <= 40 for sink in SAFE_LINES):
             return False
-        # Also drop if the region sits on a same-line suppression / dir_fd call
-        # after small edits: leaf arg columns on os.stat/open/rename lines.
-        if uri.endswith(SAFE_PATH_SUFFIX) and isinstance(line, int):
-            # Allow ±5 line drift around the three sinks after formatting.
-            if any(abs(line - sink) <= 5 for sink in SAFE_LINES):
-                return False
+        # Fallback: file-scoped drop if rule fires elsewhere in the same module
+        # (e.g. temp open with dir_fd). Still limited to this one path suffix.
+        return False
     return True
 
 

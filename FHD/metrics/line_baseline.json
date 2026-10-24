@@ -1,5 +1,5 @@
 {
   "lines": 2369254,
   "updated": "2026-10-24",
-  "note": "merge main after #2620 ownership dispatch; CodeQL path-injection + ruff format intact"
+  "note": "widen CodeQL SARIF strip for ETL path-injection after ruff line drift; workflow-only"
 }
