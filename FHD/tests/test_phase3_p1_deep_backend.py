@@ -585,21 +585,22 @@ def test_excel_generate_missing_data(excel_client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_excel_generate_and_download(excel_client: TestClient, tmp_path) -> None:
-    with patch("app.fastapi_routes.domains.excel.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
-        rows = [{"产品": "漆", "单价": 88}]
-        r = excel_client.post(
-            "/api/excel/data/generate",
-            json={"data": rows, "filename": "out.xlsx"},
-        )
-        assert r.status_code == 200
-        assert r.json()["success"] is True
-        r2 = excel_client.post(
-            "/api/excel/data/generate/download",
-            json={"data": rows, "filename": "out.xlsx"},
-        )
-        assert r2.status_code == 200
-        assert "spreadsheetml" in r2.headers.get("content-type", "")
+def test_excel_generate_and_download(
+    excel_client: TestClient, configured_excel_workspace: Path
+) -> None:
+    rows = [{"产品": "漆", "单价": 88}]
+    r = excel_client.post(
+        "/api/excel/data/generate",
+        json={"data": rows, "filename": "out.xlsx"},
+    )
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    r2 = excel_client.post(
+        "/api/excel/data/generate/download",
+        json={"data": rows, "filename": "out.xlsx"},
+    )
+    assert r2.status_code == 200
+    assert "spreadsheetml" in r2.headers.get("content-type", "")
 
 
 def test_excel_extract_upload_invalid_ext(excel_client: TestClient) -> None:
@@ -613,21 +614,18 @@ def test_excel_extract_upload_invalid_ext(excel_client: TestClient) -> None:
 def test_excel_extract_upload_ok(
     excel_client: TestClient, tmp_path, configured_excel_workspace: Path
 ) -> None:
-    buf = BytesIO()
-    _write_xlsx(Path(buf.name) if False else tmp_path / "up.xlsx", [["a"], [1]])
-    p = tmp_path / "up.xlsx"
-    with patch("app.fastapi_routes.domains.excel.excel_extract.TEMP_EXCEL_DIR", str(tmp_path)):
-        with open(p, "rb") as f:
-            r = excel_client.post(
-                "/api/excel/data/extract/upload",
-                files={
-                    "excel_file": (
-                        "up.xlsx",
-                        f.read(),
-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    )
-                },
-            )
+    p = _write_xlsx(tmp_path / "up.xlsx", [["a"], [1]])
+    with open(p, "rb") as f:
+        r = excel_client.post(
+            "/api/excel/data/extract/upload",
+            files={
+                "excel_file": (
+                    "up.xlsx",
+                    f.read(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
     assert r.status_code == 200
     assert r.json()["success"] is True
 
