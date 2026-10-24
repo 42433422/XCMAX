@@ -56,7 +56,7 @@
         "behavior_rules": [
           "没有考勤文件时只返回待办清单，不声称已转换。",
           "直接 Python 转换失败时保留原始错误和下一步建议。",
-          "默认输出路径为 424/考勤转换输出.xlsx，默认模板为 424/考勤-2026-3月份考勤统计表.xlsx。",
+          "默认输出路径为 424/考勤转换输出.xlsx，默认模板为 synthetic/attendance-template.xlsx。",
           "默认启用人员管理名单重排，除非用户明确关闭。"
         ],
         "few_shot_examples": [
@@ -116,7 +116,7 @@
         "mod_id": "taiyangniao-pro",
         "default_backend_path": "e:/FHD/mods/taiyangniao-pro/backend",
         "default_output_relpath": "424/考勤转换输出.xlsx",
-        "default_template_relpath": "424/考勤-2026-3月份考勤统计表.xlsx",
+        "default_template_relpath": "synthetic/attendance-template.xlsx",
         "default_use_personnel_roster": true
       }
     },

@@ -1,36 +1,34 @@
-"""Dispatch target selection and assignment formatting."""
+"""Pure member selection and task assignment policy."""
 
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.application.group_chat.constants import (
     _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
     _SUPER_EMPLOYEE_IDS,
+    _XIAOC_ASSISTANT_ID,
     MAX_RESPONDERS,
 )
+from app.application.group_chat.employee_registry import _is_required_group_member
 
 
-class DispatchTargetingMixin:
-    if TYPE_CHECKING:
-
-        def __getattr__(self, name: str) -> Any: ...
+class DispatchTargeting:
+    def __init__(self, mode: str = "admin") -> None:
+        self.mode = mode
 
     @staticmethod
-    def _parse_routing_json(
-        content: str,
-        candidates: list[dict[str, Any]],
-    ) -> tuple[list[str], str]:
+    def parse_routing_json(content: str, candidates: list[dict[str, Any]]) -> tuple[list[str], str]:
         text = (content or "").strip()
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:
-            return [], ""
+            return ([], "")
         try:
             data = json.loads(text[start : end + 1])
         except json.JSONDecodeError:
-            return [], ""
+            return ([], "")
         valid_ids = {str(m.get("employee_id") or "") for m in candidates}
         raw_ids = data.get("target_employee_ids")
         if not isinstance(raw_ids, list):
@@ -41,17 +39,16 @@ class DispatchTargetingMixin:
             if str(item).strip() in valid_ids
         ]
         rationale = str(data.get("rationale") or data.get("reason") or "").strip()
-        return target_ids[:MAX_RESPONDERS], rationale[:500]
+        return (target_ids[:MAX_RESPONDERS], rationale[:500])
 
     @staticmethod
-    def _heuristic_dispatch_targets(
-        candidates: list[dict[str, Any]],
-        task: str,
+    def heuristic_dispatch_targets(
+        candidates: list[dict[str, Any]], task: str
     ) -> list[dict[str, Any]]:
         by_id = {str(m.get("employee_id") or ""): m for m in candidates}
         text = (task or "").lower()
-        if DispatchTargetingMixin._dispatch_difficulty(task) == "simple":
-            preferred = DispatchTargetingMixin._preferred_single_dispatch_target(candidates, task)
+        if DispatchTargeting.dispatch_difficulty(task) == "simple":
+            preferred = DispatchTargeting.preferred_single_dispatch_target(candidates, task)
             return [preferred] if preferred else []
         wanted: list[str] = []
         if any(
@@ -111,11 +108,11 @@ class DispatchTargetingMixin:
         selected = [by_id[eid] for eid in wanted if eid in by_id]
         if selected:
             return selected[:MAX_RESPONDERS]
-        preferred = DispatchTargetingMixin._preferred_single_dispatch_target(candidates, task)
+        preferred = DispatchTargeting.preferred_single_dispatch_target(candidates, task)
         return [preferred] if preferred else []
 
     @staticmethod
-    def _dispatch_difficulty(task: str) -> str:
+    def dispatch_difficulty(task: str) -> str:
         text = (task or "").lower()
         simple_markers = (
             "简单",
@@ -147,9 +144,8 @@ class DispatchTargetingMixin:
         return "medium"
 
     @staticmethod
-    def _preferred_single_dispatch_target(
-        candidates: list[dict[str, Any]],
-        task: str,
+    def preferred_single_dispatch_target(
+        candidates: list[dict[str, Any]], task: str
     ) -> dict[str, Any] | None:
         if not candidates:
             return None
@@ -190,13 +186,13 @@ class DispatchTargetingMixin:
             "体验",
         )
         has_dev_work = any(k in text for k in dev_markers)
-        if any(k in text for k in review_markers) and not has_dev_work:
+        if any(k in text for k in review_markers) and (not has_dev_work):
             priority = [
                 "claude-super-employee",
                 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
                 "cursor-super-employee",
             ]
-        elif any(k in text for k in ui_markers) and not has_dev_work:
+        elif any(k in text for k in ui_markers) and (not has_dev_work):
             priority = [
                 "cursor-super-employee",
                 _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
@@ -218,26 +214,20 @@ class DispatchTargetingMixin:
         )
 
     @staticmethod
-    def _format_routing_decision_message(target_names: str, rationale: str) -> str:
+    def format_routing_decision_message(target_names: str, rationale: str) -> str:
         if not target_names:
             return (
                 f"【小C分工】这单暂时没有找到可执行负责人。\n原因：{rationale or '候选员工为空。'}"
             )
         is_single = (
-            "、" not in target_names and "," not in target_names and "，" not in target_names
+            "、" not in target_names and "," not in target_names and ("，" not in target_names)
         )
         intro = "这单先不拆，派一个负责人推进。" if is_single else "我先按职责拆给对应负责人。"
-        return (
-            f"【小C分工】{intro}\n"
-            f"负责人：{target_names}\n"
-            f"分工依据：{rationale or '按任务类型和成员能力分流。'}\n"
-            "我会等大家回报后给你一条验收结论。"
-        )
+        return f"【小C分工】{intro}\n负责人：{target_names}\n分工依据：{rationale or '按任务类型和成员能力分流。'}\n我会等大家回报后给你一条验收结论。"
 
-    def _build_dispatch_assignments(
-        self,
-        task: str,
-        members: list[dict[str, Any]],
+    @staticmethod
+    def build_dispatch_assignments(
+        task: str, members: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
         if not members:
             return []
@@ -250,12 +240,10 @@ class DispatchTargetingMixin:
             assigned = dict(member)
             employee_id = str(member.get("employee_id") or "")
             if should_split:
-                focus = self._super_employee_focus(employee_id, task)
+                focus = DispatchTargeting.super_employee_focus(employee_id, task)
                 assigned["assignment_focus"] = focus
-                assigned["assigned_task"] = self._format_assigned_task(
-                    original_task=task,
-                    employee_id=employee_id,
-                    focus=focus,
+                assigned["assigned_task"] = DispatchTargeting.format_assigned_task(
+                    original_task=task, employee_id=employee_id, focus=focus
                 )
             else:
                 assigned["assignment_focus"] = "主负责人"
@@ -264,7 +252,7 @@ class DispatchTargetingMixin:
         return assignments
 
     @staticmethod
-    def _super_employee_focus(employee_id: str, task: str) -> str:
+    def super_employee_focus(employee_id: str, task: str) -> str:
         text = (task or "").lower()
         if employee_id == "cursor-super-employee":
             return "移动端体验、前端交互和可见 UI 验证"
@@ -279,16 +267,76 @@ class DispatchTargetingMixin:
         return "按岗位职责处理"
 
     @staticmethod
-    def _format_assigned_task(*, original_task: str, employee_id: str, focus: str) -> str:
+    def format_assigned_task(*, original_task: str, employee_id: str, focus: str) -> str:
         boundary = {
             "cursor-super-employee": "只负责移动端/前端体验相关判断，不重复做后端日志核查。",
             "codex-super-employee": "只负责服务端/接口/测试证据，不重复做 UI 体验评价。",
             "claude-super-employee": "只负责验收口径、风险和团队收口，不重复实现或跑同一套检查。",
             "trae-super-employee": "只负责 Trae 执行端、IDE 自动化和备用执行，不重复做其它成员已负责的部分。",
         }.get(employee_id, "只处理自己职责范围内的部分。")
-        return (
-            f"子任务：{focus}。\n"
-            f"原始需求：{original_task}\n"
-            f"边界：{boundary}\n"
-            "输出要求：只汇报你的职责结论、风险和下一步，不要代替其他成员完成同一部分。"
+        return f"子任务：{focus}。\n原始需求：{original_task}\n边界：{boundary}\n输出要求：只汇报你的职责结论、风险和下一步，不要代替其他成员完成同一部分。"
+
+    @staticmethod
+    def pick_responders(
+        members: list[dict[str, Any]], text: str, mentions: list[str] | None
+    ) -> list[dict[str, Any]]:
+        if not members:
+            return []
+        if DispatchTargeting.is_broadcast_mention(text):
+            return members[:MAX_RESPONDERS]
+        explicit = DispatchTargeting.explicit_member_ids(members, text, mentions)
+        if explicit:
+            targeted = [m for m in members if str(m.get("employee_id")) in explicit]
+            return targeted[:MAX_RESPONDERS]
+        xiaoc = next(
+            (m for m in members if str(m.get("employee_id") or "") == _XIAOC_ASSISTANT_ID), None
         )
+        return [xiaoc or members[0]]
+
+    def pick_dispatch_targets(
+        self, members: list[dict[str, Any]], text: str, mentions: list[str] | None
+    ) -> list[dict[str, Any]]:
+        work_capable = [
+            m for m in members if not _is_required_group_member(str(m.get("employee_id") or ""))
+        ]
+        if self.mode != "admin":
+            work_capable = [
+                m
+                for m in work_capable
+                if str(m.get("employee_id") or "") not in _SUPER_EMPLOYEE_IDS
+            ]
+        if not work_capable:
+            return []
+        if DispatchTargeting.is_broadcast_mention(text):
+            return work_capable[:MAX_RESPONDERS]
+        explicit = DispatchTargeting.explicit_member_ids(members, text, mentions)
+        if explicit:
+            targeted = [m for m in work_capable if str(m.get("employee_id")) in explicit]
+            return targeted[:MAX_RESPONDERS]
+        return work_capable[:MAX_RESPONDERS]
+
+    @staticmethod
+    def explicit_member_ids(
+        members: list[dict[str, Any]], text: str, mentions: list[str] | None
+    ) -> set[str]:
+        explicit = {str(m).strip() for m in mentions or [] if str(m).strip()}
+        for member in members:
+            employee_id = str(member.get("employee_id") or "").strip()
+            name = str(member.get("name") or "").strip()
+            if name and f"@{name}" in text:
+                explicit.add(employee_id)
+            if employee_id and f"@{employee_id}" in text:
+                explicit.add(employee_id)
+        return explicit
+
+    @staticmethod
+    def is_broadcast_mention(text: str) -> bool:
+        lower = (text or "").lower()
+        return any(marker in lower for marker in ("@所有人", "@全体", "@全员", "@all", "@everyone"))
+
+    @staticmethod
+    def should_run_super_discussion(members: list[dict[str, Any]]) -> bool:
+        super_count = sum(
+            1 for m in members if str(m.get("employee_id") or "") in _SUPER_EMPLOYEE_IDS
+        )
+        return super_count >= 2

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import secrets
 import uuid
+from dataclasses import dataclass
 from typing import Any, cast
 
 from sqlalchemy import text
+from sqlalchemy.engine import CursorResult
 
+from app.application.mobile_relay_ports import PairingPorts
 from app.services.mobile_relay_utils import (
     _epoch_from_iso,
     _json_dumps,
@@ -19,9 +22,9 @@ from app.services.mobile_relay_utils import (
 )
 
 
-class MobileRelayPairingMixin:
-    def __getattr__(self, name: str) -> Any:
-        raise AttributeError(name)
+@dataclass(frozen=True, eq=False)
+class RelayPairing:
+    ports: PairingPorts
 
     def register_desktop(
         self,
@@ -37,8 +40,8 @@ class MobileRelayPairingMixin:
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
         normalized_base = _public_base_url(relay_base_url)
-        with self._get_db() as db:
-            self.ensure_tables(db)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
             db.execute(
                 text(
                     """
@@ -50,7 +53,7 @@ class MobileRelayPairingMixin:
                 ),
                 {"now": now},
             )
-            pairing_code = self._fresh_pairing_code(db)
+            pairing_code = self.ports.fresh_pairing_code(db)
             db.execute(
                 text(
                     """
@@ -100,12 +103,14 @@ class MobileRelayPairingMixin:
     ) -> dict[str, Any] | None:
         now = _utc_now()
         expires_at = _utc_after(ttl_seconds)
-        with self._get_db() as db:
-            self.ensure_tables(db)
-            desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
+            desktop = self.ports.desktop_for_token(
+                db, relay_id=relay_id, desktop_token=desktop_token
+            )
             if not desktop:
                 return None
-            code = self._fresh_pairing_code(db)
+            code = self.ports.fresh_pairing_code(db)
             updated = db.execute(
                 text(
                     """
@@ -123,7 +128,7 @@ class MobileRelayPairingMixin:
                     "token_hash": _token_hash(desktop_token.strip()),
                 },
             )
-            if updated.rowcount != 1:
+            if cast(CursorResult[Any], updated).rowcount != 1:
                 return None
         return {
             "relay_id": relay_id.strip(),
@@ -152,8 +157,8 @@ class MobileRelayPairingMixin:
         if len(clean_code) != 6 or not clean_code.isdigit():
             return None
         now = _utc_now()
-        with self._get_db() as db:
-            self.ensure_tables(db)
+        with self.ports.database() as db:
+            self.ports.ensure_tables(db)
             row = (
                 db.execute(
                     text(
@@ -203,7 +208,7 @@ class MobileRelayPairingMixin:
                     "updated_at": now,
                 },
             )
-            if updated.rowcount != 1:
+            if cast(CursorResult[Any], updated).rowcount != 1:
                 return None
             data.update(
                 {
@@ -213,4 +218,4 @@ class MobileRelayPairingMixin:
                     "updated_at": now,
                 }
             )
-            return cast(dict[str, Any], self._public_desktop(data))
+            return cast(dict[str, Any], self.ports.public_desktop(data))

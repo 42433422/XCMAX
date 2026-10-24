@@ -1,4 +1,4 @@
-"""Deep coverage tests for app.domain.services.conversation.context.intent_context.
+"""Deep coverage tests for app.domain.conversation.services.context.intent_context.
 
 Targets remaining uncovered branches:
 - _notify_preserved (currently uncovered)
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.context.intent_context import (
+from app.domain.conversation.services.context.intent_context import (
     HIGH_PRIORITY_INTENTS,
     LOW_PRIORITY_INTENTS,
     SPECIAL_INTENTS,

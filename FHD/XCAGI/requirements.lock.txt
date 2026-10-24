@@ -154,7 +154,7 @@ faster-whisper==1.2.1
     # via
     #   -r ../requirements-ml.txt
     #   -r ../requirements.txt
-filelock==3.32.5
+filelock==4.2.4
     # via
     #   cachecontrol
     #   huggingface-hub

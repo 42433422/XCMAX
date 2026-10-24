@@ -476,7 +476,7 @@ export const xcmaxAdminApi = {
     );
   },
   fetchCustomerTicket(ticketId: number) {
-    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[] }>(
+    return api.get<{ ticket?: Record<string, unknown>; audit_logs?: Record<string, unknown>[]; actions?: Record<string, unknown>[]; decisions?: Record<string, unknown>[]; execution_overview?: Record<string, unknown> }>(
       `/api/xcmax/admin/customer-service/tickets/${ticketId}`,
     );
   },

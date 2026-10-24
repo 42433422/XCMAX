@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import runpy
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -174,6 +175,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--runtime", help="Playwright 运行时结果 JSON（mobile_test/desktop_test/video_runtime_test/range_test）")
     args = ap.parse_args()
+    runpy.run_path(str(Path(__file__).with_name("evidence_assets.py")))["materialize"](REPO_ROOT)
+    subprocess.run(["node", str(REPO_ROOT / "scripts/dev/materialize_media_assets.mjs"), "marketing"], check=True)
 
     public_site_path = DATA_DIR / "public-site.json"
     if not public_site_path.exists():

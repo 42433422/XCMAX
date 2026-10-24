@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { materializeMediaAssets } from '../../../scripts/dev/materialize_media_assets.mjs'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
@@ -22,6 +23,8 @@ function copyCorpStaticAssets() {
     },
   }
 }
+
+materializeMediaAssets('market')
 
 export default defineConfig({
   plugins: [vue(), copyCorpStaticAssets()],

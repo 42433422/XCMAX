@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.application import agent_task_context
 from app.application.agent_orchestrator.public_step_errors import public_step_error
@@ -31,8 +31,110 @@ def normalize_product_float_query(raw: str) -> str:
 
 
 class AIChatWorkflowResponseMixin:
-    if TYPE_CHECKING:
-        _workflow_products_float_query: Any
+    def _build_workflow_thinking_steps(self, plan, decision_reason: str) -> str:
+        tool_labels = {
+            "business_db": "业务数据",
+            "customers": "客户资料",
+            "products": "产品资料",
+            "materials": "原材料资料",
+            "shipment_records": "发货记录",
+            "print": "打印服务",
+            "dataset_rag": "企业知识库",
+        }
+        action_labels = {
+            "query": "查询",
+            "read": "读取",
+            "write": "写入",
+            "create": "新增",
+            "update": "更新",
+            "delete": "删除",
+            "generate": "生成",
+            "execute": "执行",
+        }
+        intent_labels = {
+            "product_query": "查询产品资料",
+            "customer_query": "查询客户资料",
+            "deterministic_chat_reply": "处理业务咨询",
+        }
+        node_lines: list[str] = []
+        for node in plan.nodes or []:
+            raw_description = getattr(node, "description", "")
+            description = raw_description.strip() if isinstance(raw_description, str) else ""
+            if not description:
+                tool_name = tool_labels.get(str(node.tool_id), "业务能力")
+                action_name = action_labels.get(str(node.action), "处理")
+                description = f"{action_name}{tool_name}"
+            node_lines.append(f"- {description}")
+        nodes_text = "\n".join(node_lines) if node_lines else "- 直接生成答复，无需执行业务步骤"
+        metadata = getattr(plan, "metadata", {}) or {}
+        user_memory_rag_summary = str(metadata.get("user_memory_rag_summary") or "").strip()
+        memory_v2_summary = str(metadata.get("memory_v2_summary") or "").strip()
+        tool_probe_outputs = metadata.get("tool_probe_outputs") or []
+        if not isinstance(tool_probe_outputs, list):
+            tool_probe_outputs = []
+        successful_probe_count = 0
+        for item in tool_probe_outputs[:3]:
+            if not isinstance(item, dict):
+                continue
+            ok = bool(item.get("success"))
+            successful_probe_count += int(ok)
+        memory_block = (
+            f"3.5) 用户记忆 RAG 概览:\n{user_memory_rag_summary}\n"
+            if user_memory_rag_summary
+            else ""
+        )
+        memory_v2_block = (
+            f"3.6) Memory v2 已确认记忆:\n{memory_v2_summary}\n" if memory_v2_summary else ""
+        )
+        probe_block = (
+            f"3.7) 能力预检: 已确认 {successful_probe_count} 项业务能力可用\n"
+            if tool_probe_outputs
+            else ""
+        )
+        raw_intent = str(getattr(plan, "intent", "") or "").strip()
+        intent_text = intent_labels.get(raw_intent, "处理当前业务请求")
+        risks = {str(getattr(node, "risk", "low") or "low") for node in (plan.nodes or [])}
+        risk_text = (
+            "涉及业务变更，执行前需要确认或审批"
+            if risks & {"medium", "high", "critical"}
+            else "只读或低风险操作，可直接执行"
+        )
+        return (
+            f"工作编排:\n1) 业务目标: {intent_text}\n"
+            f"2) 执行计划: 共 {len(node_lines)} 个业务步骤\n"
+            f"3) 安全边界: {risk_text}\n"
+            f"{memory_block}{memory_v2_block}{probe_block}"
+            f"4) 执行方式: 按业务依赖顺序推进，并持续回写状态\n"
+            f"5) 业务步骤:\n{nodes_text}"
+        )
+
+    def _workflow_products_float_query(self, plan, run_result, user_message: str) -> str:
+        """从产品查询节点参数/结果或用户原话中提取副窗搜索词。"""
+        for node in plan.nodes or []:
+            if node.tool_id == "products" and node.action == "query":
+                p = node.params or {}
+                q = (
+                    str(p.get("keyword") or "").strip()
+                    or str(p.get("model_number") or "").strip()
+                    or str(p.get("product_name") or p.get("name") or "").strip()
+                )
+                if q := self._normalize_product_query(q):
+                    return q
+        for r in run_result.node_results:
+            if not r.success or r.tool_id != "products" or r.action != "query":
+                continue
+            out = r.output or {}
+            rows = out.get("data") or []
+            if isinstance(rows, list) and rows:
+                row = rows[0] if isinstance(rows[0], dict) else {}
+                if isinstance(row, dict):
+                    m = str(row.get("model_number") or "").strip()
+                    n = str(row.get("name") or row.get("product_name") or "").strip()
+                    if m:
+                        return m
+                if n:
+                    return n
+        return self._normalize_product_query(user_message)
 
     @staticmethod
     def _attach_task_tenant(runtime_context: dict[str, Any]) -> None:

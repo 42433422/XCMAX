@@ -1,54 +1,84 @@
 import json
+import logging
 import sqlite3
+import subprocess
+import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
+import modstore_server.employee_executor as _maintenance_employee_executor
+import modstore_server.maintenance_loop.config as _maintenance_config
+import modstore_server.maintenance_loop.dispatch as _maintenance_dispatch
+import modstore_server.maintenance_loop.knowledge_gate as _maintenance_knowledge_gate
+import modstore_server.maintenance_loop.merge as _maintenance_merge
+import modstore_server.maintenance_loop.para_client as _maintenance_para_client
+import modstore_server.maintenance_loop.resume as _maintenance_resume
+import modstore_server.maintenance_loop.review as _maintenance_review
+import modstore_server.maintenance_loop.risk as _maintenance_risk
+import modstore_server.maintenance_loop.schedule as _maintenance_schedule
+import modstore_server.maintenance_loop.store as _maintenance_store
+import modstore_server.maintenance_loop.workspace as _maintenance_workspace
 from modstore_server import (
     retort_clarification_gate,
 )
-from modstore_server import self_maintenance_loop_runner as loop_runner
 from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
 )
-from modstore_server.self_maintenance_loop_runner import (
-    _PARA_GUEST_AUTH_CACHE,
+from modstore_server.maintenance_loop.config import (
     KB_SCHEMA_FAILED_LABEL,
     KB_SCHEMA_FAILED_STATUS,
     KB_SCHEMA_RETRY_MAX,
     NEEDS_HUMAN_LABEL,
-    _assess_branch_auto_merge_policy,
-    _base_para_input,
-    _code_task_text,
-    _employee_result_ok,
+)
+from modstore_server.maintenance_loop.dispatch import _base_para_input
+from modstore_server.maintenance_loop.knowledge_gate import (
     _existing_kb_schema_retry_item,
+    _find_pr_number_for_branch,
+    _gh_pr_add_label,
+    _reject_and_retry_kb_schema_failure,
+)
+from modstore_server.maintenance_loop.memory import close_loop_memory_items
+from modstore_server.maintenance_loop.merge_policy import (
+    _assess_branch_auto_merge_policy,
+)
+from modstore_server.maintenance_loop.outcomes import (
+    _reconcile_requested_merge_feedback,
+    _update_loop_memory,
+)
+from modstore_server.maintenance_loop.para_auth import (
+    _PARA_GUEST_AUTH_CACHE,
+    _guest_auth_headers,
+)
+from modstore_server.maintenance_loop.prompts import (
+    _code_task_text,
+    _qa_task_text,
+    _review_task_text,
+)
+from modstore_server.maintenance_loop.results import (
+    _employee_result_ok,
     _extract_failure_reason,
     _find_delivery_validation,
-    _find_pr_number_for_branch,
-    _focused_test_command,
-    _gh_pr_add_label,
-    _guest_auth_headers,
-    _has_high_risk_report,
-    _historical_rollback_rate,
     _is_accepted_para_wait_timeout,
     _is_transient_employee_dispatch_failure,
-    _load_loop_memory,
-    _matches_focused_test_command,
-    _qa_task_text,
-    _reconcile_requested_merge_feedback,
-    _reconcile_retort_scope_remediations,
-    _reject_and_retry_kb_schema_failure,
+)
+from modstore_server.maintenance_loop.resume import (
     _resume_dispatch_context,
     _resume_review_qa_candidate,
     _resume_steps,
-    _review_task_text,
-    _self_maintenance_actor_user_id,
+)
+from modstore_server.maintenance_loop.review import (
+    _focused_test_command,
+    _has_high_risk_report,
     _structured_report_gate,
-    _update_loop_memory,
+)
+from modstore_server.maintenance_loop.risk import _historical_rollback_rate
+from modstore_server.maintenance_loop.schedule import _self_maintenance_actor_user_id
+from modstore_server.maintenance_loop.store import (
+    _load_loop_memory,
     clean_baseline_path,
-    close_loop_memory_items,
     ensure_clean_baseline,
     loop_memory_path,
 )
@@ -57,6 +87,11 @@ from modstore_server.self_maintenance_para_merge_remediation import (
 )
 from modstore_server.self_maintenance_quality_gate import (
     matches_black_check_command,
+)
+from modstore_server.self_maintenance_quality_gate import (
+    matches_focused_test_command as _matches_focused_test_command,
+)
+from modstore_server.self_maintenance_quality_gate import (
     matches_isort_check_command,
     matches_source_governance_command,
     quality_check_failure,
@@ -68,6 +103,9 @@ from modstore_server.self_maintenance_remediation_lineage import (
 )
 from modstore_server.self_maintenance_remediation_prompts import (
     para_merge_conflict_continues_on_rejected_branch,
+)
+from modstore_server.self_maintenance_retort_remediation import (
+    reconcile_retort_scope_remediations as _reconcile_retort_scope_remediations,
 )
 
 QUALITY_CHECKS_JSON = (
@@ -224,7 +262,7 @@ def _stats(line_changes=12, binary_files=None):
 def test_self_maintenance_heartbeat_records_only_gate_liveness(monkeypatch):
     appended = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_schedule,
         "should_run_self_maintenance_loop",
         lambda **kwargs: {
             "should_run": False,
@@ -233,9 +271,9 @@ def test_self_maintenance_heartbeat_records_only_gate_liveness(monkeypatch):
             "evolution_metrics_gate": {"pause": False},
         },
     )
-    monkeypatch.setattr(loop_runner, "_append_ledger", appended.append)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", appended.append)
 
-    receipt = loop_runner.record_self_maintenance_heartbeat(triggered_by="test")
+    receipt = _maintenance_schedule.record_self_maintenance_heartbeat(triggered_by="test")
 
     assert receipt["phase"] == "heartbeat"
     assert receipt["status"] == "heartbeat_idle"
@@ -258,7 +296,7 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
     report_gate_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_review,
         "_structured_report_gate",
         lambda steps, branch=None: (
             report_gate_calls.append((steps, branch))
@@ -275,18 +313,22 @@ def test_remote_merge_request_runs_only_after_structured_gate_and_ssot(monkeypat
     )
     merge_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_para_client,
         "_request_para_task_merge",
         lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
     )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
-    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
+    monkeypatch.setattr(
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads[branch],
+    )
     ledger_rows = []
     governance_rows = []
-    monkeypatch.setattr(loop_runner, "_append_ledger", ledger_rows.append)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", governance_rows.append)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", ledger_rows.append)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", governance_rows.append)
 
-    result = loop_runner._auto_merge_low_risk_branch(
+    result = _maintenance_merge._auto_merge_low_risk_branch(
         run_id="remote-risk-gate",
         task_id="task-remote",
         branch="devfleet/codex/sub-1",
@@ -316,12 +358,16 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_review,
         "_structured_report_gate",
         lambda steps, branch=None: {"ok": True},
     )
     heads = {"main": "b" * 40, "devfleet/codex/sub-1": "a" * 40}
-    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads[branch])
+    monkeypatch.setattr(
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads[branch],
+    )
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
         lambda *args, **kwargs: SimpleNamespace(
@@ -330,12 +376,12 @@ def test_remote_merge_request_is_not_emitted_when_ssot_blocks(monkeypatch):
         ),
     )
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_para_client,
         "_request_para_task_merge",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("merge request bypassed SSOT")),
     )
 
-    result = loop_runner._auto_merge_low_risk_branch(
+    result = _maintenance_merge._auto_merge_low_risk_branch(
         run_id="remote-risk-block",
         task_id="task-remote",
         branch="devfleet/codex/sub-1",
@@ -352,11 +398,11 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:3001")
     monkeypatch.setenv("MODSTORE_AUTO_MERGE_ALLOW_REMOTE", "1")
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_review,
         "_structured_report_gate",
         lambda steps, branch=None: {"ok": True},
     )
-    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, _branch: None)
+    monkeypatch.setattr(_maintenance_workspace, "_remote_branch_head", lambda _repo, _branch: None)
     monkeypatch.setattr(
         "modstore_server.autonomy_guard_delegate.evaluate_risk",
         lambda *args, **kwargs: SimpleNamespace(
@@ -366,15 +412,15 @@ def test_remote_merge_request_defers_unreachable_head_to_para_worker(monkeypatch
     )
     merge_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_para_client,
         "_request_para_task_merge",
         lambda **kwargs: merge_calls.append(kwargs) or {"ok": True},
     )
     ledger_rows = []
-    monkeypatch.setattr(loop_runner, "_append_ledger", ledger_rows.append)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda _row: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", ledger_rows.append)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda _row: None)
 
-    result = loop_runner._auto_merge_low_risk_branch(
+    result = _maintenance_merge._auto_merge_low_risk_branch(
         run_id="remote-missing-head",
         task_id="task-remote",
         branch="devfleet/codex/sub-1",
@@ -402,9 +448,9 @@ def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_
         (workspace / "clone-marker").write_text("created", encoding="utf-8")
         return []
 
-    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", no_changes)
+    monkeypatch.setattr(_maintenance_workspace, "_changed_files_for_branch", no_changes)
 
-    result = loop_runner._auto_merge_low_risk_branch(
+    result = _maintenance_merge._auto_merge_low_risk_branch(
         run_id="cleanup-return",
         task_id="task-local",
         branch="devfleet/codex/sub-1",
@@ -412,7 +458,9 @@ def test_local_auto_merge_cleans_ephemeral_workspace_on_return(monkeypatch, tmp_
     )
 
     assert result["reason"] == "branch_not_on_remote_or_empty"
-    assert not (runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-return").exists()
+    assert not (
+        runtime_dir / _maintenance_config.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-return"
+    ).exists()
 
 
 def test_local_auto_merge_cleans_ephemeral_workspace_on_exception(monkeypatch, tmp_path):
@@ -428,10 +476,10 @@ def test_local_auto_merge_cleans_ephemeral_workspace_on_exception(monkeypatch, t
         (workspace / "partial-clone").write_text("created", encoding="utf-8")
         raise RuntimeError("clone failed")
 
-    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", failed_clone)
+    monkeypatch.setattr(_maintenance_workspace, "_changed_files_for_branch", failed_clone)
 
     try:
-        loop_runner._auto_merge_low_risk_branch(
+        _maintenance_merge._auto_merge_low_risk_branch(
             run_id="cleanup-exception",
             task_id="task-local",
             branch="devfleet/codex/sub-1",
@@ -443,7 +491,7 @@ def test_local_auto_merge_cleans_ephemeral_workspace_on_exception(monkeypatch, t
         raise AssertionError("expected clone failure")
 
     assert not (
-        runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-exception"
+        runtime_dir / _maintenance_config.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-exception"
     ).exists()
 
 
@@ -459,16 +507,16 @@ def test_early_kb_validation_cleans_ephemeral_workspace(monkeypatch, tmp_path):
         (workspace / "clone-marker").write_text("created", encoding="utf-8")
         return []
 
-    monkeypatch.setattr(loop_runner, "_changed_files_for_branch", no_changes)
+    monkeypatch.setattr(_maintenance_workspace, "_changed_files_for_branch", no_changes)
 
-    result = loop_runner._early_kb_validation_for_branch(
+    result = _maintenance_knowledge_gate._early_kb_validation_for_branch(
         run_id="cleanup-kb",
         branch="devfleet/codex/sub-1",
     )
 
     assert result["reason"] == "early_kb_validation_no_changed_files"
     assert not (
-        runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-kb-kb-early"
+        runtime_dir / _maintenance_config.DEFAULT_MERGE_WORKSPACE_ROOT / "cleanup-kb-kb-early"
     ).exists()
 
 
@@ -477,7 +525,7 @@ def test_merge_workspace_cleanup_refuses_outside_runtime_root(monkeypatch, tmp_p
     outside = tmp_path / "outside"
     outside.mkdir()
 
-    assert loop_runner._cleanup_merge_workspace(outside) is False
+    assert _maintenance_workspace._cleanup_merge_workspace(outside) is False
     assert outside.exists()
 
 
@@ -498,14 +546,14 @@ def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
             return "FHD/app/example.py"
         return ""
 
-    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(_maintenance_workspace, "_run_cmd", fake_run_cmd)
     monkeypatch.setattr(
-        loop_runner.subprocess,
+        subprocess,
         "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
 
-    files = loop_runner._changed_files_for_branch(
+    files = _maintenance_workspace._changed_files_for_branch(
         repo_url=public_origin,
         base_branch="main",
         branch="devfleet/codex/sub-1",
@@ -520,7 +568,7 @@ def test_changed_files_prefers_configured_para_transport(monkeypatch, tmp_path):
 
 def test_changed_files_falls_back_after_configured_transport_clone_failure(monkeypatch, tmp_path):
     runtime_dir = tmp_path / "runtime"
-    workspace = runtime_dir / loop_runner.DEFAULT_MERGE_WORKSPACE_ROOT / "fallback"
+    workspace = runtime_dir / _maintenance_config.DEFAULT_MERGE_WORKSPACE_ROOT / "fallback"
     para_transport = "git@github-xcagi-modstore:example/XCMAX.git"
     public_origin = "https://github.com/example/XCMAX.git"
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime_dir))
@@ -540,14 +588,14 @@ def test_changed_files_falls_back_after_configured_transport_clone_failure(monke
             return "FHD/app/fallback.py"
         return ""
 
-    monkeypatch.setattr(loop_runner, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(_maintenance_workspace, "_run_cmd", fake_run_cmd)
     monkeypatch.setattr(
-        loop_runner.subprocess,
+        subprocess,
         "run",
         lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
     )
 
-    files = loop_runner._changed_files_for_branch(
+    files = _maintenance_workspace._changed_files_for_branch(
         repo_url=public_origin,
         base_branch="main",
         branch="devfleet/codex/sub-1",
@@ -654,7 +702,7 @@ def test_retort_clarification_uses_github_paths_after_git_diff_failure(monkeypat
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
     monkeypatch.setattr(
-        loop_runner.retort_change_evidence,
+        retort_change_evidence,
         "resolve_retort_change_evidence",
         lambda **kwargs: {
             "changed_files": ["FHD/app/example.py"],
@@ -669,7 +717,7 @@ def test_retort_clarification_uses_github_paths_after_git_diff_failure(monkeypat
         lambda **kwargs: {"aligned": True, "blockers": [], "clarification": None},
     )
 
-    result = loop_runner._evaluate_retort_clarification_before_review(
+    result = _maintenance_knowledge_gate._evaluate_retort_clarification_before_review(
         run_id="run-github-compare",
         branch="devfleet/codex/sub-1",
         para_task_id="task-github-compare",
@@ -692,7 +740,7 @@ def test_retort_clarification_skips_human_question_without_change_evidence(monke
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://github.com/example/XCMAX.git")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_RETORT_CLARIFICATION", "1")
     monkeypatch.setattr(
-        loop_runner.retort_change_evidence,
+        retort_change_evidence,
         "resolve_retort_change_evidence",
         lambda **kwargs: {
             "changed_files": [],
@@ -708,7 +756,7 @@ def test_retort_clarification_skips_human_question_without_change_evidence(monke
         lambda **kwargs: pytest.fail("Retort must not receive fabricated empty paths"),
     )
 
-    result = loop_runner._evaluate_retort_clarification_before_review(
+    result = _maintenance_knowledge_gate._evaluate_retort_clarification_before_review(
         run_id="run-no-evidence",
         branch="devfleet/codex/sub-1",
         para_task_id="task-no-evidence",
@@ -729,14 +777,22 @@ def test_retort_clarification_skips_human_question_without_change_evidence(monke
     }
 
 
-def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch):
+@pytest.mark.parametrize(
+    "source_file",
+    [
+        "self_maintenance_policy.py",
+        "maintenance_loop/coordinator.py",
+        "maintenance_loop/decision.py",
+    ],
+)
+def test_dynamic_low_risk_policy_allows_self_maintenance_code_and_tests(monkeypatch, source_file):
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_SCOPE_GLOBS", raising=False)
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_FORBIDDEN_GLOBS", raising=False)
     # 关闭 v2/v3 评分门禁，让流程走到 dynamic_low_risk 策略（本测试验证 dynamic_low_risk 逻辑）
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", "0")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", "0")
     files = [
-        "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_policy.py",
+        f"成都修茈科技有限公司/MODstore_deploy/modstore_server/{source_file}",
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
     ]
 
@@ -778,7 +834,7 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
         {
             "step": "review",
             "report_excerpt": (
-                f"{loop_runner.STRUCTURED_REVIEW_MARKER}: "
+                f"{_maintenance_config.STRUCTURED_REVIEW_MARKER}: "
                 '{"max_severity":"none","blocking_findings":[],"risk_class":"low",'
                 '"target_branch_available":true,"tested_commands":[],'
                 '"dimensions":{'
@@ -790,7 +846,7 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
         {
             "step": "qa",
             "report_excerpt": (
-                f"{loop_runner.STRUCTURED_QA_MARKER}: "
+                f"{_maintenance_config.STRUCTURED_QA_MARKER}: "
                 '{"verdict":"PASS","blocking_findings":[],"tested_commands":['
                 '{"command":"pytest focused.py -q","exit_code":0,"status":"passed"}],'
                 '"target_branch_available":true,"test_delta":{"baseline_id":"base",'
@@ -804,7 +860,7 @@ def test_safety_score_v2_allows_small_independently_verified_change_to_reach_90(
         "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_policy.py",
     ]
 
-    result = loop_runner._auto_merge_safety_score_v2(
+    result = _maintenance_risk._auto_merge_safety_score_v2(
         files,
         _stats(line_changes=60),
         diff_excerpt="narrow scheduling guard with focused regression coverage",
@@ -833,7 +889,7 @@ diff --git a/FHD/XCAGI/kb/fixes/fix.json b/FHD/XCAGI/kb/fixes/fix.json
 +{\"root_cause\": \"subprocess used the wrong Python interpreter\"}
 """
 
-    result = loop_runner._diff_semantic_penalty(diff)
+    result = _maintenance_risk._diff_semantic_penalty(diff)
 
     assert result["high_hits"] == []
     assert result["penalty"] == 0
@@ -848,7 +904,7 @@ def test_diff_semantic_scan_still_flags_added_subprocess_call():
 +subprocess.run(command)
 """
 
-    result = loop_runner._diff_semantic_penalty(diff)
+    result = _maintenance_risk._diff_semantic_penalty(diff)
 
     assert result["high_hits"] == ["subprocess"]
     assert result["penalty"] == 16
@@ -863,7 +919,7 @@ def test_diff_semantic_scan_ignores_risky_api_named_only_by_regression_test():
 +    assert worker.subprocess.run.called
 """
 
-    result = loop_runner._diff_semantic_penalty(diff)
+    result = _maintenance_risk._diff_semantic_penalty(diff)
 
     assert result["high_hits"] == []
     assert result["penalty"] == 0
@@ -877,13 +933,17 @@ def test_validate_remediation_branch_delivery_requires_advanced_work_branch(
         "work-unchanged": "a" * 40,
         "work-advanced": "b" * 40,
     }
-    monkeypatch.setattr(loop_runner, "_remote_branch_head", lambda _repo, branch: heads.get(branch))
+    monkeypatch.setattr(
+        _maintenance_workspace,
+        "_remote_branch_head",
+        lambda _repo, branch: heads.get(branch),
+    )
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/repo.git")
 
-    unchanged = loop_runner._validate_remediation_branch_delivery(
+    unchanged = _maintenance_workspace._validate_remediation_branch_delivery(
         base_branch="candidate", delivered_branch="work-unchanged"
     )
-    advanced = loop_runner._validate_remediation_branch_delivery(
+    advanced = _maintenance_workspace._validate_remediation_branch_delivery(
         base_branch="candidate", delivered_branch="work-advanced"
     )
 
@@ -1158,15 +1218,19 @@ def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
         {"result": {"ok": True}},
     ]
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "2")
-    monkeypatch.setattr(loop_runner, "_wait_for_para_device_online", lambda: {"online": True})
-    monkeypatch.setattr(loop_runner.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_para_client,
+        "_wait_for_para_device_online",
+        lambda: {"online": True},
+    )
+    monkeypatch.setattr(time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        _maintenance_employee_executor,
         "execute_employee_task",
         lambda *_args, **_kwargs: attempts.pop(0),
     )
 
-    result = loop_runner._execute_employee_task_with_retries(
+    result = _maintenance_dispatch._execute_employee_task_with_retries(
         "test-qa-runner",
         "report-only QA",
         {},
@@ -1176,6 +1240,48 @@ def test_employee_dispatch_retries_report_only_cursor_tls_failure(monkeypatch):
     assert result["self_maintenance_retry_attempts"] == 2
     assert result["result"]["ok"] is True
     assert attempts == []
+
+
+def test_device_diagnostic_logging_redacts_employee_and_device_details(monkeypatch, caplog):
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", "0")
+    monkeypatch.setattr(
+        _maintenance_para_client,
+        "_wait_for_para_device_online",
+        lambda: {"online": False, "detail": "private-device-response"},
+    )
+    monkeypatch.setattr(
+        _maintenance_employee_executor,
+        "execute_employee_task",
+        lambda *_args, **_kwargs: {"result": {"ok": True}},
+    )
+
+    with caplog.at_level(logging.WARNING, logger=_maintenance_config.logger.name):
+        result = _maintenance_dispatch._execute_employee_task_with_retries(
+            "private-employee-id",
+            "safe task",
+            {},
+            user_id=0,
+        )
+
+    assert result["result"]["ok"] is True
+    assert "private-employee-id" not in caplog.text
+    assert "private-device-response" not in caplog.text
+    assert "attempt=1/1" in caplog.text
+
+
+def test_ledger_append_keeps_records_and_restricts_file_permissions(tmp_path, monkeypatch):
+    ledger = tmp_path / "private-ledger.jsonl"
+    ledger.write_text('{"phase":"earlier"}\n', encoding="utf-8")
+    ledger.chmod(0o644)
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_LEDGER", str(ledger))
+
+    _maintenance_store._append_ledger({"phase": "next", "status": "complete"})
+
+    rows = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+    assert [row["phase"] for row in rows] == ["earlier", "next"]
+    assert rows[1]["ledger_schema_version"] == 2
+    if hasattr(_maintenance_store.os, "fchmod"):
+        assert ledger.stat().st_mode & 0o077 == 0
 
 
 def test_business_failure_is_not_retryable():
@@ -1746,7 +1852,7 @@ def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypa
         "recent_runs": [],
     }
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_read_ledger",
         lambda limit: [
             {
@@ -1801,7 +1907,7 @@ def test_retort_scope_hold_is_reconciled_to_clean_base_code_remediation(monkeypa
 def test_retort_non_scope_question_is_not_auto_remediated(monkeypatch):
     memory = {"open_items": []}
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_read_ledger",
         lambda limit: [
             {
@@ -1844,7 +1950,7 @@ def test_reconcile_retort_scope_does_not_reopen_matching_closed_remediation(
         "open_items": [],
     }
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_read_ledger",
         lambda limit: [
             {
@@ -1885,7 +1991,7 @@ def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monke
         "open_items": [],
     }
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_read_ledger",
         lambda limit: [
             {
@@ -1915,7 +2021,7 @@ def test_reconcile_retort_scope_ignores_unrelated_closed_item_for_same_run(monke
 def test_reconcile_retort_scope_tolerates_malformed_changed_file_count(monkeypatch):
     memory = {"open_items": []}
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_store,
         "_read_ledger",
         lambda limit: [
             {
@@ -2870,6 +2976,49 @@ def test_update_loop_memory_closes_resumed_item_after_success(monkeypatch, tmp_p
     assert memory["open_items"] == []
     assert memory["closed_items"][0]["original_item"]["run_id"] == "failed-run"
     assert memory["last_resolution_record"]["closed_count"] == 1
+
+
+def test_update_loop_memory_does_not_inherit_retries_across_tasks(monkeypatch, tmp_path):
+    memory_path = tmp_path / "loop_memory.json"
+    monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
+    loop_memory_path().write_text(
+        json.dumps(
+            {
+                "closed_items": [],
+                "open_items": [
+                    {
+                        "branch": "devfleet/cursor/old",
+                        "kind": "failed_steps",
+                        "para_task_id": "old-task",
+                        "retry_count": 3,
+                        "run_id": "old-run",
+                        "steps": ["code"],
+                    }
+                ],
+                "recent_runs": [],
+                "run_count": 0,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    _update_loop_memory(
+        {
+            "branch": "devfleet/cursor/new",
+            "para_task_id": "new-task",
+            "policy_decision": {"action": "stop", "reason": "loop_not_completed"},
+            "run_id": "new-run",
+            "status": "failed",
+            "steps": [{"ok": False, "step": "code"}],
+        },
+        {"reason": "force"},
+    )
+    items = _load_loop_memory()["open_items"]
+    assert len(items) == 2
+    assert items[0]["retry_count"] == 3
+    assert items[0]["para_task_id"] == "old-task"
+    assert items[1]["retry_count"] == 1
+    assert items[1]["para_task_id"] == "new-task"
 
 
 def test_update_loop_memory_retires_code_remediation_after_downstream_qa_failure(
@@ -5175,21 +5324,23 @@ def test_reject_and_retry_kb_schema_first_failure_writes_open_item(monkeypatch, 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(memory_path))
 
     # Mock PR 操作（避免依赖 gh CLI）
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    monkeypatch.setattr(
+        _maintenance_knowledge_gate, "_find_pr_number_for_branch", lambda branch: 42
+    )
     comment_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_comment",
         lambda pr, body: comment_calls.append((pr, body)) or True,
     )
     label_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_add_label",
         lambda pr, label: label_calls.append((pr, label)) or True,
     )
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", lambda record: None)
 
     final = _reject_and_retry_kb_schema_failure(
         run_id="run-kb-1",
@@ -5255,16 +5406,18 @@ def test_reject_and_retry_kb_schema_second_failure_increments_retry_count(monkey
     )
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 42)
+    monkeypatch.setattr(
+        _maintenance_knowledge_gate, "_find_pr_number_for_branch", lambda branch: 42
+    )
     label_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_add_label",
         lambda pr, label: label_calls.append((pr, label)) or True,
     )
-    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+    monkeypatch.setattr(_maintenance_knowledge_gate, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", lambda record: None)
 
     final = _reject_and_retry_kb_schema_failure(
         run_id="run-kb-2",
@@ -5312,16 +5465,18 @@ def test_reject_and_retry_kb_schema_escalates_after_max_retries(monkeypatch, tmp
     )
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: 99)
+    monkeypatch.setattr(
+        _maintenance_knowledge_gate, "_find_pr_number_for_branch", lambda branch: 99
+    )
     label_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_add_label",
         lambda pr, label: label_calls.append((pr, label)) or True,
     )
-    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+    monkeypatch.setattr(_maintenance_knowledge_gate, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", lambda record: None)
 
     final = _reject_and_retry_kb_schema_failure(
         run_id="run-kb-2",
@@ -5360,11 +5515,13 @@ def test_reject_and_retry_kb_schema_uses_24h_fallback_for_new_branch(monkeypatch
     )
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
-    monkeypatch.setattr(loop_runner, "_gh_pr_comment", lambda pr, body: True)
-    monkeypatch.setattr(loop_runner, "_gh_pr_add_label", lambda pr, label: True)
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+    monkeypatch.setattr(
+        _maintenance_knowledge_gate, "_find_pr_number_for_branch", lambda branch: None
+    )
+    monkeypatch.setattr(_maintenance_knowledge_gate, "_gh_pr_comment", lambda pr, body: True)
+    monkeypatch.setattr(_maintenance_knowledge_gate, "_gh_pr_add_label", lambda pr, label: True)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", lambda record: None)
 
     # 新 branch，不同 para_task_id
     final = _reject_and_retry_kb_schema_failure(
@@ -5387,21 +5544,23 @@ def test_reject_and_retry_kb_schema_handles_missing_pr_gracefully(monkeypatch, t
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MEMORY", str(tmp_path / "loop_memory.json"))
 
     # _find_pr_number_for_branch 返 None
-    monkeypatch.setattr(loop_runner, "_find_pr_number_for_branch", lambda branch: None)
+    monkeypatch.setattr(
+        _maintenance_knowledge_gate, "_find_pr_number_for_branch", lambda branch: None
+    )
     comment_calls = []
     label_calls = []
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_comment",
         lambda pr, body: comment_calls.append((pr, body)) or True,
     )
     monkeypatch.setattr(
-        loop_runner,
+        _maintenance_knowledge_gate,
         "_gh_pr_add_label",
         lambda pr, label: label_calls.append((pr, label)) or True,
     )
-    monkeypatch.setattr(loop_runner, "_append_governance_audit", lambda record: None)
-    monkeypatch.setattr(loop_runner, "_append_ledger", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_governance_audit", lambda record: None)
+    monkeypatch.setattr(_maintenance_store, "_append_ledger", lambda record: None)
 
     _reject_and_retry_kb_schema_failure(
         run_id="run-kb-no-pr",
@@ -5515,7 +5674,6 @@ def test_find_pr_number_for_branch_returns_none_on_gh_failure(monkeypatch):
 
 def test_over_retry_non_code_duplicate_enqueue_removes_item(monkeypatch):
     """人工队列返回 duplicate 时视为已升级，应从 open_items 移除。"""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
 
@@ -5538,7 +5696,7 @@ def test_over_retry_non_code_duplicate_enqueue_removes_item(monkeypatch):
         fake_enqueue,
     )
 
-    result = loop_runner._resume_review_qa_candidate(memory)
+    result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     assert result is None
     assert memory["open_items"] == []
@@ -5547,7 +5705,6 @@ def test_over_retry_non_code_duplicate_enqueue_removes_item(monkeypatch):
 
 def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monkeypatch, caplog):
     """入队失败的非code项不应被标记为escalated，应留在open_items等待下次重试。"""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
 
@@ -5575,7 +5732,7 @@ def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monke
     }
 
     with caplog.at_level("WARNING"):
-        result = loop_runner._resume_review_qa_candidate(memory)
+        result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     # 入队失败的项不应被标记为escalated
     item = memory["open_items"][0]
@@ -5590,7 +5747,6 @@ def test_over_retry_non_code_items_not_marked_escalated_on_enqueue_failure(monke
 
 def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch):
     """使用复合键（run_id+branch+task_id+steps）匹配成功入队项，run_id为None时也能正确删除。"""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
 
@@ -5628,7 +5784,7 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
         "recent_runs": [],
     }
 
-    result = loop_runner._resume_review_qa_candidate(memory)
+    result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     # 两个项都成功入队，应从open_items中移除
     assert len(memory["open_items"]) == 0
@@ -5638,7 +5794,6 @@ def test_enqueue_success_matching_uses_composite_key_not_only_run_id(monkeypatch
 
 def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatch):
     """Exhausted QA on one branch must not prevent code resume on another hold."""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
     monkeypatch.setattr(
@@ -5667,7 +5822,7 @@ def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatc
         "recent_runs": [],
     }
 
-    result = loop_runner._resume_review_qa_candidate(memory)
+    result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     assert result == {
         "branch": "devfleet/cursor/sub-1-latest",
@@ -5682,7 +5837,6 @@ def test_escalated_failed_steps_do_not_block_other_branch_remediation(monkeypatc
 
 def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
     """A newer Para merge-review veto must resume code before stale review holds."""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     memory = {
         "open_items": [
@@ -5713,7 +5867,7 @@ def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
         ],
     }
 
-    result = loop_runner._resume_review_qa_candidate(memory)
+    result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     assert result is not None
     assert result["reason"] == "resume_para_ai_review_rejection"
@@ -5725,7 +5879,6 @@ def test_para_ai_review_veto_not_starved_by_stale_review_failed_steps():
 
 def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypatch, caplog):
     """code类失败项应打印代码重试日志，而不是escalating to human review。"""
-    from modstore_server import self_maintenance_loop_runner as loop_runner
 
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_MAX_RETRIES", "3")
 
@@ -5744,7 +5897,7 @@ def test_code_failure_items_log_correct_message_not_escalating_to_human(monkeypa
     }
 
     with caplog.at_level("WARNING"):
-        result = loop_runner._resume_review_qa_candidate(memory)
+        result = _maintenance_resume._resume_review_qa_candidate(memory)
 
     # code项不应被escalated，也不应入队人工队列
     item = memory["open_items"][0]

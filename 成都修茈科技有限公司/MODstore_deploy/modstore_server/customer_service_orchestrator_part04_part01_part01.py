@@ -276,6 +276,11 @@ def build_reply(
         reply = f"我是小C。{intent_cn}已收到。{decision.rationale}直接在对话里补充即可。"
     elif decision.decision == "accepted":
         reply = f"我是小C。你的{intent_cn}已登记，正在跟进处理；还不会结案。可继续补充截图或具体页面，我们会尽快回复。"
+    elif intent == "refund" and any(
+        getattr(a, "action_type", "") == "refund.apply" and getattr(a, "status", "") == "failed"
+        for a in actions
+    ):
+        reply = "我是小C。退款申请未确认提交成功，不能视为已退款。原工单继续处理中，请保留支付凭证以便核对。"
     elif actions:
         action_cn = {
             "refund.apply": "退款申请",

@@ -27,9 +27,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.workflow.ports.events import StateEventPublisher
-from app.application.workflow.ports.runtime import Callback, StateSchema, WorkflowRuntime
-from app.application.workflow.ports.tools import ToolDispatcher
+from app.application.workflow.ports import (
+    Callback,
+    StateEventPublisher,
+    StateSchema,
+    ToolDispatcher,
+    WorkflowRuntime,
+)
 from app.contexts.flags import lg_runtime_mode
 from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
 from app.legacy.workflow.legacy_engine_adapter import LegacyEngineAdapter

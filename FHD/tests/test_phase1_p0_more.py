@@ -182,17 +182,21 @@ def test_approval_generate_request_no_format() -> None:
 
 
 def test_approval_node_query_for_user() -> None:
-    node = SimpleNamespace(approver_ids=json.dumps([1, 2, 3]))
+    from app.db.models.approval import ApprovalFlowNode
+
+    node = ApprovalFlowNode(approver_ids=json.dumps([1, 2, 3]))
     assert _node_query_for_user(node, 2) is True
     assert _node_query_for_user(node, 9) is False
-    assert _node_query_for_user(SimpleNamespace(approver_ids="bad"), 1) is False
+    assert _node_query_for_user(ApprovalFlowNode(approver_ids="bad"), 1) is False
 
 
 def test_approval_next_node() -> None:
+    from app.db.models.approval import ApprovalFlowNode
+
     nodes = [
-        SimpleNamespace(node_order=1),
-        SimpleNamespace(node_order=3),
-        SimpleNamespace(node_order=5),
+        ApprovalFlowNode(node_order=1),
+        ApprovalFlowNode(node_order=3),
+        ApprovalFlowNode(node_order=5),
     ]
     nxt = _next_node(nodes, 1)
     assert nxt is not None
@@ -230,7 +234,12 @@ def test_aibiz_lane_mapping() -> None:
 
 
 @pytest.fixture
-def mobile_client() -> TestClient:
+def mobile_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setattr(
+        mobile_ext,
+        "_load_market_ai_employee_profile_index",
+        AsyncMock(return_value=({}, False, "")),
+    )
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)
     app.dependency_overrides[mobile_api_mod.get_mobile_user] = lambda: SimpleNamespace(

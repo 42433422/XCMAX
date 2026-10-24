@@ -124,14 +124,30 @@ def test_employee_agent_defaults_to_xcauto_credentials(monkeypatch):
     _clear_llm_env(monkeypatch)
     monkeypatch.setenv("XCAUTO_API_KEY", "pat-employee")
 
-    from app.application.employee_runtime.agent_runner import _resolve_employee_llm_config
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
 
-    cfg = _resolve_employee_llm_config()
+    from app.application.employee_runtime.agent_runner import _chat_completion
+    from app.infrastructure.llm.providers import registry
+    from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
-    assert cfg["provider"] == "xcauto"
-    assert cfg["model"] == "xcauto-account"
-    assert cfg["api_key"] == "pat-employee"
-    assert cfg["base_url"] == "https://xiu-ci.com/v1"
+    response = Mock()
+    response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}
+    response.headers = {}
+    post = AsyncMock(return_value=response)
+    monkeypatch.setattr(registry, "_registry", None)
+    monkeypatch.setattr(
+        OpenAICompatibleAdapter,
+        "_get_client",
+        AsyncMock(return_value=SimpleNamespace(post=post)),
+    )
+    result = asyncio.run(_chat_completion([{"role": "user", "content": "test"}]))
+    assert result["choices"][0]["message"]["content"] == "ok"
+    post.assert_awaited_once()
+    assert post.await_args.args == ("https://xiu-ci.com/v1/chat/completions",)
+    assert post.await_args.kwargs["headers"]["Authorization"] == "Bearer pat-employee"
+    assert post.await_args.kwargs["json"]["model"] == "xcauto-account"
 
 
 def test_mod_employee_llm_defaults_to_xcauto_direct(monkeypatch):
