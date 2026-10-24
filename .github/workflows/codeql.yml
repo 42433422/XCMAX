@@ -44,28 +44,15 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}"
 
-      - name: Install local CodeQL path-barrier model pack
-        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
-        run: |
-          set -euo pipefail
-          # Actions `packs:` only accepts scope/name; stage the in-repo model pack
-          # into the CLI package cache so init can resolve xcmax/retort-path-model@1.0.0
-          # without a GHCR publish (barriers for _validated_path_component ReturnValue).
-          dest="${HOME}/.codeql/packages/xcmax/retort-path-model/1.0.0"
-          rm -rf "${dest}"
-          mkdir -p "${dest}"
-          cp -a .github/codeql/extensions/xcmax-retort-path-model/. "${dest}/"
-          test -f "${dest}/qlpack.yml"
-          echo "Installed local model pack at ${dest}"
-
       - name: Initialize CodeQL
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
-          # Published-style name; pack body staged into ~/.codeql/packages above.
-          packs: ${{ matrix.language == 'python' && 'xcmax/retort-path-model@1.0.0' || '' }}
+          # No packs: input — Actions resolves scope/name via GHCR only; in-repo
+          # +./ packs are rejected. ETL dir_fd path-injection FPs are stripped
+          # from the Python SARIF after analyze (see strip script below).
 
       - name: Perform CodeQL Analysis
         id: analyze
@@ -73,13 +60,36 @@ jobs:
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+          upload: ${{ matrix.language != 'python' }}
+          output: codeql-sarif-out
+
+      - name: Strip known-safe ETL dir_fd path-injection FPs (python)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          files=(codeql-sarif-out/**/*.sarif)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No SARIF produced" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            python3 .github/codeql/strip_etl_dir_fd_path_injection_fps.py "$f"
+          done
+
+      - name: Upload CodeQL SARIF (python, filtered)
+        if: (github.event_name != 'pull_request' || steps.paths.outputs.run == 'true') && matrix.language == 'python'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: codeql-sarif-out
+          category: "/language:python"
 
       - name: Retain source locations and data flows for review
         if: github.event_name != 'pull_request' || steps.paths.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: codeql-sarif-${{ matrix.language }}
-          path: ${{ steps.analyze.outputs.sarif-output }}/**/*.sarif
+          path: codeql-sarif-out/**/*.sarif
           retention-days: 14
           if-no-files-found: error
 

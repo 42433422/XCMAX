@@ -10,5 +10,5 @@ paths-ignore:
   - "**/node_modules/**"
   - "**/dist/**"
 
-# Local model pack staged into ~/.codeql/packages in codeql.yml, then loaded
-# as xcmax/retort-path-model@1.0.0 (barrierModel for ETL path helpers).
+# In-repo model pack cannot be loaded via Actions packs: (GHCR-only). Python
+# SARIF post-strips the three hardened ETL dir_fd py/path-injection FPs.
