@@ -1,5 +1,5 @@
 {
-  "lines": 2368785,
+  "lines": 2368787,
   "updated": "2026-10-24",
-  "note": "PR #2544 follow-up to cross-platform ETL path hardening: explicitly configure isolated WORKSPACE_ROOT roots in temporary-file employee/Excel/ETL tests, and validate batch glob syntax before directory resolution while retaining unsafe_path behavior for valid patterns. Exact additional net increase: 11 maintained lines. PR body remains unchanged per instruction."
+  "note": "本次 Windows ETL 原生句柄绑定修复增加 2 行：显式 ctypes.cast 将 UTF-16 缓冲区传入 UnicodeString.Buffer，并显式 int 化 Windows 文件描述符以满足类型与运行时契约；这是安全兼容修复，用户已批准本 PR 登记净增例外。"
 }
