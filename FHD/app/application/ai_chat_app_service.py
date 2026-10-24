@@ -34,8 +34,7 @@ import httpx  # noqa: F401 - compatibility patch point for legacy tests/callers
 if TYPE_CHECKING:
     # 仅用于类型标注；运行时经注入端口或 ``app.bootstrap`` 触发式解析，避免 import 期耦合。
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.workflow.ports import CheckpointStore
-    from app.application.workflow.ports import WorkflowRuntime
+    from app.application.workflow.ports import CheckpointStore, WorkflowRuntime
     from app.application.workflow.types import PlanGraph, WorkflowRunResult
 else:
     CheckpointStore = Any

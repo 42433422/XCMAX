@@ -26,15 +26,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, cast
-
-from app.domain.conversation.services.chat_tool_intent import tiered_confidence
-from app.domain.conversation.services.context import (
-    ContextFacade,
-    get_context_facade,
-)
-from app.domain.conversation.services.context import PendingIntent as ContextPendingIntent
-from app.domain.conversation.services.slot_validator import SlotValidator
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +66,7 @@ class PendingIntent:
         """检查是否过期"""
         return time.time() - self.last_updated_at > max_age_seconds
 
-    def merge_slots(self, new_slots: dict[str, Any]) -> "PendingIntent":
+    def merge_slots(self, new_slots: dict[str, Any]) -> PendingIntent:
         """合并新槽位"""
         merged = self.slots.copy()
         merged.update(new_slots)

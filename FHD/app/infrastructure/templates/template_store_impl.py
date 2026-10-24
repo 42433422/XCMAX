@@ -9,8 +9,8 @@ from typing import Any, cast
 
 from sqlalchemy import text
 
-from app.domain.template.ports import TemplateStorePort
 from app.db import session as db_session
+from app.domain.template.ports import TemplateStorePort
 from app.infrastructure.templates.stored_metadata import read_stored_template_metadata
 from app.infrastructure.templates.template_discovery import (
     business_scope,

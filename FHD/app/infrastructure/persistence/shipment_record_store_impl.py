@@ -4,9 +4,9 @@ import json
 from datetime import datetime
 from typing import Any
 
-from app.domain.shipment.ports import ShipmentRecordStorePort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
+from app.domain.shipment.ports import ShipmentRecordStorePort
 from app.domain.shipment.shipment_quantities import (
     resolve_shipment_quantity,
     validate_shipment_products,

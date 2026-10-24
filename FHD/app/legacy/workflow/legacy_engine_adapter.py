@@ -22,9 +22,9 @@ from app.application.workflow.ports import (
     Callback,
     PlanGraph,
     StateSchema,
+    ToolDispatcher,
     WorkflowRunResult,
 )
-from app.application.workflow.ports import ToolDispatcher
 
 
 class LegacyEngineAdapter:

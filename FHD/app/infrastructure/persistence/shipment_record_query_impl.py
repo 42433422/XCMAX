@@ -7,9 +7,9 @@ from typing import Any
 
 from sqlalchemy import inspect as sa_inspect
 
-from app.domain.shipment.ports import ShipmentRecordQueryPort
 from app.db.models import ShipmentRecord
 from app.db.session import get_db
+from app.domain.shipment.ports import ShipmentRecordQueryPort
 from app.infrastructure.lookups import resolve_purchase_unit
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
