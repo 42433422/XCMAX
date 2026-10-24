@@ -8,7 +8,7 @@ that adapter is retired in phase-3.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from typing import Any
+from typing import Any, cast
 
 from app.domain.conversation.ports import ChatStreamPort, ChatToolResultPort
 
@@ -36,21 +36,24 @@ class _LegacyChatStreamAdapter:
             chat_stream_sse_events as _impl,
         )
 
-        return _impl(
-            message,
-            runtime_context=dict(runtime_context) if runtime_context is not None else None,
-            system_prompt=system_prompt,
-            workspace_root=workspace_root,
-            db_write_token=db_write_token,
-            client=client,
-            model=model,
-            max_iterations=max_iterations,
+        return cast(
+            Iterator[dict[str, Any]],
+            _impl(
+                message,
+                runtime_context=dict(runtime_context) if runtime_context is not None else None,
+                system_prompt=system_prompt,
+                workspace_root=workspace_root,
+                db_write_token=db_write_token,
+                client=client,
+                model=model,
+                max_iterations=max_iterations,
+            ),
         )
 
     def get_last_tool_result(self) -> dict[str, Any]:
         from app.legacy.chat.legacy_chat_adapter import get_last_tool_result as _impl
 
-        return _impl()
+        return cast(dict[str, Any], _impl())
 
     def clear_last_tool_result(self) -> None:
         from app.legacy.chat.legacy_chat_adapter import clear_last_tool_result as _impl
