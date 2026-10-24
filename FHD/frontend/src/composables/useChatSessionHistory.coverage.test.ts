@@ -75,64 +75,27 @@ interface DepsOverrides {
 }
 
 function makeDeps(overrides: DepsOverrides = {}) {
-  const sessionId = ref(overrides.sessionId ?? 'current-sid')
-  const taskList = ref<TaskItem[]>(overrides.taskList ?? [])
-  const activeTaskId = ref(overrides.activeTaskId ?? '')
-  const expandedTaskIds = ref<string[]>(overrides.expandedTaskIds ?? [])
-  const taskFilter = ref<'all' | 'running' | 'success' | 'failed'>(overrides.taskFilter ?? 'all')
-  const currentTask = ref<ShipmentTask | null>(overrides.currentTask ?? null)
-  const lastExcelAnalysisContext = ref<Record<string, unknown> | null>(overrides.lastExcelAnalysisContext ?? null)
-  const linkedExcelSheet = ref<LinkedExcelSheet | null>(overrides.linkedExcelSheet ?? null)
-  const linkedExcelAllSheets = ref<boolean>(overrides.linkedExcelAllSheets ?? false)
-
-  const loadMessages = vi.fn()
-  const clearMessages = vi.fn()
-  const persistTaskPanelStateForSession = vi.fn()
-  const applyPersistedTaskPanelStateForSession = vi.fn()
-  const clearPersistedTaskPanelState = vi.fn()
-  const generateSessionId = vi.fn(() => 'generated-new-sid')
-  const normalizeServerContentToHtml = vi.fn((raw: unknown) => `<p>${String(raw ?? '')}</p>`)
-
-  return {
-    deps: {
-      sessionId,
-      taskList,
-      activeTaskId,
-      expandedTaskIds,
-      taskFilter,
-      currentTask,
-      lastExcelAnalysisContext,
-      linkedExcelSheet,
-      linkedExcelAllSheets,
-      loadMessages,
-      clearMessages,
-      persistTaskPanelStateForSession,
-      applyPersistedTaskPanelStateForSession,
-      clearPersistedTaskPanelState,
-      generateSessionId,
-      normalizeServerContentToHtml,
-    },
-    refs: {
-      sessionId,
-      taskList,
-      activeTaskId,
-      expandedTaskIds,
-      taskFilter,
-      currentTask,
-      lastExcelAnalysisContext,
-      linkedExcelSheet,
-      linkedExcelAllSheets,
-    },
-    mocks: {
-      loadMessages,
-      clearMessages,
-      persistTaskPanelStateForSession,
-      applyPersistedTaskPanelStateForSession,
-      clearPersistedTaskPanelState,
-      generateSessionId,
-      normalizeServerContentToHtml,
-    },
+  const refs = {
+    sessionId: ref(overrides.sessionId ?? 'current-sid'),
+    taskList: ref<TaskItem[]>(overrides.taskList ?? []),
+    activeTaskId: ref(overrides.activeTaskId ?? ''),
+    expandedTaskIds: ref<string[]>(overrides.expandedTaskIds ?? []),
+    taskFilter: ref<'all' | 'running' | 'success' | 'failed'>(overrides.taskFilter ?? 'all'),
+    currentTask: ref<ShipmentTask | null>(overrides.currentTask ?? null),
+    lastExcelAnalysisContext: ref<Record<string, unknown> | null>(overrides.lastExcelAnalysisContext ?? null),
+    linkedExcelSheet: ref<LinkedExcelSheet | null>(overrides.linkedExcelSheet ?? null),
+    linkedExcelAllSheets: ref<boolean>(overrides.linkedExcelAllSheets ?? false),
   }
+  const mocks = {
+    loadMessages: vi.fn(),
+    clearMessages: vi.fn(),
+    persistTaskPanelStateForSession: vi.fn(),
+    applyPersistedTaskPanelStateForSession: vi.fn(),
+    clearPersistedTaskPanelState: vi.fn(),
+    generateSessionId: vi.fn(() => 'generated-new-sid'),
+    normalizeServerContentToHtml: vi.fn((raw: unknown) => `<p>${String(raw ?? '')}</p>`),
+  }
+  return { deps: { ...refs, ...mocks }, refs, mocks }
 }
 
 const scopes: EffectScope[] = []

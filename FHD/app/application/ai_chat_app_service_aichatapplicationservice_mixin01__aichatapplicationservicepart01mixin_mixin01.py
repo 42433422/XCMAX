@@ -60,6 +60,8 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
                 "task_id",
                 "local_user_id",
                 "actor_id",
+                "mod_id",
+                "active_mod_id",
             ):
                 if key in context and context[key]:
                     runtime_ctx[key] = str(context[key]).strip()

@@ -486,6 +486,15 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
                 shipment.tenant_id,
             } == {1}
 
+        for entity, record_id in zip(
+            ("customers", "products", "materials", "shipment_records"), ids.values(), strict=True
+        ):
+            params = {"entity": entity, "id": record_id}
+            readback = execute_registered_workflow_tool("business_db", "read", params)
+            assert [row["id"] for row in readback["data"]] == [record_id]
+            with tenant_scope(2):
+                assert execute_registered_workflow_tool("business_db", "read", params)["data"] == []
+
         assert write(
             "customers",
             "update",

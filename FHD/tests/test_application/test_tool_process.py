@@ -25,6 +25,8 @@ def _step(action="read", **params):
 
 class FixtureExecutor(AgentToolExecutor):
     def execute(self, step, *, runtime_context):
+        if step.tool_id == "business_db":
+            return {"success": True, "business_verification": {"record_id": 42}}
         if step.action == "typed_result":
             from datetime import date
             from decimal import Decimal
@@ -99,6 +101,43 @@ def test_child_unknown_io_cannot_be_hidden_by_successful_tool():
     )
     assert result["outcome"] == "unknown" and result["reconciliation_required"]
     assert result["io_reconciliation"] == [{"kind": "http_timeout", "method": "POST"}]
+
+
+def test_spawned_write_target_returns_to_owner_and_conversation(monkeypatch):
+    from app.services import tools_workflow_common as targets
+    from app.services.conversation.context import scoped_conversation_user_id
+
+    monkeypatch.setattr(targets, "_RECENT_BUSINESS_DB_TARGETS", {})
+    context = {
+        "user_id": "2",
+        "local_user_id": 2,
+        "tenant_id": 7,
+        "mod_id": "a",
+        "session_id": "same",
+    }
+    step = AgentStep(
+        node_id="write",
+        tool_id="business_db",
+        action="write",
+        params={"entity": "customers", "operation": "create", "payload": {}},
+    )
+    assert execute_with_tool_deadline(
+        FixtureExecutor(), step, runtime_context=context, timeout_seconds=5
+    )["success"]
+    key = scoped_conversation_user_id("2", context)
+    assert targets.get_recent_business_db_target(key) == {"entity": "customers", "id": 42}
+    for field, value in [
+        ("local_user_id", 3),
+        ("tenant_id", 8),
+        ("mod_id", "b"),
+        ("session_id", "other"),
+    ]:
+        assert (
+            targets.get_recent_business_db_target(
+                scoped_conversation_user_id("2", {**context, field: value})
+            )
+            is None
+        )
 
 
 def test_default_adapter_refuses_unserializable_or_expired_start_without_dispatch():

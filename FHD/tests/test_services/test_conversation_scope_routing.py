@@ -11,6 +11,14 @@ from app.services.conversation.context import ConversationContext, scoped_conver
 from app.services.conversation.prompts import PromptsMixin
 
 
+@pytest.mark.parametrize("action", ["新增", "修改", "更新", "删除"])
+def test_describing_a_previous_write_does_not_request_another_write(action):
+    from app.domain.services.conversation.chat_tool_intent import looks_like_business_db_write
+
+    assert not looks_like_business_db_write(f"刚才{action}的客户，联系人现在是谁？请查询实际记录。")
+    assert looks_like_business_db_write(f"把刚才{action}的客户，联系人改为测试员")
+
+
 def test_state_scope_binds_owner_tenant_mod_and_conversation():
     base = {"local_user_id": 1, "tenant_id": 1, "mod_id": "a", "conversation_id": "same"}
     key = scoped_conversation_user_id("caller", base)

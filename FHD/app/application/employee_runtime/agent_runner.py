@@ -1,9 +1,4 @@
-"""员工 agent handler：多轮工具调用循环（委托 agent_loop）。
-
-历史上这里是单轮 ``_chat_completion``；现在 ``run_agent_handler`` 委托
-``agent_loop.run_employee_agent_loop`` 做真正的多轮 function-calling。
-``_chat_completion`` / ``_run_async`` 仍保留，供 executor 的认知层（cognition）单轮补全复用。
-"""
+"""Employee Agent loop and cognition completion through the shared model route."""
 
 from __future__ import annotations
 

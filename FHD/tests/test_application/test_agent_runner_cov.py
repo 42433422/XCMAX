@@ -1,9 +1,5 @@
 # mypy: disable-error-code="no-any-return"
-"""覆盖率补强测试：app.application.employee_runtime.agent_runner。
-
-聚焦于 _run_async / 统一模型路由 / _chat_completion /
-run_agent_handler 四个函数的边界与异常分支。
-"""
+"""Agent routing, async boundaries and handler delegation regressions."""
 
 from __future__ import annotations
 
