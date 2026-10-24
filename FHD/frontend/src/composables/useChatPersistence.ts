@@ -12,6 +12,7 @@ import {
 import { isIndustryWelcomePlainText } from '@/constants/industryPresets'
 import { hasAgentRunExecutionEvidence } from '@/utils/agentRunExecution'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
+import { retainTaskHistory } from '@/utils/agentTaskWorkspaceModel'
 
 /** 刷新后仍能把「分析 Excel」结果随 /api/ai/chat 的 context 带上，避免「加入数据库」落 LLM 空转 */
 export const EXCEL_ANALYSIS_STORAGE_PREFIX = 'xcagi_excel_analysis_ctx_'
@@ -477,7 +478,7 @@ export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) 
   function persistTaskPanelStateForSession(targetSessionId?: string): void {
     const sid = String(targetSessionId || sessionId.value || '').trim() || 'default'
     persistTaskPanelState(sid, {
-      taskList: taskList.value.slice(0, TASK_HISTORY_LIMIT),
+      taskList: retainTaskHistory(taskList.value, TASK_HISTORY_LIMIT),
       activeTaskId: String(activeTaskId.value || '').trim(),
       expandedTaskIds: expandedTaskIds.value.slice(0, 80),
       taskFilter: taskFilter.value,
@@ -497,7 +498,7 @@ export function useChatTaskPanelPersistence(deps: ChatTaskPanelPersistenceDeps) 
       currentTask.value = null
       return
     }
-    taskList.value = (Array.isArray(persisted.taskList) ? persisted.taskList : []).filter(isVerifiedAgentTask).slice(0, TASK_HISTORY_LIMIT)
+    taskList.value = retainTaskHistory((Array.isArray(persisted.taskList) ? persisted.taskList : []).filter(isVerifiedAgentTask), TASK_HISTORY_LIMIT)
     taskFilter.value = persisted.taskFilter
     currentTask.value = (persisted.currentTask || null) as ShipmentTask | null
     const idSet = new Set(taskList.value.map((t) => t.id))

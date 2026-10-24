@@ -217,8 +217,11 @@ def customer_reply(
     output: JsonObject,
     success: bool,
     customers: list[Any] | None = None,
+    customer_id: int | None = None,
 ) -> JsonObject:
-    params: JsonObject = {"page": 1, "per_page": 50}
+    params: JsonObject = (
+        {"id": customer_id} if customer_id is not None else {"page": 1, "per_page": 50}
+    )
     if keyword:
         params["keyword"] = keyword
     record = {
@@ -241,13 +244,21 @@ def customer_reply(
     )
 
 
-def customers(result: object, keyword: str) -> JsonObject:
+def customers(result: object, keyword: str, *, customer_id: int | None = None) -> JsonObject:
     items = result.get("data", []) if isinstance(result, dict) else []
     if not isinstance(items, list):
         items = []
     total = int(result.get("total") or len(items)) if isinstance(result, dict) else len(items)
     if not items:
         response = f"没有查到与「{keyword}」匹配的客户。" if keyword else "当前客户库暂无数据。"
+    elif customer_id is not None:
+        record = items[0]
+        response = (
+            f"客户 ID {customer_id}：{record.get('customer_name', '')}\n"
+            f"联系人：{record.get('contact_person') or '未填写'}\n"
+            f"电话：{record.get('contact_phone') or '未填写'}\n"
+            f"地址：{record.get('contact_address') or '未填写'}"
+        )
     else:
         lines = [
             f"- {c.get('customer_name', '')} {c.get('contact_person', '')}".rstrip()
@@ -261,14 +272,18 @@ def customers(result: object, keyword: str) -> JsonObject:
         keyword=keyword,
         success=True,
         customers=items[:20],
+        customer_id=customer_id,
         output={"success": True, "data": items[:20], "total": total, "page": 1, "per_page": 50},
     )
 
 
-def rejected_customers(result: JsonObject, keyword: str) -> JsonObject:
+def rejected_customers(
+    result: JsonObject, keyword: str, *, customer_id: int | None = None
+) -> JsonObject:
     return customer_reply(
         str(result.get("message") or result.get("response") or "客户查询工具执行失败"),
         keyword=keyword,
         output=result,
         success=False,
+        customer_id=customer_id,
     )

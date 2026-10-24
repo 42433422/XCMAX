@@ -306,20 +306,11 @@ def conversations_get(
     scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
     numeric_user_id = durable_user_id(scope[0])
     if numeric_user_id is not None:
-        durable = task_conversation_store.get_conversation(
+        return task_conversation_store.get_history(
             session_id=cid,
             user_id=numeric_user_id,
+            mod_id=scope[1],
         )
-        session = durable.get("session")
-        return {
-            "success": True,
-            "id": cid,
-            "title": session.get("title") if isinstance(session, dict) else None,
-            "mod_id": scope[1],
-            "messages": durable.get("messages") or [],
-            "metadata": {},
-            "durable": True,
-        }
     with _conversation_lock:
         rec = (_xcagi_user_sessions.get(scope) or {}).get(cid)
         if rec is None and not scope[1]:

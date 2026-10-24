@@ -337,6 +337,7 @@ class TestValidateRequiredParams:
         "备份数据库，不恢复",
         "请现在创建一次本机数据库备份，用于本次自动审批实测。只创建备份，不恢复、不删除、不修改业务数据。",
         "帮我生成一份本地数据库备份，执行前先给我确认。",
+        "备份当前数据库。先展示计划，等待我确认后再执行。",
     ],
 )
 @pytest.mark.parametrize("entry", ["plan", "_fallback_plan"])
@@ -359,7 +360,7 @@ def test_actual_restore_requests_use_one_registered_high_risk_step(message, entr
         )
     assert len(plan.nodes) == 1 and validate_plan_graph(plan) is None
     node = plan.nodes[0]
-    backup = "备份数据库" in message or "数据库备份" in message
+    backup = "备份数据库" in message or "数据库备份" in message or "备份当前数据库" in message
     assert (node.tool_id, node.action) == (
         "system_maintenance",
         "backup_database" if backup else "restore_database",

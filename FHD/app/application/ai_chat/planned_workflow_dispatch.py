@@ -288,12 +288,11 @@ class PlannedWorkflowDispatch:
 
         tool_registry = get_workflow_tool_registry()
         planner_message = message
-        if re.search(
-            r"刚才(?:[的那这]|新增|创建|修改|更新|查询|查到|读取|导入)", str(message or "")
-        ) and any(
-            token in str(message or "")
-            for token in ("客户", "产品", "原材料", "物料", "记录", "那条", "这条")
-        ):
+        from app.domain.conversation.services.chat_tool_intent import (
+            references_recent_business_record,
+        )
+
+        if references_recent_business_record(str(message or "")):
             from app.services.tools_workflow_registered import get_recent_business_db_target
 
             recent_target = get_recent_business_db_target(user_id)

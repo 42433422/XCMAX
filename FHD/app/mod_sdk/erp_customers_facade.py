@@ -93,10 +93,11 @@ def customers_list(
     )
 
 
-def customers_get(request: Request, customer_id: int) -> dict | JSONResponse:
+def customers_get(request: Request | None, customer_id: int) -> dict | JSONResponse:
     from app.infrastructure.auth.db_token import verify_db_read_token_header
 
-    verify_db_read_token_header(request)
+    if request is not None:
+        verify_db_read_token_header(request)
     result = _service().get_by_id(customer_id)
     if result.get("success"):
         return _stamp(result)

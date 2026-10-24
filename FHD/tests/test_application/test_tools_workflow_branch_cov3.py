@@ -308,7 +308,7 @@ class TestHandleExcelAnalysis:
                 },
                 workspace_root=str(tmp_path),
             )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_aggregate_no_group_by(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"
@@ -319,7 +319,7 @@ class TestHandleExcelAnalysis:
                 {"file_path": "data.xlsx", "action": "aggregate"},
                 workspace_root=str(tmp_path),
             )
-        assert result["success"] is True
+        assert result["success"] is False
 
     def test_action_statistics(self, tmp_path: Path) -> None:
         f = tmp_path / "data.xlsx"

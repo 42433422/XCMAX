@@ -142,15 +142,23 @@ async def test_follow_up_cache_separates_owners_history_and_models(monkeypatch):
 async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suffix):
     import asyncio
 
+    from starlette.requests import Request
+
     from app.application import planner_compat_service as service
     from app.infrastructure.llm.client import get_llm_client
 
-    request, body, client = object(), object(), object()
+    request, client = Request({"type": "http", "headers": []}), object()
+    body = (
+        service.XcagiCompatChatBatchBody(messages=["hello"])
+        if suffix
+        else service.XcagiCompatChatBody(message="hello")
+    )
     factory = MagicMock(return_value=client)
     monkeypatch.setattr(service, "create_modstore_openai_client_from_request", factory)
 
     async def execute(actual_request, actual_body):
-        assert (actual_request, actual_body) == (request, body)
+        assert actual_request is request
+        assert actual_body.model_dump(exclude={"context"}) == body.model_dump(exclude={"context"})
         factory.assert_not_called()
         assert await asyncio.to_thread(get_llm_client) is client
         return {"success": True}

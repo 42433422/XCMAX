@@ -119,10 +119,15 @@ class TestHandleExcelAnalysisExtended:
             return_value=Path(xlsx_path),
         ):
             result = handle_excel_analysis(
-                {"file_path": xlsx_path, "action": "aggregate"},
+                {
+                    "file_path": xlsx_path,
+                    "action": "aggregate",
+                    "metrics": [{"column": "value", "op": "sum"}],
+                },
                 workspace_root=str(tmp_path),
             )
         assert result["success"] is True
+        assert result["records"] == [{"value_sum": 6}]
 
     def test_excel_query_action(self, tmp_path):
         import pandas as pd
