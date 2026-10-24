@@ -380,7 +380,9 @@ async def xcmax_admin_loop_memory_evict(
     """
 
     try:
-        from modstore_server.self_maintenance_loop_runner import evict_loop_memory_items
+        from modstore_server.maintenance_loop.memory import (
+            evict_loop_memory_items,
+        )
 
         result = evict_loop_memory_items(
             actor="manual",

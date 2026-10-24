@@ -25,14 +25,21 @@ describe('Windows full application rollback helper', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "xcagi-loader-'")); cleanupRoots.push(root)
     const scriptPath = path.join(root, 'restore.ps1'), receipt = path.join(root, 'executed.txt')
     const script = `[IO.File]::WriteAllText('${receipt.replaceAll("'", "''")}', 'executed')`
-    const digest = createHash('sha256').update(script).digest('hex')
-    fs.writeFileSync(scriptPath, tampered ? script + '\n# changed' : script)
+    const digest = createHash('sha256').update(script, 'utf8').digest('hex')
+    fs.writeFileSync(scriptPath, tampered ? script + '\n# changed' : script, 'utf8')
     const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, digest), 'utf16le').toString('base64')
     expect(encoded.length).toBeLessThan(32767)
     let rejected = false
-    try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000 }) } catch { rejected = true }
+    try {
+      await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 30_000 })
+    } catch (err) {
+      const message = String((err as { stderr?: Buffer | string; message?: string }).stderr || (err as Error).message || err)
+      // Cold runners can exceed a tight 10s budget; only treat checksum mismatch (or any non-timeout failure) as reject.
+      if (/ETIMEDOUT|timed out/i.test(message)) throw err
+      rejected = true
+    }
     expect(rejected).toBe(tampered); expect(fs.existsSync(receipt)).toBe(!tampered)
-  }, 15_000)
+  }, 45_000)
   it('encodes paths and the applied record without interpolating raw JSON', () => {
     const options: WindowsRollbackLaunchOptions = {
       currentPid: 42,

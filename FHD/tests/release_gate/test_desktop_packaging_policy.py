@@ -387,7 +387,7 @@ def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> No
 def test_frozen_excel_temp_files_use_writable_app_data() -> None:
     modules = [
         REPO_ROOT / "app" / "application" / "excel_template_http_app_service.py",
-        REPO_ROOT / "app" / "fastapi_routes" / "excel_extract.py",
+        REPO_ROOT / "app" / "fastapi_routes" / "domains" / "excel" / "excel_extract.py",
     ]
 
     for path in modules:

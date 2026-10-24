@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { materializeMediaAssets } from '../../../scripts/dev/materialize_media_assets.mjs'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
@@ -48,6 +49,7 @@ export function normalizeBase(raw: string | undefined): string {
 }
 
 export default defineConfig(({ command }) => {
+  materializeMediaAssets('market')
   const envRaw = (process.env.VITE_PUBLIC_BASE || '').trim()
   const base = command === 'build' ? normalizeBase(envRaw || '/market/') : envRaw ? normalizeBase(envRaw) : '/'
 

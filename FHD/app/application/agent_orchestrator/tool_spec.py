@@ -4,8 +4,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
-from app.application.agent_orchestrator.tool_contract_fixtures import _default_fixture
-
 # Re-export tool data for existing callers.
 from app.application.agent_orchestrator.tool_spec_data import (  # noqa: F401
     _BUSINESS_ENTITIES,
@@ -29,6 +27,7 @@ from app.application.agent_orchestrator.tool_spec_data.constants import (
     PERMISSION_OVERRIDES,
     TOOL_ACTION_COST_OVERRIDES,
 )
+from app.application.agent_orchestrator.tool_spec_data.contract_samples import _default_fixture
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 RiskLevel = Literal["low", "medium", "high"]

@@ -1,5 +1,6 @@
 import { nextTick, type Ref } from 'vue'
 import { fetchCsInbox, fetchCsInboxMessages, type ImConversationSummary, type ImMessage } from '@/api/im'
+import { captureMessageScroll } from './useChatSession'
 
 type Options = {
   enabled: Ref<boolean>
@@ -7,7 +8,7 @@ type Options = {
   activeConversationId: Ref<number | null>
   messages: Ref<ImMessage[]>
   playIncoming: (body: string) => void | Promise<void>
-  scrollToBottom: () => void
+  scrollEl: Ref<HTMLElement | null>
 }
 
 /** Keep the selected admin CS inbox thread in sync with the production SSOT. */
@@ -33,6 +34,7 @@ export function useCsInboxBridge(options: Options) {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const [inbox, remoteMessages] = await Promise.all([fetchCsInbox(), fetchCsInboxMessages(activeId)])
       if (options.activeConversationId.value !== activeId || !options.enabled.value) return
+      const restoreScroll = captureMessageScroll(options.scrollEl)
 
       const regular = options.conversations.value.filter((item) => !item.is_cs_inbox)
       const regularIds = new Set(regular.map((item) => item.id))
@@ -50,7 +52,7 @@ export function useCsInboxBridge(options: Options) {
       if (incoming) void options.playIncoming(incoming.body)
       if (remoteMessages.some((item) => !oldIds.has(item.id))) {
         await nextTick()
-        options.scrollToBottom()
+        if (options.activeConversationId.value === activeId && options.enabled.value) restoreScroll()
       }
     } catch {
       // The regular IM websocket remains usable; retry this production bridge on the next tick.

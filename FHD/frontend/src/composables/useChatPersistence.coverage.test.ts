@@ -1,18 +1,3 @@
-/**
- * Coverage ramp 测试：useChatPersistence
- *
- * 目标：覆盖 useChatPersistence.ts 中尚未被现有 useChatPersistence.test.ts 触达的
- *   - readPersistedTaskPanelState / persistTaskPanelState / clearPersistedTaskPanelState
- *   - toPlainText / isWelcomeMessage / toHistoryTimestamp
- *   - useChatHistoryPersistence（normalizeHistorySessions / readLocalMessagesBySession /
- *     readLocalSessionMeta / deriveLocalSessionTitle / buildLocalHistorySession /
- *     listLocalHistorySessions / mergeHistorySessions / clearLocalHistoryCache）
- *   - useChatTaskPanelPersistence（persistTaskPanelStateForSession /
- *     applyPersistedTaskPanelStateForSession）
- *
- * 铁律3：覆盖 happy path、空值/None、边界值、异常路径（JSON 解析错误、storage 不可用）。
- * 铁律4：仅 mock 外部边界（localStorage / sessionStorage / pinia store），被测 composable 真实调用。
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
@@ -50,7 +35,8 @@ const mockExtractSessionIdForActiveMod = vi.fn((prefix: string, key: string, _mo
   return rest || null
 })
 
-vi.mock('@/utils/chatStorageKeys', () => ({
+vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
   CHAT_SESSION_META_PREFIX: 'xcagi_chat_session_meta_',
   buildChatMessagesKey: (...args: unknown[]) => mockBuildChatMessagesKey(...args),
@@ -89,9 +75,6 @@ describe('useChatPersistence — coverage ramp', () => {
     vi.restoreAllMocks()
   })
 
-  // -----------------------------------------------------------------------
-  // readPersistedExcelAnalysisContext — 异常路径补强
-  // -----------------------------------------------------------------------
   describe('readPersistedExcelAnalysisContext — edge cases', () => {
     it('returns null when sessionKey is empty', () => {
       expect(readPersistedExcelAnalysisContext('')).toBeNull()
@@ -125,14 +108,10 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // persistExcelAnalysisContext — 异常路径补强
-  // -----------------------------------------------------------------------
   describe('persistExcelAnalysisContext — edge cases', () => {
     it('stores with empty key prefix when sessionKey is empty (no early return)', () => {
-      // Source does not early-return on empty sessionKey; it just uses '' as the key
       persistExcelAnalysisContext('', { a: 1 })
-      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX)).toBe(JSON.stringify({ a: 1 }))
+      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 'default')).toBe(JSON.stringify({ a: 1 }))
     })
 
     it('removes key when ctx is null', () => {
@@ -156,9 +135,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // resolveExcelFilePathFromAnalysis — 边界值补强
-  // -----------------------------------------------------------------------
   describe('resolveExcelFilePathFromAnalysis — edge cases', () => {
     it('returns empty string for undefined', () => {
       expect(resolveExcelFilePathFromAnalysis(undefined)).toBe('')
@@ -211,9 +187,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // resolveExcelSheetOptionsFromContext — 边界值补强
-  // -----------------------------------------------------------------------
   describe('resolveExcelSheetOptionsFromContext — edge cases', () => {
     it('returns empty array for non-object ctx (number)', () => {
       expect(resolveExcelSheetOptionsFromContext(42)).toEqual([])
@@ -277,9 +250,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // resolveLinkedSheetGridPreview — 边界值补强
-  // -----------------------------------------------------------------------
   describe('resolveLinkedSheetGridPreview — edge cases', () => {
     it('returns null when linkedSheet has empty sheet_name', () => {
       expect(resolveLinkedSheetGridPreview({ preview_data: {} }, { sheet_name: '', sheet_index: 1 })).toBeNull()
@@ -372,9 +342,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // extractLikelyProductQueryKeyword — 边界值补强
-  // -----------------------------------------------------------------------
   describe('extractLikelyProductQueryKeyword — edge cases', () => {
     it('returns null for empty string', () => {
       expect(extractLikelyProductQueryKeyword('')).toBeNull()
@@ -502,9 +469,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // toPlainText
-  // -----------------------------------------------------------------------
   describe('toPlainText', () => {
     it('returns empty string for null', () => {
       expect(toPlainText(null)).toBe('')
@@ -551,9 +515,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // isWelcomeMessage
-  // -----------------------------------------------------------------------
   describe('isWelcomeMessage', () => {
     it('returns false when role is not ai', () => {
       expect(isWelcomeMessage({ role: 'user', content: '你好，我是业务助手。' })).toBe(false)
@@ -584,9 +545,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // toHistoryTimestamp
-  // -----------------------------------------------------------------------
   describe('toHistoryTimestamp', () => {
     it('returns 0 for null', () => {
       expect(toHistoryTimestamp(null)).toBe(0)
@@ -619,9 +577,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // readPersistedTaskPanelState
-  // -----------------------------------------------------------------------
   describe('readPersistedTaskPanelState', () => {
     it('returns null when sessionKey is empty', () => {
       expect(readPersistedTaskPanelState('')).toBeNull()
@@ -727,9 +682,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // persistTaskPanelState
-  // -----------------------------------------------------------------------
   describe('persistTaskPanelState', () => {
     it('does nothing when sessionKey is empty', () => {
       persistTaskPanelState('', {
@@ -775,9 +727,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // clearPersistedTaskPanelState
-  // -----------------------------------------------------------------------
   describe('clearPersistedTaskPanelState', () => {
     it('does nothing when sessionKey is empty', () => {
       clearPersistedTaskPanelState('')
@@ -804,9 +753,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // useChatHistoryPersistence
-  // -----------------------------------------------------------------------
   describe('useChatHistoryPersistence', () => {
     function makeDeps(activeModId = '') {
       const sessionId = ref('active-sid')
@@ -1278,9 +1224,6 @@ describe('useChatPersistence — coverage ramp', () => {
     })
   })
 
-  // -----------------------------------------------------------------------
-  // useChatTaskPanelPersistence
-  // -----------------------------------------------------------------------
   describe('useChatTaskPanelPersistence', () => {
     function makeTaskItem(id: string, status: TaskItem['status'] = 'success'): TaskItem {
       return {

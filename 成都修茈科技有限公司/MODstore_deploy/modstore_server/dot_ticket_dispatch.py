@@ -24,7 +24,7 @@ FIELD_LIMIT = 120
 # 账号/登录/密码/权限类：与 dot 侧 classify 的关键词一致并略放宽，命中即只出报告。
 _ACCOUNT_RE = re.compile(
     r"(账号|帐号|账户|帐户|登录|登陆|密码|验证码|注册|实名|权限|封号|解封|鉴权|授权|"
-    r"account|login|log in|sign[ -]?in|password|credential|2fa|otp|permission|forbidden|"
+    r"account|login|log in|sign[ -]?in|password|credential|(?<![a-z0-9])2fa(?![a-z0-9])|otp|permission|forbidden|"
     r"unauthori[sz]ed)",
     re.I,
 )

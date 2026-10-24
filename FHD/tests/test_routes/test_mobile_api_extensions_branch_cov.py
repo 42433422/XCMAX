@@ -3074,8 +3074,14 @@ class TestMobileServiceBridgeRequestRespondHttpEx:
 
 
 class TestMobileAiCirclePostsBranchCov:
+    @pytest.fixture
+    def report_sync(self, monkeypatch):
+        sync = AsyncMock(return_value={})
+        monkeypatch.setattr("app.application.employee_circle_sync.sync_modstore_reports", sync)
+        return sync
+
     @pytest.mark.asyncio
-    async def test_success_without_profile_match(self, m):
+    async def test_success_without_profile_match(self, m, report_sync):
         """branch: post has employee_id but no matching profile."""
         post = {"employee_id": "unknown", "author_name": "default", "author_avatar": None}
         with (
@@ -3085,9 +3091,10 @@ class TestMobileAiCirclePostsBranchCov:
         ):
             result = await m.mobile_ai_circle_posts(limit=50, user=_user())
         assert result is not None
+        report_sync.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_success_with_profile_match_and_avatar(self, m):
+    async def test_success_with_profile_match_and_avatar(self, m, report_sync):
         """branch: profile found, avatar set on post."""
         post = {"employee_id": "emp1", "author_name": "default", "author_avatar": None}
         profiles = {"emp1": {"name": "Alice", "avatar": "http://x/a.png"}}
@@ -3098,6 +3105,7 @@ class TestMobileAiCirclePostsBranchCov:
         ):
             result = await m.mobile_ai_circle_posts(limit=50, user=_user())
         assert result is not None
+        report_sync.assert_awaited_once()
 
 
 class TestMobileAiCircleCreatePostSuccess:

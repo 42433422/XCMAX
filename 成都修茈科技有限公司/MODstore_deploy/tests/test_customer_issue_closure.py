@@ -18,6 +18,7 @@ from modstore_server.custom_delivery_incident_policy import apply_ticket_outcome
 from modstore_server.customer_delivery_receipts import canonical_sha256, record_receipt
 from modstore_server.customer_issue_delivery_contract import (
     execution_succeeded,
+    role_progress_state,
     team_succeeded,
 )
 
@@ -37,6 +38,8 @@ def test_fix_failure_or_missing_roles_blocks_team():
         {"status": "unknown"},
         {"status": "skipped"},
         {"ok": False},
+        {"ok": True, "accepted": True},
+        {"ok": True, "result": {"outputs": [{"ok": True, "accepted": True}]}},
         {"status": "success", "error": "failed"},
         {"ok": True, "results": [{"ok": False}]},
         {"status": "success", "result": {"outputs": [{"ok": False}]}},
@@ -44,6 +47,21 @@ def test_fix_failure_or_missing_roles_blocks_team():
 )
 def test_no_false_execution_success(value):
     assert not execution_succeeded(value)
+
+
+@pytest.mark.parametrize("status", "accepted approved signed assigned claimed dispatched".split())
+@pytest.mark.parametrize("nested", [False, True])
+def test_approval_and_assignment_are_not_execution(status, nested):
+    receipt = {"ok": True, "status": status}
+    result = {"ok": True, "result": {"outputs": [receipt]}} if nested else receipt
+    assert not execution_succeeded(result)
+    row = {"role": "fix", "ok": True, "status": "success" if nested else status}
+    if nested:
+        row["handler_outputs"] = {"outputs": [receipt]}
+    assert role_progress_state(row) in {"pending", "manual_review"}
+    assert not team_succeeded(
+        [{"role": r, "ok": True, "status": "success"} for r in ("scout", "verify")] + [row]
+    )
 
 
 def test_o7_error_and_lineage(monkeypatch):

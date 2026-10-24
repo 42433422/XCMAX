@@ -199,6 +199,8 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
         "XCAGI_MODS_DIR",
         "XCAGI_DESKTOP_MODE",
         "XCAGI_DESKTOP_DATA_DIR",
+        "XCAGI_USER_MEMORY_DIR",
+        "XCAGI_USER_MEMORY_JSON_PATH",
     ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("XCAGI_DATA_DIR", str(_PYTEST_RUNTIME_ROOT / "app-data"))

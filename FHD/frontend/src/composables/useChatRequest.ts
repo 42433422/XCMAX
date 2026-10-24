@@ -5,6 +5,7 @@ import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 export type ChatRequestScope = {
+  identity?: string
   sessionId: string
   messages: ChatMessage[]
   turnId?: string

@@ -125,3 +125,45 @@ def test_all_adapters_conform_to_protocol():
         assert cmd, f"{d['name']} 缺 check 命令"
         argv = shlex.split(cmd)
         assert len(argv) >= 1, f"{d['name']} check 命令解析为空"
+
+
+def test_mobile_tri_platform_accepts_exact_typed_router_composition():
+    from scripts.dev.ssot_plugins.mobile_tri_platform import _has_mobile_router_composition
+
+    assert _has_mobile_router_composition("_mobile_router.include_router(extension_router)")
+    assert _has_mobile_router_composition(
+        "cast(APIRouter, _mobile_router).include_router(extension_router)"
+    )
+
+
+def test_mobile_tri_platform_rejects_missing_or_misdirected_router_composition():
+    from scripts.dev.ssot_plugins.mobile_tri_platform import _has_mobile_router_composition
+
+    assert not _has_mobile_router_composition("extension_router = APIRouter()")
+    assert not _has_mobile_router_composition(
+        "cast(APIRouter, _mobile_router).include_router(other_router)"
+    )
+    assert not _has_mobile_router_composition(
+        "cast(OtherRouter, _mobile_router).include_router(extension_router)"
+    )
+
+
+def test_mobile_tri_platform_does_not_accept_composition_from_another_module(tmp_path, monkeypatch):
+    from scripts.dev.ssot_plugins import mobile_tri_platform
+
+    wrong_module = tmp_path / "wrong_module.py"
+    wrong_module.write_text(
+        "cast(APIRouter, _mobile_router).include_router(extension_router)\n",
+        encoding="utf-8",
+    )
+    declared_module = tmp_path / "mobile_api_extensions.py"
+    declared_module.write_text(
+        "extension_router = APIRouter()\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(mobile_tri_platform, "FASTAPI_MOBILE_EXT", declared_module)
+    errors: list[str] = []
+
+    mobile_tri_platform._check_unified_stack(errors)
+
+    assert any("mobile_api_extensions.py 缺少移动路由组合" in error for error in errors)

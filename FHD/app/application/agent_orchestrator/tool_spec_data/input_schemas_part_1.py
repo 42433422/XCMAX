@@ -10,6 +10,7 @@ SPECIAL_INPUT_SCHEMAS_PART_1: dict[tuple[str, str], dict[str, Any]] = {
         "required": ["entity"],
         "properties": {
             "entity": {"type": "string", "enum": _BUSINESS_ENTITIES},
+            "id": {"type": "integer", "minimum": 1},
             "keyword": {"type": "string"},
             "query": {"type": "string"},
         },

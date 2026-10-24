@@ -193,8 +193,8 @@ _BENCH_DEFAULT_MODELS: dict[str, str] = {
     "siliconflow": "deepseek-ai/DeepSeek-V3",
     "dashscope": "qwen-turbo",
     "moonshot": "moonshot-v1-8k",
-    # 小米网关型号以控制台为准；flash 在部分 token 计划不可用，基准默认与别名统一到 v2.5-pro
-    "xiaomi": "mimo-v2.5-pro",
+    # 与官方 /models 及旧型号兼容表一致。
+    "xiaomi": "mimo-v2.6-pro",
     # MiniMax OpenAI-compatible API current general agent model.
     "minimax": "MiniMax-M2.7",
     "doubao": "doubao-1-5-lite-32k-240828",

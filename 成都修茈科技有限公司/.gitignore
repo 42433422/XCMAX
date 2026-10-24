@@ -68,3 +68,28 @@ MODstore_deploy/modstore_server/data/*.jsonl
 
 # 本地嵌套克隆（若需入库请改为 submodule）
 eskill-prototype/
+
+# Public evidence aliases are reproducible build output; retain these unique originals.
+/capabilities/assets/evidence/*
+!/capabilities/assets/evidence/base-mac-client-99-final-state.png
+!/capabilities/assets/evidence/base-mac-client-M2-shell-running.png
+!/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-20260929-095942.log
+!/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-20260929-095942.webm
+!/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-artifact.json
+!/capabilities/assets/evidence/base-mac-client-base-mac-client-macos-identity.json
+!/capabilities/assets/evidence/dt-mac-control-00-login-form.png
+!/capabilities/assets/evidence/dt-mac-control-D1-mac-control-fleet.png
+!/capabilities/assets/evidence/dt-mac-control-D2-mac-control-create-list.png
+!/capabilities/assets/evidence/dt-mac-control-D3-mac-control-detail.png
+!/capabilities/assets/evidence/dt-mac-control-D4-mac-control-cancel.png
+!/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.log
+!/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.webm
+!/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-identity.json
+
+# Exact generated media aliases; sources and checksums live in config/media-aliases.json.
+/assets/optimized/ai-intent-03-product-exists.webp
+/assets/optimized/ai-intent-05-query-failure-visible.webp
+/corp-butler/ai-butler-female-avatar-v1.png
+/corp-butler/ai-butler-male-avatar-v1.jpg
+/corp-butler/brand-xc-logo.jpg
+/marketing-assets/xc-brand-film/assets/logo-source.png

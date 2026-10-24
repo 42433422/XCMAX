@@ -29,74 +29,88 @@ def build_digest_html(
     ``meeting_minutes_html``：员工大会摘要段落（可选；空则不显示该段）。
     ``surface_audit_html``：P-W/P-S/P-App 三端页面截图巡检段落（可选）。
     """
-    root = _facade()._repo_root()
-    now_utc = _facade().datetime.now(_facade().timezone.utc)
-    sf = _facade().get_session_factory()
-    since = _facade().datetime.now(_facade().timezone.utc) - _facade().timedelta(hours=24)
+    _digest = _facade()
+    root = _digest._repo_root()
+    now_utc = _digest.datetime.now(_digest.timezone.utc)
+    sf = _digest.get_session_factory()
+    since = _digest.datetime.now(_digest.timezone.utc) - _digest.timedelta(hours=24)
     with sf() as session:
-        emp_n = _facade().count_on_duty_employees()
+        emp_n = _digest.count_on_duty_employees()
         ops_n = (
-            session.query(_facade().func.count(_facade().OpsActionAuditLog.id))
-            .filter(_facade().OpsActionAuditLog.created_at >= since)
+            session.query(_digest.func.count(_digest.OpsActionAuditLog.id))
+            .filter(_digest.OpsActionAuditLog.created_at >= since)
             .scalar()
             or 0
         )
         event_rows = (
             session.query(
-                _facade().IncidentEvent.id,
-                _facade().IncidentEvent.event_type,
-                _facade().IncidentEvent.fingerprint,
+                _digest.IncidentEvent.id,
+                _digest.IncidentEvent.event_type,
+                _digest.IncidentEvent.fingerprint,
             )
-            .filter(_facade().IncidentEvent.created_at >= since)
+            .filter(_digest.IncidentEvent.created_at >= since)
             .all()
         )
         event_n, inc_n = summarize_digest_events(event_rows)
-        production_metric_filter = ~_facade().EmployeeExecutionMetric.task.like("[duty-burn-in:%")
+        production_metric_filter = ~_digest.EmployeeExecutionMetric.task.like("[duty-burn-in:%")
         met_ok = (
-            session.query(_facade().func.count(_facade().EmployeeExecutionMetric.id))
+            session.query(_digest.func.count(_digest.EmployeeExecutionMetric.id))
             .filter(
-                _facade().EmployeeExecutionMetric.created_at >= since,
-                _facade().EmployeeExecutionMetric.status == "success",
+                _digest.EmployeeExecutionMetric.created_at >= since,
+                _digest.EmployeeExecutionMetric.status == "success",
                 production_metric_filter,
             )
             .scalar()
             or 0
         )
         met_fail = (
-            session.query(_facade().func.count(_facade().EmployeeExecutionMetric.id))
+            session.query(_digest.func.count(_digest.EmployeeExecutionMetric.id))
             .filter(
-                _facade().EmployeeExecutionMetric.created_at >= since,
-                _facade().EmployeeExecutionMetric.status != "success",
+                _digest.EmployeeExecutionMetric.created_at >= since,
+                _digest.EmployeeExecutionMetric.status != "success",
                 production_metric_filter,
             )
             .scalar()
             or 0
         )
         ticket_status_rows = (
-            session.query(_facade().CustomerServiceTicket.status, _facade().func.count())
-            .filter(_facade().CustomerServiceTicket.updated_at >= since)
-            .group_by(_facade().CustomerServiceTicket.status)
+            session.query(_digest.CustomerServiceTicket.status, _digest.func.count())
+            .filter(_digest.CustomerServiceTicket.updated_at >= since)
+            .group_by(_digest.CustomerServiceTicket.status)
             .all()
         )
+        pending_tickets = session.query(_digest.CustomerServiceTicket).filter(
+            _digest.CustomerServiceTicket.status.in_(
+                ["open", "processing", "awaiting_customer", "reopened"]
+            )
+        )
+        pending_ticket_count = pending_tickets.count()
+        pending_ticket_rows = [
+            (row.id, row.title, row.status)
+            for row in pending_tickets.order_by(
+                _digest.CustomerServiceTicket.created_at.asc(),
+                _digest.CustomerServiceTicket.id.asc(),
+            ).limit(5)
+        ]
         pending_decision_count = (
-            session.query(_facade().func.count(_facade().StrategicDecision.id))
-            .filter(_facade().StrategicDecision.status == "proposed")
+            session.query(_digest.func.count(_digest.StrategicDecision.id))
+            .filter(_digest.StrategicDecision.status == "proposed")
             .scalar()
             or 0
         )
         pending_decisions = [
             f"{title}（{scope or '全局'}）"
             for title, scope in (
-                session.query(_facade().StrategicDecision.title, _facade().StrategicDecision.scope)
-                .filter(_facade().StrategicDecision.status == "proposed")
-                .order_by(_facade().StrategicDecision.created_at.desc())
+                session.query(_digest.StrategicDecision.title, _digest.StrategicDecision.scope)
+                .filter(_digest.StrategicDecision.status == "proposed")
+                .order_by(_digest.StrategicDecision.created_at.desc())
                 .limit(5)
                 .all()
             )
         ]
-    cursor_hits = _facade()._cursor_error_lines_count(root)
-    audit_hint_html = _facade()._audit_digest_hint_html()
-    kpi_cards_html = _facade()._digest_kpi_cards_html(
+    cursor_hits = _digest._cursor_error_lines_count(root)
+    audit_hint_html = _digest._audit_digest_hint_html()
+    kpi_cards_html = _digest._digest_kpi_cards_html(
         met_ok=int(met_ok),
         met_fail=int(met_fail),
         emp_n=int(emp_n),
@@ -104,38 +118,46 @@ def build_digest_html(
         inc_n=int(inc_n),
         event_n=int(event_n),
     )
-    consistency_block = _facade()._consistency_check_html(root)
+    consistency_block = _digest._consistency_check_html(root)
     product_updates = (
         [
             line.strip()
-            for line in _facade()
-            ._git_line(["log", "--since=24 hours ago", "--format=%h %s", "-n", "5"], root)
-            .splitlines()
+            for line in _digest._git_line(
+                ["log", "--since=24 hours ago", "--format=%s", "-n", "5"], root
+            ).splitlines()
             if line.strip()
         ]
-        if _facade()._git_worktree_root(root)
+        if _digest._git_worktree_root(root)
         else ["仓库未连接 Git，无法核实产品更新"]
     )
     ticket_status_labels = {
         "open": "待受理",
         "processing": "处理中",
-        "resolved": "已解决",
-        "closed": "已关闭",
+        "awaiting_customer": "待客户反馈",
+        "reopened": "重新处理",
+        "resolved": "标记已解决",
+        "closed": "标记已关闭",
+        "expired": "已过期",
         "rejected": "已拒绝",
     }
     ticket_outcomes = [
         f"{ticket_status_labels.get(str(status), str(status) or '未记录')}: {int(count)} 张"
         for status, count in ticket_status_rows
     ]
-    work_summary_html = _facade()._digest_product_work_summary_html(
+    work_summary_html = _digest._digest_product_work_summary_html(
         product_updates=product_updates,
         ticket_outcomes=ticket_outcomes,
         pending_decisions=pending_decisions,
         pending_decision_count=int(pending_decision_count),
+        pending_tickets=[
+            f"#{ticket_id} {(title or '未命名工单')[:100]}（{ticket_status_labels.get(status, status)}）"
+            for ticket_id, title, status in pending_ticket_rows
+        ],
+        pending_ticket_count=pending_ticket_count,
     )
     briefs_block = ""
     if (employee_briefs_html or "").strip():
-        briefs_block = f"""\n<div style="padding:6px 24px 16px">\n  {_facade()._section_title("AI 改进建议", icon="&#x1F4A1;", accent="#7c3aed")}\n  <div style="background:#faf9ff;border:1px solid #e9e2fb;border-radius:12px;padding:14px 16px">\n    {employee_briefs_html}\n  </div>\n</div>\n"""
+        briefs_block = f"""\n<div style="padding:6px 24px 16px">\n  {_digest._section_title("AI 改进建议", icon="&#x1F4A1;", accent="#7c3aed")}\n  <div style="background:#faf9ff;border:1px solid #e9e2fb;border-radius:12px;padding:14px 16px">\n    {employee_briefs_html}\n  </div>\n</div>\n"""
     _weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
     try:
         from zoneinfo import ZoneInfo
@@ -147,7 +169,7 @@ def build_digest_html(
         )
     except RECOVERABLE_ERRORS:
         cn_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
-    hero_html = _facade()._hero_overview_html(
+    hero_html = _digest._hero_overview_html(
         met_ok=int(met_ok),
         met_fail=int(met_fail),
         inc_n=int(inc_n),
@@ -162,17 +184,17 @@ def build_digest_html(
     audit_block = ""
     if audit_hint_html:
         audit_block = f'\n<div style="padding:10px 16px 0">\n  {audit_hint_html}\n</div>\n'
-    autonomy_html = _facade().autonomy_decisions_digest_html()
+    autonomy_html = _digest.autonomy_decisions_digest_html()
     autonomy_block = ""
     if autonomy_html:
         autonomy_block = f'\n<div style="padding:10px 16px 0">\n  {autonomy_html}\n</div>\n'
     meeting_block = ""
     if (meeting_minutes_html or "").strip():
-        meeting_block = f"""\n<div style="padding:6px 24px 16px">\n  {_facade()._section_title("员工大会摘要", icon="&#x1F465;", accent="#0891b2")}\n  {meeting_minutes_html}\n</div>\n"""
+        meeting_block = f"""\n<div style="padding:6px 24px 16px">\n  {_digest._section_title("员工大会摘要", icon="&#x1F465;", accent="#0891b2")}\n  {meeting_minutes_html}\n</div>\n"""
     surface_block = ""
     if (surface_audit_html or "").strip():
-        surface_block = f"""\n<div style="padding:6px 24px 16px">\n  {_facade()._section_title("三端页面截图巡检", icon="&#x1F4F7;", subtitle="P-W 网站 · P-S 软件 · P-App 移动", accent="#0d9488")}\n  {surface_audit_html}\n</div>\n"""
-    return _facade()._render_digest_document(
+        surface_block = f"""\n<div style="padding:6px 24px 16px">\n  {_digest._section_title("三端页面截图巡检", icon="&#x1F4F7;", subtitle="P-W 网站 · P-S 软件 · P-App 移动", accent="#0d9488")}\n  {surface_audit_html}\n</div>\n"""
+    return _digest._render_digest_document(
         cn_display=cn_display,
         hero_html=hero_html,
         kpi_cards_html=kpi_cards_html,

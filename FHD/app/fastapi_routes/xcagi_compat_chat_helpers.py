@@ -32,6 +32,7 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
 )
+from app.application.conversation import chat_stream_sse_events
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
@@ -46,7 +47,6 @@ from app.domain.context.session_context import (
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
-from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,17 @@ def _runtime_context_with_authenticated_actor(
     authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
     """
     context = dict(runtime_context or {})
-    # Remove caller-supplied tenant before session resolution so a missing or
-    # failed resolver cannot accidentally preserve a spoofed tenant id.
-    context.pop("tenant_id", None)
+    # Every identity field crosses an untrusted HTTP boundary here. A missing
+    # session must not leave a client claim available to downstream services.
+    for key in (
+        "tenant_id",
+        "actor_id",
+        "local_user_id",
+        "authenticated_local_user_id",
+        "authenticated_username",
+        "authenticated_display_name",
+    ):
+        context.pop(key, None)
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 
