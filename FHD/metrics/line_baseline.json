@@ -1,5 +1,5 @@
 {
-  "lines": 2370053,
+  "lines": 2370060,
   "updated": "2026-10-25",
-  "note": "restore named-customer spoken variants (一个/单位名称) for #2544 CI without ReDoS regex"
+  "note": "ruff format after named-customer intent restore for #2544"
 }

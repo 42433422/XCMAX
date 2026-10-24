@@ -104,7 +104,6 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
     return payload
 
 
-
 def _is_named_customer_create(value: str) -> bool:
     """Linear parse for 「新增[一个]客户 …」 / 「…，单位名称为 X」 (no ReDoS regex)."""
     stripped = value.strip()
@@ -132,6 +131,7 @@ def _is_named_customer_create(value: str) -> bool:
         if name_end >= 2:
             return True
     return False
+
 
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
