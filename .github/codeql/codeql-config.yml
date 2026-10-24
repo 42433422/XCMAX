@@ -9,3 +9,9 @@ paths-ignore:
   - "**/scripts/**"
   - "**/node_modules/**"
   - "**/dist/**"
+
+# Local data-extension pack: path-injection barriers for Retort / ETL sanitizers.
+# Without this, models under .github/codeql/extensions/ are never loaded.
+packs:
+  python:
+    - ./.github/codeql/extensions/xcmax-retort-path-model
