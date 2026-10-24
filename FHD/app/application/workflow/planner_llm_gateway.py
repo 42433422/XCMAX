@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from typing import Any, cast
+from typing import Any
 
-from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -44,62 +41,28 @@ def request_planner_completion(
     ai_service: Any,
     context: dict[str, Any] | None,
     messages: list[dict[str, str]],
-    http_client_factory: Callable[[], Any],
     temperature: float = 0.1,
     max_tokens: int = 1200,
 ) -> dict[str, Any] | None:
-    """Call the direct LLM when configured, otherwise reuse the authenticated market channel."""
-    api_key = str(getattr(ai_service, "api_key", "") or "")
-    if api_key:
-        api_url = getattr(ai_service, "api_url", "") or default_chat_completions_url()
-        model = getattr(ai_service, "model", "") or "deepseek-chat"
-        response = http_client_factory().post(
-            api_url,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            },
-        )
-        if response.status_code >= 400:
+    """Use the same request-scoped provider and model as nested Agent tools."""
+    from app.application.employee_runtime.agent_runner import _run_async
+    from app.infrastructure.llm.providers.registry import get_active_provider
+
+    try:
+        provider = get_active_provider(conversation_service=ai_service)
+        if provider is None:
             return None
-        payload = cast("dict[str, Any]", response.json())
-        _meter_planner_completion(payload, model=model)
-        return payload
-
-    session_id = str(
-        (context or {}).get("session_id") or (context or {}).get("conversation_id") or ""
-    ).strip()
-    if session_id:
-        try:
-            session_adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
-            if session_adapter.is_configured:
-                result = cast(
-                    "dict[str, Any] | None",
-                    session_adapter.chat_completion_sync(
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                    ),
-                )
-                _meter_planner_completion(result, model="")
-                return result
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("从 Session 构建规划市场适配器失败: %s", exc)
-
-    configured_adapter = getattr(ai_service, "modstore_adapter", None)
-    if configured_adapter is None or not getattr(configured_adapter, "is_configured", False):
+        result = _run_async(
+            provider.chat_completion(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("planner model request failed", exc_info=True)
         return None
-    logger.info("LLM 规划走修茈市场平台通道 (modstore_adapter)")
-    result = cast(
-        "dict[str, Any]",
-        configured_adapter.chat_completion_sync(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        ),
-    )
-    _meter_planner_completion(result, model="")
+    if not isinstance(result, dict):
+        return None
+    _meter_planner_completion(result, model=str(result.get("model") or ""))
     return result

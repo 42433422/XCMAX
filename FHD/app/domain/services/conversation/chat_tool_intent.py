@@ -25,19 +25,14 @@ _BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
     }
 )
 
-_UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = frozenset(
-    {
-        "新建",
-        "创建",
-        "写入",
-        "修改",
-        "更新",
-        "改为",
-        "改成",
-        "删除",
-        "移除",
-    }
-)
+_UNAMBIGUOUS_BUSINESS_DB_MUTATION_KEYWORDS = _BUSINESS_DB_MUTATION_KEYWORDS - {
+    "新增",
+    "添加",
+    "加入数据库",
+    "添加到数据库",
+    "保存到数据库",
+    "入库",
+}
 
 # 输入先去空白；只认否定词紧邻动作，避免「特别好用」「别的客户」假阳性。
 _NEGATED_ACTION_RE = re.compile(
@@ -99,7 +94,11 @@ def attach_explicit_tenant_id(payload: dict[str, Any], message: str) -> dict[str
 
 def looks_like_business_db_write(message: str, lower: str | None = None) -> bool:
     """Recognize explicit CRUD without requiring users to say database jargon."""
-    value = str(message or "")
+    value = re.sub(
+        r"(刚才|刚刚|之前|上次)(?:新增|添加|新建|创建|修改|更新|删除|移除)的",
+        r"\1的",
+        str(message or ""),
+    )
     # 原始 SQL 永不进入写规划：安全闸从执行层前移到规划层（审计 safety.raw_sql.reject_021）。
     if looks_like_raw_sql(value):
         return False
@@ -124,11 +123,11 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     # Explicitly named creates use CRUD; underspecified onboarding remains on its legacy route.
     stripped_value = value.strip()
     named_customer_create = re.match(
-        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:客户|购买单位)"
-        r"(?:\s*[:：]\s*|\s+)([^，,。；;\s]{2,})",
+        r"^(?:请)?(?:帮我)?\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)"
+        r"(?:\s*[:：]\s*|\s+|\s*[，,]\s*(?:单位名称|客户名称|购买单位名称)[为是:：]?\s*)([^，,。；;\s]{2,})",
         stripped_value,
     ) or re.match(
-        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
+        r"^(?:请|帮我|请帮我)\s*(?:新增|添加)\s*(?:一个)?(?:客户|购买单位)\s*[:：]?\s*([^，,。；;\s]{2,})",
         stripped_value,
     )
     if named_customer_create and not any(

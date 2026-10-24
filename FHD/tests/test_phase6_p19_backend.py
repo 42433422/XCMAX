@@ -1039,7 +1039,7 @@ class TestExcelVectorIngest:
         assert r.status_code == 200
         assert r.json()["success"] is True
 
-    def test_ingest_json_ingest_fails_returns_400(self):
+    def test_ingest_json_ingest_fails_returns_400(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.ingest_excel.return_value = {"success": False, "message": "bad file"}
         with patch(
@@ -1110,7 +1110,7 @@ class TestExcelVectorIngest:
 class TestExcelVectorQuery:
     """Cover ``query_excel_vector`` route."""
 
-    def test_query_success(self):
+    def test_query_success(self, local_tools):
         mock_svc = MagicMock()
         mock_svc.query.return_value = {"success": True, "hits": []}
         with patch(

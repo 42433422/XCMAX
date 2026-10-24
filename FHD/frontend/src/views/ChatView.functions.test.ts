@@ -172,7 +172,8 @@ vi.mock('@/utils/chatTaskLabels', () => ({
   formatTaskSourceLabel: () => '',
 }))
 
-vi.mock('@/utils/xcagiStorageKeys', () => ({
+vi.mock('@/utils/chatStorageKeys', async importOriginal => ({
+  ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   readAiSessionIdFromStorage: () => null,
   writeAiSessionIdToStorage: vi.fn(),
 }))

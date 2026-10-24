@@ -46,6 +46,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     _xcagi_compat_reply_payload,
     _xcagi_planner_stream_bytes_async,
 )
+from app.infrastructure.llm.client import llm_client_factory_scope
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
 from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
@@ -131,12 +132,6 @@ from app.application.planner_compat_service_part02 import (
 from app.application.planner_compat_service_part02 import (
     _use_ai_chat_mainline as _use_ai_chat_mainline,
 )
-from app.application.planner_compat_service_part02 import (
-    execute_compat_chat as _execute_compat_chat_part,
-)
-from app.application.planner_compat_service_part02 import (
-    execute_compat_chat_batch as _execute_compat_chat_batch_part,
-)
 from app.application.planner_compat_service_part03 import (
     compat_chat_stream_async as _compat_chat_stream_async_impl,
 )
@@ -146,7 +141,8 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
     """Run the extracted implementation against this facade's patchable globals."""
     token = set_facade_globals(globals())
     try:
-        return await _execute_compat_chat_impl(request, body)
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            return await _execute_compat_chat_impl(request, body)
     finally:
         reset_facade_globals(token)
 
@@ -157,7 +153,8 @@ async def execute_compat_chat_batch(
     """Run the extracted batch implementation against this facade instance."""
     token = set_facade_globals(globals())
     try:
-        return await _execute_compat_chat_batch_impl(request, body)
+        with llm_client_factory_scope(lambda: create_modstore_openai_client_from_request(request)):
+            return await _execute_compat_chat_batch_impl(request, body)
     finally:
         reset_facade_globals(token)
 

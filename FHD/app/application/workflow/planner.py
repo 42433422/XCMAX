@@ -8,8 +8,6 @@ import uuid
 from collections.abc import Callable
 from typing import Any, cast
 
-import httpx
-
 from app.application.workflow.types import normalize_workflow_risk
 from app.domain.services.conversation.chat_tool_intent import (
     attach_explicit_tenant_id as _attach_explicit_tenant_id,
@@ -30,19 +28,6 @@ from .planner_llm_gateway import request_planner_completion
 from .types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 logger = logging.getLogger(__name__)
-
-# 同步规划 LLM 复用 Client，减轻短时多次 DeepSeek 连接失败
-_planner_http_client: httpx.Client | None = None
-
-
-def close_planner_http_client() -> None:
-    """Close the reusable planner HTTP client during application shutdown."""
-    global _planner_http_client
-    client = _planner_http_client
-    _planner_http_client = None
-    if client is not None and not client.is_closed:
-        client.close()
-
 
 from app.application.workflow.planner_part01 import (
     _changes_for_business_db_message as _changes_for_business_db_message,
@@ -167,9 +152,6 @@ from app.application.workflow.planner_llmworkflowplanner_mixin02 import (
 )
 from app.application.workflow.planner_part03 import (
     _filter_tool_registry_for_profile as _filter_tool_registry_for_profile,
-)
-from app.application.workflow.planner_part03 import (
-    _get_planner_http_client as _get_planner_http_client,
 )
 from app.application.workflow.planner_part04 import (
     LLMWorkflowPlanner as LLMWorkflowPlanner,

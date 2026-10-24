@@ -277,12 +277,17 @@ class _LLMWorkflowPlannerPart02Mixin:
                 intent = "business_db_read"
                 entity = _facade()._infer_business_db_entity(message)
                 keyword = _facade()._extract_business_db_read_keyword(message, entity)
+                record_id = _facade().re.search(r"\bID\s*[:：]?\s*(\d+)", message, _facade().re.I)
                 nodes.append(
                     _facade().WorkflowNode(
                         node_id="read_business_db",
                         tool_id="business_db",
                         action="read",
-                        params={"entity": entity, "keyword": keyword},
+                        params={
+                            "entity": entity,
+                            "keyword": keyword,
+                            **({"id": int(record_id[1])} if record_id else {}),
+                        },
                         risk="low",
                         description="读取受控业务数据库",
                         idempotent=True,

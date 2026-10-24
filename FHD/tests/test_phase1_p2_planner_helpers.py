@@ -13,7 +13,6 @@ from starlette.requests import Request
 from app.application.workflow.planner import (
     LLMWorkflowPlanner,
     _filter_tool_registry_for_profile,
-    _get_planner_http_client,
     execute_tool,
     get_tool_registry,
 )
@@ -151,12 +150,6 @@ def test_execute_print_label_tool_missing_products() -> None:
     out = _execute_print_label_tool({})
     assert out["success"] is False
     assert out["error_code"] == "missing_products"
-
-
-def test_get_planner_http_client_singleton() -> None:
-    a = _get_planner_http_client()
-    b = _get_planner_http_client()
-    assert a is b
 
 
 # ---------------------------------------------------------------------------

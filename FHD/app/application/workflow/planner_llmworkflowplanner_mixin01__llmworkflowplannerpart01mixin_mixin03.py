@@ -22,9 +22,6 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
         invalid_plan: _facade().PlanGraph,
     ) -> _facade().PlanGraph | None:
         """CriticAgent：LLM 修复无效 PlanGraph（只重试一次）。"""
-        api_key = getattr(self._ai_service, "api_key", "") or ""
-        if not api_key:
-            return None
         try:
             tool_specs = []
             for tool_id, spec in tool_registry.items():
@@ -105,29 +102,15 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                 {"role": "system", "content": "你是工作流计划修复器，只输出可执行 JSON。"},
                 {"role": "user", "content": _facade().json.dumps(prompt, ensure_ascii=False)},
             ]
-            from app.infrastructure.llm.providers.credentials import default_chat_completions_url
-
-            api_url = getattr(self._ai_service, "api_url", "") or default_chat_completions_url()
-            response = (
-                _facade()
-                ._get_planner_http_client()
-                .post(
-                    api_url,
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": getattr(self._ai_service, "model", "") or "deepseek-chat",
-                        "messages": messages,
-                        "temperature": 0.2,
-                        "max_tokens": 1000,
-                    },
-                )
+            response_data = _facade().request_planner_completion(
+                ai_service=self._ai_service,
+                context=context,
+                messages=messages,
+                temperature=0.2,
+                max_tokens=1000,
             )
-            if response.status_code >= 400:
+            if response_data is None:
                 return None
-            response_data = response.json()
             raw = (
                 (response_data.get("choices") or [{}])[0]
                 .get("message", {})
@@ -255,7 +238,6 @@ class __LLMWorkflowPlannerPart01MixinPart03Mixin:
                 ai_service=self._ai_service,
                 context=context,
                 messages=messages,
-                http_client_factory=_facade()._get_planner_http_client,
             )
             if response_data is None:
                 return None

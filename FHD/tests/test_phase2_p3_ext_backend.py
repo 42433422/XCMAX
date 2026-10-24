@@ -88,21 +88,15 @@ def test_execute_products_tool_list() -> None:
 
 
 def test_execute_customers_tool_list() -> None:
-    with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"success": True, "data": []}
-        mock_client.return_value.get.return_value = resp
+    with patch("app.bootstrap.get_customer_app_service") as service:
+        service.return_value.get_all.return_value = {"success": True, "data": []}
         out = _execute_customers_tool({"action": "list"})
     assert out.get("success") is True or isinstance(out, dict)
 
 
 def test_execute_shipment_records_tool() -> None:
-    with patch("app.application.workflow.planner._get_planner_http_client") as mock_client:
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.json.return_value = {"success": True, "records": []}
-        mock_client.return_value.get.return_value = resp
+    with patch("app.bootstrap.get_shipment_app_service") as service:
+        service.return_value.get_shipment_records.return_value = []
         out = _execute_shipment_records_tool({"limit": 5})
     assert isinstance(out, dict)
 
