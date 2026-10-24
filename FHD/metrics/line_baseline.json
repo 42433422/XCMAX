@@ -1,5 +1,5 @@
 {
-  "lines": 2336434,
+  "lines": 2336751,
   "updated": "2026-10-24",
-  "note": "tickets #61/#65: business-language daily digest copy + admin MarketOverviewPanel/route/tests (no iframe)"
+  "note": "tickets #61/#65: business-language daily digest + admin MarketOverviewPanel/route/tests (no iframe); baseline was under-counted by ~317 vs actual tracked lines"
 }
