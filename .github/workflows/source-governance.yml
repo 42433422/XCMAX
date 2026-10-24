@@ -37,6 +37,11 @@ jobs:
       - name: Check broad exception ratchet
         run: python scripts/ci/check_broad_except_gate.py
 
+      - name: Structure gates (G1–G6 ratchet)
+        working-directory: FHD
+        run: |
+          python scripts/check_structure_gates.py --repo "${GITHUB_WORKSPACE}" --fail-on-warn
+
   sunbird-source-build:
     runs-on: ubuntu-latest
     steps:

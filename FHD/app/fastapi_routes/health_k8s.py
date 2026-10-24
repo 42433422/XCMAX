@@ -1,4 +1,8 @@
-"""K8s 风格健康检查（自归档 health 蓝图迁移，路径保持 /health/*）。"""
+"""K8s 风格健康检查（experimental — 非签约部署主路径；桌面健康走通用 health）。
+
+自归档 health 蓝图迁移，路径保持 /health/*。主从见 docs/architecture/DEPLOY_PATH_SSOT.md。
+"""
+
 
 from __future__ import annotations
 

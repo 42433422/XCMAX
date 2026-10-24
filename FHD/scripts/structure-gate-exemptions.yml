@@ -1,6 +1,19 @@
-# Structure / legacy retirement exemptions (phase-2)
+# Structure gate + legacy retirement exemptions (merged A+E)
+# Rules: each entry needs expires + owner; expired → treated as invalid.
 version: 1
 exemptions:
+  - id: EX-APP-FIXTURE-001
+    gate: G3.1
+    path: FHD/app/application/agent_orchestrator/tool_spec_data/test_fixtures.py
+    reason: 阶段二外迁前存量固件
+    expires: "2026-12-31"
+    owner: platform
+  - id: EX-APP-FIXTURE-002
+    gate: G3.1
+    path: FHD/app/application/agent_orchestrator/tool_contract_fixtures.py
+    reason: 阶段二外迁前存量固件
+    expires: "2026-12-31"
+    owner: platform
   - id: EX-LEGACY-MOUNTS-001
     gate: G4.3
     path: FHD/app/fastapi_routes/mounts/

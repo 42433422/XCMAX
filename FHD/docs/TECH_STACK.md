@@ -1,7 +1,8 @@
 # FHD (XCAGI) 技术栈
 
-> 本文件为 XCAGI v10.0 项目的权威技术栈说明。其它位置若出现不一致描述，以本文为准。
-> 更新日期：2026-05-26
+> 本文件为 XCAGI v10.0 项目的**栈选型**权威说明。其它位置若出现栈选型不一致，以本文为准。
+> **部署主从不以本文为准**：部署范式以 [`architecture/ADR-route-a-desktop-private.md`](architecture/ADR-route-a-desktop-private.md) 为准（路线 A：桌面私有化 + 现网单 CVM 滚动；Docker/K8s 为 experimental）。
+> 更新日期：2026-10-24
 
 ---
 
@@ -11,7 +12,7 @@
 |------|------|------|
 | 架构模式 | Neuro-DDD | 领域驱动设计 + AI 用例编排 |
 | 交付形态 | 桌面版 + Web 版 | Electron 桌面壳 + FastAPI 子进程 / Nginx + FastAPI |
-| 部署方式 | Docker / K8s / 桌面安装包 | 灵活部署选项 |
+| 部署方式 | **主路径**：桌面安装包 + 私有化节点 + 现网单 CVM 滚动；**experimental**：Docker / Compose / K8s | 主从见 ADR-route-a；禁止「多官方等权」表述 |
 
 ---
 
@@ -30,17 +31,19 @@
 
 | 场景 | 技术 | 说明 |
 |------|------|------|
-| Web 版 | PostgreSQL | 生产环境主数据库 |
-| 桌面版 | SQLite | 本地数据库，无需额外服务 |
+| **桌面 SKU / Mod 业务主库** | SQLite | **业务数据主路径**（ADR-route-a）；本地无需额外服务 |
+| **云 API 侧** | PostgreSQL | 账号、市场代理、会话/配置等云侧库；**非** Mod 业务主库 |
 | ORM | SQLAlchemy | 2.0+ 版本，类型安全 |
 | 迁移 | Alembic | 数据库版本管理 |
 
 ### 2.3 缓存与队列
 
-| Web 版 | 桌面版 | 用途 |
-|--------|--------|------|
+| 云 API 侧 | 桌面 SKU | 用途 |
+|-----------|----------|------|
 | Redis | 内存队列 | 缓存、会话、限流 |
 | Celery | 本地队列 | 异步任务处理 |
+
+> 桌面 SKU 不依赖 Redis/Celery 作为签约主路径运行时。
 
 ### 2.4 AI 与机器学习
 
@@ -91,13 +94,13 @@
 
 ### 4.1 部署与运维
 
-| 技术 | 用途 |
-|------|------|
-| Docker | 容器化 |
-| Docker Compose | 本地开发环境 |
-| Kubernetes | 生产编排 |
-| Nginx | 反向代理 |
-| GitHub Actions | CI/CD |
+| 技术 | 用途 | 主从 |
+|------|------|------|
+| 桌面安装包 + ops/CVM 滚动 | 签约交付与现网发布 | **主路径**（见 ADR-route-a、`ops/README.md`） |
+| Nginx | 反向代理（云 API / 站点） | 主路径配套 |
+| GitHub Actions | CI/CD | 主路径配套 |
+| Docker / Docker Compose | 容器化实验、部分云 API 镜像 | **experimental**（非签约主路径） |
+| Kubernetes | 可选云形态编排 | **experimental**（现网默认单机 CVM，非多节点写扩展） |
 
 ### 4.2 监控与日志
 
