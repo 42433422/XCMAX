@@ -139,10 +139,11 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
     stripped_value = value.strip()
     # Parse the small supported prefix grammar directly.  A negated character
     # class followed by a minimum-width repeat made the old regex backtrack on
-    # long, delimiter-free user input.
+    # long, delimiter-free user input.  Keep the spoken variants from
+    # e86ce2482 (「一个」+「单位名称为 …」) without reintroducing that regex.
     named_customer_create = False
     prefix_match = re.match(
-        r"^(?:请\s*)?(?:帮我\s*)?(?:新增|添加)\s*(?:客户|购买单位)",
+        r"^(?:请\s*)?(?:帮我\s*)?(?:新增|添加)\s*(?:一个\s*)?(?:客户|购买单位)",
         stripped_value,
     )
     if prefix_match:
@@ -153,7 +154,25 @@ def looks_like_business_db_write(message: str, lower: str | None = None) -> bool
             (index for index, char in enumerate(remainder) if char in "，,。；; \t\r\n"),
             len(remainder),
         )
-        named_customer_create = end >= 2
+        if end >= 2:
+            named_customer_create = True
+        else:
+            # 「新增一个客户，单位名称为 星光贸易」— linear marker + name token.
+            search_from = remainder.lstrip("，, \t")
+            for marker in ("购买单位名称", "客户名称", "单位名称"):
+                marker_at = search_from.find(marker)
+                if marker_at < 0:
+                    continue
+                after = search_from[marker_at + len(marker) :].lstrip()
+                if after.startswith(("为", "是", ":", "：")):
+                    after = after[1:].lstrip()
+                name_end = next(
+                    (index for index, char in enumerate(after) if char in "，,。；; \t\r\n"),
+                    len(after),
+                )
+                if name_end >= 2:
+                    named_customer_create = True
+                    break
     if named_customer_create and not any(
         marker in value for marker in ("产品", "商品", "订单", "报价", "发货", "不要", "别", "取消")
     ):
