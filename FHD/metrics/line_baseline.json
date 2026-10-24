@@ -1,5 +1,5 @@
 {
-  "lines": 2337227,
+  "lines": 2337241,
   "updated": "2026-10-24",
-  "note": "rebase onto #2613 tip"
+  "note": "G2.2 exclude compat shims"
 }
