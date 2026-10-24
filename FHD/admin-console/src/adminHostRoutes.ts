@@ -28,6 +28,12 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     meta: { title: '客户交付中心', requiresAdminAccount: true, hostAdmin: true },
   },
   {
+    path: '/market-overview',
+    name: 'market-overview',
+    component: () => import('./views/MarketOverviewView.vue'),
+    meta: { title: '市场总览', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
     path: '/founder-autonomy',
     name: 'founder-autonomy',
     component: () => import('./views/FounderAutonomyView.vue'),

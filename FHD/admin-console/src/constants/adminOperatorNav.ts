@@ -9,6 +9,7 @@ export const ADMIN_OPERATOR_MENU_ITEMS: CoreMenuCatalogItem[] = [
   { key: 'xcmax-admin', name: '服务器后台总览', iconClass: 'fa-dashboard' },
   { key: 'customer-service-tickets', name: '客服工单 · 客户反馈', iconClass: 'fa-comments' },
   { key: 'delivery-center', name: '客户交付中心', iconClass: 'fa-truck' },
+  { key: 'market-overview', name: '市场总览', iconClass: 'fa-line-chart' },
   { key: 'founder-autonomy', name: '创始人状态', iconClass: 'fa-compass' },
   { key: 'server-functions', name: '服务器功能模块', iconClass: 'fa-server' },
   { key: 'approval-hub', name: '自治审批中心', iconClass: 'fa-check-square-o' },

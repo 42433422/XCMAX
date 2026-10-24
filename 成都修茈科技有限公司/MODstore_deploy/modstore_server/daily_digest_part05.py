@@ -175,7 +175,7 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             surface_audit_html=surface_audit_html,
         )
         day = _facade().digest_calendar_day()
-        subject = f"MODstore 每日摘要 · {day}"
+        subject = f"MODstore 每日业务摘要 · {day}"
         any_delivered = False
         delivery_rows: _facade().List[_facade().Dict[str, _facade().Any]] = []
         attachments = [surface_ppt_path] if surface_ppt_path else []

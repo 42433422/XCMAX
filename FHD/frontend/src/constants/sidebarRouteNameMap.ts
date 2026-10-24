@@ -46,5 +46,7 @@ export const SIDEBAR_ROUTE_NAME_MAP: Record<string, string> = {
   '/automation-policy': 'xcmax-admin',
   '/duty-time-architecture': 'duty-time-architecture',
   '/duty-roster-graph': 'duty-roster-graph',
+  '/market-overview': 'market-overview',
+  '/delivery-center': 'delivery-center',
   '/server-functions': 'server-functions',
 }

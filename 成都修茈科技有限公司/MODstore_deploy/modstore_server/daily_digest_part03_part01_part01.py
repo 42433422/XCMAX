@@ -49,19 +49,19 @@ def _hero_overview_html(
     total = met_ok + met_fail
     rate = f"{met_ok * 100 // total}%" if total > 0 else "—"
     if met_fail > 0:
-        tone, verdict, dot = ("crit", "需要处理", "#dc2626")
+        tone, verdict, dot = ("crit", "有业务事项待处理", "#dc2626")
     elif inc_n > 0 or cursor_hits > 0:
-        tone, verdict, dot = ("warn", "需关注", "#d97706")
+        tone, verdict, dot = ("warn", "有业务事项需关注", "#d97706")
     else:
-        tone, verdict, dot = ("ok", "系统健康", "#16a34a")
+        tone, verdict, dot = ("ok", "业务运转平稳", "#16a34a")
     fg, bg, bd = _facade()._DIGEST_TONES[tone]
     notes = [f"任务成功率 {rate}", f"系统事件 {event_n} 条", f"{emp_n} 名编制在岗"]
     if inc_n:
         notes.append(f"待处理 {inc_n} 项")
     if ops_n:
-        notes.append(f"运维操作 {ops_n} 条")
+        notes.append(f"后台操作 {ops_n} 条")
     if cursor_hits > 0:
-        notes.append(f"代码助手 {cursor_hits} 行异常")
+        notes.append(f"开发助手告警 {cursor_hits} 条")
     summary_line = " · ".join(notes)
 
     def _stat(value: str, label: str, color: str = "#0f172a") -> str:
@@ -96,7 +96,7 @@ def _render_digest_document(
     briefs_block: str = "",
 ) -> str:
     """把各段 HTML 拼装为完整邮件文档（纯函数 · 无 DB，便于本地预览）。"""
-    return f"""\n<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;line-height:1.55;color:#0f172a;background:#eef2f8;padding:24px 12px">\n<div style="max-width:660px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaf0;box-shadow:0 12px 34px rgba(15,23,42,0.10)">\n\n<div style="height:4px;background:linear-gradient(90deg,#22d3ee,#2563eb,#4f46e5);background-color:#2563eb"></div>\n\n<div style="background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 55%,#2563eb 100%);background-color:#1d4ed8;padding:26px 24px 24px">\n  <table role="presentation" style="width:100%;border-collapse:collapse"><tr>\n    <td style="vertical-align:middle;white-space:nowrap">\n      <span style="display:inline-block;width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.30);color:#ffffff;font-size:21px;font-weight:800;text-align:center;line-height:40px;vertical-align:middle">M</span>\n      <span style="display:inline-block;vertical-align:middle;margin-left:13px">\n        <span style="display:block;font-size:21px;font-weight:800;color:#ffffff;letter-spacing:.6px;line-height:1.1">MODstore</span>\n        <span style="display:block;font-size:11px;color:#bfdbfe;letter-spacing:2px;margin-top:3px">AI 运营中枢</span>\n      </span>\n    </td>\n    <td style="vertical-align:middle;text-align:right">\n      <span style="display:inline-block;padding:5px 13px;border-radius:999px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.28);color:#e0f2fe;font-size:11px;font-weight:600">每日 08:00 CST</span>\n    </td>\n  </tr></table>\n  <div style="margin-top:20px;font-size:25px;font-weight:800;color:#ffffff;letter-spacing:.5px">每日运营摘要</div>\n  <div style="margin-top:6px;font-size:13px;color:#bfdbfe">{cn_display}</div>\n</div>\n\n{work_summary_html}\n{hero_html}\n\n{imap_block}\n{audit_block}\n{autonomy_block}\n\n<div style="padding:14px 16px 4px">\n  {kpi_cards_html}\n</div>\n\n{consistency_block}\n{tls_cert_section_html}\n{staged_section_html}\n{meeting_block}\n{surface_block}\n{briefs_block}\n\n<div style="border-top:1px solid #eef2f7;padding:18px 24px;text-align:center;background:#fafbfd">\n  <div style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.5px">MODstore · AI 运营中枢</div>\n  <div style="font-size:11px;color:#94a3b8;margin-top:5px">自动发送 · 每日 08:00 CST · 回复本邮件可进行审批操作</div>\n</div>\n\n</div>\n</div>\n"""
+    return f"""\n<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;line-height:1.55;color:#0f172a;background:#eef2f8;padding:24px 12px">\n<div style="max-width:660px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e6eaf0;box-shadow:0 12px 34px rgba(15,23,42,0.10)">\n\n<div style="height:4px;background:linear-gradient(90deg,#22d3ee,#2563eb,#4f46e5);background-color:#2563eb"></div>\n\n<div style="background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 55%,#2563eb 100%);background-color:#1d4ed8;padding:26px 24px 24px">\n  <table role="presentation" style="width:100%;border-collapse:collapse"><tr>\n    <td style="vertical-align:middle;white-space:nowrap">\n      <span style="display:inline-block;width:40px;height:40px;border-radius:11px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.30);color:#ffffff;font-size:21px;font-weight:800;text-align:center;line-height:40px;vertical-align:middle">M</span>\n      <span style="display:inline-block;vertical-align:middle;margin-left:13px">\n        <span style="display:block;font-size:21px;font-weight:800;color:#ffffff;letter-spacing:.6px;line-height:1.1">MODstore</span>\n        <span style="display:block;font-size:11px;color:#bfdbfe;letter-spacing:2px;margin-top:3px">业务更新日志</span>\n      </span>\n    </td>\n    <td style="vertical-align:middle;text-align:right">\n      <span style="display:inline-block;padding:5px 13px;border-radius:999px;background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.28);color:#e0f2fe;font-size:11px;font-weight:600">每日 08:00 CST</span>\n    </td>\n  </tr></table>\n  <div style="margin-top:20px;font-size:25px;font-weight:800;color:#ffffff;letter-spacing:.5px">每日业务摘要</div>\n  <div style="margin-top:6px;font-size:13px;color:#bfdbfe">{cn_display}</div>\n</div>\n\n{work_summary_html}\n{hero_html}\n\n{imap_block}\n{audit_block}\n{autonomy_block}\n\n<div style="padding:14px 16px 4px">\n  {kpi_cards_html}\n</div>\n\n{consistency_block}\n{tls_cert_section_html}\n{staged_section_html}\n{meeting_block}\n{surface_block}\n{briefs_block}\n\n<div style="border-top:1px solid #eef2f7;padding:18px 24px;text-align:center;background:#fafbfd">\n  <div style="font-size:12px;font-weight:700;color:#475569;letter-spacing:.5px">MODstore · 业务更新日志</div>\n  <div style="font-size:11px;color:#94a3b8;margin-top:5px">自动发送 · 每日 08:00 CST · 回复本邮件可进行审批操作</div>\n</div>\n\n</div>\n</div>\n"""
 
 
 def _persist_daily_digest_record(

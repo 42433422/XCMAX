@@ -1,5 +1,5 @@
 {
-  "lines": 2336396,
+  "lines": 2336728,
   "updated": "2026-10-24",
-  "note": "ticket #53: replace Full-Pipeline iframe-only automation policy with adminTheme AutomationPolicyPanel + six_line SSOT parser/tests/aliases; standalone /automation-policy redirects to overview tab (PR #2610)."
+  "note": "remove duplicate marketOverviewMetrics.ts (keep admin-console SSOT + aliases)"
 }
