@@ -1,5 +1,5 @@
 {
-  "lines": 2370037,
+  "lines": 2370053,
   "updated": "2026-10-25",
-  "note": "merge origin/main (#2625) into #2544; restore lazy compat credential scope"
+  "note": "restore named-customer spoken variants (一个/单位名称) for #2544 CI without ReDoS regex"
 }
