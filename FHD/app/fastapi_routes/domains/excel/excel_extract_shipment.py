@@ -79,7 +79,6 @@ def _temporary_upload_path(prefix: str, original_name: str, allowed_suffixes: se
     return str(Path(TEMP_EXCEL_DIR) / f"{prefix}_{uuid4().hex}{suffix}")
 
 
-
 def _build_etl_http():
     """Compose shipment_etl HTTP adapters (upload ownership + public errors)."""
     from datetime import datetime as _dt
@@ -123,7 +122,6 @@ def _build_etl_http():
         responses,
     )
     return imports, ocr, history, templates
-
 
 
 from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
