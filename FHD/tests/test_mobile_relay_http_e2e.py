@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,6 +17,8 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     from app.fastapi_routes import mobile_api_extensions as ext
     from app.services import mobile_relay_service as relay
 
+    notify = Mock()
+    monkeypatch.setattr("app.services.mobile_push.notify_user", notify)
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-http.db'}")
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -184,6 +187,10 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     )
     assert complete_response.status_code == 200
     assert complete_response.json()["data"]["task"]["status"] == "completed"
+    notify.assert_called_once()
+    assert notify.call_args.args == (7,)
+    assert notify.call_args.kwargs["data"]["task_id"] == task["task_id"]
+    assert notify.call_args.kwargs["data"]["task_status"] == "completed"
 
     status_response = client.get(f"/api/mobile/v1/relay/tasks/{task['task_id']}")
     assert status_response.status_code == 200

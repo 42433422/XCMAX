@@ -19,7 +19,6 @@ import pytest
 def test_workbench_sessions_survive_release_directory_change(tmp_path, monkeypatch):
     from modman.repo_config import RepoConfig
     from modstore_server import mod_scaffold_runner, workbench_api
-    from modstore_server import workbench_api_part01_part01_part01 as storage
 
     runtime = tmp_path / "runtime"
     monkeypatch.setenv("MODSTORE_RUNTIME_DIR", str(runtime))
@@ -28,7 +27,7 @@ def test_workbench_sessions_survive_release_directory_change(tmp_path, monkeypat
     monkeypatch.setattr(workbench_api, "WORKBENCH_SESSIONS", {})
     sid = "a" * 24
     for release in ("b" * 40, "c" * 40):
-        monkeypatch.setattr(storage, "__file__", str(tmp_path / release / "storage.py"))
+        monkeypatch.setattr(workbench_api, "__file__", str(tmp_path / release / "workbench_api.py"))
         assert workbench_api._workbench_session_store_dir() == runtime / "workbench_sessions"
         assert mod_scaffold_runner.modstore_library_path() == runtime / "library"
         if not workbench_api.WORKBENCH_SESSIONS:
@@ -43,7 +42,6 @@ def legacy_delivery_state(tmp_path, monkeypatch):
     from modstore_server import customer_delivery_sources as sources
     from modstore_server import customer_delivery_versioned as versioned
     from modstore_server import mod_scaffold_runner, workbench_api
-    from modstore_server import workbench_api_part01_part01_part01 as storage
     from tests.customer_delivery_fixture import signed_artifact
 
     sha, sid = "e" * 40, "d" * 24
@@ -124,7 +122,10 @@ def legacy_delivery_state(tmp_path, monkeypatch):
     monkeypatch.setattr(mod_scaffold_runner, "modstore_library_path", runner)
     monkeypatch.setattr(mod_scaffold_runner, "load_config", lambda: RepoConfig())
     current = tmp_path / "releases" / ("c" * 40)
-    for module in (storage, __import__("modstore_server.customer_delivery_build", fromlist=[""])):
+    for module in (
+        workbench_api,
+        __import__("modstore_server.customer_delivery_build", fromlist=[""]),
+    ):
         monkeypatch.setattr(
             module,
             "__file__",
@@ -610,7 +611,10 @@ def test_versioned_run_reaches_quality_gate_through_real_snapshot(
         stale_cache = {
             **snapshot,
             "status": "running",
-            "artifact": {"mod_id": versioned.MOD_ID, "validation_summary": {"probe_pending": True}},
+            "artifact": {
+                "mod_id": versioned.MOD_ID,
+                "validation_summary": {"probe_pending": True},
+            },
             "verified_artifacts": [],
         }
         workbench_api.WORKBENCH_SESSIONS[sid] = stale_cache

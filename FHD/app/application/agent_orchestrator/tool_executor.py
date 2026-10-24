@@ -189,6 +189,20 @@ def execute_with_tool_deadline(
             and result.get("outcome") != "unknown"
             and not result.get("reconciliation_required")
         ):
+            if (
+                step.tool_id == "business_db"
+                and step.action == "write"
+                and result.get("success") is True
+                and isinstance(step.params.get("payload"), dict)
+            ):
+                from app.services.tools_workflow_common import _remember_business_db_target
+
+                _remember_business_db_target(
+                    context,
+                    str(step.params.get("entity") or ""),
+                    str(step.params.get("operation") or "create"),
+                    result,
+                )
             return result
     return {
         "success": False,

@@ -29,7 +29,10 @@ def test_private_delivery_migration_uses_persistent_library_and_stopped_window()
     preflight = script.index("migrate_delivery_state true")
     stop = script.index("systemctl stop modstore.service modstore-scheduler.service", preflight)
     copied = script.index("migrate_delivery_state false", stop)
-    assert preflight < stop < copied < script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    promote = script.index('ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"')
+    final_verify = script.rindex("verify_fixed_release_approval", 0, stop)
+    assert preflight < final_verify < stop < copied < promote
+    assert "verify_fixed_release_approval" not in script[stop:promote]
     assert (
         'TARGET_SHA="$PREVIOUS_SHA" LIBRARY_DIR="$PREVIOUS_LIBRARY_DIR" write_service_units'
         in script
@@ -203,7 +206,12 @@ def test_immutable_release_is_exact_sha_atomic_and_rolls_back() -> None:
     assert 'MODSTORE_JWT_SECRET="$BUILD_JWT_SECRET"' in script
     assert 'MODSTORE_RUNTIME_DIR="$BUILD_ROOT/.runtime-build"' in script
     assert "MODSTORE_INSECURE_EMPTY_JWT" not in script
-    assert ".[web,knowledge,evolution-metrics]" in script
+    assert ".[web,knowledge,evolution-metrics,governance]" in script
+    assert '"$BUILD_ROOT/packages/retort_engine"' in script
+    assert '"$BUILD_ROOT/packages/xcagi_common"' in script
+    assert (
+        "retort-engine>=0.4.0,<0.5" in pyproject["project"]["optional-dependencies"]["governance"]
+    )
     assert "alembic>=1.16,<2" in pyproject["project"]["optional-dependencies"]["web"]
     assert "pandas>=2.0" in pyproject["project"]["optional-dependencies"]["evolution-metrics"]
     assert "import fastapi, pytest, pytest_cov, uvicorn, modstore_server.app" in script

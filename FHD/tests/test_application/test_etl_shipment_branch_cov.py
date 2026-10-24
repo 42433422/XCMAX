@@ -721,6 +721,11 @@ class TestShipmentCompatParser:
 # shipment_template_extractor.py
 # ---------------------------------------------------------------------------
 class TestShipmentTemplateExtractor:
+    @pytest.fixture(autouse=True)
+    def _configured_workspace(self, tmp_path, monkeypatch):
+        """Use an exact per-test root instead of trusting the system temp directory."""
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def _make_source(self, tmp_path, *, with_total=True):
         from openpyxl import Workbook
 

@@ -125,6 +125,7 @@ def configure_desktop_environment(
     os.environ.setdefault("XCAGI_WORKSPACE_ROOT", str(root))
     os.environ.setdefault("UPLOAD_FOLDER", str(dirs["uploads"]))
     os.environ.setdefault("EXCEL_VECTOR_DB_PATH", str(dirs["data"] / "excel_vectors.db"))
+    os.environ.setdefault("XCAGI_USER_MEMORY_DIR", str(root / "user_memory"))
     os.environ.setdefault("XCAGI_MODS_ROOT", str(dirs["mods"]))
     os.environ.setdefault("XCAGI_MODELS_DIR", str(dirs["models"]))
     os.environ.setdefault("XCAGI_LOG_DIR", str(dirs["logs"]))

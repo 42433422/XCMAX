@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib
+from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import (
     execution_requires_reconciliation,
@@ -127,8 +128,9 @@ def _wait_for_para_task(
     task_id: str,
     req: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
-    deadline = _facade().time.monotonic() + _facade()._wait_timeout_sec(req)
-    last_body: _facade().Any = {}
+    _handler = _facade()
+    deadline = _handler.time.monotonic() + _handler._wait_timeout_sec(req)
+    last_body: Any = {}
     terminal = {"completed", "merged", "failed", "merge_conflict"}
     from modstore_server.customer_issue_delivery_contract import para_task_succeeded
 
@@ -151,7 +153,7 @@ def _wait_for_para_task(
                     if isinstance(body, dict)
                     else resp.text[:500]
                 ),
-                "snapshot": _facade()._task_result_snapshot(body),
+                "snapshot": _handler._task_result_snapshot(body),
             }
         task = body.get("task") if isinstance(body, dict) else None
         if not isinstance(task, dict):
@@ -164,10 +166,10 @@ def _wait_for_para_task(
                 "requires_reconciliation": True,
                 "status": "para_task_identity_mismatch",
                 "error": "Para returned a different task identity",
-                "snapshot": _facade()._task_result_snapshot(body),
+                "snapshot": _handler._task_result_snapshot(body),
             }
         if status in terminal:
-            snapshot = _facade()._task_result_snapshot(body)
+            snapshot = _handler._task_result_snapshot(body)
             ok = para_task_succeeded(
                 task, task_id, req.get("required_subtask_ids"), req.get("planned_devices")
             )
@@ -175,27 +177,27 @@ def _wait_for_para_task(
             return {
                 "ok": ok,
                 "status": "para_task_incomplete" if incomplete else "para_task_" + status,
-                "error": "" if ok else _facade()._first_para_error(snapshot),
+                "error": "" if ok else _handler._first_para_error(snapshot),
                 "snapshot": snapshot,
             }
         # An existing task still needs one readback when completion waiting is disabled.
-        if not _facade()._coerce_bool(
-            req.get("wait_for_para"), _facade()._wait_for_completion_default()
+        if not _handler._coerce_bool(
+            req.get("wait_for_para"), _handler._wait_for_completion_default()
         ):
             return {
                 "ok": False,
                 "status": "para_task_accepted",
-                "snapshot": _facade()._task_result_snapshot(body),
+                "snapshot": _handler._task_result_snapshot(body),
             }
-        if _facade().time.monotonic() >= deadline:
-            snapshot = _facade()._task_result_snapshot(last_body)
+        if _handler.time.monotonic() >= deadline:
+            snapshot = _handler._task_result_snapshot(last_body)
             return {
                 "ok": False,
                 "status": "para_task_timeout",
-                "error": f"Para task {task_id} 未在 {_facade()._wait_timeout_sec(req):.0f}s 内完成",
+                "error": f"Para task {task_id} 未在 {_handler._wait_timeout_sec(req):.0f}s 内完成",
                 "snapshot": snapshot,
             }
-        _facade().time.sleep(_facade()._wait_poll_sec())
+        _handler.time.sleep(_handler._wait_poll_sec())
 
 
 def _req_with_excluded_tools(

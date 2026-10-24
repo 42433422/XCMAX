@@ -23,7 +23,7 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
     """
     signals: List[Dict[str, Any]] = []
     try:
-        from modstore_server.self_maintenance_loop_runner import _load_loop_memory
+        from modstore_server.maintenance_loop.store import _load_loop_memory
 
         memory = _load_loop_memory()
         if not isinstance(memory, dict):

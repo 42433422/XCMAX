@@ -1,7 +1,7 @@
 # SSOT 索引（唯一真相源登记表）
 
 > **本文件为 SSOT 索引的 SSOT**。任何文档声称 SSOT 必须在此登记。
-> 最后更新：2026-10-03
+> 最后更新：2026-10-24
 
 ## 登记规则
 
@@ -45,6 +45,7 @@
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |
 | database-storage（数据库存储） | [../config/database_storage_modes.yaml](../config/database_storage_modes.yaml) | SQLite/PG 存储模式唯一真相源：桌面 database.json profile、SQLite→PostgreSQL 同步计划、重启生效策略 |
 | customer-delivery（客户私有交付） | [../config/customer_delivery.json](../config/customer_delivery.json) | 客户品牌；`legacy_mod_id` vs `industry_mod_id`；**双轨** `modules` / `employees` 及轨道节点进度；生产员工只列定制包；太阳鸟「考勤表转化」= 模块轨节点 |
+| deploy-path（部署主从） | [architecture/DEPLOY_PATH_SSOT.md](architecture/DEPLOY_PATH_SSOT.md) | 主路径=桌面私有化+CVM 滚动；Docker/K8s/health_k8s=experimental；权威边界见 ADR-route-a |
 | process-flow（业务流程与交付流程） | [architecture/PROCESS_FLOW_SSOT.md](architecture/PROCESS_FLOW_SSOT.md) | 业务工作流程 + 对外交付流程唯一真相源；供 AGI 编排（Agent Orchestrator / Workflow Engine / NeuroBus 事件驱动）消费；含统一单据生命周期、自动化就绪度矩阵、断点行动项 |
 | utils-boundary（app/utils 职责域） | [devex/utils-domain-boundaries.md](devex/utils-domain-boundaries.md) | app/utils 47 模块职责域归类 + 目标包结构唯一真相源；excel/resilience 已迁移，其余待后续 Stage |
 | net-deletion（净删除棘轮） | [../metrics/line_baseline.json](../metrics/line_baseline.json) | 全仓「人工维护代码 + 文档」总行数基线，只减不增；口径与排除项见 scripts/dev/check_net_deletion.py |
@@ -83,6 +84,7 @@
 | neuro-bus-events | `FHD/config/neuro_bus_events.yaml` | blocking |
 | runtime-inventory | `FHD/config/service_topology.yaml` | blocking |
 | repository-ssot | `FHD/app/infrastructure/repositories/` | blocking |
+| structure-gates | `FHD/scripts/ci/check_structure_gates.py` | blocking |
 | dev-inventory | `FHD/scripts/dev/` | blocking |
 | dev-guards | `FHD/scripts/dev/` | blocking |
 | net-deletion | `FHD/metrics/line_baseline.json` | blocking |

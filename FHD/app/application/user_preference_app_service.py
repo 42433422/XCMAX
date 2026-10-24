@@ -17,7 +17,7 @@ class UserPreferenceApplicationService:
 
     def get_preference(self, user_id: str, key: str, default: Any = None) -> Any:
         try:
-            from app.utils.user_memory import get_user_memory_service
+            from app.services.user_memory_service import get_user_memory_service
 
             memory_service = get_user_memory_service()
             return memory_service.get_preference(user_id, key, default)
@@ -26,7 +26,7 @@ class UserPreferenceApplicationService:
 
     def set_preference(self, user_id: str, key: str, value: Any) -> bool:
         try:
-            from app.utils.user_memory import get_user_memory_service
+            from app.services.user_memory_service import get_user_memory_service
 
             memory_service = get_user_memory_service()
             memory_service.add_preference(user_id, key, value)
@@ -36,7 +36,7 @@ class UserPreferenceApplicationService:
 
     def get_all_preferences(self, user_id: str) -> dict[str, Any]:
         try:
-            from app.utils.user_memory import get_user_memory_service
+            from app.services.user_memory_service import get_user_memory_service
 
             memory_service = get_user_memory_service()
             return memory_service.get_all_preferences(user_id)

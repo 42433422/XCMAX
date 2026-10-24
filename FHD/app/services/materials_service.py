@@ -5,7 +5,7 @@
 import logging
 from typing import Any, cast
 
-from app.application.ports.material_repository import MaterialRepository
+from app.domain.product.ports import MaterialRepository
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 logger = logging.getLogger(__name__)

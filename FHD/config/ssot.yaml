@@ -347,6 +347,17 @@ domains:
     check: python scripts/dev/ssot_plugins/repository_ssot.py check
     sync: null
 
+  - name: structure-gates
+    owner: platform-governance
+    enabled: true
+    # Neuro-DDD 结构门禁 G1–G6（阶段二列车 A）：棘轮恶化即失败。
+    ssot: FHD/scripts/ci/check_structure_gates.py
+    derived:
+      - FHD/scripts/ci/structure-gate-exemptions.yml
+    mode: lint
+    check: python scripts/ci/check_structure_gates.py --repo ../ --fail-on-warn
+    sync: null
+
   - name: dev-inventory
     owner: devops
     enabled: true

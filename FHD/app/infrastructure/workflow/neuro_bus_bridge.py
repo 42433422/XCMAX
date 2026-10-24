@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.application.workflow.ports.events import StateUpdateEvent, StateUpdatePayload
+from app.application.workflow.ports import StateUpdateEvent, StateUpdatePayload
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.events.base import EventPriority, NeuroEvent
 from app.utils.operational_errors import BOUNDARY_ERRORS
