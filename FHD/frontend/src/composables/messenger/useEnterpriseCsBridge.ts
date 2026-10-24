@@ -11,6 +11,7 @@ type Options = {
   conversations: Ref<ImConversationSummary[]>
   activeConversationId: Ref<number | null>
   messages: Ref<ImMessage[]>
+  scrollEl: Ref<HTMLElement | null>
   playIncoming: (body: string) => void | Promise<void>
   scrollToBottom: () => void
 }
@@ -54,6 +55,8 @@ export function useEnterpriseCsBridge(options: Options) {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const thread = await fetchEnterpriseCsThread()
       if (!current()) return
+      const element = options.scrollEl.value
+      const follow = element && element.scrollHeight - element.clientHeight - element.scrollTop <= 48
       enterpriseCsReadError.value = ''
       options.messages.value = thread.messages
       const local = options.conversations.value.find((item) => item.id === localId)
@@ -69,7 +72,7 @@ export function useEnterpriseCsBridge(options: Options) {
       const incoming = thread.messages.find((item) => !oldIds.has(item.id) && !item.is_self)
       if (notifyIncoming && incoming) void options.playIncoming(incoming.body)
       await nextTick()
-      options.scrollToBottom()
+      if (follow && current() && options.scrollEl.value === element) options.scrollToBottom()
     } catch (error) {
       if (current()) enterpriseCsReadError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error

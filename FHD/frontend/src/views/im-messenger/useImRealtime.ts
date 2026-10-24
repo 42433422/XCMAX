@@ -8,6 +8,7 @@ export interface ImRealtimeDeps {
   conversations: Ref<ImConversationSummary[]>
   activeConversationId: Ref<number | null>
   messages: Ref<ImMessage[]>
+  scrollEl: Ref<HTMLElement | null>
   wsConnected: Ref<boolean>
   wsConnecting: Ref<boolean>
   scrollToBottom: () => void
@@ -24,6 +25,7 @@ export function useImRealtime(deps: ImRealtimeDeps) {
     conversations,
     activeConversationId,
     messages,
+    scrollEl,
     wsConnected,
     wsConnecting,
     scrollToBottom,
@@ -41,8 +43,12 @@ export function useImRealtime(deps: ImRealtimeDeps) {
     if (isCustomerEnterpriseCs(cid)) return
     if (cid === activeConversationId.value) {
       if (!messages.value.some((m) => m.id === msg.id)) {
+        const element = scrollEl.value
+        const follow = element && element.scrollHeight - element.clientHeight - element.scrollTop <= 48
         messages.value.push(msg)
-        void nextTick().then(scrollToBottom)
+        void nextTick().then(() => {
+          if (follow && activeConversationId.value === cid && scrollEl.value === element) scrollToBottom()
+        })
         void markImRead(cid, msg.id)
       }
     }

@@ -184,6 +184,7 @@ const {
   stopEnterpriseCsPolling,
 } = useEnterpriseCsBridge({
   enabled: isDesktopShell(),
+  scrollEl,
   conversations,
   activeConversationId,
   messages,
@@ -358,6 +359,7 @@ const imChatDomRefs = {
 // WebSocket / 实时消息处理拆分至 ./im-messenger/useImRealtime.ts（行为与拆分前一致）
 const { applyIncomingMessage, applyReadState, connectWs, disconnectWs } = useImRealtime({
   isCustomerEnterpriseCs,
+  scrollEl,
   localUserId,
   conversations,
   activeConversationId,

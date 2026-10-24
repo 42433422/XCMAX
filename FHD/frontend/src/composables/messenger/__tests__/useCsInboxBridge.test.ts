@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { effectScope, nextTick, ref } from 'vue'
 import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
+import { useEnterpriseCsBridge } from '../useEnterpriseCsBridge'
+import { useImRealtime } from '@/views/im-messenger/useImRealtime'
 import type { ImConversationSummary, ImMessage } from '@/api/im'
 
 const imMocks = vi.hoisted(() => ({
+  fetchEnterpriseCsThread: vi.fn(),
+  markImRead: vi.fn(async () => ({})),
   fetchCsInbox: vi.fn(),
   fetchCsInboxMessages: vi.fn(),
 }))
@@ -120,4 +124,63 @@ describe('useCsInboxBridge', () => {
     expect(imMocks.fetchCsInboxMessages).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
+})
+
+// WO-7dc7831514ca / account 29 / CI867efb701a61983ae7ad9f1f78ed1cc838a4ec8eeb8292d1.
+// Component-independent regression; the customer's reported jump to the top still needs runtime verification.
+describe('passive message updates preserve reading position', () => {
+  const scopes: ReturnType<typeof effectScope>[] = []
+  afterEach(() => { scopes.splice(0).forEach((scope) => scope.stop()); vi.clearAllMocks() })
+
+  function setup(enterprise: boolean, top: number) {
+    const scope = effectScope()
+    scopes.push(scope)
+    const element = document.createElement('div')
+    Object.defineProperties(element, { scrollHeight: { value: 1000 }, clientHeight: { value: 400 } })
+    element.scrollTop = top
+    const scrollEl = ref<HTMLElement | null>(element)
+    const messages = ref<ImMessage[]>([])
+    const activeConversationId = ref<number | null>(1)
+    const conversations = ref<ImConversationSummary[]>([{
+      id: 1, title: '客服', is_direct: true, last_message_at: null, last_message_preview: '', unread_count: 0,
+      is_enterprise_dedicated_cs: enterprise,
+    }])
+    const message: ImMessage = { id: 2, conversation_id: 1, sender_user_id: 2, body: '新消息', created_at: null }
+    imMocks.fetchEnterpriseCsThread.mockResolvedValue({ conversation: conversations.value[0], messages: [message] })
+    const scrollToBottom = vi.fn(() => { element.scrollTop = element.scrollHeight })
+    const common = { conversations, activeConversationId, messages, scrollEl, scrollToBottom, playIncoming: vi.fn() }
+    const bridge = scope.run(() => useEnterpriseCsBridge({ ...common, enabled: enterprise }))!
+    const realtime = useImRealtime({
+      ...common, localUserId: ref(29), wsConnected: ref(false), wsConnecting: ref(false),
+      loadConversations: vi.fn(async () => {}), isCustomerEnterpriseCs: () => enterprise,
+    })
+    return { element, messages, activeConversationId, scrollToBottom, update: async () => {
+      if (enterprise) await bridge.refreshEnterpriseCsThread()
+      else realtime.applyIncomingMessage(message, 1)
+      await nextTick()
+    } }
+  }
+
+  for (const enterprise of [false, true]) {
+    const source = enterprise ? '客服轮询' : '实时消息'
+    it(`${source}保留正在阅读的旧消息位置`, async () => {
+      const state = setup(enterprise, 120)
+      await state.update()
+      expect(state.messages.value).toHaveLength(1)
+      expect(state.element.scrollTop).toBe(120)
+      expect(state.scrollToBottom).not.toHaveBeenCalled()
+    })
+    it(`${source}继续跟随底部的新消息`, async () => {
+      const state = setup(enterprise, 600)
+      await state.update()
+      expect(state.scrollToBottom).toHaveBeenCalledOnce()
+    })
+    it(`${source}不把旧会话的延迟滚动带到新会话`, async () => {
+      const state = setup(enterprise, 600)
+      const pending = state.update()
+      state.activeConversationId.value = 3
+      await pending
+      expect(state.scrollToBottom).not.toHaveBeenCalled()
+    })
+  }
 })
