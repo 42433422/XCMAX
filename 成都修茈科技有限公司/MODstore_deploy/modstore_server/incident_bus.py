@@ -46,13 +46,9 @@ _NON_DISPATCH_EVENT_TYPES = frozenset(
     }
 )
 
-# Workflow lifecycle signals are not generic incidents.  They may still drive
-# an explicit ``EmployeeTriggerBinding`` (for example
-# ``employee.task.done:intent-analyst`` -> ``employee-planner`` or
-# ``ops.change_request.submitted`` -> ``change-request-auditor``), but must not
-# enter the generic incident team or task market.  Treating healthy task,
-# scheduler, backup, or planned change-request signals as incidents creates
-# recursive scout/fix/verify teams and disposable workspaces for normal work.
+# Lifecycle signals remain recorded and drive explicit EmployeeTriggerBinding
+# subscribers; healthy releases, tasks, backups and schedules must not create
+# generic scout/fix/verify teams or code-repair workspaces.
 _BINDING_ONLY_EVENT_TYPES = frozenset(
     {
         "backup.completed",
@@ -60,6 +56,7 @@ _BINDING_ONLY_EVENT_TYPES = frozenset(
         "backup.ondemand_completed",
         "employee.task.assigned",
         "employee.task.done",
+        "git.push",
         "ops.change_request.submitted",
         "schedule.tick",
     }

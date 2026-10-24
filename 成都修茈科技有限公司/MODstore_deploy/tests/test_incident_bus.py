@@ -268,6 +268,7 @@ def test_change_request_submission_only_dispatches_explicit_auditor(
     ("event_type", "payload"),
     [
         ("schedule.tick", {"kind": "digest_prewarm"}),
+        ("git.push", {"summary": "immutable release changed"}),
         ("backup.completed", {"trigger": "scheduled", "ok": True}),
         ("backup.ondemand_completed", {"trigger": "manual", "ok": True}),
         ("backup.dr_guard.cleared", {"reason": "probe_recovered"}),
@@ -294,6 +295,41 @@ def test_binding_only_workflow_signal_skips_generic_incident_fanout(
     assert publish(event_type, payload, source="workflow-signal-test")
     assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
     assert employee_calls == []
+
+
+def test_release_notification_preserves_context_subscription(admin_user, monkeypatch, generic_calls):
+    from modstore_server.incident_collectors import collect_git_push_event
+
+    previous, head = "a" * 40, "b" * 40
+    employee_id = "push-update-context-officer"
+    with models.get_session_factory()() as session:
+        session.add(models.EmployeeTriggerBinding(employee_id=employee_id, event_type="git.push"))
+        session.commit()
+    monkeypatch.setattr("modstore_server.incident_bus._catalog_employee_ids", lambda _: {employee_id})
+    monkeypatch.setattr("modstore_server.incident_collectors._LAST_GIT_HEAD_SHA", previous)
+    monkeypatch.setattr("modstore_server.incident_collectors._remember_deployed_head", lambda _: None)
+    monkeypatch.setattr(
+        "modstore_server.incident_collectors._release_manifest",
+        lambda: (None, {"git_sha": head, "release_id": "release-test"}),
+    )
+    calls = []
+    monkeypatch.setattr(
+        "modstore_server.incident_bus.execute_employee_task",
+        lambda eid, task, data, **kw: calls.append((eid, data)) or {"ok": True},
+    )
+
+    assert collect_git_push_event()
+    assert generic_calls == {"orchestrator": 0, "team": 0, "market": 0}
+    assert [eid for eid, _ in calls] == [employee_id]
+    context = calls[0][1]["update_context"]
+    assert context["commit_sha"] == head and context["rollback"] == f"git:{previous}"
+    with models.get_session_factory()() as session:
+        event = session.query(models.IncidentEvent).filter_by(event_type="git.push").one()
+        saved = json.loads(event.payload_json)
+        assert saved["head_sha"] == head and saved["prev_sha"] == previous
+        assert saved["update_context"] == context
+    assert not collect_git_push_event()
+    assert len(calls) == 1
 
 
 def test_reviewed_duty_binding_runs_after_generic_incident_team_claim(admin_user, monkeypatch):
