@@ -196,9 +196,10 @@ def test_stream_controls_and_business_writes_use_stateful_mainline(
     message, pending, use_app, source
 ):
     service = MagicMock()
-    service._pending_workflows = (
-        {"web_pro_session": {"agent_run_id": "original"}} if pending else {}
-    )
+    from app.services.conversation.context import scoped_conversation_user_id
+
+    owner_key = scoped_conversation_user_id("web_pro_session", {"local_user_id": 17})
+    service._pending_workflows = {owner_key: {"agent_run_id": "original"}} if pending else {}
     service.process_chat.return_value = {
         "success": True,
         "response": "已处理",

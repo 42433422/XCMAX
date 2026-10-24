@@ -23,7 +23,9 @@ _client_lock = threading.Lock()
 _mode: Literal["online", "offline"]
 _offline_model: str | None = None
 _openai_client: Any | None = None
-_scoped_client: ContextVar[tuple[Any, str] | None] = ContextVar("scoped_llm_client", default=None)
+_scoped_client: ContextVar[tuple[Any, str | None] | None] = ContextVar(
+    "scoped_llm_client", default=None
+)
 
 
 @contextmanager
@@ -34,6 +36,31 @@ def llm_client_scope(client: Any, model: str) -> Iterator[None]:
         yield
     finally:
         _scoped_client.reset(token)
+
+
+@contextmanager
+def llm_client_factory_scope(factory: Any) -> Iterator[None]:
+    """Bind credentials lazily so deterministic and approval-only paths need no LLM."""
+    token = _scoped_client.set((factory, None))
+    try:
+        yield
+    finally:
+        _scoped_client.reset(token)
+
+
+def _resolved_scoped_client() -> tuple[Any, str] | None:
+    scoped = _scoped_client.get()
+    if scoped is not None and scoped[1] is None:
+        client = scoped[0]()
+        from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
+
+        model = resolve_default_chat_model()
+        if getattr(client, "is_modstore_openai_compatible", False):
+            provider = str(client.default_provider or "").strip()
+            model = f"{provider}/{client.default_model}" if provider else str(client.default_model)
+        scoped = (client, model)
+        _scoped_client.set(scoped)
+    return cast("tuple[Any, str] | None", scoped)
 
 
 def _env_mode() -> Literal["online", "offline"] | None:
@@ -108,7 +135,7 @@ def _first_api_key() -> tuple[str, str | None]:
 
 
 def require_api_key() -> None:
-    if resolve_mode() == "offline":
+    if _scoped_client.get() is not None or resolve_mode() == "offline":
         return
     key, _ = _first_api_key()
     if not key:
@@ -122,6 +149,8 @@ def get_llm_client() -> Any | None:
 
     offline：返回 ``None``（由本地 Ollama 等路径处理，不强制云端客户端）。
     """
+    if scoped := _resolved_scoped_client():
+        return scoped[0]
     if resolve_mode() == "offline":
         return None
     require_api_key()
@@ -192,7 +221,7 @@ def get_offline_status() -> dict[str, Any]:
 
 
 def get_openai_compatible_client() -> Any:
-    if scoped := _scoped_client.get():
+    if scoped := _resolved_scoped_client():
         return scoped[0]
     cli = get_llm_client()
     if cli is None:
@@ -201,7 +230,7 @@ def get_openai_compatible_client() -> Any:
 
 
 def resolve_chat_model() -> str:
-    if scoped := _scoped_client.get():
+    if scoped := _resolved_scoped_client():
         return scoped[1]
     from app.infrastructure.llm.providers.credentials import resolve_default_chat_model
 
@@ -211,6 +240,7 @@ def resolve_chat_model() -> str:
 __all__ = [
     "resolve_mode",
     "llm_client_scope",
+    "llm_client_factory_scope",
     "set_mode",
     "require_api_key",
     "get_llm_client",

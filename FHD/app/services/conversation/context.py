@@ -9,6 +9,24 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def scoped_conversation_user_id(user_id: str, context: dict[str, Any] | None) -> str:
+    """Bind transient history and pending actions to the authenticated owner."""
+    ctx = context or {}
+    owner = ctx.get("local_user_id") or ctx.get("actor_id")
+    if not owner:
+        return user_id
+    import hashlib
+    import json
+
+    scope = [
+        str(ctx.get("tenant_id") or ""),
+        str(owner),
+        str(ctx.get("mod_id") or ctx.get("active_mod_id") or ""),
+        str(ctx.get("session_id") or ctx.get("conversation_id") or user_id),
+    ]
+    return "chat:" + hashlib.sha256(json.dumps(scope, default=str).encode()).hexdigest()
+
+
 @dataclass
 class ConversationContext:
     user_id: str

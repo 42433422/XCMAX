@@ -133,6 +133,8 @@ def _runtime_context_with_authenticated_actor(
     # Remove caller-supplied tenant before session resolution so a missing or
     # failed resolver cannot accidentally preserve a spoofed tenant id.
     context.pop("tenant_id", None)
+    context.pop("local_user_id", None)
+    context.pop("actor_id", None)
     try:
         from app.infrastructure.auth.dependencies import resolve_session_user
 

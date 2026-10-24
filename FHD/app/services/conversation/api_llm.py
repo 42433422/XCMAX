@@ -47,28 +47,6 @@ class ConversationLlmMixin:
             )
         return self._deepseek_async_client
 
-    def _ensure_modstore_from_session(self) -> None:
-        """Populate the MODstore adapter from the active signed-in session."""
-        try:
-            adapter = getattr(self, "modstore_adapter", None)
-            if adapter is not None and getattr(adapter, "auth_token", None):
-                return
-            session_id = getattr(self, "_active_session_id", None) or ""
-            if not session_id:
-                return
-            from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
-
-            adapter = ModstorePlatformAdapter.from_session(session_id=session_id)
-            if adapter is not None and getattr(adapter, "auth_token", None):
-                self.modstore_adapter = adapter
-                logger.info(
-                    "已从 session 自动配置修茈市场平台 Token（%s chars, url=%s）",
-                    len(adapter.auth_token),
-                    adapter.platform_url,
-                )
-        except RECOVERABLE_ERRORS as error:
-            logger.warning("从 session 配置市场适配器失败: %s", error)
-
     async def call_llm_api(
         self,
         messages: list[dict[str, str]],
@@ -79,7 +57,6 @@ class ConversationLlmMixin:
         """Call the active platform, direct, or legacy LLM provider."""
         started = time.perf_counter()
         try:
-            self._ensure_modstore_from_session()
             from app.infrastructure.llm.providers.registry import get_active_provider
 
             provider = get_active_provider(conversation_service=self)

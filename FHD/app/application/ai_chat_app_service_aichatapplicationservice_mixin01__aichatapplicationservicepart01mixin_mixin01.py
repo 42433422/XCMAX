@@ -81,6 +81,11 @@ class __AIChatApplicationServicePart01MixinPart01Mixin:
     ) -> dict[str, _facade().Any]:
         if not message:
             return {"success": False, "message": "消息内容不能为空"}
+        from app.services.conversation.context import scoped_conversation_user_id
+
+        context = dict(context or {})
+        context.setdefault("conversation_id", context.get("session_id") or user_id)
+        user_id = scoped_conversation_user_id(user_id, context)
         try:
             from app.neuro_bus.application_neuro_bridge import neuro_notify_chat_received
 

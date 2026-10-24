@@ -1,5 +1,6 @@
 import { readActiveExtensionModIdFromStorage, XCAGI_ACTIVE_EXTENSION_MOD_ID_KEY } from '@/utils/xcagiStorageKeys'
 import { resolveTenantStorageScopeFromRuntime, tenantScopedKeySegment } from '@/utils/tenantStorageScope'
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
 
 export const CHAT_MESSAGES_STORAGE_PREFIX = 'xcagi_chat_messages_'
 export const CHAT_SESSION_META_PREFIX = 'xcagi_chat_session_meta_'
@@ -16,23 +17,34 @@ export function readActiveModIdFromStorage(scope?: string): string {
 }
 
 function scopedSuffix(sessionId: string, modId: string, scope?: string): string {
-  const tenantPart = tenantScopedKeySegment(scope)
+  const tenantPart = tenantScopedKeySegment(scope || resolveChatStorageScope())
   const sid = String(sessionId || 'default')
   return modId ? `${tenantPart}mod:${modId}:${sid}` : `${tenantPart}${sid}`
 }
 
+export function resolveChatStorageScope(): string {
+  const identity = getRuntimeTenantStorageScopeInput()
+  const tenant = resolveTenantStorageScopeFromRuntime(true)
+  const owner = identity?.localUserId ?? identity?.marketUserId ?? identity?.marketUsername
+  return tenant.startsWith('tenant:') && owner != null && String(owner).trim()
+    ? `${tenant}:owner:${encodeURIComponent(String(owner))}` : tenant
+}
+
 export function buildChatMessagesKey(sessionId: string, modId?: string, scope?: string): string {
-  const mod = typeof modId === 'string' ? modId : readActiveModIdFromStorage(scope)
-  return `${CHAT_MESSAGES_STORAGE_PREFIX}${scopedSuffix(sessionId, mod, scope)}`
+  return buildChatScopedKey(CHAT_MESSAGES_STORAGE_PREFIX, sessionId, modId, scope)
 }
 
 export function buildChatSessionMetaKey(sessionId: string, modId?: string, scope?: string): string {
+  return buildChatScopedKey(CHAT_SESSION_META_PREFIX, sessionId, modId, scope)
+}
+
+export function buildChatScopedKey(prefix: string, sessionId: string, modId?: string, scope?: string): string {
   const mod = typeof modId === 'string' ? modId : readActiveModIdFromStorage(scope)
-  return `${CHAT_SESSION_META_PREFIX}${scopedSuffix(sessionId, mod, scope)}`
+  return `${prefix}${scopedSuffix(sessionId, mod, scope)}`
 }
 
 function stripTenantSegment(suffix: string, scope?: string): string | null {
-  const s = scope || resolveTenantStorageScopeFromRuntime()
+  const s = scope || resolveChatStorageScope()
   if (s === 'local') return suffix
   const needle = `${s}:`
   if (!suffix.startsWith(needle)) return null

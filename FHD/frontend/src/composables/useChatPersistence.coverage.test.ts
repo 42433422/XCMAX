@@ -1,18 +1,3 @@
-/**
- * Coverage ramp 测试：useChatPersistence
- *
- * 目标：覆盖 useChatPersistence.ts 中尚未被现有 useChatPersistence.test.ts 触达的
- *   - readPersistedTaskPanelState / persistTaskPanelState / clearPersistedTaskPanelState
- *   - toPlainText / isWelcomeMessage / toHistoryTimestamp
- *   - useChatHistoryPersistence（normalizeHistorySessions / readLocalMessagesBySession /
- *     readLocalSessionMeta / deriveLocalSessionTitle / buildLocalHistorySession /
- *     listLocalHistorySessions / mergeHistorySessions / clearLocalHistoryCache）
- *   - useChatTaskPanelPersistence（persistTaskPanelStateForSession /
- *     applyPersistedTaskPanelStateForSession）
- *
- * 铁律3：覆盖 happy path、空值/None、边界值、异常路径（JSON 解析错误、storage 不可用）。
- * 铁律4：仅 mock 外部边界（localStorage / sessionStorage / pinia store），被测 composable 真实调用。
- */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
@@ -50,7 +35,8 @@ const mockExtractSessionIdForActiveMod = vi.fn((prefix: string, key: string, _mo
   return rest || null
 })
 
-vi.mock('@/utils/chatStorageKeys', () => ({
+vi.mock('@/utils/chatStorageKeys', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/utils/chatStorageKeys')>(),
   CHAT_MESSAGES_STORAGE_PREFIX: 'xcagi_chat_messages_',
   CHAT_SESSION_META_PREFIX: 'xcagi_chat_session_meta_',
   buildChatMessagesKey: (...args: unknown[]) => mockBuildChatMessagesKey(...args),
@@ -132,7 +118,7 @@ describe('useChatPersistence — coverage ramp', () => {
     it('stores with empty key prefix when sessionKey is empty (no early return)', () => {
       // Source does not early-return on empty sessionKey; it just uses '' as the key
       persistExcelAnalysisContext('', { a: 1 })
-      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX)).toBe(JSON.stringify({ a: 1 }))
+      expect(sessionStorage.getItem(EXCEL_ANALYSIS_STORAGE_PREFIX + 'default')).toBe(JSON.stringify({ a: 1 }))
     })
 
     it('removes key when ctx is null', () => {

@@ -7,11 +7,27 @@ import {
 } from './chatStorageKeys'
 import { writeActiveExtensionModIdToStorage } from './xcagiStorageKeys'
 import { setTenantStorageScopeCache } from './tenantStorageScope'
+import { setRuntimeTenantStorageScopeInput } from './tenantStorageScopeRuntime'
+import { persistExcelAnalysisContext, readPersistedExcelAnalysisContext } from '@/composables/useChatPersistence'
 
 describe('chatStorageKeys tenant isolation', () => {
   beforeEach(() => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9 })
     setTenantStorageScopeCache('tenant:9')
     writeActiveExtensionModIdToStorage('taiyangniao-pro', 'tenant:9')
+  })
+
+  it('isolates the same session and Excel context between users within one tenant', () => {
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    const key = buildChatMessagesKey('same-session', 'm')
+    persistExcelAnalysisContext('same-session', { file_path: '/owner-a/test.xlsx' })
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
+    expect(buildChatMessagesKey('same-session', 'm')).not.toBe(key)
+    expect(extractSessionIdForActiveMod(CHAT_MESSAGES_STORAGE_PREFIX, key, 'm')).toBeNull()
+    expect(readPersistedExcelAnalysisContext('same-session')).toBeNull()
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 1 })
+    expect(readPersistedExcelAnalysisContext('same-session')).toEqual({ file_path: '/owner-a/test.xlsx' })
+    setRuntimeTenantStorageScopeInput(null)
   })
 
   it('embeds tenant and mod in chat message key', () => {

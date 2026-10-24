@@ -11,7 +11,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -478,58 +478,36 @@ class TestOrchestratorMainLinkWiring:
 
 
 class TestPlannerGatewayMetering:
-    def test_direct_key_path_meters(self, tmp_path):
+    @pytest.mark.parametrize("has_response", [True, False])
+    def test_common_provider_is_metered_only_on_completion(
+        self, tmp_path, monkeypatch, has_response
+    ):
         from app.application.workflow import planner_llm_gateway
+        from app.infrastructure.llm.providers import registry
 
-        ai_service = MagicMock()
-        ai_service.api_key = "sk-test"
-        ai_service.api_url = "http://llm.test/v1/chat/completions"
-        ai_service.model = "test-model"
-
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = {
+        payload = {
             "model": "test-model",
             "choices": [{"message": {"content": "plan"}}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20},
         }
-        http_client = MagicMock()
-        http_client.post.return_value = response
-
+        provider = MagicMock()
+        provider.chat_completion = AsyncMock(return_value=payload if has_response else None)
+        monkeypatch.setattr(registry, "get_active_provider", lambda **kwargs: provider)
         result = planner_llm_gateway.request_planner_completion(
-            ai_service=ai_service,
+            ai_service=object(),
             context={},
             messages=[{"role": "user", "content": "plan this"}],
-            http_client_factory=lambda: http_client,
+            http_client_factory=lambda: pytest.fail("Planner must use the shared provider"),
         )
-        assert result is not None
         entries = _read_ledger(tmp_path)
-        assert len(entries) == 1
-        assert entries[0]["source"] == "agent_planner"
-        assert entries[0]["model"] == "test-model"
-        assert entries[0]["total_tokens"] == 20
-
-    def test_failed_http_call_does_not_meter(self, tmp_path):
-        from app.application.workflow import planner_llm_gateway
-
-        ai_service = MagicMock()
-        ai_service.api_key = "sk-test"
-        ai_service.api_url = "http://llm.test/v1/chat/completions"
-        ai_service.model = "test-model"
-
-        response = MagicMock()
-        response.status_code = 500
-        http_client = MagicMock()
-        http_client.post.return_value = response
-
-        result = planner_llm_gateway.request_planner_completion(
-            ai_service=ai_service,
-            context={},
-            messages=[{"role": "user", "content": "plan this"}],
-            http_client_factory=lambda: http_client,
-        )
-        assert result is None
-        assert _read_ledger(tmp_path) == []
+        if has_response:
+            assert result == payload
+            assert len(entries) == 1
+            assert entries[0]["source"] == "agent_planner"
+            assert entries[0]["model"] == "test-model"
+            assert entries[0]["total_tokens"] == 20
+        else:
+            assert result is None and entries == []
 
 
 class TestEmployeeAgentLoopMetering:
