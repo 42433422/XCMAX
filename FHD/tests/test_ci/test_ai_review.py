@@ -328,8 +328,7 @@ class TestMatchRules:
         ]
         findings = review.match_high_risk_rules(hunks)
         assert not any(
-            finding.rule
-            in {"subprocess-shell-true", "eval", "exec", "pickle-loads"}
+            finding.rule in {"subprocess-shell-true", "eval", "exec", "pickle-loads"}
             for finding in findings
         )
 

@@ -1,5 +1,8 @@
 """Auto-merged part* modules (debt24)."""
 
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
+# isort: skip_file
+
 from __future__ import annotations
 
 import importlib

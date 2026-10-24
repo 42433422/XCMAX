@@ -1,5 +1,8 @@
 """Auto-merged part* modules (debt24)."""
 
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
+# isort: skip_file
+
 from __future__ import annotations
 
 import importlib
@@ -9,8 +12,6 @@ from modstore_server.api.service_auth import require_admin_user
 # --- from authoring_part01.py ---
 """Implementation extracted from the public facade module."""
 
-
-import importlib
 
 from modstore_server.api.service_auth import require_admin_user
 
@@ -363,13 +364,7 @@ def api_capture_mod_snapshot(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
 from modstore_server.api.service_auth import require_admin_user
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.authoring")
 
 
 @_facade().router.post("/api/mods/{mod_id}/snapshots/{snap_id}/restore")

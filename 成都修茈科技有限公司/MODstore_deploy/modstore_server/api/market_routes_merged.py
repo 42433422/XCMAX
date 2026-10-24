@@ -1,5 +1,8 @@
 """Auto-merged part* modules (debt24)."""
 
+# mypy: disable-error-code="valid-type, attr-defined, no-any-return"
+# isort: skip_file
+
 from __future__ import annotations
 
 import importlib
@@ -8,11 +11,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 # --- from market_routes_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _facade():
@@ -441,12 +439,6 @@ class PasswordChangeDTO(_facade().BaseModel):
 # --- from market_routes_part01_part01_part02.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
-
 
 @_facade().router.put("/auth/profile")
 def api_update_profile(
@@ -564,15 +556,6 @@ def api_admin_status(
 
 # --- from market_routes_part02_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
 
 
 @_facade().router.get("/wallet/balance")
@@ -943,12 +926,6 @@ def api_wallet_ai_preauthorize(
 
 # --- from market_routes_part02_part01_part02.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
 
 
 @_facade().router.post("/wallet/ai/settle")
@@ -1351,12 +1328,6 @@ def api_download_item(
 # --- from market_routes_part02_part01_part03.py ---
 """Implementation extracted from the public facade module."""
 
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
-
 
 @_facade().router.get("/my-store")
 def api_my_store(
@@ -1415,12 +1386,6 @@ def _upload_chunks_dir() -> _facade().Path:
 
 # --- from market_routes_part03_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-import importlib
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
 
 
 def _existing_child_file(parent: _facade().Path, name: str) -> _facade().Path | None:
@@ -1791,15 +1756,6 @@ def api_complete_upload(
 """Implementation extracted from the public facade module."""
 
 
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
-
-
 @_facade().router.delete("/admin/catalog/{item_id}")
 def api_admin_delete_catalog(
     item_id: int, user: _facade().User = _facade().Depends(_facade()._require_admin)
@@ -2051,15 +2007,6 @@ def api_admin_purge_all_mods(
 
 # --- from market_routes_part04.py ---
 """Implementation extracted from the public facade module."""
-
-
-import importlib
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
-
-
-def _facade():
-    return importlib.import_module("modstore_server.api.market_routes")
 
 
 @_facade().router.get("/admin/users")

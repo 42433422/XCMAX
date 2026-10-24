@@ -3,6 +3,7 @@
 These are NOT test fixtures. They seed ToolActionSpecV2.contract_samples
 (legacy field alias: test_fixtures) for tools that need explicit I/O examples.
 """
+
 from __future__ import annotations
 
 from typing import Any

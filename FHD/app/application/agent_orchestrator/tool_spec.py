@@ -55,7 +55,6 @@ class ToolActionSpecV2:
         """Compat alias for contract_samples (historical name)."""
         return self.contract_samples
 
-
     def to_dict(self) -> dict[str, Any]:
         return {
             "tool_id": self.tool_id,
