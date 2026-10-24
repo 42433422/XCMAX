@@ -1,6 +1,9 @@
 """Shipment writes, compensation and deduplication must describe the same state."""
 
+import os
+import struct
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -187,6 +190,179 @@ def test_batch_scan_rejects_a_file_symlink_outside_selected_directory(tmp_path, 
         "error_code": "unsafe_path",
         "files": [],
     }
+
+
+def test_batch_scan_uses_only_names_from_the_selected_directory(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    selected = workspace / "incoming"
+    selected.mkdir(parents=True)
+    (selected / "one.xlsx").write_bytes(b"synthetic")
+    (selected / "ignore.csv").write_bytes(b"synthetic")
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+    result = _scan(selected, "*.xlsx", workspace)
+
+    assert result.root == selected
+    assert result.paths == [selected / "one.xlsx"]
+
+
+def test_batch_scan_rejects_a_directory_symlink_outside_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    selected = workspace / "incoming-link"
+    outside = tmp_path / "private"
+    outside.mkdir(parents=True)
+    workspace.mkdir()
+    (outside / "private.xlsx").write_bytes(b"private fixture")
+    try:
+        selected.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        if os.name == "nt":
+            pytest.skip(f"Windows runner cannot create a test reparse point: {exc}")
+        raise
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+    result = _scan(selected, "*.xlsx", workspace)
+
+    assert result == {
+        "success": False,
+        "message": "非法目录",
+        "error_code": "unsafe_path",
+        "files": [],
+    }
+
+
+def test_batch_scan_keeps_enumeration_pinned_when_directory_path_is_swapped(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+    from app.application.shipment_etl import directory_listing
+
+    workspace = tmp_path / "workspace"
+    selected = workspace / "incoming"
+    outside = tmp_path / "private"
+    selected.mkdir(parents=True)
+    outside.mkdir()
+    (selected / "trusted.xlsx").write_bytes(b"trusted fixture")
+    (outside / "private.xlsx").write_bytes(b"private fixture")
+    moved = workspace / "moved-incoming"
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+    enumerated: list[str] = []
+
+    if os.name == "nt":
+        native_list = directory_listing._windows_directory_names
+
+        def swap_then_list(directory_fd):
+            _replace_with_directory_symlink(selected, moved, outside)
+            enumerated.extend(native_list(directory_fd))
+            return enumerated
+
+        monkeypatch.setattr(directory_listing, "_windows_directory_names", swap_then_list)
+    else:
+        native_list = directory_listing.os.listdir
+
+        def swap_then_list(directory_fd):
+            _replace_with_directory_symlink(selected, moved, outside)
+            enumerated.extend(native_list(directory_fd))
+            return enumerated
+
+        monkeypatch.setattr(directory_listing.os, "listdir", swap_then_list)
+        monkeypatch.setattr(
+            directory_listing.os,
+            "supports_fd",
+            set(directory_listing.os.supports_fd) | {swap_then_list},
+        )
+
+    try:
+        result = _scan(selected, "*.xlsx", workspace)
+        assert "trusted.xlsx" in enumerated
+        assert "private.xlsx" not in enumerated
+        assert not hasattr(result, "paths")
+        assert result["error_code"] == "unsafe_path"
+    finally:
+        if selected.is_symlink():
+            selected.unlink()
+        if moved.exists():
+            moved.rename(selected)
+
+
+def _replace_with_directory_symlink(selected: Path, moved: Path, outside: Path) -> None:
+    selected.rename(moved)
+    try:
+        selected.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        selected.unlink(missing_ok=True)
+        moved.rename(selected)
+        if os.name == "nt":
+            pytest.skip(f"Windows runner cannot create a test reparse point: {exc}")
+        raise
+
+
+def test_batch_scan_preserves_permission_errors(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    workspace = tmp_path / "workspace"
+    selected = workspace / "incoming"
+    selected.mkdir(parents=True)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+    def deny_listing(*args, **kwargs):
+        raise PermissionError("synthetic permission denial")
+
+    monkeypatch.setattr(security, "list_etl_directory_names", deny_listing)
+    with pytest.raises(PermissionError, match="synthetic permission denial"):
+        _scan(selected, "*.xlsx", workspace)
+
+
+def _windows_directory_record(name: str, *, next_offset: int = 0) -> bytearray:
+    name_bytes = name.encode("utf-16-le")
+    record = bytearray(104 + len(name_bytes))
+    struct.pack_into("<I", record, 0, next_offset)
+    struct.pack_into("<I", record, 60, len(name_bytes))
+    record[104:] = name_bytes
+    return record
+
+
+def test_batch_scan_windows_directory_page_parser_accepts_multiple_entries():
+    from app.application.shipment_etl.directory_listing import _parse_windows_directory_page
+
+    first_name = "trusted.xlsx"
+    first_bytes = first_name.encode("utf-16-le")
+    first_next = (104 + len(first_bytes) + 7) // 8 * 8
+    page = bytearray(first_next + 104 + len("second.xlsx".encode("utf-16-le")))
+    page[: 104 + len(first_bytes)] = _windows_directory_record(first_name, next_offset=first_next)
+    page[first_next:] = _windows_directory_record("second.xlsx")
+
+    assert _parse_windows_directory_page(bytes(page)) == [first_name, "second.xlsx"]
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ("short_header", "truncated Windows directory entry header"),
+        ("overlap", "invalid Windows directory entry offset"),
+        ("misaligned", "invalid Windows directory entry offset"),
+        ("past_page", "invalid Windows directory entry offset"),
+        ("odd_name", "invalid Windows directory entry filename length"),
+        ("past_page_name", "invalid Windows directory entry filename length"),
+    ],
+)
+def test_batch_scan_windows_directory_page_parser_rejects_bad_bounds(mutation, message):
+    from app.application.shipment_etl.directory_listing import _parse_windows_directory_page
+
+    page = _windows_directory_record("x.xlsx")
+    if mutation == "short_header":
+        page = page[:80]
+    elif mutation == "overlap":
+        struct.pack_into("<I", page, 0, 8)
+    elif mutation == "misaligned":
+        struct.pack_into("<I", page, 0, 105)
+    elif mutation == "past_page":
+        struct.pack_into("<I", page, 0, 4096)
+    elif mutation == "odd_name":
+        struct.pack_into("<I", page, 60, 3)
+    elif mutation == "past_page_name":
+        struct.pack_into("<I", page, 60, len(page))
+
+    with pytest.raises(OSError, match=message):
+        _parse_windows_directory_page(bytes(page))
 
 
 def test_failed_fingerprint_cleanup_does_not_claim_a_rollback_is_retryable(

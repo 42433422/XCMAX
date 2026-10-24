@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -388,6 +390,68 @@ def test_etl_input_opens_only_regular_files_beneath_the_trusted_root(tmp_path, m
     with pytest.raises(security.ShipmentEtlPathError):
         with security.open_etl_input_file(outside):
             pytest.fail("an outside file must not be opened")
+
+
+def test_etl_input_accepts_non_bmp_filename(tmp_path, monkeypatch):
+    from app.application import shipment_excel_etl_security as security
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    source = allowed / "客户😀扩展漢字.xlsx"
+    source.write_bytes(b"trusted workbook")
+    monkeypatch.setattr(security, "_trusted_base_roots", lambda: [allowed])
+    monkeypatch.delenv("WORKSPACE_ROOT", raising=False)
+
+    with security.open_etl_input_file(source) as stream:
+        assert stream.read() == b"trusted workbook"
+
+
+def test_etl_input_rejects_embedded_nul_component():
+    from app.application import shipment_excel_etl_security as security
+
+    with pytest.raises(security.ShipmentEtlPathError, match="invalid component"):
+        security._validated_path_component("input\x00.xlsx")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows UTF-16 component limit")
+def test_etl_input_windows_path_component_checks_utf16_length():
+    from app.application import shipment_excel_etl_security as security
+
+    assert security._validated_path_component("😀" * 127) == "😀" * 127
+    with pytest.raises(security.ShipmentEtlPathError, match="too long"):
+        security._validated_path_component("😀" * 128)
+
+
+def test_etl_input_rejects_fifo_without_waiting(tmp_path):
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("FIFO input is unavailable on this platform")
+
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    fifo = allowed / "blocked.xlsx"
+    os.mkfifo(fifo)
+    script = """
+import sys
+from app.application import shipment_excel_etl_security as security
+try:
+    with security.open_etl_input_file(sys.argv[1], workspace_root=sys.argv[2]):
+        raise SystemExit('FIFO unexpectedly opened as an ETL input')
+except security.ShipmentEtlPathError:
+    raise SystemExit(0)
+"""
+    environment = os.environ.copy()
+    environment["WORKSPACE_ROOT"] = str(allowed)
+
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(fifo), str(allowed)],
+        cwd=Path(__file__).resolve().parents[2],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=3,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
 
 
 def test_etl_input_rejects_a_leaf_symlink_swapped_after_resolution(tmp_path, monkeypatch):

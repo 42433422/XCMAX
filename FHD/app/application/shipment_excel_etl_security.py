@@ -111,6 +111,43 @@ def _windows_file_api():
     return ctypes, wintypes, kernel32, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock
 
 
+def list_etl_directory_names(
+    directory: str | Path,
+    *,
+    workspace_root: str | Path | None = None,
+) -> tuple[Path, list[str]]:
+    """List names while holding the canonical allowed directory itself open.
+
+    The returned paths still require point-of-use validation: this method pins
+    enumeration to one directory identity, while readers separately open each
+    selected file through ``open_etl_input_file``.
+    """
+    root = resolve_etl_path(directory, workspace_root=workspace_root, must_exist=True)
+    root_text = os.path.realpath(os.path.normpath(str(root)))
+    trusted_root = next(
+        (
+            Path(os.path.realpath(str(candidate)))
+            for candidate in etl_allowed_roots(workspace_root)
+            if _is_under_root(root_text, os.path.realpath(str(candidate)))
+        ),
+        None,
+    )
+    if trusted_root is None:
+        raise ShipmentEtlPathError("path not under allowed dirs")
+
+    canonical_root = Path(root_text)
+    directory_fd = _open_directory_under_root(
+        trusted_root, canonical_root, create=False, list_directory=True
+    )
+    try:
+        from .shipment_etl.directory_listing import list_directory_names
+
+        names = list_directory_names(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return canonical_root, names
+
+
 def _windows_os_error():
     import ctypes
 
@@ -157,14 +194,17 @@ def _windows_wrap_handle(handle: int, flags: int) -> int:
             os.close(descriptor)
 
 
-def _windows_open_anchor(anchor: str) -> int:
+def _windows_open_anchor(anchor: str, *, list_directory: bool = False) -> int:
     import msvcrt
     from ctypes import wintypes
 
     _, _, kernel32, *_ = _windows_file_api()
+    access = 0x20 | 0x80 | 0x100000  # TRAVERSE | READ_ATTRIBUTES | SYNCHRONIZE
+    if list_directory:
+        access |= 0x1  # FILE_LIST_DIRECTORY
     handle = kernel32.CreateFileW(
         anchor,
-        0x20 | 0x80 | 0x100000,
+        access,
         0x1 | 0x2 | 0x4,
         None,
         3,
@@ -196,6 +236,7 @@ def _windows_open_relative(
     create: bool,
     for_output: bool = False,
     for_input: bool = False,
+    list_directory: bool = False,
 ) -> int:
     """Open/create one child relative to a pinned directory handle."""
     import msvcrt
@@ -204,7 +245,12 @@ def _windows_open_relative(
     ctypes, wintypes, _, ntdll, UnicodeString, ObjectAttributes, IoStatusBlock = _windows_file_api()
     from_handle = msvcrt.get_osfhandle(parent_fd)  # type: ignore[attr-defined]
     name_buffer = ctypes.create_unicode_buffer(name)
-    name_bytes = len(name) * ctypes.sizeof(ctypes.c_wchar)
+    try:
+        name_bytes = len(name.encode("utf-16-le", errors="strict"))
+    except UnicodeEncodeError as exc:
+        raise ShipmentEtlPathError("path contains invalid Unicode") from exc
+    if name_bytes > 0xFFFC:
+        raise ShipmentEtlPathError("path component is too long")
     unicode_name = UnicodeString(
         name_bytes,
         name_bytes + ctypes.sizeof(ctypes.c_wchar),
@@ -230,6 +276,8 @@ def _windows_open_relative(
         fd_flags = os.O_WRONLY | _windows_binary_flag()
     elif directory:
         access = 0x80 | 0x20 | 0x100000  # READ_ATTRIBUTES | TRAVERSE | SYNCHRONIZE
+        if list_directory:
+            access |= 0x1  # FILE_LIST_DIRECTORY
         if create:
             access |= 0x2 | 0x4 | 0x40  # ADD_FILE | ADD_SUBDIRECTORY | DELETE_CHILD
         disposition = 3 if create else 1  # OPEN_IF / OPEN
@@ -428,6 +476,12 @@ def _validated_path_component(value: str) -> str:
     ):
         raise ShipmentEtlPathError("path contains an invalid component")
     if os.name == "nt":
+        try:
+            encoded_component = component.encode("utf-16-le", errors="strict")
+        except UnicodeEncodeError as exc:
+            raise ShipmentEtlPathError("path contains invalid Unicode") from exc
+        if len(encoded_component) > 510:
+            raise ShipmentEtlPathError("path component is too long")
         windows_device = component.split(".", 1)[0].upper()
         if (
             any(character in component for character in '<>:"|?*')
@@ -559,7 +613,13 @@ def _safe_under_roots(raw: str, roots: list[Path]) -> Path:
     raise ShipmentEtlPathError("path not under allowed dirs")
 
 
-def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> int:
+def _open_directory_under_root(
+    root: Path,
+    directory: Path,
+    *,
+    create: bool,
+    list_directory: bool = False,
+) -> int:
     """Open a managed directory by walking components without following links."""
     root = Path(os.path.realpath(str(root)))
     directory = Path(os.path.normpath(str(directory)))
@@ -572,14 +632,16 @@ def _open_directory_under_root(root: Path, directory: Path, *, create: bool) -> 
         raise ShipmentEtlPathError("path not under allowed dirs")
 
     if os.name == "nt":
-        fd = _windows_open_anchor(root.anchor)
+        components = (*root.parts[1:], *parts)
+        fd = _windows_open_anchor(root.anchor, list_directory=list_directory and not components)
         try:
-            for part in (*root.parts[1:], *parts):
+            for index, part in enumerate(components):
                 next_fd = _windows_open_relative(
                     fd,
                     _validated_path_component(part),
                     directory=True,
                     create=create,
+                    list_directory=list_directory and index == len(components) - 1,
                 )
                 os.close(fd)
                 fd = next_fd
@@ -728,7 +790,11 @@ def open_etl_input_file(
                 for_input=True,
             )
         else:
-            flags = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+            nonblocking = getattr(os, "O_NONBLOCK", 0)
+            if not nonblocking:
+                raise ShipmentEtlPathError("non-blocking input open is unavailable")
+            # Open FIFOs without waiting for a writer so fstat can reject them.
+            flags = os.O_RDONLY | os.O_NOFOLLOW | nonblocking | getattr(os, "O_CLOEXEC", 0)
             descriptor = os.open(name, flags, dir_fd=parent_fd)
             if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ShipmentEtlPathError("input is not a regular file")
