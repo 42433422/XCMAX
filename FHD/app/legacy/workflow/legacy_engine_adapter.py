@@ -18,13 +18,13 @@ from __future__ import annotations
 from typing import Any, cast
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.ports.runtime import (
+from app.application.workflow.ports import (
     Callback,
     PlanGraph,
     StateSchema,
+    ToolDispatcher,
     WorkflowRunResult,
 )
-from app.application.workflow.ports.tools import ToolDispatcher
 
 
 class LegacyEngineAdapter:

@@ -127,33 +127,200 @@ def _build_etl_http():
     return imports, ocr, history, templates
 
 
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
-    shipment_etl_batch_execute as shipment_etl_batch_execute,
+# --- shipment ETL HTTP handlers (formerly part01/part02; no dynamic facade) ---
+@router.post(
+    "/shipment-etl/preview",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
-    shipment_etl_batch_preview as shipment_etl_batch_preview,
+async def shipment_etl_preview(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
+):
+    from app.fastapi_routes.shipment_etl.ports import TemplateCapture
+
+    imports, *_rest = _build_etl_http()
+    return await imports.preview(
+        file,
+        file_path,
+        str(workspace_root or "").strip() or None,
+        _form_include_ledger(include_ledger),
+        TemplateCapture(
+            enabled=_form_truthy(save_as_template, False),
+            name=str(template_name or "").strip(),
+            scope=str(template_scope or "").strip(),
+        ),
+    )
+
+
+@router.post(
+    "/shipment-etl/execute",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
-    shipment_etl_execute as shipment_etl_execute,
+async def shipment_etl_execute(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    notes_json: str = Form(""),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+    idempotent: str = Form("1"),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
+    dry_run: str = Form("0"),
+    direct: str = Form("0"),
+    force_shipment_target: str = Form("0"),
+    save_as_template: str = Form("0"),
+    template_name: str = Form(""),
+    template_scope: str = Form(""),
+    _user: Any = Depends(require_identified_user),
+):
+    from app.fastapi_routes.shipment_etl.ports import TemplateCapture
+
+    imports, *_rest = _build_etl_http()
+    return await imports.execute(
+        file,
+        file_path,
+        str(workspace_root or "").strip() or None,
+        notes_json,
+        import_products=_form_truthy(import_products, True),
+        import_shipments=_form_truthy(import_shipments, True),
+        idempotent=_form_truthy(idempotent, True),
+        include_ledger=_form_include_ledger(include_ledger, default="0"),
+        confirm_ledger=_form_truthy(confirm_ledger, False),
+        dry_run=_form_truthy(dry_run, False),
+        direct=_form_truthy(direct, False),
+        force_shipment_target=_form_truthy(force_shipment_target, False),
+        template=TemplateCapture(
+            enabled=_form_truthy(save_as_template, False),
+            name=str(template_name or "").strip(),
+            scope=str(template_scope or "").strip(),
+        ),
+    )
+
+
+@router.post(
+    "/shipment-etl/ocr-preview",
+    dependencies=[Depends(require_tenant_etl_preview)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
-    shipment_etl_ocr_preview as shipment_etl_ocr_preview,
+async def shipment_etl_ocr_preview(
+    file: UploadFile | None = File(default=None),
+    file_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
+):
+    _imports, ocr, *_rest = _build_etl_http()
+    return await ocr.run(
+        file,
+        file_path,
+        str(workspace_root or "").strip() or None,
+        _form_include_ledger(include_ledger),
+    )
+
+
+@router.post(
+    "/shipment-etl/batch-preview",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part01 import (
-    shipment_etl_preview as shipment_etl_preview,
+async def shipment_etl_batch_preview(
+    directory: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
+):
+    imports, *_rest = _build_etl_http()
+    return imports.batch_preview(
+        directory,
+        str(workspace_root or "").strip() or None,
+        _form_include_ledger(include_ledger),
+    )
+
+
+@router.post(
+    "/shipment-etl/batch-execute",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
-    get_extract_log as get_extract_log,
+async def shipment_etl_batch_execute(
+    directory: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("0"),
+    confirm_ledger: str = Form("0"),
+    idempotent: str = Form("1"),
+    import_products: str = Form("1"),
+    import_shipments: str = Form("1"),
+    dry_run: str = Form("0"),
+    _user: Any = Depends(require_identified_user),
+):
+    imports, *_rest = _build_etl_http()
+    return imports.batch_execute(
+        directory,
+        str(workspace_root or "").strip() or None,
+        include_ledger=_form_include_ledger(include_ledger, default="0"),
+        confirm_ledger=_form_truthy(confirm_ledger, False),
+        idempotent=_form_truthy(idempotent, True),
+        import_products=_form_truthy(import_products, True),
+        import_shipments=_form_truthy(import_shipments, True),
+        dry_run=_form_truthy(dry_run, False),
+    )
+
+
+@router.post(
+    "/shipment-etl/generate-template",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
-    get_extract_logs as get_extract_logs,
+async def shipment_etl_generate_template(
+    kind: str = Form("delivery"),
+    output_path: str = Form(""),
+    unit_name: str = Form("闭环测试客户"),
+    _user: Any = Depends(require_identified_user),
+):
+    _i, _o, _h, templates = _build_etl_http()
+    return templates.generate(kind, output_path, unit_name)
+
+
+@router.post(
+    "/shipment-etl/regenerate",
+    dependencies=[Depends(require_legacy_shipment_etl_access)],
 )
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
-    get_preview as get_preview,
-)
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
-    shipment_etl_generate_template as shipment_etl_generate_template,
-)
-from app.fastapi_routes.domains.excel.excel_extract_shipment_part02 import (
-    shipment_etl_regenerate as shipment_etl_regenerate,
-)
+async def shipment_etl_regenerate(
+    file_path: str = Form(""),
+    output_path: str = Form(""),
+    workspace_root: str = Form(""),
+    include_ledger: str = Form("auto"),
+    _user: Any = Depends(require_identified_user),
+):
+    _i, _o, _h, templates = _build_etl_http()
+    return templates.regenerate(
+        file_path,
+        output_path,
+        str(workspace_root or "").strip() or None,
+        _form_include_ledger(include_ledger),
+    )
+
+
+@router.get("/logs")
+def get_extract_logs(
+    data_type: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=50),
+    offset: int = Query(default=0),
+):
+    _i, _o, history, _t = _build_etl_http()
+    return history.list(data_type, status, limit, offset)
+
+
+@router.get("/logs/{log_id}")
+def get_extract_log(log_id: int):
+    _i, _o, history, _t = _build_etl_http()
+    return history.detail(log_id)
+
+
+@router.get("/preview/{log_id}")
+def get_preview(log_id: int):
+    _i, _o, history, _t = _build_etl_http()
+    return history.detail(log_id, preview=True)

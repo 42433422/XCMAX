@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import httpx
 
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
 from app.services import get_ai_conversation_service

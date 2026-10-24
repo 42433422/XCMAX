@@ -1,5 +1,5 @@
 {
-  "lines": 2370073,
+  "lines": 2370555,
   "updated": "2026-10-25",
-  "note": "merge origin/main (#2626) into #2544 after market/etl isolation fixes"
+  "note": "架构债18-31 rebase onto hygiene#2627(f1fa12791)：ports/services归域+门禁G1-G9；行数相对合入后main重测"
 }

@@ -1,4 +1,4 @@
-"""Tests for app.domain.services.conversation.coordinator — UnifiedConversationCoordinator + SlotValidator."""
+"""Tests for app.domain.conversation.services.coordinator — UnifiedConversationCoordinator + SlotValidator."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.chat_tool_intent import tiered_confidence
-from app.domain.services.conversation.coordinator import (
+from app.domain.conversation.services.chat_tool_intent import tiered_confidence
+from app.domain.conversation.services.coordinator import (
     IntentResult,
     PendingIntent,
     ProcessingAction,
@@ -449,14 +449,14 @@ class TestNegationWriteGuard:
 
 class TestGetConversationCoordinator:
     def test_returns_instance(self):
-        with patch("app.domain.services.conversation.coordinator._coordinator", None):
+        with patch("app.domain.conversation.services.coordinator._coordinator", None):
             with patch(
-                "app.domain.services.conversation.coordinator.UnifiedConversationCoordinator"
+                "app.domain.conversation.services.coordinator.UnifiedConversationCoordinator"
             ) as MockCls:
                 mock_inst = MagicMock()
                 MockCls.return_value = mock_inst
                 # Reset module-level singleton
-                import app.domain.services.conversation.coordinator as mod
+                import app.domain.conversation.services.coordinator as mod
 
                 mod._coordinator = None
                 result = get_conversation_coordinator()

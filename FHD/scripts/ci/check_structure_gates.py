@@ -4,6 +4,7 @@
 Read-only scan of a local XCMAX checkout. Does NOT modify the repo.
 Wired into CI via source-governance (structure-gates job).
 Ratchet baseline breaches are ERROR (block worsening).
+G7/G8/G9 added for mechanical fragments, noisy basenames, app/domain ratio.
 
 Exit codes:
   0 — no errors (warnings may be printed)
@@ -25,24 +26,25 @@ from pathlib import Path
 
 # --- baselines (do not invent; keep in sync with 06-structure-gates.md) ---
 BASELINE = {
-    "mixin_total": 86,
-    "mixin_ge_20kb": 4,
-    "mixin_ge_15kb": 17,
-    # Raised on #2544: tech-debt remediation branch already carries more routes /
-    # legacy refs than the phase-1 train-A freeze on main; ratchet must not block
-    # CodeQL path-injection closeout. Counts measured 2026-10-24 Asia/Shanghai.
-    "routes_total": 307,
-    "routes_top_level": 162,
-    "legacy_prod_ref_files": 58,
-    "application_ports_py": 15,
-    "workflow_ports_py": 5,
+    # Tightened 2026-10-25 Asia/Shanghai (arch 18-31 train).
+    "mixin_total": 11,
+    "mixin_ge_20kb": 0,
+    "mixin_ge_15kb": 1,
+    "routes_total": 305,
+    "routes_top_level": 115,
+    "legacy_prod_ref_files": 54,
+    "application_ports_py": 1,
+    "workflow_ports_py": 1,
+    # G7: mechanical (part|mixin)\d+ filenames under FHD/app
+    "mechanical_fragments": 0,
+    # G8: duplicate basename count for noisy names outside mods/XCAGI (sum of counts)
+    "noisy_basename_files": 0,  # app tree: blueprints/parser/mapper/rules/mapping/build_xcemp/convert — expect 0
+    # G9 info: application/domain py ratio ceiling (warn if worse)
+    "app_domain_ratio_x100": 450,  # 4.50:1 — current ~4.25
 }
 
-# Stock fixtures allowed until phase-2 move (G3)
-EXEMPT_APP_FIXTURES = {
-    "FHD/app/application/agent_orchestrator/tool_spec_data/test_fixtures.py",
-    "FHD/app/application/agent_orchestrator/tool_contract_fixtures.py",
-}
+# G3: no stock fixtures under application after rename to examples/contract_samples
+EXEMPT_APP_FIXTURES: set[str] = set()
 
 KB = 1024
 GE_20KB = 20 * KB
@@ -292,6 +294,84 @@ def main() -> int:
         f"domain/<ctx>/ports.py count={len(domain_ctx_ports)} "
         "(target: grow in phase-2; baseline 0)"
     )
+
+    # --- G7 mechanical fragments (part|mixin digits) ---
+    frag_re = re.compile(r"(?:part|mixin)\d+", re.I)
+    frags = [
+        p
+        for p in app.rglob("*.py")
+        if p.is_file() and frag_re.search(p.name) and "__pycache__" not in p.parts
+    ]
+    infos.append(
+        f"mechanical fragments={len(frags)} "
+        f"(baseline {BASELINE['mechanical_fragments']})"
+    )
+    if len(frags) > BASELINE["mechanical_fragments"]:
+        errors.append(
+            f"G7: mechanical (part|mixin) digit files {len(frags)} > "
+            f"baseline {BASELINE['mechanical_fragments']}: "
+            + ", ".join(rel(repo, p) for p in frags[:8])
+        )
+
+    # --- G8 noisy duplicate basenames outside mods/XCAGI ---
+    noisy = {
+        "blueprints.py",
+        "parser.py",
+        "mapper.py",
+        "rules.py",
+        "mapping.py",
+        "build_xcemp.py",
+        "convert.py",
+    }
+    noisy_hits = []
+    for p in app.rglob("*.py"):
+        if not p.is_file() or "__pycache__" in p.parts:
+            continue
+        if "mods" in p.parts or "XCAGI" in p.parts:
+            continue
+        if p.name in noisy:
+            noisy_hits.append(p)
+    infos.append(
+        f"noisy basenames in app (excl mods)={len(noisy_hits)} "
+        f"(baseline {BASELINE['noisy_basename_files']})"
+    )
+    if len(noisy_hits) > BASELINE["noisy_basename_files"]:
+        errors.append(
+            f"G8: noisy basename files {len(noisy_hits)} > "
+            f"baseline {BASELINE['noisy_basename_files']}"
+        )
+
+    # --- G9 application/domain ratio ---
+    def _count_py(root: Path) -> int:
+        if not root.is_dir():
+            return 0
+        return sum(
+            1
+            for p in root.rglob("*.py")
+            if p.is_file() and "__pycache__" not in p.parts
+        )
+
+    n_app = _count_py(app / "application")
+    n_dom = _count_py(app / "domain")
+    ratio_x100 = int(round((n_app / max(n_dom, 1)) * 100))
+    infos.append(
+        f"application/domain py={n_app}/{n_dom} ratio={ratio_x100/100:.2f}:1 "
+        f"(ceiling {BASELINE['app_domain_ratio_x100']/100:.2f}:1)"
+    )
+    if ratio_x100 > BASELINE["app_domain_ratio_x100"]:
+        warns.append(
+            f"G9: application/domain ratio {ratio_x100/100:.2f}:1 > "
+            f"ceiling {BASELINE['app_domain_ratio_x100']/100:.2f}:1"
+        )
+
+    # domain/<ctx>/ports.py should not shrink below current train
+    domain_ctx_ports = (
+        list((app / "domain").glob("*/ports.py")) if (app / "domain").is_dir() else []
+    )
+    if len(domain_ctx_ports) < 7:
+        warns.append(
+            f"G5.3: domain/<ctx>/ports.py count {len(domain_ctx_ports)} < expected 7"
+        )
 
     # --- G6 docs ---
     for w in check_tech_stack_doc(repo):

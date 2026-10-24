@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.services.conversation.chat_tool_intent import (
+from app.domain.conversation.services.chat_tool_intent import (
     is_negated_action_request,
     looks_like_business_db_write,
     looks_like_explicit_workflow_tool_intent,
