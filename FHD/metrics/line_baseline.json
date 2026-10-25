@@ -1,5 +1,5 @@
 {
-  "lines": 2329744,
+  "lines": 2329754,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 红修18：跟进 tip 5e0482b1 facade _get_printer_service 行数；SSOT net-deletion"
+  "note": "debt19 #2631 CI 红修21：ruff format 展开 tip20 branch_cov2 路径改写的两测例（+10 行）；SSOT net-deletion"
 }
