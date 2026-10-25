@@ -32,14 +32,14 @@ def bridge(monkeypatch):
     # 让 /push 测试能拿到 admin token
     monkeypatch.setenv("MODSTORE_ADMIN_RECHARGE_TOKEN", "test-admin-token")
 
-    # The facade is split across cached ``*_partNN`` modules whose route
-    # decorators target the facade router at import time. Reload the whole
-    # family so a prior app-factory import cannot leave a fresh facade with an
-    # empty router.
+    # Facade + merged (debt24) register routes at import time via decorators.
+    # Reload both so a prior create_app import cannot leave a fresh facade with
+    # an empty router while merged stays cached and skips re-decoration.
     for module_name in list(os.sys.modules):
-        if module_name == "modstore_server.butler_qq_bridge" or module_name.startswith(
-            "modstore_server.butler_qq_bridge_part"
-        ):
+        if module_name in {
+            "modstore_server.butler_qq_bridge",
+            "modstore_server.butler_qq_bridge_merged",
+        } or module_name.startswith("modstore_server.butler_qq_bridge_part"):
             del os.sys.modules[module_name]
     mod = importlib.import_module("modstore_server.butler_qq_bridge")
     return mod

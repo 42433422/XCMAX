@@ -89,6 +89,9 @@ from modstore_server.para_delegate_handler_merged import (
     _attach_tool_fallback_meta as _attach_tool_fallback_meta,
     _attach_credential_grant as _attach_credential_grant,
     _independent_check_plan as _independent_check_plan,
+    prepare_dolt_ticket_payload as prepare_dolt_ticket_payload,
+    prepare_task_group as prepare_task_group,
+    PreparedTaskGroup as PreparedTaskGroup,
 )
 
 _PARA_GUEST_AUTH_CACHE: Dict[str, str] = {}

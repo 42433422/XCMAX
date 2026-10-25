@@ -1359,7 +1359,7 @@ def _post_para_api_once(
                 options=options,
                 grant=grant,
                 group=payload_group,
-                transform=prepare_dolt_ticket_payload,
+                transform=h.prepare_dolt_ticket_payload,
             )
             if payload_group.blocked is not None:
                 return payload_group.blocked

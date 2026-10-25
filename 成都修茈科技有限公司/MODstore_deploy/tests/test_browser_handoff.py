@@ -126,7 +126,7 @@ def test_expired_wrong_purpose_wrong_target_and_changed_credentials(database):
 
 def test_api_authentication_no_store_user_binding_and_csrf_first_visit(database, monkeypatch):
     monkeypatch.setenv("MODSTORE_DISABLE_CSRF", "0")
-    from modstore_server.api.app_factory_part01 import _include_router_without_method_conflicts
+    from modstore_server.api.app_factory import _include_router_without_method_conflicts
     from modstore_server.market_auth_api import router as market_auth_router
 
     app = FastAPI()

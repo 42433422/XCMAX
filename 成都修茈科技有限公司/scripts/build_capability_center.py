@@ -246,13 +246,18 @@ _EVIDENCE_INDEX: dict[str, dict] = {}
 
 
 def file_digest(rel: str) -> tuple[str, int] | None:
-    """仓库内文件的 SHA-256 与字节数（同一次构建内缓存）。"""
+    """仓库内或归档 MANIFEST 钉扎文件的 SHA-256 与字节数（同一次构建内缓存）。"""
     if rel not in _SHA_CACHE:
-        try:
-            raw = e(rel).read_bytes()
-        except OSError:
+        st = evidence_state(rel)
+        if not st["exists"] or not st.get("sha256") or st.get("size") is None:
             return None
-        _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+        local = st.get("path")
+        if local is not None and Path(local).is_file():
+            raw = Path(local).read_bytes()
+            _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+        else:
+            # Blob unmounted; committed archive MANIFEST verifies the pin.
+            _SHA_CACHE[rel] = (st["sha256"], int(st["size"]))
     return _SHA_CACHE[rel]
 
 
