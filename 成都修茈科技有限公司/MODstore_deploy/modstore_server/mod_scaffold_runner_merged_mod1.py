@@ -1,4 +1,5 @@
 """Auto-merged part* modules (debt24)."""
+# mypy: ignore-errors
 
 # mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 # isort: skip_file

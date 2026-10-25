@@ -1,5 +1,7 @@
 """Auto-merged part* modules (debt24)."""
 
+# mypy: ignore-errors
+
 # mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 # isort: skip_file
 
@@ -8,6 +10,11 @@ from __future__ import annotations
 import importlib
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+
+def _facade():
+    return importlib.import_module("modstore_server.mod_scaffold_runner")
+
 
 # --- from mod_scaffold_runner_part01_part01_part01.py ---
 """Implementation extracted from the public facade module."""

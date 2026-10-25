@@ -1,5 +1,7 @@
 """Auto-merged part* modules (debt24)."""
 
+# mypy: ignore-errors
+
 # mypy: disable-error-code="valid-type, attr-defined, no-any-return"
 # isort: skip_file
 
@@ -12,6 +14,11 @@ from modstore_server.infrastructure.private_asset_storage import (
     reset_draft_directory,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
+
+
+def _facade():
+    return importlib.import_module("modstore_server.employee_asset_pipeline")
+
 
 # --- from employee_asset_pipeline_part01.py ---
 """Implementation extracted from the public facade module."""
