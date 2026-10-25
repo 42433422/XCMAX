@@ -1,5 +1,5 @@
 {
-  "lines": 2329698,
+  "lines": 2329735,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 收口：补 application chat_business_safety 兼容 facade/shim（把 infrastructure 依赖移出 domain）、全历史再生能力中心/product_lines/public-site SSOT；净增约 +222 行属门禁收口必要产物，非功能膨胀"
+  "note": "debt19 #2631 CI 红修16：services/application 懒加载兼容 + agent_routes shim + kitten pickup；净增属门禁收口"
 }

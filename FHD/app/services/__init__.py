@@ -111,7 +111,10 @@ from app.infrastructure.skills import execute_skill, get_skill_registry
 
 
 def __getattr__(name: str):
-    """Expose migrated application modules through legacy service imports."""
+    """Expose migrated modules through legacy ``app.services`` imports (debt19)."""
+    import sys
+    from importlib import import_module
+
     if name == "UserMemoryService":
         from app.domain.shared_services.user_memory_service import UserMemoryService
 
@@ -124,13 +127,30 @@ def __getattr__(name: str):
         from app.application import private_mod_delivery_app
 
         return private_mod_delivery_app
-    if name == "kitten_ai_document":
-        from app.domain.shared_services import kitten_ai_document as mod
 
-        return mod
-    if name == "document_templates_service":
-        from app.domain.shared_services import document_templates_service as mod
-
+    # Explicit renames after debt19 splits / moves.
+    aliases = {
+        "work_order_ssot": "app.domain.shared_services.ssot",
+        "work_order_gate": "app.domain.shared_services.gate",
+    }
+    candidates = []
+    if name in aliases:
+        candidates.append(aliases[name])
+    candidates.extend(
+        (
+            f"app.domain.shared_services.{name}",
+            f"app.domain.app_pure.{name}",
+            f"app.application.{name}",
+            f"app.mod_sdk.{name}",
+        )
+    )
+    for target in candidates:
+        try:
+            mod = import_module(target)
+        except ModuleNotFoundError:
+            continue
+        sys.modules[f"{__name__}.{name}"] = mod
+        globals()[name] = mod
         return mod
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import pytest
-from app.fastapi_routes.domains.agent.agent_routes import router
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.requests import Request
@@ -28,6 +27,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
     set_task_execution_repository_for_tests,
 )
+from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 
 
