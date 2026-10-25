@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 BusinessOperation = Literal[
     "personnel_read",
@@ -240,19 +239,13 @@ def _connect_existing() -> sqlite3.Connection | None:
 
 
 def _authenticated_user_from_request(request: Any) -> Any | None:
+    """Resolve identity via application facade only (domain must not import infrastructure)."""
     from app.application import chat_business_safety as facade
 
     resolver = getattr(facade, "_authenticated_user_from_request", None)
     if callable(resolver) and resolver is not _authenticated_user_from_request:
         return resolver(request)
-    if request is None:
-        return None
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
-
-        return resolve_session_user(request)
-    except RECOVERABLE_ERRORS:  # noqa: BLE001 - identity resolution must fail closed
-        return None
+    return None
 
 
 def _resolve_actor_identity(

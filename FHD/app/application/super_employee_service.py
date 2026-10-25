@@ -59,16 +59,6 @@ from .super_employee.messages import MessageSynchronizer
 from .super_employee.output import CliOutput
 from .super_employee.para import ParaClient
 from .super_employee.policy import EmployeePolicy
-from .super_employee.protocols import (
-    CliPorts,
-    ConversationPorts,
-    DevelopmentPorts,
-    ExecutionContext,
-    MessageSyncPorts,
-    ParaPorts,
-    WorkspacePorts,
-    WorktreePorts,
-)
 from .super_employee.profiles import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -80,6 +70,16 @@ from .super_employee.profiles import _claude_cli_command as _claude_cli_command
 from .super_employee.profiles import _codex_cli_command as _codex_cli_command
 from .super_employee.profiles import _cursor_cli_command as _cursor_cli_command
 from .super_employee.profiles import _trae_cli_command as _trae_cli_command
+from .super_employee.protocols import (
+    CliPorts,
+    ConversationPorts,
+    DevelopmentPorts,
+    ExecutionContext,
+    MessageSyncPorts,
+    ParaPorts,
+    WorkspacePorts,
+    WorktreePorts,
+)
 
 logger = logging.getLogger(__name__)
 

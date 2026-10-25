@@ -200,16 +200,18 @@ class TestJitCreateLocalUserForEnterprise:
 
 class TestAttachSessionCookie:
     def test_with_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
         from fastapi.responses import JSONResponse
+
+        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
         result = _attach_session_cookie(response, "test-session-id")
         assert isinstance(result, JSONResponse)
 
     def test_with_none_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
         from fastapi.responses import JSONResponse
+
+        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
         result = _attach_session_cookie(response, None)

@@ -41,11 +41,11 @@ from app.application.claude_super_employee_service import (
 from app.application.codex_super_employee_service import (
     CodexSuperEmployeeService as CodexSuperEmployeeService,
 )
-from app.application.mobile_extensions import protocols as contracts
 from app.application.cursor_super_employee_service import (
     CursorSuperEmployeeService as CursorSuperEmployeeService,
 )
 from app.application.facades.mobile_relay_facade import MobileRelayService as MobileRelayService
+from app.application.mobile_extensions import protocols as contracts
 from app.application.trae_super_employee_service import (
     TraeSuperEmployeeService as TraeSuperEmployeeService,
 )
