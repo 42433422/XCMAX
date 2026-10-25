@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from .models import (
     PipelineBody,
 )
-from .ports import CrmServices, Payload, PipelineRepository
+from .customer_service_ports import CrmServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

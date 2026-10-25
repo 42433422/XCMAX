@@ -16,7 +16,7 @@ from .delivery import DeliveryHandlers
 from .intake import IntakeHandlers
 from .messaging import MessagingHandlers
 from .pipeline import PipelineHandlers
-from .ports import (
+from .customer_service_ports import (
     ChangesServices,
     ContractsServices,
     CrmServices,

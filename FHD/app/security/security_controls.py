@@ -12,7 +12,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterable
+from typing import Any, Iterable
 
 from app.security.authz_policy import Principal, require_any_role
 from app.security.csrf_protect import mint_csrf, verify_csrf
@@ -108,7 +108,7 @@ def looks_like_ip(value: str) -> bool:
     if not value:
         return False
     try:
-        ipaddress.ip_address(value.split("%")[0])
+        ipaddress.ip_address(value.split("%", maxsplit=1)[0])
         return True
     except ValueError:
         return False

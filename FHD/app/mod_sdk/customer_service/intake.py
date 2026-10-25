@@ -14,7 +14,7 @@ from .models import (
     LandingFunnelSyncBody,
     PipelineBody,
 )
-from .ports import Employee, Environment, IntakeServices, Payload, PipelineRepository
+from .customer_service_ports import Employee, Environment, IntakeServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

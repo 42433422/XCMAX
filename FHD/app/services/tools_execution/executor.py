@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.services.tools_execution.context import _hdr, _j
 from app.services.tools_execution.order_parser import _parse_order_text
 from app.services.tools_execution.registry import (
@@ -11,6 +9,8 @@ from app.services.tools_execution.registry import (
     _validate_required_params,
     get_workflow_tool_registry,
 )
+from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

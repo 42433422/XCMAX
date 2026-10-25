@@ -9,7 +9,7 @@ from .models import (
     DeliveryPlanBody,
     PipelineBody,
 )
-from .ports import DeliveryServices, Environment, Payload, PipelineRepository
+from .customer_service_ports import DeliveryServices, Environment, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

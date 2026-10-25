@@ -37,7 +37,7 @@ from app.services.tools_execution.registry import (
     _validate_required_params,
     get_workflow_tool_registry,
 )
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
 __all__ = [
     "set_tool_execute_headers",

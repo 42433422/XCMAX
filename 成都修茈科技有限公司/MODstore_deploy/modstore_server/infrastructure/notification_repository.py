@@ -1,6 +1,6 @@
 # mypy: disable-error-code="arg-type, assignment"
 """SQLAlchemy adapter implementing
-:class:`modstore_server.domain.notification.ports.NotificationRepository`.
+:class:`modstore_server.domain.notification.port_contracts.NotificationRepository`.
 """
 
 from __future__ import annotations

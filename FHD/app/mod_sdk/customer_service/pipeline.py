@@ -10,7 +10,7 @@ from .models import (
     EnterpriseCredentialsIssueBody,
     PipelineBody,
 )
-from .ports import Employee, Environment, Payload, PipelineRepository, PipelineServices
+from .customer_service_ports import Employee, Environment, Payload, PipelineRepository, PipelineServices
 
 
 @dataclass(frozen=True, eq=False)

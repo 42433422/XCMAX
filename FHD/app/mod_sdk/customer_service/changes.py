@@ -11,7 +11,7 @@ from .models import (
     ChangeRequestNotifyBody,
     ChangeRequestStatusBody,
 )
-from .ports import ChangesServices, Environment, Payload, PipelineRepository
+from .customer_service_ports import ChangesServices, Environment, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

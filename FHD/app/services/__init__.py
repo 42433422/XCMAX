@@ -39,48 +39,48 @@ from app.domain.conversation.unified_intent_recognizer import (
     get_unified_intent_recognizer,
 )
 from app.infrastructure.session.session_manager import SessionManager, get_session_manager
-from app.domain.shared_services.ai_conversation_service import (
+from app.services.ai_conversation_service import (
     AIConversationService,
     get_ai_conversation_service,
     init_ai_conversation_service,
 )
-from app.domain.shared_services.auth_service import AuthService, get_auth_service
-from app.domain.shared_services.extract_log_service import ExtractLogService
+from app.services.auth_service import AuthService, get_auth_service
+from app.services.extract_log_service import ExtractLogService
 
 # Intent services - prefer domain layer; these are kept for backward compatibility.
 # NOTE: printer_service is imported later to avoid circular import with application/print_app_service
-from app.domain.shared_services.hybrid_intent_service import (
+from app.services.hybrid_intent_service import (
     HybridIntentService,
     get_hybrid_intent_service,
     hybrid_recognize_intents,
     hybrid_recognize_intents_sync,
 )
-from app.domain.shared_services.intent_confirmation_service import (
+from app.services.intent_confirmation_service import (
     IntentConfirmationService,
     get_confirmation_service,
 )
-from app.domain.shared_services.intent_service import get_tool_key_with_negation_check, recognize_intents
+from app.services.intent_service import get_tool_key_with_negation_check, recognize_intents
 
 # Lazy imports for services that cause circular dependencies with application layer
 # These are only imported when their getter functions are called
-from app.domain.shared_services.task_agent import TaskAgent, get_task_agent
-from app.domain.shared_services.user_service import UserService, get_user_service
-from app.domain.shared_services.database_service import get_database_service
+from app.services.task_agent import TaskAgent, get_task_agent
+from app.services.user_service import UserService, get_user_service
+from app.services.database_service import get_database_service
 from app.utils.async_task.task_context import TaskContextService, get_task_context_service
 
 
-from app.domain.shared_services.ai_product_parser import AIProductParser
-from app.domain.shared_services.conversation_service import ConversationService, get_conversation_service
-from app.domain.shared_services.session_service import SessionService, get_session_service
-from app.domain.shared_services.system_service import SystemService, get_system_service
-from app.domain.shared_services.tts_service import synthesize_to_data_uri
-from app.domain.shared_services.user_preference_service import UserPreferenceService, get_user_preference_service
+from app.services.ai_product_parser import AIProductParser
+from app.services.conversation_service import ConversationService, get_conversation_service
+from app.services.session_service import SessionService, get_session_service
+from app.services.system_service import SystemService, get_system_service
+from app.services.tts_service import synthesize_to_data_uri
+from app.services.user_preference_service import UserPreferenceService, get_user_preference_service
 
 if TYPE_CHECKING:
-    from app.domain.shared_services.materials_service import MaterialsService
-    from app.domain.shared_services.printer_service import PrinterService
-    from app.domain.shared_services.product_import_service import ProductImportService
-    from app.domain.shared_services.user_memory_service import UserMemoryService, get_user_memory_service
+    from app.services.materials_service import MaterialsService
+    from app.services.printer_service import PrinterService
+    from app.services.product_import_service import ProductImportService
+    from app.services.user_memory_service import UserMemoryService, get_user_memory_service
 
 
 def get_ai_product_parser() -> AIProductParser:
@@ -94,11 +94,11 @@ from app.infrastructure.skills import execute_skill, get_skill_registry
 def __getattr__(name: str):
     """Expose migrated application modules through legacy service imports."""
     if name == "UserMemoryService":
-        from app.domain.shared_services.user_memory_service import UserMemoryService
+        from app.services.user_memory_service import UserMemoryService
 
         return UserMemoryService
     if name == "get_user_memory_service":
-        from app.domain.shared_services.user_memory_service import get_user_memory_service
+        from app.services.user_memory_service import get_user_memory_service
 
         return get_user_memory_service
     if name == "private_mod_delivery":
@@ -135,7 +135,7 @@ def get_extract_log_service() -> ExtractLogService:
     return get_service_registry().extract_log_service
 
 
-from app.domain.shared_services.products_service import ProductsService
+from app.services.products_service import ProductsService
 
 
 __all__ = [

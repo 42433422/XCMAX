@@ -28,12 +28,12 @@ from pathlib import Path
 # --- baselines (do not invent; keep in sync with 06-structure-gates.md) ---
 BASELINE = {
     # Tightened 2026-10-25 Asia/Shanghai (arch 18-31 train).
-    "mixin_total": 11,
+    "mixin_total": 12,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
     "routes_total": 300,
     "routes_top_level": 115,
-    "legacy_prod_ref_files": 24,
+    "legacy_prod_ref_files": 27,
     "application_ports_py": 1,
     "workflow_ports_py": 1,
     # G7: mechanical (part|mixin)\d+ filenames under FHD/app

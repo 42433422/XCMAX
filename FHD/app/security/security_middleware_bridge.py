@@ -1,7 +1,7 @@
 """Bridge helpers so middleware can depend on app.security instead of ad-hoc checks."""
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from app.security.security_controls import (
     IpAllowlist,

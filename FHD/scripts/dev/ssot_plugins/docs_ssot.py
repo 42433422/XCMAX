@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .ssot_plugins_base import ROOT, run_command
+from .base import ROOT, run_command
 
 
 def run(action: str, domain: dict[str, Any], *, dry_run: bool = True) -> int:

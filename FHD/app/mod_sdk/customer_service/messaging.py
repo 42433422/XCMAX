@@ -9,7 +9,7 @@ from .models import (
     IntakeNoticeBody,
     WechatSendBody,
 )
-from .ports import Environment, MessagingServices, Payload, PipelineRepository
+from .customer_service_ports import Environment, MessagingServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)
