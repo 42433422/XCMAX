@@ -1,8 +1,8 @@
 """Offline safety + real rule routing, not online planner/tool acceptance (#1776)."""
 
 import pytest
-from app.domain.app_pure.chat_business_safety_core import classify_business_chat_intent
 
+from app.domain.app_pure.chat_business_safety_core import classify_business_chat_intent
 from app.domain.app_pure.intent_recognition_app import recognize_intents
 
 

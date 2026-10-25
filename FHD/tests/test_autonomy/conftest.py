@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter  # noqa: E402
 from scripts.autonomy.types import (  # noqa: E402
     Action,
     ActionType,
@@ -35,8 +36,6 @@ from scripts.autonomy.types import (  # noqa: E402
     RuntimeTruthSnapshot,
     Signal,
 )
-
-from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter  # noqa: E402
 
 # --------------------------------------------------------------------------- #
 # 临时目录 fixtures

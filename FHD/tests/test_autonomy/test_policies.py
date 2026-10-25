@@ -14,7 +14,6 @@
 from __future__ import annotations
 
 import pytest
-from scripts.autonomy.types import Action, ActionType, Plan, RiskLevel, Signal
 
 from scripts.autonomy.policies import (
     ALL_POLICIES,
@@ -27,6 +26,7 @@ from scripts.autonomy.policies.compose_unhealthy_policy import ComposeUnhealthyP
 from scripts.autonomy.policies.disk_full_policy import DiskFullPolicy
 from scripts.autonomy.policies.health_down_policy import HealthDownPolicy
 from scripts.autonomy.policies.manifest_drift_policy import ManifestDriftPolicy
+from scripts.autonomy.types import Action, ActionType, Plan, RiskLevel, Signal
 
 # --------------------------------------------------------------------------- #
 # 工具函数

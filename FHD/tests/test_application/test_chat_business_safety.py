@@ -9,7 +9,6 @@ from typing import Any
 
 import openpyxl
 import pytest
-from app.domain.app_pure.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from fastapi import Request
 
 from app.application import chat_business_safety as safety
@@ -18,6 +17,7 @@ from app.application import chat_business_safety_leave as leave_safety
 from app.application import chat_business_safety_output as output_safety
 from app.application import chat_business_safety_personnel as personnel_safety
 from app.application import planner_compat_service as planner_compat
+from app.domain.app_pure.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 

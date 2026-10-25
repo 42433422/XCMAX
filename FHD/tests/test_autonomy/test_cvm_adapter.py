@@ -24,14 +24,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from scripts.autonomy.types import (
-    Action,
-    ActionResult,
-    ActionType,
-    AuditEntry,
-    Diagnosis,
-    RiskLevel,
-)
 
 from scripts.autonomy.cvm_adapter import (
     DEFAULT_DEPLOY_ROOT,
@@ -39,6 +31,14 @@ from scripts.autonomy.cvm_adapter import (
     DEFAULT_MANIFEST_PATH,
     CvmAutonomyAdapter,
     list_audit_entries,
+)
+from scripts.autonomy.types import (
+    Action,
+    ActionResult,
+    ActionType,
+    AuditEntry,
+    Diagnosis,
+    RiskLevel,
 )
 
 # --------------------------------------------------------------------------- #

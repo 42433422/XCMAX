@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-10-25 02:41 UTC",
+  "generated_at": "2026-10-25 03:16 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -93,16 +93,16 @@
   "capability_totals": {
     "total": 157,
     "by_status": {
-      "verified": 0,
-      "partial": 0,
-      "implemented": 124,
+      "verified": 106,
+      "partial": 15,
+      "implemented": 3,
       "planned": 33
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 0,
-    "last_verified_at": null,
+    "verified_total": 106,
+    "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
       "macos": 99,
@@ -113,24 +113,24 @@
     "platform_coverage": {
       "windows": {
         "applicable": 98,
-        "verified": 0,
+        "verified": 97,
         "partial": 0,
-        "pending": 98,
-        "last_verified_at": null
+        "pending": 1,
+        "last_verified_at": "2026-09-29"
       },
       "macos": {
         "applicable": 99,
-        "verified": 0,
-        "partial": 0,
-        "pending": 99,
-        "last_verified_at": null
+        "verified": 82,
+        "partial": 13,
+        "pending": 4,
+        "last_verified_at": "2026-09-30"
       },
       "web": {
         "applicable": 128,
-        "verified": 0,
+        "verified": 127,
         "partial": 0,
-        "pending": 128,
-        "last_verified_at": null
+        "pending": 1,
+        "last_verified_at": "2026-09-29"
       },
       "android": {
         "applicable": 8,
@@ -147,7 +147,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 32
+    "completion": 75
   },
   "capability_warnings": [
     "[base-account-security] 实现路径不存在: FHD/app/application/account_security.py",
@@ -224,10 +224,11 @@
         ],
         "total": 102,
         "by_status": {
-          "implemented": 77,
+          "verified": 72,
+          "partial": 5,
           "planned": 25
         },
-        "verified": 0
+        "verified": 72
       },
       "releases": {
         "macos": {
@@ -308,10 +309,11 @@
         ],
         "total": 38,
         "by_status": {
-          "implemented": 33,
-          "planned": 5
+          "verified": 31,
+          "planned": 5,
+          "partial": 2
         },
-        "verified": 0
+        "verified": 31
       },
       "releases": {
         "web": {
@@ -340,10 +342,12 @@
         ],
         "total": 17,
         "by_status": {
-          "implemented": 14,
-          "planned": 3
+          "partial": 8,
+          "verified": 3,
+          "planned": 3,
+          "implemented": 3
         },
-        "verified": 0
+        "verified": 3
       },
       "releases": {
         "android": {
