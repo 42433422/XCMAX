@@ -233,7 +233,7 @@ def test_bill_floor_java_uses_java_wallet(monkeypatch):
 def test_plan_templates_no_llm_calls():
     import re
 
-    for mod_path in ("modstore_server/db/base.py", "modstore_server/models_db.py"):
+    for mod_path in ("modstore_server/db/db_base.py", "modstore_server/models_db.py"):
         with open(mod_path, encoding="utf-8") as fh:
             src = fh.read()
         assert "llm_calls" not in src, f"{mod_path} 仍在发放 llm_calls 计次配额"

@@ -1,5 +1,5 @@
 {
-  "lines": 2329768,
+  "lines": 2329790,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 红修24：modstore base/convert 兼容 shim + black 格式；SSOT net-deletion"
+  "note": "debt19 #2631 CI 红修25：db_base 恢复为实现本体，base.py 薄 re-export；修 mypy attr-defined"
 }
