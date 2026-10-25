@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from .db_base import (  # noqa: F401
     Base,
-    _SessionFactory,
     _add_column_if_missing,
     _engine,
+    _SessionFactory,
     _sqlite_add_column_if_missing,
     database_url,
     default_db_path,
