@@ -100,7 +100,7 @@ from modstore_server.word_generate_runtime import (
     is_word_generate,
     render_word_generate_convert_module,
 )
-from modstore_server.employee_asset_pipeline_merged import (
+from modstore_server.employee_asset_pipeline_merged import (  # type: ignore[attr-defined]
     _clean_brief_for_description as _clean_brief_for_description,
     _safe_basename as _safe_basename,
     _classify_asset as _classify_asset,
