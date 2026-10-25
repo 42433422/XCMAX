@@ -15,8 +15,12 @@ from app.domain.app_pure.chat_business_safety import (
 from app.domain.app_pure.chat_business_safety import (
     _db_path as _db_path,
 )
+from app.domain.app_pure.chat_business_safety_output import _default_get_printer_service
 from app.mod_sdk.workspace import resolve_safe_workspace_relpath as resolve_safe_workspace_relpath
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+# Domain output resolves printers via this facade attribute.
+_get_printer_service = _default_get_printer_service
 
 
 def _authenticated_user_from_request(request: Any) -> Any | None:
@@ -32,6 +36,7 @@ def _authenticated_user_from_request(request: Any) -> Any | None:
 
 __all__ = [
     "BusinessChatIntent",
+    "_get_printer_service",
     "classify_business_chat_intent",
     "try_handle_business_chat_action",
 ]
