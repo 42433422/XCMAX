@@ -12,8 +12,11 @@ import importlib
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
-def _facade():
+def _load_public_module():
     return importlib.import_module("modstore_server.employee_executor")
+
+
+_facade = _load_public_module
 
 
 # --- from employee_executor_part01.py ---
