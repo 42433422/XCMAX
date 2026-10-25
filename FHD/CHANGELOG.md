@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 架构债 debt19 收口：拆分 MODstore/evals/pregel 巨文件为 facade+模块，compat-resource-glob 改为 tgz 依赖以收敛 package.json；用户侧功能不变。
+
 - 架构债 follow-up：收敛 ports/同名路由入口与兼容清单，不改变产品功能。
 
 ### Changed
