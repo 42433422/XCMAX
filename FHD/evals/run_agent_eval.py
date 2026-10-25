@@ -4802,9 +4802,8 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-
     from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -5070,7 +5069,7 @@ def _run_memory_v2_governance_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_plan(task: dict[str, Any]):
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan_data = dict(task.get("plan") or {})
     nodes = [

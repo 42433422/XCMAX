@@ -2391,7 +2391,9 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_with_file(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir),
+            patch(
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+            ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,
@@ -2412,7 +2414,9 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_file_analysis_error_returns_500(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir),
+            patch(
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+            ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,

@@ -150,7 +150,8 @@ class TestExecuteCustomersRouteAction:
 
     def test_update_success(self):
         with patch(
-            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_update", return_value={"id": 5}
+            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_update",
+            return_value={"id": 5},
         ):
             result = _execute_customers_route_action("update", {"id": 5, "name": "B"})
         assert result["success"] is True

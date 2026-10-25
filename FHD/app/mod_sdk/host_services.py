@@ -151,7 +151,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     ),
     "customers_create": ("app.fastapi_routes.domains.customer.customer_routes", "customers_create"),
     "customers_delete": ("app.fastapi_routes.domains.customer.customer_routes", "customers_delete"),
-    "customers_get_one": ("app.fastapi_routes.domains.customer.customer_routes", "customers_get_one"),
+    "customers_get_one": (
+        "app.fastapi_routes.domains.customer.customer_routes",
+        "customers_get_one",
+    ),
     "customers_update": ("app.fastapi_routes.domains.customer.customer_routes", "customers_update"),
     "diagnostics": ("app.fastapi_routes.model_payment", "diagnostics"),
     "ensure_delivery_on_doc": (
@@ -298,7 +301,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.legacy.routes.product.compat_routes",
         "products_delete",
     ),
-    "products_export_xlsx": ("app.fastapi_routes.domains.product.product_routes", "products_export_xlsx"),
+    "products_export_xlsx": (
+        "app.fastapi_routes.domains.product.product_routes",
+        "products_export_xlsx",
+    ),
     "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
     "products_get_by_id": (
         "app.legacy.routes.product.compat_routes",

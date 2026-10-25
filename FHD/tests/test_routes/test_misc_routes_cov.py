@@ -83,7 +83,8 @@ class TestDbReadTokenVerify:
 
     def test_correct_read_token(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.misc.misc_routes.effective_db_read_token", return_value="tok"
+            "app.fastapi_routes.domains.misc.misc_routes.effective_db_read_token",
+            return_value="tok",
         ):
             with patch(
                 "app.fastapi_routes.domains.conversation.helpers._touch_chat_db_read_grace",
@@ -94,7 +95,8 @@ class TestDbReadTokenVerify:
 
     def test_wrong_read_token(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.misc.misc_routes.effective_db_read_token", return_value="tok"
+            "app.fastapi_routes.domains.misc.misc_routes.effective_db_read_token",
+            return_value="tok",
         ):
             r = client.post("/fhd/db-read-token/verify", json={"token": "wrong"})
         assert r.json()["valid"] is False
@@ -193,7 +195,9 @@ class TestCompatCurrentDbDisplayLabel:
 class TestSystemTestDbStatus:
     def test_status_returns_mode(self, client: TestClient):
         db_info = {"mode": "production", "backend": "sqlite", "current_db_name": "db.sqlite"}
-        with patch("app.fastapi_routes.domains.misc.misc_routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.misc_routes.get_db_status", return_value=db_info
+        ):
             r = client.get("/system/test-db/status")
         assert r.status_code == 200
         data = r.json()["data"]
@@ -201,7 +205,9 @@ class TestSystemTestDbStatus:
 
     def test_status_test_mode(self, client: TestClient):
         db_info = {"mode": "test", "backend": "sqlite", "current_db_name": "test.db"}
-        with patch("app.fastapi_routes.domains.misc.misc_routes.get_db_status", return_value=db_info):
+        with patch(
+            "app.fastapi_routes.domains.misc.misc_routes.get_db_status", return_value=db_info
+        ):
             r = client.get("/system/test-db/status")
         assert r.json()["data"]["test_mode"] is True
 
@@ -246,7 +252,8 @@ class TestSystemTestDbEnable:
                 return_value={"success": True},
             ):
                 with patch(
-                    "app.fastapi_routes.domains.misc.misc_routes.get_db_status", return_value=db_info
+                    "app.fastapi_routes.domains.misc.misc_routes.get_db_status",
+                    return_value=db_info,
                 ):
                     r = client.post("/system/test-db/enable")
         assert r.status_code == 200
@@ -257,7 +264,8 @@ class TestSystemTestDbEnable:
             return_value={"error": "fail", "message": "db error"},
         ):
             with patch(
-                "app.fastapi_routes.domains.misc.misc_routes.resolve_mode", return_value="production"
+                "app.fastapi_routes.domains.misc.misc_routes.resolve_mode",
+                return_value="production",
             ):
                 r = client.post("/system/test-db/enable", json={"enabled": True})
         assert r.status_code == 400
@@ -372,7 +380,8 @@ class TestMemoryV2AgentOutput:
 class TestToolsRoutes:
     def test_compat_tools_list_no_role(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.misc.misc_routes.get_tools_payload", return_value={"tools": []}
+            "app.fastapi_routes.domains.misc.misc_routes.get_tools_payload",
+            return_value={"tools": []},
         ):
             r = client.get("/tools")
         assert r.status_code == 200
