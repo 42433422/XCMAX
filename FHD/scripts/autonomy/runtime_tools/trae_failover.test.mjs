@@ -41,6 +41,15 @@ test('policy failures and unknown command failures do not silently change tools'
   assert.equal(isTraeProviderFailoverEligible('syntax error in local wrapper'), false);
 });
 
+test('Trae missing-model initialization failure permits the existing executor fallback', () => {
+  const error = 'failed to create agent: failed to create agent: Models is required';
+  const details = describeTraeFailure({ code: 1, stdout: JSON.stringify({ type: 'result', error }) });
+  assert.equal(isTraeProviderFailoverEligible(details), true);
+  assert.equal(isTraeProviderFailoverEligible(describeTraeFailure({ code: 1, stderr: error })), true);
+  assert.equal(isTraeProviderFailoverEligible('Models is required'), false);
+  assert.equal(isTraeProviderFailoverEligible(`permission denied: ${error}`), false);
+});
+
 test('Codex non-zero diagnostics preserve the provider error tail instead of the prompt head', () => {
   const output = formatCodexNonZeroOutput({
     code: 1,

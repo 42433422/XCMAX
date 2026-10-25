@@ -120,6 +120,7 @@ test('provider mode falls back only on quota, login, billing, rate-limit, timeou
     'HTTP 401 Unauthorized',
     '429 Too Many Requests',
     'request timed out',
+    'trae 失败: failed to create agent: failed to create agent: Models is required',
     'cursor exited with code null (timed out)\ntimed out',
   ]) assert.equal(isToolFallbackEligible(text, 'provider'), true, text);
   for (const text of [
