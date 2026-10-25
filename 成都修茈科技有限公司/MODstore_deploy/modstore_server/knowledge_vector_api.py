@@ -14,7 +14,10 @@ from modstore_server.embedding_service import (
     embed_texts,
     embedding_config_snapshot,
 )
-from modstore_server.knowledge_ingest import SUPPORTED_EXTENSIONS, parse_and_chunk_with_metadata
+from modstore_server.knowledge_ingest import (
+    SUPPORTED_EXTENSIONS,
+    parse_and_chunk_with_metadata,
+)
 from modstore_server.knowledge_vector_store import (
     KnowledgeVectorError,
     delete_document,

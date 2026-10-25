@@ -9,7 +9,10 @@ import pytest
 
 from modstore_server import employee_duty_filesystem_inputs as filesystem_inputs
 from modstore_server import employee_duty_input_resolver as resolver
-from modstore_server.employee_duty_cron_runtime import _require_success, execute_employee_cron_duty
+from modstore_server.employee_duty_cron_runtime import (
+    _require_success,
+    execute_employee_cron_duty,
+)
 
 NOW = datetime(2026, 8, 1, 9, 0, tzinfo=timezone.utc)
 

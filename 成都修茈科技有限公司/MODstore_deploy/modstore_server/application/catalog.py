@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 from modman.manifest_util import read_manifest
 from modman.store import iter_mod_dirs
 from modstore_server import catalog_store
-from modstore_server.domain.catalog.ports import CatalogRepository
-from modstore_server.domain.catalog.types import CatalogItem as CatalogDomainItem
-from modstore_server.domain.catalog.types import ModShellUiRow
+from modstore_server.domain.catalog.catalog_types import CatalogItem as CatalogDomainItem
+from modstore_server.domain.catalog.catalog_types import (
+    ModShellUiRow,
+)
+from modstore_server.domain.ports import CatalogRepository
 from modstore_server.eventing.bus import NeuroBus
 from modstore_server.eventing.contracts import CATALOG_PACKAGE_PUBLISHED
 from modstore_server.eventing.events import new_event
@@ -255,7 +257,9 @@ class CatalogApplicationService:
     ) -> dict[str, Any]:
         """Audit 通过后：落盘 JSON 包、在同一 DB 事务内 upsert ``catalog_items``、发 ``catalog.package_published``。"""
 
-        from modstore_server.infrastructure.catalog_repository import SqlCatalogRepository
+        from modstore_server.infrastructure.catalog_repository import (
+            SqlCatalogRepository,
+        )
 
         saved = self._storage.append_package(package_record, package_file)
         domain_item = CatalogDomainItem(

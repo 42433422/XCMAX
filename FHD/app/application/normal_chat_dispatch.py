@@ -48,7 +48,7 @@ def _llm_route(text: str) -> JsonObject | None:
 
 
 def _label_slots(text: str) -> JsonObject:
-    from app.application.label_print_inputs import extract_label_print_slots
+    from app.domain.app_pure.label_print_inputs import extract_label_print_slots
 
     return extract_label_print_slots(text)
 
@@ -56,7 +56,7 @@ def _label_slots(text: str) -> JsonObject:
 def route_normal_mode_message(message: str) -> dict[str, Any]:
     from app.application.workflow.sql_execution_policy import database_maintenance_request
     from app.desktop_automation.service import desktop_action_request
-    from app.services.intent_service import is_negation
+    from app.domain.shared_services.intent_service import is_negation
 
     return route_message(
         message,
@@ -113,7 +113,7 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
         return cast(JsonObject, _parse_order_text(text))
 
     def build_preview(unit: str, products: list[JsonObject], text: str) -> JsonObject:
-        from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+        from app.domain.app_pure.ai_chat_helpers import build_shipment_preview_response_dict
 
         return build_shipment_preview_response_dict(unit, products, text)
 
@@ -270,7 +270,7 @@ def build_inventory_count_response_dict(route_result: dict[str, Any]) -> dict[st
 
 def build_mrp_production_response_dict(route_result: dict[str, Any]) -> dict[str, Any] | None:
     def fetch() -> JsonObject:
-        from app.services.manufacturing_service import ManufacturingService
+        from app.domain.shared_services.manufacturing_service import ManufacturingService
 
         return ManufacturingService().query_orders(page=1, per_page=20)
 
@@ -299,7 +299,7 @@ def build_aging_report_response_dict(route_result: dict[str, Any]) -> dict[str, 
         )
 
     def fetch() -> JsonObject:
-        from app.services.accounting_services import aging_report
+        from app.domain.shared_services.accounting_services import aging_report
 
         party_type = "receivable" if account_type in ("应收", "receivable", "客户") else "payable"
         return aging_report(party_type=party_type, party_id=int(party_id))
@@ -518,7 +518,7 @@ def build_reports_query_response_dict(
     )
 
     def fetch() -> JsonObject:
-        from app.services.report_service import ReportService
+        from app.domain.shared_services.report_service import ReportService
 
         service = ReportService()
         if label == "库存":
@@ -544,7 +544,7 @@ def build_replenishment_suggest_response_dict(
     route_result: dict[str, Any],
 ) -> dict[str, Any] | None:
     def fetch() -> JsonObject:
-        from app.services.replenishment_service import suggest_replenishment
+        from app.domain.shared_services.replenishment_service import suggest_replenishment
 
         return suggest_replenishment()
 

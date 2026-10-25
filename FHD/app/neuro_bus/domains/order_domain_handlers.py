@@ -14,8 +14,8 @@ import logging
 import threading
 from typing import Any
 
-from app.neuro_bus.domains.base import DomainChannel
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.domains.domains_base import DomainChannel
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

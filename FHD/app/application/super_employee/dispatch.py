@@ -8,13 +8,13 @@ from typing import Any
 
 import httpx
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .common import _SUBTASK_LABELS
 from .devices import DeviceSelection
-from .ports import ExecutionContext, OutboxWriter, ParaPorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import ExecutionContext, OutboxWriter, ParaPorts
 
 
 class EmployeeDispatcher:

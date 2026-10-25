@@ -9,7 +9,7 @@ from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
 from .common import read_json_object
-from .ports import AdminGate, ErrorPolicy, JsonObject
+from .port_contracts import AdminGate, ErrorPolicy, JsonObject
 
 
 class AutonomyAdmin:

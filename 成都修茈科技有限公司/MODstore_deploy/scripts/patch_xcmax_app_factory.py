@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-TARGET = Path(__file__).resolve().parents[1] / "modstore_server" / "api" / "app_factory.py"
+TARGET = (
+    Path(__file__).resolve().parents[1] / "modstore_server" / "api" / "app_factory.py"
+)
 
 OLD_TAGS = """    {"name": "catalog-mod-sync", "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）"},
 ]"""

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, Body
 
 from .account_recovery import AccountRecovery
-from .ports import JsonObject
+from .port_contracts import JsonObject
 
 
 class RecoveryRoutes:

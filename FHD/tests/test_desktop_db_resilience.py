@@ -9,15 +9,15 @@ from pathlib import Path
 
 import pytest
 
+from app.desktop_runtime.desktop_runtime_paths import (
+    configure_desktop_environment,
+    ensure_desktop_dirs,
+)
 from app.desktop_runtime.migrate import (
     _integrity_check_ok,
     _quick_check_ok,
     backup_database,
     recover_if_corrupt,
-)
-from app.desktop_runtime.paths import (
-    configure_desktop_environment,
-    ensure_desktop_dirs,
 )
 
 

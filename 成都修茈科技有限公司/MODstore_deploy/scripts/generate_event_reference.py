@@ -35,14 +35,18 @@ def main() -> int:
     lines.append('  "id": "<事件唯一 id>",')
     lines.append('  "type": "<事件名，见下表>",')
     lines.append('  "version": <事件版本，整数>,')
-    lines.append('  "source": "modstore-python | modstore-java | modstore-employee-api | ...",')
+    lines.append(
+        '  "source": "modstore-python | modstore-java | modstore-employee-api | ...",'
+    )
     lines.append('  "aggregate_id": "<聚合 id，例如订单号 / 工作流 id>",')
     lines.append('  "created_at": <unix 秒>,')
     lines.append('  "data": { ... }')
     lines.append("}")
     lines.append("```")
     lines.append("")
-    lines.append("HTTP 头同时包含 `X-Modstore-Webhook-Signature: sha256=<hex>`，签名规则：")
+    lines.append(
+        "HTTP 头同时包含 `X-Modstore-Webhook-Signature: sha256=<hex>`，签名规则："
+    )
     lines.append("")
     lines.append("```")
     lines.append("HMAC-SHA256(secret, timestamp + '.' + event_id + '.' + body)")
@@ -55,7 +59,9 @@ def main() -> int:
     for name, c in sorted(EVENT_CONTRACTS.items()):
         required = ", ".join(f"`{k}`" for k in c.required_payload) or "—"
         desc = c.description.replace("|", "\\|")
-        lines.append(f"| `{c.name}` | {c.version} | {c.aggregate} | {required} | {desc} |")
+        lines.append(
+            f"| `{c.name}` | {c.version} | {c.aggregate} | {required} | {desc} |"
+        )
 
     lines.append("")
     lines.append("## 详细说明")

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from .ports import CheckpointStore
-from .types import NodeExecutionResult, PlanGraph, WorkflowRunResult
+from .workflow_types import NodeExecutionResult, PlanGraph, WorkflowRunResult
 
 
 def save_progress(

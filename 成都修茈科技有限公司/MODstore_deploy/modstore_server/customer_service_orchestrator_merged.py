@@ -219,7 +219,18 @@ def infer_intent(
     if any((word in text for word in ("上架", "审核", "合规", "下架"))):
         return "catalog_review"
     # 明确的产品缺陷描述优先于登录、余额等账号词；普通账号求助仍归账号支持。
-    account_marks = ("会员", "权益", "额度", "登录", "余额", "钱包", "充值", "到账", "扣费", "账单")
+    account_marks = (
+        "会员",
+        "权益",
+        "额度",
+        "登录",
+        "余额",
+        "钱包",
+        "充值",
+        "到账",
+        "扣费",
+        "账单",
+    )
     has_account_mark = any((word in text for word in account_marks + ("消费记录",)))
     if _account_word_is_product_defect(text) and ("账号" in text or has_account_mark):
         return "product_issue"

@@ -94,7 +94,7 @@ def _doc(domain: str, module: str, note: str = "") -> LegacyRoute:
 
 
 LEGACY_ROUTE_REGISTRY: tuple[LegacyRoute, ...] = (
-    _doc("agent", "app.fastapi_routes.domains.agent.routes", "Agent 运行/计划/执行"),
+    _doc("agent", "app.fastapi_routes.domains.agent.agent_routes", "Agent 运行/计划/执行"),
     _doc("auth", "app.fastapi_routes.domains.auth.routes", "认证/授权"),
     _doc(
         "conversation",
@@ -115,7 +115,7 @@ LEGACY_ROUTE_REGISTRY: tuple[LegacyRoute, ...] = (
     _doc("system", "app.fastapi_routes.domains.system.routes", "系统/管理"),
     _doc("template", "app.fastapi_routes.domains.template.routes", "模板"),
     _doc("workflow", "app.fastapi_routes.domains.workflow.routes", "工作流/审批"),
-    _doc("db", "app.fastapi_routes.domains.db.base", "DB 查询/写入（base 入口）"),
+    _doc("db", "app.fastapi_routes.domains.db.db_base", "DB 查询/写入（base 入口）"),
 )
 
 

@@ -15,7 +15,7 @@ from app.db.models import (
     StorageLocation,
     Warehouse,
 )
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.inventory_service import InventoryService
 
 
 def _fluent(*, first=None, all_=None, count_=0) -> MagicMock:
@@ -41,7 +41,7 @@ def _session(queries=None) -> MagicMock:
 
 
 def _patch_db(session):
-    return patch("app.services.inventory_service.get_db", lambda: _fake_db(session))
+    return patch("app.domain.shared_services.inventory_service.get_db", lambda: _fake_db(session))
 
 
 class _Col:

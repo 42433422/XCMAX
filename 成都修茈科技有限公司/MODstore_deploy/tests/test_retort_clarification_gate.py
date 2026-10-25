@@ -426,7 +426,9 @@ def test_self_maintenance_review_gate_blocks_when_pending(monkeypatch, tmp_path)
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_ENABLED", "1")
     monkeypatch.setenv("MODSTORE_RETORT_CLARIFICATION_LEDGER", str(tmp_path / "clar.json"))
     monkeypatch.setattr(
-        _maintenance_workspace, "_changed_files_for_branch", lambda **_k: ["docs/readme.md"]
+        _maintenance_workspace,
+        "_changed_files_for_branch",
+        lambda **_k: ["docs/readme.md"],
     )
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "file:///tmp/fake.git")
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")

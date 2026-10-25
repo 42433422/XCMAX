@@ -10,14 +10,14 @@ from typing import Any, cast
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
 )
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.auth.db_token import verify_db_read_token_header
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _business_mod_json_block,
     _product_parse_id,
     _product_parse_is_active,
@@ -178,7 +178,7 @@ def _run_products_compat_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
@@ -271,7 +271,7 @@ def shipment_records_units() -> dict:
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units/")
 def taiyangniao_shipment_records_units_host_alias() -> dict:
     """Stable host alias for desktop clients with independently updated private Mods."""
-    from app.application.attendance_reference_data import attendance_unit_names
+    from app.domain.app_pure.attendance_reference_data import attendance_unit_names
 
     units = attendance_unit_names(_products_units_for_select())
     return {"success": True, "data": units, "units": units, "source": "host_compat"}

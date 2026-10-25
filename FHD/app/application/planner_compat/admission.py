@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
-from .ports import ChatTurn, Context, Payload, ReadAuthorization, ReplyFormatter
+from .protocols import ChatTurn, Context, Payload, ReadAuthorization, ReplyFormatter
 
 
 @dataclass(frozen=True)

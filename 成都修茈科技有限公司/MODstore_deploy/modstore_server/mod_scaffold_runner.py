@@ -26,7 +26,9 @@ from modstore_server.employee_ai_scaffold import (
     build_employee_pack_zip,
     parse_employee_pack_llm_json,
 )
-from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+from modstore_server.employee_pack_export import (
+    build_employee_pack_manifest_from_workflow,
+)
 from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,

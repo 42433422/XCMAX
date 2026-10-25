@@ -38,7 +38,9 @@ def test_budget_only_override_is_bounded_and_does_not_force_platform_model(monke
     assert route["budget"]["reasoning_effort"] == "medium"
 
 
-def test_para_prompt_contains_actual_executor_candidates_and_requested_budget(monkeypatch):
+def test_para_prompt_contains_actual_executor_candidates_and_requested_budget(
+    monkeypatch,
+):
     monkeypatch.setenv("MODSTORE_INCIDENT_CODEX_SCOUT_MODELS", "fast-model")
     req = _build_request(
         task="inspect repository",
@@ -79,7 +81,12 @@ def test_platform_cognition_applies_output_token_cap(monkeypatch):
     result = asyncio.run(
         _cognition_real(
             {"agent": {"model": {"max_tokens": 8000}}},
-            {"normalized_input": {"_trusted_incident_team_execution": True, "role": "scout"}},
+            {
+                "normalized_input": {
+                    "_trusted_incident_team_execution": True,
+                    "role": "scout",
+                }
+            },
             {},
             None,
             0,

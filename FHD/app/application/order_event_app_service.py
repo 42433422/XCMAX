@@ -1,4 +1,4 @@
-"""MODstore 订单事件桥接门面：routes 经此访问 app.services.order_event_bridge。
+"""MODstore 订单事件桥接门面：routes 经此访问 app.domain.shared_services.order_event_bridge。
 
 保持架构依赖方向（routes → application → services），避免 webhook 路由直连 services 层。
 """
@@ -16,7 +16,7 @@ def ingest_paid_event(
     timestamp: str | None = None,
     event_id: str | None = None,
 ) -> dict[str, Any]:
-    from app.services.order_event_bridge import ingest_paid_event as _ingest
+    from app.domain.shared_services.order_event_bridge import ingest_paid_event as _ingest
 
     return _ingest(
         envelope,

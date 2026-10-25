@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.order_event_bridge import (
+from app.domain.shared_services.order_event_bridge import (
     PAID_EVENT_TYPE,
     event_dedup_key,
     ingest_paid_event,
@@ -86,7 +86,7 @@ class TestEventDedupKey:
 
 class TestVerifySignature:
     def test_returns_true_when_no_secret(self):
-        with patch("app.services.order_event_bridge.bridge_secret", return_value=""):
+        with patch("app.domain.shared_services.order_event_bridge.bridge_secret", return_value=""):
             assert verify_signature(b"{}", "sha256=abc") is True
 
     def test_valid_signature(self):
@@ -97,25 +97,35 @@ class TestVerifySignature:
         expected = hmac.new(
             secret.encode(), f"{ts}.{eid}.".encode() + raw, hashlib.sha256
         ).hexdigest()
-        with patch("app.services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(raw, f"sha256={expected}", timestamp=ts, event_id=eid) is True
 
     def test_invalid_signature(self):
         secret = "s3cret"
-        with patch("app.services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(b"{}", "sha256=deadbeef") is False
 
     def test_missing_signature_rejected(self):
         secret = "s3cret"
-        with patch("app.services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(b"{}", None) is False
 
 
 class TestIngestPaidEvent:
     def test_accepts_and_dedups(self):
         with (
-            patch("app.services.order_event_bridge.emit_paid_event", return_value=True) as emit,
-            patch("app.services.order_event_bridge._record_reconciliation_if_user") as rec,
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True
+            ) as emit,
+            patch(
+                "app.domain.shared_services.order_event_bridge._record_reconciliation_if_user"
+            ) as rec,
         ):
             first = ingest_paid_event(_ENVELOPE)
             second = ingest_paid_event(_ENVELOPE)
@@ -127,7 +137,7 @@ class TestIngestPaidEvent:
         rec.assert_called_once()
 
     def test_rejects_invalid_envelope(self):
-        with patch("app.services.order_event_bridge.emit_paid_event") as emit:
+        with patch("app.domain.shared_services.order_event_bridge.emit_paid_event") as emit:
             result = ingest_paid_event({"type": "refund.approved"})
         assert result["accepted"] is False
         assert result["reason"] == "invalid_envelope"
@@ -136,8 +146,10 @@ class TestIngestPaidEvent:
     def test_rejects_bad_signature(self):
         secret = "s3cret"
         with (
-            patch("app.services.order_event_bridge.bridge_secret", return_value=secret),
-            patch("app.services.order_event_bridge.emit_paid_event") as emit,
+            patch(
+                "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+            ),
+            patch("app.domain.shared_services.order_event_bridge.emit_paid_event") as emit,
         ):
             result = ingest_paid_event(
                 _ENVELOPE,
@@ -152,8 +164,12 @@ class TestIngestPaidEvent:
 
     def test_returns_emitted_flag(self):
         with (
-            patch("app.services.order_event_bridge.emit_paid_event", return_value=False),
-            patch("app.services.order_event_bridge._record_reconciliation_if_user") as rec,
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=False
+            ),
+            patch(
+                "app.domain.shared_services.order_event_bridge._record_reconciliation_if_user"
+            ) as rec,
         ):
             result = ingest_paid_event(_ENVELOPE)
         assert result["emitted"] is False
@@ -162,8 +178,10 @@ class TestIngestPaidEvent:
     def test_ties_to_reconciliation(self):
         # 触发履约样板：应调用 record_reconciliation
         with (
-            patch("app.services.order_event_bridge.emit_paid_event", return_value=True),
-            patch("app.services.user_cs_pipeline.record_reconciliation") as rec,
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True
+            ),
+            patch("app.domain.shared_services.user_cs_pipeline.record_reconciliation") as rec,
         ):
             ingest_paid_event(_ENVELOPE)
         rec.assert_called_once()
@@ -176,20 +194,20 @@ class TestIngestPaidEvent:
 class TestBridgeSecretEnv:
     def test_reads_from_env(self, monkeypatch) -> None:
         monkeypatch.setenv("MODSTORE_ORDER_WEBHOOK_SECRET", "  env-secret  ")
-        from app.services.order_event_bridge import bridge_secret
+        from app.domain.shared_services.order_event_bridge import bridge_secret
 
         assert bridge_secret() == "env-secret"
 
     def test_empty_when_unset(self, monkeypatch) -> None:
         monkeypatch.delenv("MODSTORE_ORDER_WEBHOOK_SECRET", raising=False)
-        from app.services.order_event_bridge import bridge_secret
+        from app.domain.shared_services.order_event_bridge import bridge_secret
 
         assert bridge_secret() == ""
 
 
 class TestEmitPaidEvent:
     def test_publishes_to_neuro_bus(self) -> None:
-        from app.services.order_event_bridge import emit_paid_event
+        from app.domain.shared_services.order_event_bridge import emit_paid_event
 
         bus = MagicMock()
         bus.publish.return_value = True
@@ -198,7 +216,7 @@ class TestEmitPaidEvent:
         bus.publish.assert_called_once()
 
     def test_false_when_publish_returns_false(self) -> None:
-        from app.services.order_event_bridge import emit_paid_event
+        from app.domain.shared_services.order_event_bridge import emit_paid_event
 
         bus = MagicMock()
         bus.publish.return_value = False
@@ -206,7 +224,7 @@ class TestEmitPaidEvent:
             assert emit_paid_event(_ENVELOPE["data"]) is False
 
     def test_false_on_exception(self) -> None:
-        from app.services.order_event_bridge import emit_paid_event
+        from app.domain.shared_services.order_event_bridge import emit_paid_event
 
         bus = MagicMock()
         bus.publish.side_effect = RuntimeError("bus down")
@@ -216,23 +234,24 @@ class TestEmitPaidEvent:
 
 class TestRecordReconciliation:
     def test_skips_when_no_user_id(self) -> None:
-        from app.services.order_event_bridge import _record_reconciliation_if_user
+        from app.domain.shared_services.order_event_bridge import _record_reconciliation_if_user
 
-        with patch("app.services.user_cs_pipeline.record_reconciliation") as rec:
+        with patch("app.domain.shared_services.user_cs_pipeline.record_reconciliation") as rec:
             _record_reconciliation_if_user({"user_id": 0, "out_trade_no": "MOD0"})
         rec.assert_not_called()
 
     def test_records_reconciliation(self) -> None:
-        from app.services.order_event_bridge import _record_reconciliation_if_user
+        from app.domain.shared_services.order_event_bridge import _record_reconciliation_if_user
 
-        with patch("app.services.user_cs_pipeline.record_reconciliation") as rec:
+        with patch("app.domain.shared_services.user_cs_pipeline.record_reconciliation") as rec:
             _record_reconciliation_if_user(_ENVELOPE["data"])
         rec.assert_called_once()
 
     def test_swallows_exception(self) -> None:
-        from app.services.order_event_bridge import _record_reconciliation_if_user
+        from app.domain.shared_services.order_event_bridge import _record_reconciliation_if_user
 
         with patch(
-            "app.services.user_cs_pipeline.record_reconciliation", side_effect=RuntimeError("x")
+            "app.domain.shared_services.user_cs_pipeline.record_reconciliation",
+            side_effect=RuntimeError("x"),
         ):
             _record_reconciliation_if_user(_ENVELOPE["data"])  # 不应抛异常

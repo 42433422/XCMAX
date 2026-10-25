@@ -149,7 +149,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
+            from modstore_server.unified_autonomy_orchestrator import (
+                orchestrate_incident,
+            )
 
             orchestration = orchestrate_incident(event_id)
             if not orchestration.get("should_dispatch", True):
@@ -170,7 +172,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.incident_team_orchestrator import dispatch_incident_team
+            from modstore_server.incident_team_orchestrator import (
+                dispatch_incident_team,
+            )
 
             team = dispatch_incident_team(event_id)
             if team.get("requires_reconciliation") or team.get("outcome") == "unknown":
@@ -219,7 +223,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.employee_task_market import dispatch_incident_via_market
+            from modstore_server.employee_task_market import (
+                dispatch_incident_via_market,
+            )
 
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
@@ -280,7 +286,9 @@ def _dispatch_incident_body(event_id: int) -> None:
             if filt and filt != str(ev.source or ""):
                 continue
             if reviewed_bindings_only:
-                from modstore_server.duty_workforce_contracts import matching_duty_event_contract
+                from modstore_server.duty_workforce_contracts import (
+                    matching_duty_event_contract,
+                )
 
                 if not matching_duty_event_contract(
                     eid_sub,
@@ -303,7 +311,8 @@ def _dispatch_incident_body(event_id: int) -> None:
     )
     if event_type == "ops.intake.customer_ticket" and team_claimed and not team_members:
         logger.warning(
-            "incident claimed without persisted team event_id=%s; stop fallback", event_id
+            "incident claimed without persisted team event_id=%s; stop fallback",
+            event_id,
         )
         return
     already_ran: set[str] = set(team_members)

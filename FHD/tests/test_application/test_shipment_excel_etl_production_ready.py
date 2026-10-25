@@ -19,7 +19,7 @@ from app.application.shipment_excel_etl_app_service import (
     preview_shipment_excel_etl,
     write_delivery_note_workbook,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
 from app.domain.shipment.aggregates import Shipment
 
@@ -66,8 +66,8 @@ class _MemoryRepo:
 
 @pytest.fixture()
 def orm_fp_db(tmp_path, monkeypatch):
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
     from app.application.shipment_etl_profile import clear_profile_cache
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.setenv("FHD_EXCEL_ETL_DEFAULT_TARGET", "shipment")
@@ -158,7 +158,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
     svc = ShipmentApplicationService(repository=repo)
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
 
@@ -235,7 +235,7 @@ def test_compensate_on_failure_rolls_back_created(tmp_path, monkeypatch, orm_fp_
     svc = _FlakySvc(repo)
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
 
@@ -304,7 +304,7 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
     svc = ShipmentApplicationService(repository=repo)
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     dry = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.butler_identity_catalog import (
+from app.domain.app_pure.butler_identity_catalog import (
     ATOMIC_IDENTITIES,
     DEFAULT_MBTI_EI,
     DEFAULT_MBTI_JP,

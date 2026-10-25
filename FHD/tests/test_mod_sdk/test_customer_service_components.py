@@ -271,9 +271,9 @@ def test_declared_host_interfaces_match_actual_exported_call_contracts():
 
 @pytest.mark.asyncio
 async def test_crm_component_runs_with_independent_explicit_dependencies():
+    from app.application.customer_service.protocols import Payload
     from app.mod_sdk.customer_service.crm import CrmHandlers
     from app.mod_sdk.customer_service.models import PipelineBody
-    from app.mod_sdk.customer_service.ports import Payload
 
     calls = []
 

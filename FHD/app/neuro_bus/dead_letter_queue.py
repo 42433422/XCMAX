@@ -18,7 +18,7 @@ from pathlib import Path as Path
 from typing import Any, Protocol
 from uuid import uuid4
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .storage.dead_letter_management import DeadLetterManagement

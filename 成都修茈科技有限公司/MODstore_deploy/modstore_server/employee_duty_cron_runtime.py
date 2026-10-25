@@ -126,7 +126,9 @@ def execute_employee_cron_duty(
             "allow_high_risk_real_run": False,
             **({"project_root": project_root} if project_root else {}),
         }
-        from modstore_server.employee_duty_input_resolver import resolve_employee_duty_input
+        from modstore_server.employee_duty_input_resolver import (
+            resolve_employee_duty_input,
+        )
 
         try:
             resolved_input = resolve_employee_duty_input(employee_id)

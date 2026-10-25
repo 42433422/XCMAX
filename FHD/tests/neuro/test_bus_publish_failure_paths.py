@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.neuro_bus import bus as bus_mod
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
 # ---------------------------------------------------------------------------
 # publish() 拒绝分支
@@ -272,7 +272,7 @@ def test_set_neuro_bus_replaces_singleton(monkeypatch):
 
 def test_registered_domains_returns_empty_when_registry_unavailable(monkeypatch):
     monkeypatch.setattr(
-        "app.neuro_bus.domains.base.get_domain_registry",
+        "app.neuro_bus.domains.domains_base.get_domain_registry",
         MagicMock(side_effect=RuntimeError("no registry")),
     )
     bus = bus_mod.NeuroBus(worker_threads=1)

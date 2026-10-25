@@ -13,7 +13,7 @@ from fastapi import Request
 from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import Context
+from .protocols import Context
 
 BINARY_CONTEXT_KEYS = frozenset(
     {

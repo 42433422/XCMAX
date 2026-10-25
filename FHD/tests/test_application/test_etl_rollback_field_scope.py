@@ -18,7 +18,7 @@ from app.application.etl.targets import get_adapter
 from app.application.etl.targets.customer_product_support import customer_values
 from app.application.etl.targets.helpers import model_values
 from app.application.etl.targets.products import ProductAdapter
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.etl import EtlRun, EtlRunRow, EtlTemplateVersion, EtlUpload
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit

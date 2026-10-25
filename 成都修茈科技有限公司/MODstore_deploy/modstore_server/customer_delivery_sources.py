@@ -34,7 +34,10 @@ def migrate_private_delivery_state(
     from modstore_server.customer_delivery_build import _verify_artifact_record
     from modstore_server.customer_delivery_versioned import source_fingerprints
 
-    legacy_deploy, runtime_root = Path(legacy_deploy).absolute(), Path(runtime_root).absolute()
+    legacy_deploy, runtime_root = (
+        Path(legacy_deploy).absolute(),
+        Path(runtime_root).absolute(),
+    )
     library = Path(library).absolute() if library else runtime_root / "library"
     legacy_library = (
         Path(legacy_library).absolute() if legacy_library else legacy_deploy / "library"
@@ -179,7 +182,10 @@ def migrate_private_delivery_state(
             raise ValueError("无发行锚的 bootstrap 不能迁移私有生产会话")
         if snapshot.get("delivery_source_mode") != "versioned_main":
             continue
-        owner, ticket = int(snapshot.get("user_id") or 0), int(snapshot.get("ticket_id") or 0)
+        owner, ticket = (
+            int(snapshot.get("user_id") or 0),
+            int(snapshot.get("ticket_id") or 0),
+        )
         _validate_identity(owner, sid)
         scope = {"owner_user_id": owner, "session_id": sid, "ticket_id": ticket}
         source_root = roots[2][0] / str(owner) / sid
@@ -193,7 +199,10 @@ def migrate_private_delivery_state(
         if snapshot.get("status") != "done" or not records:
             raise ValueError("主线交付迁移缺少已完成原会话和签名包")
         for record in records:
-            mod_id, version = str(record.get("id") or ""), str(record.get("version") or "")
+            mod_id, version = (
+                str(record.get("id") or ""),
+                str(record.get("version") or ""),
+            )
             stable_version(version)
             if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", mod_id):
                 raise ValueError("迁移产物身份无效")

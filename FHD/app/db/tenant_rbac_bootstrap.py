@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.tenant import Tenant
 from app.db.models.tenant_invitation import TenantInvitation
 

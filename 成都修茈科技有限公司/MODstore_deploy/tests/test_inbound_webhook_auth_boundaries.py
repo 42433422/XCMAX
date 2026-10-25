@@ -203,18 +203,23 @@ def test_bad_signature_and_tampered_workflow_body_are_rejected(boundary, provide
 
 
 @pytest.mark.parametrize(
-    "offset,expected", [(-3600001, 401), (-3600000, 200), (0, 200), (3600000, 200), (3600001, 401)]
+    "offset,expected",
+    [(-3600001, 401), (-3600000, 200), (0, 200), (3600000, 200), (3600001, 401)],
 )
 def test_dingtalk_timestamp_window_boundaries(boundary, monkeypatch, offset, expected):
     from datetime import UTC, datetime
 
     now = 1800000000000
     monkeypatch.setattr(
-        inbound, "datetime", SimpleNamespace(now=lambda tz: datetime.fromtimestamp(now / 1000, UTC))
+        inbound,
+        "datetime",
+        SimpleNamespace(now=lambda tz: datetime.fromtimestamp(now / 1000, UTC)),
     )
     client, _, enqueue, _ = boundary
     response = client.post(
-        "/api/inbound/webhooks/dingtalk", content=BODY, headers=ding_headers(now + offset)
+        "/api/inbound/webhooks/dingtalk",
+        content=BODY,
+        headers=ding_headers(now + offset),
     )
     assert response.status_code == expected
     assert enqueue.call_count == (expected == 200)

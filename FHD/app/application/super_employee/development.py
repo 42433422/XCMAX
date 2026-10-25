@@ -12,12 +12,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.application.git_workspace_manager import GitWorkspaceManager
+from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .common import _relay_wt_lock
-from .ports import DevelopmentPorts, WorktreePorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import DevelopmentPorts, WorktreePorts
 
 logger = logging.getLogger(__name__)
 

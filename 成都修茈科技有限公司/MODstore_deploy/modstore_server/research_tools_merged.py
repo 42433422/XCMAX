@@ -737,7 +737,9 @@ def contact_company_web_search_queries(query: str) -> _facade().List[str]:
 
 
 def contact_web_search_budget_sec() -> float:
-    from modstore_server.contact_company_web_search import contact_web_search_budget_sec as impl
+    from modstore_server.contact_company_web_search import (
+        contact_web_search_budget_sec as impl,
+    )
 
     return impl()
 
@@ -745,7 +747,9 @@ def contact_web_search_budget_sec() -> float:
 def rank_contact_serp_rows(
     query: str, rows: _facade().List[_facade().Dict[str, _facade().Any]]
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
-    from modstore_server.contact_company_web_search import rank_contact_serp_rows as impl
+    from modstore_server.contact_company_web_search import (
+        rank_contact_serp_rows as impl,
+    )
 
     return impl(query, rows)
 
@@ -753,7 +757,9 @@ def rank_contact_serp_rows(
 async def contact_known_site_company_lookup(
     query: str, *, max_results: int = 5
 ) -> _facade().List[str]:
-    from modstore_server.contact_company_web_search import contact_known_site_company_lookup as impl
+    from modstore_server.contact_company_web_search import (
+        contact_known_site_company_lookup as impl,
+    )
 
     return await impl(query, max_results=max_results)
 
@@ -765,7 +771,9 @@ async def _contact_company_web_fetch_one(
     max_results: int,
     timeout_sec: float | None = None,
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]]:
-    from modstore_server.contact_company_web_search import _contact_company_web_fetch_one as impl
+    from modstore_server.contact_company_web_search import (
+        _contact_company_web_fetch_one as impl,
+    )
 
     return await impl(
         search_query,
@@ -778,7 +786,9 @@ async def _contact_company_web_fetch_one(
 async def _contact_company_web_raw_results(
     query: str, *, max_results: int
 ) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]]:
-    from modstore_server.contact_company_web_search import _contact_company_web_raw_results as impl
+    from modstore_server.contact_company_web_search import (
+        _contact_company_web_raw_results as impl,
+    )
 
     return await impl(query, max_results=max_results)
 
@@ -786,7 +796,9 @@ async def _contact_company_web_raw_results(
 async def search_company_names_via_web(
     query: str, *, max_results: int = 8
 ) -> _facade().Tuple[_facade().List[str], _facade().Optional[str], str]:
-    from modstore_server.contact_company_web_search import search_company_names_via_web as impl
+    from modstore_server.contact_company_web_search import (
+        search_company_names_via_web as impl,
+    )
 
     return await impl(query, max_results=max_results)
 

@@ -1,5 +1,5 @@
 # mypy: disable-error-code="var-annotated"
-"""测试 app.services.mobile_relay_service 的辅助函数分支覆盖。
+"""测试 app.domain.shared_services.mobile_relay_service 的辅助函数分支覆盖。
 
 覆盖目标：
 - _utc_now / _utc_after（时间格式化 / 最小 60s 钳制）
@@ -26,7 +26,13 @@ import pytest
 
 
 def _load_mobile_relay_service_module():
-    path = Path(__file__).resolve().parents[2] / "app" / "services" / "mobile_relay_service.py"
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "domain"
+        / "shared_services"
+        / "mobile_relay_service.py"
+    )
     spec = importlib.util.spec_from_file_location("mobile_relay_service_under_test", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)

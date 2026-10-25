@@ -7,7 +7,7 @@ from fastapi import Request
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.security.mobile_jwt import issue_mobile_tokens, refresh_mobile_access_token

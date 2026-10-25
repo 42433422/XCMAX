@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, cast
 
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     Callable,
     DatabaseCall,
 )

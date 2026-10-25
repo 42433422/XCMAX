@@ -103,7 +103,10 @@ def _seed(db):
 
 
 def test_parser_is_allowlisted_bounded_and_suggests_commands():
-    from modstore_server.diagnostic_terminal import DiagnosticTerminalError, parse_command
+    from modstore_server.diagnostic_terminal import (
+        DiagnosticTerminalError,
+        parse_command,
+    )
 
     parsed = parse_command('find "首次 登录" --limit 12')
     assert parsed.name == "find"

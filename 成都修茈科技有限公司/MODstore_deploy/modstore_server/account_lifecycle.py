@@ -9,7 +9,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from modstore_server.account_license_plans import account_license_plan, is_account_license_plan_id
+from modstore_server.account_license_plans import (
+    account_license_plan,
+    is_account_license_plan_id,
+)
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.models import User, UserPlan, get_session_factory
 

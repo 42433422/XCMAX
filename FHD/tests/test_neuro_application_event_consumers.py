@@ -20,7 +20,7 @@ from app.neuro_bus.bus import NeuroBus, get_neuro_bus
 from app.neuro_bus.domains.application_event_consumers import (
     register_application_event_consumers,
 )
-from app.neuro_bus.events.base import EventMetadata, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, NeuroEvent
 
 
 @pytest.fixture

@@ -18,7 +18,7 @@ def client(monkeypatch):
 
     prime_test_env(sqlite_url="sqlite:///:memory:")
     from app.db import dispose_and_recreate_engine, engine
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     dispose_and_recreate_engine()
     Base.metadata.create_all(engine)

@@ -318,7 +318,10 @@ async def get_platform_runtime_route(
 ):
     """Current platform-funded AI employee route plus effective fallback."""
     from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
-    from modstore_server.llm_runtime_route import read_runtime_route_state, rollback_target
+    from modstore_server.llm_runtime_route import (
+        read_runtime_route_state,
+        rollback_target,
+    )
     from modstore_server.services.llm import resolve_platform_bench_llm
 
     provider, model = resolve_platform_bench_llm()

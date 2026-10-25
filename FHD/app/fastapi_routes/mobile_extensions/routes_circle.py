@@ -8,11 +8,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_extensions.models import (
-    AiCircleCommentBody,
-    AiCirclePostBody,
-)
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     AddCommentCall,
     AiCircleEmployeeProfilesCall,
     AiCircleUserCall,
@@ -22,6 +18,10 @@ from app.fastapi_routes.mobile_extensions.ports import (
     SyncCircleCall,
     ToggleLikeCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    AiCircleCommentBody,
+    AiCirclePostBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

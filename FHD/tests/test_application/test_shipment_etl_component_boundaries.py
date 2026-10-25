@@ -34,8 +34,8 @@ def _note(number):
 
 @pytest.fixture
 def import_ports(tmp_path, monkeypatch):
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
     from app.application.shipment_etl_profile import clear_profile_cache
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     kb_path = tmp_path / "kb.json"
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
@@ -404,7 +404,8 @@ def test_dry_run_deduplicates_without_constructing_any_writer(import_ports, monk
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", unexpected)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records", unexpected
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
+        unexpected,
     )
     note = _note("SYNTH-A")
     result = etl.execute_shipment_excel_etl("", notes=[note, deepcopy(note)], dry_run=True)
@@ -420,7 +421,7 @@ def test_product_import_failure_prevents_shipment_service_construction(import_po
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", unexpected)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "product validation rejected"},
     )
     result = etl.execute_shipment_excel_etl("", notes=[_note("SYNTH-A")])

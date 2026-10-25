@@ -139,7 +139,10 @@ def test_execute_fallback_breakpoint_units_complete_locally(monkeypatch):
     )
     rid = _seed_fallback_digest(ps)
 
-    from modstore_server.digest_action_items import list_action_items, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        list_action_items,
+        parse_and_store_action_items,
+    )
 
     parse_and_store_action_items(
         day="2026-06-28",

@@ -11,7 +11,7 @@ from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
-    from app.application.workflow.types import PlanGraph
+    from app.application.workflow.workflow_types import PlanGraph
 
 logger = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ class ImportWorkflowAdmission:
                 "按单位+型号/名称去重后导入产品",
                 "返回导入结果（新增/跳过/失败）",
             ]
-            from app.application.workflow.types import PlanGraph, WorkflowNode
+            from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
             plan = PlanGraph(
                 plan_id=f"plan_unit_products_import_{uuid.uuid4().hex[:12]}",
@@ -291,7 +291,7 @@ class ImportWorkflowAdmission:
                 except RECOVERABLE_ERRORS as parse_err:
                     logger.warning("shipment etl detect failed: %s", parse_err)
             if delivery_notes:
-                from app.application.workflow.types import PlanGraph, WorkflowNode
+                from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
                 note_summary = "；".join(
                     f"{n.get('sheet')}→{n.get('unit_name')}({n.get('item_count')}行)"
@@ -431,7 +431,7 @@ class ImportWorkflowAdmission:
                     file_context=merged_file_ctx,
                     intent="excel_import_to_db",
                 )
-            from app.application.workflow.types import PlanGraph, WorkflowNode
+            from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
             plan = PlanGraph(
                 plan_id=f"plan_excel_import_{uuid.uuid4().hex[:12]}",

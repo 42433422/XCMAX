@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.task_agent import TaskAgent, _cn_number, get_task_agent
+from app.domain.shared_services.task_agent import TaskAgent, _cn_number, get_task_agent
 
 # ---------------------------------------------------------------------------
 # Shared fixture
@@ -21,7 +21,7 @@ from app.services.task_agent import TaskAgent, _cn_number, get_task_agent
 def agent():
     ctx = MagicMock()
     ctx.get.return_value = None
-    with patch("app.services.task_agent.get_task_context_service", return_value=ctx):
+    with patch("app.domain.shared_services.task_agent.get_task_context_service", return_value=ctx):
         a = TaskAgent()
     return a
 
@@ -484,12 +484,12 @@ class TestParseQtyToken:
 
 class TestGetTaskAgent:
     def test_singleton(self):
-        import app.services.task_agent as _mod
+        import app.domain.shared_services.task_agent as _mod
 
         old = _mod._task_agent
         _mod._task_agent = None
         try:
-            with patch("app.services.task_agent.get_task_context_service"):
+            with patch("app.domain.shared_services.task_agent.get_task_context_service"):
                 a1 = get_task_agent()
                 a2 = get_task_agent()
             assert a1 is a2

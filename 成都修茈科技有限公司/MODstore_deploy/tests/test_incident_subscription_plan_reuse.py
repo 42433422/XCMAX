@@ -11,11 +11,15 @@ from tests.test_incident_bus import admin_user, fresh_db  # noqa: F401
 
 def test_intake_routing_suggestions_cannot_duplicate_persisted_team(monkeypatch):
     monkeypatch.setattr(
-        incident_bus, "_extract_routing_plan", lambda result: [{"proposed_owner": "another-fixer"}]
+        incident_bus,
+        "_extract_routing_plan",
+        lambda result: [{"proposed_owner": "another-fixer"}],
     )
     calls = []
     monkeypatch.setattr(
-        incident_bus, "execute_employee_task", lambda *a, **k: calls.append((a, k)) or {"ok": True}
+        incident_bus,
+        "execute_employee_task",
+        lambda *a, **k: calls.append((a, k)) or {"ok": True},
     )
     count = incident_dispatch._dispatch_intake_routing_plan(
         {},
@@ -38,7 +42,9 @@ def test_customer_status_subscriber_keeps_original_team_context(admin_user, monk
         for employee in members:
             db.add(
                 models.EmployeeTriggerBinding(
-                    employee_id=employee, event_type="ops.intake.customer_ticket", is_active=True
+                    employee_id=employee,
+                    event_type="ops.intake.customer_ticket",
+                    is_active=True,
                 )
             )
         event = models.IncidentEvent(
@@ -65,7 +71,8 @@ def test_customer_status_subscriber_keeps_original_team_context(admin_user, monk
     monkeypatch.setattr(incident_dispatch, "_has_reviewed_duty_binding", lambda _: False)
     monkeypatch.setattr(incident_bus, "_catalog_employee_ids", lambda _: members)
     monkeypatch.setattr(
-        "modstore_server.duty_workforce_contracts.duty_event_execution_input", lambda *a, **k: {}
+        "modstore_server.duty_workforce_contracts.duty_event_execution_input",
+        lambda *a, **k: {},
     )
     monkeypatch.setattr(
         "modstore_server.duty_workforce_contracts.matching_duty_event_contract",
@@ -75,7 +82,7 @@ def test_customer_status_subscriber_keeps_original_team_context(admin_user, monk
     monkeypatch.setattr(
         incident_bus,
         "execute_employee_task",
-        lambda eid, task, data, **kwargs: calls.append((eid, task, data)) or {"ok": True},
+        lambda eid, task, data, **kwargs: (calls.append((eid, task, data)) or {"ok": True}),
     )
     incident_dispatch._dispatch_incident_body(event_id)
     assert [call[0] for call in calls] == ["user-customer-service-officer"]
@@ -130,7 +137,9 @@ def test_terminal_or_unplanned_claim_never_launches_subscriber_repair(
     monkeypatch.setattr(incident_bus, "_catalog_employee_ids", lambda _: {"intake-dispatcher"})
     calls = []
     monkeypatch.setattr(
-        incident_bus, "execute_employee_task", lambda *a, **k: calls.append((a, k)) or {"ok": True}
+        incident_bus,
+        "execute_employee_task",
+        lambda *a, **k: calls.append((a, k)) or {"ok": True},
     )
     incident_dispatch._dispatch_incident_body(event_id)
     assert calls == []

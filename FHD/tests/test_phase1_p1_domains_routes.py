@@ -381,7 +381,7 @@ def audit_client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-@patch("app.application.audit_log_reader.list_audit_log_entries")
+@patch("app.domain.app_pure.audit_log_reader.list_audit_log_entries")
 def test_admin_audit_logs_json(mock_list: MagicMock, audit_client: TestClient) -> None:
     mock_list.return_value = {"entries": [], "total": 0}
     r = audit_client.get("/api/admin/audit-logs")
@@ -389,7 +389,7 @@ def test_admin_audit_logs_json(mock_list: MagicMock, audit_client: TestClient) -
     assert r.json()["success"] is True
 
 
-@patch("app.application.audit_log_reader.export_audit_log_csv")
+@patch("app.domain.app_pure.audit_log_reader.export_audit_log_csv")
 def test_admin_audit_logs_csv(mock_export: MagicMock, audit_client: TestClient) -> None:
     mock_export.return_value = "id,action\n"
     r = audit_client.get("/api/admin/audit-logs", params={"format": "csv"})

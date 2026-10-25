@@ -149,7 +149,11 @@ def test_two_drainers_with_same_snapshot_send_once(factory, monkeypatch):
     [
         ("ops.intake.customer_ticket", {}, "pending"),
         ("payment.paid", {}, "uncertain"),
-        ("ops.intake.customer_ticket", {"intake_source": "private_mod_rework"}, "uncertain"),
+        (
+            "ops.intake.customer_ticket",
+            {"intake_source": "private_mod_rework"},
+            "uncertain",
+        ),
     ],
 )
 def test_expired_deliveries_retain_identity_and_fence_late_workers(

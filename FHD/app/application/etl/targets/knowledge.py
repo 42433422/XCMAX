@@ -6,13 +6,13 @@ import hashlib
 from typing import Any, cast
 
 from app.application.etl.errors import EtlError
-from app.application.etl.targets.base import (
+from app.application.etl.targets.helpers import is_uploaded_document_path, issue
+from app.application.etl.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,
     json_safe,
 )
-from app.application.etl.targets.helpers import is_uploaded_document_path, issue
 from app.infrastructure.tenant_scope import tenant_id_for_write
 
 

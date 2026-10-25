@@ -11,7 +11,10 @@ from fastapi import Depends, HTTPException
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
-from modstore_server.workbench.schemas import WorkbenchResearchBody, WorkbenchWebSearchBody
+from modstore_server.workbench.schemas import (
+    WorkbenchResearchBody,
+    WorkbenchWebSearchBody,
+)
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
 
@@ -23,7 +26,10 @@ class ResearchPorts:
 
 
 async def workbench_web_search(
-    body: WorkbenchWebSearchBody, user: User = Depends(_get_current_user), *, ports: ResearchPorts
+    body: WorkbenchWebSearchBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: ResearchPorts,
 ):
     """与 Agent `internet_search` 同源：Bing 爬虫 → Tavily → DDG/SearXNG，并抓取结果页正文。"""
     out = await ports.web_search(
@@ -38,7 +44,10 @@ async def workbench_web_search(
 
 
 async def workbench_research_context(
-    body: WorkbenchResearchBody, user: User = Depends(_get_current_user), *, ports: ResearchPorts
+    body: WorkbenchResearchBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: ResearchPorts,
 ):
     """
     优先 Bing HTML 爬虫检索网页摘要，失败时用 Tavily 兜底（不抓取任意第三方 URL），

@@ -31,6 +31,8 @@ def import_backend(
     """Load a fully initialized, path-isolated Mod backend module, including nested stems."""
     backend_path = child(mod_path, "backend", directory=True)
     path = relative_file(backend_path, f"{stem}.py") if backend_path else None
+    if path is None and stem == "blueprints" and backend_path:
+        path = relative_file(backend_path, "pack_surface.py")
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)

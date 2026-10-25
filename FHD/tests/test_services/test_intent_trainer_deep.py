@@ -1,5 +1,5 @@
 # mypy: disable-error-code="attr-defined"
-"""Deep coverage tests for app.services.intent_trainer.
+"""Deep coverage tests for app.domain.shared_services.intent_trainer.
 
 Root cause of near-zero coverage: the source module imports ``torch`` and
 ``transformers`` at module top-level. These heavy ML deps are NOT installed in
@@ -30,7 +30,7 @@ import pytest
 # This file previously carried its own stub installer + sys.modules restore
 # logic; the restore step broke collection of later files in this directory
 # (it popped torch from sys.modules, so the next file's
-# ``from app.services.intent_trainer import ...`` failed silently).
+# ``from app.domain.shared_services.intent_trainer import ...`` failed silently).
 
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
@@ -172,7 +172,7 @@ def _install_torch_transformers_stubs() -> None:
 
 # Stubs (if needed) are installed by tests/test_services/conftest.py.
 # Now safe to import the source module.
-from app.services.intent_trainer import (  # noqa: E402
+from app.domain.shared_services.intent_trainer import (  # noqa: E402
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -467,7 +467,7 @@ nlu:
         """When HAS_YAML is False, parse_nlu_yaml raises ImportError."""
         path = tmp_path / "nlu.yml"
         path.write_text("nlu: []\n", encoding="utf-8")
-        with patch("app.services.intent_trainer.HAS_YAML", False):
+        with patch("app.domain.shared_services.intent_trainer.HAS_YAML", False):
             with pytest.raises(ImportError, match="PyYAML is required"):
                 parse_nlu_yaml(str(path))
 
@@ -676,16 +676,16 @@ class TestComputeMetricsDeep:
 
 class TestTrainIntentModelDeep:
     def test_empty_data_raises_value_error(self, tmp_path):
-        with patch("app.services.intent_trainer.load_training_data", return_value=[]):
+        with patch("app.domain.shared_services.intent_trainer.load_training_data", return_value=[]):
             with pytest.raises(ValueError, match="训练数据为空"):
                 train_intent_model(data_path="fake.json", output_dir=str(tmp_path / "out"))
 
-    @patch("app.services.intent_trainer.DataCollatorWithPadding")
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification")
-    @patch("app.services.intent_trainer.AutoConfig")
-    @patch("app.services.intent_trainer.AutoTokenizer")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification")
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_full_training_flow(
         self,
         mock_load,
@@ -733,12 +733,12 @@ class TestTrainIntentModelDeep:
         labels_data = json.loads(labels_file.read_text(encoding="utf-8"))
         assert labels_data["labels"] == INTENT_LABELS
 
-    @patch("app.services.intent_trainer.DataCollatorWithPadding")
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification")
-    @patch("app.services.intent_trainer.AutoConfig")
-    @patch("app.services.intent_trainer.AutoTokenizer")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification")
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_early_stopping_disabled_when_patience_zero(
         self,
         mock_load,
@@ -762,7 +762,7 @@ class TestTrainIntentModelDeep:
         mock_trainer.save_model.side_effect = _save_model
         mock_trainer_cls.return_value = mock_trainer
 
-        with patch("app.services.intent_trainer.EarlyStoppingCallback") as mock_es:
+        with patch("app.domain.shared_services.intent_trainer.EarlyStoppingCallback") as mock_es:
             train_intent_model(
                 data_path="fake.json",
                 output_dir=str(tmp_path / "out"),
@@ -772,12 +772,12 @@ class TestTrainIntentModelDeep:
             # EarlyStoppingCallback should NOT be instantiated
             mock_es.assert_not_called()
 
-    @patch("app.services.intent_trainer.DataCollatorWithPadding")
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification")
-    @patch("app.services.intent_trainer.AutoConfig")
-    @patch("app.services.intent_trainer.AutoTokenizer")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification")
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_early_stopping_enabled_when_patience_positive(
         self,
         mock_load,
@@ -801,7 +801,7 @@ class TestTrainIntentModelDeep:
         mock_trainer.save_model.side_effect = _save_model
         mock_trainer_cls.return_value = mock_trainer
 
-        with patch("app.services.intent_trainer.EarlyStoppingCallback") as mock_es:
+        with patch("app.domain.shared_services.intent_trainer.EarlyStoppingCallback") as mock_es:
             train_intent_model(
                 data_path="fake.json",
                 output_dir=str(tmp_path / "out"),
@@ -810,12 +810,12 @@ class TestTrainIntentModelDeep:
             )
             mock_es.assert_called_once_with(early_stopping_patience=3)
 
-    @patch("app.services.intent_trainer.DataCollatorWithPadding")
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification")
-    @patch("app.services.intent_trainer.AutoConfig")
-    @patch("app.services.intent_trainer.AutoTokenizer")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification")
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_output_dir_created(
         self,
         mock_load,
@@ -861,9 +861,9 @@ class TestExportToOnnxDeep:
             result = export_to_onnx(str(tmp_path), str(tmp_path / "model.onnx"))
             assert result is None
 
-    @patch("app.services.intent_trainer.torch.onnx.export")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification")
-    @patch("app.services.intent_trainer.AutoTokenizer")
+    @patch("app.domain.shared_services.intent_trainer.torch.onnx.export")
+    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer")
     def test_exports_when_onnxruntime_available(
         self,
         mock_tok,
@@ -904,7 +904,7 @@ class TestMainCLIDeep:
             with pytest.raises(SystemExit):
                 main()
 
-    @patch("app.services.intent_trainer.train_intent_model")
+    @patch("app.domain.shared_services.intent_trainer.train_intent_model")
     def test_main_calls_train(self, mock_train, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
         with patch(
@@ -938,8 +938,8 @@ class TestMainCLIDeep:
             assert kwargs["learning_rate"] == 0.001
             assert kwargs["max_length"] == 128
 
-    @patch("app.services.intent_trainer.export_to_onnx")
-    @patch("app.services.intent_trainer.train_intent_model")
+    @patch("app.domain.shared_services.intent_trainer.export_to_onnx")
+    @patch("app.domain.shared_services.intent_trainer.train_intent_model")
     def test_main_with_export_onnx_flag(self, mock_train, mock_export, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
         with patch(
@@ -964,8 +964,8 @@ class TestMainCLIDeep:
             assert args[0] == str(tmp_path / "final")
             assert args[1].endswith("model.onnx")
 
-    @patch("app.services.intent_trainer.export_to_onnx")
-    @patch("app.services.intent_trainer.train_intent_model")
+    @patch("app.domain.shared_services.intent_trainer.export_to_onnx")
+    @patch("app.domain.shared_services.intent_trainer.train_intent_model")
     def test_main_without_export_onnx_flag(self, mock_train, mock_export, tmp_path):
         mock_train.return_value = str(tmp_path / "final")
         with patch(

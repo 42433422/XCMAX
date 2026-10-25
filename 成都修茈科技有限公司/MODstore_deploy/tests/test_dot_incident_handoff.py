@@ -29,7 +29,8 @@ def runtime(event_id, role, monkeypatch):
     from modstore_server.incident_team_dispatch import member_runtime_input
 
     monkeypatch.setattr(
-        "modstore_server.duty_workforce_contracts.duty_event_execution_input", lambda *a, **k: {}
+        "modstore_server.duty_workforce_contracts.duty_event_execution_input",
+        lambda *a, **k: {},
     )
     rows = [
         {
@@ -148,7 +149,8 @@ def test_retry_retains_prior_failed_fix_before_row_replacement(incident, monkeyp
 
 
 @pytest.mark.parametrize(
-    "mutation", ["missing_selector", "stale_attempt", "wrong_owner", "wrong_revision", "no_claim"]
+    "mutation",
+    ["missing_selector", "stale_attempt", "wrong_owner", "wrong_revision", "no_claim"],
 )
 def test_missing_or_forged_runtime_is_blocked(incident, monkeypatch, mutation):
     data = runtime(incident[0], "verify", monkeypatch)
@@ -167,7 +169,10 @@ def test_missing_or_forged_runtime_is_blocked(incident, monkeypatch, mutation):
         with pytest.raises(dot.DoltIncidentContractError):
             dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
     else:
-        with incident_claim_scope(incident[0]), pytest.raises(dot.DoltIncidentContractError):
+        with (
+            incident_claim_scope(incident[0]),
+            pytest.raises(dot.DoltIncidentContractError),
+        ):
             dot.prepare_dolt_ticket_payload(req, _payload(req), "dolt")
 
 

@@ -52,7 +52,7 @@ def _legacy_connect() -> sqlite3.Connection:
 def _ensure_orm_table() -> bool:
     """尽量确保主库有指纹表（兼容未跑迁移的环境）。"""
     try:
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.models.shipment_etl_fingerprint import ShipmentEtlImportFingerprint
         from app.db.session import get_db
 

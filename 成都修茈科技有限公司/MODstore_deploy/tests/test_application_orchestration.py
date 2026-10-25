@@ -7,7 +7,10 @@ from pathlib import Path
 from modstore_server.application.catalog import CatalogApplicationService
 from modstore_server.application.employee import EmployeeApplicationService
 from modstore_server.eventing.bus import InMemoryNeuroBus
-from modstore_server.eventing.contracts import CATALOG_PACKAGE_PUBLISHED, EMPLOYEE_PACK_REGISTERED
+from modstore_server.eventing.contracts import (
+    CATALOG_PACKAGE_PUBLISHED,
+    EMPLOYEE_PACK_REGISTERED,
+)
 from modstore_server.infrastructure.catalog_repository import (
     InMemoryCatalogPackageStorage,
     InMemoryCatalogRepository,

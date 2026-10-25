@@ -17,7 +17,7 @@ import httpx
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .types import PlanGraph, WorkflowNode
+from .workflow_types import PlanGraph, WorkflowNode
 
 logger = logging.getLogger(__name__)
 

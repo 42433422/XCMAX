@@ -25,7 +25,12 @@ CASES = [
         "scaffold",
     ),
     ("POST", "/api/mods/shared/snapshots", {}, "snapshot"),
-    ("POST", "/api/mods/shared/attach-catalog-employee", {"pkg_id": "synthetic"}, "attach"),
+    (
+        "POST",
+        "/api/mods/shared/attach-catalog-employee",
+        {"pkg_id": "synthetic"},
+        "attach",
+    ),
     (
         "POST",
         "/api/mods/ai-scaffold",
@@ -33,7 +38,12 @@ CASES = [
         "ai",
     ),
     ("PUT", "/api/mods/shared/manifest", {"manifest": {"id": "shared"}}, "manifest"),
-    ("PUT", "/api/mods/shared/file", {"path": "hello.txt", "content": "synthetic"}, "file"),
+    (
+        "PUT",
+        "/api/mods/shared/file",
+        {"path": "hello.txt", "content": "synthetic"},
+        "file",
+    ),
     ("DELETE", "/api/mods/shared", None, "delete"),
     ("POST", "/api/sync/push", {}, "push"),
     ("POST", "/api/sync/push", {"mod_ids": []}, "push"),
@@ -68,7 +78,9 @@ def guarded_client(monkeypatch, tmp_path):
     monkeypatch.setattr(
         sync_v1,
         "decode_access_token",
-        lambda token: {"sub": users[f"Bearer {token}"].id} if f"Bearer {token}" in users else None,
+        lambda token: (
+            {"sub": users[f"Bearer {token}"].id} if f"Bearer {token}" in users else None
+        ),
     )
     monkeypatch.setattr(
         sync_v1,
@@ -95,10 +107,12 @@ def guarded_client(monkeypatch, tmp_path):
     monkeypatch.setattr(sync_v1, "_lib", lambda: tmp_path)
     monkeypatch.setattr(sync_v1, "list_mods", lambda _: [{"id": "shared"}, {"id": "other"}])
     monkeypatch.setattr(
-        "modstore_server.customer_delivery_catalog.authorized_runtime_ids", lambda uid: {"shared"}
+        "modstore_server.customer_delivery_catalog.authorized_runtime_ids",
+        lambda uid: {"shared"},
     )
     monkeypatch.setattr(
-        "modstore_server.customer_delivery_catalog.private_release_rows", lambda *args: {}
+        "modstore_server.customer_delivery_catalog.private_release_rows",
+        lambda *args: {},
     )
     writers = {
         "manifest": Mock(return_value=[]),
@@ -124,7 +138,9 @@ def guarded_client(monkeypatch, tmp_path):
     factory.return_value.__enter__.return_value = session
     monkeypatch.setattr(authoring, "get_session_factory", lambda: factory)
     monkeypatch.setattr(
-        authoring, "read_manifest", lambda _: ({"id": "shared", "workflow_employees": []}, None)
+        authoring,
+        "read_manifest",
+        lambda _: ({"id": "shared", "workflow_employees": []}, None),
     )
     for key, name, result in [
         ("restore", "restore_manifest_snapshot", ({}, [])),
@@ -138,10 +154,12 @@ def guarded_client(monkeypatch, tmp_path):
         monkeypatch.setattr(authoring, name, writers[key])
     writers["ai"] = AsyncMock(return_value={"ok": True})
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.run_mod_suite_ai_scaffold_async", writers["ai"]
+        "modstore_server.mod_scaffold_runner.run_mod_suite_ai_scaffold_async",
+        writers["ai"],
     )
     monkeypatch.setattr(
-        "modstore_server.mod_scaffold_runner.analyze_mod_employee_readiness", lambda *_: {}
+        "modstore_server.mod_scaffold_runner.analyze_mod_employee_readiness",
+        lambda *_: {},
     )
     app = FastAPI()
     app.include_router(authoring.router)
@@ -158,9 +176,19 @@ def guarded_client(monkeypatch, tmp_path):
     "headers,status",
     [
         ({"Cookie": "csrf_token=t", "X-CSRF-Token": "t"}, 401),
-        ({"Authorization": "Bearer forged", "Cookie": "csrf_token=t", "X-CSRF-Token": "t"}, 401),
+        (
+            {
+                "Authorization": "Bearer forged",
+                "Cookie": "csrf_token=t",
+                "X-CSRF-Token": "t",
+            },
+            401,
+        ),
         ({"Authorization": "Bearer member"}, 403),
-        ({"Authorization": "Bearer forged", "Cookie": "is_admin=true; csrf_token=t"}, 403),
+        (
+            {"Authorization": "Bearer forged", "Cookie": "is_admin=true; csrf_token=t"},
+            403,
+        ),
     ],
 )
 def test_untrusted_and_entitled_members_cannot_mutate_shared_code(
@@ -190,7 +218,12 @@ def test_admin_retains_existing_shared_write_contract(
 @pytest.mark.parametrize("operation", ["push", "pull"])
 @pytest.mark.parametrize(
     "token,status",
-    [("pat_member", 403), ("pat_admin", 200), ("pat_no_scope", 403), ("pat_revoked", 401)],
+    [
+        ("pat_member", 403),
+        ("pat_admin", 200),
+        ("pat_no_scope", 403),
+        ("pat_revoked", 401),
+    ],
 )
 def test_v1_write_requires_both_admin_role_and_existing_pat_scope(
     guarded_client, operation, token, status

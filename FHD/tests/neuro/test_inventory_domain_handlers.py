@@ -33,7 +33,7 @@ from app.neuro_bus.domains.inventory_domain_handlers import (
     handle_auto_inbound_requested,
     register_inventory_domain_handlers,
 )
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 @pytest.fixture(autouse=True)
@@ -112,7 +112,7 @@ class TestResolvePurchaseService:
         fake_module.PurchaseService = lazy_cls
         monkeypatch.setitem(
             sys.modules,
-            "app.services.purchase_service",
+            "app.domain.shared_services.purchase_service",
             fake_module,
         )
 

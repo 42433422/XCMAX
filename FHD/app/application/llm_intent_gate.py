@@ -187,7 +187,7 @@ def llm_route_message(message: str) -> dict[str, Any] | None:
     if _MUTATION_RE.search(text):
         return None
     try:
-        from app.services.intent_service import recognize_intents
+        from app.domain.shared_services.intent_service import recognize_intents
 
         flags = recognize_intents(text)
         if flags.get("is_negated") or flags.get("is_negation_intent"):

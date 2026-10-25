@@ -56,8 +56,13 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     monkeypatch, case_ticket_payload, tmp_path
 ):
     from modstore_server import customer_service_api
-    from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
-    from modstore_server.incident_bus import _dispatch_intake_routing_plan, _extract_routing_plan
+    from modstore_server.duty_workforce_contracts import (
+        enrich_customer_ticket_publish_payload,
+    )
+    from modstore_server.incident_bus import (
+        _dispatch_intake_routing_plan,
+        _extract_routing_plan,
+    )
 
     # 1) publish 边界 enrich
     enriched = enrich_customer_ticket_publish_payload(dict(case_ticket_payload))
@@ -103,7 +108,12 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     published: list[dict] = []
 
     def _capture_publish(
-        event_type, payload, source="unit", fingerprint=None, dedupe_minutes=0, inbox_key=None
+        event_type,
+        payload,
+        source="unit",
+        fingerprint=None,
+        dedupe_minutes=0,
+        inbox_key=None,
     ):
         assert inbox_key, "Durable dispatch must forward its inbox identity"
         published.append({"event_type": event_type, "payload": dict(payload), "source": source})

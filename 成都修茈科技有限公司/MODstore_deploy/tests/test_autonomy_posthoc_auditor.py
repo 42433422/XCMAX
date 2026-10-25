@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import modstore_server.db.base as db_base
+import modstore_server.db.db_base as db_base
 import modstore_server.models as models
 from modstore_server.autonomy_decision_audit import (
     append_autonomy_decision,

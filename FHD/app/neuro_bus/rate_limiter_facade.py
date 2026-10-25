@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, ClassVar, Protocol, cast
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 logger = logging.getLogger(__name__)
 

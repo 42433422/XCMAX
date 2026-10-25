@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.application.workflow.types import WorkflowNode
+from app.application.workflow.workflow_types import WorkflowNode
 from app.domain.conversation.services.chat_tool_intent import (
     attach_explicit_tenant_id as _attach_explicit_tenant_id,
 )

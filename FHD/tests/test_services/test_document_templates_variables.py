@@ -1,4 +1,4 @@
-"""Tests for app.services.document_templates.variables — pure helper functions."""
+"""Tests for app.domain.shared_services.document_templates.variables — pure helper functions."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.document_templates.variables import (
+from app.domain.shared_services.document_templates.variables import (
     _DEFAULT_TEMPLATE_SCOPE_RULES,
     _TERM_EQUIVALENTS,
     _build_scope_template_type_map,

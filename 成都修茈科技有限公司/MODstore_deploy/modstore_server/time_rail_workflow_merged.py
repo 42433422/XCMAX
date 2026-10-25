@@ -86,7 +86,14 @@ def _node_status_shell(
 ) -> _facade().Dict[str, _facade().Any]:
     ev = list(evidence or [])
     if source:
-        ev.append({"source": source, "last_run": last_run, "ok": ok, "detail": dict(detail or {})})
+        ev.append(
+            {
+                "source": source,
+                "last_run": last_run,
+                "ok": ok,
+                "detail": dict(detail or {}),
+            }
+        )
     is_observed = (
         bool(observed)
         if observed is not None
@@ -332,7 +339,11 @@ def _ensure_non_triggered_time_rail_decisions(
             )
     if release_kind not in ("installer", "major"):
         for nid in ("P9I", "P5I", "P6I", "FASTGATE", "DLSSOT"):
-            mark(nid, source="daily_digest.release_kind", reason="release_kind_not_installer")
+            mark(
+                nid,
+                source="daily_digest.release_kind",
+                reason="release_kind_not_installer",
+            )
     pipeline = phase_c_pipeline or {}
     step_ids = list(
         pipeline.get("executed_steps")
@@ -441,7 +452,12 @@ def _action_item_stats(
             by_status[str(it.get("status") or "")] = (
                 by_status.get(str(it.get("status") or ""), 0) + 1
             )
-        return {"ok": True, "total": len(items), "by_kind": by_kind, "by_status": by_status}
+        return {
+            "ok": True,
+            "total": len(items),
+            "by_kind": by_kind,
+            "by_status": by_status,
+        }
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.debug("time_rail: action item stats unavailable", exc_info=True)
         return {"ok": False, "total": 0, "by_kind": {}, "by_status": {}}

@@ -31,9 +31,9 @@ class BatchMigrationFixer:
             content = event_file.read_text(encoding="utf-8")
 
             # 确保有正确的基类导入
-            if "from app.neuro_bus.events.base import" not in content:
+            if "from app.neuro_bus.events.events_base import" not in content:
                 # 添加导入
-                new_import = "from app.neuro_bus.events.base import NeuroEvent, EventPriority\n"
+                new_import = "from app.neuro_bus.events.events_base import NeuroEvent, EventPriority\n"
                 content = new_import + content
                 event_file.write_text(content, encoding="utf-8")
                 fixed_count += 1
@@ -62,7 +62,7 @@ class BatchMigrationFixer:
                 lines = content.split("\n")
                 import_idx = -1
                 for i, line in enumerate(lines):
-                    if line.startswith("from app.neuro_bus.events.base import"):
+                    if line.startswith("from app.neuro_bus.events.events_base import"):
                         import_idx = i
                         break
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
-from app.application.audit_log_reader import export_audit_log_csv, list_audit_log_entries
+from app.domain.app_pure.audit_log_reader import export_audit_log_csv, list_audit_log_entries
 from app.infrastructure.auth.dependencies import get_logged_in_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin-audit"])

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from fastapi import Request
 from sqlalchemy.orm import Session
 
-from .ports import JsonObject, LocalUser
+from .port_contracts import JsonObject, LocalUser
 
 if TYPE_CHECKING:
     from app.db.models.user import Session as UserSession

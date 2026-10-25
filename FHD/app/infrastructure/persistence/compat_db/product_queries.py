@@ -14,7 +14,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import OperationalError
 
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _EXPORT_MAX_ROWS,
     _sql_statement_timeout_ms,
 )

@@ -7,7 +7,10 @@ import re
 import shutil
 from typing import Any, Dict, Optional
 
-from modstore_server.catalog_quality import OFFICE_AUX_PACK_1_PKG_IDS, PUBLIC_TABULAR_PKG_IDS
+from modstore_server.catalog_quality import (
+    OFFICE_AUX_PACK_1_PKG_IDS,
+    PUBLIC_TABULAR_PKG_IDS,
+)
 from modstore_server.employee_golden_compare import PROTECTED_GOLDEN_IDS
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 

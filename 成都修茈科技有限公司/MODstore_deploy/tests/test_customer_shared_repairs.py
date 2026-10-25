@@ -6,7 +6,11 @@ from ipaddress import IPv6Address
 import pytest
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
-from tests.test_customer_issue_delivery_pipeline import github_fixture, make_ticket, seed_repair
+from tests.test_customer_issue_delivery_pipeline import (
+    github_fixture,
+    make_ticket,
+    seed_repair,
+)
 
 
 def _as(monkeypatch, user):
@@ -78,7 +82,8 @@ def test_confirmed_link_skips_repeat_dispatch_and_keeps_customer_acceptance_inde
     assert conflict.status_code == 409
     published = []
     monkeypatch.setattr(
-        "modstore_server.incident_bus.publish", lambda *a, **k: published.append(a) or True
+        "modstore_server.incident_bus.publish",
+        lambda *a, **k: published.append(a) or True,
     )
     envelope = {
         "id": "public-repair-test",
@@ -110,7 +115,13 @@ def test_confirmed_link_skips_repeat_dispatch_and_keeps_customer_acceptance_inde
     assert item["ready"] is True and target["owner_user_id"] == pair["target_user"].id
     receipt = {
         key: target[key]
-        for key in ("host_sha", "version", "release_id", "signed_metadata_sha256", "case_id")
+        for key in (
+            "host_sha",
+            "version",
+            "release_id",
+            "signed_metadata_sha256",
+            "case_id",
+        )
     }
     receipt.update(
         receipt_id="reuse-customer-confirmation",
@@ -143,7 +154,8 @@ def test_confirmed_link_skips_repeat_dispatch_and_keeps_customer_acceptance_inde
 
 
 @pytest.mark.parametrize(
-    "change", ["version", "sha", "description", "private", "source_reopened", "source_worker"]
+    "change",
+    ["version", "sha", "description", "private", "source_reopened", "source_worker"],
 )
 def test_link_rechecks_source_applicability_and_repair_proof(client, monkeypatch, pair, change):
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
@@ -164,7 +176,8 @@ def test_link_rechecks_source_applicability_and_repair_proof(client, monkeypatch
             source = db.get(CustomerServiceTicket, pair["source_id"])
             original = json_loads(source.evidence_json, {})
             original["resolution"].update(
-                repair_verified=False, reopen_after_action_id=pair["body"]["source_action_id"]
+                repair_verified=False,
+                reopen_after_action_id=pair["body"]["source_action_id"],
             )
             source.evidence_json = json_dumps(original)
         else:

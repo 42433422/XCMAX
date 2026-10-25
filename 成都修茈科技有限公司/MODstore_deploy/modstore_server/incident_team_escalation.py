@@ -43,9 +43,13 @@ def _write(db, event, payload: dict) -> None:
     assert_incident_claim(event.id, session=db)
     won = (
         db.query(IncidentEvent)
-        .filter(IncidentEvent.id == event.id, IncidentEvent.payload_json == event.payload_json)
+        .filter(
+            IncidentEvent.id == event.id,
+            IncidentEvent.payload_json == event.payload_json,
+        )
         .update(
-            {"payload_json": json.dumps(payload, ensure_ascii=False)}, synchronize_session=False
+            {"payload_json": json.dumps(payload, ensure_ascii=False)},
+            synchronize_session=False,
         )
     )
     if not won:
@@ -120,7 +124,12 @@ def _dispatch_requested(event_id: int, receipt: dict) -> dict:
 
 
 def request_incident_escalation(
-    *, event_id: int, role: str, category: str, reason: str, attempted_actions: dict | None = None
+    *,
+    event_id: int,
+    role: str,
+    category: str,
+    reason: str,
+    attempted_actions: dict | None = None,
 ) -> dict:
     """Request one read-only ultimate review for the persisted failed attempt."""
     try:
@@ -136,9 +145,17 @@ def request_incident_escalation(
                 )
                 attempt = str(row.get("attempt_id") or "")
                 if not attempt:
-                    return {"state": "failed", "accepted": False, "error": "role_attempt_missing"}
+                    return {
+                        "state": "failed",
+                        "accepted": False,
+                        "error": "role_attempt_missing",
+                    }
                 if row.get("ok") is True:
-                    return {"state": "cancelled", "accepted": False, "error": "attempt_recovered"}
+                    return {
+                        "state": "cancelled",
+                        "accepted": False,
+                        "error": "attempt_recovered",
+                    }
                 identity = [
                     event_id,
                     payload.get("ticket_id"),

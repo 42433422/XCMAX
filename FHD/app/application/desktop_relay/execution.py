@@ -7,7 +7,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.desktop_relay.ports import (
+from app.application.desktop_relay.protocols import (
     ClassifyResultCall,
     JsonObject,
     SuperEmployee,

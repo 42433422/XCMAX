@@ -7,7 +7,7 @@ import uuid
 from typing import Any, cast
 
 from app.application.employee_runtime.tool_scope import CODE_WRITE_TOOLS, WRITE_TOOLS
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def build_write_approval_gate(
                 ApprovalGatedEngine,
             )
             from app.application.workflow.engine import WorkflowEngine
-            from app.application.workflow.types import PlanGraph, WorkflowNode
+            from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
             from resources.config.risk_actions_loader import get_action_risk
 
             write_action = "execute"

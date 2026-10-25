@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from app.services.conversation.prompts import PromptsMixin
+from app.domain.shared_services.conversation.prompts import PromptsMixin
 
 
 @pytest.fixture

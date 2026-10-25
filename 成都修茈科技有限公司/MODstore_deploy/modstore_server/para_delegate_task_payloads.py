@@ -158,7 +158,10 @@ def prepare_task_group(
             payload = transform(req, payload, h._normalize_tool_name(selected_tool))
         except DoltIncidentContractError as exc:
             group.blocked = _blocked(
-                grant, "dolt_incident_contract", "blocked_dolt_incident_contract", str(exc)
+                grant,
+                "dolt_incident_contract",
+                "blocked_dolt_incident_contract",
+                str(exc),
             )
             return
         if not group.first_payload:

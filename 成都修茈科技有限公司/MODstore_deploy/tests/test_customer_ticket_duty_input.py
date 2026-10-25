@@ -85,7 +85,9 @@ def test_duty_event_execution_input_enriches_customer_ticket(monkeypatch):
 
 
 def test_enrich_customer_ticket_publish_payload_has_requests_and_ticket():
-    from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
+    from modstore_server.duty_workforce_contracts import (
+        enrich_customer_ticket_publish_payload,
+    )
 
     enriched = enrich_customer_ticket_publish_payload(
         {

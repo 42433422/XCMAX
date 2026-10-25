@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest, ApprovalStatus
 
-from .ports import ApprovalAccess, AuditWriter, JsonObject, WorkspaceResponse
+from .protocols import ApprovalAccess, AuditWriter, JsonObject, WorkspaceResponse
 from .repository import ApprovalRepository
 
 

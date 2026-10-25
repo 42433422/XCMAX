@@ -15,8 +15,10 @@ from fastapi.testclient import TestClient
 
 from modstore_server.application.notification import NotificationApplicationService
 from modstore_server.domain import notification as notification_domain
-from modstore_server.domain.notification.types import NotificationType
-from modstore_server.infrastructure.notification_repository import InMemoryNotificationRepository
+from modstore_server.domain.notification.notification_types import NotificationType
+from modstore_server.infrastructure.notification_repository import (
+    InMemoryNotificationRepository,
+)
 
 
 class _RecordingPusher:

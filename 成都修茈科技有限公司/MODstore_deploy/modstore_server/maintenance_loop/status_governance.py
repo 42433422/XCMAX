@@ -60,7 +60,8 @@ def project_governance_state(state):
                         item.get("executable_template", {}).get("required_tests")
                         if isinstance(item.get("executable_template"), dict)
                         and isinstance(
-                            item.get("executable_template", {}).get("required_tests"), list
+                            item.get("executable_template", {}).get("required_tests"),
+                            list,
                         )
                         else []
                     ),
@@ -239,7 +240,10 @@ def project_governance_state(state):
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "register_duty_employees"
-            next_actions = ["register_duty_employees", "refresh_self_maintenance_status"]
+            next_actions = [
+                "register_duty_employees",
+                "refresh_self_maintenance_status",
+            ]
         elif gate_action == "isolate":
             ui_state = "requires_roster_isolation"
             tone = "bad"
@@ -266,7 +270,10 @@ def project_governance_state(state):
             primary_surface = "self_evolution_loop"
             primary_view = "loop"
             primary_action = "inspect_governance_audit"
-            next_actions = ["inspect_governance_audit", "review_failed_governance_actions"]
+            next_actions = [
+                "inspect_governance_audit",
+                "review_failed_governance_actions",
+            ]
         elif not participant_count:
             ui_state = "waiting_for_loop_participants"
             tone = "warn"
@@ -381,7 +388,11 @@ def project_governance_state(state):
             "governance_health": state["governance_audit_summary"],
             "next_actions": next_actions,
             "handoff_path": [
-                {"surface": "self_evolution_loop", "role": "runtime_overview", "view": "loop"},
+                {
+                    "surface": "self_evolution_loop",
+                    "role": "runtime_overview",
+                    "view": "loop",
+                },
                 {
                     "surface": "duty_roster_graph",
                     "role": "governance_surface",

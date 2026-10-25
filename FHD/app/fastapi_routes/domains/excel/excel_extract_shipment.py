@@ -141,7 +141,7 @@ async def shipment_etl_preview(
     template_name: str = Form(""),
     template_scope: str = Form(""),
 ):
-    from app.fastapi_routes.shipment_etl.ports import TemplateCapture
+    from app.application.shipment_etl.protocols import TemplateCapture
 
     imports, *_rest = _build_etl_http()
     return await imports.preview(
@@ -179,7 +179,7 @@ async def shipment_etl_execute(
     template_scope: str = Form(""),
     _user: Any = Depends(require_identified_user),
 ):
-    from app.fastapi_routes.shipment_etl.ports import TemplateCapture
+    from app.application.shipment_etl.protocols import TemplateCapture
 
     imports, *_rest = _build_etl_http()
     return await imports.execute(

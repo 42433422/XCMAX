@@ -186,7 +186,9 @@ def test_source_filtered_event_contract_builds_safe_system_input(monkeypatch) ->
     assert manifest["id"] == "employee-planner"
 
 
-def test_operational_events_supply_real_deterministic_handler_inputs(monkeypatch) -> None:
+def test_operational_events_supply_real_deterministic_handler_inputs(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("XCMAX_MONOREPO_ROOT", "/opt/xcmax/current")
     schedule = duty_event_execution_input(
         "daily-orchestrator",

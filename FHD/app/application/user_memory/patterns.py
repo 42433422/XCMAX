@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from app.application.user_memory.models import ActionPattern, ContextSummary, UserMemory
-from app.application.user_memory.ports import JsonObject, MemoryAccess, memory_transaction
+from app.application.user_memory.protocols import JsonObject, MemoryAccess, memory_transaction
 from app.domain.user_memory.analysis import (
     analyze_action_sequence,
     suggestions_for_sequences,

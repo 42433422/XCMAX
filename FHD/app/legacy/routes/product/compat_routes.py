@@ -14,14 +14,14 @@ from fastapi import HTTPException as HTTPException
 from fastapi import Query as Query
 from fastapi.responses import JSONResponse, Response
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.fastapi_routes.xcagi_compat_product_actions import (
     execute_product_action,
     price_list_word_response,
 )
 from app.infrastructure.auth.business_scope_gate import require_scoped_business_permission
 from app.infrastructure.auth.db_token import verify_db_read_token_header
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _business_mod_json_block,
     _product_parse_id,
     _product_parse_is_active,
@@ -54,7 +54,7 @@ from .mutation_flow import ProductMutations, mutation_preflight, response_status
 from .mutation_flow import _http_exception_result as _http_exception_result
 from .mutation_flow import _normalize_products_create_payload as _normalize_products_create_payload
 from .mutation_routes import ProductMutationRoutes
-from .ports import (
+from .port_contracts import (
     create_product_agent,
     load_business_visibility,
     load_price_preview,

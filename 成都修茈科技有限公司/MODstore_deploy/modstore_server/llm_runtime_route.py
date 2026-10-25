@@ -208,7 +208,10 @@ async def platform_model_catalog(
 ) -> dict[str, Any]:
     """Return selectable platform-funded models from the canonical catalog."""
 
-    from modstore_server.llm_catalog import get_models_for_credentials, resolve_catalog_credentials
+    from modstore_server.llm_catalog import (
+        get_models_for_credentials,
+        resolve_catalog_credentials,
+    )
     from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
     from modstore_server.models import get_session_factory
 

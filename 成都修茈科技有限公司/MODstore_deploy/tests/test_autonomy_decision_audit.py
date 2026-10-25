@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import DatabaseError
 
-import modstore_server.db.base as db_base
+import modstore_server.db.db_base as db_base
 import modstore_server.models as models
 from modstore_server.api.deps import require_admin
 from modstore_server.autonomy_decision_audit import (
@@ -21,7 +21,10 @@ from modstore_server.autonomy_decision_audit import (
 )
 from modstore_server.autonomy_decision_evidence_api import router
 from modstore_server.redline_approval_api import router as redline_router
-from modstore_server.redline_approval_gate import create_redline_request, reject_redline_request
+from modstore_server.redline_approval_gate import (
+    create_redline_request,
+    reject_redline_request,
+)
 
 NOW = datetime(2026, 7, 22, 8, 0, tzinfo=timezone.utc)
 

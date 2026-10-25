@@ -10,7 +10,7 @@ from starlette.types import ASGIApp
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import InternalHttpClient
+from .protocols import InternalHttpClient
 from .route_policy import canonical_api_target
 
 

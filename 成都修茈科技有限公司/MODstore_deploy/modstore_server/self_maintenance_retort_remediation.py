@@ -77,7 +77,9 @@ def assess_retort_scope_diff_contract(
 ) -> Optional[dict[str, Any]]:
     """Fail closed when an active Retort scope hold exceeds the clean-base diff budget."""
 
-    from modstore_server.self_maintenance_policy import memory_has_retort_scope_remediation
+    from modstore_server.self_maintenance_policy import (
+        memory_has_retort_scope_remediation,
+    )
 
     if not memory_has_retort_scope_remediation(memory):
         return None

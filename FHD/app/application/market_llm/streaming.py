@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator, Iterator
 
 import httpx
 
-from .ports import ChatInput, Connection, Route, StreamPorts
+from .protocols import ChatInput, Connection, Route, StreamPorts
 
 
 def stream_sync(

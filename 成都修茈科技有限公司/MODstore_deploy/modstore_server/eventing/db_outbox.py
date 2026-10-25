@@ -23,7 +23,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
+from modstore_server.eventing.contracts import (
+    canonical_event_name,
+    event_version,
+    validate_payload,
+)
 from modstore_server.eventing.events import DomainEvent, new_event
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.models import OutboxDeadLetter, OutboxEvent, get_session_factory
@@ -445,7 +449,9 @@ class OutboxDispatcherWorker:
         while not self._stop.is_set():
             try:
                 drain(limit=self.batch_size)
-                from modstore_server.customer_issue_intake import recover_pending_incidents
+                from modstore_server.customer_issue_intake import (
+                    recover_pending_incidents,
+                )
 
                 recover_pending_incidents(limit=self.batch_size)
             except RECOVERABLE_ERRORS:

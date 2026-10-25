@@ -15,7 +15,9 @@ from shlex import quote as shlex_quote
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pkg-ids", required=True, help="Comma-separated pkg_id list")
-    ap.add_argument("--force", action="store_true", help="Pass --force to onboard script")
+    ap.add_argument(
+        "--force", action="store_true", help="Pass --force to onboard script"
+    )
     args = ap.parse_args()
     target = (os.environ.get("DEPLOY_SSH") or "").strip() or "root@119.27.178.147"
     deploy = "/root/modstore-git/MODstore_deploy"
@@ -28,7 +30,17 @@ def main() -> None:
         f"--repo-root {repo} --pkg-ids {ids_q}{extra}"
     )
     r = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=30", target, "bash", "-lc", inner],
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=30",
+            target,
+            "bash",
+            "-lc",
+            inner,
+        ],
         check=False,
     )
     raise SystemExit(r.returncode)

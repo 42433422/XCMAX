@@ -7,7 +7,7 @@ from logging import Logger
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import ChatTrace, ChatTurn, Context, Payload
+from .protocols import ChatTrace, ChatTurn, Context, Payload
 
 
 @dataclass

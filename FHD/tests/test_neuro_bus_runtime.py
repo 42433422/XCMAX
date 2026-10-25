@@ -66,7 +66,7 @@ def test_run_lifespan_setup_host_path(monkeypatch):
 
     monkeypatch.setattr("app.neuro_bus.bus_setup.setup_neuro_bus", _setup)
     monkeypatch.setattr(
-        "app.neuro_bus.domains.base.get_domain_registry",
+        "app.neuro_bus.domains.domains_base.get_domain_registry",
         lambda: _Registry(),
     )
 

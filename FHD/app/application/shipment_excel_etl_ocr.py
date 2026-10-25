@@ -208,7 +208,7 @@ def ocr_source_to_workbook(
         }
 
     try:
-        from app.services.ocr_service import get_ocr_service
+        from app.domain.shared_services.ocr_service import get_ocr_service
 
         ocr = get_ocr_service()
         with etl_security.open_etl_input_file(path) as source_file:

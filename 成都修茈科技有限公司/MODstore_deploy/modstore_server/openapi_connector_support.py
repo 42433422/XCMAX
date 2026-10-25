@@ -12,7 +12,12 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from modstore_server.models import OpenApiConnector, OpenApiCredential, OpenApiOperation, User
+from modstore_server.models import (
+    OpenApiConnector,
+    OpenApiCredential,
+    OpenApiOperation,
+    User,
+)
 from modstore_server.openapi_connector_runtime import (
     OutboundBlocked,
     decrypt_credential_payload,

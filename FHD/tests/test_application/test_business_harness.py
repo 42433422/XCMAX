@@ -228,7 +228,7 @@ def test_terminal_projection_closes_original_plan_without_reexecuting(
     from sqlalchemy.pool import StaticPool
 
     from app.application.workflow.plan_store import WorkflowPlanStore
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.db.models.workflow import WorkflowPlan
 
     engine = create_engine("sqlite:///:memory:", poolclass=StaticPool)

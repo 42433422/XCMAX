@@ -1,4 +1,4 @@
-"""Deep coverage tests for app.application.enterprise_deploy_pull.
+"""Deep coverage tests for app.domain.app_pure.enterprise_deploy_pull.
 
 Targets remaining uncovered branches:
 - _read_deployed_sha256 (file missing, read error)
@@ -23,7 +23,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import enterprise_deploy_pull as edp
-from app.application.enterprise_deploy_pull import (
+from app.domain.app_pure.enterprise_deploy_pull import (
     PullJob,
     PullStep,
     _build_pull_steps,

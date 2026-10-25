@@ -53,7 +53,9 @@ except ImportError:
 
 
 def _maybe_fill_keys_from_files() -> None:
-    if os.environ.get("ALIPAY_APP_PRIVATE_KEY") or os.environ.get("ALIPAY_APP_PRIVATE_KEY_PATH"):
+    if os.environ.get("ALIPAY_APP_PRIVATE_KEY") or os.environ.get(
+        "ALIPAY_APP_PRIVATE_KEY_PATH"
+    ):
         return
     priv = _root / "keys" / "app_private_key.pem"
     if priv.is_file():
@@ -68,7 +70,9 @@ def _maybe_fill_keys_from_files() -> None:
 
 _maybe_fill_keys_from_files()
 
-_app_id = (os.environ.get("ALIPAY_APP_ID") or os.environ.get("ALIPAY_PID") or "").strip()
+_app_id = (
+    os.environ.get("ALIPAY_APP_ID") or os.environ.get("ALIPAY_PID") or ""
+).strip()
 if not _app_id:
     print(
         "未配置 ALIPAY_APP_ID。请在 MODstore_deploy/.env 中填写支付宝「应用 APPID」："
@@ -84,7 +88,9 @@ if not (os.environ.get("ALIPAY_DEBUG") or "").strip():
 _notify = (os.environ.get("ALIPAY_NOTIFY_URL") or "").strip()
 if not _notify:
     if _alipay_sandbox_mode():
-        os.environ["ALIPAY_NOTIFY_URL"] = "http://127.0.0.1:8765/api/payment/notify/alipay"
+        os.environ["ALIPAY_NOTIFY_URL"] = (
+            "http://127.0.0.1:8765/api/payment/notify/alipay"
+        )
     else:
         print(
             "正式收款须设置公网可访问的 ALIPAY_NOTIFY_URL（HTTPS，与线上一致），"

@@ -116,7 +116,9 @@ def main() -> int:
 
     from modstore_server.catalog_store import append_package
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-    from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+    from modstore_server.employee_asset_pipeline import (
+        mirror_catalog_file_to_market_files,
+    )
     from modstore_server.mod_scaffold_runner import import_zip, modstore_library_path
     from modstore_server.models import CatalogItem, User, get_session_factory
 

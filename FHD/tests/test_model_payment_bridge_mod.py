@@ -17,13 +17,11 @@ def test_model_payment_manifest_facade_flag():
 
 def test_model_payment_stays_out_of_primary_sidebar():
     """模型服务保留设置页能力，但不能再次注册为主导航菜单。"""
-    for mod_dir in (
-        REPO / "mods" / "xcagi-model-payment-bridge",
-        REPO / "XCAGI" / "mods" / "xcagi-model-payment-bridge",
-    ):
-        data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
-        menu_ids = {str(row.get("id") or "") for row in data.get("frontend", {}).get("menu", [])}
-        assert "mod-model-payment" not in menu_ids
+    # debt19: SSOT 仅 FHD/mods；禁止再导出 XCAGI/mods 副本
+    mod_dir = REPO / "mods" / "xcagi-model-payment-bridge"
+    data = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
+    menu_ids = {str(row.get("id") or "") for row in data.get("frontend", {}).get("menu", [])}
+    assert "mod-model-payment" not in menu_ids
 
 
 def test_model_payment_blueprints_delegate_routes():

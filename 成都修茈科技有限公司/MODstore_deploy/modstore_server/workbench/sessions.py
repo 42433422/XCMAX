@@ -21,7 +21,9 @@ Payload = dict[str, Any]
 
 
 def session_store_directory() -> Path:
-    from modstore_server.infrastructure.private_asset_storage import require_private_directory
+    from modstore_server.infrastructure.private_asset_storage import (
+        require_private_directory,
+    )
 
     configured = os.environ.get("MODSTORE_RUNTIME_DIR", "").strip()
     runtime = Path(configured) if configured else Path(tempfile.gettempdir()) / "modstore_runtime"
@@ -143,7 +145,6 @@ class SessionStore:
 
 
 class StepUpdate(Protocol):
-
     def __call__(
         self, sid: str, step_id: str, status: str, message: str | dict | None = None
     ) -> Awaitable[None]: ...
@@ -173,7 +174,11 @@ class SessionProgress:
                 if step["id"] != step_id:
                     continue
                 previous = step.get("status")
-                if previous in ("done", "error") and status not in ("done", "error", "skipped"):
+                if previous in ("done", "error") and status not in (
+                    "done",
+                    "error",
+                    "skipped",
+                ):
                     break
                 if previous == "running" and status == "pending":
                     break
@@ -193,7 +198,9 @@ class SessionProgress:
         message = (error or "步骤失败").strip()[:1000]
         if step_id == "workflow_sandbox" and message:
             try:
-                from modstore_server.craft_failure_signals import emit_craft_step_failure
+                from modstore_server.craft_failure_signals import (
+                    emit_craft_step_failure,
+                )
 
                 async with self.store.lock:
                     self.store.hydrate(sid)

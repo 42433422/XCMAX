@@ -18,7 +18,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     from app.services import mobile_relay_service as relay
 
     notify = Mock()
-    monkeypatch.setattr("app.services.mobile_push.notify_user", notify)
+    monkeypatch.setattr("app.domain.shared_services.mobile_push.notify_user", notify)
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-http.db'}")
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 

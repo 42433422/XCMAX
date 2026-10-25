@@ -135,13 +135,13 @@ hiddenimports.extend(
         "app.fastapi_routes.domains.admin_audit.routes",
         "app.application.attendance_reference_data",
         "app.application.chat_business_safety",
-        "app.services.ai_action_audit_service",
-        "app.services.ocr_service",
+        "app.domain.shared_services.ai_action_audit_service",
+        "app.domain.shared_services.ocr_service",
         # XCMAX sync registers these appliers through importlib strings. Static
         # analysis cannot see them, but the installed desktop entitlement API
         # imports xcmax_sync_service and must have both modules available.
-        "app.services.xcmax_sync_basic_appliers",
-        "app.services.xcmax_sync_extended_appliers",
+        "app.domain.shared_services.xcmax_sync_basic_appliers",
+        "app.domain.shared_services.xcmax_sync_extended_appliers",
         "app.runtime_integrity",
     ]
 )
@@ -157,12 +157,12 @@ hiddenimports.extend(
     [
         "app.application.employee_circle_sync",
         "app.application.user_cs_demand_intake_bridge",
-        "app.services.service_contract_fill",
-        "app.services.user_cs_connected_welcome",
-        "app.services.user_cs_delivery",
-        "app.services.user_cs_enterprise_credentials",
-        "app.services.user_cs_landing_crm",
-        "app.services.user_cs_software_delivery",
+        "app.domain.shared_services.service_contract_fill",
+        "app.domain.shared_services.user_cs_connected_welcome",
+        "app.domain.shared_services.user_cs_delivery",
+        "app.domain.shared_services.user_cs_enterprise_credentials",
+        "app.domain.shared_services.user_cs_landing_crm",
+        "app.domain.shared_services.user_cs_software_delivery",
     ]
 )
 

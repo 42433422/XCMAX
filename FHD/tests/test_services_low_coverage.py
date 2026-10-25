@@ -7,29 +7,29 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.user_cs_crm_store import (
+from app.domain.shared_services.user_cs_crm_store import (
     CrmSyncError,
     get_crm_bundle_for_market_user,
     sync_crm_from_pipeline_doc,
 )
-from app.services.user_cs_delivery import (
+from app.domain.shared_services.user_cs_delivery import (
     apply_contract_snapshot_to_doc,
     build_delivery_progress_message,
     ensure_delivery_on_doc,
     update_delivery_plan,
 )
-from app.services.user_cs_demand_form import (
+from app.domain.shared_services.user_cs_demand_form import (
     _landing_base_url,
     build_intake_form_url,
     verify_webhook_secret,
 )
-from app.services.user_cs_enterprise_credentials import (
+from app.domain.shared_services.user_cs_enterprise_credentials import (
     _base_payload,
     issue_enterprise_credentials,
 )
-from app.services.user_cs_intake_notice import build_intake_form_notice_message
-from app.services.user_cs_landing_crm import apply_landing_submission_to_funnel
-from app.services.user_cs_software_delivery import notify_software_delivery
+from app.domain.shared_services.user_cs_intake_notice import build_intake_form_notice_message
+from app.domain.shared_services.user_cs_landing_crm import apply_landing_submission_to_funnel
+from app.domain.shared_services.user_cs_software_delivery import notify_software_delivery
 
 # ══════════════════════════════════════════════════════════════════════════════
 # user_cs_delivery
@@ -211,8 +211,8 @@ class TestBasePayload:
 
 
 class TestIssueEnterpriseCredentials:
-    @patch("app.services.user_cs_pipeline.load_pipeline")
-    @patch("app.services.user_cs_pipeline.save_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
     def test_issues_credentials(self, mock_save, mock_load):
         mock_load.return_value = {"username": "testuser"}
         mock_save.return_value = {"username": "testuser"}
@@ -220,8 +220,8 @@ class TestIssueEnterpriseCredentials:
         assert result["success"] is True
         assert "password" in result
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
-    @patch("app.services.user_cs_pipeline.save_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
     def test_custom_password(self, mock_save, mock_load):
         mock_load.return_value = {"username": "testuser"}
         mock_save.return_value = {"username": "testuser"}
@@ -242,7 +242,7 @@ class TestCrmSyncError:
 
 
 class TestGetCrmBundleForMarketUser:
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_empty_pipeline(self, mock_load):
         mock_load.return_value = {}
         result = get_crm_bundle_for_market_user(1)
@@ -250,7 +250,7 @@ class TestGetCrmBundleForMarketUser:
         assert result["quote"] is None
         assert result["invoice"] is None
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_with_opportunity(self, mock_load):
         mock_load.return_value = {
             "crm_opportunity_id": 10,
@@ -261,7 +261,7 @@ class TestGetCrmBundleForMarketUser:
         assert result["opportunity"] is not None
         assert result["opportunity"]["id"] == 10
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_with_quote(self, mock_load):
         mock_load.return_value = {
             "crm_quote_id": 20,
@@ -314,13 +314,13 @@ class TestBuildIntakeFormNoticeMessage:
 
 
 class TestApplyLandingSubmissionToFunnel:
-    @patch("app.services.user_cs_demand_form.apply_landing_submission_to_pipeline")
+    @patch("app.domain.shared_services.user_cs_demand_form.apply_landing_submission_to_pipeline")
     def test_anonymous_lead(self, mock_apply):
         result = apply_landing_submission_to_funnel({"market_user_id": 0})
         assert result["anonymous_lead"] is True
 
-    @patch("app.services.user_cs_intake_finalize.finalize_intake_submission")
-    @patch("app.services.user_cs_demand_form.apply_landing_submission_to_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_finalize.finalize_intake_submission")
+    @patch("app.domain.shared_services.user_cs_demand_form.apply_landing_submission_to_pipeline")
     def test_valid_user_no_crm_sync(self, mock_apply, mock_finalize):
         mock_apply.return_value = {
             "intake_submitted_at": "2026-01-01",
@@ -329,8 +329,8 @@ class TestApplyLandingSubmissionToFunnel:
         result = apply_landing_submission_to_funnel({"market_user_id": 1})
         assert "intake_submitted_at" in result
 
-    @patch("app.services.user_cs_intake_finalize.finalize_intake_submission")
-    @patch("app.services.user_cs_demand_form.apply_landing_submission_to_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_finalize.finalize_intake_submission")
+    @patch("app.domain.shared_services.user_cs_demand_form.apply_landing_submission_to_pipeline")
     def test_valid_user_needs_crm_sync(self, mock_apply, mock_finalize):
         mock_apply.return_value = {"intake_submitted_at": "2026-01-01"}
         mock_finalize.return_value = (
@@ -347,15 +347,15 @@ class TestApplyLandingSubmissionToFunnel:
 
 
 class TestNotifySoftwareDelivery:
-    @patch("app.services.user_cs_pipeline.load_pipeline")
-    @patch("app.services.user_cs_intake_notice._primary_contact_name")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name")
     def test_already_sent(self, mock_contact, mock_load):
         mock_load.return_value = {"software_delivery_sent_at": "2026-01-01"}
         result = notify_software_delivery(1)
         assert result["skipped"] is True
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
-    @patch("app.services.user_cs_intake_notice._primary_contact_name")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name")
     def test_no_contact(self, mock_contact, mock_load):
         mock_load.return_value = {}
         mock_contact.return_value = ""
@@ -363,9 +363,9 @@ class TestNotifySoftwareDelivery:
         assert result["success"] is False
         assert "未绑定" in result["error"]
 
-    @patch("app.services.user_cs_pipeline.save_pipeline")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
-    @patch("app.services.user_cs_intake_notice._primary_contact_name")
+    @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name")
     @patch("app.desktop_automation.service.get_desktop_automation_service")
     def test_send_success(self, mock_auto, mock_contact, mock_load, mock_save):
         mock_load.return_value = {}
@@ -378,8 +378,8 @@ class TestNotifySoftwareDelivery:
         assert result["success"] is True
 
     @patch("app.desktop_automation.service.get_desktop_automation_service")
-    @patch("app.services.user_cs_intake_notice._primary_contact_name")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_send_failure(self, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {}
         mock_contact.return_value = "张三"
@@ -388,8 +388,8 @@ class TestNotifySoftwareDelivery:
         assert result["success"] is False
 
     @patch("app.desktop_automation.service.get_desktop_automation_service")
-    @patch("app.services.user_cs_intake_notice._primary_contact_name")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_send_exception(self, mock_load, mock_contact, mock_auto):
         mock_load.return_value = {}
         mock_contact.return_value = "张三"

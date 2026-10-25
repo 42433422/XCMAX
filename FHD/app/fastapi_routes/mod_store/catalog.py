@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import JsonGet, MarketPage, PageMapper, Payload, RowFilter
+from .port_contracts import JsonGet, MarketPage, PageMapper, Payload, RowFilter
 from .projection import safe_text
 from .schemas import (
     ModStoreCatalogPayload,

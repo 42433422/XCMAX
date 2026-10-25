@@ -21,9 +21,9 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.application import account_security
 from app.db.models.user import User
+from app.domain.auth.ports import Database
 from app.fastapi_routes.domains.auth import routes
 from app.fastapi_routes.domains.auth.account_security import AccountSecurity
-from app.fastapi_routes.domains.auth.ports import Database
 from app.utils.path_io import user_avatar_storage
 
 
@@ -57,12 +57,12 @@ def fake_account(
     monkeypatch.setattr(routes, "resolve_session_user", lambda _request: principal)
     monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(db))
     monkeypatch.setattr(
-        "app.application.account_security.generate_totp_secret", lambda: "replacement-secret"
+        "app.domain.app_pure.account_security.generate_totp_secret", lambda: "replacement-secret"
     )
     monkeypatch.setattr(
-        "app.application.account_security.provisioning_uri", lambda *_args: "otpauth://fake"
+        "app.domain.app_pure.account_security.provisioning_uri", lambda *_args: "otpauth://fake"
     )
-    monkeypatch.setattr("app.application.account_security.verify_totp", lambda *_args: True)
+    monkeypatch.setattr("app.domain.app_pure.account_security.verify_totp", lambda *_args: True)
     return principal, db
 
 

@@ -716,7 +716,9 @@ async def _cognition_real(
         model_name = str(model_cfg.get("model_name") or "auto").strip()
         wants_auto = provider.lower() == "auto" or model_name.lower() == "auto"
         if wants_auto:
-            from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+            from modstore_server.mod_scaffold_runner import (
+                resolve_llm_provider_model_auto,
+            )
 
             uid = int(user_id or 0)
             if uid <= 0:
@@ -770,7 +772,8 @@ async def _cognition_real(
             role=str(normalized_inp.get("role") or ""),
         )
         max_tokens = min(
-            max_tokens, int(role_route.get("budget", {}).get("output_tokens") or max_tokens)
+            max_tokens,
+            int(role_route.get("budget", {}).get("output_tokens") or max_tokens),
         )
     messages = [{"role": "system", "content": system_prompt}]
     p_cfg = _facade()._get_section(config, "perception")
@@ -1306,7 +1309,9 @@ def _action_agent_runner(
                 read_only=read_only,
             )
             if not resolved:
-                from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+                from modstore_server.integrations.vibe_adapter import (
+                    ensure_within_workspace,
+                )
 
                 resolved = str(
                     ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
@@ -1337,7 +1342,9 @@ def _action_agent_runner(
         ):
             uid_ai = int(user_id or 0)
             if uid_ai > 0:
-                from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+                from modstore_server.mod_scaffold_runner import (
+                    resolve_llm_provider_model_auto,
+                )
 
                 with sf() as sess:
                     urow = sess.query(_facade().User).filter(_facade().User.id == uid_ai).first()
@@ -1433,7 +1440,9 @@ def _action_agent_runner(
         ctx["approval_required_globs"] = []
     try:
         from modstore_server.integrations.ops_action_handlers import OPS_EMPLOYEE_IDS
-        from modstore_server.integrations.ops_action_handlers import repo_root as _ops_repo_root
+        from modstore_server.integrations.ops_action_handlers import (
+            repo_root as _ops_repo_root,
+        )
 
         if employee_id in OPS_EMPLOYEE_IDS:
             ctx["ops_readonly_repo_root"] = str(_ops_repo_root())
@@ -1614,7 +1623,9 @@ def _action_direct_python(
             direct_input.get("_trusted_duty_contract_execution")
         )
         if reviewed_burn_in or reviewed_duty_execution:
-            from modstore_server.duty_workforce_contracts import resolve_reviewed_duty_employee_root
+            from modstore_server.duty_workforce_contracts import (
+                resolve_reviewed_duty_employee_root,
+            )
 
             root = resolve_reviewed_duty_employee_root(employee_id)
         else:
@@ -1681,7 +1692,9 @@ def _action_direct_python(
             model = str(kwargs.get("model") or "auto")
             uid = int(user_id or 0)
             if uid > 0 and (provider.lower() == "auto" or model.lower() == "auto"):
-                from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+                from modstore_server.mod_scaffold_runner import (
+                    resolve_llm_provider_model_auto,
+                )
 
                 with sf() as sess:
                     urow = sess.query(_facade().User).filter(_facade().User.id == uid).first()
@@ -1994,7 +2007,9 @@ def _actions_real(
             )
         elif handler in ("vibe_edit", "vibe_heal", "vibe_code"):
             try:
-                from modstore_server.integrations.vibe_action_handlers import dispatch_vibe_handler
+                from modstore_server.integrations.vibe_action_handlers import (
+                    dispatch_vibe_handler,
+                )
 
                 vibe_out = dispatch_vibe_handler(
                     str(handler), actions_cfg, reasoning, task, employee_id, user_id
@@ -2008,13 +2023,17 @@ def _actions_real(
                 }
             outputs.append(vibe_out or {"handler": str(handler), "ok": False, "error": "no output"})
         elif handler == "doc_sync":
-            from modstore_server.integrations.doc_sync_handler import dispatch_doc_sync_handler
+            from modstore_server.integrations.doc_sync_handler import (
+                dispatch_doc_sync_handler,
+            )
 
             outputs.append(
                 dispatch_doc_sync_handler(actions_cfg, reasoning, task, employee_id, user_id)
             )
         elif handler in ("shell_exec", "ssh_exec"):
-            from modstore_server.integrations.ops_action_handlers import dispatch_ops_handler
+            from modstore_server.integrations.ops_action_handlers import (
+                dispatch_ops_handler,
+            )
 
             outputs.append(
                 dispatch_ops_handler(handler, actions_cfg, reasoning, task, employee_id, user_id)
@@ -2160,7 +2179,9 @@ def _auto_wrap_execution_result_to_change_requests(
             from modstore_server.employee_change_request_service import (
                 defer_write_as_change_request,
             )
-            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+            from modstore_server.employee_scope_policy import (
+                workspace_policy_from_manifest,
+            )
 
             sf = _facade().get_session_factory()
             with sf() as session:
@@ -2387,7 +2408,10 @@ def _execute_employee_phase_01(state):
             True,
             {
                 "employee_id": state["employee_id"],
-                "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+                "pack": {
+                    "id": state["pack"]["pack_id"],
+                    "version": state["pack"]["version"],
+                },
                 "duration_ms": state["duration_ms"],
                 "result": {
                     "task": state["task"],
@@ -2405,7 +2429,10 @@ def _execute_employee_phase_01(state):
         )
     ctx = _facade().build_employee_context(state["employee_id"], state["payload"])
     state["perceived"] = _facade()._perception_real(
-        state["config"].get("perception", {}), state["payload"], state["session"], state["user_id"]
+        state["config"].get("perception", {}),
+        state["payload"],
+        state["session"],
+        state["user_id"],
     )
     try:
         from modstore_server.employee_perception_enricher import enrich_perception
@@ -2425,10 +2452,14 @@ def _execute_employee_phase_01(state):
         )
     except RECOVERABLE_ERRORS as _pe_exc:
         _facade().logger.debug(
-            "perception_enricher failed employee_id=%s err=%s", state["employee_id"], _pe_exc
+            "perception_enricher failed employee_id=%s err=%s",
+            state["employee_id"],
+            _pe_exc,
         )
     try:
-        from modstore_server.employee_task_classifier import enrich_perception_with_classification
+        from modstore_server.employee_task_classifier import (
+            enrich_perception_with_classification,
+        )
 
         enrich_perception_with_classification(
             employee_id=state["employee_id"],
@@ -2437,7 +2468,9 @@ def _execute_employee_phase_01(state):
         )
     except RECOVERABLE_ERRORS as _tc_exc:
         _facade().logger.debug(
-            "task_classifier failed employee_id=%s err=%s", state["employee_id"], _tc_exc
+            "task_classifier failed employee_id=%s err=%s",
+            state["employee_id"],
+            _tc_exc,
         )
     file_path_fast = (
         isinstance(state["payload"], dict)
@@ -2510,10 +2543,15 @@ def _execute_employee_phase_04(state):
         ).strip().lower() in {"1", "true", "yes", "on"}
         if not state["suppress_lifecycle_events"]:
             try:
-                from modstore_server.notification_service import notify_employee_execution_done
+                from modstore_server.notification_service import (
+                    notify_employee_execution_done,
+                )
 
                 notify_employee_execution_done(
-                    state["user_id"], state["employee_id"], state["task"], state["exec_status"]
+                    state["user_id"],
+                    state["employee_id"],
+                    state["task"],
+                    state["exec_status"],
                 )
             except RECOVERABLE_ERRORS:
                 pass
@@ -2521,7 +2559,10 @@ def _execute_employee_phase_04(state):
             True,
             {
                 "employee_id": state["employee_id"],
-                "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+                "pack": {
+                    "id": state["pack"]["pack_id"],
+                    "version": state["pack"]["version"],
+                },
                 "duration_ms": state["duration_ms"],
                 "result": state["result"],
                 "executed_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
@@ -2532,7 +2573,9 @@ def _execute_employee_phase_04(state):
         )
     if state["recovery_meta"].get("recovered"):
         try:
-            from modstore_server.services.change_signal import emit_execution_recovery_event
+            from modstore_server.services.change_signal import (
+                emit_execution_recovery_event,
+            )
 
             emit_execution_recovery_event(
                 state["employee_id"],
@@ -2579,7 +2622,9 @@ def _execute_employee_phase_04(state):
             state["result"]["change_request_ids"] = normalized_cids
     if not _facade()._flag_enabled(state["payload"].get("suppress_lifecycle_events")):
         try:
-            from modstore_server.notification_service import notify_employee_execution_done
+            from modstore_server.notification_service import (
+                notify_employee_execution_done,
+            )
 
             notify_employee_execution_done(
                 state["user_id"], state["employee_id"], state["task"], "success"
@@ -2655,7 +2700,10 @@ def _execute_employee_phase_04(state):
         True,
         {
             "employee_id": state["employee_id"],
-            "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+            "pack": {
+                "id": state["pack"]["pack_id"],
+                "version": state["pack"]["version"],
+            },
             "duration_ms": state["duration_ms"],
             "result": state["result"],
             "executed_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
@@ -2698,10 +2746,15 @@ def _execute_employee_phase_03(state):
         except (TypeError, ValueError):
             burn_in_deadline = 0.0
         if burn_in_deadline > 0 and _facade().time.time() > burn_in_deadline:
-            burn_in_acceptance = {"passed": False, "reasons": ["orchestration_deadline_exceeded"]}
+            burn_in_acceptance = {
+                "passed": False,
+                "reasons": ["orchestration_deadline_exceeded"],
+            }
         else:
             try:
-                from modstore_server.duty_workforce_burnin import validate_burn_in_execution_result
+                from modstore_server.duty_workforce_burnin import (
+                    validate_burn_in_execution_result,
+                )
 
                 burn_in_acceptance = validate_burn_in_execution_result(
                     {"result": state["result"] if isinstance(state["result"], dict) else {}}
@@ -2768,7 +2821,9 @@ def _execute_employee_phase_03(state):
             state["result"]["human_report"] = _human_report
     except RECOVERABLE_ERRORS as _hr_exc:
         _facade().logger.debug(
-            "build_human_report failed employee_id=%s err=%s", state["employee_id"], _hr_exc
+            "build_human_report failed employee_id=%s err=%s",
+            state["employee_id"],
+            _hr_exc,
         )
     if not state["handler_ok"]:
         state["cog_err"] = (
@@ -2937,7 +2992,10 @@ def _execute_employee_phase_02(state):
     except RECOVERABLE_ERRORS:
         _facade().logger.debug("cognition im hook skipped", exc_info=True)
     try:
-        from modstore_server.employee_handoff import _resolve_target_employee_id, perform_handoff
+        from modstore_server.employee_handoff import (
+            _resolve_target_employee_id,
+            perform_handoff,
+        )
 
         _handoff_to_raw = None
         _handoff_reason = ""
@@ -2997,7 +3055,9 @@ def _execute_employee_phase_02(state):
                 state["reasoning"]["_handoff"] = _handoff_out
     except RECOVERABLE_ERRORS as _ho_exc:
         _facade().logger.debug(
-            "handoff perform failed employee_id=%s err=%s", state["employee_id"], _ho_exc
+            "handoff perform failed employee_id=%s err=%s",
+            state["employee_id"],
+            _ho_exc,
         )
     try:
         if _handoff_target and (
@@ -3031,7 +3091,9 @@ def _execute_employee_phase_02(state):
             state["result"]["path_guard"] = _path_guard
     except RECOVERABLE_ERRORS as _pg_exc:
         _facade().logger.debug(
-            "path_guard check failed employee_id=%s err=%s", state["employee_id"], _pg_exc
+            "path_guard check failed employee_id=%s err=%s",
+            state["employee_id"],
+            _pg_exc,
         )
     try:
         from modstore_server.employee_verification import run_verification
@@ -3076,7 +3138,9 @@ def _execute_employee_phase_02(state):
             state["result"]["evolution_signal"] = _evo
     except RECOVERABLE_ERRORS as _evo_exc:
         _facade().logger.debug(
-            "evolution_signal check failed employee_id=%s err=%s", state["employee_id"], _evo_exc
+            "evolution_signal check failed employee_id=%s err=%s",
+            state["employee_id"],
+            _evo_exc,
         )
     _ho = state["reasoning"].get("_handoff") if isinstance(state["reasoning"], dict) else None
     if isinstance(_ho, dict) and isinstance(state["result"], dict):
@@ -3186,12 +3250,17 @@ def execute_employee_task(
 
                         if state["user_id"]:
                             notify_employee_execution_done(
-                                state["user_id"], state["employee_id"], state["task"], "failed"
+                                state["user_id"],
+                                state["employee_id"],
+                                state["task"],
+                                "failed",
                             )
                     except RECOVERABLE_ERRORS:
                         pass
                 try:
-                    from modstore_server.models_project_context import record_execution_outcome
+                    from modstore_server.models_project_context import (
+                        record_execution_outcome,
+                    )
 
                     record_execution_outcome(
                         employee_id=state["employee_id"],
@@ -3207,10 +3276,15 @@ def execute_employee_task(
                 ).strip().lower() in {"1", "true", "yes", "on"}
                 if not state["suppress_lifecycle_events"]:
                     try:
-                        from modstore_server.services.change_signal import emit_task_lifecycle_event
+                        from modstore_server.services.change_signal import (
+                            emit_task_lifecycle_event,
+                        )
 
                         emit_task_lifecycle_event(
-                            state["employee_id"], state["task"], status="failed", error=str(e)
+                            state["employee_id"],
+                            state["task"],
+                            status="failed",
+                            error=str(e),
                         )
                     except RECOVERABLE_ERRORS:
                         pass

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.application.entitled_industries_init import (
+from app.domain.app_pure.entitled_industries_init import (
     init_entitled_industries_for_user,
     merge_entitled_industries,
     validate_industry_in_entitled,

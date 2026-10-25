@@ -14,7 +14,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 try:
-    from app.domain.services.intent_recognition_service import IntentRecognitionService
+    from app.domain.conversation.intent_recognition_service import IntentRecognitionService
 except ModuleNotFoundError:
     # Legacy tuple-returning service removed; superseded by UnifiedIntentRecognizer (dict API).
     IntentRecognitionService = None  # type: ignore[assignment,misc]

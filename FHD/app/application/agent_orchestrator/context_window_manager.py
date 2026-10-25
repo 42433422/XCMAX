@@ -1,6 +1,6 @@
 """上下文窗口管理器（ContextWindowManager）——按 token 预算裁剪 + 自动摘要旧轮次。
 
-接入点：``app.services.conversation.api.call_llm_api`` 在调用 ``provider.chat_completion``
+接入点：``app.domain.shared_services.conversation.api.call_llm_api`` 在调用 ``provider.chat_completion``
 之前调用 ``ContextWindowManager.compress``，对 ``messages`` 做"按预算裁剪 + 必要时摘要"。
 
 设计目标

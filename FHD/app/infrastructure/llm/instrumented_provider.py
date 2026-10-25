@@ -12,7 +12,7 @@ from typing import Any
 
 from app.infrastructure.llm import genai_telemetry as telemetry
 from app.infrastructure.llm import guardrails
-from app.infrastructure.llm.providers.base import LLMProvider
+from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.infrastructure.llm.trace_store import get_trace_store
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

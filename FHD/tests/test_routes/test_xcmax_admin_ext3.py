@@ -894,7 +894,7 @@ class TestListConflicts:
     @pytest.mark.asyncio
     async def test_success(self, client: TestClient):
         with patch(
-            "app.services.admin_sync_service.list_sync_conflicts",
+            "app.domain.shared_services.admin_sync_service.list_sync_conflicts",
             return_value=[{"id": 1, "entity_type": "product"}],
         ):
             response = client.get("/api/xcmax/sync/conflicts")
@@ -907,7 +907,7 @@ class TestListConflicts:
     async def test_error_returns_empty(self, client: TestClient):
         with (
             patch(
-                "app.services.admin_sync_service.list_sync_conflicts",
+                "app.domain.shared_services.admin_sync_service.list_sync_conflicts",
                 side_effect=RuntimeError("conflict fail"),
             ),
             patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (RuntimeError,)),

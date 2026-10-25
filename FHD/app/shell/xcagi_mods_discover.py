@@ -1,9 +1,4 @@
-"""
-扫描 XCAGI 仓库下的 ``mods/<mod_id>/manifest.json``，供 /api/mods 与 /api/mods/routes 使用。
-
-前端约定：``XCAGI/mods/<id>/frontend/routes.js`` 由 Vite glob 动态加载（见 registerModRoutes.ts）。
-环境变量 ``XCAGI_ROOT`` 可指向 XCAGI 目录；未设置时假定本仓库根下存在 ``XCAGI/`` 子目录。
-"""
+"""Discover Mods from explicit roots or canonical FHD/mods for the shell API."""
 
 from __future__ import annotations
 
@@ -65,7 +60,7 @@ def _unique_dirs(paths: list[Path]) -> list[Path]:
 def xcagi_root() -> Path | None:
     """
     含 ``mods/`` 子目录的 XCAGI 工程根（不是 mods 目录本身）。
-    优先 ``XCAGI_ROOT``；否则依次尝试：与本包同仓库的 ``<repo>/XCAGI``、当前工作目录、向上查找。
+    优先 ``XCAGI_ROOT``，默认使用 ``FHD/mods``；缺失时才回退旧布局。
     """
     candidates: list[Path] = []
     raw = os.environ.get("XCAGI_ROOT", "").strip()
@@ -74,7 +69,7 @@ def xcagi_root() -> Path | None:
     here = Path(__file__).resolve()
     # app/shell/this_file.py -> parents[2] == FHD 仓库根
     repo = here.parents[2]
-    candidates.append(repo / "XCAGI")
+    candidates.extend((repo, repo / "XCAGI"))
     cwd = Path.cwd().resolve()
     candidates.append(cwd / "XCAGI")
     # 若进程 cwd 已在 XCAGI 根目录（常见：在 XCAGI 下起 uvicorn）

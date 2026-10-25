@@ -7,9 +7,9 @@
 import logging
 from decimal import Decimal
 
-from app.neuro_bus.domains.base import DomainChannel, NeuroDomain, get_domain_registry
+from app.neuro_bus.domains.domains_base import DomainChannel, NeuroDomain, get_domain_registry
 from app.neuro_bus.domains.order_domain_handlers import register_order_domain_handlers
-from app.neuro_bus.events.base import EventPriority
+from app.neuro_bus.events.events_base import EventPriority
 
 logger = logging.getLogger(__name__)
 

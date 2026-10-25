@@ -39,6 +39,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.manager import (
+    AIConversationService,
+    get_ai_conversation_service,
+    init_ai_conversation_service,
+)
 from app.fastapi_routes.mobile_api import (
     MobileLoginRequest,
     MobileRefreshRequest,
@@ -60,12 +66,6 @@ from app.infrastructure.mods.mod_manager import (
     _short_exc_message,
     import_mod_backend_py,
     is_mods_disabled,
-)
-from app.services.conversation.context import ConversationContext
-from app.services.conversation.manager import (
-    AIConversationService,
-    get_ai_conversation_service,
-    init_ai_conversation_service,
 )
 
 # ===========================================================================
@@ -586,13 +586,13 @@ class TestGetAiConversationServiceSingleton:
         would otherwise pollute later tests that call ``get_ai_conversation_service()``.
         """
         yield
-        import app.services.conversation.manager as _manager_mod
+        import app.domain.shared_services.conversation.manager as _manager_mod
 
         _manager_mod._ai_conversation_service = None
 
     def test_get_ai_conversation_service_returns_singleton(self) -> None:
         with patch(
-            "app.services.conversation.manager.AIConversationService.__init__",
+            "app.domain.shared_services.conversation.manager.AIConversationService.__init__",
             return_value=None,
         ):
             svc1 = get_ai_conversation_service()
@@ -601,7 +601,7 @@ class TestGetAiConversationServiceSingleton:
 
     def test_init_ai_conversation_service_creates_new_instance(self) -> None:
         with patch(
-            "app.services.conversation.manager.AIConversationService.__init__",
+            "app.domain.shared_services.conversation.manager.AIConversationService.__init__",
             return_value=None,
         ):
             svc = init_ai_conversation_service()

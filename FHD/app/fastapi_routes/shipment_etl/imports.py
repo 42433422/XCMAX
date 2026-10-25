@@ -8,7 +8,7 @@ from collections.abc import Callable
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.shipment_etl.ports import (
+from app.application.shipment_etl.protocols import (
     ShipmentApplication,
     TemplateCapture,
     TemplateIngest,

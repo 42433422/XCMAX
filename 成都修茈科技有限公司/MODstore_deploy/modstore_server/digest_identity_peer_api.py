@@ -26,7 +26,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from modstore_server.digest_identity import normalize_digest_identity_code, verify_digest_identity
+from modstore_server.digest_identity import (
+    normalize_digest_identity_code,
+    verify_digest_identity,
+)
 from modstore_server.models import get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

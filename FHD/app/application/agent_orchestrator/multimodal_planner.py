@@ -19,7 +19,7 @@ from app.application.agent_orchestrator.multimodal_artifacts import (
     resolve_tenant_id as _resolve_tenant_id,
 )
 from app.application.agent_orchestrator.run_models import AgentArtifact
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 __all__ = [
     "_artifact_from_attachment",

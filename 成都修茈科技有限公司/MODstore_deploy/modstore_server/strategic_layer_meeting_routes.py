@@ -11,7 +11,11 @@ from fastapi import Depends, Query
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.strategic_layer import MeetingDecisionRef, MeetingParticipants, MeetingStatus
+from modstore_server.strategic_layer import (
+    MeetingDecisionRef,
+    MeetingParticipants,
+    MeetingStatus,
+)
 from modstore_server.strategic_layer_models import (
     CancelMeetingRequest,
     ConcludeMeetingRequest,

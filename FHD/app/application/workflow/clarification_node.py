@@ -9,7 +9,7 @@ from app.services.tools_execution.registry import (
 )
 
 from . import clarification_lifecycle as _lifecycle
-from .types import PlanGraph, WorkflowNode
+from .workflow_types import PlanGraph, WorkflowNode
 
 build_clarify_node = _lifecycle.build_clarify_node
 clarification_ttl_seconds = _lifecycle.clarification_ttl_seconds
@@ -79,7 +79,7 @@ def needs_clarification(
             operation = str(params.get("operation") or "").strip().lower()
             payload = params.get("payload")
             if operation in {"update", "delete"} and isinstance(payload, dict):
-                from app.services.tools_workflow_registered import (
+                from app.domain.shared_services.tools_workflow_registered import (
                     prepare_business_db_write_target,
                 )
 
@@ -132,7 +132,7 @@ def needs_clarification(
         missing += missing_shipment_call_fields(node.tool_id, node.action, params)
         missing = list(dict.fromkeys(missing))
         if (node.tool_id, node.action) == ("inventory", "stock_in"):
-            from app.application.inventory_inputs import missing_stock_in_fields
+            from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
             missing = missing_stock_in_fields(params)
         if node.tool_id == "sales" and node.action in {"quote", "create_order"}:

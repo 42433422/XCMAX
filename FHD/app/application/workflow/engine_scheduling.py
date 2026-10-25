@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from .engine_checkpoints import save_progress
 from .ports import CheckpointStore
-from .types import (
+from .workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     StateSchema,

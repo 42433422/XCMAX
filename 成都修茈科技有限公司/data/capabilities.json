@@ -6,15 +6,15 @@
   "stats": {
     "total": 157,
     "by_status": {
-      "verified": 132,
-      "partial": 18,
+      "verified": 106,
+      "partial": 15,
       "implemented": 3,
-      "planned": 4
+      "planned": 33
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 132,
+    "verified_total": 106,
     "last_verified_at": "2026-09-30",
     "platform_counts": {
       "windows": 98,
@@ -60,7 +60,7 @@
         "last_verified_at": null
       }
     },
-    "completion": 93
+    "completion": 75
   },
   "product_version": "1.0.0.6",
   "release_ready": false,
@@ -293,7 +293,7 @@
             {
               "id": "base-account-security",
               "name": "账户安全与锁定",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -392,7 +392,7 @@
             {
               "id": "base-device-bind",
               "name": "设备绑定与配对授权",
-              "status": "partial",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -797,7 +797,7 @@
             {
               "id": "ai-model-access",
               "name": "模型接入与使用计费",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -841,7 +841,7 @@
             {
               "id": "ai-multimodal",
               "name": "多模态（文本 / 图像 / 语音）",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -1015,7 +1015,7 @@
             {
               "id": "ai-run-monitor",
               "name": "运行监测与任务历史",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -1163,7 +1163,7 @@
             {
               "id": "ai-csv",
               "name": "CSV 生成与解析",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1203,7 +1203,7 @@
             {
               "id": "ai-pdf",
               "name": "PDF 生成与解析",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1243,7 +1243,7 @@
             {
               "id": "ai-ppt",
               "name": "PPT 生成与解析",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1283,7 +1283,7 @@
             {
               "id": "ai-word",
               "name": "Word 生成与解析",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1323,7 +1323,7 @@
             {
               "id": "ai-ocr-doc",
               "name": "单据图像识别解析",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1363,7 +1363,7 @@
             {
               "id": "ai-vector-rag",
               "name": "知识库向量检索（RAG 工具链）",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -1518,7 +1518,7 @@
             {
               "id": "erp-master-data",
               "name": "产品 / 客户 / 供应商主数据",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1598,7 +1598,7 @@
             {
               "id": "erp-purchase-inbound",
               "name": "采购入库管理",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1638,7 +1638,7 @@
             {
               "id": "erp-inventory-warehouse",
               "name": "仓库 / 库位 / 调拨 / 预警",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1678,7 +1678,7 @@
             {
               "id": "erp-replenishment",
               "name": "库存补货建议",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1804,7 +1804,7 @@
             {
               "id": "erp-ar-ap",
               "name": "应收应付与毛利",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1884,7 +1884,7 @@
             {
               "id": "erp-invoice",
               "name": "发票与税务",
-              "status": "partial",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -1924,7 +1924,7 @@
             {
               "id": "erp-reconcile",
               "name": "经营对账与结算",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -2439,7 +2439,7 @@
             {
               "id": "ch-notify",
               "name": "通知与推送",
-              "status": "partial",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -2479,7 +2479,7 @@
             {
               "id": "ch-task-center",
               "name": "任务中心与审批通知",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "windows",
                 "macos",
@@ -3122,7 +3122,7 @@
             {
               "id": "mods-pack-io",
               "name": "包导入导出与发布",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -3354,7 +3354,7 @@
             {
               "id": "mods-store-sync",
               "name": "市场库同步与可见性",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -4060,7 +4060,7 @@
             {
               "id": "pay-refund",
               "name": "退款申请与审核",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -4203,7 +4203,7 @@
             {
               "id": "pay-author-revenue",
               "name": "作者收益与分成结算",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -4335,7 +4335,7 @@
             {
               "id": "ops-work-order",
               "name": "需求工单与验收回执",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -4429,7 +4429,7 @@
             {
               "id": "ops-customer-value",
               "name": "行动事项与客户价值",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -5002,7 +5002,7 @@
             {
               "id": "sec-audit",
               "name": "操作审计与日志",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -5188,7 +5188,7 @@
             {
               "id": "sec-ai-trace",
               "name": "AI 调用追溯",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],
@@ -5331,7 +5331,7 @@
             {
               "id": "sec-model-gate",
               "name": "真实模型验货门禁",
-              "status": "verified",
+              "status": "planned",
               "platforms": [
                 "web"
               ],

@@ -40,9 +40,18 @@ def upgrade() -> None:
     if "submitter_type" not in columns:
         op.add_column(
             _TABLE,
-            sa.Column("submitter_type", sa.String(16), nullable=False, server_default="unknown"),
+            sa.Column(
+                "submitter_type",
+                sa.String(16),
+                nullable=False,
+                server_default="unknown",
+            ),
         )
-    indexes = {str(row["name"]) for row in sa.inspect(bind).get_indexes(_TABLE) if row.get("name")}
+    indexes = {
+        str(row["name"])
+        for row in sa.inspect(bind).get_indexes(_TABLE)
+        if row.get("name")
+    }
     if _INDEX not in indexes:
         op.create_index(_INDEX, _TABLE, ["submitter_type"])
     backfill_submitter_types(bind)
@@ -50,7 +59,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     bind = op.get_bind()
-    indexes = {str(row["name"]) for row in sa.inspect(bind).get_indexes(_TABLE) if row.get("name")}
+    indexes = {
+        str(row["name"])
+        for row in sa.inspect(bind).get_indexes(_TABLE)
+        if row.get("name")
+    }
     if _INDEX in indexes:
         op.drop_index(_INDEX, table_name=_TABLE)
     columns = {str(row["name"]) for row in sa.inspect(bind).get_columns(_TABLE)}

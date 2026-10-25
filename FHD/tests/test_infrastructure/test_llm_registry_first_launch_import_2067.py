@@ -143,7 +143,7 @@ def test_import_lock_error_falls_back_instead_of_type_error(monkeypatch):
         raise RuntimeError("deadlock detected by _ModuleLock('app.fastapi_routes.market_account')")
 
     monkeypatch.setattr(
-        "app.services.conversation.manager.get_ai_conversation_service_if_ready",
+        "app.domain.shared_services.conversation.manager.get_ai_conversation_service_if_ready",
         lambda: None,
     )
     monkeypatch.setattr(registry, "_initialized_market_token_reader", lambda: _boom)

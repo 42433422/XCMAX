@@ -29,3 +29,5 @@ flutter run
 - IM WebSocket、员工任务中心、设备注册
 
 详见 [`FLUTTER_UNIFICATION.md`](FLUTTER_UNIFICATION.md)。
+
+> debt19: POC only — not a production client SKU.

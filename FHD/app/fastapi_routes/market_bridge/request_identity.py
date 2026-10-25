@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import JsonObject, LatestToken, LocalUser, ProxyJSON, SaveToken
+from .port_contracts import JsonObject, LatestToken, LocalUser, ProxyJSON, SaveToken
 
 
 def session_id_from_request(request: Request) -> str:

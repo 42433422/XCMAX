@@ -239,7 +239,7 @@ async def install_industry_seed(industry_id: str) -> dict[str, Any]:
 
 
 def is_desktop() -> bool:
-    from app.desktop_runtime.paths import is_desktop_mode as operation
+    from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode as operation
 
     return cast("bool", operation())
 
@@ -309,7 +309,7 @@ def set_account_industry(username: str, industry_id: str) -> None:
 
 
 async def sync_circle() -> object:
-    from app.application.employee_circle_sync import sync_modstore_reports as operation
+    from app.domain.app_pure.employee_circle_sync import sync_modstore_reports as operation
 
     return await operation()
 

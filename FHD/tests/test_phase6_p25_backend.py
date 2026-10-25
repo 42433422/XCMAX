@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import ai_chat_rag_integration as rag_integration
+from app.domain.shared_services.report_service import ReportService
 from app.fastapi_routes.rbac import router as rbac_router
 from app.infrastructure.persistence.compat_db import queries as compat_queries
 from app.neuro_bus.bus import (
@@ -33,9 +34,8 @@ from app.neuro_bus.bus import (
     _neuro_trace_sample_rate,
     _should_trace_event,
 )
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.services import xcmax_sync_service as sync_svc
-from app.services.report_service import ReportService
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -61,7 +61,7 @@ class TestConversationServiceUncoveredBranches:
     """补充 ``ConversationService`` 的异常/边界分支（p1 已覆盖 happy path）。"""
 
     def test_save_message_existing_session_with_intent_and_metadata(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -78,12 +78,12 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=7),
             patch(
-                "app.services.conversation_service.AIConversation",
+                "app.domain.shared_services.conversation_service.AIConversation",
                 return_value=conversation,
             ),
         ):
@@ -98,7 +98,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.commit.assert_called_once()
 
     def test_save_message_user_id_none_stores_none(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -111,12 +111,12 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
             patch(
-                "app.services.conversation_service.AIConversation",
+                "app.domain.shared_services.conversation_service.AIConversation",
                 return_value=conversation,
             ),
         ):
@@ -125,7 +125,7 @@ class TestConversationServiceUncoveredBranches:
         assert conversation.user_id is None
 
     def test_save_message_db_rollback_on_flush_error(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -134,18 +134,18 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=1),
-            patch("app.services.conversation_service.AIConversation"),
+            patch("app.domain.shared_services.conversation_service.AIConversation"),
         ):
             with pytest.raises(RuntimeError, match="flush failed"):
                 svc.save_message("s", "1", "user", "hi")
         mock_db.rollback.assert_called_once()
 
     def test_get_session_messages_limit_zero(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -154,7 +154,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_session_messages("s1", limit=0)
@@ -162,7 +162,7 @@ class TestConversationServiceUncoveredBranches:
         assert result == []
 
     def test_get_sessions_user_id_empty_string_no_filter(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -171,7 +171,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_sessions(user_id="", limit=10)
@@ -180,19 +180,19 @@ class TestConversationServiceUncoveredBranches:
         mock_query.filter.assert_not_called()
 
     def test_get_sessions_query_error_rollback_not_called(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             side_effect=ValueError("bad db"),
         ):
             with pytest.raises(ValueError, match="bad db"):
                 svc.get_sessions()
 
     def test_update_session_title_empty_title_commits(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -202,7 +202,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.update_session_title("s1", "")
@@ -211,7 +211,7 @@ class TestConversationServiceUncoveredBranches:
         assert session.title == ""
 
     def test_delete_session_no_messages_still_deletes_session(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -220,7 +220,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.services.conversation_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.delete_session("s1")
@@ -230,14 +230,14 @@ class TestConversationServiceUncoveredBranches:
         mock_db.commit.assert_called_once()
 
     def test_create_session_title_none(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=3),
@@ -247,14 +247,14 @@ class TestConversationServiceUncoveredBranches:
         assert isinstance(sid, str)
 
     def test_create_session_empty_user_id_normalized_none(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
 
         with (
             patch(
-                "app.services.conversation_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
@@ -264,18 +264,18 @@ class TestConversationServiceUncoveredBranches:
         assert isinstance(sid, str)
 
     def test_normalize_user_id_negative_numeric_string(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         assert ConversationService._normalize_user_id("-5") is None
 
     def test_normalize_user_id_float_like_string(self):
-        from app.services.conversation_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         assert ConversationService._normalize_user_id("12.0") is None
 
     def test_get_conversation_service_resets_singleton(self):
+        from app.domain.shared_services.conversation_service import get_conversation_service
         from app.services import conversation_service as mod
-        from app.services.conversation_service import get_conversation_service
 
         with patch.object(mod, "_conversation_service", None):
             svc1 = get_conversation_service()
@@ -793,7 +793,7 @@ class TestCompatDbQueriesUncoveredBranches:
             ),
             patch("app.infrastructure.persistence.compat_db.queries.inspect", return_value=insp),
             patch(
-                "app.infrastructure.persistence.compat_db.base._exc_chain_has_undefined_table",
+                "app.infrastructure.persistence.compat_db.compat_db_base._exc_chain_has_undefined_table",
                 return_value=True,
             ),
         ):
@@ -988,7 +988,9 @@ class TestReportServiceUncoveredBranches:
         record.amount = Decimal("100")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="customer", source="shipment")
 
         assert result["success"] is True
@@ -1001,7 +1003,9 @@ class TestReportServiceUncoveredBranches:
         record.amount = Decimal("50")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="date", source="shipment")
 
         assert result["data"][0]["date"] == "2026-01-01"
@@ -1010,13 +1014,15 @@ class TestReportServiceUncoveredBranches:
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = []
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="unknown", source="shipment")
 
         assert result == {"success": True, "data": [], "summary": {}}
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.func")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.func")
     def test_get_sales_report_with_date_filters(self, mock_func, mock_sr, svc):
         from sqlalchemy import column
 
@@ -1033,7 +1039,9 @@ class TestReportServiceUncoveredBranches:
         start = datetime(2026, 1, 1)
         end = datetime(2026, 1, 31)
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             svc.get_sales_report(start_date=start, end_date=end, customer_id=5, source="shipment")
 
         assert mock_query.filter.call_count == 3
@@ -1046,7 +1054,9 @@ class TestReportServiceUncoveredBranches:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_inventory_report(warehouse_id=2, category="c1")
 
         assert result["success"] is True
@@ -1061,7 +1071,9 @@ class TestReportServiceUncoveredBranches:
         order.supplier_id = 1
         mock_db.query.return_value.all.return_value = [order]
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_purchase_report(group_by="status")
 
         assert result["data"][0]["status"] == "draft"
@@ -1075,7 +1087,9 @@ class TestReportServiceUncoveredBranches:
         order.supplier.name = "s1"
         mock_db.query.return_value.all.return_value = [order]
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_purchase_report(group_by="date")
 
         assert result["data"][0]["date"] == "2026-02-01"
@@ -1089,18 +1103,20 @@ class TestReportServiceUncoveredBranches:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_inventory_transaction_report(transaction_type="in", product_id=3)
 
         assert result["count"] == 0
         assert mock_query.filter.call_count == 2
 
-    @patch("app.services.report_service.ShipmentRecord")
-    @patch("app.services.report_service.PurchaseOrder")
-    @patch("app.services.report_service.InventoryLedger")
-    @patch("app.services.report_service.Supplier")
-    @patch("app.services.report_service.Product")
-    @patch("app.services.report_service.func")
+    @patch("app.domain.shared_services.report_service.ShipmentRecord")
+    @patch("app.domain.shared_services.report_service.PurchaseOrder")
+    @patch("app.domain.shared_services.report_service.InventoryLedger")
+    @patch("app.domain.shared_services.report_service.Supplier")
+    @patch("app.domain.shared_services.report_service.Product")
+    @patch("app.domain.shared_services.report_service.func")
     def test_get_dashboard_summary_none_amounts(
         self, mock_func, mock_product, mock_supplier, mock_ledger, mock_po, mock_sr, svc
     ):
@@ -1138,7 +1154,9 @@ class TestReportServiceUncoveredBranches:
 
         mock_db.query = MagicMock(side_effect=side_effect_query)
 
-        with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_dashboard_summary()
 
         assert result["success"] is True
@@ -1156,7 +1174,7 @@ class TestReportServiceUncoveredBranches:
         assert result["filename"] == "report.xlsx"
 
     def test_export_to_excel_engine_error(self, svc):
-        with patch("app.services.report_service.pd.DataFrame") as df_cls:
+        with patch("app.domain.shared_services.report_service.pd.DataFrame") as df_cls:
             df_cls.side_effect = ValueError("bad data")
             result = svc.export_to_excel("sales", [{"a": 1}], "report")
 
@@ -1329,7 +1347,7 @@ class TestNeuroBusUncoveredBranches:
     def test_neuro_bus_registered_domains_exception(self):
         bus = NeuroBus()
         with patch(
-            "app.neuro_bus.domains.base.get_domain_registry",
+            "app.neuro_bus.domains.domains_base.get_domain_registry",
             side_effect=ImportError("no registry"),
         ):
             assert bus.registered_domains == []

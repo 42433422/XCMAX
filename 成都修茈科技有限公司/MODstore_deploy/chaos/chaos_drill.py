@@ -106,12 +106,20 @@ def run_smoke(args: argparse.Namespace, execute: bool) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run a controlled MODstore chaos drill.")
+    parser = argparse.ArgumentParser(
+        description="Run a controlled MODstore chaos drill."
+    )
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), required=True)
-    parser.add_argument("--duration", type=int, default=60, help="Fault duration in seconds")
-    parser.add_argument("--confirm", action="store_true", help="Actually execute the drill")
     parser.add_argument(
-        "--skip-smoke", action="store_true", help="Skip smoke checks before and after the drill"
+        "--duration", type=int, default=60, help="Fault duration in seconds"
+    )
+    parser.add_argument(
+        "--confirm", action="store_true", help="Actually execute the drill"
+    )
+    parser.add_argument(
+        "--skip-smoke",
+        action="store_true",
+        help="Skip smoke checks before and after the drill",
     )
     parser.add_argument("--base-url", default="http://127.0.0.1:8765")
     parser.add_argument("--market-url", default="http://127.0.0.1:4173")
@@ -127,7 +135,9 @@ def main() -> int:
     for item in scenario.observe:
         print(f"- {item}")
     if not execute:
-        print("\nDry run only. Re-run with --confirm in a staging environment to execute.")
+        print(
+            "\nDry run only. Re-run with --confirm in a staging environment to execute."
+        )
 
     if not args.skip_smoke:
         print("\nPre-check:")

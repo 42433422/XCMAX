@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.domain.knowledge.types import KnowledgeIndexRef
+from modstore_server.domain.knowledge.knowledge_types import KnowledgeIndexRef
 
 
 class InMemoryKnowledgeIndexRepository:

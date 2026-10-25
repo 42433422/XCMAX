@@ -12,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 # ---------------------------------------------------------------------------

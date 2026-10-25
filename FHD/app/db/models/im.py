@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstr
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 class ImConversation(Base):

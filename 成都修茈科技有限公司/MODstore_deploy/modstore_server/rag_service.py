@@ -22,7 +22,11 @@ from sqlalchemy.orm import Session
 
 from modstore_server import vector_engine
 from modstore_server.embedding_service import EmbeddingConfigError, embed_texts
-from modstore_server.models import KnowledgeCollection, KnowledgeMembership, get_session_factory
+from modstore_server.models import (
+    KnowledgeCollection,
+    KnowledgeMembership,
+    get_session_factory,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.vector_engine import VectorEngineError
 

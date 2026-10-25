@@ -11,7 +11,9 @@ from modstore_server.customer_ticket_triage import (
     guard_code_fix_tool,
     stamp_intake_triage,
 )
-from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
+from modstore_server.duty_workforce_contracts import (
+    enrich_customer_ticket_publish_payload,
+)
 
 
 def test_account_intent_needs_ultimate_and_blocks_code_fix():

@@ -1,174 +1,23 @@
-"""Cross-platform data paths and environment bootstrap for desktop builds."""
+"""Compat module path: debt19 renamed paths.py → desktop_runtime_paths.py."""
 
 from __future__ import annotations
 
-import logging
-import os
-import platform
-from pathlib import Path
+from .desktop_runtime_paths import (  # noqa: F401
+    clear_database_recovery_marker,
+    configure_desktop_environment,
+    ensure_desktop_dirs,
+    get_desktop_data_dir,
+    get_desktop_mode,
+    is_desktop_mode,
+    sqlite_database_url,
+)
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-DESKTOP_ENV = "XCAGI_DESKTOP_MODE"
-DATA_DIR_ENV = "XCAGI_DATA_DIR"
-LEGACY_DATA_DIR_ENV = "XCAGI_DESKTOP_DATA_DIR"
-_DB_RECOVERY_MARKER = "database-recovery-required"
-
-
-def get_desktop_mode() -> str:
-    return (os.environ.get(DESKTOP_ENV) or "0").strip().lower()
-
-
-def is_desktop_mode() -> bool:
-    return get_desktop_mode() in {"1", "true", "yes", "on"}
-
-
-def _default_user_data_dir() -> Path:
-    system = platform.system().lower()
-    if system == "windows":
-        root = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or str(Path.home())
-        return Path(root) / "XCAGI"
-    if system == "darwin":
-        return Path.home() / "Library" / "Application Support" / "XCAGI"
-    return Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config")) / "XCAGI"
-
-
-def get_desktop_data_dir(data_dir: str | os.PathLike[str] | None = None) -> Path:
-    raw = (
-        str(data_dir)
-        if data_dir is not None
-        else os.environ.get(DATA_DIR_ENV) or os.environ.get(LEGACY_DATA_DIR_ENV)
-    )
-    return Path(raw).expanduser().resolve() if raw else _default_user_data_dir().resolve()
-
-
-def ensure_desktop_dirs(
-    data_dir: str | os.PathLike[str] | None = None,
-) -> dict[str, Path]:
-    root = get_desktop_data_dir(data_dir)
-    dirs = {
-        "root": root,
-        "data": root / "data",
-        "uploads": root / "uploads",
-        "logs": root / "logs",
-        "mods": root / "mods",
-        "models": root / "models",
-        "cache": root / "cache",
-        "backups": root / "backups",
-    }
-    for path in dirs.values():
-        path.mkdir(parents=True, exist_ok=True)
-    return dirs
-
-
-def sqlite_database_url(data_dir: str | os.PathLike[str] | None = None) -> str:
-    dirs = ensure_desktop_dirs(data_dir)
-    return "sqlite:///" + dirs["data"].joinpath("xcagi.db").as_posix()
-
-
-def clear_database_recovery_marker(data_dir: str | os.PathLike[str] | None = None) -> bool:
-    marker = get_desktop_data_dir(data_dir) / "config" / _DB_RECOVERY_MARKER
-    try:
-        marker.unlink(missing_ok=True)
-        return True
-    except OSError as exc:
-        logging.getLogger(__name__).warning("could not clear database recovery marker: %s", exc)
-        return False
-
-
-def configure_desktop_environment(
-    data_dir: str | os.PathLike[str] | None = None,
-) -> Path:
-    """Set process environment defaults for the local desktop runtime.
-
-    Delivery default is SQLite under userData. Optional ``config/database.json``
-    may enable remote PostgreSQL later (``remote.enabled``); UI is not required yet.
-    """
-
-    from .database_profile import apply_database_profile_to_env
-
-    os.environ[DESKTOP_ENV] = "1"
-    dirs = ensure_desktop_dirs(data_dir)
-    root = dirs["root"]
-    os.environ[DATA_DIR_ENV] = str(root)
-    os.environ[LEGACY_DATA_DIR_ENV] = str(root)
-
-    (root / "config").mkdir(parents=True, exist_ok=True)
-    apply_database_profile_to_env(root, local_sqlite_url=sqlite_database_url(root))
-    # 本地 SQLite 模式：启动自检 + 自动恢复。PostgreSQL 模式跳过（主库在远端）。
-    if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
-        from .migrate import recover_if_corrupt
-
-        marker = root / "config" / _DB_RECOVERY_MARKER
-        try:
-            recovery = recover_if_corrupt(root)
-            if recovery["action"] == "corrupt_no_backup":
-                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
-                logging.getLogger(__name__).error(
-                    "desktop db corrupt and no usable backup: %s", recovery["detail"]
-                )
-                marker.write_text("corrupt_no_backup\n", encoding="utf-8")
-            elif recovery["action"] == "restored":
-                if clear_database_recovery_marker(root):
-                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
-                else:
-                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
-            elif marker.exists():
-                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
-            else:
-                os.environ.pop("XCAGI_DESKTOP_DB_RECOVERY", None)
-        except RECOVERABLE_ERRORS as exc:
-            logging.getLogger(__name__).warning("recover_if_corrupt failed (non-fatal): %s", exc)
-    os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
-    # 考勤模板 424/… 与上传输出均相对工作区根；桌面默认=userData
-    os.environ.setdefault("WORKSPACE_ROOT", str(root))
-    os.environ.setdefault("XCAGI_WORKSPACE_ROOT", str(root))
-    os.environ.setdefault("UPLOAD_FOLDER", str(dirs["uploads"]))
-    os.environ.setdefault("EXCEL_VECTOR_DB_PATH", str(dirs["data"] / "excel_vectors.db"))
-    os.environ.setdefault("XCAGI_USER_MEMORY_DIR", str(root / "user_memory"))
-    os.environ.setdefault("XCAGI_MODS_ROOT", str(dirs["mods"]))
-    os.environ.setdefault("XCAGI_MODELS_DIR", str(dirs["models"]))
-    os.environ.setdefault("XCAGI_LOG_DIR", str(dirs["logs"]))
-
-    # Desktop mode should not require Redis/Celery to be installed or running.
-    os.environ.setdefault("XCAGI_FORCE_SYNC_TASKS", "1")
-    os.environ.setdefault("XCAGI_DISABLE_REDIS", "1")
-    os.environ.setdefault("CACHE_REDIS_URL", "")
-    os.environ.setdefault("CELERY_BROKER_URL", "memory://")
-    os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
-
-    # The Electron shell owns the browser window; uvicorn reload subprocesses
-    # make packaged desktop shutdown unreliable.
-    os.environ.setdefault("FASTAPI_HOST", "127.0.0.1")
-    os.environ.setdefault("XCAGI_UVICORN_RELOAD", "0")
-    os.environ.setdefault("PYTHONUTF8", "1")
-
-    import sys
-
-    if getattr(sys, "frozen", False):
-        meipass = getattr(sys, "_MEIPASS", None)
-        if meipass:
-            base = Path(meipass)
-            bundled = base / "mods"
-            if bundled.is_dir():
-                os.environ.setdefault("XCAGI_BUNDLED_MODS_DIR", str(bundled))
-            sku_file = base / "product-sku.json"
-            if sku_file.is_file():
-                os.environ.setdefault("XCAGI_PRODUCT_SKU_FILE", str(sku_file))
-
-    from app.mod_sdk.edition_policy import configure_edition_defaults, seed_edition_mods_from_bundle
-
-    configure_edition_defaults(desktop=True)
-    try:
-        seed_edition_mods_from_bundle()
-    except RECOVERABLE_ERRORS as exc:
-        logging.getLogger(__name__).warning("Desktop mod seed skipped: %s", exc)
-
-    try:
-        from app.mod_sdk.industry_seed import refresh_installed_industry_mods_from_bundle
-
-        refresh_installed_industry_mods_from_bundle(mods_root=dirs["mods"])
-    except RECOVERABLE_ERRORS as exc:
-        logging.getLogger(__name__).warning("Desktop industry mod refresh skipped: %s", exc)
-
-    return root
+__all__ = [
+    "get_desktop_mode",
+    "is_desktop_mode",
+    "get_desktop_data_dir",
+    "ensure_desktop_dirs",
+    "sqlite_database_url",
+    "clear_database_recovery_marker",
+    "configure_desktop_environment",
+]

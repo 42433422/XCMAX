@@ -27,10 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import desc, select
 
-from modstore_server.db.base import get_session_factory
+from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import StrategicReport as StrategicReportModel
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.strategic_layer.strategic_report_analysis import StrategicReportAnalysisMixin
+from modstore_server.strategic_layer.strategic_report_analysis import (
+    StrategicReportAnalysisMixin,
+)
 
 logger = logging.getLogger(__name__)
 

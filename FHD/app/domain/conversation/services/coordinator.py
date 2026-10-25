@@ -64,7 +64,7 @@ class UnifiedConversationCoordinator:
     def task_agent(self):
         """延迟加载 TaskAgent"""
         if self._task_agent is None:
-            from app.services.task_agent import get_task_agent
+            from app.domain.shared_services.task_agent import get_task_agent
 
             self._task_agent = get_task_agent()
         return self._task_agent
@@ -162,7 +162,7 @@ class UnifiedConversationCoordinator:
         命中即取消 pending 并返回 NEGATED，绝不调用 execute_plan。
         查询类意图无副作用，不拦（避免过度拦截正常表达）。
         """
-        from app.services.intent_service import WRITE_TOOL_INTENTS, is_negation
+        from app.domain.shared_services.intent_service import WRITE_TOOL_INTENTS, is_negation
 
         write_target: str | None = None
         if pending is not None and pending.intent in WRITE_TOOL_INTENTS:
@@ -200,7 +200,7 @@ class UnifiedConversationCoordinator:
     def _recognize_intent(self, message: str, context_data: dict[str, Any]) -> IntentResult:
         """意图识别 — 通过 NeuroDDD 反射弧 + 规则引擎"""
         from app.domain.neuro.reflex_arc import ReflexType, get_reflex_arc
-        from app.services.intent_service import recognize_intents
+        from app.domain.shared_services.intent_service import recognize_intents
 
         reflex = get_reflex_arc()
         rr = reflex.process(message)

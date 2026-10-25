@@ -35,7 +35,9 @@ _RESERVED = {
 }
 
 
-def _validated_archive(zf: zipfile.ZipFile) -> tuple[str, list[tuple[zipfile.ZipInfo, list[str]]]]:
+def _validated_archive(
+    zf: zipfile.ZipFile,
+) -> tuple[str, list[tuple[zipfile.ZipInfo, list[str]]]]:
     infos = zf.infolist()
     if (
         not infos

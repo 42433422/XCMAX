@@ -30,7 +30,10 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
     else:
         state.current_step = "mod_sandbox"
         await ports.progress.set_step(
-            state.session_id, "mod_sandbox", "running", "正在校验包体（manifest / Python）"
+            state.session_id,
+            "mod_sandbox",
+            "running",
+            "正在校验包体（manifest / Python）",
         )
         _msb_result = await ports.craft_step(
             "mod_sandbox",
@@ -47,7 +50,11 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
             if state.pack_dir.is_dir():
                 _mf, mf_err = ports.manifest(state.pack_dir)
                 mod_checks.append(
-                    {"id": "manifest", "ok": mf_err is None, "message": mf_err or "manifest 可读取"}
+                    {
+                        "id": "manifest",
+                        "ok": mf_err is None,
+                        "message": mf_err or "manifest 可读取",
+                    }
                 )
                 py_warns = ports.compile_warnings(state.pack_dir)
                 mod_checks.append(
@@ -75,7 +82,11 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
                 mod_checks.extend(vibe_checks)
             else:
                 mod_checks.append(
-                    {"id": "manifest", "ok": False, "message": f"包目录无效: {state.pack_dir}"}
+                    {
+                        "id": "manifest",
+                        "ok": False,
+                        "message": f"包目录无效: {state.pack_dir}",
+                    }
                 )
             state.package_sandbox = {
                 "ok": all((c.get("ok") for c in mod_checks)) if mod_checks else False,
@@ -93,7 +104,8 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
             else:
                 mod_sb_msg = "包体校验有提示，见会话 artifact.mod_sandbox"
         _prompt_chk = next(
-            (c for c in mod_checks if str(c.get("id") or "") == "vibe_system_prompt_quality"), None
+            (c for c in mod_checks if str(c.get("id") or "") == "vibe_system_prompt_quality"),
+            None,
         )
         if _prompt_chk is not None and (not _prompt_chk.get("ok")):
             msg = str(_prompt_chk.get("message") or "backend/employees/*.py 缺少 SYSTEM_PROMPT")
@@ -106,7 +118,10 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
             "txt_generate": "txt_generate_runtime",
         }.get(state.pipeline_label, "")
         _wx_runtime_chk = (
-            next((c for c in mod_checks if str(c.get("id") or "") == _runtime_chk_id), None)
+            next(
+                (c for c in mod_checks if str(c.get("id") or "") == _runtime_chk_id),
+                None,
+            )
             if _runtime_chk_id
             else None
         )
@@ -135,7 +150,10 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
             "正在生成独立包并验证 python xxx.xcemp validate …",
         )
         _ss_result = await ports.craft_step(
-            "standalone_smoke", res=state.result, pack_dir=state.pack_dir, user_id=state.user_id
+            "standalone_smoke",
+            res=state.result,
+            pack_dir=state.pack_dir,
+            user_id=state.user_id,
         )
         if _ss_result:
             state.standalone_smoke_ok = _ss_result["standalone_smoke_ok"]
@@ -161,7 +179,10 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
             )
         elif _standalone_smoke_status == "error":
             await ports.progress.set_step(
-                state.session_id, "standalone_smoke", "error", _standalone_smoke_msg[:480]
+                state.session_id,
+                "standalone_smoke",
+                "error",
+                _standalone_smoke_msg[:480],
             )
             await ports.progress.fail(
                 state.session_id, "standalone_smoke", _standalone_smoke_msg[:1000]
@@ -201,7 +222,9 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
                 )
         elif state.fhd_base:
             try:
-                from modstore_server.infrastructure.http_clients import get_external_client
+                from modstore_server.infrastructure.http_clients import (
+                    get_external_client,
+                )
 
                 base = state.fhd_base.rstrip("/")
                 host_warnings: List[str] = []
@@ -253,7 +276,11 @@ async def check_employee_runtime(state: EmployeeBuildState, *, ports: EmployeeRu
                     state.host_probe["warnings"] = host_warnings
                 await ports.progress.set_step(state.session_id, "host_check", "done", msg[:480])
             except RECOVERABLE_ERRORS as e:
-                state.host_probe = {"skipped": False, "ok": False, "error": str(e)[:300]}
+                state.host_probe = {
+                    "skipped": False,
+                    "ok": False,
+                    "error": str(e)[:300],
+                }
                 await ports.progress.set_step(
                     state.session_id, "host_check", "done", f"探测失败: {e!s}"[:300]
                 )

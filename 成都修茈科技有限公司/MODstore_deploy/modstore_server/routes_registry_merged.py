@@ -432,7 +432,9 @@ async def api_register_workflow_employee_catalog(
     )
     if manifest_err or not manifest_zip:
         raise _facade().HTTPException(400, manifest_err or "生成员工包失败")
-    from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+    from modstore_server.employee_pack_export import (
+        build_employee_pack_manifest_from_workflow,
+    )
 
     manifest, manifest_build_err = build_employee_pack_manifest_from_workflow(
         mod_id, data, entry, workflow_index=idx
@@ -1053,7 +1055,9 @@ def register_all_routes(app: _facade().FastAPI) -> None:
 
     app.include_router(market_router)
     app.include_router(payment_router)
-    from modstore_server.api.catalog_public_routes import router as catalog_public_router
+    from modstore_server.api.catalog_public_routes import (
+        router as catalog_public_router,
+    )
     from modstore_server.mod_sync_catalog_api import router as mod_sync_catalog_router
 
     app.include_router(catalog_public_router)

@@ -6,9 +6,18 @@ import json
 from typing import Any
 
 from modstore_server.customer_issue_delivery_contract import execution_succeeded
-from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
+from modstore_server.incident_team_handler_digest import (
+    handler_output_digest,
+    redact_text,
+)
 
-_IDENTITY = ("event_id", "tenant_id", "employee_id", "attempt_id", "verified_fix_attempt_id")
+_IDENTITY = (
+    "event_id",
+    "tenant_id",
+    "employee_id",
+    "attempt_id",
+    "verified_fix_attempt_id",
+)
 _REFERENCES = (
     "task_id",
     "para_task_id",

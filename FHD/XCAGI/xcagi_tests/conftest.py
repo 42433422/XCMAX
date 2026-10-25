@@ -117,7 +117,7 @@ def mock_dispatch():
 
 @pytest.fixture
 def sample_plan_graph():
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id="sample-linear",

@@ -30,7 +30,9 @@ def test_workbench_fallback_source_uses_generic_private_data_free_profile() -> N
     compile(source, "fallback_employee.py", "exec")
 
 
-def test_workbench_fallback_consumer_copies_fixed_private_data_free_asset(tmp_path) -> None:
+def test_workbench_fallback_consumer_copies_fixed_private_data_free_asset(
+    tmp_path,
+) -> None:
     destination = tmp_path / "employee.py"
     _copy_fallback_employee_source(destination)
     source = destination.read_text(encoding="utf-8")

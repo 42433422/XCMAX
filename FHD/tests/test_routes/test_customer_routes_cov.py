@@ -405,11 +405,11 @@ class TestCustomersImport:
 
         # run_customers_excel_import_bytes is a lazy import that the module guards via __getattr__
         # Inject a fresh fake into sys.modules before the route handler executes
-        fake_excel = types.ModuleType("app.application.excel_imports")
+        fake_excel = types.ModuleType("app.domain.app_pure.excel_imports")
         fake_excel.run_customers_excel_import_bytes = lambda _: {"success": True, "created": 5}  # type: ignore[attr-defined]
         with patch(f"{_ROUTES}._customers_write_raise"):
             with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
-                with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
+                with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
                     r = client.post(
                         "/customers/import",
                         files={
@@ -428,14 +428,14 @@ class TestCustomersImport:
         import sys
         import types
 
-        fake_excel = types.ModuleType("app.application.excel_imports")
+        fake_excel = types.ModuleType("app.domain.app_pure.excel_imports")
         fake_excel.run_customers_excel_import_bytes = lambda _: {
             "success": False,
             "message": "parse error",
         }  # type: ignore[attr-defined]
         with patch(f"{_ROUTES}._customers_write_raise"):
             with patch(f"{_ROUTES}._business_mod_json_block", return_value=None):
-                with patch.dict(sys.modules, {"app.application.excel_imports": fake_excel}):
+                with patch.dict(sys.modules, {"app.domain.app_pure.excel_imports": fake_excel}):
                     r = client.post(
                         "/customers/import",
                         files={

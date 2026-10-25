@@ -177,7 +177,7 @@ class Scenario:
 
 
 def _build_plan_sales_query(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -199,7 +199,7 @@ def _build_plan_sales_query(plan_id: str) -> Any:
 
 
 def _build_plan_create_order(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -231,7 +231,7 @@ def _build_plan_create_order(plan_id: str) -> Any:
 
 
 def _build_plan_mark_shipped(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -260,7 +260,7 @@ def _build_plan_mark_shipped(plan_id: str) -> Any:
 
 
 def _build_plan_inventory_reorder(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -289,7 +289,7 @@ def _build_plan_inventory_reorder(plan_id: str) -> Any:
 
 
 def _build_plan_ocr_retry(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -310,7 +310,7 @@ def _build_plan_ocr_retry(plan_id: str) -> Any:
 
 
 def _build_plan_wechat_notify(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,
@@ -331,7 +331,7 @@ def _build_plan_wechat_notify(plan_id: str) -> Any:
 
 
 def _build_plan_excel_export(plan_id: str) -> Any:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     return PlanGraph(
         plan_id=plan_id,

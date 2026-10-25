@@ -35,7 +35,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+from modstore_server.script_agent.sandbox_host import (
+    SandboxHostContext,
+    SandboxRpcServer,
+)
 from modstore_server.script_agent.sandbox_preamble import PREAMBLE_SOURCE
 from modstore_server.script_agent.sandbox_runner import (
     DEFAULT_TIMEOUT_SECONDS,

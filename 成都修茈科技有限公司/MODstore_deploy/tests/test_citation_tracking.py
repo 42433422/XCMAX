@@ -1,6 +1,10 @@
 """引用溯源集成测试。"""
 
-from modstore_server.rag_service import RetrievedChunk, extract_citations, format_retrieved_block
+from modstore_server.rag_service import (
+    RetrievedChunk,
+    extract_citations,
+    format_retrieved_block,
+)
 
 
 def _make_chunk(chunk_id: str, content: str, filename: str = "test.txt") -> RetrievedChunk:

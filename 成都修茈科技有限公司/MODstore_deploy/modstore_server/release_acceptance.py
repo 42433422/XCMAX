@@ -47,7 +47,9 @@ def normalize_platform(raw: str) -> str:
     return _PLATFORM_ALIASES.get(str(raw or "").strip().lower(), str(raw or "").strip().lower())
 
 
-def _latest_by_installation(receipts: Iterable[_ReceiptLike]) -> dict[str, _ReceiptLike]:
+def _latest_by_installation(
+    receipts: Iterable[_ReceiptLike],
+) -> dict[str, _ReceiptLike]:
     latest: dict[str, _ReceiptLike] = {}
     for row in receipts:
         key = str(row.installation_id or "").strip()

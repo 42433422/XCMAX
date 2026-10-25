@@ -104,7 +104,8 @@ def list_retort_clarifications(
 
 
 @_facade().router.get(
-    "/council/clarifications/{session_id}", response_model=_facade().Dict[str, _facade().Any]
+    "/council/clarifications/{session_id}",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def get_retort_clarification(
     session_id: str, _: _facade().User = _facade().Depends(_facade().get_current_user)
@@ -118,7 +119,8 @@ def get_retort_clarification(
 
 
 @_facade().router.post(
-    "/council/clarifications/{session_id}/answer", response_model=_facade().Dict[str, _facade().Any]
+    "/council/clarifications/{session_id}/answer",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def answer_retort_clarification(
     session_id: str,
@@ -128,7 +130,9 @@ def answer_retort_clarification(
     from modstore_server.retort_clarification_gate import answer_clarification
 
     out = answer_clarification(
-        session_id, answers=body.answers, answered_by=_facade().authenticated_admin_actor(admin)
+        session_id,
+        answers=body.answers,
+        answered_by=_facade().authenticated_admin_actor(admin),
     )
     if not out.get("ok"):
         raise _facade().HTTPException(409, str(out.get("error") or "answer failed"))
@@ -223,7 +227,8 @@ def get_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/approve", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/approve",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def approve_decision(
     decision_id: str,
@@ -271,7 +276,8 @@ def reject_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/withdraw", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/withdraw",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def withdraw_decision(
     decision_id: str,
@@ -307,7 +313,8 @@ def start_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/complete", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/complete",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def complete_decision(
     decision_id: str,
@@ -377,7 +384,12 @@ def seed_autonomy_rules(
     """幂等 seed 默认自治边界规则（13 条）。"""
     try:
         inserted = _facade().seed_default_boundaries()
-        return {"ok": True, "inserted": inserted, "skipped": 13 - inserted, "total_default": 13}
+        return {
+            "ok": True,
+            "inserted": inserted,
+            "skipped": 13 - inserted,
+            "total_default": 13,
+        }
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("seed_default_boundaries failed")
         raise _facade().HTTPException(500, f"seed failed: {exc}") from exc

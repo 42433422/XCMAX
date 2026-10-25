@@ -23,7 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from sqlalchemy import select
 
-from modstore_server.db.base import get_session_factory
+from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import AutonomyBoundary as AutonomyBoundaryModel
 
 logger = logging.getLogger(__name__)

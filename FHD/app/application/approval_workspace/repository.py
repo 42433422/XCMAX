@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
 
-from .ports import SessionFactory
+from .protocols import SessionFactory
 
 
 @dataclass(frozen=True)

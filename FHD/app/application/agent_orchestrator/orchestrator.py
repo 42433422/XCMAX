@@ -36,7 +36,7 @@ from app.application.agent_orchestrator.task_background import AgentOrchestrator
 from app.application.agent_orchestrator.task_context import apply_task_context
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.agent_orchestrator.tool_spec import get_tool_action_spec, validate_tool_call
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
     plan_to_dict,
@@ -227,7 +227,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
         plan_metadata = dict(plan.metadata or {})
         run.metadata["plan"] = plan_to_dict(plan)
         self._attach_memory_recall(run, plan_metadata.get("memory_recall"))
-        from app.application.workflow.types import step_plan_nodes
+        from app.application.workflow.workflow_types import step_plan_nodes
 
         nodes, graph_error = step_plan_nodes(plan)
         run.steps = [self._step_from_node(node) for node in nodes]

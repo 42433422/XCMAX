@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Request
 from fastapi.responses import JSONResponse
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 
 router = APIRouter(tags=["tools-execute"])
 
@@ -85,7 +85,7 @@ def run_tools_execute_agent(
     route_path: str,
 ) -> tuple[dict[str, Any], int] | None:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import _normalize_action, get_workflow_tool_registry
 
     raw_tool_id = body.get("tool_id") or body.get("skill_id")

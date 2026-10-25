@@ -32,7 +32,9 @@ from modstore_server.alipay_config import read_file_from_env as _read_file_from_
 from modstore_server.alipay_config import sdk_import_error as sdk_import_error
 from modstore_server.alipay_config import warn_notify_url_path_once as warn_notify_url_path_once
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.payments.alipay_gateway import AlipayGateway
+from modstore_server.payments.alipay_gateway import (
+    AlipayGateway,
+)
 from modstore_server.payments.alipay_gateway import standard_api_result as _standard_api_result
 from modstore_server.payments.checkout import CheckoutMethods
 from modstore_server.payments.checkout import create_pay_order as _select_checkout
@@ -89,7 +91,10 @@ def _build_common_kwargs(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _gateway().common_kwargs(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 
@@ -97,7 +102,10 @@ def _try_precreate(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _gateway().precreate(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 
@@ -174,7 +182,10 @@ def precreate_order(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _try_precreate(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 

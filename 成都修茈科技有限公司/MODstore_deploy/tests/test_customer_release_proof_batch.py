@@ -4,7 +4,11 @@ from collections import Counter
 from types import SimpleNamespace
 
 from modstore_server.customer_service_tools import json_dumps, json_loads
-from tests.test_customer_issue_delivery_pipeline import github_fixture, make_ticket, seed_repair
+from tests.test_customer_issue_delivery_pipeline import (
+    github_fixture,
+    make_ticket,
+    seed_repair,
+)
 
 
 def test_pending_batch_fetches_each_proof_once_and_binds_each_case(client, monkeypatch, tmp_path):
@@ -62,7 +66,13 @@ def test_pending_batch_fetches_each_proof_once_and_binds_each_case(client, monke
     target = targets[first]
     receipt = {
         key: target[key]
-        for key in ("host_sha", "version", "release_id", "signed_metadata_sha256", "case_id")
+        for key in (
+            "host_sha",
+            "version",
+            "release_id",
+            "signed_metadata_sha256",
+            "case_id",
+        )
     }
     receipt.update(
         receipt_id="batch-confirm-1",

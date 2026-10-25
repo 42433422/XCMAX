@@ -4,7 +4,7 @@ from typing import Protocol, cast
 
 from fastapi import Request
 
-from .ports import ErrorPolicy, JsonObject
+from .port_contracts import ErrorPolicy, JsonObject
 
 
 async def read_json_object(request: Request, errors: ErrorPolicy) -> JsonObject | None:

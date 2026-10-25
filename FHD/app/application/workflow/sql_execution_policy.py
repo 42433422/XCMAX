@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 REFUSAL_CODE = "raw_sql_execution_not_supported"
 REFUSAL_MESSAGE = "不能直接执行数据库 SQL。请使用具体的业务操作，并先确认操作对象和影响范围。"

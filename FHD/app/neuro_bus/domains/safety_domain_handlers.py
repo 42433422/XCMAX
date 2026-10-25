@@ -7,7 +7,7 @@ Safety 领域处理器逻辑
 
 import logging
 
-from app.neuro_bus.domains.base import DomainChannel
+from app.neuro_bus.domains.domains_base import DomainChannel
 from app.neuro_bus.neuro_trace_config import bump_domain_handler_metric
 
 logger = logging.getLogger(__name__)

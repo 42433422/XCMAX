@@ -66,7 +66,12 @@ async def _run_workbench_script_pipeline(
     else:
         try:
             script_wf = ports.commit(
-                db, user_id=user_id, session_id=sid, payload=payload, files=files, result=result
+                db,
+                user_id=user_id,
+                session_id=sid,
+                payload=payload,
+                files=files,
+                result=result,
             )
         except RECOVERABLE_ERRORS as e:
             msg = f"保存脚本工作流失败: {e}"

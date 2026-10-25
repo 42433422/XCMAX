@@ -27,7 +27,7 @@ from app.desktop_runtime.backup_scheduler import (
     start_backup_scheduler,
     stop_backup_scheduler,
 )
-from app.desktop_runtime.paths import ensure_desktop_dirs
+from app.desktop_runtime.desktop_runtime_paths import ensure_desktop_dirs
 
 
 def _reset_desktop_env(monkeypatch) -> None:

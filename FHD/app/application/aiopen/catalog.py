@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .definitions import AIOPEN_PRODUCT_NAME, AIOPEN_PRODUCT_TAGLINE, MCP_SERVER_NAME
-from .ports import CursorHub
+from .protocols import CursorHub
 from .runtime import RuntimeState
 
 

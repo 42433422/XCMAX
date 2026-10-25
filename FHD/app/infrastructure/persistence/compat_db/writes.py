@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import inspect, text
 
 from app.infrastructure.db.sync_engine import get_sync_engine
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _customer_pg_engine_insp,
     _customer_pg_products_has_unit,
     _pg_expr_norm_unit,

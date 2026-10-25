@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 def _make_svc() -> AIChatApplicationService:

@@ -6,7 +6,7 @@ import json
 import uuid
 from typing import Any
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 from app.utils.json_safe import json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -175,7 +175,7 @@ def resolve_registered_capability_call(args: dict[str, Any] | None) -> dict[str,
             "required_params": required,
         }
     if (tool_id, action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import validate_stock_in_request
+        from app.domain.app_pure.inventory_inputs import validate_stock_in_request
 
         try:
             validate_stock_in_request(params)
@@ -222,7 +222,7 @@ def execute_registered_capability(
 
     from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
     from app.application.workflow.engine import WorkflowEngine
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     tool_id = str(resolved["tool_id"])
     action = str(resolved["action"])

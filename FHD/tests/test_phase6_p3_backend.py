@@ -17,14 +17,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.infrastructure.payment import order_store
-from app.services.hybrid_intent_service import (
+from app.domain.shared_services.hybrid_intent_service import (
     HybridIntentService,
     get_hybrid_intent_service,
     hybrid_recognize_intents,
     hybrid_recognize_intents_sync,
     reset_hybrid_intent_service,
 )
+from app.infrastructure.payment import order_store
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------
@@ -675,7 +675,7 @@ def _make_service(
 def test_init_disables_bert_when_init_raises() -> None:
     # _init_bert_service imports get_bert_intent_service from .bert_intent_service
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("no model"),
     ):
         svc = HybridIntentService(use_bert=True)
@@ -693,7 +693,7 @@ def test_init_with_bert_disabled() -> None:
 def test_init_with_bert_enabled_and_service_initialized() -> None:
     fake_bert = MagicMock()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         return_value=fake_bert,
     ):
         svc = HybridIntentService(use_bert=True)
@@ -1059,7 +1059,7 @@ def test_recognize_sync_handles_recoverable_error() -> None:
 async def test_hybrid_recognize_intents_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         result = await hybrid_recognize_intents("你好")
@@ -1070,7 +1070,7 @@ async def test_hybrid_recognize_intents_uses_singleton() -> None:
 def test_hybrid_recognize_intents_sync_uses_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         result = hybrid_recognize_intents_sync("你好")
@@ -1081,7 +1081,7 @@ def test_hybrid_recognize_intents_sync_uses_singleton() -> None:
 def test_get_hybrid_intent_service_singleton_caches() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
@@ -1093,11 +1093,11 @@ def test_get_hybrid_intent_service_with_rasa() -> None:
     reset_hybrid_intent_service()
     with (
         patch(
-            "app.services.bert_intent_service.get_bert_intent_service",
+            "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
             side_effect=RuntimeError("disabled"),
         ),
         patch(
-            "app.services.hybrid_intent_service.get_rasa_nlu_service",
+            "app.domain.shared_services.hybrid_intent_service.get_rasa_nlu_service",
             return_value=MagicMock(),
         ) as mock_get_rasa,
     ):
@@ -1110,13 +1110,13 @@ def test_get_hybrid_intent_service_with_rasa() -> None:
 def test_reset_hybrid_intent_service_clears_singleton() -> None:
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc1 = get_hybrid_intent_service(use_bert=True)
     reset_hybrid_intent_service()
     with patch(
-        "app.services.bert_intent_service.get_bert_intent_service",
+        "app.domain.shared_services.bert_intent_service.get_bert_intent_service",
         side_effect=RuntimeError("disabled"),
     ):
         svc2 = get_hybrid_intent_service(use_bert=True)

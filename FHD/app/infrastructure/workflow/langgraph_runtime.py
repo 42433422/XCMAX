@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any, Iterator
 from langgraph.graph.state import END, START, StateGraph
 
 from app.application.workflow.ports import StateEventPublisher, WorkflowRuntime
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     StateSchema,
     WorkflowNode,
 )

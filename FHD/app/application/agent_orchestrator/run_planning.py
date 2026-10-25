@@ -7,7 +7,7 @@ from typing import Any
 
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.run_repository import AgentRunRepository
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

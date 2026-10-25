@@ -184,7 +184,7 @@ def _custom_track_blocked(issue: dict[str, Any], issue_number: int) -> tuple[boo
     if CUSTOM_TRACK_APPROVED_LABEL in labels:
         return False, ""
     try:
-        from app.services.work_order_ssot import find_by_issue
+        from app.domain.shared_services.ssot import find_by_issue
 
         view = find_by_issue(issue_number)
     except BOUNDARY_ERRORS:  # noqa: BLE001 - 工单视图读取失败不阻断通用轨道派发
@@ -435,7 +435,7 @@ def run(args: argparse.Namespace) -> int:
 def _record_in_dev_transition(issue_number: int) -> None:
     """主线接线：工单随 ai-implement 派发进入开发态（best-effort）。"""
     try:
-        from app.services.work_order_ssot import find_by_issue, record_transition
+        from app.domain.shared_services.ssot import find_by_issue, record_transition
 
         view = find_by_issue(issue_number)
         if view is None:

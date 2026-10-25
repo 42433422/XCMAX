@@ -16,10 +16,10 @@ from app.application.normal_chat_dispatch import (
     route_normal_mode_message,
 )
 from app.application.sales_app_service import SalesAppService
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Customer, Product, SalesOrder
+from app.domain.shared_services.tools_workflow_registered import _registered_router_sales
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.tools_workflow_registered import _registered_router_sales
 
 
 def _order(order_no: str = "SO-001", state: str = "confirmed") -> SimpleNamespace:

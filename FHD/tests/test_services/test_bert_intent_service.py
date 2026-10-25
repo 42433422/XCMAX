@@ -1,4 +1,4 @@
-"""Tests for app.services.bert_intent_service — BERT intent classification service."""
+"""Tests for app.domain.shared_services.bert_intent_service — BERT intent classification service."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.bert_intent_service import (
+from app.domain.shared_services.bert_intent_service import (
     ID_TO_LABEL,
     INTENT_LABELS,
     LABEL_TO_ID,
@@ -57,7 +57,7 @@ class TestBertIntentClassifierDummy:
     def test_init_with_local_files_only_no_model(self):
         """When local_files_only=True and no model_path, uses dummy model."""
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -67,7 +67,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_returns_dict(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -80,7 +80,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_return_probs(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -91,7 +91,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_no_probs_by_default(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -100,7 +100,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_batch(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -110,7 +110,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_batch_return_probs(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -119,7 +119,7 @@ class TestBertIntentClassifierDummy:
 
     def test_is_available_false_for_dummy(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -127,7 +127,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_intent_in_labels(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -136,7 +136,7 @@ class TestBertIntentClassifierDummy:
 
     def test_dummy_predict_confidence_range(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -145,7 +145,7 @@ class TestBertIntentClassifierDummy:
 
     def test_init_with_explicit_device(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(device="cpu", local_files_only=True)
@@ -153,7 +153,7 @@ class TestBertIntentClassifierDummy:
 
     def test_init_default_confidence_threshold(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(local_files_only=True)
@@ -161,7 +161,7 @@ class TestBertIntentClassifierDummy:
 
     def test_init_custom_confidence_threshold(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             clf = BertIntentClassifier(confidence_threshold=0.9, local_files_only=True)
@@ -193,7 +193,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "config.json"), "w") as f:
             json.dump(config_data, f)
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             mock_auto_tokenizer_cls.from_pretrained.assert_called()
@@ -215,7 +217,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "config.json"), "w") as f:
             json.dump(config_data, f)
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             # Should use standard ID_TO_LABEL, not LABEL_0
@@ -238,7 +242,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "intent_labels.json"), "w") as f:
             json.dump(labels_data, f)
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             assert clf.id2label[0] == "greet"
@@ -251,7 +257,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls = MagicMock()
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="bert-base-chinese", device="cpu")
             mock_auto_tokenizer_cls.from_pretrained.assert_called()
@@ -264,7 +272,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls.from_pretrained.side_effect = OSError("no network")
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="bert-base-chinese", device="cpu")
             assert clf.model is None
@@ -282,7 +292,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls = MagicMock()
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="custom-model-name", device="cpu")
             # Should call from_pretrained with "custom-model-name"
@@ -325,7 +337,9 @@ class TestBertIntentClassifierPredictWithModel:
         mock_tokenizer = MagicMock()
         mock_tokenizer.return_value = {"input_ids": MagicMock(), "attention_mask": MagicMock()}
 
-        with patch("app.services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, MagicMock(), MagicMock())
             clf = BertIntentClassifier(device="cpu", local_files_only=True)
 
@@ -381,7 +395,7 @@ class TestBertIntentService:
 
     def test_init_creates_classifier(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(local_files_only=True)
@@ -390,7 +404,7 @@ class TestBertIntentService:
 
     def test_recognize_with_dummy_model_and_fallback(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=True, local_files_only=True)
@@ -402,7 +416,7 @@ class TestBertIntentService:
 
     def test_recognize_no_fallback_unavailable(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=False, local_files_only=True)
@@ -413,7 +427,7 @@ class TestBertIntentService:
 
     def test_recognize_with_context(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=True, local_files_only=True)
@@ -422,7 +436,7 @@ class TestBertIntentService:
 
     def test_recognize_batch_with_fallback(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=True, local_files_only=True)
@@ -437,7 +451,7 @@ class TestBertIntentService:
 
     def test_recognize_batch_no_fallback_unavailable(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(use_fallback=False, local_files_only=True)
@@ -448,7 +462,7 @@ class TestBertIntentService:
 
     def test_get_top_intents_unavailable(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(local_files_only=True)
@@ -457,7 +471,7 @@ class TestBertIntentService:
 
     def test_get_top_intents_with_model(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(local_files_only=True)
@@ -477,7 +491,7 @@ class TestBertIntentService:
 
     def test_low_confidence_triggers_fallback_recommendation(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(
@@ -498,7 +512,7 @@ class TestBertIntentService:
 
     def test_high_confidence_no_fallback(self):
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = BertIntentService(
@@ -528,7 +542,7 @@ class TestBertIntentServiceSingleton:
     def test_get_service_returns_instance(self):
         reset_bert_intent_service()
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc = get_bert_intent_service(local_files_only=True)
@@ -538,7 +552,7 @@ class TestBertIntentServiceSingleton:
     def test_singleton_returns_same_instance(self):
         reset_bert_intent_service()
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc1 = get_bert_intent_service(local_files_only=True)
@@ -549,7 +563,7 @@ class TestBertIntentServiceSingleton:
     def test_reset_clears_singleton(self):
         reset_bert_intent_service()
         with patch(
-            "app.services.bert_intent_service._import_ml_stack",
+            "app.domain.shared_services.bert_intent_service._import_ml_stack",
             side_effect=ImportError("no torch"),
         ):
             svc1 = get_bert_intent_service(local_files_only=True)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.utils.time import utc_now_naive
 
 

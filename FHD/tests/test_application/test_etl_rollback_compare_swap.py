@@ -15,7 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application.etl.errors import EtlError
 from app.application.etl.targets import get_adapter
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, PurchaseUnit, ShipmentRecord, Warehouse
 from app.infrastructure.tenant_scope import tenant_scope
 

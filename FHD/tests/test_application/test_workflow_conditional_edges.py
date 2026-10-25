@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     Branch,
     PlanGraph,
     WorkflowNode,

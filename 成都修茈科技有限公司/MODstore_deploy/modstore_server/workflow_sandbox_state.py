@@ -6,7 +6,12 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.models import Workflow, WorkflowEdge, WorkflowNode, WorkflowSandboxRun
+from modstore_server.models import (
+    Workflow,
+    WorkflowEdge,
+    WorkflowNode,
+    WorkflowSandboxRun,
+)
 
 
 def _safe_json_loads(raw: Any) -> Any:

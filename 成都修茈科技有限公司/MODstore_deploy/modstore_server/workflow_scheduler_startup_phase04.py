@@ -59,7 +59,9 @@ def _register_scheduler_phase_04():
 
     def _duty_workforce_learning_job() -> None:
         try:
-            from modstore_server.duty_workforce_learning import run_duty_workforce_learning
+            from modstore_server.duty_workforce_learning import (
+                run_duty_workforce_learning,
+            )
 
             out = _facade()._run_tracked_scheduler_job(
                 "duty_workforce_learning", run_duty_workforce_learning
@@ -186,7 +188,9 @@ def _register_scheduler_phase_04():
 
     def _predictive_maintenance_job() -> None:
         try:
-            from modstore_server.predictive_maintenance import run_predictive_maintenance_once
+            from modstore_server.predictive_maintenance import (
+                run_predictive_maintenance_once,
+            )
 
             out = run_predictive_maintenance_once()
             _facade().logger.info(
@@ -239,7 +243,9 @@ def _register_scheduler_phase_04():
 
     def _auto_merge_audit_sampling_job() -> None:
         try:
-            from modstore_server.auto_merge_audit_sampler import run_auto_merge_audit_sampling_once
+            from modstore_server.auto_merge_audit_sampler import (
+                run_auto_merge_audit_sampling_once,
+            )
 
             out = run_auto_merge_audit_sampling_once()
             _facade().logger.info(

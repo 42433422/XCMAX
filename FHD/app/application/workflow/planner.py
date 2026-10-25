@@ -13,8 +13,8 @@ import httpx
 from app.domain.conversation.services.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
+from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.services import get_ai_conversation_service
-from app.services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import ensure_fhd_repo_on_syspath
 
@@ -115,7 +115,13 @@ from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from .planning_loop import PlanningLoop
-from .types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk, validate_plan_graph
+from .workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    normalize_workflow_risk,
+    validate_plan_graph,
+)
 
 logger = logging.getLogger(__name__)
 _planner_http_client: httpx.Client | None = None
@@ -276,7 +282,7 @@ class LLMWorkflowPlanner:
         except RECOVERABLE_ERRORS as e:
             logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
         try:
-            from app.services.user_memory_service import get_user_memory_service
+            from app.domain.shared_services.user_memory_service import get_user_memory_service
 
             memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
                 user_id=user_id, max_items=6

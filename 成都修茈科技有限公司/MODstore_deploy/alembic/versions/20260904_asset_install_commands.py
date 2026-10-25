@@ -26,8 +26,15 @@ def upgrade() -> None:
         "asset_install_commands",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
-        sa.Column("purchase_id", sa.Integer(), sa.ForeignKey("purchases.id"), nullable=False),
-        sa.Column("catalog_id", sa.Integer(), sa.ForeignKey("catalog_items.id"), nullable=False),
+        sa.Column(
+            "purchase_id", sa.Integer(), sa.ForeignKey("purchases.id"), nullable=False
+        ),
+        sa.Column(
+            "catalog_id",
+            sa.Integer(),
+            sa.ForeignKey("catalog_items.id"),
+            nullable=False,
+        ),
         sa.Column("installation_id", sa.String(64), nullable=False, server_default="*"),
         sa.Column("idempotency_key", sa.String(192), nullable=False),
         sa.Column("source", sa.String(32), nullable=False, server_default="user_click"),
@@ -38,9 +45,21 @@ def upgrade() -> None:
         sa.Column("error", sa.Text(), nullable=False, server_default=""),
         sa.Column("claimed_at", sa.DateTime(), nullable=True),
         sa.Column("completed_at", sa.DateTime(), nullable=True),
-        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
-        sa.UniqueConstraint("idempotency_key", name="uq_asset_install_command_idempotency"),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.UniqueConstraint(
+            "idempotency_key", name="uq_asset_install_command_idempotency"
+        ),
     )
     for name, columns in (
         ("ix_asset_install_commands_user_id", ["user_id"]),

@@ -231,7 +231,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         yield _facade()._sse_event_line({"type": "token", "text": response_text})
         yield _facade()._sse_event_line({"type": "done", "result": payload})
         return
-    from app.application.chat_business_safety import try_handle_business_chat_action
+    from app.domain.app_pure.chat_business_safety import try_handle_business_chat_action
 
     business_payload = try_handle_business_chat_action(
         body.message,

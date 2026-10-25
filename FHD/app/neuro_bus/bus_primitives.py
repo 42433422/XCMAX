@@ -10,7 +10,7 @@ from collections.abc import Callable
 from heapq import heappop, heappush
 from typing import cast
 
-from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
+from app.neuro_bus.events.events_base import AsyncEventHandler, EventHandler, NeuroEvent
 
 logger = logging.getLogger(__name__)
 

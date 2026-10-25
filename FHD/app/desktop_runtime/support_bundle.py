@@ -20,7 +20,7 @@ from app.desktop_runtime.migrate import export_config
 from app.security.log_redaction import redact_log_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .paths import ensure_desktop_dirs, is_desktop_mode
+from .desktop_runtime_paths import ensure_desktop_dirs, is_desktop_mode
 
 logger = logging.getLogger(__name__)
 # MODstore customer issue intake rejects larger bundles.

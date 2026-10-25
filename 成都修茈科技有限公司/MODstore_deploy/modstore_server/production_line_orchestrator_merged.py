@@ -112,7 +112,9 @@ class FiveLineDefinition:
 "Implementation extracted from the public facade module."
 
 
-def _step_status_map(pipeline: _facade().Dict[str, _facade().Any]) -> _facade().Dict[str, str]:
+def _step_status_map(
+    pipeline: _facade().Dict[str, _facade().Any],
+) -> _facade().Dict[str, str]:
     out: _facade().Dict[str, str] = {}
     for block in ("production_line", "operations_line"):
         for s in pipeline.get(block, {}).get("steps", []):

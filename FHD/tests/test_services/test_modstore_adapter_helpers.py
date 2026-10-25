@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.conversation.modstore_adapter import (
+from app.domain.shared_services.conversation.modstore_adapter import (
     _iter_market_sse_data_payloads,
     _iter_market_transport_plans,
     _market_connect_attempts,

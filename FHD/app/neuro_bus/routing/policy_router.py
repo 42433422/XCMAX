@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.domain.neuro.processors.coordinator import ProcessorType, RoutingDecision
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.routing.features import build_routing_features
 from app.neuro_bus.routing.policy_nn import predict_with_confidence
 from app.neuro_bus.routing.routing_log import append_routing_decision

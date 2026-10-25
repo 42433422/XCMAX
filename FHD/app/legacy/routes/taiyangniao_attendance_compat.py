@@ -61,7 +61,7 @@ def _candidate_mod_roots() -> list[Path]:
             add(Path(raw) / "mods")
 
     try:
-        from app.desktop_runtime.paths import get_desktop_data_dir
+        from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir
 
         add(get_desktop_data_dir() / "mods")
     except RECOVERABLE_ERRORS:

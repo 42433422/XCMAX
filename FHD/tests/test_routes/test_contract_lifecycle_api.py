@@ -167,7 +167,8 @@ def test_contract_status_success(client: TestClient, monkeypatch: pytest.MonkeyP
         "contract_fields": {"party_a_name": "甲方公司"},
     }
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     r = client.get(
         "/api/contract-lifecycle/status", params={"market_user_id": 1, "username": "张三"}
@@ -185,7 +186,8 @@ def test_contract_status_no_contract_lifecycle(
 ) -> None:
     fake_pipeline = {"stage": "idle", "username": "李四", "erp_customer_name": "公司B"}
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     r = client.get("/api/contract-lifecycle/status", params={"market_user_id": 2})
     assert r.status_code == 200
@@ -197,7 +199,8 @@ def test_contract_status_no_contract_lifecycle(
 def test_contract_status_no_esign_task(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_pipeline = {"stage": "idle", "username": "王五", "contract_lifecycle": {"status": "draft"}}
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     r = client.get("/api/contract-lifecycle/status", params={"market_user_id": 3})
     assert r.status_code == 200
@@ -213,7 +216,8 @@ def test_contract_status_esign_task_not_dict(
         "contract_lifecycle": {"status": "draft", "esign_task": "not-a-dict"},
     }
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     r = client.get("/api/contract-lifecycle/status", params={"market_user_id": 4})
     assert r.status_code == 200
@@ -231,7 +235,8 @@ def test_contract_status_contract_fields_not_dict(
         "contract_fields": "not-a-dict",
     }
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     r = client.get("/api/contract-lifecycle/status", params={"market_user_id": 5})
     assert r.status_code == 200
@@ -251,16 +256,19 @@ def test_contract_status_missing_market_user_id_returns_422(client: TestClient) 
 def test_transition_success(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     fake_pipeline = {"stage": "contract_pending", "contract_lifecycle": {"status": "draft"}}
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.transition_contract",
+        "app.domain.shared_services.contract_lifecycle.transition_contract",
         lambda doc, status, source="", note="": {**doc, "contract_lifecycle": {"status": status}},
     )
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+        "app.domain.shared_services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
     )
-    monkeypatch.setattr("app.services.user_cs_pipeline.save_pipeline", lambda doc: doc)
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_pipeline.save_pipeline", lambda doc: doc
+    )
     r = client.post(
         "/api/contract-lifecycle/transition",
         json={"market_user_id": 1, "status": "signed", "username": "张三", "note": "签署完成"},
@@ -293,13 +301,18 @@ def test_transition_with_note(client: TestClient, monkeypatch: pytest.MonkeyPatc
         return {**doc, "contract_lifecycle": {"status": status, "note": note}}
 
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
-    monkeypatch.setattr("app.services.contract_lifecycle.transition_contract", fake_transition)
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+        "app.domain.shared_services.contract_lifecycle.transition_contract", fake_transition
     )
-    monkeypatch.setattr("app.services.user_cs_pipeline.save_pipeline", lambda doc: doc)
+    monkeypatch.setattr(
+        "app.domain.shared_services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+    )
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_pipeline.save_pipeline", lambda doc: doc
+    )
     r = client.post(
         "/api/contract-lifecycle/transition",
         json={"market_user_id": 1, "status": "signed", "note": "审批通过"},
@@ -337,13 +350,18 @@ def test_esign_start_success(client: TestClient, monkeypatch: pytest.MonkeyPatch
         }
 
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
-    monkeypatch.setattr("app.services.contract_lifecycle.start_esign_flow", fake_start_esign)
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+        "app.domain.shared_services.contract_lifecycle.start_esign_flow", fake_start_esign
     )
-    monkeypatch.setattr("app.services.user_cs_pipeline.save_pipeline", lambda doc: doc)
+    monkeypatch.setattr(
+        "app.domain.shared_services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+    )
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_pipeline.save_pipeline", lambda doc: doc
+    )
     r = client.post(
         "/api/contract-lifecycle/esign/start",
         json={"market_user_id": 1, "party_a": "甲方公司", "party_b": "乙方公司"},
@@ -368,13 +386,18 @@ def test_esign_start_no_payment_defaults_amount_to_none(
         return {**doc, "esign_task": {"amount_cents": amount_cents}}
 
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
-    monkeypatch.setattr("app.services.contract_lifecycle.start_esign_flow", fake_start_esign)
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+        "app.domain.shared_services.contract_lifecycle.start_esign_flow", fake_start_esign
     )
-    monkeypatch.setattr("app.services.user_cs_pipeline.save_pipeline", lambda doc: doc)
+    monkeypatch.setattr(
+        "app.domain.shared_services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+    )
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_pipeline.save_pipeline", lambda doc: doc
+    )
     r = client.post(
         "/api/contract-lifecycle/esign/start", json={"market_user_id": 1, "party_a": "甲方公司"}
     )
@@ -397,13 +420,18 @@ def test_esign_start_no_party_b_uses_erp_customer_name(
         return {**doc, "esign_task": {}}
 
     monkeypatch.setattr(
-        "app.services.user_cs_pipeline.load_pipeline", lambda uid, username="": fake_pipeline
+        "app.domain.shared_services.user_cs_pipeline.load_pipeline",
+        lambda uid, username="": fake_pipeline,
     )
-    monkeypatch.setattr("app.services.contract_lifecycle.start_esign_flow", fake_start_esign)
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+        "app.domain.shared_services.contract_lifecycle.start_esign_flow", fake_start_esign
     )
-    monkeypatch.setattr("app.services.user_cs_pipeline.save_pipeline", lambda doc: doc)
+    monkeypatch.setattr(
+        "app.domain.shared_services.contract_lifecycle.apply_contract_to_crm_meta", lambda doc: doc
+    )
+    monkeypatch.setattr(
+        "app.domain.shared_services.user_cs_pipeline.save_pipeline", lambda doc: doc
+    )
     r = client.post(
         "/api/contract-lifecycle/esign/start", json={"market_user_id": 1, "party_a": "甲方公司"}
     )
@@ -507,7 +535,8 @@ def test_esign_sign_complete_success(client: TestClient, monkeypatch: pytest.Mon
     sys.modules[_SES].task_ttl_exceeded = lambda task: False
     sys.modules[_SES].complete_task = lambda task_id, signer_name="": None
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook", lambda payload: {"success": True}
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
+        lambda payload: {"success": True},
     )
     r = client.post(
         "/api/contract-lifecycle/esign/sign/task1/complete",
@@ -611,7 +640,8 @@ def test_esign_sign_complete_no_signer_name_uses_party_b(
     sys.modules[_SES].task_ttl_exceeded = lambda task: False
     sys.modules[_SES].complete_task = lambda task_id, signer_name="": None
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook", lambda payload: {"success": True}
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
+        lambda payload: {"success": True},
     )
     r = client.post(
         "/api/contract-lifecycle/esign/sign/task1/complete", json={"token": "tok", "agree": True}
@@ -652,7 +682,7 @@ def test_esign_sign_complete_webhook_failure_returns_400(
     sys.modules[_SES].task_ttl_exceeded = lambda task: False
     sys.modules[_SES].complete_task = lambda task_id, signer_name="": None
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook",
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
         lambda payload: {"success": False, "error": "保存失败"},
     )
     r = client.post(
@@ -680,7 +710,7 @@ def test_esign_webhook_json_body_success(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook",
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
         lambda payload: {"success": True, "data": {"market_user_id": 1}},
     )
     r = client.post(
@@ -695,7 +725,7 @@ def test_esign_webhook_json_body_unsigned(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook",
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
         lambda payload: {"success": False, "error": "unsigned"},
     )
     r = client.post("/api/contract-lifecycle/esign/webhook", json={"signed": False})
@@ -705,7 +735,7 @@ def test_esign_webhook_json_body_unsigned(
 
 def test_esign_webhook_empty_json(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook",
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
         lambda payload: {"success": False, "error": "missing market_user_id"},
     )
     r = client.post("/api/contract-lifecycle/esign/webhook", json={})
@@ -745,7 +775,8 @@ def test_esign_webhook_fadada_valid_signature(
     fake_adapter.parse_webhook.return_value = {"signed": True, "market_user_id": 1}
     sys.modules[_EA].get_esign_adapter = lambda: fake_adapter
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook", lambda payload: {"success": True}
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
+        lambda payload: {"success": True},
     )
     r = client.post(
         "/api/contract-lifecycle/esign/webhook",
@@ -769,7 +800,7 @@ def test_esign_webhook_fadada_handle_failure_returns_400(
     fake_adapter.parse_webhook.return_value = {"signed": False}
     sys.modules[_EA].get_esign_adapter = lambda: fake_adapter
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.handle_esign_webhook",
+        "app.domain.shared_services.contract_lifecycle.handle_esign_webhook",
         lambda payload: {"success": False, "error": "处理失败"},
     )
     r = client.post(

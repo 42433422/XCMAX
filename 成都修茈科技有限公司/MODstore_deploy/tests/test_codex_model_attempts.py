@@ -14,7 +14,8 @@ def test_candidates_line_from_env_and_request(monkeypatch):
     monkeypatch.delenv("MODSTORE_PARA_CODEX_MODEL_CANDIDATES", raising=False)
     assert codex_model_candidates_line({}) == ""
     monkeypatch.setenv(
-        "MODSTORE_PARA_CODEX_MODEL_CANDIDATES", "gpt-5.6-sol, gpt-5.6-terra>gpt-5.6-luna"
+        "MODSTORE_PARA_CODEX_MODEL_CANDIDATES",
+        "gpt-5.6-sol, gpt-5.6-terra>gpt-5.6-luna",
     )
     assert (
         codex_model_candidates_line({})

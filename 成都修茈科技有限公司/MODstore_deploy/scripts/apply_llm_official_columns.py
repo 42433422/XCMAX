@@ -10,7 +10,9 @@ from sqlalchemy import create_engine, text
 
 
 def db_url() -> str:
-    url = (os.environ.get("MODSTORE_DATABASE_URL") or os.environ.get("DATABASE_URL") or "").strip()
+    url = (
+        os.environ.get("MODSTORE_DATABASE_URL") or os.environ.get("DATABASE_URL") or ""
+    ).strip()
     if not url:
         print("MODSTORE_DATABASE_URL or DATABASE_URL required", file=sys.stderr)
         sys.exit(1)
@@ -54,14 +56,22 @@ def main() -> None:
             ("official_synced_at", "TIMESTAMP"),
         ):
             if not col_exists(conn, "ai_model_prices", col):
-                conn.execute(text(f"ALTER TABLE ai_model_prices ADD COLUMN {col} {typ}"))
+                conn.execute(
+                    text(f"ALTER TABLE ai_model_prices ADD COLUMN {col} {typ}")
+                )
                 print(f"added ai_model_prices.{col}")
 
         if col_exists(conn, "alembic_version", "version_num"):
             ver = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
-            if ver in ("20260601_llm_billing_settings", "20260526_users_deleted_at", None):
+            if ver in (
+                "20260601_llm_billing_settings",
+                "20260526_users_deleted_at",
+                None,
+            ):
                 conn.execute(
-                    text("UPDATE alembic_version SET version_num = '20260601_llm_official_prices'")
+                    text(
+                        "UPDATE alembic_version SET version_num = '20260601_llm_official_prices'"
+                    )
                 )
                 ver = "20260601_llm_official_prices"
             print("alembic_version:", ver)
