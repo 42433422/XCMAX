@@ -39,9 +39,7 @@ async def workbench_web_search(
         max_chars=body.max_chars,
     )
     if out.get("error") == "rate_limited":
-        raise HTTPException(
-            429, (out.get("warnings") or ["今日联网检索次数已达上限"])[0]
-        )
+        raise HTTPException(429, (out.get("warnings") or ["今日联网检索次数已达上限"])[0])
     return out
 
 

@@ -13,7 +13,9 @@ import os
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Replay OutboxEvent rows (mark pending + drain once).")
+    p = argparse.ArgumentParser(
+        description="Replay OutboxEvent rows (mark pending + drain once)."
+    )
     p.add_argument("--event-id", default="", help="Exact event_id to match")
     p.add_argument("--event-name", default="", help="Canonical event_name filter")
     p.add_argument("--since-id", type=int, default=0)
@@ -33,7 +35,9 @@ def main() -> int:
             q = q.filter(OutboxEvent.event_name == args.event_name.strip())
         if args.since_id > 0:
             q = q.filter(OutboxEvent.id >= args.since_id)
-        rows = q.order_by(OutboxEvent.id.asc()).limit(max(1, min(args.limit, 500))).all()
+        rows = (
+            q.order_by(OutboxEvent.id.asc()).limit(max(1, min(args.limit, 500))).all()
+        )
         for row in rows:
             row.status = "pending"
             row.last_error = ""

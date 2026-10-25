@@ -159,9 +159,7 @@ def _interfaces_for_category(category: str, *, oai_compat: bool) -> List[str]:
 def _provider_assets(block: Mapping[str, Any]) -> Dict[str, Any]:
     provider = str(block.get("provider") or "").strip().lower()
     configured = bool(block.get("configured"))
-    detailed = [
-        row for row in (block.get("models_detailed") or []) if isinstance(row, dict)
-    ]
+    detailed = [row for row in (block.get("models_detailed") or []) if isinstance(row, dict)]
     counts = media_counts_from_detailed(detailed)
     oai_compat = provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
     assets: List[Dict[str, Any]] = []
@@ -170,9 +168,7 @@ def _provider_assets(block: Mapping[str, Any]) -> Dict[str, Any]:
         if not mid:
             continue
         category = str(row.get("category") or "other")
-        caps = (
-            row.get("capabilities") if isinstance(row.get("capabilities"), dict) else {}
-        )
+        caps = row.get("capabilities") if isinstance(row.get("capabilities"), dict) else {}
         assets.append(
             {
                 "model": mid,
@@ -250,9 +246,7 @@ def build_ai_asset_inventory(
     """Merge catalog + CLI status into an ops-facing AI asset inventory."""
 
     providers_raw = [
-        row
-        for row in (platform_catalog or {}).get("providers") or []
-        if isinstance(row, dict)
+        row for row in (platform_catalog or {}).get("providers") or [] if isinstance(row, dict)
     ]
     providers = [_provider_assets(row) for row in providers_raw]
 
@@ -283,10 +277,7 @@ def build_ai_asset_inventory(
                 if asset.get("category") != cat:
                     continue
                 mid = f"{provider_id}:{asset.get('model')}"
-                if (
-                    mid not in bucket["sample_models"]
-                    and len(bucket["sample_models"]) < 12
-                ):
+                if mid not in bucket["sample_models"] and len(bucket["sample_models"]) < 12:
                     bucket["sample_models"].append(mid)
 
     cli_assets = _cli_assets(cli_catalog)
@@ -302,8 +293,7 @@ def build_ai_asset_inventory(
             iface["available"] = bool(installed_clis)
         elif iface["id"] in {"platform.image", "platform.video"}:
             iface["available"] = any(
-                p.get("configured") and p.get("oai_compat_images_video")
-                for p in providers
+                p.get("configured") and p.get("oai_compat_images_video") for p in providers
             )
         elif iface["id"].startswith("platform."):
             iface["available"] = bool(configured_providers)
@@ -314,12 +304,8 @@ def build_ai_asset_inventory(
         "configured_provider_count": len(configured_providers),
         "configured_providers": configured_providers,
         "model_count": int((platform_catalog or {}).get("model_count") or 0),
-        "runtime_model_count": int(
-            (platform_catalog or {}).get("runtime_model_count") or 0
-        ),
-        "media_totals": {
-            cat: int(by_category[cat]["model_count"]) for cat in CATEGORY_ORDER
-        },
+        "runtime_model_count": int((platform_catalog or {}).get("runtime_model_count") or 0),
+        "media_totals": {cat: int(by_category[cat]["model_count"]) for cat in CATEGORY_ORDER},
         "cli_installed_count": len(installed_clis),
         "cli_usable_count": len(usable_clis),
         "quota_ok": bool((quota or {}).get("ok", True)),

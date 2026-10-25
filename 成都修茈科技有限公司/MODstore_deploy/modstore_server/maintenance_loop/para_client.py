@@ -30,9 +30,7 @@ def _fetch_para_task_report_excerpt(
         with httpx.Client(
             timeout=20.0, trust_env=False, verify=para_auth._para_tls_verify()
         ) as client:
-            resp = client.get(
-                f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers
-            )
+            resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
             resp.raise_for_status()
             task = (resp.json() or {}).get("task") or {}
     except RECOVERABLE_ERRORS:
@@ -51,12 +49,8 @@ def _fetch_para_task_report_excerpt(
 
 def _fetch_para_task_state(api_base: str, task_id: str) -> Dict[str, Any]:
     headers = para_auth._guest_auth_headers(api_base)
-    with httpx.Client(
-        timeout=20.0, trust_env=False, verify=para_auth._para_tls_verify()
-    ) as client:
-        resp = client.get(
-            f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers
-        )
+    with httpx.Client(timeout=20.0, trust_env=False, verify=para_auth._para_tls_verify()) as client:
+        resp = client.get(f"{api_base.rstrip('/')}/api/tasks/{task_id}", headers=headers)
         resp.raise_for_status()
         task = (resp.json() or {}).get("task") or {}
     return task if isinstance(task, dict) else {}
@@ -82,9 +76,7 @@ def _kickstart_para_agent() -> Dict[str, Any]:
         or str(Path.home() / "Library/LaunchAgents" / f"{label}.plist")
     )
     try:
-        output = workspace._run_cmd(
-            ["launchctl", "kickstart", "-k", target], timeout=30
-        )
+        output = workspace._run_cmd(["launchctl", "kickstart", "-k", target], timeout=30)
         return {"attempted": True, "ok": True, "output": output, "target": target}
     except RECOVERABLE_ERRORS as first_exc:
         bootstrap_result: Dict[str, Any] = {"attempted": False}
@@ -108,9 +100,7 @@ def _kickstart_para_agent() -> Dict[str, Any]:
                     "plist": str(plist),
                 }
         try:
-            output = workspace._run_cmd(
-                ["launchctl", "kickstart", "-k", target], timeout=30
-            )
+            output = workspace._run_cmd(["launchctl", "kickstart", "-k", target], timeout=30)
             return {
                 "attempted": True,
                 "bootstrap": bootstrap_result,
@@ -134,9 +124,7 @@ def _kickstart_para_agent() -> Dict[str, Any]:
             }
 
 
-def _clear_stale_para_current_task(
-    *, device_id: str, current_task: str
-) -> Dict[str, Any]:
+def _clear_stale_para_current_task(*, device_id: str, current_task: str) -> Dict[str, Any]:
     db_file = para_auth._para_db_file()
     if db_file is None:
         return {"cleared": False, "reason": "para_db_file_missing"}
@@ -211,12 +199,8 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
     device_id = os.environ.get("MODSTORE_PARA_DEVICE_ID", "").strip()
     if not api_base or not device_id:
         return {"online": False, "reason": "missing_para_api_base_or_device_id"}
-    timeout_sec = max(
-        0, config._env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", 60)
-    )
-    poll_sec = max(
-        1, config._env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_POLL_SEC", 5)
-    )
+    timeout_sec = max(0, config._env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_WAIT_SEC", 60))
+    poll_sec = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_DEVICE_ONLINE_POLL_SEC", 5))
     deadline = time.monotonic() + timeout_sec
     last_status: Dict[str, Any] = {}
     last_error = ""
@@ -229,9 +213,7 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
             with httpx.Client(
                 timeout=15.0, trust_env=False, verify=para_auth._para_tls_verify()
             ) as client:
-                resp = client.get(
-                    f"{api_base.rstrip('/')}/api/devices", headers=headers
-                )
+                resp = client.get(f"{api_base.rstrip('/')}/api/devices", headers=headers)
                 if resp.status_code in {401, 403}:
                     headers = None
                     para_auth._PARA_GUEST_AUTH_CACHE.pop(api_base.rstrip("/"), None)
@@ -255,10 +237,7 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 tools = target.get("tools")
                 if isinstance(tools, list):
                     for tool in tools:
-                        if (
-                            isinstance(tool, dict)
-                            and str(tool.get("toolName") or "") == "codex"
-                        ):
+                        if isinstance(tool, dict) and str(tool.get("toolName") or "") == "codex":
                             codex_tool = tool
                             break
                 tool_status = str(codex_tool.get("status") or "").lower()
@@ -291,9 +270,7 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                         "stale_clear": stale_clear,
                         "status": target.get("status"),
                     }
-                    if config._env_bool(
-                        "MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE", False
-                    ):
+                    if config._env_bool("MODSTORE_SELF_MAINTENANCE_ALLOW_BUSY_DEVICE", False):
                         return {**last_status, "reason": "online_busy_allowed"}
                     if kickstart_result is None:
                         kickstart_result = _kickstart_para_agent()
@@ -301,9 +278,7 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 else:
                     orphan_reconcile: Optional[Dict[str, Any]] = None
                     if online and (not current_task) and (tool_status in {"", "idle"}):
-                        orphan_reconcile = _reconcile_orphan_para_running_tasks(
-                            device_id=device_id
-                        )
+                        orphan_reconcile = _reconcile_orphan_para_running_tasks(device_id=device_id)
                     last_status = {
                         "codex_tool": codex_tool,
                         "device_id": device_id,
@@ -323,9 +298,7 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
                 kickstart_result = _kickstart_para_agent()
                 headers = None
         if time.monotonic() >= deadline:
-            was_online = bool(last_status.get("online")) or bool(
-                last_status.get("busy")
-            )
+            was_online = bool(last_status.get("online")) or bool(last_status.get("busy"))
             return {
                 **last_status,
                 "error": last_error,
@@ -341,13 +314,9 @@ def _wait_for_para_device_online() -> Dict[str, Any]:
         time.sleep(poll_sec)
 
 
-def _mark_para_task_merged(
-    *, api_base: str, task_id: str, merge_sha: str
-) -> Dict[str, Any]:
+def _mark_para_task_merged(*, api_base: str, task_id: str, merge_sha: str) -> Dict[str, Any]:
     headers = para_auth._guest_auth_headers(api_base)
-    with httpx.Client(
-        timeout=30.0, trust_env=False, verify=para_auth._para_tls_verify()
-    ) as client:
+    with httpx.Client(timeout=30.0, trust_env=False, verify=para_auth._para_tls_verify()) as client:
         resp = client.post(
             f"{api_base.rstrip('/')}/api/tasks/{task_id}/merge",
             headers=headers,
@@ -373,9 +342,7 @@ def _request_para_task_merge(*, api_base: str, task_id: str) -> Dict[str, Any]:
     ).strip()
     workspace_path = str(Path(workspace_root).expanduser() / task_id)
     headers = para_auth._guest_auth_headers(api_base)
-    with httpx.Client(
-        timeout=30.0, trust_env=False, verify=para_auth._para_tls_verify()
-    ) as client:
+    with httpx.Client(timeout=30.0, trust_env=False, verify=para_auth._para_tls_verify()) as client:
         resp = client.post(
             f"{api_base.rstrip('/')}/api/tasks/{task_id}/request-merge",
             headers=headers,

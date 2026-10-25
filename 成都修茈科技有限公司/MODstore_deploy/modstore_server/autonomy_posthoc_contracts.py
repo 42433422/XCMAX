@@ -126,12 +126,8 @@ def _post_apply_scope_verdict(
         )
 
         pack = load_employee_pack(session, str(change_request.source_employee_id or ""))
-        manifest = (
-            pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-        )
-        scope_globs, forbidden_globs, _approval_globs = workspace_policy_from_manifest(
-            manifest
-        )
+        manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+        scope_globs, forbidden_globs, _approval_globs = workspace_policy_from_manifest(manifest)
     except BOUNDARY_ERRORS:  # noqa: BLE001 - evidence outage must stay unknown, not crash the job
         return {"ok": False, "reason": "workspace_policy_unavailable"}
     if not scope_globs and not forbidden_globs:
@@ -179,9 +175,7 @@ def verify_code_write_action(
             return {
                 "ok": True,
                 "verdict": "no_prohibited_miss",
-                "evidence_ref": (
-                    f"employee-suggestion:{int(failure.id)}:narrow-ci:{failed_step}"
-                ),
+                "evidence_ref": (f"employee-suggestion:{int(failure.id)}:narrow-ci:{failed_step}"),
                 "reason": "narrow_ci_blocked_before_apply",
             }
         if applied_at < _utc(allowed_at):
@@ -195,11 +189,7 @@ def verify_code_write_action(
         if event is None:
             return {"ok": False, "reason": "post_apply_verification_missing"}
         failed_checks = payload.get("failed_checks")
-        if (
-            payload.get("ok") is not True
-            or not isinstance(failed_checks, list)
-            or failed_checks
-        ):
+        if payload.get("ok") is not True or not isinstance(failed_checks, list) or failed_checks:
             return {"ok": False, "reason": "post_apply_verification_failed"}
         scope = _post_apply_scope_verdict(
             session,
@@ -274,9 +264,7 @@ def verify_daily_digest_action(
         if not isinstance(recipients, list) or not isinstance(deliveries, list):
             continue
         recipient_set = {
-            str(value).strip().lower()
-            for value in recipients
-            if str(value or "").strip()
+            str(value).strip().lower() for value in recipients if str(value or "").strip()
         }
         if recipient_set != configured_recipients:
             continue
@@ -367,8 +355,7 @@ def verify_self_maintenance_merge_action(
     run_records = [
         record
         for record in records
-        if str(record.get("run_id") or "") == run_id
-        and _recorded_at_or_after(record, allowed_at)
+        if str(record.get("run_id") or "") == run_id and _recorded_at_or_after(record, allowed_at)
     ]
     request = next(
         (
@@ -378,18 +365,14 @@ def verify_self_maintenance_merge_action(
         ),
         None,
     )
-    failed_attempt = (
-        _failed_merge_request_attempt(run_records) if request is None else None
-    )
+    failed_attempt = _failed_merge_request_attempt(run_records) if request is None else None
     task_receipt = request or failed_attempt or {}
     task_id = str(task_receipt.get("para_task_id") or "").strip()
     if not task_id:
         return {"ok": False, "reason": "merge_request_receipt_missing"}
     branch = str(task_receipt.get("branch") or "").strip()
     base_branch = str(
-        task_receipt.get("base_branch")
-        or os.environ.get("MODSTORE_PARA_BRANCH")
-        or "main"
+        task_receipt.get("base_branch") or os.environ.get("MODSTORE_PARA_BRANCH") or "main"
     ).strip()
     para_reason = ""
     try:
@@ -426,9 +409,7 @@ def verify_self_maintenance_merge_action(
             return {
                 "ok": True,
                 "verdict": "no_prohibited_miss",
-                "evidence_ref": (
-                    f"para-task:{task_id}:terminal:{task_status}+{veto_ref}"
-                ),
+                "evidence_ref": (f"para-task:{task_id}:terminal:{task_status}+{veto_ref}"),
                 "reason": "merge_request_failed_and_pull_remained_vetoed",
             }
         return {
@@ -481,9 +462,7 @@ def verify_self_maintenance_merge_action(
             branch=branch,
             base_branch=base_branch,
             allowed_at=allowed_at,
-            expected_merge_sha=(
-                task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""
-            ),
+            expected_merge_sha=(task_merge_sha if _SHA.fullmatch(task_merge_sha) else ""),
             expected_task_id=task_id,
         )
     except RECOVERABLE_ERRORS:

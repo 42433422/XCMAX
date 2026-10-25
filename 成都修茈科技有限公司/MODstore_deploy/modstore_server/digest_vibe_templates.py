@@ -72,9 +72,7 @@ def resolve_vibe_prep_version_context(
 
 def _version_header_block(kind: str, ctx: Dict[str, Any]) -> str:
     label = "更新清单" if kind == "updates" else "补丁清单"
-    list_ver = (
-        ctx.get("updates_version") if kind == "updates" else ctx.get("patches_version")
-    )
+    list_ver = ctx.get("updates_version") if kind == "updates" else ctx.get("patches_version")
     mode_label = "手动重跑" if str(ctx.get("mode") or "") == "manual" else "08:00 自动"
     rid = int(ctx.get("digest_record_id") or 0)
     archive = f"#{rid}" if rid > 0 else "—"
@@ -89,28 +87,18 @@ def _apply_version_stamp(kind: str, body: str, ctx: Dict[str, Any]) -> str:
         if text.startswith(known_h1):
             text = text[len(known_h1) :].lstrip()
             break
-    text = re.sub(
-        "(?ms)^\\| 字段 \\| 值 \\|\\n(?:\\|[^\\n]*\\|\\n)+", "", text, count=1
-    ).lstrip()
+    text = re.sub("(?ms)^\\| 字段 \\| 值 \\|\\n(?:\\|[^\\n]*\\|\\n)+", "", text, count=1).lstrip()
     header = _facade()._version_header_block(kind, ctx)
     return f"{title}\n\n{header}\n{text}".rstrip() + "\n"
 
 
 def _include_meta_maintenance_updates() -> bool:
-    raw = (
-        (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_META_UPDATES") or "")
-        .strip()
-        .lower()
-    )
+    raw = (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_META_UPDATES") or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
 
 
 def _include_surface_hint_tasks() -> bool:
-    raw = (
-        (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_SURFACE_HINTS") or "")
-        .strip()
-        .lower()
-    )
+    raw = (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_SURFACE_HINTS") or "").strip().lower()
     return raw in ("1", "true", "yes", "on")
 
 
@@ -177,9 +165,7 @@ def _build_template_vibe_markdowns(
     """
     update_lines: List[str] = []
     patch_lines: List[str] = []
-    emp_by_id = {
-        str(e.get("employee_id") or ""): e for e in employees if e.get("employee_id")
-    }
+    emp_by_id = {str(e.get("employee_id") or ""): e for e in employees if e.get("employee_id")}
     evidence = "\n".join(
         (
             x.strip()
@@ -192,15 +178,9 @@ def _build_template_vibe_markdowns(
     def _emp_section(pid: str, fallback_name: str = "") -> Tuple[str, str, str]:
         emp = emp_by_id.get(pid) or {}
         name = str(emp.get("name") or fallback_name or pid)
-        pack_ver = str(
-            emp.get("pack_version") or _facade()._employee_pack_version(pid) or "—"
-        )
-        scope = (
-            emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
-        )
-        scope_txt = (
-            "、".join((f"`{s}`" for s in scope[:6])) or "（manifest 未声明 scope）"
-        )
+        pack_ver = str(emp.get("pack_version") or _facade()._employee_pack_version(pid) or "—")
+        scope = emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
+        scope_txt = "、".join((f"`{s}`" for s in scope[:6])) or "（manifest 未声明 scope）"
         return (name, pack_ver, scope_txt)
 
     def _add_update(pid: str, fallback_name: str, items: List[str]) -> None:
@@ -265,9 +245,7 @@ def _build_template_vibe_markdowns(
                     "- **P2** 把 P-S title/route 对照表纳入每日巡检验收项，失败时生成可定位的页面清单"
                 ],
             )
-        if any(
-            (x in evidence for x in ("ERR_CONNECTION_CLOSED", "ERR_HTTP2_PING_FAILED"))
-        ):
+        if any((x in evidence for x in ("ERR_CONNECTION_CLOSED", "ERR_HTTP2_PING_FAILED"))):
             _add_patch(
                 "marketing-site-builder",
                 "营销站点构建员",
@@ -299,20 +277,12 @@ def _build_template_vibe_markdowns(
             continue
         name = str(emp.get("name") or pid)
         pack_ver = str(emp.get("pack_version") or "—")
-        scope = (
-            emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
-        )
-        scope_txt = (
-            "、".join((f"`{s}`" for s in scope[:6])) or "（manifest 未声明 scope）"
-        )
-        depends = (
-            emp.get("depends_on") if isinstance(emp.get("depends_on"), list) else []
-        )
+        scope = emp.get("scope_globs") if isinstance(emp.get("scope_globs"), list) else []
+        scope_txt = "、".join((f"`{s}`" for s in scope[:6])) or "（manifest 未声明 scope）"
+        depends = emp.get("depends_on") if isinstance(emp.get("depends_on"), list) else []
         handlers = emp.get("handlers") if isinstance(emp.get("handlers"), list) else []
         failures = (
-            emp.get("recent_failures")
-            if isinstance(emp.get("recent_failures"), list)
-            else []
+            emp.get("recent_failures") if isinstance(emp.get("recent_failures"), list) else []
         )
         domain = str(emp.get("domain") or "").strip()
         has_failures = bool(failures)
@@ -330,21 +300,14 @@ def _build_template_vibe_markdowns(
                 for dep in depends[:3]:
                     update_lines.append(f"  - 依赖 `{dep}`：同步接口/契约说明")
             if handlers:
-                update_lines.append(
-                    "- **P2** 复核 handlers 注册与 yuangon 目录结构一致"
-                )
+                update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
                 for h in handlers[:3]:
                     update_lines.append(f"  - handler `{h}`")
             update_lines.append("")
         actionable_failures: List[Tuple[str, str]] = []
         for fail in failures[:2]:
             if isinstance(fail, dict):
-                msg = str(
-                    fail.get("message")
-                    or fail.get("error")
-                    or fail.get("summary")
-                    or fail
-                )
+                msg = str(fail.get("message") or fail.get("error") or fail.get("summary") or fail)
                 fail_task = str(fail.get("task") or "")
             else:
                 msg = str(fail)

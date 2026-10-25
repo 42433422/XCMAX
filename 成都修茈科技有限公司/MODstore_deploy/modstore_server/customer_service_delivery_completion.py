@@ -12,9 +12,7 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.models_cs import CustomerServiceTicket
 
 
-def complete_delivery_if_ready(
-    ticket: CustomerServiceTicket, evidence: dict[str, Any]
-) -> None:
+def complete_delivery_if_ready(ticket: CustomerServiceTicket, evidence: dict[str, Any]) -> None:
     """商务、客户验收和全部产物在正式主线宿主的业务验证齐全才完成。"""
     artifact_rows = evidence.get("delivery_artifacts")
     artifact_rows = artifact_rows if isinstance(artifact_rows, list) else []
@@ -30,9 +28,7 @@ def complete_delivery_if_ready(
         if artifacts:
             break
         artifact_value = run.get("artifact")
-        artifact: dict[str, Any] = (
-            artifact_value if isinstance(artifact_value, dict) else {}
-        )
+        artifact: dict[str, Any] = artifact_value if isinstance(artifact_value, dict) else {}
         if artifact.get("mod_id"):
             artifacts.add(("module", str(artifact["mod_id"])))
         if artifact.get("pack_id"):

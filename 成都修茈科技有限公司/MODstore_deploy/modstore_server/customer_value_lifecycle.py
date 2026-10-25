@@ -65,9 +65,7 @@ def build_customer_lifecycle(
     receipts_by_order: dict[str, list[CustomerValueReceipt]] = {}
     for verified_row in verified_receipts:
         if verified_row.order_no:
-            receipts_by_order.setdefault(str(verified_row.order_no), []).append(
-                verified_row
-            )
+            receipts_by_order.setdefault(str(verified_row.order_no), []).append(verified_row)
 
     lifecycle_rows: list[dict[str, Any]] = []
     stage_counts: Counter[str] = Counter()
@@ -85,17 +83,15 @@ def build_customer_lifecycle(
             256,
         )
         customer_alias = (
-            "customer-" + hashlib.sha256(entity_ref.encode()).hexdigest()[:12]
-            if entity_ref
-            else ""
+            "customer-" + hashlib.sha256(entity_ref.encode()).hexdigest()[:12] if entity_ref else ""
         )
         order_receipts = receipts_by_order.get(order_no, [])
         receipts_by_goal: dict[str, list[CustomerValueReceipt]] = {}
         for order_receipt in order_receipts:
             if order_receipt.customer_goal_id:
-                receipts_by_goal.setdefault(
-                    str(order_receipt.customer_goal_id), []
-                ).append(order_receipt)
+                receipts_by_goal.setdefault(str(order_receipt.customer_goal_id), []).append(
+                    order_receipt
+                )
 
         def goal_rank(rows: list[CustomerValueReceipt]) -> tuple[bool, int, datetime]:
             kinds: dict[str, CustomerValueReceipt] = {}
@@ -120,9 +116,7 @@ def build_customer_lifecycle(
                 and accepted
                 and reused
                 and achieved
-                and first.occurred_at
-                <= measured_outcome.occurred_at
-                <= accepted.occurred_at
+                and first.occurred_at <= measured_outcome.occurred_at <= accepted.occurred_at
                 and accepted.occurred_at + timedelta(hours=24) <= reused.occurred_at
             )
             latest = max(
@@ -131,9 +125,7 @@ def build_customer_lifecycle(
             )
             return sequence_valid, len(kinds), latest
 
-        selected_rows = (
-            max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
-        )
+        selected_rows = max(receipts_by_goal.values(), key=goal_rank) if receipts_by_goal else []
         by_kind: dict[str, CustomerValueReceipt] = {}
         for selected_row in sorted(selected_rows, key=lambda item: item.occurred_at):
             by_kind.setdefault(str(selected_row.receipt_kind), selected_row)
@@ -162,10 +154,7 @@ def build_customer_lifecycle(
         measured = _float_or_nan(outcome_evidence.get("measured_value"))
         target = _float_or_nan(outcome_evidence.get("target"))
         outcome_achieved = (
-            comparison == "ge"
-            and measured >= target
-            or comparison == "le"
-            and measured <= target
+            comparison == "ge" and measured >= target or comparison == "le" and measured <= target
         )
 
         stages = {
@@ -201,9 +190,7 @@ def build_customer_lifecycle(
                 and (
                     acceptance_evidence.get("customer_confirmed") is True
                     or _SHA256.fullmatch(
-                        _text(
-                            acceptance_evidence.get("signed_document_sha256"), 64
-                        ).lower()
+                        _text(acceptance_evidence.get("signed_document_sha256"), 64).lower()
                     )
                 )
             ),
@@ -285,9 +272,7 @@ def build_customer_lifecycle(
     return {
         "lifecycle_schema": "customer_value_lifecycle/v2",
         "release_sha": release_sha,
-        "six_stage_counts": {
-            stage: int(stage_counts.get(stage, 0)) for stage in _STAGES
-        },
+        "six_stage_counts": {stage: int(stage_counts.get(stage, 0)) for stage in _STAGES},
         "complete_customer_count": len(complete_entities),
         "complete_customer_target": 3,
         "three_customer_loop_verified": len(complete_entities) >= 3,

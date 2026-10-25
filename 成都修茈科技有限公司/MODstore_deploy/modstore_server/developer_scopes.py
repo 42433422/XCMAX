@@ -57,11 +57,7 @@ def normalize_scopes_for_storage(scopes: Sequence[str]) -> List[str]:
 
 def validate_scopes_or_raise(scopes: Sequence[str]) -> List[str]:
     """校验 scope 白名单，返回规范化列表；非法则抛 ValueError。"""
-    bad = [
-        s
-        for s in (scopes or [])
-        if (s or "").strip() and (s or "").strip() not in KNOWN_SCOPES
-    ]
+    bad = [s for s in (scopes or []) if (s or "").strip() and (s or "").strip() not in KNOWN_SCOPES]
     if bad:
         raise ValueError(f"未知 scope: {', '.join(bad)}；允许值见 KNOWN_SCOPES")
     return normalize_scopes_for_storage(scopes)

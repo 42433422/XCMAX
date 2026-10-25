@@ -119,9 +119,7 @@ def tabular_upload_preview(
                 continue
             lines = [ln.rstrip("\r\n") for ln in text.splitlines() if ln.strip()][:4]
         elif low.endswith((".xlsx", ".xlsm")):
-            lines, wb_ok = _xlsx_preview_lines(
-                bytes(raw), max_line_chars=max_line_chars
-            )
+            lines, wb_ok = _xlsx_preview_lines(bytes(raw), max_line_chars=max_line_chars)
             if not lines:
                 if wb_ok:
                     xlsx_failed_hint = True

@@ -125,7 +125,10 @@ def test_cannot_read_tasks_created_by_other_actors(setup):
     client, factory = setup
     with factory() as db:
         admin_task = accept(
-            db, actor="admin:1", key="admin-request-1", request={"message": "x", "mode": "code"}
+            db,
+            actor="admin:1",
+            key="admin-request-1",
+            request={"message": "x", "mode": "code"},
         )
         admin_task_id = admin_task.id
     response = client.get(f"/api/service/mac-control/tasks/{admin_task_id}", headers=auth())

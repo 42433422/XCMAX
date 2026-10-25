@@ -79,15 +79,11 @@ def workspace_root() -> Path:
             return root
         if (root / "FHD").exists() and (root / "成都修茈科技有限公司").exists():
             return root
-    return Path(
-        os.environ.get("XCMAX_WORKSPACE_ROOT") or Path.home() / "Desktop" / "XCMAX"
-    )
+    return Path(os.environ.get("XCMAX_WORKSPACE_ROOT") or Path.home() / "Desktop" / "XCMAX")
 
 
 def kb_root() -> Path:
-    raw = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get(
-        "XCMAX_KB_ROOT"
-    )
+    raw = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get("XCMAX_KB_ROOT")
     if raw:
         return Path(raw).expanduser()
     return workspace_root() / "FHD" / "XCAGI" / "kb"
@@ -119,10 +115,7 @@ def _write_kb_doc(kind: str, prefix: str, payload: Dict[str, Any]) -> Path:
     path = directory / f"{stamp}-{prefix}-{_safe_slug(str(slug_source), kind)}.json"
     counter = 1
     while path.exists():
-        path = (
-            directory
-            / f"{stamp}-{prefix}-{_safe_slug(str(slug_source), kind)}-{counter}.json"
-        )
+        path = directory / f"{stamp}-{prefix}-{_safe_slug(str(slug_source), kind)}-{counter}.json"
         counter += 1
     with path.open("w", encoding="utf-8") as fh:
         json.dump(
@@ -142,10 +135,7 @@ def _validation_error(message: str) -> ValueError:
 
 
 def _require_non_empty_string(payload: Dict[str, Any], field: str) -> None:
-    if (
-        not isinstance(payload.get(field), str)
-        or not str(payload.get(field) or "").strip()
-    ):
+    if not isinstance(payload.get(field), str) or not str(payload.get(field) or "").strip():
         raise _validation_error(f"{field} must be a non-empty string")
 
 
@@ -170,9 +160,7 @@ def validate_fix_knowledge_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(required_tests, list) or not all(
         isinstance(item, str) for item in required_tests
     ):
-        raise _validation_error(
-            "fix executable_template.required_tests must be a string list"
-        )
+        raise _validation_error("fix executable_template.required_tests must be a string list")
     return payload
 
 
@@ -262,9 +250,7 @@ def _lexical_score(query: str, doc: Dict[str, Any], fields: Sequence[str]) -> fl
     if not hay_tokens:
         return 0.0
     overlap = len(query_tokens & hay_tokens)
-    phrase_bonus = (
-        2.0 if query.strip() and query.strip().lower() in haystack.lower() else 0.0
-    )
+    phrase_bonus = 2.0 if query.strip() and query.strip().lower() in haystack.lower() else 0.0
     return overlap / max(len(query_tokens), 1) + phrase_bonus
 
 
@@ -272,22 +258,13 @@ def _format_docs_for_rag(docs: Sequence[Dict[str, Any]]) -> str:
     chunks: List[str] = []
     for idx, doc in enumerate(docs, start=1):
         kind = str(doc.get("kind") or "knowledge")
-        title = (
-            doc.get("symptom")
-            or doc.get("pattern")
-            or doc.get("summary")
-            or doc.get("id")
-        )
-        body = json.dumps(
-            doc, ensure_ascii=False, sort_keys=True, default=_json_default
-        )
+        title = doc.get("symptom") or doc.get("pattern") or doc.get("summary") or doc.get("id")
+        body = json.dumps(doc, ensure_ascii=False, sort_keys=True, default=_json_default)
         chunks.append(f"[{idx}] kind={kind}\ntitle={title}\n{body}")
     return "\n\n---\n\n".join(chunks)[:MAX_CONTEXT_TEXT]
 
 
-def _retrieve_with_fhd_rag(
-    query: str, docs: Sequence[Dict[str, Any]], limit: int
-) -> List[str]:
+def _retrieve_with_fhd_rag(query: str, docs: Sequence[Dict[str, Any]], limit: int) -> List[str]:
     if not docs:
         return []
     root = workspace_root()
@@ -310,11 +287,7 @@ def _retrieve_with_fhd_rag(
         chunks = result.get("chunks") if isinstance(result, dict) else None
         if not isinstance(chunks, list):
             return []
-        return [
-            str(chunk.get("text") or "")
-            for chunk in chunks[:limit]
-            if isinstance(chunk, dict)
-        ]
+        return [str(chunk.get("text") or "") for chunk in chunks[:limit] if isinstance(chunk, dict)]
     except RECOVERABLE_ERRORS:
         return []
     finally:
@@ -337,9 +310,7 @@ def _rank_docs(
     ranked: List[Tuple[float, Dict[str, Any]]] = []
     for doc in docs:
         score = _lexical_score(query, doc, fields)
-        if rag_text and any(
-            str(doc.get(field) or "")[:80] in rag_text for field in fields
-        ):
+        if rag_text and any(str(doc.get(field) or "")[:80] in rag_text for field in fields):
             score += 0.75
         if score > 0:
             ranked.append(

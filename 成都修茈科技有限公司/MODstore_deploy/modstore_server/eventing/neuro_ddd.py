@@ -146,9 +146,7 @@ class _SlaMonitor:
         self._violations: list[dict[str, Any]] = []
         self._max_violations = 500
 
-    def record(
-        self, event_name: str, tier: str, elapsed_ms: float, sla_ms: int
-    ) -> None:
+    def record(self, event_name: str, tier: str, elapsed_ms: float, sla_ms: int) -> None:
         if elapsed_ms > sla_ms:
             self._violations.append(
                 {
@@ -201,11 +199,7 @@ class NeuroDDDBus:
 
         self._dedup = (
             _Deduplicator()
-            if (
-                enable_dedup
-                if enable_dedup is not None
-                else env_flag("NEURO_DDD_DEDUP")
-            )
+            if (enable_dedup if enable_dedup is not None else env_flag("NEURO_DDD_DEDUP"))
             else None
         )
         self._rate_limiter = (

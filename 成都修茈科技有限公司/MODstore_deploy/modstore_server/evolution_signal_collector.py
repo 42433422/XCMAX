@@ -47,9 +47,7 @@ def _collect_pytest_failures(*, root: Path, limit: int = 12) -> List[Dict[str, s
             return []
         items: List[Dict[str, str]] = []
         try:
-            data = json.loads(
-                raw.replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">")
-            )
+            data = json.loads(raw.replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">"))
             if isinstance(data, dict):
                 for nodeid in list(data.keys())[:limit]:
                     items.append({"kind": "pytest", "nodeid": str(nodeid)})
@@ -64,9 +62,7 @@ def _collect_pytest_failures(*, root: Path, limit: int = 12) -> List[Dict[str, s
         return []
 
 
-def _collect_runtime_anomalies(
-    *, lookback_hours: int, limit: int = 20
-) -> List[Dict[str, str]]:
+def _collect_runtime_anomalies(*, lookback_hours: int, limit: int = 20) -> List[Dict[str, str]]:
     """近窗口 incident_bus 入库事件。"""
     cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
     try:
@@ -126,9 +122,7 @@ def _collect_performance_signals() -> List[Dict[str, str]]:
                 {
                     "kind": "performance",
                     "signal": "post_deploy_smoke_failed",
-                    "detail": str(
-                        last.get("error") or last.get("reason") or "smoke not ok"
-                    )[:240],
+                    "detail": str(last.get("error") or last.get("reason") or "smoke not ok")[:240],
                 }
             )
         for s in slow[:5]:
@@ -175,9 +169,7 @@ def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
                     "action": action,
                     "reason": reason,
                     "run_id": str(memory.get("last_run", {}).get("run_id") or ""),
-                    "completed_at": str(
-                        memory.get("last_run", {}).get("completed_at") or ""
-                    ),
+                    "completed_at": str(memory.get("last_run", {}).get("completed_at") or ""),
                 }
             )
 
@@ -193,14 +185,10 @@ def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
                     "action": str(item.get("action") or ""),
                     "reason": str(item.get("reason") or ""),
                     "run_id": str(item.get("run_id") or ""),
-                    "task_id": str(
-                        item.get("task_id") or item.get("para_task_id") or ""
-                    ),
+                    "task_id": str(item.get("task_id") or item.get("para_task_id") or ""),
                     "branch": str(item.get("branch") or ""),
                     "created_at": str(item.get("created_at") or ""),
-                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[
-                        :360
-                    ],
+                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[:360],
                 }
             )
 
@@ -228,9 +216,7 @@ def _collect_loop_memory_signals(limit: int = 12) -> List[Dict[str, str]]:
                     "run_id": str(item.get("run_id") or ""),
                     "branch": str(item.get("branch") or ""),
                     "completed_at": str(item.get("completed_at") or ""),
-                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[
-                        :360
-                    ],
+                    "detail": json.dumps(item, ensure_ascii=False, sort_keys=True)[:360],
                 }
             )
 
@@ -387,33 +373,25 @@ def aggregate_signals() -> Dict[str, Any]:
     # Intent benchmark: 准确率 < 0.80 触发
     intent_acc = float(intent.get("accuracy") or 1.0)
     intent_below = intent_acc < _INTENT_ACCURACY_THRESHOLD
-    intent_score = (
-        max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc) if intent_below else 0.0
-    )
+    intent_score = max(0.0, _INTENT_ACCURACY_THRESHOLD - intent_acc) if intent_below else 0.0
 
     # Legacy usage: legacy_ratio > 0.25 触发
     legacy_ratio = float(legacy.get("legacy_ratio") or 0.0)
     legacy_below = legacy_ratio > _LEGACY_RATIO_THRESHOLD
-    legacy_score = (
-        max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD) if legacy_below else 0.0
-    )
+    legacy_score = max(0.0, legacy_ratio - _LEGACY_RATIO_THRESHOLD) if legacy_below else 0.0
 
     # SLO: availability < 0.99 或 error_rate > 0.01 触发
     # 兼容两种报告格式：
     #   - 显式字段 availability/error_rate（汇总格式）
     #   - slo-measured readings 字典：availability = 满足目标项占比，error_rate = 1 - availability
-    slo_avail = float(
-        slo.get("availability") if slo.get("availability") is not None else 1.0
-    )
+    slo_avail = float(slo.get("availability") if slo.get("availability") is not None else 1.0)
     slo_err = float(slo.get("error_rate") or 0.0)
     readings = slo.get("readings") or {}
     if isinstance(readings, dict) and readings and slo.get("availability") is None:
         met = [1 for r in readings.values() if r.get("meets_target")]
         slo_avail = len(met) / len(readings)
         slo_err = 1.0 - slo_avail
-    slo_below = (slo_avail < _SLO_AVAILABILITY_THRESHOLD) or (
-        slo_err > _SLO_ERROR_RATE_THRESHOLD
-    )
+    slo_below = (slo_avail < _SLO_AVAILABILITY_THRESHOLD) or (slo_err > _SLO_ERROR_RATE_THRESHOLD)
     slo_score = 0.0
     if slo_below:
         slo_score = max(

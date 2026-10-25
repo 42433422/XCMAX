@@ -83,16 +83,12 @@ def _safe_resolve_provider_model(
     return {"provider": prov, "model": mdl}
 
 
-def _build_brief(
-    action_cfg: Dict[str, Any], reasoning: Dict[str, Any], task: str
-) -> str:
+def _build_brief(action_cfg: Dict[str, Any], reasoning: Dict[str, Any], task: str) -> str:
     """合成 brief:作者填的 brief 模板 + LLM reasoning + 用户 task。"""
     template = str(action_cfg.get("brief") or "").strip()
     reasoning_text = str((reasoning or {}).get("reasoning") or "").strip()
     if template:
-        rendered = template.replace("{{task}}", task or "").replace(
-            "{{reasoning}}", reasoning_text
-        )
+        rendered = template.replace("{{task}}", task or "").replace("{{reasoning}}", reasoning_text)
         return rendered.strip()
     parts = []
     if task:
@@ -141,9 +137,7 @@ def vibe_edit_handler(
             "error": "vibe_edit 暂不支持 async_mode;请改用脚本工作流或工作台「AI 代码技能」",
         }
 
-    cog_input = (
-        reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
-    )
+    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
     raw_root = (
         action_cfg.get("root")
         or cog_input.get("project_root")
@@ -184,9 +178,7 @@ def vibe_edit_handler(
     brief = _build_brief(action_cfg, reasoning, task)
     focus_paths_raw = action_cfg.get("focus_paths")
     focus_paths = (
-        [str(x) for x in focus_paths_raw if x]
-        if isinstance(focus_paths_raw, list)
-        else None
+        [str(x) for x in focus_paths_raw if x] if isinstance(focus_paths_raw, list) else None
     )
     dry_run = bool(action_cfg.get("dry_run", False))
 
@@ -204,9 +196,7 @@ def vibe_edit_handler(
                         return {"handler": "vibe_edit", "ok": False, "error": ferr}
                     if sub is not None:
                         paths_chk.append(sub)
-            scope_err = validate_repo_paths_for_employee_pack(
-                session, employee_id, paths_chk
-            )
+            scope_err = validate_repo_paths_for_employee_pack(session, employee_id, paths_chk)
             if scope_err:
                 _publish_scope_violation(employee_id, scope_err)
                 return {"handler": "vibe_edit", "ok": False, "error": scope_err}
@@ -277,9 +267,7 @@ def vibe_heal_handler(
             "error": f"integrations 未导入: {exc}",
         }
 
-    cog_input = (
-        reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
-    )
+    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
     raw_root = (
         action_cfg.get("root")
         or cog_input.get("project_root")
@@ -328,9 +316,7 @@ def vibe_heal_handler(
     sf = get_session_factory()
     try:
         with sf() as session:
-            scope_err = validate_repo_paths_for_employee_pack(
-                session, employee_id, [Path(root)]
-            )
+            scope_err = validate_repo_paths_for_employee_pack(session, employee_id, [Path(root)])
             if scope_err:
                 _publish_scope_violation(employee_id, scope_err)
                 return {"handler": "vibe_heal", "ok": False, "error": scope_err}
@@ -403,9 +389,7 @@ def vibe_code_handler(
     skill_id_hint = action_cfg.get("skill_id") or None
     mode = str(action_cfg.get("mode") or "brief_first")
     run_input = (
-        action_cfg.get("run_input")
-        if isinstance(action_cfg.get("run_input"), dict)
-        else None
+        action_cfg.get("run_input") if isinstance(action_cfg.get("run_input"), dict) else None
     )
 
     sf = get_session_factory()
@@ -474,11 +458,7 @@ def dispatch_vibe_handler(
     fn = VIBE_HANDLERS.get(handler_name)
     if fn is None:
         return None
-    cfg = (
-        actions_cfg.get(handler_name)
-        if isinstance(actions_cfg.get(handler_name), dict)
-        else {}
-    )
+    cfg = actions_cfg.get(handler_name) if isinstance(actions_cfg.get(handler_name), dict) else {}
     return fn(cfg, reasoning, task, employee_id, int(user_id or 0))
 
 

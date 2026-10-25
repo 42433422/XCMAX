@@ -122,12 +122,8 @@ def landing_submission_payload(row: LandingContactSubmission) -> dict:
         "desktop_os": desktop_os or None,
         "need_mobile": need_mobile_val,
         "privacy_agreed": bool(meta.get("privacy_agreed")),
-        "privacy_version": str(
-            meta.get("privacy_version") or CONTACT_PRIVACY_VERSION
-        ).strip()[:32],
-        "privacy_url": str(meta.get("privacy_url") or CONTACT_PRIVACY_URL).strip()[
-            :256
-        ],
+        "privacy_version": str(meta.get("privacy_version") or CONTACT_PRIVACY_VERSION).strip()[:32],
+        "privacy_url": str(meta.get("privacy_url") or CONTACT_PRIVACY_URL).strip()[:256],
         "privacy_agreed_at": str(meta.get("privacy_agreed_at") or "").strip(),
         "market_user_id": int(meta.get("market_user_id") or 0) or None,
         "submitted_at": submitted_at,

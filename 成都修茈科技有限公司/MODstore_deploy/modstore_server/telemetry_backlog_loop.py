@@ -157,9 +157,7 @@ def run_telemetry_scan(
             logger.warning("telemetry signal ingest failed: %s", exc)
             results.append({"ok": False, "error": str(exc)})
 
-    market_payloads = [
-        s["payload"] for s in signals if s.get("type") == "market_signal"
-    ]
+    market_payloads = [s["payload"] for s in signals if s.get("type") == "market_signal"]
     release_plan = {}
     if market_payloads:
         try:
@@ -280,11 +278,7 @@ def _scan_market_signals_from_db(lookback_hours: int) -> List[Dict[str, Any]]:
             for row in rows:
                 kind = str(getattr(row, "kind", "") or "").lower()
                 summary = str(getattr(row, "summary", "") or "")
-                if (
-                    "market" not in kind
-                    and "市场" not in summary
-                    and "竞品" not in summary
-                ):
+                if "market" not in kind and "市场" not in summary and "竞品" not in summary:
                     continue
                 signals.append(
                     {
@@ -439,13 +433,9 @@ def _scan_ci_failure_rate(lookback_hours: int) -> List[Dict[str, Any]]:
 
             cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
             recent_changes = (
-                session.query(OpsStagedChange)
-                .filter(OpsStagedChange.created_at >= cutoff)
-                .all()
+                session.query(OpsStagedChange).filter(OpsStagedChange.created_at >= cutoff).all()
             )
-            failed = sum(
-                1 for c in recent_changes if getattr(c, "status", "") == "failed"
-            )
+            failed = sum(1 for c in recent_changes if getattr(c, "status", "") == "failed")
             total = len(recent_changes)
             if total > 0 and failed / total > 0.3:
                 signals.append(

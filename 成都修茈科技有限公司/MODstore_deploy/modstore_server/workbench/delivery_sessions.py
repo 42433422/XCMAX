@@ -37,9 +37,7 @@ class WorkbenchSessions:
     ) -> dict[str, str]:
         body = _parse_workbench_session_create(dict(payload or {}))
         normalized = body.model_dump()
-        raw_files = (
-            payload.get("_files") if isinstance(payload.get("_files"), list) else []
-        )
+        raw_files = payload.get("_files") if isinstance(payload.get("_files"), list) else []
         if raw_files:
             normalized["_files"] = raw_files
         session_id = session_id or uuid.uuid4().hex[:24]
@@ -57,9 +55,7 @@ class WorkbenchSessions:
             existing = self.store.data.get(session_id)
             if existing:
                 if int(existing.get("user_id") or 0) != int(user_id):
-                    raise PermissionError(
-                        "production session belongs to another account"
-                    )
+                    raise PermissionError("production session belongs to another account")
                 if (
                     run_inline
                     and existing.get("status") == "running"
@@ -82,9 +78,7 @@ class WorkbenchSessions:
                 "steps": _default_steps(
                     body.intent,
                     body.execution_mode,
-                    employee_target=str(
-                        getattr(body, "employee_target", None) or "pack_only"
-                    ),
+                    employee_target=str(getattr(body, "employee_target", None) or "pack_only"),
                 ),
                 "planning_record": _planning_record(normalized),
                 "artifact": None,
@@ -104,13 +98,9 @@ class WorkbenchSessions:
                 seed_previous_delivery,
             )
 
-            with (
-                private_source_context(source_scope) if source_scope else nullcontext()
-            ):
+            with private_source_context(source_scope) if source_scope else nullcontext():
                 if source_scope and delivery_context:
-                    seed_previous_delivery(
-                        source_scope, delivery_context.get("evidence") or {}
-                    )
+                    seed_previous_delivery(source_scope, delivery_context.get("evidence") or {})
                 await self.run_pipeline(session_id, int(user_id), normalized)
 
         if run_inline:
@@ -153,9 +143,7 @@ class WorkbenchSessions:
                     self.store.data[session_id]["verified_artifacts"] = verified
                     self.store.persist(session_id)
             except BOUNDARY_ERRORS as exc:
-                await self.progress.fail(
-                    session_id, "mod_sandbox", f"正式交付构建未通过：{exc}"
-                )
+                await self.progress.fail(session_id, "mod_sandbox", f"正式交付构建未通过：{exc}")
 
         task = asyncio.create_task(run_delivery_pipeline())
         task.add_done_callback(self.store.task_failsafe(session_id))
@@ -188,9 +176,7 @@ class WorkbenchSessions:
             "status": session["status"],
             "steps": session["steps"],
             "artifact": _enrich_artifact_skill_aliases(
-                dict(session["artifact"])
-                if isinstance(session.get("artifact"), dict)
-                else None
+                dict(session["artifact"]) if isinstance(session.get("artifact"), dict) else None
             ),
             "planning_record": session.get("planning_record"),
             "error": session.get("error"),

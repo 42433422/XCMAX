@@ -29,24 +29,16 @@ def loop_memory_path() -> Path:
 
 def governance_audit_path() -> Path:
     raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_GOVERNANCE_AUDIT")
-    return (
-        Path(raw)
-        if raw
-        else config._runtime_dir() / config.DEFAULT_GOVERNANCE_AUDIT_NAME
-    )
+    return Path(raw) if raw else config._runtime_dir() / config.DEFAULT_GOVERNANCE_AUDIT_NAME
 
 
 def clean_baseline_path() -> Path:
     raw = os.environ.get("MODSTORE_SELF_MAINTENANCE_CLEAN_BASELINE")
     if raw:
         return Path(raw)
-    kb_root = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get(
-        "XCMAX_KB_ROOT"
-    )
+    kb_root = os.environ.get("XCMAX_SELF_EVOLUTION_KB_ROOT") or os.environ.get("XCMAX_KB_ROOT")
     if kb_root:
-        return (
-            Path(kb_root).expanduser() / "metrics" / config.DEFAULT_CLEAN_BASELINE_NAME
-        )
+        return Path(kb_root).expanduser() / "metrics" / config.DEFAULT_CLEAN_BASELINE_NAME
     return config._runtime_dir() / config.DEFAULT_CLEAN_BASELINE_NAME
 
 
@@ -148,10 +140,7 @@ def _read_ledger(
                     continue
                 try:
                     row = json.loads(line)
-                    if (
-                        isinstance(row, dict)
-                        and row.get("phase") == "remediation_attempt"
-                    ):
+                    if isinstance(row, dict) and row.get("phase") == "remediation_attempt":
                         continue
                     rows.append(row)
                 except json.JSONDecodeError:
@@ -212,9 +201,7 @@ def _select_recent_milestone_rows(
     never prove current autonomy forever.
     """
     current = (now or config._utc_now()).astimezone(timezone.utc)
-    bounded_days = max(
-        1, min(int(window_days or config.DEFAULT_EVIDENCE_WINDOW_DAYS), 90)
-    )
+    bounded_days = max(1, min(int(window_days or config.DEFAULT_EVIDENCE_WINDOW_DAYS), 90))
     bounded_runs = max(1, min(int(run_limit or config.DEFAULT_EVIDENCE_RUN_LIMIT), 64))
     bounded_rows = max(1, min(int(row_limit or config.DEFAULT_EVIDENCE_ROW_LIMIT), 512))
     cutoff = current - timedelta(days=bounded_days)
@@ -231,11 +218,7 @@ def _select_recent_milestone_rows(
         if not phase and (not row.get("event")) and (not row.get("event_type")):
             continue
         observed_at = _ledger_row_timestamp(row)
-        if (
-            observed_at is None
-            or observed_at < cutoff
-            or observed_at > future_tolerance
-        ):
+        if observed_at is None or observed_at < cutoff or observed_at > future_tolerance:
             continue
         eligible.append((row, observed_at))
         run_id = str(row.get("run_id") or "").strip()
@@ -243,9 +226,7 @@ def _select_recent_milestone_rows(
             latest_by_run[run_id] = observed_at
     selected_run_ids = {
         run_id
-        for (run_id, _) in sorted(latest_by_run.items(), key=lambda item: item[1])[
-            -bounded_runs:
-        ]
+        for (run_id, _) in sorted(latest_by_run.items(), key=lambda item: item[1])[-bounded_runs:]
     }
     return self_maintenance_runtime_evidence.retain_completed_merge_runs(
         eligible,

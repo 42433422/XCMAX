@@ -65,18 +65,12 @@ def admin_list_dlq(
     query = db.query(OutboxDeadLetter)
     if not include_resolved:
         query = query.filter(OutboxDeadLetter.resolved_at.is_(None))
-    rows = (
-        query.order_by(OutboxDeadLetter.id.desc()).limit(max(1, min(limit, 200))).all()
-    )
+    rows = query.order_by(OutboxDeadLetter.id.desc()).limit(max(1, min(limit, 200))).all()
     unresolved_count = int(
-        db.query(OutboxDeadLetter)
-        .filter(OutboxDeadLetter.resolved_at.is_(None))
-        .count()
+        db.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
     )
     resolved_count = int(
-        db.query(OutboxDeadLetter)
-        .filter(OutboxDeadLetter.resolved_at.is_not(None))
-        .count()
+        db.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_not(None)).count()
     )
     return {
         "ok": True,

@@ -77,13 +77,9 @@ def _resolve_embedding_config(
     selected_provider = (provider or "").strip().lower()
     api_key = (os.environ.get("MODSTORE_EMBEDDING_API_KEY") or "").strip()
     base_url = (
-        os.environ.get("MODSTORE_EMBEDDING_BASE_URL")
-        or os.environ.get("OPENAI_BASE_URL")
-        or ""
+        os.environ.get("MODSTORE_EMBEDDING_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or ""
     ).strip()
-    model = (
-        os.environ.get("MODSTORE_EMBEDDING_MODEL") or "text-embedding-3-small"
-    ).strip()
+    model = (os.environ.get("MODSTORE_EMBEDDING_MODEL") or "text-embedding-3-small").strip()
     dim = int((os.environ.get("MODSTORE_EMBEDDING_DIM") or "1536").strip() or "1536")
     source = "embedding_env" if api_key else "none"
 
@@ -98,24 +94,16 @@ def _resolve_embedding_config(
             candidates = []
             if selected_provider:
                 candidates.append(selected_provider)
-            candidates.extend(
-                p for p in _EMBEDDING_PROVIDER_ORDER if p not in candidates
-            )
+            candidates.extend(p for p in _EMBEDDING_PROVIDER_ORDER if p not in candidates)
             for candidate in candidates:
                 if candidate not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
                     continue
                 if not _provider_embedding_configured(candidate):
                     continue
-                provider_key, provider_source = resolve_api_key(
-                    session, int(user_id), candidate
-                )
+                provider_key, provider_source = resolve_api_key(session, int(user_id), candidate)
                 if provider_key:
-                    provider_base = (
-                        resolve_base_url(session, int(user_id), candidate) or ""
-                    )
-                    provider_model, provider_dim = _provider_embedding_model_dim(
-                        candidate
-                    )
+                    provider_base = resolve_base_url(session, int(user_id), candidate) or ""
+                    provider_model, provider_dim = _provider_embedding_model_dim(candidate)
                     api_key = provider_key
                     base_url = provider_base
                     model = provider_model
@@ -161,12 +149,7 @@ def _embeddings_url(base_url: str, *, provider: str = "") -> str:
     path = (urlparse(b).path or "").rstrip("/")
     if path.endswith("/compatible-mode"):
         return f"{b}/v1/embeddings"
-    if (
-        path.endswith("/v1")
-        or path.endswith("/v2")
-        or path.endswith("/v3")
-        or path.endswith("/v4")
-    ):
+    if path.endswith("/v1") or path.endswith("/v2") or path.endswith("/v3") or path.endswith("/v4"):
         return f"{b}/embeddings"
     if path.endswith("/api/v3"):
         return f"{b}/embeddings"
@@ -190,9 +173,7 @@ async def embed_texts(
         return await _embed_ollama(texts, cfg)
 
     if not api_key:
-        raise EmbeddingConfigError(
-            "未配置可用 Embedding Key；已读取文件内容，但无法写入向量库"
-        )
+        raise EmbeddingConfigError("未配置可用 Embedding Key；已读取文件内容，但无法写入向量库")
 
     clean = [(t or "").strip() for t in texts]
     if not clean:
@@ -223,18 +204,14 @@ async def embed_texts(
     rows = data.get("data")
     if not isinstance(rows, list):
         raise EmbeddingConfigError("Embedding API 响应缺少 data")
-    rows = sorted(
-        rows, key=lambda x: int(x.get("index", 0)) if isinstance(x, dict) else 0
-    )
+    rows = sorted(rows, key=lambda x: int(x.get("index", 0)) if isinstance(x, dict) else 0)
     vectors: List[List[float]] = []
     for item in rows:
         emb = item.get("embedding") if isinstance(item, dict) else None
         if not isinstance(emb, list):
             raise EmbeddingConfigError("Embedding API 响应缺少 embedding")
         if len(emb) != int(cfg["dim"]):
-            raise EmbeddingConfigError(
-                f"Embedding 维度 {len(emb)} 与配置 {cfg['dim']} 不一致"
-            )
+            raise EmbeddingConfigError(f"Embedding 维度 {len(emb)} 与配置 {cfg['dim']} 不一致")
         vectors.append([float(x) for x in emb])
     return vectors
 
@@ -244,11 +221,7 @@ async def _embed_ollama(texts: List[str], cfg: Dict[str, Any]) -> List[List[floa
     clean = [(t or "").strip() for t in texts]
     if not clean:
         return []
-    base_url = (
-        (os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434")
-        .strip()
-        .rstrip("/")
-    )
+    base_url = (os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434").strip().rstrip("/")
     url = _embeddings_url(base_url, provider="ollama")
     body = {"model": cfg["model"], "input": clean}
     headers = {"Content-Type": "application/json"}

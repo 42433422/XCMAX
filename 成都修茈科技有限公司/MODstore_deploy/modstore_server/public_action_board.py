@@ -79,9 +79,7 @@ def _public_item(it: Dict[str, Any]) -> Dict[str, Any]:
         "status": status,
         "status_label": _STATUS_PUBLIC.get(status, status),
         "line": str(it.get("line") or "P-S"),
-        "line_label": _LINE_PUBLIC.get(
-            str(it.get("line") or "P-S"), str(it.get("line") or "—")
-        ),
+        "line_label": _LINE_PUBLIC.get(str(it.get("line") or "P-S"), str(it.get("line") or "—")),
         "owner": str(it.get("employee_label") or "AI 员工").strip()[:64] or "AI 员工",
         "employee_id": str(it.get("employee_id") or "").strip()[:80],
         "kind": str(it.get("kind") or ""),
@@ -119,9 +117,7 @@ def build_trajectory(
         return []
 
     # 按真实更新时间倒序，避免伪时序
-    merged.sort(
-        key=lambda x: str(x.get("updated_at") or x.get("day") or ""), reverse=True
-    )
+    merged.sort(key=lambda x: str(x.get("updated_at") or x.get("day") or ""), reverse=True)
 
     out: List[Dict[str, Any]] = []
     n = min(len(merged), max(1, limit))
@@ -136,11 +132,7 @@ def build_trajectory(
         text = f"{status_label} · {owner} · {line_label}：{title}"
         ts = str(it.get("ts") or "") or _public_clock(it.get("updated_at"))
         if not ts and it.get("day"):
-            ts = (
-                str(it.get("day"))[-5:]
-                if len(str(it.get("day"))) >= 5
-                else str(it.get("day"))
-            )
+            ts = str(it.get("day"))[-5:] if len(str(it.get("day"))) >= 5 else str(it.get("day"))
         out.append(
             {
                 "ts": ts or "—",
@@ -198,9 +190,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
     else:
         # 优先「今天」；今天无条目再回退 latest，并显式标记 stale，禁止静默粘旧日。
         today_any = list_action_items(day=calendar_day, limit=1)
-        today_strategic = any(
-            item.get("day") == calendar_day for item in strategic_updates
-        )
+        today_strategic = any(item.get("day") == calendar_day for item in strategic_updates)
         if today_any or today_strategic:
             use_day = calendar_day
         elif source_day:
@@ -209,12 +199,8 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
         else:
             use_day = calendar_day
 
-    patches_raw = (
-        list_action_items(kind="patch", day=use_day, limit=100) if use_day else []
-    )
-    updates_raw = (
-        list_action_items(kind="update", day=use_day, limit=100) if use_day else []
-    )
+    patches_raw = list_action_items(kind="patch", day=use_day, limit=100) if use_day else []
+    updates_raw = list_action_items(kind="update", day=use_day, limit=100) if use_day else []
     patches = [_public_item(x) for x in patches_raw]
     updates = [
         *[_public_item(x) for x in updates_raw],
@@ -225,9 +211,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
 
     def _sum(s: Dict[str, Any], extras: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_p = s.get("by_priority") or {}
-        extra_done = sum(
-            1 for item in extras if item.get("status") in {"merged", "closed"}
-        )
+        extra_done = sum(1 for item in extras if item.get("status") in {"merged", "closed"})
         total = int(s.get("total") or 0) + len(extras)
         done = int(s.get("done") or 0) + extra_done
         by_line = dict(s.get("by_line") or {})
@@ -276,9 +260,7 @@ def build_public_action_board(*, day: Optional[str] = None) -> Dict[str, Any]:
 def public_board_targets() -> List[Path]:
     isolated_output = (os.environ.get("MODSTORE_PUBLIC_OUTPUT_ROOT") or "").strip()
     if isolated_output:
-        return [
-            Path(isolated_output).expanduser().resolve() / "download-action-board.json"
-        ]
+        return [Path(isolated_output).expanduser().resolve() / "download-action-board.json"]
     root = _repo_root()
     targets = [
         root / "成都修茈科技有限公司" / "download-action-board.json",

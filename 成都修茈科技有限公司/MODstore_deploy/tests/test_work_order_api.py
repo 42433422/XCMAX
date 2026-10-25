@@ -130,14 +130,23 @@ class TestCoreFold:
     def test_fold_recovers_issue_and_release(self) -> None:
         wo_id = derive_wo_id("key-1")
         rows = [
-            self._row(wo_id, "created", source="intent_confirmation_service", dedup_key="key-1"),
+            self._row(
+                wo_id,
+                "created",
+                source="intent_confirmation_service",
+                dedup_key="key-1",
+            ),
             self._row(
                 wo_id,
                 "transition",
                 from_state="candidate",
                 to_state="routed",
                 ref=json.dumps(
-                    {"issue_number": 42, "issue_url": "https://x/42", "track": "product_line"}
+                    {
+                        "issue_number": 42,
+                        "issue_url": "https://x/42",
+                        "track": "product_line",
+                    }
                 ),
             ),
             self._row(wo_id, "transition", from_state="routed", to_state="in_dev"),
@@ -198,7 +207,10 @@ class TestWorkOrderApi:
             json={
                 "wo_id": wo_id,
                 "to_state": "routed",
-                "ref": {"issue_number": issue_number, "issue_url": f"https://x/{issue_number}"},
+                "ref": {
+                    "issue_number": issue_number,
+                    "issue_url": f"https://x/{issue_number}",
+                },
             },
             headers=headers,
         )
@@ -511,7 +523,11 @@ def test_customer_decision_is_owner_bound_and_moves_only_inside_window(monkeypat
         assert not any(row.event == "transition" and row.to_state == "closed" for row in events)
 
         replay = customer_issue_api.decide_product_issue(ticket.id, decision, db=db, user=owner)
-        assert replay["replayed"] is True and sync_attempts == ["failed", "retried", "retried"]
+        assert replay["replayed"] is True and sync_attempts == [
+            "failed",
+            "retried",
+            "retried",
+        ]
         ticket = db.get(CustomerServiceTicket, ticket.id)
         evidence = json_loads(ticket.evidence_json, {})
         audits = (

@@ -57,9 +57,7 @@ def pending_run_recovery(
     if not expected_trigger or expected_trigger != str(triggered_by or "").strip():
         return None
 
-    started_at = str(
-        latest_start.get("started_at") or latest_start.get("created_at") or ""
-    ).strip()
+    started_at = str(latest_start.get("started_at") or latest_start.get("created_at") or "").strip()
     terminal_status = str(terminal.get("status") or "").strip()
     if terminal_status == "abandoned_interrupted":
         return {
@@ -73,9 +71,7 @@ def pending_run_recovery(
         }
 
     failure_error = str(terminal.get("error") or "").strip()
-    if terminal_status != "failed" or not _is_retryable_infrastructure_failure(
-        failure_error
-    ):
+    if terminal_status != "failed" or not _is_retryable_infrastructure_failure(failure_error):
         return None
     return {
         "detail": {

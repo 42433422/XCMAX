@@ -37,17 +37,13 @@ def _register_scheduler_phase_01():
             from modstore_server.daily_pipeline_lock import write_scheduler_heartbeat
 
             write_scheduler_heartbeat(
-                job_count=len(_facade()._scheduler.get_jobs())
-                if _facade()._scheduler
-                else None
+                job_count=len(_facade()._scheduler.get_jobs()) if _facade()._scheduler else None
             )
             try:
                 from modstore_server.node_coordinator import write_node_heartbeat
 
                 write_node_heartbeat(
-                    job_count=len(_facade()._scheduler.get_jobs())
-                    if _facade()._scheduler
-                    else None
+                    job_count=len(_facade()._scheduler.get_jobs()) if _facade()._scheduler else None
                 )
             except RECOVERABLE_ERRORS:
                 _facade().logger.debug("node heartbeat failed", exc_info=True)
@@ -129,9 +125,7 @@ def _register_scheduler_phase_01():
     _facade()._scheduler.add_job(
         _customer_value_reconcile_job,
         _facade().IntervalTrigger(
-            minutes=max(
-                1, _facade()._env_int("MODSTORE_CUSTOMER_VALUE_RECONCILE_MINUTES", 15)
-            )
+            minutes=max(1, _facade()._env_int("MODSTORE_CUSTOMER_VALUE_RECONCILE_MINUTES", 15))
         ),
         id="customer_value_reconciler",
         replace_existing=True,

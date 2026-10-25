@@ -107,9 +107,7 @@ def request_model_fallback(**request: Any) -> Dict[str, Any]:
         return {"ok": False, "reason": "model_fallback_gateway_not_installed"}
     try:
         out = model_fallback_gateway.request_fallback(**request)
-        return (
-            out if isinstance(out, dict) else {"ok": False, "reason": "invalid_result"}
-        )
+        return out if isinstance(out, dict) else {"ok": False, "reason": "invalid_result"}
     except RECOVERABLE_ERRORS as exc:
         return {"ok": False, "reason": f"model_fallback_error:{str(exc)[:200]}"}
 
@@ -213,9 +211,7 @@ def run_failure_loop(
                     employee_id=employee_id,
                     error=error[:500],
                 )
-                fu["model_fallback"] = {
-                    k: hook.get(k) for k in ("ok", "reason", "model")
-                }
+                fu["model_fallback"] = {k: hook.get(k) for k in ("ok", "reason", "model")}
                 if hook.get("ok"):
                     fu["action"] = "model_fallback_requested"
                     fu["ok"] = True
@@ -226,9 +222,7 @@ def run_failure_loop(
             if fu["attempts"] >= cap:
                 break
             if role == "fix":
-                verify = next(
-                    (item for item in results if item.get("role") == "verify"), None
-                )
+                verify = next((item for item in results if item.get("role") == "verify"), None)
                 if verify is not None:
                     verify.update(
                         ok=False,
@@ -237,9 +231,7 @@ def run_failure_loop(
                     )
             fu["attempts"] += 1
             fu["action"] = (
-                "transient_retry"
-                if category == "environment"
-                else "code_retry_with_feedback"
+                "transient_retry" if category == "environment" else "code_retry_with_feedback"
             )
             if category == "environment":
                 _sleep(min(60, backoff * 2 ** (fu["attempts"] - 1)))
@@ -247,9 +239,7 @@ def run_failure_loop(
             try:
                 retry = retry_member(
                     event_id=event_id,
-                    member=members.get(
-                        role, {"employee_id": employee_id, "role": role}
-                    ),
+                    member=members.get(role, {"employee_id": employee_id, "role": role}),
                     team_plan=team_plan,
                     payload=payload,
                     event_type=event_type,
@@ -267,18 +257,10 @@ def run_failure_loop(
                     "retryable": False,
                     "error": str(exc)[:500],
                 }
-                logger.exception(
-                    "incident_team: retry failed event_id=%s role=%s", event_id, role
-                )
-            retry = (
-                retry
-                if isinstance(retry, dict)
-                else {"status": "failed", "error": "invalid"}
-            )
+                logger.exception("incident_team: retry failed event_id=%s role=%s", event_id, role)
+            retry = retry if isinstance(retry, dict) else {"status": "failed", "error": "invalid"}
             fu["retry_result"] = {
-                k: v
-                for k, v in retry.items()
-                if k in {"status", "ok", "error", "handler_failed"}
+                k: v for k, v in retry.items() if k in {"status", "ok", "error", "handler_failed"}
             }
             if execution_requires_reconciliation(retry):
                 row.update(
@@ -359,9 +341,7 @@ def _rerun_verify(retry_member, results, members, ctx: Dict[str, Any]) -> None:
     verify = next((r for r in results if r.get("role") == "verify"), None)
     if verify is None:
         return
-    verify.update(
-        ok=False, status="verification_invalidated", verified_fix_attempt_id=""
-    )
+    verify.update(ok=False, status="verification_invalidated", verified_fix_attempt_id="")
     member = members.get("verify") or {
         "employee_id": verify.get("employee_id"),
         "role": "verify",

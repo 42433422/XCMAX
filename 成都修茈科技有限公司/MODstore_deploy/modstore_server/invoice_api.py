@@ -62,9 +62,7 @@ class InvoiceApplyDTO(BaseModel):
 
 class InvoiceReviewDTO(BaseModel):
     action: str = Field(..., pattern="^(issue|reject)$")
-    pdf_url: str = Field(
-        "", description="已开具发票的 PDF 下载链接（action=issue 时填写）"
-    )
+    pdf_url: str = Field("", description="已开具发票的 PDF 下载链接（action=issue 时填写）")
     reject_reason: str = Field("", description="拒绝原因（action=reject 时填写）")
 
 
@@ -168,9 +166,7 @@ def api_invoice_list(
 
 @router.get("/api/admin/invoices")
 def admin_list_invoices(
-    status: Optional[str] = Query(
-        None, description="过滤状态：pending/issued/rejected"
-    ),
+    status: Optional[str] = Query(None, description="过滤状态：pending/issued/rejected"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
     user: User = Depends(require_user),

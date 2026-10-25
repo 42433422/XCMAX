@@ -359,14 +359,10 @@ def minimal_excel_table_json() -> Dict[str, Any]:
 
 
 def minimal_json_fixture_bytes() -> bytes:
-    return json.dumps(minimal_excel_table_json(), ensure_ascii=False, indent=2).encode(
-        "utf-8"
-    )
+    return json.dumps(minimal_excel_table_json(), ensure_ascii=False, indent=2).encode("utf-8")
 
 
-def excel_read_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def excel_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     clean = compact_routing_brief(brief, max_len=400) or (brief or "").strip()
@@ -380,8 +376,7 @@ def excel_read_orchestration_plan(
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": f"{clean}\n\n读取 inputs/*.xlsx，写出 outputs/workbook.json。",
         "script_runtime_notes": "只能读 inputs/、写 outputs/；使用 openpyxl。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": f"{clean}\n\nSkill：上传 xlsx → 全量单元格 JSON。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -390,9 +385,7 @@ def excel_read_orchestration_plan(
     }
 
 
-def excel_generate_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def excel_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     clean = compact_routing_brief(brief, max_len=400) or (brief or "").strip()
@@ -406,8 +399,7 @@ def excel_generate_orchestration_plan(
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": f"{clean}\n\n读取 inputs/*.json，写出 outputs/output.xlsx。",
         "script_runtime_notes": "JSON 为中介；使用 openpyxl.Workbook。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": f"{clean}\n\nSkill：JSON → xlsx 落盘。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -416,9 +408,7 @@ def excel_generate_orchestration_plan(
     }
 
 
-def resolve_excel_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def resolve_excel_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if is_excel_generate(brief):
         return excel_generate_orchestration_plan(brief, payload)
     return excel_read_orchestration_plan(brief, payload)

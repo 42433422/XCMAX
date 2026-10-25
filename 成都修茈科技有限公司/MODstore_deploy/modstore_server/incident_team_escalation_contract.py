@@ -58,9 +58,7 @@ def active_context(db, event, *, receipt: dict | None = None) -> tuple[dict, str
         return payload, "ticket_identity_missing"
     if receipt is not None:
         rows = (payload.get("_team_claim") or {}).get("team") or []
-        current: dict[str, Any] = next(
-            (r for r in rows if r.get("role") == receipt["role"]), {}
-        )
+        current: dict[str, Any] = next((r for r in rows if r.get("role") == receipt["role"]), {})
         if current.get("attempt_id") != receipt["attempt_id"]:
             return payload, "attempt_superseded"
         if current.get("ok") is True:
@@ -92,18 +90,11 @@ def review_input(event_id: int, payload: dict, receipt: dict) -> dict:
             raise ValueError("ultimate_review_route_unavailable")
     summary = safe_text(payload.get("summary") or payload.get("title"), 1200)
     rows = (payload.get("_team_claim") or {}).get("team") or []
-    failed: dict[str, Any] = next(
-        (row for row in rows if row.get("role") == receipt["role"]), {}
-    )
+    failed: dict[str, Any] = next((row for row in rows if row.get("role") == receipt["role"]), {})
     handoff = format_role_handoff(failed, receipt["role"], max_chars=4000)
     references = json.loads(handoff).get("references") or []
     original_tasks = sorted(
-        {
-            str(ref[key])
-            for ref in references
-            for key in ("task_id", "para_task_id")
-            if ref.get(key)
-        }
+        {str(ref[key]) for ref in references for key in ("task_id", "para_task_id") if ref.get(key)}
     )
     actions = json.dumps(receipt.get("attempted_actions") or {}, ensure_ascii=False)
     # Dot's existing privacy adapter caps its summary. Put original task IDs and
@@ -119,18 +110,12 @@ def review_input(event_id: int, payload: dict, receipt: dict) -> dict:
         "An uncertain original task must be inspected by its existing task ID.\n"
         f"Role: {receipt['role']}\n{compact}\nFailed role handoff: {handoff}"
     )
-    scout: dict[str, Any] = next(
-        (row for row in rows if row.get("role") == "scout"), {}
-    )
+    scout: dict[str, Any] = next((row for row in rows if row.get("role") == "scout"), {})
     if scout and receipt["role"] != "scout":
-        prompt += "\nScout handoff: " + format_role_handoff(
-            scout, "scout", max_chars=1600
-        )
+        prompt += "\nScout handoff: " + format_role_handoff(scout, "scout", max_chars=1600)
     return {
         "event_id": event_id,
-        "event_type": "ops.intake.customer_ticket"
-        if payload.get("ticket_id")
-        else "on_error",
+        "event_type": "ops.intake.customer_ticket" if payload.get("ticket_id") else "on_error",
         "user_id": payload.get("user_id"),
         "tenant_id": payload.get("tenant_id") or payload.get("user_id"),
         "request_id": receipt["key"],
@@ -175,10 +160,7 @@ def dispatch_receipt(result: dict) -> dict:
     state = "unknown" if uncertain else "accepted" if accepted else "failed"
     if not accepted and (task_id or result.get("submission_started")):
         state = "unknown"
-    if (
-        result.get("status") in {"failed", "para_task_failed", "merge_conflict"}
-        and not uncertain
-    ):
+    if result.get("status") in {"failed", "para_task_failed", "merge_conflict"} and not uncertain:
         state = "failed"
     return {
         "state": state,
@@ -202,9 +184,7 @@ def task_receipt(receipt: dict, task: dict) -> dict:
     children = task.get("subTasks", task.get("subtasks", []))
     children = children if isinstance(children, list) else []
     required = set(receipt.get("required_subtask_ids") or [])
-    returned = {
-        str(child.get("id") or "") for child in children if isinstance(child, dict)
-    }
+    returned = {str(child.get("id") or "") for child in children if isinstance(child, dict)}
     planned = set(receipt.get("planned_devices") or [])
     devices = {
         str(child.get("device_id") or child.get("deviceId") or "")
@@ -233,7 +213,6 @@ def task_receipt(receipt: dict, task: dict) -> dict:
         "requires_reconciliation": state in {"accepted", "unknown"},
         "task_status": safe_text(status, 100),
         "error": safe_text(
-            task.get("error")
-            or ("worker_receipt_incomplete" if state == "unknown" else "")
+            task.get("error") or ("worker_receipt_incomplete" if state == "unknown" else "")
         ),
     }

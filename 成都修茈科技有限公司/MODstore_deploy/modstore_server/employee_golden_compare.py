@@ -57,20 +57,10 @@ def _read_manifest(pack_dir: Path) -> Dict[str, Any]:
 
 def _manifest_contract_from_dir(pack_dir: Path) -> Dict[str, Any]:
     mf = _read_manifest(pack_dir)
-    ec2 = (
-        mf.get("employee_config_v2")
-        if isinstance(mf.get("employee_config_v2"), dict)
-        else {}
-    )
-    perception = (
-        ec2.get("perception") if isinstance(ec2.get("perception"), dict) else {}
-    )
+    ec2 = mf.get("employee_config_v2") if isinstance(mf.get("employee_config_v2"), dict) else {}
+    perception = ec2.get("perception") if isinstance(ec2.get("perception"), dict) else {}
     actions = ec2.get("actions") if isinstance(ec2.get("actions"), dict) else {}
-    dp = (
-        actions.get("direct_python")
-        if isinstance(actions.get("direct_python"), dict)
-        else {}
-    )
+    dp = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
     rs: Dict[str, Any] = {}
     rule_p = pack_dir / "rule_spec.json"
     if rule_p.is_file():
@@ -89,9 +79,7 @@ def _manifest_contract_from_dir(pack_dir: Path) -> Dict[str, Any]:
     }
 
 
-def _diff_contract(
-    candidate: Dict[str, Any], golden: Dict[str, Any]
-) -> List[Dict[str, str]]:
+def _diff_contract(candidate: Dict[str, Any], golden: Dict[str, Any]) -> List[Dict[str, str]]:
     items: List[Dict[str, str]] = []
     for key in ("runtime_kind", "artifact", "default_output_relpath"):
         cv, gv = str(candidate.get(key) or ""), str(golden.get(key) or "")
@@ -127,9 +115,7 @@ def _static_convert_signals(pack_dir: Path) -> Dict[str, bool]:
             pass
     return {
         "has_convert_file": has_convert,
-        "ooxml": any(
-            t in blob for t in ("zipfile", "wordprocessingml", "document.xml")
-        ),
+        "ooxml": any(t in blob for t in ("zipfile", "wordprocessingml", "document.xml")),
         "paragraphs": "paragraphs" in blob,
         "tables": "tables" in blob,
         "core_properties": "core_properties" in blob,

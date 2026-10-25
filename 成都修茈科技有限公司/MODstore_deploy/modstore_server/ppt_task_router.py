@@ -30,8 +30,7 @@ def resolve_task_route(
         return {"mode": "enhance", "recipe": HOMEWORK_RECIPE, "use_llm": False}
 
     if has_template and (
-        is_homework_marquee_request(q)
-        or str(payload.get("enhance_homework_marquee") or "") == "1"
+        is_homework_marquee_request(q) or str(payload.get("enhance_homework_marquee") or "") == "1"
     ):
         return {"mode": "enhance", "recipe": HOMEWORK_RECIPE, "use_llm": False}
 

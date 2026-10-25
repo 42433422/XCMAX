@@ -69,15 +69,11 @@ class _ExcerptReader:
         self.lock = threading.Lock()
         self.changed = threading.Event()
         self.done = threading.Event()
-        self.thread = threading.Thread(
-            target=self.read, name="command-excerpt", daemon=True
-        )
+        self.thread = threading.Thread(target=self.read, name="command-excerpt", daemon=True)
 
     def read(self) -> None:
         decoder = io.IncrementalNewlineDecoder(
-            codecs.getincrementaldecoder(locale.getpreferredencoding(False))(
-                errors="replace"
-            ),
+            codecs.getincrementaldecoder(locale.getpreferredencoding(False))(errors="replace"),
             translate=True,
         )
         try:
@@ -148,9 +144,7 @@ def run_cmd_excerpt(
                         f"command output read failed: {' '.join(args)}"
                     ) from reader.error
                 if rc != 0:
-                    raise RuntimeError(
-                        f"command failed ({rc}): {' '.join(args)}\n{excerpt}"
-                    )
+                    raise RuntimeError(f"command failed ({rc}): {' '.join(args)}\n{excerpt}")
                 return excerpt
             now = time.monotonic()
             if now >= deadline:
@@ -172,13 +166,9 @@ def run_cmd_excerpt(
                         )
                     )
                 ):
-                    raise RuntimeError(
-                        f"command failed ({rc}): {' '.join(args)}\n{excerpt}"
-                    )
+                    raise RuntimeError(f"command failed ({rc}): {' '.join(args)}\n{excerpt}")
                 return excerpt
-            next_event = (
-                min(deadline, capped_at + 1.0) if capped_at is not None else deadline
-            )
+            next_event = min(deadline, capped_at + 1.0) if capped_at is not None else deadline
             reader.changed.wait(timeout=min(0.05, max(0.0, next_event - now)))
             reader.changed.clear()
     finally:

@@ -31,9 +31,7 @@ def sync_triggers_for_manifest(manifest: Dict[str, Any], *, session=None) -> int
     """
     from modstore_server.models import EmployeeTriggerBinding, get_session_factory
 
-    pack_id = str(
-        (manifest.get("identity") or {}).get("id") or manifest.get("id") or ""
-    ).strip()
+    pack_id = str((manifest.get("identity") or {}).get("id") or manifest.get("id") or "").strip()
     if not pack_id:
         logger.warning("sync_triggers: manifest missing id, skip")
         return 0
@@ -121,11 +119,7 @@ def sync_duty_contract_event_bindings(*, session=None) -> int:
             risk = str(binding.get("risk_level") or "").strip().lower()
             event_key = str(binding.get("event_type") or "").strip()
             base = event_key.split(":", 1)[0].strip()
-            if (
-                risk not in {"low", "medium"}
-                or not event_key
-                or base not in event_types
-            ):
+            if risk not in {"low", "medium"} or not event_key or base not in event_types:
                 continue
             employee_id = str(binding.get("employee_id") or "").strip()
             row = (
@@ -168,11 +162,7 @@ def sync_all_employee_triggers() -> int:
         sf = get_session_factory()
         total = 0
         with sf() as session:
-            rows = (
-                session.query(CatalogItem)
-                .filter(CatalogItem.artifact == "employee_pack")
-                .all()
-            )
+            rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
             for row in rows:
                 try:
                     manifest: Dict[str, Any] = {
@@ -187,9 +177,7 @@ def sync_all_employee_triggers() -> int:
                         if p.exists():
                             with zipfile.ZipFile(p, "r") as z:
                                 if "manifest.json" in z.namelist():
-                                    manifest = json.loads(
-                                        z.read("manifest.json").decode("utf-8")
-                                    )
+                                    manifest = json.loads(z.read("manifest.json").decode("utf-8"))
                     n = sync_triggers_for_manifest(manifest, session=session)
                     total += n
                 except RECOVERABLE_ERRORS:

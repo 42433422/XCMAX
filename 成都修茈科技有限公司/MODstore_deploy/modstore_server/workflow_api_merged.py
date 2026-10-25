@@ -117,17 +117,13 @@ class CreateWorkflowBody(_facade().BaseModel):
 
 
 class WorkflowExecuteBody(_facade().BaseModel):
-    input_data: _facade().Dict[str, _facade().Any] = _facade().Field(
-        default_factory=dict
-    )
+    input_data: _facade().Dict[str, _facade().Any] = _facade().Field(default_factory=dict)
 
 
 class SandboxRunBody(_facade().BaseModel):
     """沙盒运行：默认 Mock 员工，全链路变量快照与边条件分支记录。"""
 
-    input_data: _facade().Dict[str, _facade().Any] = _facade().Field(
-        default_factory=dict
-    )
+    input_data: _facade().Dict[str, _facade().Any] = _facade().Field(default_factory=dict)
     mock_employees: bool = True
     validate_only: bool = False
 
@@ -288,9 +284,7 @@ def _parse_positive_int(v: _facade().Any) -> int:
 def _workflow_summary(
     db: _facade().Session, workflow: _facade().Workflow, user_id: int
 ) -> _facade().Dict[str, _facade().Any]:
-    sandbox_status = _facade().sandbox_status_for_workflow(
-        db, workflow, user_id=user_id
-    )
+    sandbox_status = _facade().sandbox_status_for_workflow(db, workflow, user_id=user_id)
     return {
         "id": workflow.id,
         "name": workflow.name,
@@ -300,9 +294,7 @@ def _workflow_summary(
         "updated_at": workflow.updated_at.isoformat(),
         "graph_fingerprint": sandbox_status["graph_fingerprint"],
         "sandbox_status": sandbox_status,
-        "sandbox_passed_for_current_graph": sandbox_status[
-            "sandbox_passed_for_current_graph"
-        ],
+        "sandbox_passed_for_current_graph": sandbox_status["sandbox_passed_for_current_graph"],
     }
 
 
@@ -318,12 +310,7 @@ def _employee_id_matches(candidate_id: str, target_employee_id: str) -> bool:
         return False
     if c == t:
         return True
-    return (
-        c.endswith(f"-{t}")
-        or c.endswith(f"_{t}")
-        or t.endswith(f"-{c}")
-        or t.endswith(f"_{c}")
-    )
+    return c.endswith(f"-{t}") or c.endswith(f"_{t}") or t.endswith(f"-{c}") or t.endswith(f"_{c}")
 
 
 def _employee_matches_manifest_entry(
@@ -336,9 +323,9 @@ def _employee_matches_manifest_entry(
         return True
     label = str(entry.get("label") or "").strip()
     panel_title = str(entry.get("panel_title") or "").strip()
-    return _facade()._employee_id_matches(
-        label, employee_id
-    ) or _facade()._employee_id_matches(panel_title, employee_id)
+    return _facade()._employee_id_matches(label, employee_id) or _facade()._employee_id_matches(
+        panel_title, employee_id
+    )
 
 
 @_facade().router.post("/", summary="创建工作流")
@@ -411,9 +398,7 @@ async def list_workflows_by_employee(
     eid = (employee_id or "").strip()
     if not eid:
         raise _facade().HTTPException(400, "employee_id 不能为空")
-    workflows = (
-        db.query(_facade().Workflow).filter(_facade().Workflow.user_id == user.id).all()
-    )
+    workflows = db.query(_facade().Workflow).filter(_facade().Workflow.user_id == user.id).all()
     workflow_by_id = {int(w.id): w for w in workflows}
     result_by_id: _facade().Dict[int, _facade().Dict[str, _facade().Any]] = {}
     node_hit_ids: set[int] = set()
@@ -434,9 +419,7 @@ async def list_workflows_by_employee(
         except _facade().json.JSONDecodeError:
             errors.append(f"workflow_node[{n.id}] config 不是合法 JSON")
             continue
-        hit = _facade()._employee_id_matches(
-            str((cfg or {}).get("employee_id") or "").strip(), eid
-        )
+        hit = _facade()._employee_id_matches(str((cfg or {}).get("employee_id") or "").strip(), eid)
         if not hit:
             continue
         wid = int(n.workflow_id)
@@ -474,9 +457,7 @@ async def list_workflows_by_employee(
             for row in wf_rows:
                 if not _facade()._employee_matches_manifest_entry(row, eid):
                     continue
-                wid = _facade()._parse_positive_int(
-                    row.get("workflow_id") or row.get("workflowId")
-                )
+                wid = _facade()._parse_positive_int(row.get("workflow_id") or row.get("workflowId"))
                 if wid <= 0 or wid in node_hit_ids or wid in manifest_hit_ids:
                     continue
                 w = workflow_by_id.get(wid)
@@ -512,9 +493,7 @@ async def get_workflow(
     """获取工作流的详细信息，包括节点和边"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -543,9 +522,7 @@ async def get_workflow(
         "created_at": workflow.created_at.isoformat(),
         "updated_at": workflow.updated_at.isoformat(),
         "graph_fingerprint": _facade().workflow_graph_fingerprint(db, workflow_id),
-        "sandbox_status": _facade().sandbox_status_for_workflow(
-            db, workflow, user_id=user.id
-        ),
+        "sandbox_status": _facade().sandbox_status_for_workflow(db, workflow, user_id=user.id),
         "nodes": [
             {
                 "id": n.id,
@@ -579,9 +556,7 @@ async def update_workflow(
     """更新工作流信息（JSON body：name, description, is_active）。"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -613,9 +588,7 @@ async def delete_workflow(
     """删除工作流"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -647,9 +620,7 @@ async def add_workflow_node(
     """添加工作流节点（JSON body）。"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -686,9 +657,7 @@ async def update_workflow_node(
     node = (
         db.query(_facade().WorkflowNode)
         .join(_facade().Workflow)
-        .filter(
-            _facade().WorkflowNode.id == node_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().WorkflowNode.id == node_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not node:
@@ -722,9 +691,7 @@ async def delete_workflow_node(
     node = (
         db.query(_facade().WorkflowNode)
         .join(_facade().Workflow)
-        .filter(
-            _facade().WorkflowNode.id == node_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().WorkflowNode.id == node_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not node:
@@ -748,9 +715,7 @@ async def add_workflow_edge(
     """添加工作流边（JSON body）。"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -800,9 +765,7 @@ async def delete_workflow_edge(
     edge = (
         db.query(_facade().WorkflowEdge)
         .join(_facade().Workflow)
-        .filter(
-            _facade().WorkflowEdge.id == edge_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().WorkflowEdge.id == edge_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not edge:
@@ -812,9 +775,7 @@ async def delete_workflow_edge(
     return {"message": "边已删除"}
 
 
-@_facade().router.get(
-    "/{workflow_id}/validate", summary="校验工作流（静态 + 拓扑提示）"
-)
+@_facade().router.get("/{workflow_id}/validate", summary="校验工作流（静态 + 拓扑提示）")
 async def validate_workflow_endpoint(
     workflow_id: int,
     db: _facade().Session = _facade().Depends(_facade().get_db),
@@ -824,9 +785,7 @@ async def validate_workflow_endpoint(
 
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -858,9 +817,7 @@ async def sandbox_run_workflow(
 
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -887,9 +844,7 @@ async def sandbox_run_workflow(
             "sandbox_run_id": int(row.id),
             "graph_fingerprint": row.graph_fingerprint,
             "sandbox_status": status,
-            "sandbox_passed_for_current_graph": status[
-                "sandbox_passed_for_current_graph"
-            ],
+            "sandbox_passed_for_current_graph": status["sandbox_passed_for_current_graph"],
         }
     if not report.get("ok") and (not body.validate_only):
         raise _facade().HTTPException(
@@ -920,9 +875,7 @@ async def execute_workflow(
 
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -943,9 +896,7 @@ async def execute_workflow(
         _facade().require_llm_credit(qdb, user.id, 1)
     failure_message: _facade().Optional[str] = None
     try:
-        output_data = engine_execute(
-            workflow_id, body.input_data or {}, user_id=user.id
-        )
+        output_data = engine_execute(workflow_id, body.input_data or {}, user_id=user.id)
         execution.status = "completed"
         execution.output_data = _facade().json.dumps(output_data)
         execution.completed_at = _facade().datetime.now(_facade().timezone.utc)
@@ -967,11 +918,7 @@ async def execute_workflow(
             WORKFLOW_EXECUTION_FAILED,
         )
 
-        event_name = (
-            WORKFLOW_EXECUTION_FAILED
-            if failure_message
-            else WORKFLOW_EXECUTION_COMPLETED
-        )
+        event_name = WORKFLOW_EXECUTION_FAILED if failure_message else WORKFLOW_EXECUTION_COMPLETED
         webhook_dispatcher.publish_event(
             event_name,
             aggregate_id=str(execution.id),
@@ -999,9 +946,7 @@ async def execute_workflow(
         "input_data": _facade().json.loads(execution.input_data),
         "output_data": _facade().json.loads(execution.output_data or "{}"),
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat()
-        if execution.completed_at
-        else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
     }
 
 
@@ -1016,9 +961,7 @@ async def get_workflow_executions(
     """获取工作流的执行记录"""
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1053,9 +996,7 @@ async def list_workflow_triggers(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1086,9 +1027,7 @@ async def create_workflow_trigger(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1111,9 +1050,7 @@ async def create_workflow_trigger(
     return {"id": row.id, "ok": True}
 
 
-@_facade().router.delete(
-    "/{workflow_id}/triggers/{trigger_id}", summary="删除或停用工作流触发器"
-)
+@_facade().router.delete("/{workflow_id}/triggers/{trigger_id}", summary="删除或停用工作流触发器")
 async def delete_workflow_trigger(
     workflow_id: int,
     trigger_id: int,
@@ -1122,9 +1059,7 @@ async def delete_workflow_trigger(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1159,9 +1094,7 @@ async def webhook_run_workflow(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1185,9 +1118,7 @@ async def webhook_run_workflow(
         raise _facade().HTTPException(500, str(e)) from e
 
 
-@_facade().router.post(
-    "/{workflow_id}/versions/publish", summary="发布工作流版本（快照当前图）"
-)
+@_facade().router.post("/{workflow_id}/versions/publish", summary="发布工作流版本（快照当前图）")
 async def publish_workflow_version(
     workflow_id: int,
     body: PublishVersionBody,
@@ -1196,9 +1127,7 @@ async def publish_workflow_version(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1237,9 +1166,7 @@ async def publish_workflow_version(
     }
 
 
-@_facade().router.get(
-    "/{workflow_id}/versions", summary="工作流版本列表（按 version_no 倒序）"
-)
+@_facade().router.get("/{workflow_id}/versions", summary="工作流版本列表（按 version_no 倒序）")
 async def list_workflow_versions(
     workflow_id: int,
     limit: int = _facade().Query(50, ge=1, le=100),
@@ -1249,9 +1176,7 @@ async def list_workflow_versions(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1288,9 +1213,7 @@ async def get_workflow_version(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1335,9 +1258,7 @@ async def rollback_workflow_version(
 ):
     workflow = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not workflow:
@@ -1392,9 +1313,7 @@ async def get_execution_detail(
         "output_data": _facade().json.loads(execution.output_data or "{}"),
         "error_message": execution.error_message,
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat()
-        if execution.completed_at
-        else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
     }
 
 
@@ -1434,9 +1353,7 @@ async def public_webhook_run_workflow(
         hdr = (request.headers.get("X-Workflow-Secret") or "").strip()
         if not _facade().hmac.compare_digest(hdr, secret):
             raise _facade().HTTPException(403, "Webhook secret mismatch")
-    elif _facade().os.environ.get(
-        "MODSTORE_REQUIRE_WEBHOOK_SECRET", ""
-    ).strip().lower() in (
+    elif _facade().os.environ.get("MODSTORE_REQUIRE_WEBHOOK_SECRET", "").strip().lower() in (
         "1",
         "true",
         "yes",

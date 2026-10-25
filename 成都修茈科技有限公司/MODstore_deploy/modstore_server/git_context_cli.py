@@ -34,9 +34,7 @@ def main() -> None:
     sha = run_git(["rev-parse", "HEAD"])
     branch = run_git(["branch", "--show-current"])
     st = run_git(["status", "-sb"])
-    print(
-        f"DEPLOY_TIER={tier}\nHOSTNAME={host}\nGIT_SHA={sha}\nBRANCH={branch}\nSTATUS\n{st}"
-    )
+    print(f"DEPLOY_TIER={tier}\nHOSTNAME={host}\nGIT_SHA={sha}\nBRANCH={branch}\nSTATUS\n{st}")
 
 
 if __name__ == "__main__":

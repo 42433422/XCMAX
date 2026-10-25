@@ -43,9 +43,7 @@ class AgentLoopOutcome:
 SandboxRunner = Callable[..., Awaitable[SandboxResult]]
 
 
-def _merge_script_sandbox_policy_kwargs(
-    brief: Brief, sandbox_kwargs: Dict[str, Any]
-) -> None:
+def _merge_script_sandbox_policy_kwargs(brief: Brief, sandbox_kwargs: Dict[str, Any]) -> None:
     """从 ``Brief.references`` 合并脚本沙箱策略；显式 ``sandbox_kwargs`` 优先。"""
     if sandbox_kwargs.get("employee_run_allowlist") is not None:
         return
@@ -99,9 +97,7 @@ async def run_agent_loop(
     try:
         plan = await make_plan(brief, ctx, llm=llm)
     except BOUNDARY_ERRORS as e:  # noqa: BLE001
-        outcome = AgentLoopOutcome(
-            ok=False, iterations=0, error=f"planner: {e}", trace=trace
-        )
+        outcome = AgentLoopOutcome(ok=False, iterations=0, error=f"planner: {e}", trace=trace)
         yield AgentEvent(
             "error",
             0,
@@ -113,9 +109,7 @@ async def run_agent_loop(
 
     last_code: Optional[str] = None
     last_failure: Dict[str, Any] = {}
-    final_outcome = AgentLoopOutcome(
-        ok=False, iterations=0, plan_md=plan.plan_md, trace=trace
-    )
+    final_outcome = AgentLoopOutcome(ok=False, iterations=0, plan_md=plan.plan_md, trace=trace)
 
     for i in range(max_iterations):
         final_outcome.iterations = i + 1
@@ -125,9 +119,7 @@ async def run_agent_loop(
                 code = await write_code(brief, plan, ctx, llm=llm)
                 phase_label = "code"
             else:
-                code = await repair_code(
-                    brief, plan, ctx, last_code, last_failure, llm=llm
-                )
+                code = await repair_code(brief, plan, ctx, last_code, last_failure, llm=llm)
                 phase_label = "repair"
         except BOUNDARY_ERRORS as e:  # noqa: BLE001
             yield AgentEvent("error", i, {"reason": f"{phase_label} failed: {e}"})
@@ -146,9 +138,7 @@ async def run_agent_loop(
             )
             return
         yield AgentEvent(phase_label, i, {"code": code})
-        trace.append(
-            {"phase": phase_label, "iteration": i, "code_excerpt": code[:1000]}
-        )
+        trace.append({"phase": phase_label, "iteration": i, "code_excerpt": code[:1000]})
 
         # === static check ===
         static_errors = validate_script(code)
@@ -217,9 +207,7 @@ async def run_agent_loop(
                 result.outputs = fallback_outputs
                 result.timed_out = False
                 result.returncode = 0
-                result.stdout = (
-                    result.stdout + "\n已生成 outputs/summary.md（超时兜底）"
-                ).strip()
+                result.stdout = (result.stdout + "\n已生成 outputs/summary.md（超时兜底）").strip()
                 final_outcome.last_result = result
                 final_outcome.ok = True
                 final_outcome.final_code = code

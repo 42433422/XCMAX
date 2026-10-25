@@ -232,11 +232,7 @@ def dispatch_doc_sync_handler(
             "error": f"doc_sync handler not allowed for employee '{employee_id}'",
         }
 
-    cfg = (
-        actions_cfg.get("doc_sync")
-        if isinstance(actions_cfg.get("doc_sync"), dict)
-        else {}
-    )
+    cfg = actions_cfg.get("doc_sync") if isinstance(actions_cfg.get("doc_sync"), dict) else {}
     root = _repo_root()
 
     scope_globs = cfg.get("scope_globs") or _DEFAULT_SCOPE_GLOBS
@@ -247,19 +243,13 @@ def dispatch_doc_sync_handler(
             import yaml
 
             yaml_path = (
-                root
-                / "yuangon"
-                / "quality-and-docs"
-                / "doc-knowledge-curator"
-                / "employee.yaml"
+                root / "yuangon" / "quality-and-docs" / "doc-knowledge-curator" / "employee.yaml"
             )
             if yaml_path.is_file():
                 yaml_data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
                 if isinstance(yaml_data, dict):
                     scope_globs = yaml_data.get("scope_globs") or scope_globs
-                    forbidden_globs = (
-                        yaml_data.get("forbidden_globs") or forbidden_globs
-                    )
+                    forbidden_globs = yaml_data.get("forbidden_globs") or forbidden_globs
         except RECOVERABLE_ERRORS:
             pass
 
@@ -275,9 +265,7 @@ def dispatch_doc_sync_handler(
         reasoning_data = {}
 
     doc_operations = reasoning_data.get("doc_operations") or []
-    change_signals = (
-        reasoning_data.get("change_signals") or reasoning_data.get("incident") or {}
-    )
+    change_signals = reasoning_data.get("change_signals") or reasoning_data.get("incident") or {}
 
     if change_signals:
         affected = detect_changes(change_signals, root)
@@ -293,9 +281,7 @@ def dispatch_doc_sync_handler(
             result.errors.append("doc_operation missing filepath")
             continue
 
-        full_path = (
-            str(root / filepath) if not Path(filepath).is_absolute() else filepath
-        )
+        full_path = str(root / filepath) if not Path(filepath).is_absolute() else filepath
 
         if op_type == "read":
             read_result = read_doc(full_path)
@@ -311,9 +297,7 @@ def dispatch_doc_sync_handler(
             )
             if write_result.get("ok"):
                 result.changed_docs.append(filepath)
-                result.markdown_lint_errors += write_result.get(
-                    "markdown_lint_errors", 0
-                )
+                result.markdown_lint_errors += write_result.get("markdown_lint_errors", 0)
                 result.diff_summary += write_result.get("diff_summary", "")
             else:
                 result.errors.append(f"write failed: {write_result.get('error')}")
@@ -337,9 +321,7 @@ def dispatch_doc_sync_handler(
 
     if not doc_operations and not change_signals:
         result.status = "ok"
-        result.diff_summary = (
-            "No doc operations or change signals provided; sync skipped."
-        )
+        result.diff_summary = "No doc operations or change signals provided; sync skipped."
 
     _write_doc_sync_audit(
         employee_id=employee_id,

@@ -70,9 +70,7 @@ def export_workflow_bundle(db: Session, workflow_id: int) -> Optional[Dict[str, 
     )
 
     # Map original DB node IDs → stable temp keys inside the bundle
-    node_key_map: Dict[int, str] = {
-        int(str(n.id)): f"n{i}" for i, n in enumerate(nodes)
-    }
+    node_key_map: Dict[int, str] = {int(str(n.id)): f"n{i}" for i, n in enumerate(nodes)}
 
     nodes_out = []
     for n in nodes:
@@ -116,13 +114,9 @@ def export_workflow_bundle(db: Session, workflow_id: int) -> Optional[Dict[str, 
     }
 
 
-def export_script_workflow_bundle(
-    db: Session, script_workflow_id: int
-) -> Optional[Dict[str, Any]]:
+def export_script_workflow_bundle(db: Session, script_workflow_id: int) -> Optional[Dict[str, Any]]:
     """Return a portable representation of a ScriptWorkflow with its current version."""
-    swf = (
-        db.query(ScriptWorkflow).filter(ScriptWorkflow.id == script_workflow_id).first()
-    )
+    swf = db.query(ScriptWorkflow).filter(ScriptWorkflow.id == script_workflow_id).first()
     if not swf:
         return None
 
@@ -199,9 +193,7 @@ def embed_workflow_bundles_in_manifest(
     }
 
     wf_bundles: List[Dict[str, Any]] = list(manifest.get("workflow_bundles") or [])
-    swf_bundles: List[Dict[str, Any]] = list(
-        manifest.get("script_workflow_bundles") or []
-    )
+    swf_bundles: List[Dict[str, Any]] = list(manifest.get("script_workflow_bundles") or [])
 
     for wid in wf_ids:
         if wid in existing_wf_ids:
@@ -210,9 +202,7 @@ def embed_workflow_bundles_in_manifest(
         if bundle is None:
             if not skip_missing:
                 raise ValueError(f"workflow_id={wid} not found in DB")
-            logger.warning(
-                "embed_workflow_bundles: workflow_id=%d not found, skipped", wid
-            )
+            logger.warning("embed_workflow_bundles: workflow_id=%d not found, skipped", wid)
             continue
         wf_bundles.append(bundle)
         existing_wf_ids.add(wid)
@@ -224,9 +214,7 @@ def embed_workflow_bundles_in_manifest(
         if bundle is None:
             if not skip_missing:
                 raise ValueError(f"script_workflow_id={sid} not found in DB")
-            logger.warning(
-                "embed_workflow_bundles: script_workflow_id=%d not found, skipped", sid
-            )
+            logger.warning("embed_workflow_bundles: script_workflow_id=%d not found, skipped", sid)
             continue
         swf_bundles.append(bundle)
         existing_swf_ids.add(sid)
@@ -256,9 +244,7 @@ def embed_workflow_bundles_in_manifest(
 # ── Rehydration on install ────────────────────────────────────────────────────
 
 
-def _create_workflow_from_bundle(
-    db: Session, user: User, bundle: Dict[str, Any]
-) -> int:
+def _create_workflow_from_bundle(db: Session, user: User, bundle: Dict[str, Any]) -> int:
     """Insert a Workflow + nodes + edges from a bundle dict; return new workflow ID."""
     wf = Workflow(
         user_id=user.id,
@@ -307,9 +293,7 @@ def _create_workflow_from_bundle(
     return int(wf.id)
 
 
-def _create_script_workflow_from_bundle(
-    db: Session, user: User, bundle: Dict[str, Any]
-) -> int:
+def _create_script_workflow_from_bundle(db: Session, user: User, bundle: Dict[str, Any]) -> int:
     """Insert a ScriptWorkflow + current version from a bundle dict; return new ID."""
     try:
         brief_text = json.dumps(bundle.get("brief_json") or {}, ensure_ascii=False)
@@ -369,9 +353,7 @@ def rehydrate_workflow_bundles(
         b for b in (manifest.get("workflow_bundles") or []) if isinstance(b, dict)
     ]
     swf_bundles: List[Dict[str, Any]] = [
-        b
-        for b in (manifest.get("script_workflow_bundles") or [])
-        if isinstance(b, dict)
+        b for b in (manifest.get("script_workflow_bundles") or []) if isinstance(b, dict)
     ]
 
     if not wf_bundles and not swf_bundles:
@@ -379,9 +361,7 @@ def rehydrate_workflow_bundles(
 
     # Build source → new-target ID maps
     wf_id_map: Dict[int, int] = {}  # source_workflow_id → new_workflow_id
-    swf_id_map: Dict[
-        int, int
-    ] = {}  # source_script_workflow_id → new_script_workflow_id
+    swf_id_map: Dict[int, int] = {}  # source_script_workflow_id → new_script_workflow_id
 
     for bundle in wf_bundles:
         src_id = bundle.get("source_workflow_id")
@@ -440,14 +420,10 @@ def rehydrate_workflow_bundles(
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
-    collab = (
-        v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
-    )
+    collab = v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
 
     # employee_config_v2.collaboration.workflow.workflow_id
-    wf_entry = (
-        collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
-    )
+    wf_entry = collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
     for key in ("workflow_id", "workflowId"):
         if key in wf_entry:
             wf_entry[key] = _remap_wf(wf_entry[key])

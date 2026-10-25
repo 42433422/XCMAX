@@ -117,9 +117,7 @@ def _make_client():
                 "group_openid": getattr(message, "group_openid", ""),
                 "author": {
                     "member_openid": (
-                        getattr(message.author, "member_openid", "")
-                        if message.author
-                        else ""
+                        getattr(message.author, "member_openid", "") if message.author else ""
                     )
                 },
                 "_botpy_msg": message,
@@ -135,9 +133,7 @@ def _make_client():
                 "content": text,
                 "author": {
                     "user_openid": (
-                        getattr(message.author, "user_openid", "")
-                        if message.author
-                        else ""
+                        getattr(message.author, "user_openid", "") if message.author else ""
                     )
                 },
                 "_botpy_msg": message,
@@ -152,9 +148,7 @@ def _make_client():
             )
 
         async def on_error(self, event_name: str, *args, **kwargs):
-            logger.error(
-                "butler-qqbot: error in event %s args=%s", event_name, args[:1]
-            )
+            logger.error("butler-qqbot: error in event %s args=%s", event_name, args[:1])
 
     return _ButlerClient
 
@@ -191,9 +185,7 @@ async def _run_botpy_forever() -> None:
             logger.info("butler-qqbot: cancelled, stopping.")
             break
         except RECOVERABLE_ERRORS as exc:
-            logger.error(
-                "butler-qqbot: connection error: %s, retry in %ss", exc, backoff
-            )
+            logger.error("butler-qqbot: connection error: %s, retry in %ss", exc, backoff)
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, 120)
         else:

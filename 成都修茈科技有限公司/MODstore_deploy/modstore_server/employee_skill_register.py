@@ -128,9 +128,7 @@ def _upsert_eskill(
     source: str = "employee_pack",
 ) -> int:
     """创建（或复用同名）ESkill + ESkillVersion，返回 ESkill.id。"""
-    existing = (
-        db.query(ESkill).filter(ESkill.user_id == user.id, ESkill.name == name).first()
-    )
+    existing = db.query(ESkill).filter(ESkill.user_id == user.id, ESkill.name == name).first()
     if existing:
         # bump version 指向新的 vibe skill_id
         prev_ver = existing.active_version
@@ -146,9 +144,7 @@ def _upsert_eskill(
             eskill_id=existing.id,
             version=new_ver_no,
             static_logic_json=json.dumps(logic, ensure_ascii=False),
-            trigger_policy_json=json.dumps(
-                {"on_error": True, "on_quality_below_threshold": True}
-            ),
+            trigger_policy_json=json.dumps({"on_error": True, "on_quality_below_threshold": True}),
             quality_gate_json=json.dumps({}),
             note=f"re-registered from {source}; vibe_skill_id={vibe_skill_id}",
         )
@@ -178,9 +174,7 @@ def _upsert_eskill(
         eskill_id=skill.id,
         version=1,
         static_logic_json=json.dumps(logic, ensure_ascii=False),
-        trigger_policy_json=json.dumps(
-            {"on_error": True, "on_quality_below_threshold": True}
-        ),
+        trigger_policy_json=json.dumps({"on_error": True, "on_quality_below_threshold": True}),
         quality_gate_json=json.dumps({}),
         note=f"registered from {source}; vibe_skill_id={vibe_skill_id}",
     )
@@ -290,9 +284,9 @@ async def _llm_split_steps(
                 "name": name[:64],
                 "sub_brief": sub_brief[:400],
                 "input_keys": [str(k) for k in (item.get("input_keys") or [])[:8]],
-                "output_var": _sanitize_identifier(
-                    str(item.get("output_var") or name), "result"
-                )[:40],
+                "output_var": _sanitize_identifier(str(item.get("output_var") or name), "result")[
+                    :40
+                ],
                 "domain": str(item.get("domain") or "")[:200],
             }
         )
@@ -338,9 +332,7 @@ async def register_employee_pack_as_eskills(
         return []
 
     try:
-        coder = get_vibe_coder(
-            session=db, user_id=user.id, provider=provider, model=model
-        )
+        coder = get_vibe_coder(session=db, user_id=user.id, provider=provider, model=model)
     except BOUNDARY_ERRORS:  # noqa: BLE001
         logger.warning("获取 vibe coder 失败")
         return []
@@ -408,9 +400,7 @@ async def register_employee_pack_as_eskills(
             # B. 升级：让 vibe-coding LLM 重新生成真实代码 + 沙箱
             vibe_sid_v2 = vibe_sid
             try:
-                upgraded = coder.code(
-                    step["sub_brief"], mode="brief_first", skill_id=vibe_sid
-                )
+                upgraded = coder.code(step["sub_brief"], mode="brief_first", skill_id=vibe_sid)
                 vibe_sid_v2 = getattr(upgraded, "skill_id", vibe_sid)
                 logger.info("Skill 升级成功")
             except BOUNDARY_ERRORS:  # noqa: BLE001

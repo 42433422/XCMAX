@@ -29,17 +29,13 @@ def validated_check_units(
     from modstore_server.para_delegate_handler import _independent_check_plan
 
     try:
-        units, revision = (
-            _independent_check_plan(req) if not req.get("para_task_id") else ([], "")
-        )
+        units, revision = _independent_check_plan(req) if not req.get("para_task_id") else ([], "")
         return units, revision, None
     except (ValueError, TypeError) as exc:
         return [], "", _blocked(None, "", "blocked_independent_checks", str(exc))
 
 
-def task_payload_options(
-    req: dict[str, Any], units: list[dict[str, Any]]
-) -> dict[str, Any]:
+def task_payload_options(req: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, Any]:
     """Resolve request options at the existing pre-I/O boundary."""
     h = importlib.import_module("modstore_server.para_delegate_handler")
     max_attempts = h._resolve_max_attempts(req)
@@ -52,9 +48,7 @@ def task_payload_options(
     ):
         auto_merge = h._coerce_bool(req.get("auto_merge_on_complete"), False)
     workspace_path = str(
-        req.get("workspace_path")
-        or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH")
-        or ""
+        req.get("workspace_path") or h.os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
     ).strip()
     return {
         "max_attempts": max_attempts,
@@ -63,9 +57,7 @@ def task_payload_options(
     }
 
 
-def _blocked(
-    grant: Any, reason: str, status: str, error: str, **extra: Any
-) -> dict[str, Any]:
+def _blocked(grant: Any, reason: str, status: str, error: str, **extra: Any) -> dict[str, Any]:
     if grant is not None:
         from modstore_server.cred_vault import revoke_task_grants
 
@@ -136,9 +128,7 @@ def prepare_task_group(
         }
         if unit:
             payload.update(
-                subtask_title=f"check:{unit['unit_id']} {unit.get('title') or ''}"[
-                    :240
-                ],
+                subtask_title=f"check:{unit['unit_id']} {unit.get('title') or ''}"[:240],
                 prompt=h.insert_before_loop_context(
                     base_prompt,
                     "独立只读检查 "

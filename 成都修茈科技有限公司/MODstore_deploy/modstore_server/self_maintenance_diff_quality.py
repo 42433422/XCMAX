@@ -66,15 +66,10 @@ def changed_modstore_python_files(
         )
         if untracked.returncode != 0:
             detail = (untracked.stderr or b"").decode("utf-8", errors="replace")[:1000]
-            raise RuntimeError(
-                f"git ls-files failed with exit {untracked.returncode}: {detail}"
-            )
+            raise RuntimeError(f"git ls-files failed with exit {untracked.returncode}: {detail}")
         raw_paths.extend((untracked.stdout or b"").split(b"\0"))
 
-    prefix = (
-        modstore_root.resolve().relative_to(repo_root.resolve()).as_posix().rstrip("/")
-        + "/"
-    )
+    prefix = modstore_root.resolve().relative_to(repo_root.resolve()).as_posix().rstrip("/") + "/"
     targets: list[str] = []
     for raw_path in raw_paths:
         if not raw_path:

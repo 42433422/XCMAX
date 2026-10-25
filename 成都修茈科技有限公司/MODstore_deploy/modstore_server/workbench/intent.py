@@ -36,9 +36,7 @@ def _employee_asset_publish_catalog_from_env() -> bool:
 
     部署可设 ``MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG=1``，生成即登记，避免 ``/manifest`` 404。
     """
-    return (
-        os.environ.get("MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG") or ""
-    ).strip().lower() in (
+    return (os.environ.get("MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG") or "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -286,9 +284,7 @@ def _default_steps(
                     },
                 ]
             )
-    base.append(
-        {"id": "complete", "label": "完成", "status": "pending", "message": None}
-    )
+    base.append({"id": "complete", "label": "完成", "status": "pending", "message": None})
     if intent == CANVAS_SKILL_INTENT:
         base[1]["label"] = "创建 Skill 组"
     return base

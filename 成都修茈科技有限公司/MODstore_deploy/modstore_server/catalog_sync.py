@@ -80,9 +80,7 @@ def upsert_catalog_item_from_xc_package_dict(
     row.sha256 = sha256
 
 
-def sync_packages_json_to_catalog_items(
-    session, *, admin_user_id: int
-) -> Dict[str, Any]:
+def sync_packages_json_to_catalog_items(session, *, admin_user_id: int) -> Dict[str, Any]:
     """将 ``catalog_store`` 中缺失的包插入 ``catalog_items``。"""
     inserted = 0
     skipped = 0
@@ -95,8 +93,7 @@ def sync_packages_json_to_catalog_items(
         if not pkg_id or not version:
             continue
         had_row = (
-            session.query(CatalogItem).filter(CatalogItem.pkg_id == pkg_id).first()
-            is not None
+            session.query(CatalogItem).filter(CatalogItem.pkg_id == pkg_id).first() is not None
         )
 
         upsert_catalog_item_from_xc_package_dict(session, r, author_id=admin_user_id)

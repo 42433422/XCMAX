@@ -53,13 +53,17 @@ def _build_pack(spec: dict) -> tuple[Path, bytes, dict, dict]:
     convert_fn = getattr(px, spec["convert"])
     rule_spec = build_rule(brief)
     rule_spec["pack_id"] = spec["pack_id"]
-    manifest = _normalize_manifest(_fallback_manifest(brief, rule_spec), brief, rule_spec)
+    manifest = _normalize_manifest(
+        _fallback_manifest(brief, rule_spec), brief, rule_spec
+    )
     manifest["id"] = spec["pack_id"]
     _names = {
         "pdf-full-read-employee": "PDF 全量读取员",
         "pdf-generate-employee": "PDF 生成员",
     }
-    manifest["name"] = _names.get(spec["pack_id"]) or manifest.get("name") or spec["pack_id"]
+    manifest["name"] = (
+        _names.get(spec["pack_id"]) or manifest.get("name") or spec["pack_id"]
+    )
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
     emp["id"] = spec["pack_id"]
     manifest["employee"] = emp
@@ -77,7 +81,9 @@ def main() -> int:
     parser.add_argument(
         "--publish", action="store_true", help="Write to catalog_store + catalog_items"
     )
-    parser.add_argument("--public", action="store_true", help="Set is_public=true on catalog rows")
+    parser.add_argument(
+        "--public", action="store_true", help="Set is_public=true on catalog rows"
+    )
     args = parser.parse_args()
 
     from modstore_server.mod_scaffold_runner import import_zip, modstore_library_path
@@ -98,8 +104,12 @@ def main() -> int:
             continue
 
         from modstore_server.catalog_store import append_package
-        from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-        from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+        from modstore_server.catalog_sync import (
+            upsert_catalog_item_from_xc_package_dict,
+        )
+        from modstore_server.employee_asset_pipeline import (
+            mirror_catalog_file_to_market_files,
+        )
         from modstore_server.models import CatalogItem, get_session_factory
 
         pid = spec["pack_id"]
@@ -137,10 +147,14 @@ def main() -> int:
             row.price = 0.0
             row.artifact = "employee_pack"
             row.material_category = (
-                saved.get("material_category") or rec.get("material_category") or "ai_employee"
+                saved.get("material_category")
+                or rec.get("material_category")
+                or "ai_employee"
             )
             row.workpiece_type = (
-                saved.get("workpiece_type") or rec.get("workpiece_type") or "document_processor"
+                saved.get("workpiece_type")
+                or rec.get("workpiece_type")
+                or "document_processor"
             )
             row.industry = saved.get("industry") or rec["industry"]
             row.stored_filename = saved.get("stored_filename") or ""

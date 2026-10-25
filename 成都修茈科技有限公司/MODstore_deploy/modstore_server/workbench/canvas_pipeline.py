@@ -83,21 +83,17 @@ async def _run_workbench_canvas_pipeline(
             )
             if not nl.get("ok"):
                 try:
-                    db.query(WorkflowEdge).filter(
-                        WorkflowEdge.workflow_id == wid
-                    ).delete(synchronize_session=False)
-                    db.query(WorkflowNode).filter(
-                        WorkflowNode.workflow_id == wid
-                    ).delete(synchronize_session=False)
-                    db.query(Workflow).filter(Workflow.id == wid).delete(
+                    db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == wid).delete(
                         synchronize_session=False
                     )
+                    db.query(WorkflowNode).filter(WorkflowNode.workflow_id == wid).delete(
+                        synchronize_session=False
+                    )
+                    db.query(Workflow).filter(Workflow.id == wid).delete(synchronize_session=False)
                     db.commit()
                 except RECOVERABLE_ERRORS:
                     db.rollback()
-                await ports.progress.fail(
-                    sid, "generate", nl.get("error") or "工作流图生成失败"
-                )
+                await ports.progress.fail(sid, "generate", nl.get("error") or "工作流图生成失败")
                 async with ports.sessions.lock:
                     sess = ports.sessions.data.get(sid)
                     if sess:
@@ -116,9 +112,7 @@ async def _run_workbench_canvas_pipeline(
         await ports.progress.set_step(sid, "generate", "done")
         _skill_current_step = "validate"
         await ports.progress.set_step(sid, "validate", "running")
-        node_count = (
-            db.query(WorkflowNode).filter(WorkflowNode.workflow_id == wid).count()
-        )
+        node_count = db.query(WorkflowNode).filter(WorkflowNode.workflow_id == wid).count()
         if node_count == 0:
             detail = "新建工作流暂无节点，进入画布后再添加节点并运行沙盒校验"
             async with ports.sessions.lock:
@@ -148,9 +142,7 @@ async def _run_workbench_canvas_pipeline(
             warns = report.get("warnings") or []
             detail = None
             if errs:
-                detail = "校验提示（可进画布修改）：" + "；".join(
-                    (str(e) for e in errs[:8])
-                )
+                detail = "校验提示（可进画布修改）：" + "；".join((str(e) for e in errs[:8]))
             elif warns:
                 detail = "提示：" + "；".join((str(w) for w in warns[:6]))
             async with ports.sessions.lock:
@@ -181,9 +173,7 @@ async def _run_workbench_canvas_pipeline(
         await ports.progress.set_step(sid, "complete", "done")
         await ports.progress.finish(
             sid,
-            _enrich_artifact_skill_aliases(
-                {"workflow_id": wid, "workflow_name": name, **nl_meta}
-            ),
+            _enrich_artifact_skill_aliases({"workflow_id": wid, "workflow_name": name, **nl_meta}),
         )
     except RECOVERABLE_ERRORS as e:
         _LOG.exception(

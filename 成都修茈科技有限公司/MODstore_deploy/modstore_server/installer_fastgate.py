@@ -30,9 +30,7 @@ def _env_bool(name: str, default: str = "1") -> bool:
     )
 
 
-def verify_installer_fastgate(
-    *, release_train: str, release_kind: str
-) -> Dict[str, Any]:
+def verify_installer_fastgate(*, release_train: str, release_kind: str) -> Dict[str, Any]:
     """推 COS 前置门禁。返回 {ok, skipped, reason, smoke?, ...}；ok=False 时调用方应阻断推送。"""
     at = datetime.now(UTC).isoformat()
     base = {"release_train": release_train, "release_kind": release_kind, "at": at}

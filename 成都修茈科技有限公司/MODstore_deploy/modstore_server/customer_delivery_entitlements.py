@@ -21,10 +21,7 @@ def grant_verified_delivery_access(
     *,
     owner_id: int,
 ) -> list[str]:
-    if (
-        int(ticket.user_id) != owner_id
-        or manifest.get("delivery_owner_user_id") != owner_id
-    ):
+    if int(ticket.user_id) != owner_id or manifest.get("delivery_owner_user_id") != owner_id:
         raise HTTPException(403, "只有原工单账号可以获取私有交付权益")
     if (
         evidence.get("acceptance_status") != "accepted"

@@ -22,7 +22,9 @@ async def run(config: dict) -> dict:
     import app.fastapi_app.factory as factory
     import httpx
     from app.application.mod_delivery_receipt_outbox import retry_delivery_receipts
-    from app.application.private_mod_delivery_artifacts import install_custom_delivery_artifact
+    from app.application.private_mod_delivery_artifacts import (
+        install_custom_delivery_artifact,
+    )
     from app.db.db_base import Base
     from app.db.models.tenant import Tenant
     from app.db.models.user import Session, User
@@ -102,7 +104,8 @@ async def run(config: dict) -> dict:
                 assert initialize_roster_once([{"name": "Synthetic employee", "dept": "Fixture"}])
     if config["action"] == "autosync":
         async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=factory._app_singleton), base_url="http://host.test"
+            transport=httpx.ASGITransport(app=factory._app_singleton),
+            base_url="http://host.test",
         ) as client:
             response = await client.post(
                 "/api/mod-store/private-delivery/sync",
@@ -154,7 +157,11 @@ async def run(config: dict) -> dict:
 
 def _loopback_only_connect(original):
     def connect(sock, address):
-        if isinstance(address, tuple) and address[0] not in {"127.0.0.1", "::1", "localhost"}:
+        if isinstance(address, tuple) and address[0] not in {
+            "127.0.0.1",
+            "::1",
+            "localhost",
+        }:
             raise OSError("Delivery integration fixture forbids non-loopback networking")
         return original(sock, address)
 

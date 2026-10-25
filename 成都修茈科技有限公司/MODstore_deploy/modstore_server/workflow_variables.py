@@ -78,8 +78,6 @@ def eval_condition(expr: str, context: Dict[str, Any]) -> bool:
     try:
         tree = ast.parse(expr, mode="eval")
         _SafeExpr().visit(tree)
-        return bool(
-            eval(compile(tree, "<workflow>", "eval"), {"__builtins__": {}}, context)
-        )
+        return bool(eval(compile(tree, "<workflow>", "eval"), {"__builtins__": {}}, context))
     except RECOVERABLE_ERRORS:
         return False

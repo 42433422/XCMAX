@@ -36,17 +36,11 @@ money = _values.money
 money_str = _values.money_str
 usage_from_response = _values.usage_from_response
 
-DEFAULT_INPUT_PRICE_PER_1K = Decimal(
-    os.environ.get("COSER_DEFAULT_INPUT_PRICE_PER_1K", "0.006")
-)
-DEFAULT_OUTPUT_PRICE_PER_1K = Decimal(
-    os.environ.get("COSER_DEFAULT_OUTPUT_PRICE_PER_1K", "0.018")
-)
+DEFAULT_INPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_INPUT_PRICE_PER_1K", "0.006"))
+DEFAULT_OUTPUT_PRICE_PER_1K = Decimal(os.environ.get("COSER_DEFAULT_OUTPUT_PRICE_PER_1K", "0.018"))
 DEFAULT_MIN_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
 DEFAULT_PREAUTH_CHARGE = Decimal(os.environ.get("COSER_DEFAULT_PREAUTH_CHARGE", "0.05"))
-DEFAULT_SERVICE_FEE_MULTIPLIER = Decimal(
-    os.environ.get("COSER_SERVICE_FEE_MULTIPLIER", "1.5")
-)
+DEFAULT_SERVICE_FEE_MULTIPLIER = Decimal(os.environ.get("COSER_SERVICE_FEE_MULTIPLIER", "1.5"))
 
 _WINDOWS: dict[str, list[float]] = {}
 
@@ -119,9 +113,7 @@ def default_model_prices(session: Session) -> tuple[Decimal, Decimal, Decimal]:
     )
 
 
-def model_price(
-    session: Session, provider: str, model: str
-) -> tuple[Decimal, Decimal, Decimal]:
+def model_price(session: Session, provider: str, model: str) -> tuple[Decimal, Decimal, Decimal]:
     row = (
         session.query(AiModelPrice)
         .filter(
@@ -198,18 +190,14 @@ def pricing_public_dict(
         "official_min_charge": official_min,
         "official_source": official_source,
         "official_synced_at": official_synced_at,
-        "suggested_input_per_1k": float(official_in * markup)
-        if official_in is not None
-        else None,
+        "suggested_input_per_1k": float(official_in * markup) if official_in is not None else None,
         "suggested_output_per_1k": (
             float(official_out * markup) if official_out is not None else None
         ),
     }
 
 
-def merge_catalog_pricing(
-    session: Session, providers_out: List[Dict[str, Any]]
-) -> None:
+def merge_catalog_pricing(session: Session, providers_out: List[Dict[str, Any]]) -> None:
     """就地写入 models_detailed[].pricing。"""
     priced: Dict[tuple[str, str], AiModelPrice] = {}
     for r in session.query(AiModelPrice).filter(AiModelPrice.enabled.is_(True)).all():
@@ -226,9 +214,7 @@ def merge_catalog_pricing(
             )
 
 
-def calculate_charge(
-    session: Session, provider: str, model: str, usage: UsageMeter
-) -> Decimal:
+def calculate_charge(session: Session, provider: str, model: str, usage: UsageMeter) -> Decimal:
     in_price, out_price, min_charge = model_price(session, provider, model)
     base_amount = (Decimal(usage.prompt_tokens) / Decimal(1000) * in_price) + (
         Decimal(usage.completion_tokens) / Decimal(1000) * out_price
@@ -244,9 +230,7 @@ def estimate_preauthorization(
     messages: Iterable[Dict[str, Any]],
     max_tokens: int | None,
 ) -> Decimal:
-    prompt_tokens = sum(
-        estimate_tokens_from_message_content(m.get("content")) for m in messages
-    )
+    prompt_tokens = sum(estimate_tokens_from_message_content(m.get("content")) for m in messages)
     completion_tokens = max_tokens or int(
         os.environ.get("COSER_DEFAULT_PREAUTH_COMPLETION_TOKENS", "1024")
     )
@@ -302,9 +286,7 @@ def enforce_risk_limits(
             int(os.environ.get("COSER_USER_LLM_RPM", "20")),
         )
         if ip:
-            _limit_key(
-                "llm_ip_minute", ip, 60, int(os.environ.get("COSER_IP_LLM_RPM", "60"))
-            )
+            _limit_key("llm_ip_minute", ip, 60, int(os.environ.get("COSER_IP_LLM_RPM", "60")))
         _limit_key(
             "llm_provider_minute",
             provider,
@@ -326,14 +308,10 @@ def enforce_risk_limits(
         raise
 
     blocked_words = [
-        x.strip()
-        for x in os.environ.get("COSER_BLOCKED_WORDS", "").split(",")
-        if x.strip()
+        x.strip() for x in os.environ.get("COSER_BLOCKED_WORDS", "").split(",") if x.strip()
     ]
     if blocked_words:
-        joined = "\n".join(
-            flatten_message_content_for_risk(m.get("content")) for m in messages
-        )
+        joined = "\n".join(flatten_message_content_for_risk(m.get("content")) for m in messages)
         hit = next((w for w in blocked_words if w and w in joined), "")
         if hit:
             session.add(
@@ -378,17 +356,13 @@ async def bill_internal_llm_floor(
     就保底最低，永不免费。返回实际计费金额。
     """
     min_charge = money(os.environ.get("COSER_DEFAULT_MIN_CHARGE", "0.02"))
-    charge = (
-        amount if (amount is not None and money(amount) > min_charge) else min_charge
-    )
+    charge = amount if (amount is not None and money(amount) > min_charge) else min_charge
     charge = money(charge)
 
     wallet = JavaWalletClient()
     if wallet.enabled:
         request_id = new_request_id()
-        hold = await wallet.preauthorize(
-            authorization, charge, label, label, request_id
-        )
+        hold = await wallet.preauthorize(authorization, charge, label, label, request_id)
         await wallet.settle(authorization, hold, charge, request_id)
         return charge
 
@@ -427,11 +401,7 @@ def save_success_log(
     if not conversation:
         title = (
             next(
-                (
-                    m.get("content", "").strip()
-                    for m in messages
-                    if m.get("role") == "user"
-                ),
+                (m.get("content", "").strip() for m in messages if m.get("role") == "user"),
                 "",
             )[:80]
             or "新对话"
@@ -445,11 +415,7 @@ def save_success_log(
     for m in messages:
         if m.get("role") in {"user", "assistant", "system"}:
             raw_c = m.get("content")
-            stored = (
-                raw_c
-                if isinstance(raw_c, str)
-                else redact_message_content_for_storage(raw_c)
-            )
+            stored = raw_c if isinstance(raw_c, str) else redact_message_content_for_storage(raw_c)
             session.add(
                 ChatMessage(
                     conversation_id=conversation.id,

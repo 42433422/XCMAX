@@ -54,9 +54,7 @@ class SuitePorts:
     write_ui: Callable[..., Any]
 
 
-def _cleanup_mod_pipeline_resources(
-    db: Session, resources: List[Dict[str, Any]]
-) -> None:
+def _cleanup_mod_pipeline_resources(db: Session, resources: List[Dict[str, Any]]) -> None:
     """做 Mod 全流程失败时尽量撤销已创建目录与数据库记录（尽力而为）。"""
     import shutil
 
@@ -72,12 +70,12 @@ def _cleanup_mod_pipeline_resources(
                         wid_int = int(wid)
                     except (TypeError, ValueError):
                         continue
-                    db.query(WorkflowEdge).filter(
-                        WorkflowEdge.workflow_id == wid_int
-                    ).delete(synchronize_session=False)
-                    db.query(WorkflowNode).filter(
-                        WorkflowNode.workflow_id == wid_int
-                    ).delete(synchronize_session=False)
+                    db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == wid_int).delete(
+                        synchronize_session=False
+                    )
+                    db.query(WorkflowNode).filter(WorkflowNode.workflow_id == wid_int).delete(
+                        synchronize_session=False
+                    )
                     wf = db.query(Workflow).filter(Workflow.id == wid_int).first()
                     if wf:
                         db.delete(wf)
@@ -108,9 +106,7 @@ async def _run_workbench_mod_pipeline(
     ports: SuitePorts,
 ):
     if not bool(payload.get("generate_full_suite", True)):
-        await ports.progress.set_step(
-            sid, "manifest", "running", "正在生成最小 manifest"
-        )
+        await ports.progress.set_step(sid, "manifest", "running", "正在生成最小 manifest")
         res = await ports.scaffold(
             db,
             user,
@@ -133,9 +129,7 @@ async def _run_workbench_mod_pipeline(
             "workflow_sandbox",
         ):
             await ports.progress.set_step(sid, skipped, "skipped", "最小 Mod 模式跳过")
-        await ports.progress.set_step(
-            sid, "mod_sandbox", "running", "正在做轻量 Mod 校验"
-        )
+        await ports.progress.set_step(sid, "mod_sandbox", "running", "正在做轻量 Mod 校验")
         mod_dir = Path(res["path"])
         warns = ports.compile_warnings(mod_dir)
         await ports.progress.set_step(
@@ -157,9 +151,7 @@ async def _run_workbench_mod_pipeline(
             },
         )
         return
-    await ports.progress.set_step(
-        sid, "manifest", "running", "正在生成结构化 Mod 蓝图 JSON"
-    )
+    await ports.progress.set_step(sid, "manifest", "running", "正在生成结构化 Mod 蓝图 JSON")
     gen = await ports.blueprint(
         db,
         user,
@@ -198,22 +190,17 @@ async def _run_workbench_mod_pipeline(
             generate_frontend=generate_frontend,
         )
         if not imported.get("ok"):
-            await ports.progress.fail(
-                sid, "repo", imported.get("error") or "Mod 仓库创建失败"
-            )
+            await ports.progress.fail(sid, "repo", imported.get("error") or "Mod 仓库创建失败")
             return
         blueprint = parsed.get("blueprint") or blueprint
         mod_dir = Path(imported["path"])
         _pipeline_resources.append({"type": "mod_dir", "path": str(mod_dir)})
         repo_done = f"已写入 {imported.get('id')}"
         if generate_frontend:
-            repo_done += (
-                "；含 Vue 定制页（frontend/routes.js、frontend/views/HomeView.vue）"
-                + (
-                    "，frontend_app 由模型省略已自动补齐"
-                    if imported.get("had_frontend_fallback")
-                    else ""
-                )
+            repo_done += "；含 Vue 定制页（frontend/routes.js、frontend/views/HomeView.vue）" + (
+                "，frontend_app 由模型省略已自动补齐"
+                if imported.get("had_frontend_fallback")
+                else ""
             )
         await ports.progress.set_step(sid, "repo", "done", repo_done)
         await ports.progress.set_step(sid, "industry", "running", "正在写入行业卡片")
@@ -269,9 +256,7 @@ async def _run_workbench_mod_pipeline(
                 mod_dir=mod_dir,
                 employees=employees_for_llm,
                 mod_id=str(manifest.get("id") or mod_dir.name),
-                mod_name=str(
-                    manifest.get("name") or manifest.get("id") or mod_dir.name
-                ),
+                mod_name=str(manifest.get("name") or manifest.get("id") or mod_dir.name),
                 mod_brief=brief,
                 industry_card=industry_card,
                 provider=gen.get("provider"),
@@ -286,9 +271,8 @@ async def _run_workbench_mod_pipeline(
             )
             return
         impl_errs = impl_result.get("errors") or []
-        impl_done_msg = (
-            f"已生成 {len(impl_result.get('generated') or [])} 份员工脚本"
-            + (f"，{len(impl_errs)} 份走兜底实现" if impl_errs else "")
+        impl_done_msg = f"已生成 {len(impl_result.get('generated') or [])} 份员工脚本" + (
+            f"，{len(impl_errs)} 份走兜底实现" if impl_errs else ""
         )
         await ports.progress.set_step(sid, "employee_impls", "done", impl_done_msg)
         await ports.progress.set_step(
@@ -319,9 +303,7 @@ async def _run_workbench_mod_pipeline(
         ]
         _pipeline_resources.append({"type": "workflow_ids", "ids": wf_ids})
         failed_workflows = [
-            x
-            for x in workflow_results
-            if isinstance(x, dict) and (not x.get("ok", True))
+            x for x in workflow_results if isinstance(x, dict) and (not x.get("ok", True))
         ]
         await ports.progress.set_step(
             sid,
@@ -334,9 +316,7 @@ async def _run_workbench_mod_pipeline(
             await ports.progress.set_step(sid, "register_packs", "error", _fw_msg[:480])
             await ports.progress.fail(sid, "register_packs", _fw_msg[:1000])
             return
-        await ports.progress.set_step(
-            sid, "register_packs", "running", "修复画布员工节点对齐…"
-        )
+        await ports.progress.set_step(sid, "register_packs", "running", "修复画布员工节点对齐…")
         graph_patch_result = ports.patch_employee_nodes(
             db, user, mod_dir=mod_dir, workflow_results=workflow_results
         )
@@ -360,12 +340,9 @@ async def _run_workbench_mod_pipeline(
         )
         reg_errs = register_result.get("errors") or []
         patches = graph_patch_result.get("patches") or []
-        patch_updates = sum(
-            (1 for p in patches if p.get("action") in ("update", "insert"))
-        )
-        reg_done_msg = (
-            f"画布修复 {patch_updates} 处；已登记 {len(register_result.get('registered') or [])} 个员工包"
-            + (f"，{len(reg_errs)} 个失败" if reg_errs else "")
+        patch_updates = sum((1 for p in patches if p.get("action") in ("update", "insert")))
+        reg_done_msg = f"画布修复 {patch_updates} 处；已登记 {len(register_result.get('registered') or [])} 个员工包" + (
+            f"，{len(reg_errs)} 个失败" if reg_errs else ""
         )
         await ports.progress.set_step(sid, "register_packs", "done", reg_done_msg)
         await ports.progress.set_step(sid, "api", "running", "正在汇总 OpenAPI 节点")
@@ -374,9 +351,7 @@ async def _run_workbench_mod_pipeline(
             "warnings": wf.get("api_warnings") or [],
         }
         api_msg = f"发现 {len(api_summary['nodes'])} 个 API 节点" + (
-            f"，{len(api_summary['warnings'])} 个待配置"
-            if api_summary["warnings"]
-            else ""
+            f"，{len(api_summary['warnings'])} 个待配置" if api_summary["warnings"] else ""
         )
         await ports.progress.set_step(sid, "api", "done", api_msg)
         await ports.progress.set_step(
@@ -397,9 +372,7 @@ async def _run_workbench_mod_pipeline(
         blueprint["employee_impl_result"] = impl_result
         blueprint["graph_patch_result"] = graph_patch_result
         blueprint["pack_register_result"] = register_result
-        vibe_heal_report = (
-            impl_result.get("vibe_heal") if isinstance(impl_result, dict) else None
-        )
+        vibe_heal_report = impl_result.get("vibe_heal") if isinstance(impl_result, dict) else None
         ports.write_blueprint(
             mod_dir,
             blueprint,

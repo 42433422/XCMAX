@@ -95,9 +95,7 @@ def _register_scheduler_phase_02():
         try:
             from modstore_server.daily_digest import run_daily_digest_email
 
-            result = _facade()._run_daily_pipeline_stage(
-                "daily_digest", run_daily_digest_email
-            )
+            result = _facade()._run_daily_pipeline_stage("daily_digest", run_daily_digest_email)
             if result and (not result.get("ok")):
                 _facade().logger.error(
                     "daily digest email job completed without delivery: reason=%s rows=%s",
@@ -115,9 +113,7 @@ def _register_scheduler_phase_02():
                     isinstance(result, dict)
                     and result.get("ok", True)
                     and (not result.get("skipped"))
-                    and _facade()._env_bool(
-                        "MODSTORE_DAILY_CHAIN_EVENT_TRIGGER_ENABLED", True
-                    )
+                    and _facade()._env_bool("MODSTORE_DAILY_CHAIN_EVENT_TRIGGER_ENABLED", True)
                 ):
                     record_id = result.get("record_id")
                     from modstore_server.daily_release_train_orchestrator_job import (
@@ -134,28 +130,18 @@ def _register_scheduler_phase_02():
                     _facade().logger.info(
                         "daily chain event: vibe_line record_id=%s ok=%s skipped=%s",
                         record_id,
-                        vibe_result.get("ok")
-                        if isinstance(vibe_result, dict)
-                        else None,
-                        vibe_result.get("skipped")
-                        if isinstance(vibe_result, dict)
-                        else None,
+                        vibe_result.get("ok") if isinstance(vibe_result, dict) else None,
+                        vibe_result.get("skipped") if isinstance(vibe_result, dict) else None,
                     )
                     release_result = _facade()._run_daily_pipeline_stage(
                         "release_train_orchestrator",
-                        lambda: run_daily_release_train_orchestrator_job(
-                            record_id=record_id
-                        ),
+                        lambda: run_daily_release_train_orchestrator_job(record_id=record_id),
                     )
                     _facade().logger.info(
                         "daily chain event: release_train record_id=%s ok=%s skipped=%s",
                         record_id,
-                        release_result.get("ok")
-                        if isinstance(release_result, dict)
-                        else None,
-                        release_result.get("skipped")
-                        if isinstance(release_result, dict)
-                        else None,
+                        release_result.get("ok") if isinstance(release_result, dict) else None,
+                        release_result.get("skipped") if isinstance(release_result, dict) else None,
                     )
         except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily digest email job failed")
@@ -263,9 +249,7 @@ def _register_scheduler_phase_02():
             misfire_grace_time=_facade()._business_misfire_grace_time(),
             coalesce=True,
             max_instances=1,
-            **_facade()._startup_recovery_kwargs(
-                "self_maintenance_loop_daily", delay_seconds=40
-            ),
+            **_facade()._startup_recovery_kwargs("self_maintenance_loop_daily", delay_seconds=40),
         )
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register self-maintenance loop cron failed")
@@ -336,9 +320,7 @@ def _register_scheduler_phase_02():
                 "daily release_train cron disabled; digest completion event is primary"
             )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception(
-            "register daily release_train orchestrator cron failed"
-        )
+        _facade().logger.exception("register daily release_train orchestrator cron failed")
 
     def _daily_backup_job() -> None:
         try:
@@ -383,9 +365,7 @@ def _register_scheduler_phase_02():
             _facade().logger.exception("dr recovery probe job failed")
 
     try:
-        probe_mins = int(
-            _facade().os.environ.get("MODSTORE_DR_PROBE_INTERVAL_MINUTES", "30")
-        )
+        probe_mins = int(_facade().os.environ.get("MODSTORE_DR_PROBE_INTERVAL_MINUTES", "30"))
     except ValueError:
         probe_mins = 30
     _facade()._scheduler.add_job(

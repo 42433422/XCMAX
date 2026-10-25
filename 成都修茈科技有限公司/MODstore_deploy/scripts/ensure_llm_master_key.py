@@ -44,7 +44,9 @@ def ensure_key(env_path: Path) -> bool:
             print(f"[OK] {KEY_NAME} 已配置")
             return False
         if value:
-            raise ValueError(f"{KEY_NAME} 已存在但不是有效 Fernet 密钥，请手动核对后再部署")
+            raise ValueError(
+                f"{KEY_NAME} 已存在但不是有效 Fernet 密钥，请手动核对后再部署"
+            )
         lines[idx] = f"{KEY_NAME}={_generate_fernet_key()}"
         _write_env(env_path, lines)
         print(f"[OK] 已生成并写入 {KEY_NAME}")

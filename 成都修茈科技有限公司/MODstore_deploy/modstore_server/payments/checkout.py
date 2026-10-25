@@ -30,10 +30,7 @@ def create_pay_order(
 ) -> dict[str, Any]:
     ua = (user_agent or "").lower()
     is_mobile = any(
-        (
-            k in ua
-            for k in ("mobile", "android", "iphone", "ipad", "ipod", "windows phone")
-        )
+        (k in ua for k in ("mobile", "android", "iphone", "ipad", "ipod", "windows phone"))
     )
     if is_mobile:
         logger.info("[alipay] 检测到移动端 UA，使用 wap.pay")
@@ -48,9 +45,7 @@ def create_pay_order(
         if res["ok"]:
             gateway = res.get("gateway", "")
             order_string = res.get("order_string", "")
-            redirect_url = (
-                f"{gateway}?{order_string}" if gateway and order_string else None
-            )
+            redirect_url = f"{gateway}?{order_string}" if gateway and order_string else None
             return {
                 "ok": True,
                 "type": "wap",

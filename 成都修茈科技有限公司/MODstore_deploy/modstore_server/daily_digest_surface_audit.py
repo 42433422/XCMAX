@@ -129,9 +129,7 @@ _STATIC_PW_PAGES: Tuple[Tuple[str, str], ...] = (
     # /developer.html 和 /excel-to-ai.html 已确认服务器返回首页内容（title/innerText 与 index.html 完全相同）→ 移除
 )
 
-_PW_MARKET_ENTRY_PAGES: Tuple[Tuple[str, str], ...] = (
-    ("软件下载", "/market/workbench/download"),
-)
+_PW_MARKET_ENTRY_PAGES: Tuple[Tuple[str, str], ...] = (("软件下载", "/market/workbench/download"),)
 _PW_MARKET_ADMIN_PAGES: Tuple[Tuple[str, str], ...] = (
     ("管理端·数据库管理", "/market/admin/database"),
     ("管理端·值班员工", "/market/admin/duty-employees"),
@@ -214,9 +212,7 @@ _PW_ACCOUNT_PAGES: Tuple[Tuple[str, str], ...] = (
 )
 
 # AI 考试独立 Tab（AiTestLayout 下 Tab 栏）
-_PW_AI_TEST_PAGES: Tuple[Tuple[str, str], ...] = (
-    ("AI员工考试", "/market/ai-test/exam"),
-)
+_PW_AI_TEST_PAGES: Tuple[Tuple[str, str], ...] = (("AI员工考试", "/market/ai-test/exam"),)
 
 # 工作台核心子页（WorkbenchView 顶栏有直接入口）
 _PW_WORKBENCH_PAGES: Tuple[Tuple[str, str], ...] = (

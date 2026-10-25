@@ -105,9 +105,7 @@ CLI_PROFILES: tuple[CliProfile, ...] = (
         env_path="MODSTORE_CODEX_CLI_PATH",
         candidates=(
             _home_path("~/.local/bin/codex"),
-            _home_path(
-                "~/XCMAX-runtime/harmony/command-line-tools/tool/node/bin/codex"
-            ),
+            _home_path("~/XCMAX-runtime/harmony/command-line-tools/tool/node/bin/codex"),
             "/opt/homebrew/bin/codex",
             "/usr/local/bin/codex",
             "/Applications/Codex.app/Contents/Resources/codex",
@@ -137,9 +135,7 @@ CLI_PROFILES: tuple[CliProfile, ...] = (
         candidates=(
             _home_path("~/.claude/local/claude"),
             _home_path("~/.local/bin/claude"),
-            _home_path(
-                "~/XCMAX-runtime/harmony/command-line-tools/tool/node/bin/claude"
-            ),
+            _home_path("~/XCMAX-runtime/harmony/command-line-tools/tool/node/bin/claude"),
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude",
         ),
@@ -185,9 +181,7 @@ def _safe_process_env() -> Dict[str, str]:
     # CLI 兜底使用各工具自身登录态，不向子进程传递平台或部署密钥。
     for name in list(env):
         upper = name.upper()
-        if any(
-            marker in upper for marker in ("API_KEY", "TOKEN", "SECRET", "PASSWORD")
-        ):
+        if any(marker in upper for marker in ("API_KEY", "TOKEN", "SECRET", "PASSWORD")):
             env.pop(name, None)
     env["CI"] = "1"
     env["NO_COLOR"] = "1"
@@ -227,9 +221,7 @@ def _version(cli_path: str) -> tuple[str, str]:
     safe_lines = [
         line.strip()
         for line in combined.splitlines()
-        if line.strip()
-        and "error=" not in line.lower()
-        and "warning:" not in line.lower()
+        if line.strip() and "error=" not in line.lower() and "warning:" not in line.lower()
     ]
     version = safe_lines[-1][:160] if safe_lines else ""
     error = "" if proc.returncode == 0 else f"version command exited {proc.returncode}"
@@ -308,9 +300,7 @@ def invoke_cli(
     prompt = _messages_prompt(messages)
     started = time.monotonic()
     try:
-        with tempfile.TemporaryDirectory(
-            prefix=f"xcagi-llm-cli-{profile.cli_id}-"
-        ) as tmp:
+        with tempfile.TemporaryDirectory(prefix=f"xcagi-llm-cli-{profile.cli_id}-") as tmp:
             output_path = Path(tmp) / "last-message.txt"
             command = profile.command_builder(cli_path, prompt, output_path, tmp)
             proc = _run(command, cwd=tmp, timeout=max(15.0, float(timeout)))
@@ -381,9 +371,7 @@ def inspect_cli(profile: CliProfile, *, live_probe: bool = False) -> Dict[str, A
         out["usable"] = bool(probe.get("ok") and "CLI_OK" in reply.upper())
         out["latency_ms"] = probe.get("latency_ms")
         out["probe_reply"] = reply[:80] if probe.get("ok") else ""
-        out["error"] = (
-            "" if out["usable"] else str(probe.get("error") or "probe_failed")[:500]
-        )
+        out["error"] = "" if out["usable"] else str(probe.get("error") or "probe_failed")[:500]
     return out
 
 
@@ -408,9 +396,7 @@ async def cli_status_catalog(*, live_probe: bool = False) -> Dict[str, Any]:
 
 
 def _fallback_order() -> List[CliProfile]:
-    raw = str(
-        os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ORDER") or "codex,claude,cursor,trae"
-    )
+    raw = str(os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ORDER") or "codex,claude,cursor,trae")
     ordered: List[CliProfile] = []
     seen = set()
     for cli_id in raw.split(","):
@@ -429,9 +415,7 @@ async def chat_via_cli_fallback(
     attempts: List[Dict[str, Any]] = []
     for profile in _fallback_order():
         if not find_cli_path(profile):
-            attempts.append(
-                {"cli": profile.cli_id, "ok": False, "error": "not_installed"}
-            )
+            attempts.append({"cli": profile.cli_id, "ok": False, "error": "not_installed"})
             continue
         result = await asyncio.to_thread(
             invoke_cli,

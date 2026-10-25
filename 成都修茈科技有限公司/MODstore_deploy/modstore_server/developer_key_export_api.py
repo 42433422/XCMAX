@@ -103,9 +103,7 @@ class ExportBundleBody(BaseModel):
         return out
 
 
-@router.post(
-    "/bundle", summary="加密导出 PAT 包到桌面公钥（须密码确认；默认轮换所选 Token）"
-)
+@router.post("/bundle", summary="加密导出 PAT 包到桌面公钥（须密码确认；默认轮换所选 Token）")
 def export_encrypted_bundle(
     body: ExportBundleBody,
     request: Request,
@@ -122,9 +120,7 @@ def export_encrypted_bundle(
     _rate_check(user.id)
 
     row_user = db.query(User).filter(User.id == user.id).first()
-    if not row_user or not verify_password(
-        body.current_password, row_user.password_hash
-    ):
+    if not row_user or not verify_password(body.current_password, row_user.password_hash):
         _audit(
             db,
             user_id=user.id,

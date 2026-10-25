@@ -101,9 +101,7 @@ def build_autonomy_decision_evidence(
         if row.decision != "allow":
             continue
         timestamp = audit._utc(row.occurred_at).timestamp() if row.occurred_at else 0.0
-        first_allow_at[row.action_id] = min(
-            first_allow_at.get(row.action_id, timestamp), timestamp
-        )
+        first_allow_at[row.action_id] = min(first_allow_at.get(row.action_id, timestamp), timestamp)
         previous = first_allow_contract.get(row.action_id)
         if previous is None or timestamp < previous[0]:
             first_allow_contract[row.action_id] = (
@@ -189,9 +187,7 @@ def build_autonomy_decision_evidence(
 
     total = len(action_ids)
     veto_count = len(veto_ids)
-    by_decision = Counter(
-        row.decision for row in decisions if row.decision in audit.DECISIONS
-    )
+    by_decision = Counter(row.decision for row in decisions if row.decision in audit.DECISIONS)
     items = [audit._serialize_row(row) for row in rows[:bounded_limit]]
     return {
         "schema": audit.SCHEMA_VERSION,

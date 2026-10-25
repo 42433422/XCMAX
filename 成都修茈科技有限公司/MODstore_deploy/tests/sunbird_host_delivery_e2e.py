@@ -116,7 +116,12 @@ def delivery(tmp_path, monkeypatch, request):
     with sessions.begin() as db:
         for uid in (101, 102):
             db.add(
-                User(id=uid, username=f"synthetic-{uid}", password_hash="unusable", is_admin=False)
+                User(
+                    id=uid,
+                    username=f"synthetic-{uid}",
+                    password_hash="unusable",
+                    is_admin=False,
+                )
             )
         db.add(CustomerServiceSession(id=1, user_id=101))
         db.add(
@@ -203,7 +208,8 @@ def delivery(tmp_path, monkeypatch, request):
         ):
             state["lose_running_response"] = False
             return JSONResponse(
-                {"detail": "synthetic response loss after server commit"}, status_code=503
+                {"detail": "synthetic response loss after server commit"},
+                status_code=503,
             )
         return response
 
@@ -331,7 +337,11 @@ def test_signed_sunbird_install_fresh_process_probe_and_lost_receipt(delivery):
     assert unknown["current"]["runtime_status"] == "running"
     assert unknown["current"]["runtime_process_id"] == unknown["process_id"]
     assert unknown["api_status"] == {"1": 200, "2": 403}
-    assert unknown["result"] == {"installed_reported": 1, "runtime_reported": 0, "pending": 1}
+    assert unknown["result"] == {
+        "installed_reported": 1,
+        "runtime_reported": 0,
+        "pending": 1,
+    }
     pending = ticket_state(delivery)
     assert pending["status"] == "processing" and pending["closed_at"] is None
     runtime = unknown["rows"][0]["runtime_payload"]
@@ -351,7 +361,11 @@ def test_signed_sunbird_install_fresh_process_probe_and_lost_receipt(delivery):
     completed = ticket_state(delivery)
     assert completed["status"] == "resolved" and completed["closed_at"]
     recovered = host(delivery, "retry")
-    assert recovered["result"] == {"installed_reported": 0, "runtime_reported": 1, "pending": 0}
+    assert recovered["result"] == {
+        "installed_reported": 0,
+        "runtime_reported": 1,
+        "pending": 0,
+    }
     assert recovered["rows"][0]["runtime_response"]["receipt"]["replayed"] is True
     assert recovered["rows"][0]["runtime_payload"] == runtime == lost["rows"][0]["runtime_payload"]
     final = ticket_state(delivery)
@@ -414,7 +428,11 @@ def test_actual_failed_sunbird_probe_returns_original_ticket_to_rework(delivery)
         assert events[0].status == "pending"  # No external dispatcher runs in this fixture.
     request_count = len(delivery.state["requests"])
     duplicate = host(delivery, "retry")
-    assert duplicate["result"] == {"installed_reported": 0, "runtime_reported": 0, "pending": 0}
+    assert duplicate["result"] == {
+        "installed_reported": 0,
+        "runtime_reported": 0,
+        "pending": 0,
+    }
     assert len(delivery.state["requests"]) == request_count
 
 
@@ -423,7 +441,11 @@ def test_uninitialized_workspace_waits_without_false_failure_receipt(delivery):
     host(delivery, "install", roster=False)
     pending = host(delivery, "retry", roster=False)
     assert pending["roster_exists"] is False
-    assert pending["result"] == {"installed_reported": 1, "runtime_reported": 0, "pending": 1}
+    assert pending["result"] == {
+        "installed_reported": 1,
+        "runtime_reported": 0,
+        "pending": 1,
+    }
     assert "runtime_payload" not in pending["rows"][0]
     final = ticket_state(delivery)
     assert final["status"] == "processing"
@@ -431,7 +453,9 @@ def test_uninitialized_workspace_waits_without_false_failure_receipt(delivery):
     assert not final["evidence"].get("automatic_rework_generations")
 
 
-def test_open_client_discovers_installs_refreshes_rights_and_retries_without_manual_page(delivery):
+def test_open_client_discovers_installs_refreshes_rights_and_retries_without_manual_page(
+    delivery,
+):
     from modstore_server.models import UserMod
 
     # A new runtime ID has no UserMod yet; discovery must use the accepted owner ticket.

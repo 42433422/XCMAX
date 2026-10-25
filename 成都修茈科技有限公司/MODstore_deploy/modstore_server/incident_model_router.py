@@ -32,9 +32,7 @@ def _route_from_env(prefix: str) -> Dict[str, str]:
 
 
 def _payload_scope(payload: Dict[str, Any]) -> str:
-    return (
-        str(payload.get("scope") or payload.get("source_scope") or "").strip().lower()
-    )
+    return str(payload.get("scope") or payload.get("source_scope") or "").strip().lower()
 
 
 def _model_route_for_incident(
@@ -93,11 +91,7 @@ _ROLE_BUDGETS = {
 
 def _bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
     try:
-        return (
-            max(minimum, min(maximum, int(value)))
-            if not isinstance(value, bool)
-            else default
-        )
+        return max(minimum, min(maximum, int(value))) if not isinstance(value, bool) else default
     except (TypeError, ValueError, OverflowError):
         return default
 
@@ -130,19 +124,11 @@ def route_for_incident(
 
     configured_effort = str(overrides.get("reasoning_effort") or effort)
     route["budget"] = {
-        "context_chars": _bounded_int(
-            overrides.get("context_chars"), context, 4000, 120000
-        ),
-        "handoff_chars": _bounded_int(
-            overrides.get("handoff_chars"), handoff, 1200, 12000
-        ),
-        "output_tokens": _bounded_int(
-            overrides.get("output_tokens"), output, 256, 32768
-        ),
+        "context_chars": _bounded_int(overrides.get("context_chars"), context, 4000, 120000),
+        "handoff_chars": _bounded_int(overrides.get("handoff_chars"), handoff, 1200, 12000),
+        "output_tokens": _bounded_int(overrides.get("output_tokens"), output, 256, 32768),
         "reasoning_effort": (
-            configured_effort
-            if configured_effort in {"low", "medium", "high"}
-            else effort
+            configured_effort if configured_effort in {"low", "medium", "high"} else effort
         ),
         "codex_model_candidates": _split_models(
             overrides.get("codex_model_candidates")
@@ -155,12 +141,7 @@ def route_for_incident(
 def bench_override_for_route(route: Dict[str, Any]) -> Optional[Tuple[str, str]]:
     provider = str(route.get("provider") or "").strip()
     model = str(route.get("model") or "").strip()
-    if (
-        not provider
-        or not model
-        or provider.lower() == "auto"
-        or model.lower() == "auto"
-    ):
+    if not provider or not model or provider.lower() == "auto" or model.lower() == "auto":
         return None
     return provider, model
 

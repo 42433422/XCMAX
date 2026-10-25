@@ -10,9 +10,7 @@ from typing import Any, Dict, List, Tuple
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
-def _parse_markdown_slides(
-    markdown: str, fallback_title: str
-) -> List[Tuple[str, List[str]]]:
+def _parse_markdown_slides(markdown: str, fallback_title: str) -> List[Tuple[str, List[str]]]:
     text = (markdown or "").replace("\r\n", "\n").replace("\r", "\n").strip()
     if not text:
         return [(fallback_title or "AI 生成 PPT", ["暂无内容"])]
@@ -24,9 +22,7 @@ def _parse_markdown_slides(
     def flush() -> None:
         nonlocal current_title, bullets
         if current_title or bullets:
-            slides.append(
-                (current_title or fallback_title or "页面", bullets[:8] or [" "])
-            )
+            slides.append((current_title or fallback_title or "页面", bullets[:8] or [" "]))
         current_title = ""
         bullets = []
 
@@ -87,25 +83,19 @@ def build_pptx_from_markdown(markdown: str, *, title: str = "AI 生成 PPT") -> 
         bg.solid()
         bg.fore_color.rgb = RGBColor(15, 23, 42)
 
-        badge = slide.shapes.add_textbox(
-            Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3)
-        )
+        badge = slide.shapes.add_textbox(Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3))
         badge.text_frame.text = f"{idx:02d}"
         badge.text_frame.paragraphs[0].font.size = Pt(11)
         badge.text_frame.paragraphs[0].font.color.rgb = RGBColor(125, 211, 252)
 
-        title_box = slide.shapes.add_textbox(
-            Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72)
-        )
+        title_box = slide.shapes.add_textbox(Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72))
         title_box.text_frame.text = slide_title
         title_p = title_box.text_frame.paragraphs[0]
         title_p.font.size = Pt(28)
         title_p.font.bold = True
         title_p.font.color.rgb = RGBColor(248, 250, 252)
 
-        body = slide.shapes.add_textbox(
-            Inches(1.0), Inches(1.95), Inches(11.1), Inches(4.8)
-        )
+        body = slide.shapes.add_textbox(Inches(1.0), Inches(1.95), Inches(11.1), Inches(4.8))
         tf = body.text_frame
         tf.word_wrap = True
         tf.clear()
@@ -139,18 +129,14 @@ def _normalize_presentation_slides(data: Dict[str, Any]) -> List[Dict[str, Any]]
     for idx, raw in enumerate(slides_in):
         if not isinstance(raw, dict):
             continue
-        title = str(raw.get("title") or raw.get("slide_title") or f"第 {idx + 1} 页")[
-            :80
-        ]
+        title = str(raw.get("title") or raw.get("slide_title") or f"第 {idx + 1} 页")[:80]
         bullets_in = raw.get("bullets")
         bullets: List[str] = []
         if isinstance(bullets_in, list):
             bullets = [str(b).strip()[:180] for b in bullets_in if str(b).strip()]
         body = str(raw.get("body_text") or "").strip()
         if body and not bullets:
-            bullets = [
-                line.strip()[:180] for line in body.splitlines() if line.strip()
-            ][:8]
+            bullets = [line.strip()[:180] for line in body.splitlines() if line.strip()][:8]
         notes = str(
             raw.get("notes_generated")
             or raw.get("speaker_notes")
@@ -166,9 +152,7 @@ def _normalize_presentation_slides(data: Dict[str, Any]) -> List[Dict[str, Any]]
                 "notes": notes,
             }
         )
-    return out[:30] or [
-        {"index": 1, "title": "演示文稿", "bullets": [" "], "notes": ""}
-    ]
+    return out[:30] or [{"index": 1, "title": "演示文稿", "bullets": [" "], "notes": ""}]
 
 
 def build_pptx_from_presentation_json(data: Dict[str, Any]) -> bytes:
@@ -205,9 +189,7 @@ def build_pptx_from_presentation_json(data: Dict[str, Any]) -> bytes:
     for idx, slide_data in enumerate(slides, start=1):
         slide_title = str(slide_data.get("title") or f"第 {idx} 页")
         bullet_lines = (
-            slide_data.get("bullets")
-            if isinstance(slide_data.get("bullets"), list)
-            else [" "]
+            slide_data.get("bullets") if isinstance(slide_data.get("bullets"), list) else [" "]
         )
         notes_text = str(slide_data.get("notes") or "").strip()
 
@@ -216,25 +198,19 @@ def build_pptx_from_presentation_json(data: Dict[str, Any]) -> bytes:
         bg.solid()
         bg.fore_color.rgb = RGBColor(15, 23, 42)
 
-        badge = slide.shapes.add_textbox(
-            Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3)
-        )
+        badge = slide.shapes.add_textbox(Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3))
         badge.text_frame.text = f"{idx:02d}"
         badge.text_frame.paragraphs[0].font.size = Pt(11)
         badge.text_frame.paragraphs[0].font.color.rgb = RGBColor(125, 211, 252)
 
-        title_box = slide.shapes.add_textbox(
-            Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72)
-        )
+        title_box = slide.shapes.add_textbox(Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72))
         title_box.text_frame.text = slide_title
         title_p = title_box.text_frame.paragraphs[0]
         title_p.font.size = Pt(28)
         title_p.font.bold = True
         title_p.font.color.rgb = RGBColor(248, 250, 252)
 
-        body = slide.shapes.add_textbox(
-            Inches(1.0), Inches(1.95), Inches(11.1), Inches(4.8)
-        )
+        body = slide.shapes.add_textbox(Inches(1.0), Inches(1.95), Inches(11.1), Inches(4.8))
         tf = body.text_frame
         tf.word_wrap = True
         tf.clear()

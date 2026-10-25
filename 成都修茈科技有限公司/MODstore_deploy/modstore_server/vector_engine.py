@@ -272,9 +272,7 @@ def query(
             {
                 "id": str(_id),
                 "document": str(docs[i]) if i < len(docs) else "",
-                "metadata": dict(metas[i])
-                if i < len(metas) and isinstance(metas[i], dict)
-                else {},
+                "metadata": dict(metas[i]) if i < len(metas) and isinstance(metas[i], dict) else {},
                 "distance": float(dists[i]) if i < len(dists) else 1.0,
             }
         )

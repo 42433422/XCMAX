@@ -79,9 +79,7 @@ def api_sign_checkout(body: SignCheckoutBody, user: User = Depends(_get_current_
     }
 
 
-async def _forward_checkout_to_java(
-    request: Request, body: CheckoutDTO
-) -> Response | None:
+async def _forward_checkout_to_java(request: Request, body: CheckoutDTO) -> Response | None:
     """PAYMENT_BACKEND=java 时由中间件转发；若请求仍落到本路由，则直连 Java，避免误用 Python 侧支付宝配置。"""
     gw = PaymentGatewayService()
     if gw.backend != "java":

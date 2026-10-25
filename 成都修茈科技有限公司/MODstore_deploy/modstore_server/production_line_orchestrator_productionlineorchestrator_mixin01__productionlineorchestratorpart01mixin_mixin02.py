@@ -39,9 +39,7 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
     ) -> _facade().Dict[str, _facade().Any]:
         from modstore_server.employee_orchestrator import plan_and_dispatch
 
-        strategy = (
-            _facade().os.environ.get("XCAGI_DEPLOY_STRATEGY", "canary").strip().lower()
-        )
+        strategy = _facade().os.environ.get("XCAGI_DEPLOY_STRATEGY", "canary").strip().lower()
         out = plan_and_dispatch(
             f"执行自动发布：GitHub Release+更新元数据+{strategy}策略部署到K8s；先部署到staging验证，再推进到production。",
             context,
@@ -150,9 +148,7 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
     ) -> _facade().Dict[str, _facade().Any]:
         step = self.get_step("O3")
         assert step
-        return self._skipped_step_result(
-            step, "报价与合同在 admin 审批门控后由业务系统完成"
-        )
+        return self._skipped_step_result(step, "报价与合同在 admin 审批门控后由业务系统完成")
 
     async def _step_payment(
         self, context: _facade().Dict[str, _facade().Any]
@@ -168,18 +164,14 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
     ) -> _facade().Dict[str, _facade().Any]:
         step = self.get_step("O5")
         assert step
-        return self._skipped_step_result(
-            step, "软件交付由 CI/CD 与 K8s 发布流水线自动完成"
-        )
+        return self._skipped_step_result(step, "软件交付由 CI/CD 与 K8s 发布流水线自动完成")
 
     async def _step_usage(
         self, context: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
         step = self.get_step("O6")
         assert step
-        return self._skipped_step_result(
-            step, "用户使用由 FHD 运行时与 NeuroBus 自动处理"
-        )
+        return self._skipped_step_result(step, "用户使用由 FHD 运行时与 NeuroBus 自动处理")
 
     async def _step_feedback(
         self, context: _facade().Dict[str, _facade().Any]
@@ -218,13 +210,9 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
         step = self.get_step("O10")
         assert step
         fhd = (
-            os.environ.get("XCAGI_FHD_INTERNAL_URL")
-            or os.environ.get("FHD_INTERNAL_URL")
-            or ""
+            os.environ.get("XCAGI_FHD_INTERNAL_URL") or os.environ.get("FHD_INTERNAL_URL") or ""
         ).rstrip("/")
-        auto = (
-            os.environ.get("RECONCILIATION_AUTO_CONFIRM") or ""
-        ).strip().lower() in (
+        auto = (os.environ.get("RECONCILIATION_AUTO_CONFIRM") or "").strip().lower() in (
             "1",
             "true",
             "yes",
@@ -240,9 +228,7 @@ class __ProductionLineOrchestratorPart01MixinPart02Mixin:
                 if resp.status_code < 400:
                     payload = (
                         resp.json()
-                        if resp.headers.get("content-type", "").startswith(
-                            "application/json"
-                        )
+                        if resp.headers.get("content-type", "").startswith("application/json")
                         else {}
                     )
                     inner = payload.get("data") if isinstance(payload, dict) else {}

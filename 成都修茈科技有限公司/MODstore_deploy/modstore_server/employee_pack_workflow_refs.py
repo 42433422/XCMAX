@@ -38,8 +38,7 @@ def collect_referenced_ids(manifest: Dict[str, Any]) -> Tuple[List[int], List[in
     if isinstance(script_attachment, dict):
         add(
             script_ids,
-            script_attachment.get("script_workflow_id")
-            or script_attachment.get("workflow_id"),
+            script_attachment.get("script_workflow_id") or script_attachment.get("workflow_id"),
         )
 
     workflow_attachment = manifest.get("workflow_attachment")

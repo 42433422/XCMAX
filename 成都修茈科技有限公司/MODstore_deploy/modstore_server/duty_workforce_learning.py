@@ -265,9 +265,7 @@ def load_open_workforce_gaps(
     return rows[-max(1, min(int(limit), 500)) :]
 
 
-def _append_gap_resolutions(
-    pairs: Iterable[Dict[str, Any]], path: Path
-) -> tuple[int, int]:
+def _append_gap_resolutions(pairs: Iterable[Dict[str, Any]], path: Path) -> tuple[int, int]:
     candidates, resolved, _planned = _gap_ledger_state(path)
     written = 0
     skipped = 0
@@ -321,9 +319,7 @@ def _append_gap_remediation_plans(path: Path) -> tuple[int, int]:
     return written, skipped
 
 
-def _record_pair(
-    pair: Dict[str, Any], *, existing: set[str]
-) -> Optional[Dict[str, Any]]:
+def _record_pair(pair: Dict[str, Any], *, existing: set[str]) -> Optional[Dict[str, Any]]:
     accepted = pair["accepted"]
     failures = list(pair["failures"])
     evidence = {

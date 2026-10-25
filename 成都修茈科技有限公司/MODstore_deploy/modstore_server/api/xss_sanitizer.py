@@ -137,11 +137,7 @@ class XSSSanitizerMiddleware:
             await self.app(scope, receive, send)
             return
 
-        if not (
-            path.startswith("/api/")
-            or path.startswith("/v1/")
-            or path.startswith("/admin/")
-        ):
+        if not (path.startswith("/api/") or path.startswith("/v1/") or path.startswith("/admin/")):
             await self.app(scope, receive, send)
             return
 
@@ -167,8 +163,6 @@ class XSSSanitizerMiddleware:
             return
 
         sanitized = _sanitize_value(parsed)
-        new_body = json.dumps(
-            sanitized, ensure_ascii=False, separators=(",", ":")
-        ).encode("utf-8")
+        new_body = json.dumps(sanitized, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
         await self.app(scope, _make_replay_receive(new_body, receive), send)

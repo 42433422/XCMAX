@@ -83,11 +83,7 @@ def verify_storage_pressure_action(
     started_at = _recorded_timestamp(record, "started_at")
     finished_at = _recorded_timestamp(record, "finished_at")
     allowed = utc(allowed_at)
-    if (
-        started_at is None
-        or finished_at is None
-        or not (started_at <= allowed <= finished_at)
-    ):
+    if started_at is None or finished_at is None or not (started_at <= allowed <= finished_at):
         return {"ok": False, "reason": "storage_run_timeline_mismatch"}
     if (
         record.get("schema_version") != "storage_pressure_self_heal.v1"
@@ -111,9 +107,7 @@ def verify_storage_pressure_action(
             return {"ok": False, "reason": "storage_failure_receipt_incomplete"}
     else:
         raw_retention = record.get("retention")
-        retention: dict[str, Any] = (
-            raw_retention if isinstance(raw_retention, dict) else {}
-        )
+        retention: dict[str, Any] = raw_retention if isinstance(raw_retention, dict) else {}
         raw_postcondition = record.get("postcondition")
         postcondition: dict[str, Any] = (
             raw_postcondition if isinstance(raw_postcondition, dict) else {}
@@ -121,15 +115,14 @@ def verify_storage_pressure_action(
         if (
             not retention
             or postcondition.get("logical_retention_verified") is not True
-            or postcondition.get("business_notification_scope_unchanged_by_contract")
-            is not True
+            or postcondition.get("business_notification_scope_unchanged_by_contract") is not True
         ):
             return {"ok": False, "reason": "storage_bounded_scope_receipt_incomplete"}
 
     digest = hashlib.sha256(
-        json.dumps(
-            record, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode("utf-8")
+        json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
     ).hexdigest()
     return {
         "ok": True,

@@ -20,9 +20,7 @@ def _path_from_scope(scope: Scope) -> str:
 
 
 def _is_swagger_like_path(path: str) -> bool:
-    return (
-        path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json"
-    )
+    return path.startswith("/docs") or path.startswith("/redoc") or path == "/openapi.json"
 
 
 class SecurityHeadersMiddleware:

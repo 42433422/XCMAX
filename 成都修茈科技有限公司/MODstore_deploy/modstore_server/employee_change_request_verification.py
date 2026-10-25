@@ -25,9 +25,7 @@ def _guard_under_workspace(workspace_root: str, path: str) -> Optional[str]:
         if root_path.is_symlink():
             return None
         root = str(root_path.parent.resolve() / root_path.name)
-        relative = os.path.relpath(
-            os.path.abspath(os.path.join(root_path, path)), root_path
-        )
+        relative = os.path.relpath(os.path.abspath(os.path.join(root_path, path)), root_path)
         resolved = os.path.abspath(os.path.join(root, relative))
         if os.path.commonpath((root, resolved)) != root:
             return None
@@ -39,16 +37,10 @@ def _guard_under_workspace(workspace_root: str, path: str) -> Optional[str]:
 
 
 @contextmanager
-def _workspace_fd(
-    root: str, path: str, *, write: bool = False, directory: bool = False
-):
+def _workspace_fd(root: str, path: str, *, write: bool = False, directory: bool = False):
     """Anchor every component to an open directory; never follow a replaced link."""
     target = _guard_under_workspace(root, path)
-    if (
-        target is None
-        or not hasattr(os, "O_NOFOLLOW")
-        or os.open not in os.supports_dir_fd
-    ):
+    if target is None or not hasattr(os, "O_NOFOLLOW") or os.open not in os.supports_dir_fd:
         raise OSError("workspace isolation unavailable or path rejected")
     parts = Path(target).parts[1:]
     fd = os.open(os.path.sep, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
@@ -270,11 +262,7 @@ def _request_post_apply_self_repair(
             emit_event=True,
             auto_dispatch=True,
         )
-        return (
-            out if isinstance(out, dict) else {"ok": False, "reason": "invalid result"}
-        )
+        return out if isinstance(out, dict) else {"ok": False, "reason": "invalid result"}
     except RECOVERABLE_ERRORS as exc:
-        logger.exception(
-            "request post-apply self repair failed for CR %d", change_request_id
-        )
+        logger.exception("request post-apply self repair failed for CR %d", change_request_id)
         return {"ok": False, "error": str(exc)[:500]}

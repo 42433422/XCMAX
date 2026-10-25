@@ -38,9 +38,7 @@ async def apply_nl_workflow_graph(
     """
     wf = (
         db.query(_facade().Workflow)
-        .filter(
-            _facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id
-        )
+        .filter(_facade().Workflow.id == workflow_id, _facade().Workflow.user_id == user.id)
         .first()
     )
     if not wf:
@@ -102,9 +100,7 @@ async def apply_nl_workflow_graph(
     data = _facade()._extract_json_object(str(result.get("content") or ""))
     if not data:
         return {"ok": False, "error": "模型返回无法解析为 JSON 对象"}
-    workflow_data = (
-        data.get("workflow") if isinstance(data.get("workflow"), dict) else data
-    )
+    workflow_data = data.get("workflow") if isinstance(data.get("workflow"), dict) else data
     raw_nodes = workflow_data.get("nodes") if isinstance(workflow_data, dict) else None
     raw_edges = workflow_data.get("edges") if isinstance(workflow_data, dict) else None
     if not isinstance(raw_nodes, list) or not isinstance(raw_edges, list):
@@ -136,9 +132,7 @@ async def apply_nl_workflow_graph(
         if employee_nodes:
             first_cfg = dict(employee_nodes[0].get("config") or {})
             first_cfg["employee_id"] = employee_pack_id
-            if target_employee_label and (
-                not str(employee_nodes[0].get("name") or "").strip()
-            ):
+            if target_employee_label and (not str(employee_nodes[0].get("name") or "").strip()):
                 employee_nodes[0]["name"] = str(target_employee_label)[:120]
             if not str(first_cfg.get("task") or "").strip():
                 first_cfg["task"] = str(brief or "根据工作流上下文完成员工任务")[:400]
@@ -194,9 +188,7 @@ async def apply_nl_workflow_graph(
             and str(p.get("temp_skill_id") or "") not in existing_skill_ids
         ]
         if missing_presets:
-            warnings.append(
-                f"LLM 漏掉 {len(missing_presets)} 个预置 ESkill 节点，已自动插入"
-            )
+            warnings.append(f"LLM 漏掉 {len(missing_presets)} 个预置 ESkill 节点，已自动插入")
             for idx_p, p in enumerate(missing_presets):
                 tid = f"preset_eskill_{p['eskill_id']}"
                 if tid in seen_tid:
@@ -228,20 +220,13 @@ async def apply_nl_workflow_graph(
             if f"preset_eskill_{p['eskill_id']}" in seen_tid
         ]
         if inserted_preset_tids:
-            start_tid = next(
-                (n["temp_id"] for n in nodes_in if n["node_type"] == "start"), ""
-            )
-            end_tid = next(
-                (n["temp_id"] for n in nodes_in if n["node_type"] == "end"), ""
-            )
+            start_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "start"), "")
+            end_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "end"), "")
             if start_tid and end_tid:
                 edges_in = [
                     e
                     for e in edges_in
-                    if not (
-                        e["source_temp_id"] == start_tid
-                        and e["target_temp_id"] == end_tid
-                    )
+                    if not (e["source_temp_id"] == start_tid and e["target_temp_id"] == end_tid)
                 ]
                 chain = inserted_preset_tids
                 prev = start_tid
@@ -276,17 +261,13 @@ async def apply_nl_workflow_graph(
             "error": f"图中须有且仅有一个 start 与一个 end（当前 start={len(starts)} end={len(ends)}）",
         }
     if employee_pack_id and any((n["temp_id"] == "target_employee" for n in nodes_in)):
-        start_tid = next(
-            (n["temp_id"] for n in nodes_in if n["node_type"] == "start"), ""
-        )
+        start_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "start"), "")
         end_tid = next((n["temp_id"] for n in nodes_in if n["node_type"] == "end"), "")
         if start_tid and end_tid:
             edges_in = [
                 e
                 for e in edges_in
-                if not (
-                    e["source_temp_id"] == start_tid and e["target_temp_id"] == end_tid
-                )
+                if not (e["source_temp_id"] == start_tid and e["target_temp_id"] == end_tid)
             ]
             if not any((e["target_temp_id"] == "target_employee" for e in edges_in)):
                 edges_in.append(
@@ -311,14 +292,11 @@ async def apply_nl_workflow_graph(
         warnings.append(f"检测到环路（示例）: {cycles[0][:240]}")
     unreachable = _facade()._unreachable_from_start_nl(nodes_in, edges_in)
     if unreachable:
-        warnings.append(
-            f"存在从 start 不可达的节点 temp_id（至多列 5 个）: {unreachable[:5]}"
-        )
+        warnings.append(f"存在从 start 不可达的节点 temp_id（至多列 5 个）: {unreachable[:5]}")
     skill_refs = {
         str(n.get("config", {}).get("temp_skill_id") or "")
         for n in nodes_in
-        if n.get("node_type") == "eskill"
-        and str(n.get("config", {}).get("temp_skill_id") or "")
+        if n.get("node_type") == "eskill" and str(n.get("config", {}).get("temp_skill_id") or "")
     }
     blueprint_refs = {str(bp.get("temp_skill_id") or "") for bp in skill_blueprints}
     preset_name_to_skill = {
@@ -340,15 +318,12 @@ async def apply_nl_workflow_graph(
                 continue
             cfg = n.get("config") if isinstance(n.get("config"), dict) else {}
             temp_skill_id = str(cfg.get("temp_skill_id") or "")
-            if (
-                temp_skill_id in blueprint_refs
-                or str(cfg.get("skill_id") or "").strip()
-            ):
+            if temp_skill_id in blueprint_refs or str(cfg.get("skill_id") or "").strip():
                 if temp_skill_id not in preset_alias_refs:
                     continue
-            preset_skill_id = preset_name_to_skill.get(
-                str(n.get("name") or "").strip()
-            ) or (sole_preset_skill_id if temp_skill_id in preset_alias_refs else "")
+            preset_skill_id = preset_name_to_skill.get(str(n.get("name") or "").strip()) or (
+                sole_preset_skill_id if temp_skill_id in preset_alias_refs else ""
+            )
             if preset_skill_id:
                 cfg.pop("temp_skill_id", None)
                 cfg["skill_id"] = preset_skill_id
@@ -360,9 +335,7 @@ async def apply_nl_workflow_graph(
                 for bp in skill_blueprints
                 if str(bp.get("temp_skill_id") or "") not in preset_alias_refs
             ]
-            blueprint_refs = {
-                str(bp.get("temp_skill_id") or "") for bp in skill_blueprints
-            }
+            blueprint_refs = {str(bp.get("temp_skill_id") or "") for bp in skill_blueprints}
     missing_refs = sorted((x for x in skill_refs if x and x not in blueprint_refs))
     if missing_refs:
         return {
@@ -379,9 +352,7 @@ async def apply_nl_workflow_graph(
     id_map: _facade().Dict[str, int] = {}
     temp_to_skill: _facade().Dict[str, int] = {}
     try:
-        temp_to_skill = _facade()._create_generated_skills(
-            db, user, skill_blueprints, warnings
-        )
+        temp_to_skill = _facade()._create_generated_skills(db, user, skill_blueprints, warnings)
         for n in nodes_in:
             cfg = dict(n["config"])
             if n["node_type"] == "eskill":

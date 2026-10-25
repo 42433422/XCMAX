@@ -97,9 +97,7 @@ def api_export_workflow_employee_pack(
         raise _facade().HTTPException(400, err or "manifest 无效")
     rows = data.get("workflow_employees")
     if not isinstance(rows, list) or workflow_index < 0 or workflow_index >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id,
         data,
@@ -135,9 +133,7 @@ async def api_register_workflow_employee_catalog(
     rows = data.get("workflow_employees")
     idx = int(body.workflow_index)
     if not isinstance(rows, list) or idx < 0 or idx >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     entry = rows[idx] if isinstance(rows[idx], dict) else {}
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id, data, entry, workflow_index=idx, mod_dir=d
@@ -163,9 +159,7 @@ async def api_register_workflow_employee_catalog(
         mod_id, data, entry, workflow_index=idx
     )
     if manifest_build_err or not manifest:
-        raise _facade().HTTPException(
-            400, manifest_build_err or "生成员工包 manifest 失败"
-        )
+        raise _facade().HTTPException(400, manifest_build_err or "生成员工包 manifest 失败")
     rec: _facade().Dict[str, _facade().Any] = {
         "id": pack_id,
         "name": str(manifest.get("name") or pack_id),
@@ -215,11 +209,7 @@ async def api_register_workflow_employee_catalog(
             # 必须在 catalog_items 置为公开，否则 /v1/packages 只认 is_public 行会把它隐藏。
             from modstore_server.models import CatalogItem as _CatalogItemRow
 
-            row = (
-                db.query(_CatalogItemRow)
-                .filter(_CatalogItemRow.pkg_id == pack_id)
-                .first()
-            )
+            row = db.query(_CatalogItemRow).filter(_CatalogItemRow.pkg_id == pack_id).first()
             if row is not None:
                 row.is_public = True
                 row.compliance_status = "approved"
@@ -287,10 +277,7 @@ def api_attach_catalog_employee(
     if not isinstance(rows, list):
         rows = []
     for row in rows:
-        if (
-            isinstance(row, dict)
-            and str(row.get("catalog_pkg_id") or "").strip() == pkg_id
-        ):
+        if isinstance(row, dict) and str(row.get("catalog_pkg_id") or "").strip() == pkg_id:
             raise _facade().HTTPException(400, "该员工包已在当前 Mod 中")
     taken = {
         str(x.get("id") or "").strip()
@@ -450,9 +437,7 @@ def api_patch_workflow_employee_nodes(
 
     sf = _facade().get_session_factory()
     with sf() as db:
-        out = patch_workflow_graph_employee_nodes(
-            db, user, mod_dir=d, workflow_results=[]
-        )
+        out = patch_workflow_graph_employee_nodes(db, user, mod_dir=d, workflow_results=[])
         readiness = analyze_mod_employee_readiness(db, user, d)
     return {
         "ok": bool(out.get("ok")),

@@ -92,9 +92,7 @@ class AllHandsCoordinator:
             }
         other_ids = [pid for pid, _ in pairs]
         sem = asyncio.Semaphore(max(1, min(concurrency, 4)))
-        stagger_sec = float(
-            os.environ.get("MODSTORE_ALL_HANDS_STAGGER_SEC", "1.0") or "1.0"
-        )
+        stagger_sec = float(os.environ.get("MODSTORE_ALL_HANDS_STAGGER_SEC", "1.0") or "1.0")
         stagger_lock = asyncio.Lock()
         stagger_seq = 0
         done_lock = asyncio.Lock()
@@ -136,9 +134,7 @@ class AllHandsCoordinator:
                     # Each employee is a plugin task boundary. Cancellation and
                     # process-level BaseException signals continue to propagate.
                     logger.exception("all_hands employee report failed pkg_id=%s", pid)
-                    row = self._error_row(
-                        pid, name, str(exc)[:800], [f"汇报失败：{exc}"[:200]]
-                    )
+                    row = self._error_row(pid, name, str(exc)[:800], [f"汇报失败：{exc}"[:200]])
             status = str(row.get("status") or "")
             async with done_lock:
                 done_count += 1
@@ -174,11 +170,7 @@ class AllHandsCoordinator:
             await asyncio.gather(*tasks, return_exceptions=True)
         ok_count = sum((1 for e in employees if e.get("status") == "ok"))
         error_count = sum(
-            (
-                1
-                for e in employees
-                if e.get("status") in {"error", "model_error", "empty"}
-            )
+            (1 for e in employees if e.get("status") in {"error", "model_error", "empty"})
         )
         summary = {
             "total": len(employees),

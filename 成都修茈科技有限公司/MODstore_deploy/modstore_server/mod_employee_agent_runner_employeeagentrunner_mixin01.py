@@ -22,9 +22,7 @@ class _EmployeeAgentRunnerPart01Mixin:
     ) -> None:
         self.ctx = ctx
         self.max_rounds = (
-            _facade()._default_max_rounds()
-            if max_rounds is None
-            else max(1, min(10, max_rounds))
+            _facade()._default_max_rounds() if max_rounds is None else max(1, min(10, max_rounds))
         )
         self.workspace_root = workspace_root or str(ctx.get("workspace_root") or ".")
 
@@ -33,9 +31,7 @@ class _EmployeeAgentRunnerPart01Mixin:
         task: str,
         *,
         system_prompt: str = "",
-        extra_history: _facade().Optional[
-            _facade().List[_facade().Dict[str, str]]
-        ] = None,
+        extra_history: _facade().Optional[_facade().List[_facade().Dict[str, str]]] = None,
     ) -> _facade().Dict[str, _facade().Any]:
         """Execute *task* using the ReAct loop.
 
@@ -124,15 +120,11 @@ class _EmployeeAgentRunnerPart01Mixin:
                 list(tool_input.keys())[:6],
             )
             result = await self._dispatch_tool(tool_name, tool_input)
-            tool_calls_log.append(
-                {"tool": tool_name, "input": tool_input, "result": result}
-            )
+            tool_calls_log.append({"tool": tool_name, "input": tool_input, "result": result})
             messages.append(
                 {
                     "role": "user",
-                    "content": _facade().json.dumps(
-                        {"tool_result": result}, ensure_ascii=False
-                    ),
+                    "content": _facade().json.dumps({"tool_result": result}, ensure_ascii=False),
                 }
             )
         messages.append(
@@ -142,11 +134,7 @@ class _EmployeeAgentRunnerPart01Mixin:
             }
         )
         resp = await self._call_llm(messages, max_tokens=1500)
-        parsed = (
-            _facade()._try_parse_json(resp.get("content") or "")
-            if resp.get("ok")
-            else None
-        )
+        parsed = _facade()._try_parse_json(resp.get("content") or "") if resp.get("ok") else None
         final = (
             (parsed or {}).get("answer")
             or resp.get("content")
@@ -164,10 +152,7 @@ class _EmployeeAgentRunnerPart01Mixin:
         self, name: str, input_data: _facade().Dict[str, _facade().Any]
     ) -> _facade().Dict[str, _facade().Any]:
         try:
-            if (
-                self.ctx.get("read_only")
-                and name not in _facade()._READ_ONLY_AGENT_TOOLS
-            ):
+            if self.ctx.get("read_only") and name not in _facade()._READ_ONLY_AGENT_TOOLS:
                 return {
                     "ok": False,
                     "blocked": True,
@@ -210,10 +195,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                     timeout_seconds=float(input_data.get("timeout_seconds") or 10.0),
                 )
             if name == "validate_xcemp_package":
-                if (
-                    "xcemp_validate" not in capabilities
-                    or employee_id != "self-checker"
-                ):
+                if "xcemp_validate" not in capabilities or employee_id != "self-checker":
                     return {
                         "ok": False,
                         "error": f"员工 {employee_id or '?'} 无权使用 {name}",
@@ -228,9 +210,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                     else {}
                 )
                 relative_path = str(
-                    input_data.get("xcemp_path")
-                    or employee_input.get("xcemp_path")
-                    or ""
+                    input_data.get("xcemp_path") or employee_input.get("xcemp_path") or ""
                 ).strip()
                 return await validate_xcemp_package(
                     self.workspace_root,
@@ -335,9 +315,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                 )
 
                 return await reconcile_llm_route_autopilot(
-                    triggered_by=str(
-                        input_data.get("reason") or "employee:llm-ops-engineer"
-                    ),
+                    triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),
                     force=False,
                 )
             if name == "switch_platform_llm_route":
@@ -356,9 +334,7 @@ class _EmployeeAgentRunnerPart01Mixin:
 
                 return await rollback_runtime_route(
                     actor="employee:llm-ops-engineer",
-                    reason=str(
-                        input_data.get("reason") or "employee requested rollback"
-                    ),
+                    reason=str(input_data.get("reason") or "employee requested rollback"),
                     force=False,
                 )
             wr = self.workspace_root
@@ -368,18 +344,14 @@ class _EmployeeAgentRunnerPart01Mixin:
             if name == "write_workspace_file":
                 path = str(input_data.get("path") or "")
                 content = str(input_data.get("content") or "")
-                return await _facade().tool_write_workspace_file(
-                    wr, path, content, self.ctx
-                )
+                return await _facade().tool_write_workspace_file(wr, path, content, self.ctx)
             if name == "list_workspace_dir":
                 path = str(input_data.get("path") or ".")
                 return await _facade().tool_list_workspace_dir(wr, path)
             if name == "scan_project_tree":
                 path = str(input_data.get("path") or ".")
                 max_files = int(input_data.get("max_files") or 200)
-                return await _facade().tool_scan_project_tree(
-                    wr, path, max_files=max_files
-                )
+                return await _facade().tool_scan_project_tree(wr, path, max_files=max_files)
             if name == "identify_file_types":
                 path = str(input_data.get("path") or ".")
                 return await _facade().tool_identify_file_types(wr, path)

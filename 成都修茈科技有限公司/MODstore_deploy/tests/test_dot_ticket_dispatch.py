@@ -21,7 +21,8 @@ DOT_ACCOUNT = re.compile(
     re.I,
 )
 DOT_REPORT_ONLY = re.compile(
-    r"(report_only\s*[:=]\s*(true|1)|MODSTORE_REPORT_ONLY=1|仅出报告|只出报告|只读)", re.I
+    r"(report_only\s*[:=]\s*(true|1)|MODSTORE_REPORT_ONLY=1|仅出报告|只出报告|只读)",
+    re.I,
 )
 
 TICKET_NO = "CS2026101904220000070012"
@@ -181,7 +182,17 @@ def test_redaction_covers_every_sensitive_field():
     without_ticket_no = exported.replace(TICKET_NO, "")
     for fragment in CUSTOMER_FRAGMENTS:
         assert fragment not in without_ticket_no, fragment
-    for kind in ("手机号", "电话", "邮箱", "身份证", "银行卡", "地址", "内部ID", "凭据", "IP"):
+    for kind in (
+        "手机号",
+        "电话",
+        "邮箱",
+        "身份证",
+        "银行卡",
+        "地址",
+        "内部ID",
+        "凭据",
+        "IP",
+    ):
         assert f"[已遮蔽:{kind}]" in exported, kind
     assert "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo" not in exported
     assert "inst-secret-77" not in exported
@@ -207,7 +218,9 @@ def test_non_dolt_and_non_ticket_payloads_unchanged():
     for tool in ("grok_bot", "codex", "cursor", "claude_code", "trae", ""):
         assert dot.prepare_dolt_ticket_payload(req, dict(payload), tool) == payload
     maint = mod._build_request(
-        task="self maintenance", input_data={"event_type": "self_maintenance"}, employee_id="x"
+        task="self maintenance",
+        input_data={"event_type": "self_maintenance"},
+        employee_id="x",
     )
     plain = {"title": "self maintenance", "prompt": "p", "report_only": False}
     assert dot.prepare_dolt_ticket_payload(maint, dict(plain), "dolt") == plain
@@ -324,7 +337,10 @@ def test_mode_follows_triage_intervention():
     assert "[dot:report_only]" in out["title"] and out["report_only"] is True
 
     regraded = _req(
-        _incident(intent="general", triage_intervention={"intent": "product_issue", "by": "dot"})
+        _incident(
+            intent="general",
+            triage_intervention={"intent": "product_issue", "by": "dot"},
+        )
     )
     out = dot.prepare_dolt_ticket_payload(regraded, _payload(regraded), "dolt")
     assert "[dot:code_fix]" in out["title"] and "intent=product_issue" in out["prompt"]

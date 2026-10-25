@@ -133,9 +133,7 @@ def default_backends(
             out.append(EnvBackend(environ))
         elif name == "file":
             if not file_dir:
-                raise CredentialError(
-                    "选用 file 后端但未配置 MODSTORE_CREDENTIAL_FILE_DIR"
-                )
+                raise CredentialError("选用 file 后端但未配置 MODSTORE_CREDENTIAL_FILE_DIR")
             out.append(FileBackend(file_dir))
         elif name in {"vault", "kms"}:
             out.append(ReservedBackend(name))
@@ -182,9 +180,7 @@ def write_audit(event: str, **fields: Any) -> Dict[str, Any]:
     for key, value in fields.items():
         if "value" in key.lower() or value is None:
             continue
-        record[key] = (
-            value if isinstance(value, (int, float, bool, list)) else str(value)[:300]
-        )
+        record[key] = value if isinstance(value, (int, float, bool, list)) else str(value)[:300]
     try:
         path = audit_log_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -282,17 +278,11 @@ class TaskGrant:
     def prompt_line(self) -> str:
         """写进派单提示词的授权引用：只有编号、任务、作用域、过期时间，没有凭据值。"""
 
-        return (
-            GRANT_PROMPT_KEY + "=" + json.dumps(self.payload(), separators=(",", ":"))
-        )
+        return GRANT_PROMPT_KEY + "=" + json.dumps(self.payload(), separators=(",", ":"))
 
     def token(self) -> str:
-        body = json.dumps(
-            self.payload(), separators=(",", ":"), sort_keys=True
-        ).encode()
-        return (
-            base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + self.signature
-        )
+        body = json.dumps(self.payload(), separators=(",", ":"), sort_keys=True).encode()
+        return base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + self.signature
 
 
 def _signing_key() -> bytes:
@@ -306,16 +296,12 @@ def _sign(payload: Mapping[str, Any]) -> str:
 
 
 def _ttl(ttl_seconds: Optional[int]) -> int:
-    raw = ttl_seconds or int(
-        os.environ.get("MODSTORE_CREDENTIAL_GRANT_TTL_SECONDS") or 3600
-    )
+    raw = ttl_seconds or int(os.environ.get("MODSTORE_CREDENTIAL_GRANT_TTL_SECONDS") or 3600)
     return max(60, min(int(raw), 86400))
 
 
 def default_grant_scopes() -> Tuple[str, ...]:
-    raw = os.environ.get(
-        "MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY,CODEX_API_KEY"
-    )
+    raw = os.environ.get("MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY,CODEX_API_KEY")
     return tuple(s.strip() for s in raw.split(",") if _NAME_RE.match(s.strip()))
 
 
@@ -379,11 +365,7 @@ def verify_grant_token(token: str, now: Optional[float] = None) -> TaskGrant:
 def _load_revocations() -> Dict[str, float]:
     try:
         data = json.loads(_revocation_path().read_text(encoding="utf-8"))
-        return (
-            {str(k): float(v) for k, v in data.items()}
-            if isinstance(data, dict)
-            else {}
-        )
+        return {str(k): float(v) for k, v in data.items()} if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
 

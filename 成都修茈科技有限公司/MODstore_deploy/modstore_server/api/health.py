@@ -28,16 +28,12 @@ def _background_jobs_enabled() -> bool:
 def _scheduler_status_url() -> str:
     """Return the private scheduler endpoint, allowing an explicit ops override."""
 
-    return os.environ.get(
-        "MODSTORE_SCHEDULER_STATUS_URL", _SCHEDULER_STATUS_URL
-    ).strip()
+    return os.environ.get("MODSTORE_SCHEDULER_STATUS_URL", _SCHEDULER_STATUS_URL).strip()
 
 
 def _scheduler_status_timeout_seconds() -> float:
     try:
-        return max(
-            0.1, float(os.environ.get("MODSTORE_SCHEDULER_STATUS_TIMEOUT_SECONDS", "1"))
-        )
+        return max(0.1, float(os.environ.get("MODSTORE_SCHEDULER_STATUS_TIMEOUT_SECONDS", "1")))
     except ValueError:
         return _SCHEDULER_STATUS_TIMEOUT_SECONDS
 
@@ -60,10 +56,10 @@ def _scheduler_process_status() -> bool:
             return cached_status
 
     try:
-        request = Request(
-            _scheduler_status_url(), headers={"Accept": "application/json"}
-        )
-        with urlopen(request, timeout=_scheduler_status_timeout_seconds()) as response:  # nosec B310
+        request = Request(_scheduler_status_url(), headers={"Accept": "application/json"})
+        with urlopen(
+            request, timeout=_scheduler_status_timeout_seconds()
+        ) as response:  # nosec B310
             payload = json.loads(response.read())
         data = payload.get("data") if isinstance(payload, dict) else None
         status = bool(

@@ -51,7 +51,10 @@ def test_chat_dispatch_client_raises_on_failure(monkeypatch):
 
 
 def test_ensure_within_workspace_rejects_traversal(tmp_path, monkeypatch):
-    from modstore_server.integrations.vibe_adapter import VibePathError, ensure_within_workspace
+    from modstore_server.integrations.vibe_adapter import (
+        VibePathError,
+        ensure_within_workspace,
+    )
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -113,7 +116,10 @@ def test_get_vibe_coder_caches_per_user_provider(monkeypatch, tmp_path):
 
 
 def test_get_vibe_coder_requires_provider_model(monkeypatch):
-    from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
+    from modstore_server.integrations.vibe_adapter import (
+        VibeIntegrationError,
+        get_vibe_coder,
+    )
 
     with pytest.raises(VibeIntegrationError):
         get_vibe_coder(user_id=1, provider="", model="gpt-4o-mini")

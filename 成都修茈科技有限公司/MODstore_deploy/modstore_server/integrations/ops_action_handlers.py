@@ -40,9 +40,7 @@ def _path_hits_user_data(norm: str) -> bool:
     return False
 
 
-def _assert_shell_paths_safe(
-    command_id: str, args: Mapping[str, Any], cwd: Optional[str]
-) -> None:
+def _assert_shell_paths_safe(command_id: str, args: Mapping[str, Any], cwd: Optional[str]) -> None:
     """禁止 shell 命令触及用户数据目录（与 sync tar exclude 对齐）。"""
     blobs: List[str] = []
     if cwd:
@@ -55,9 +53,7 @@ def _assert_shell_paths_safe(
             raise ValueError(f"refused path (user-data guard): {b[:200]!r}")
 
 
-_BRANCH_SAFE = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/"
-)
+_BRANCH_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/")
 
 
 def _sanitize_branch(name: str) -> str:
@@ -256,9 +252,7 @@ def _write_audit(
 def _build_local_sync_argv() -> List[str]:
     """Windows: sync-modstore-to-server.ps1；Linux: 依赖 MODSTORE_SYNC_DEPLOY_BASH（sh -c 一行）。"""
     if os.name == "nt":
-        ps1 = (
-            repo_root() / "MODstore_deploy" / "scripts" / "sync-modstore-to-server.ps1"
-        )
+        ps1 = repo_root() / "MODstore_deploy" / "scripts" / "sync-modstore-to-server.ps1"
         if not ps1.is_file():
             raise FileNotFoundError(f"sync script missing: {ps1}")
         return [

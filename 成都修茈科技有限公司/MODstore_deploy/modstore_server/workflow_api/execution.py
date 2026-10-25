@@ -64,9 +64,7 @@ async def execute_workflow(
         require_llm_credit(qdb, user.id, 1)
     failure_message: Optional[str] = None
     try:
-        output_data = engine_execute(
-            workflow_id, body.input_data or {}, user_id=user.id
-        )
+        output_data = engine_execute(workflow_id, body.input_data or {}, user_id=user.id)
         execution.status = "completed"
         execution.output_data = json.dumps(output_data)
         execution.completed_at = datetime.now(UTC)
@@ -94,9 +92,7 @@ async def execute_workflow(
         failure_message = str(e)
         execution.status = "failed"
         execution.error_message = failure_message
-        execution.output_data = json.dumps(
-            getattr(e, "evidence", {}), ensure_ascii=False
-        )
+        execution.output_data = json.dumps(getattr(e, "evidence", {}), ensure_ascii=False)
         execution.completed_at = datetime.now(UTC)
     db.commit()
 
@@ -107,11 +103,7 @@ async def execute_workflow(
             WORKFLOW_EXECUTION_FAILED,
         )
 
-        event_name = (
-            WORKFLOW_EXECUTION_FAILED
-            if failure_message
-            else WORKFLOW_EXECUTION_COMPLETED
-        )
+        event_name = WORKFLOW_EXECUTION_FAILED if failure_message else WORKFLOW_EXECUTION_COMPLETED
         webhook_dispatcher.publish_event(
             event_name,
             aggregate_id=str(execution.id),
@@ -141,9 +133,7 @@ async def execute_workflow(
         "input_data": json.loads(execution.input_data),
         "output_data": json.loads(execution.output_data or "{}"),
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat()
-        if execution.completed_at
-        else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
     }
 
 
@@ -215,7 +205,5 @@ async def get_execution_detail(
         "output_data": json.loads(execution.output_data or "{}"),
         "error_message": execution.error_message,
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat()
-        if execution.completed_at
-        else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
     }

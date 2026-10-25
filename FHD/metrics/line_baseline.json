@@ -1,5 +1,5 @@
 {
-  "lines": 2337309,
+  "lines": 2329476,
   "updated": "2026-10-25",
-  "note": "debt19 #2631：mods_ssot NO_XCAGI_EXPORT + employee-roster/product-lines 生成物对齐后微调基线"
+  "note": "debt19 #2631：workflow.types shim + MODstore black 格式化"
 }

@@ -59,15 +59,11 @@ async def employee_save_impl(
         raise HTTPException(400, "manifest 中缺少 identity.id 或顶层 id 字段")
     pack_id = _re.sub("[^a-z0-9._-]", "-", raw_id.lower()).strip("-")[:48]
     if not pack_id:
-        raise HTTPException(
-            400, f"无法从 employee_id/manifest.id 生成合法 pack_id: {raw_id!r}"
-        )
+        raise HTTPException(400, f"无法从 employee_id/manifest.id 生成合法 pack_id: {raw_id!r}")
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info(
-            "employee_save: manifest validation warnings count=%s", len(registry_errs)
-        )
+        _LOG.info("employee_save: manifest validation warnings count=%s", len(registry_errs))
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:
@@ -106,11 +102,7 @@ async def employee_save_impl(
     ).strip()
     _wants_word = manifest_expects_word_runtime(mf, brief=_brief_for_pack)
     _has_runtime = pack_dir.is_dir() and pack_has_direct_python_runtime(pack_dir)
-    if (
-        _wants_word
-        and "direct_python" in manifest_actions_handlers(mf)
-        and (not _has_runtime)
-    ):
+    if _wants_word and "direct_python" in manifest_actions_handlers(mf) and (not _has_runtime):
         raise HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         mf = persist_manifest_to_pack_dir(pack_dir, mf, brief=_brief_for_pack)
@@ -135,9 +127,7 @@ async def employee_save_impl(
                         if not member.endswith("/"):
                             dest.write_bytes(zf.read(member))
         except RECOVERABLE_ERRORS as exc:
-            _LOG.warning(
-                "employee_save: zip extraction failed error_type=%s", type(exc).__name__
-            )
+            _LOG.warning("employee_save: zip extraction failed error_type=%s", type(exc).__name__)
         finally:
             try:
                 tmp_zip_path.unlink(missing_ok=True)
@@ -184,11 +174,7 @@ async def employee_save_impl(
                 )
                 panel_summary = ""
                 wf_rows = mf.get("workflow_employees") or []
-                if (
-                    isinstance(wf_rows, list)
-                    and wf_rows
-                    and isinstance(wf_rows[0], dict)
-                ):
+                if isinstance(wf_rows, list) and wf_rows and isinstance(wf_rows[0], dict):
                     panel_summary = str(wf_rows[0].get("panel_summary") or "")
                 sf_sk = ports.database()
                 with sf_sk() as db_sk:
@@ -225,9 +211,7 @@ async def employee_save_impl(
                         matched = name_to_spec.get(sk_dict.get("name") or "")
                         if matched:
                             sk_dict["eskill_id"] = matched["eskill_id"]
-                            sk_dict["vibe_skill_id"] = (
-                                matched.get("vibe_skill_id") or ""
-                            )
+                            sk_dict["vibe_skill_id"] = matched.get("vibe_skill_id") or ""
                         updated.append(sk_dict)
                     existing_names = {s.get("name") or "" for s in updated}
                     for spec in specs:
@@ -260,12 +244,8 @@ async def employee_save_impl(
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(500, f"员工包打包失败: {exc}") from exc
-    version = str(
-        mf.get("version") or (mf.get("identity") or {}).get("version") or "1.0.0"
-    ).strip()
-    name = str(
-        mf.get("name") or (mf.get("identity") or {}).get("name") or pack_id
-    ).strip()
+    version = str(mf.get("version") or (mf.get("identity") or {}).get("version") or "1.0.0").strip()
+    name = str(mf.get("name") or (mf.get("identity") or {}).get("name") or pack_id).strip()
     rec = {
         "id": pack_id,
         "name": name,
@@ -274,9 +254,7 @@ async def employee_save_impl(
             mf.get("description") or (mf.get("identity") or {}).get("description") or ""
         ),
         "artifact": "employee_pack",
-        "industry": str(
-            mf.get("industry") or (mf.get("commerce") or {}).get("industry") or "通用"
-        ),
+        "industry": str(mf.get("industry") or (mf.get("commerce") or {}).get("industry") or "通用"),
         "release_channel": "stable",
         "commerce": mf.get("commerce") or {"mode": "free", "price": 0},
         "license": {"type": "personal", "verify_url": None},
@@ -299,9 +277,7 @@ async def employee_save_impl(
     sf = ports.database()
     with sf() as db:
         try:
-            upsert_catalog_item_from_xc_package_dict(
-                db, saved, author_id=cast(int, user.id)
-            )
+            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=cast(int, user.id))
             store_catalog_row(
                 db,
                 pack_id=pack_id,
@@ -362,9 +338,7 @@ async def employee_export(
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info(
-            "employee_export: manifest validation warnings count=%s", len(registry_errs)
-        )
+        _LOG.info("employee_export: manifest validation warnings count=%s", len(registry_errs))
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:

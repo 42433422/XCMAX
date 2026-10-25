@@ -128,8 +128,7 @@ def is_ppt_full_read(brief: str) -> bool:
 def ppt_read_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / PPT 全量读取",
-        "goal": (brief or "").strip().splitlines()[0][:200]
-        or "上传 PPT，全量解析并生成演讲备注",
+        "goal": (brief or "").strip().splitlines()[0][:200] or "上传 PPT，全量解析并生成演讲备注",
         "input": "用户上传的 .pptx 文件",
         "output": "outputs/presentation_full.json + speaker_notes.md + outputs/images/",
         "output_schema": {
@@ -154,8 +153,7 @@ def ppt_read_structured_spec(brief: str) -> Dict[str, Any]:
 def ppt_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / PPT 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200]
-        or "LLM 编排 + OOXML 写出 output.pptx",
+        "goal": (brief or "").strip().splitlines()[0][:200] or "LLM 编排 + OOXML 写出 output.pptx",
         "input": "presentation_full v2 JSON / user_query / .txt；可选 template .pptx（execute-file template_file）",
         "output": "outputs/output.pptx + outputs/ppt_edit_plan.json",
         "output_schema": {
@@ -338,8 +336,7 @@ def ppt_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "只能读 inputs/、写 outputs/；VLM/备注通过 ctx.call_llm。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": f"{merged or clean}\n\nSkill：上传 pptx → JSON 中介 + 演讲备注 + 图片 VLM。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -349,9 +346,7 @@ def ppt_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
     }
 
 
-def ppt_generate_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def ppt_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     checklist = payload.get("execution_checklist")
@@ -375,8 +370,7 @@ def ppt_generate_orchestration_plan(
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "direct_python 读 JSON 写 pptx。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": f"{merged or clean}\n\nSkill：JSON → output.pptx。",
         "acceptance": [
             "输出 output.pptx",
@@ -385,9 +379,7 @@ def ppt_generate_orchestration_plan(
     }
 
 
-def resolve_ppt_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def resolve_ppt_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     if is_ppt_generate(brief):
         return ppt_generate_orchestration_plan(brief, payload)
     return ppt_read_orchestration_plan(brief, payload)

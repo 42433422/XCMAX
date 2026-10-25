@@ -47,10 +47,7 @@ def execute_generated_operation(
             method = (operation.method or "GET").upper()
             try:
                 spec_params = (
-                    runtime.json.loads(operation.request_schema or "{}").get(
-                        "parameters"
-                    )
-                    or []
+                    runtime.json.loads(operation.request_schema or "{}").get("parameters") or []
                 )
             except (TypeError, ValueError):
                 spec_params = []
@@ -61,9 +58,7 @@ def execute_generated_operation(
             path_params, query_params, header_params = runtime._split_params(
                 mutable_params, spec_params
             )
-            applied_path = runtime._apply_path_params(
-                operation.path, path_params, spec_params
-            )
+            applied_path = runtime._apply_path_params(operation.path, path_params, spec_params)
             full_url = runtime._resolve_full_url(
                 connector.base_url, applied_path, override=base_url_override
             )
@@ -122,9 +117,7 @@ def execute_generated_operation(
             response_headers = {str(k): str(v) for k, v in response.headers.items()}
             raw_bytes = response.content[: runtime._MAX_RESPONSE_BYTES]
             try:
-                text_body = raw_bytes.decode(
-                    response.encoding or "utf-8", errors="replace"
-                )
+                text_body = raw_bytes.decode(response.encoding or "utf-8", errors="replace")
             except (LookupError, AttributeError):
                 text_body = raw_bytes.decode("utf-8", errors="replace")
             content_type = (response.headers.get("content-type") or "").lower()

@@ -27,9 +27,7 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRO
 
 logger = logging.getLogger(__name__)
 
-MAX_HANDOFF_DEPTH = max(
-    1, int(os.environ.get("MODSTORE_HANDOFF_MAX_DEPTH", "4") or "4")
-)
+MAX_HANDOFF_DEPTH = max(1, int(os.environ.get("MODSTORE_HANDOFF_MAX_DEPTH", "4") or "4"))
 """每条原始任务最多链式 handoff N 次（默认 4）。"""
 
 
@@ -42,9 +40,7 @@ class HandoffDirective:
     priority: int = 5
 
 
-def _coerce_directive(
-    raw: Any, *, fallback_brief: str = ""
-) -> Optional[HandoffDirective]:
+def _coerce_directive(raw: Any, *, fallback_brief: str = "") -> Optional[HandoffDirective]:
     if not raw:
         return None
     if isinstance(raw, str):
@@ -53,10 +49,7 @@ def _coerce_directive(
     if not isinstance(raw, dict):
         return None
     eid = str(
-        raw.get("to_employee_id")
-        or raw.get("handoff_to")
-        or raw.get("employee_id")
-        or ""
+        raw.get("to_employee_id") or raw.get("handoff_to") or raw.get("employee_id") or ""
     ).strip()
     if not eid:
         return None
@@ -142,18 +135,14 @@ def build_followup_subtasks(
     from modstore_server.task_router import SubTask
 
     if depth >= MAX_HANDOFF_DEPTH:
-        logger.info(
-            "handoff: depth limit reached (%s), skipping further handoffs", depth
-        )
+        logger.info("handoff: depth limit reached (%s), skipping further handoffs", depth)
         return []
 
     new_subtasks: List[SubTask] = []
     for result in layer_results:
         if not result or not result.get("ok", False):
             continue
-        outcome = (
-            result.get("result") if isinstance(result.get("result"), dict) else result
-        )
+        outcome = result.get("result") if isinstance(result.get("result"), dict) else result
         directives = extract_handoff_directives(outcome, fallback_brief=fallback_brief)
         if not directives:
             continue

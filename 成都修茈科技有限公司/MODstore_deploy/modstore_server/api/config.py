@@ -64,9 +64,7 @@ def api_export_fhd_shell_mods(
 ):
     fhd = library_paths.fhd_repo_root()
     if not fhd.is_dir():
-        raise HTTPException(
-            500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）"
-        )
+        raise HTTPException(500, "无法定位 FHD 仓库根目录（预期 MODstore 位于 FHD/MODstore）")
     target = (fhd / "backend" / "shell" / "fhd_shell_mods.json").resolve()
     raw = body.output_path or ""
     raw = raw.strip()

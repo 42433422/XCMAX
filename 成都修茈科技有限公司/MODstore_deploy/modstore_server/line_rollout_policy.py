@@ -95,9 +95,7 @@ def check_daily_cr_budget(*, digest_record_id: int = 0) -> Dict[str, Any]:
             rows = (
                 session.query(EmployeeChangeRequest)
                 .filter(EmployeeChangeRequest.created_at >= cutoff)
-                .filter(
-                    EmployeeChangeRequest.status.in_(("applied", "pending", "approved"))
-                )
+                .filter(EmployeeChangeRequest.status.in_(("applied", "pending", "approved")))
                 .all()
             )
         count = len(rows)
@@ -125,9 +123,7 @@ def check_daily_cr_budget(*, digest_record_id: int = 0) -> Dict[str, Any]:
         return {"ok": True, "skipped": True, "error": str(exc)}
 
 
-def line_rollout_pass_rate(
-    *, dispatch_line: str, lookback_days: int = 7
-) -> Dict[str, Any]:
+def line_rollout_pass_rate(*, dispatch_line: str, lookback_days: int = 7) -> Dict[str, Any]:
     """近 N 天该产线 CR 验证通过率（applied / total）。"""
     try:
         lookback_days = max(1, min(int(lookback_days or 7), 30))
@@ -152,9 +148,7 @@ def line_rollout_pass_rate(
                 .all()
             )
         matched = [
-            r
-            for r in rows
-            if line_tag and line_tag in str(getattr(r, "task_brief", "") or "")
+            r for r in rows if line_tag and line_tag in str(getattr(r, "task_brief", "") or "")
         ]
         if not matched:
             return {
@@ -182,9 +176,7 @@ def should_allow_line_primary(dispatch_line: str) -> Dict[str, Any]:
     """综合 primary 名单 + 通过率 + CR 预算。"""
     mode = resolve_line_execution_mode(
         dispatch_line,
-        global_digest_mode=os.environ.get(
-            "MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow"
-        ),
+        global_digest_mode=os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow"),
     )
     budget = check_daily_cr_budget()
     rollout = line_rollout_pass_rate(dispatch_line=dispatch_line)

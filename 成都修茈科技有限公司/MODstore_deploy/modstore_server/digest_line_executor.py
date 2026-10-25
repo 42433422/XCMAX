@@ -32,9 +32,7 @@ def _env_bool(name: str, default: str = "1") -> bool:
 
 
 def _parse_priorities_env() -> Optional[List[str]]:
-    raw = (
-        os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_PRIORITIES") or "P0,P1,P2"
-    ).strip()
+    raw = (os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_PRIORITIES") or "P0,P1,P2").strip()
     if not raw or raw.lower() in ("*", "all"):
         return None
     parts = [p.strip().upper() for p in raw.replace(";", ",").split(",") if p.strip()]
@@ -45,9 +43,7 @@ def _max_units() -> int:
     try:
         return max(
             1,
-            min(
-                int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MAX_UNITS", "32")), 128
-            ),
+            min(int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MAX_UNITS", "32")), 128),
         )
     except ValueError:
         return 32
@@ -107,9 +103,7 @@ def _read_execute_meta(record_id: int) -> Dict[str, Any]:
     return {}
 
 
-def persist_line_execute_on_digest_record(
-    record_id: int, payload: Dict[str, Any]
-) -> None:
+def persist_line_execute_on_digest_record(record_id: int, payload: Dict[str, Any]) -> None:
     if record_id <= 0 or not isinstance(payload, dict):
         return
     try:
@@ -123,9 +117,7 @@ def persist_line_execute_on_digest_record(
             row.vibe_line_execute_json = json.dumps(payload, ensure_ascii=False)
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.exception(
-            "persist_line_execute_on_digest_record failed id=%s", record_id
-        )
+        logger.exception("persist_line_execute_on_digest_record failed id=%s", record_id)
 
 
 def _load_digest_execute_context(record_id: int) -> Optional[Dict[str, Any]]:
@@ -160,12 +152,8 @@ def _load_digest_execute_context(record_id: int) -> Optional[Dict[str, Any]]:
 
 def _risk_flags_for_dispatch() -> Dict[str, bool]:
     return {
-        "allow_high_risk_real_run": _env_bool(
-            "MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK", "0"
-        ),
-        "allow_medium_risk": _env_bool(
-            "MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_MEDIUM_RISK", "0"
-        ),
+        "allow_high_risk_real_run": _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK", "0"),
+        "allow_medium_risk": _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_MEDIUM_RISK", "0"),
     }
 
 
@@ -367,9 +355,7 @@ def _split_local_verified_units(
     for unit in units:
         if _is_vibe_prep_generation_breakpoint_unit(unit, line=line):
             local_units.append(unit)
-            local_results.append(
-                _verify_vibe_prep_generation_breakpoint_unit(record_id, unit)
-            )
+            local_results.append(_verify_vibe_prep_generation_breakpoint_unit(record_id, unit))
         else:
             remote_units.append(unit)
     return local_units, local_results, remote_units
@@ -383,9 +369,7 @@ def _mark_local_verified_action_items_merged(
     for result in results:
         if not bool(result.get("ok")):
             continue
-        evidence = (
-            result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
-        )
+        evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
         for raw_id in evidence.get("action_item_ids") or []:
             try:
                 iid = int(raw_id)
@@ -439,17 +423,13 @@ def _filter_units_for_line(
             ]
     elif line == DISPATCH_SR:
         filtered = [
-            u
-            for u in filtered
-            if u.pipeline_step in ("P1", "P8") or u.list_kind == "updates"
+            u for u in filtered if u.pipeline_step in ("P1", "P8") or u.list_kind == "updates"
         ]
     elif line == DISPATCH_APP:
         # 移动 / App 发布线：消费 P1/P2 的更新与补丁（打包 / 渠道发布 / WebView 适配）。
         filtered = [u for u in filtered if u.pipeline_step in ("P1", "P2")]
     elif line == DISPATCH_PS:
-        filtered = [
-            u for u in filtered if u.list_kind == "patches" and u.pipeline_step == "P2"
-        ]
+        filtered = [u for u in filtered if u.list_kind == "patches" and u.pipeline_step == "P2"]
     else:
         filtered = [u for u in filtered if u.pipeline_step == "P2"]
     return filtered
@@ -463,10 +443,7 @@ def _resolve_line_mode(
 ) -> tuple[str, bool, Dict[str, Any]]:
     """按产线灰度策略解析执行 mode 与 dry_run。"""
     global_mode = (
-        (
-            os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow")
-            or "shadow"
-        )
+        (os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow")
         .strip()
         .lower()
     )
@@ -493,9 +470,7 @@ def _resolve_line_mode(
         return requested_mode or ("shadow" if dry_run else "auto"), dry_run, {}
 
 
-def _merge_run_meta(
-    meta: Dict[str, Any], line: str, run: Dict[str, Any]
-) -> Dict[str, Any]:
+def _merge_run_meta(meta: Dict[str, Any], line: str, run: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(meta or {})
     runs = dict(out.get("runs") or {})
     runs[line] = run

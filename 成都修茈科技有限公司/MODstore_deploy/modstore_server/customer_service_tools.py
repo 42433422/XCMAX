@@ -97,9 +97,7 @@ def build_action(
 ) -> CustomerServiceAction:
     key = f"{ticket_id}:{action_type}:{target_type}:{target_id}"
     existing = (
-        db.query(CustomerServiceAction)
-        .filter(CustomerServiceAction.idempotency_key == key)
-        .first()
+        db.query(CustomerServiceAction).filter(CustomerServiceAction.idempotency_key == key).first()
     )
     if existing:
         return existing
@@ -129,9 +127,7 @@ _FORBIDDEN_ACTION_TYPES = frozenset(
 )
 
 
-def execute_action(
-    db: Session, action: CustomerServiceAction, user: User
-) -> CustomerServiceAction:
+def execute_action(db: Session, action: CustomerServiceAction, user: User) -> CustomerServiceAction:
     if action.status in {"completed", "skipped"}:
         return action
     action_type = str(action.action_type or "").strip().lower()
@@ -143,9 +139,7 @@ def execute_action(
         or "privilege.escalate" in action_type
     ):
         action.status = "failed"
-        action.error = (
-            "forbidden: customer service cannot grant admin or escalate privileges"
-        )
+        action.error = "forbidden: customer service cannot grant admin or escalate privileges"
         action.result_json = json_dumps(
             {"ok": False, "message": "拒绝执行：客服通道禁止提权/开通管理员"}
         )
@@ -181,9 +175,7 @@ def execute_action(
             result = {"ok": True, "message": "已记录客服处理建议"}
         action.status = "completed" if result.get("ok") else "failed"
         action.result_json = json_dumps(result)
-        action.error = (
-            "" if result.get("ok") else str(result.get("message") or "动作执行失败")
-        )
+        action.error = "" if result.get("ok") else str(result.get("message") or "动作执行失败")
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - 动作失败需写审计，不向外抛破坏会话
         action.status = "failed"
         action.error = str(exc)
@@ -280,9 +272,7 @@ def _apply_refund(
         return {"ok": False, "message": "订单不存在或不属于当前用户"}
     if str(order.get("status") or "").lower() != "paid":
         return {"ok": False, "message": "只有已支付订单可申请退款"}
-    existing = (
-        db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
-    )
+    existing = db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
     if existing:
         return {
             "ok": True,

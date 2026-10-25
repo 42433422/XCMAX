@@ -36,9 +36,7 @@ router = APIRouter(prefix="/api/store", tags=["store-lifecycle"])
 # --------------------------------------------------------------------------
 class SettleBody(BaseModel):
     author_id: int = Field(..., description="待结算作者")
-    earning_ids: list[int] | None = Field(
-        default=None, description="为空则结算该作者全部 pending"
-    )
+    earning_ids: list[int] | None = Field(default=None, description="为空则结算该作者全部 pending")
 
 
 @router.post("/earnings/settle")
@@ -91,9 +89,7 @@ def earnings_summary(
                 func.count(AuthorEarning.id),
                 func.coalesce(func.sum(AuthorEarning.net), 0),
             )
-            .filter(
-                AuthorEarning.author_id == author_id, AuthorEarning.status == status
-            )
+            .filter(AuthorEarning.author_id == author_id, AuthorEarning.status == status)
             .one()
         )
         out[status] = {"count": int(agg[0] or 0), "net": round(float(agg[1] or 0), 2)}
@@ -224,9 +220,7 @@ def submit_review(
     """提交/更新评价（每用户每商品一条，upsert）。"""
     row = (
         db.query(ModReview)
-        .filter(
-            ModReview.catalog_id == body.catalog_id, ModReview.user_id == current.id
-        )
+        .filter(ModReview.catalog_id == body.catalog_id, ModReview.user_id == current.id)
         .first()
     )
     if row is None:

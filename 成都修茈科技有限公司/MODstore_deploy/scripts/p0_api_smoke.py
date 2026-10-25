@@ -102,7 +102,9 @@ def pick_workflow_id(client: httpx.Client, employee_id: str, explicit: str) -> i
         return int(explicit.strip())
     from urllib.parse import quote
 
-    data = get_json(client, f"/api/workflow/by-employee?employee_id={quote(employee_id, safe='')}")
+    data = get_json(
+        client, f"/api/workflow/by-employee?employee_id={quote(employee_id, safe='')}"
+    )
     wfs = data.get("workflows") if isinstance(data, dict) else None
     if isinstance(wfs, list) and wfs:
         return int(wfs[0]["id"])
@@ -117,9 +119,12 @@ def pick_workflow_id(client: httpx.Client, employee_id: str, explicit: str) -> i
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="P0 API smoke: employee + workflow sandbox + execute")
+    ap = argparse.ArgumentParser(
+        description="P0 API smoke: employee + workflow sandbox + execute"
+    )
     ap.add_argument(
-        "--base-url", default=os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765")
+        "--base-url",
+        default=os.environ.get("MODSTORE_BASE_URL", "http://127.0.0.1:8765"),
     )
     ap.add_argument("--token", default=_env_token(), help="Bearer access token")
     ap.add_argument(
@@ -133,10 +138,18 @@ def main() -> int:
         default=os.environ.get("MODSTORE_MINT_USERNAME", "testuser").strip(),
         help="与 mint-user-id 一起用于 create_access_token",
     )
-    ap.add_argument("--username", default=os.environ.get("MODSTORE_USERNAME", "").strip())
-    ap.add_argument("--password", default=os.environ.get("MODSTORE_PASSWORD", "").strip())
-    ap.add_argument("--employee-id", default=os.environ.get("MODSTORE_EMPLOYEE_ID", "").strip())
-    ap.add_argument("--workflow-id", default=os.environ.get("MODSTORE_WORKFLOW_ID", "").strip())
+    ap.add_argument(
+        "--username", default=os.environ.get("MODSTORE_USERNAME", "").strip()
+    )
+    ap.add_argument(
+        "--password", default=os.environ.get("MODSTORE_PASSWORD", "").strip()
+    )
+    ap.add_argument(
+        "--employee-id", default=os.environ.get("MODSTORE_EMPLOYEE_ID", "").strip()
+    )
+    ap.add_argument(
+        "--workflow-id", default=os.environ.get("MODSTORE_WORKFLOW_ID", "").strip()
+    )
     ap.add_argument("--task", default="smoke", help="员工任务名")
     args = ap.parse_args()
     base = args.base_url.rstrip("/")
@@ -195,9 +208,9 @@ def main() -> int:
             "body": _safe_json(r2),
         }
         if r2.status_code >= 400:
-            out["paths"]["workflow_sandbox_run"][
-                "note"
-            ] = "沙盒失败常见于图校验错误、或员工节点配置缺失；仍继续尝试正式执行。"
+            out["paths"]["workflow_sandbox_run"]["note"] = (
+                "沙盒失败常见于图校验错误、或员工节点配置缺失；仍继续尝试正式执行。"
+            )
 
         # 3) 正式执行（需 is_active）
         r3 = post_json(

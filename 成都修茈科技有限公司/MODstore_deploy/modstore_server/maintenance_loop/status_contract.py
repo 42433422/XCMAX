@@ -9,12 +9,8 @@ from . import config, deployment, merge_policy, review, risk, store
 
 
 def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
-    latest_timestamp = (
-        store._ledger_row_timestamp(state["rows"][-1]) if state["rows"] else None
-    )
-    latest_event_at = (
-        latest_timestamp.isoformat() if latest_timestamp is not None else None
-    )
+    latest_timestamp = store._ledger_row_timestamp(state["rows"][-1]) if state["rows"] else None
+    latest_event_at = latest_timestamp.isoformat() if latest_timestamp is not None else None
     runtime_source = {
         "name": "self_maintenance_loop_runner",
         "runtime": "MODstore",
@@ -164,9 +160,7 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
             return bool(contract_nested_presence.get(name))
         return name in runtime_top_level_keys
 
-    def _contract_surface_remediation(
-        surface: str, missing: List[str]
-    ) -> Dict[str, Any]:
+    def _contract_surface_remediation(surface: str, missing: List[str]) -> Dict[str, Any]:
         if not missing:
             return {
                 "action": "observe",
@@ -201,10 +195,7 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
                 "executable": False,
             }
         if surface == "duty_roster_graph":
-            if (
-                "governance_audit.summary" in missing
-                or "governance_gate.summary" in missing
-            ):
+            if "governance_audit.summary" in missing or "governance_gate.summary" in missing:
                 return {
                     "action": "inspect_governance_audit",
                     "title": "Inspect governance audit contract",
@@ -238,9 +229,7 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
 
     contract_surface_readiness = {}
     for surface, requirements in contract_surface_requirements.items():
-        missing = [
-            name for name in requirements if not _contract_dependency_present(name)
-        ]
+        missing = [name for name in requirements if not _contract_dependency_present(name)]
         remediation = _contract_surface_remediation(surface, missing)
         contract_surface_readiness[surface] = {
             "ok": not missing,
@@ -265,8 +254,7 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
             "severity": readiness.get("severity") or "bad",
             "action": readiness.get("action") or "inspect_runtime_contract",
             "title": readiness.get("title") or "Surface contract blocked",
-            "detail": readiness.get("detail")
-            or "Surface runtime dependencies are missing.",
+            "detail": readiness.get("detail") or "Surface runtime dependencies are missing.",
             "target_surface": readiness.get("target_surface") or surface,
             "target_view": readiness.get("target_view") or "loop",
             "requires_admin": readiness.get("requires_admin") is True,
@@ -301,32 +289,17 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
         "status": "blocked" if contract_surface_incidents else "clear",
         "total": len(contract_surface_incidents),
         "surfaces": sorted(
-            {
-                str(item.get("surface"))
-                for item in contract_surface_incidents
-                if item.get("surface")
-            }
+            {str(item.get("surface")) for item in contract_surface_incidents if item.get("surface")}
         ),
         "actions": sorted(
-            {
-                str(item.get("action"))
-                for item in contract_surface_incidents
-                if item.get("action")
-            }
+            {str(item.get("action")) for item in contract_surface_incidents if item.get("action")}
         ),
         "by_severity": {
             severity: sum(
-                (
-                    1
-                    for item in contract_surface_incidents
-                    if item.get("severity") == severity
-                )
+                (1 for item in contract_surface_incidents if item.get("severity") == severity)
             )
             for severity in sorted(
-                {
-                    str(item.get("severity") or "unknown")
-                    for item in contract_surface_incidents
-                }
+                {str(item.get("severity") or "unknown") for item in contract_surface_incidents}
             )
         },
         "requires_admin_count": sum(
@@ -379,13 +352,9 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
         "all_surfaces_ok": contract_all_surfaces_ok,
         "primary_action": contract_surface_incident_summary.get("primary_action"),
         "primary_surface": contract_surface_incident_summary.get("primary_surface"),
-        "primary_target_surface": contract_surface_incident_summary.get(
-            "primary_target_surface"
-        ),
+        "primary_target_surface": contract_surface_incident_summary.get("primary_target_surface"),
         "surface_incident_total": contract_surface_incident_summary.get("total", 0),
-        "admin_required": contract_surface_incident_summary.get(
-            "admin_required", False
-        ),
+        "admin_required": contract_surface_incident_summary.get("admin_required", False),
         "executable_available": contract_surface_incident_summary.get(
             "executable_available", False
         ),
@@ -398,14 +367,9 @@ def render_runtime_contract(state: Dict[str, Any]) -> Dict[str, Any]:
                 if isinstance(contract_primary_incident, dict)
                 else "loop"
             ),
-            "action": contract_surface_incident_summary.get("primary_action")
-            or "observe",
-            "requires_admin": contract_surface_incident_summary.get(
-                "admin_required", False
-            ),
-            "executable": contract_surface_incident_summary.get(
-                "executable_available", False
-            ),
+            "action": contract_surface_incident_summary.get("primary_action") or "observe",
+            "requires_admin": contract_surface_incident_summary.get("admin_required", False),
+            "executable": contract_surface_incident_summary.get("executable_available", False),
             "employee_id": (
                 state["ui_bridge"].get("primary_employee_id")
                 if isinstance(state["ui_bridge"], dict)
@@ -507,8 +471,7 @@ def _build_runtime_status_result(
                 "policy": "recent_meaningful_runs_excluding_heartbeat_skip_and_kb_salvage",
             },
             "steps_by_open_run": {
-                run_id: state["steps_by_run"].get(run_id, [])
-                for run_id in state["open_run_ids"]
+                run_id: state["steps_by_run"].get(run_id, []) for run_id in state["open_run_ids"]
             },
         },
         "participants": sorted(
@@ -525,9 +488,7 @@ def _build_runtime_status_result(
             "path": str(store.governance_audit_path()),
             "summary": state["governance_audit_summary"],
             "recent": state["governance_audit"],
-            "last": (
-                state["governance_audit"][-1] if state["governance_audit"] else None
-            ),
+            "last": (state["governance_audit"][-1] if state["governance_audit"] else None),
         },
         "merge_decision": state["merge_decision"],
         "kb_summary": state["kb_summary"],
@@ -562,9 +523,7 @@ def _build_runtime_status_result(
             ),
             "focused_test_command": review._focused_test_command(),
             "threshold": config._env_int("MODSTORE_SELF_MAINTENANCE_THRESHOLD", 1),
-            "cooldown_minutes": config._env_int(
-                "MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360
-            ),
+            "cooldown_minutes": config._env_int("MODSTORE_SELF_MAINTENANCE_COOLDOWN_MINUTES", 360),
             "auto_dispatch_deploy": config._auto_dispatch_deploy_enabled(),
             "auto_dispatch_deploy_envs": deployment._auto_dispatch_deploy_envs(),
             "auto_dispatch_deploy_dry_run": config._env_flag_enabled(

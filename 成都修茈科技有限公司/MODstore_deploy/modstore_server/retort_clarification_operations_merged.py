@@ -20,9 +20,7 @@ def _facade():
 def answer_clarification(
     session_id: str,
     *,
-    answers: _facade().Mapping[str, _facade().Any]
-    | _facade().Sequence[_facade().Any]
-    | str,
+    answers: _facade().Mapping[str, _facade().Any] | _facade().Sequence[_facade().Any] | str,
     answered_by: str = "admin",
 ) -> dict[str, _facade().Any]:
     _facade().sweep_expired_clarifications()
@@ -31,22 +29,16 @@ def answer_clarification(
         return {"ok": False, "error": "session_id_missing"}
     if isinstance(answers, str):
         freeform = answers.strip()
-        answer_map: dict[str, _facade().Any] = (
-            {"freeform": freeform} if freeform else {}
-        )
+        answer_map: dict[str, _facade().Any] = {"freeform": freeform} if freeform else {}
     elif isinstance(answers, _facade().Mapping):
-        answer_map = {
-            str(k): str(v).strip() for (k, v) in answers.items() if str(v or "").strip()
-        }
+        answer_map = {str(k): str(v).strip() for (k, v) in answers.items() if str(v or "").strip()}
         freeform = str(answer_map.get("freeform") or "").strip()
     else:
         answer_map = {}
         freeform = ""
         for index, item in enumerate(answers or [], start=1):
             if isinstance(item, _facade().Mapping):
-                key = _facade()._text(
-                    item.get("id") or item.get("question_id") or f"q{index}", 64
-                )
+                key = _facade()._text(item.get("id") or item.get("question_id") or f"q{index}", 64)
                 value = _facade()._text(item.get("answer") or item.get("text"), 2000)
             else:
                 key = f"q{index}"
@@ -72,15 +64,12 @@ def answer_clarification(
         question_ids = [
             _facade()._text(item.get("id"), 64)
             for item in row.get("questions") or []
-            if isinstance(item, _facade().Mapping)
-            and _facade()._text(item.get("id"), 64)
+            if isinstance(item, _facade().Mapping) and _facade()._text(item.get("id"), 64)
         ]
         if freeform:
             for qid in question_ids:
                 answer_map.setdefault(qid, freeform)
-        missing = [
-            qid for qid in question_ids if not str(answer_map.get(qid) or "").strip()
-        ]
+        missing = [qid for qid in question_ids if not str(answer_map.get(qid) or "").strip()]
         if missing and (not freeform):
             return {
                 "ok": False,
@@ -99,9 +88,7 @@ def answer_clarification(
             "updated_at": _facade()._now_iso(),
         }
         sessions[sid] = row
-        _facade()._save_store_unlocked(
-            {"schema": _facade()._SCHEMA, "sessions": sessions}
-        )
+        _facade()._save_store_unlocked({"schema": _facade()._SCHEMA, "sessions": sessions})
     try:
         boss_qid = int(row.get("boss_question_id") or 0)
     except (TypeError, ValueError):
@@ -116,8 +103,7 @@ def answer_clarification(
                 if pending and pending.status == "pending":
                     pending.status = "answered"
                     pending.answer = (
-                        freeform
-                        or _facade().json.dumps(answer_map, ensure_ascii=False)[:4000]
+                        freeform or _facade().json.dumps(answer_map, ensure_ascii=False)[:4000]
                     )
                     pending.answered_at = _facade()._now()
                     session.commit()
@@ -126,9 +112,7 @@ def answer_clarification(
     return {"ok": True, "session": _facade()._public_session(sid, row)}
 
 
-def cancel_clarification(
-    session_id: str, *, reason: str = "cancelled"
-) -> dict[str, _facade().Any]:
+def cancel_clarification(session_id: str, *, reason: str = "cancelled") -> dict[str, _facade().Any]:
     _facade().sweep_expired_clarifications()
     sid = _facade()._text(session_id, 128)
     with _facade()._LOCK:
@@ -147,9 +131,7 @@ def cancel_clarification(
             "updated_at": _facade()._now_iso(),
         }
         sessions[sid] = row
-        _facade()._save_store_unlocked(
-            {"schema": _facade()._SCHEMA, "sessions": sessions}
-        )
+        _facade()._save_store_unlocked({"schema": _facade()._SCHEMA, "sessions": sessions})
     return {"ok": True, "session": {"session_id": sid, **row}}
 
 
@@ -173,9 +155,7 @@ def mark_clarification_resolved(session_id: str) -> dict[str, _facade().Any]:
             "updated_at": _facade()._now_iso(),
         }
         sessions[sid] = row
-        _facade()._save_store_unlocked(
-            {"schema": _facade()._SCHEMA, "sessions": sessions}
-        )
+        _facade()._save_store_unlocked({"schema": _facade()._SCHEMA, "sessions": sessions})
     return {"ok": True, "session": {"session_id": sid, **row}}
 
 
@@ -191,14 +171,10 @@ def _mirror_to_boss_inbox(
         admin_id = int(_admin_user_id() or 0)
         if admin_id <= 0:
             return {"mirrored": False, "reason": "no_admin_user"}
-        questions = (
-            row.get("questions") if isinstance(row.get("questions"), list) else []
-        )
+        questions = row.get("questions") if isinstance(row.get("questions"), list) else []
         primary = ""
         for item in questions:
-            if isinstance(item, _facade().Mapping) and _facade()._text(
-                item.get("question"), 500
-            ):
+            if isinstance(item, _facade().Mapping) and _facade()._text(item.get("question"), 500):
                 primary = _facade()._text(item.get("question"), 500)
                 break
         if not primary:
@@ -222,8 +198,7 @@ def _mirror_to_boss_inbox(
             "question_ids": [
                 _facade()._text(item.get("id"), 64)
                 for item in questions
-                if isinstance(item, _facade().Mapping)
-                and _facade()._text(item.get("id"), 64)
+                if isinstance(item, _facade().Mapping) and _facade()._text(item.get("id"), 64)
             ],
         }
         sf = get_session_factory()
@@ -300,9 +275,7 @@ def open_clarification_session(
     )
     build_questions, needed, _enrich = _facade()._load_clarification_builder()
     if not force and (
-        not needed(
-            assessment, intent, changed_files=changed_files, risk_level=risk_level
-        )
+        not needed(assessment, intent, changed_files=changed_files, risk_level=risk_level)
     ):
         return {
             "ok": True,
@@ -384,9 +357,7 @@ def open_clarification_session(
             "ttl_seconds": _facade().ttl_seconds(),
         }
         sessions[sid] = row
-        _facade()._save_store_unlocked(
-            {"schema": _facade()._SCHEMA, "sessions": sessions}
-        )
+        _facade()._save_store_unlocked({"schema": _facade()._SCHEMA, "sessions": sessions})
     mirror = _facade()._mirror_to_boss_inbox(sid, row)
     if mirror.get("question_id"):
         with _facade()._LOCK:
@@ -396,9 +367,7 @@ def open_clarification_session(
             current["boss_question_id"] = int(mirror["question_id"])
             current["updated_at"] = _facade()._now_iso()
             sessions[sid] = current
-            _facade()._save_store_unlocked(
-                {"schema": _facade()._SCHEMA, "sessions": sessions}
-            )
+            _facade()._save_store_unlocked({"schema": _facade()._SCHEMA, "sessions": sessions})
             row = current
     try:
         from modstore_server.human_uncertainty_queue import enqueue_uncertain_item
@@ -514,9 +483,7 @@ def evaluate_retort_clarification_gate(
     intent = _facade()._text(strategy_intent, 4000)
     blockers: list[str] = []
     if session and session.get("status") == _facade()._STATUS_ANSWERED:
-        intent = _facade()._text(
-            session.get("enriched_strategy_intent") or intent, 4000
-        )
+        intent = _facade()._text(session.get("enriched_strategy_intent") or intent, 4000)
     elif session and session.get("status") == _facade()._STATUS_OPEN:
         blockers.append("retort_clarification_pending")
     elif session and session.get("status") == _facade()._STATUS_EXPIRED:
@@ -551,11 +518,7 @@ def evaluate_retort_clarification_gate(
             package_id=package_id,
             source="council_evaluate",
         )
-        session = (
-            opened.get("session")
-            if isinstance(opened.get("session"), dict)
-            else session
-        )
+        session = opened.get("session") if isinstance(opened.get("session"), dict) else session
         if opened.get("opened") or opened.get("reused"):
             blockers.append("retort_clarification_pending")
     if session and session.get("status") == _facade()._STATUS_ANSWERED:
@@ -565,17 +528,11 @@ def evaluate_retort_clarification_gate(
         )
         if assessment.get("status") == "aligned" and session.get("session_id"):
             _facade().mark_clarification_resolved(str(session.get("session_id")))
-            session = (
-                _facade().get_clarification(str(session.get("session_id"))) or session
-            )
+            session = _facade().get_clarification(str(session.get("session_id"))) or session
     aligned = (
-        assessment.get("status") == "aligned"
-        and "retort_clarification_pending" not in blockers
+        assessment.get("status") == "aligned" and "retort_clarification_pending" not in blockers
     )
-    if (
-        assessment.get("status") == "misaligned"
-        and "retort_clarification_pending" not in blockers
-    ):
+    if assessment.get("status") == "misaligned" and "retort_clarification_pending" not in blockers:
         blockers.append("retort_intent_misaligned")
     return {
         "ok": True,
@@ -585,9 +542,7 @@ def evaluate_retort_clarification_gate(
         "assessment": assessment,
         "blockers": list(dict.fromkeys(blockers)),
         "clarification": session,
-        "sweep": _facade().sweep_expired_clarifications()
-        if sweep.get("expired_count")
-        else sweep,
+        "sweep": _facade().sweep_expired_clarifications() if sweep.get("expired_count") else sweep,
     }
 
 
@@ -608,10 +563,7 @@ def clarification_blocks_auto_approve(
             "session_id": session.get("session_id"),
             "expires_at": session.get("expires_at"),
         }
-    if (
-        status == _facade()._STATUS_EXPIRED
-        and _facade().expire_fallback() != "degrade_intent"
-    ):
+    if status == _facade()._STATUS_EXPIRED and _facade().expire_fallback() != "degrade_intent":
         return {
             "blocked": True,
             "reason": "retort_clarification_expired",

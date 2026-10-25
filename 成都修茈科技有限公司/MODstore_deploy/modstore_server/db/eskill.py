@@ -38,9 +38,7 @@ class ESkill(Base):
 
 class ESkillVersion(Base):
     __tablename__ = "eskill_versions"
-    __table_args__ = (
-        UniqueConstraint("eskill_id", "version", name="uq_eskill_version"),
-    )
+    __table_args__ = (UniqueConstraint("eskill_id", "version", name="uq_eskill_version"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     eskill_id = Column(Integer, ForeignKey("eskills.id"), nullable=False, index=True)

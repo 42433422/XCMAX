@@ -148,9 +148,7 @@ from modstore_server.strategic_layer_api_merged import (
     withdraw_decision as withdraw_decision,
 )
 
-_routes_module = importlib.import_module(
-    "modstore_server.strategic_layer_meeting_routes"
-)
+_routes_module = importlib.import_module("modstore_server.strategic_layer_meeting_routes")
 schedule_meeting = _routes_module.schedule_meeting
 list_meetings = _routes_module.list_meetings
 get_meeting = _routes_module.get_meeting

@@ -91,9 +91,7 @@ ORDER_RE = re.compile(
     "(?:订单号|order[_ -]?no|订单)[:：\\s]*((?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*[0-9])[A-Za-z0-9_-]{2,5}|[A-Za-z0-9_-]{6,64})(?![A-Za-z0-9_-])",
     re.I,
 )
-CATALOG_RE = re.compile(
-    "(?:商品\\s*ID|catalog[_ -]?id|商品)[:：\\s#]*([0-9]{1,12})", re.I
-)
+CATALOG_RE = re.compile("(?:商品\\s*ID|catalog[_ -]?id|商品)[:：\\s#]*([0-9]{1,12})", re.I)
 LLM_PROVIDER_RE = re.compile("(?:厂商|provider)\\s*[:：]\\s*([a-z0-9_-]+)", re.I)
 LLM_MODEL_RE = re.compile("(?:模型|model)\\s*[:：]\\s*(\\S+)", re.I)
 LLM_SLASH_RE = re.compile("\\b([a-z0-9_-]{2,32})\\s*/\\s*([^\\s,，。]{1,120})", re.I)
@@ -101,9 +99,7 @@ GREETING_RE = re.compile(
     "^(你好|您好|嗨|哈喽|hello|hi|hey|在吗|早上好|上午好|下午好|晚上好|你好呀|您好呀)[!！。.?？~\\s]*$",
     re.I,
 )
-ESCALATE_RE = re.compile(
-    "转人工|人工客服|提交工单|创建工单|升级处理|要工单|找人工|处理不了|没解决"
-)
+ESCALATE_RE = re.compile("转人工|人工客服|提交工单|创建工单|升级处理|要工单|找人工|处理不了|没解决")
 TICKET_INTENTS = frozenset(
     {
         "refund",
@@ -125,9 +121,7 @@ KNOWN_INTENTS = frozenset(
         "llm_extension",
     }
 )
-FOLLOWUP_INTENTS = frozenset(
-    {"general", "greeting", "account_support", "product_issue"}
-)
+FOLLOWUP_INTENTS = frozenset({"general", "greeting", "account_support", "product_issue"})
 TRIAGE_LANES = frozenset(
     {
         "product_defect",

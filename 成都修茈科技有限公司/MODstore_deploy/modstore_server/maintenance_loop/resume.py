@@ -90,9 +90,7 @@ def _resume_review_qa_candidate(
                             exc,
                         )
             except RECOVERABLE_ERRORS as exc:
-                config.logger.warning(
-                    "failed to import human uncertainty queue: %s", exc
-                )
+                config.logger.warning("failed to import human uncertainty queue: %s", exc)
         if enqueue_success_keys:
             memory["open_items"] = [
                 item
@@ -102,10 +100,7 @@ def _resume_review_qa_candidate(
                     and item.get("kind") == "failed_steps"
                     and (int(item.get("retry_count") or 1) >= max_retries)
                     and ("code" not in memory_domain._open_item_steps(item))
-                    and (
-                        memory_domain._failed_open_item_identity(item)
-                        in enqueue_success_keys
-                    )
+                    and (memory_domain._failed_open_item_identity(item) in enqueue_success_keys)
                 )
             ]
         else:
@@ -125,11 +120,7 @@ def _resume_review_qa_candidate(
             )
             return None
     last_decision = memory.get("last_policy_decision")
-    last_reason = (
-        str(last_decision.get("reason") or "")
-        if isinstance(last_decision, dict)
-        else ""
-    )
+    last_reason = str(last_decision.get("reason") or "") if isinstance(last_decision, dict) else ""
     if last_reason == "review_or_qa_reported_risk":
         return None
     if last_reason in {"employee_step_failed", "loop_not_completed"}:
@@ -166,25 +157,17 @@ def _resume_review_qa_candidate(
             "human_strategy_approval",
         }:
             continue
-        reason = (
-            self_maintenance_remediation_lineage.normalize_automated_remediation_reason(
-                memory, item
-            )
+        reason = self_maintenance_remediation_lineage.normalize_automated_remediation_reason(
+            memory, item
         )
-        resume_plan = (
-            self_maintenance_remediation_lineage.automated_remediation_resume_plan(
-                reason
-            )
-        )
+        resume_plan = self_maintenance_remediation_lineage.automated_remediation_resume_plan(reason)
         if resume_plan is None:
             continue
         failed_steps, continue_existing_code_task = resume_plan
         if "code" not in failed_steps:
             continue
         branch = str(item.get("branch") or "").strip()
-        para_task_id = str(
-            item.get("task_id") or item.get("para_task_id") or ""
-        ).strip()
+        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         if not branch or not para_task_id:
             continue
         candidate: Dict[str, Any] = {
@@ -215,8 +198,10 @@ def _resume_review_qa_candidate(
             "human_strategy_approval",
         }:
             continue
-        ai_review_candidate = self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
-            memory, item
+        ai_review_candidate = (
+            self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
+                memory, item
+            )
         )
         if ai_review_candidate is not None:
             return ai_review_candidate
@@ -230,9 +215,7 @@ def _resume_review_qa_candidate(
         if any((str(step) in {"review", "qa"} for step in review_steps)):
             run_id = str(item.get("run_id") or "")
             if run_id:
-                review_failed_run_ids.add(
-                    (run_id, tuple((str(step) for step in review_steps)))
-                )
+                review_failed_run_ids.add((run_id, tuple((str(step) for step in review_steps))))
     for run in reversed(recent_runs):
         if not isinstance(run, dict):
             continue
@@ -260,13 +243,13 @@ def _resume_review_qa_candidate(
             "human_strategy_approval",
         }:
             continue
-        reason = (
-            self_maintenance_remediation_lineage.normalize_automated_remediation_reason(
+        reason = self_maintenance_remediation_lineage.normalize_automated_remediation_reason(
+            memory, item
+        )
+        ai_review_candidate = (
+            self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
                 memory, item
             )
-        )
-        ai_review_candidate = self_maintenance_para_merge_remediation.resume_candidate_from_para_ai_review_item(
-            memory, item
         )
         if ai_review_candidate is not None:
             return ai_review_candidate
@@ -276,9 +259,7 @@ def _resume_review_qa_candidate(
             "risk_score_v3_below_threshold_or_blocked",
         }:
             branch = str(item.get("branch") or "").strip()
-            para_task_id = str(
-                item.get("task_id") or item.get("para_task_id") or ""
-            ).strip()
+            para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
             run_id = str(item.get("run_id") or "").strip()
             if branch and para_task_id:
                 return {
@@ -290,18 +271,12 @@ def _resume_review_qa_candidate(
                     "reason": "resume_safety_score_remediation",
                 }
             continue
-        resume_plan = (
-            self_maintenance_remediation_lineage.automated_remediation_resume_plan(
-                reason
-            )
-        )
+        resume_plan = self_maintenance_remediation_lineage.automated_remediation_resume_plan(reason)
         if resume_plan is None:
             continue
         failed_steps, continue_existing_code_task = resume_plan
         branch = str(item.get("branch") or "").strip()
-        para_task_id = str(
-            item.get("task_id") or item.get("para_task_id") or ""
-        ).strip()
+        para_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         run_id = str(item.get("run_id") or "").strip()
         if branch and para_task_id:
             remediation_candidate: Dict[str, Any] = {
@@ -312,14 +287,10 @@ def _resume_review_qa_candidate(
                 "reason": "resume_automated_remediation_candidate",
             }
             if reason.startswith("para_merge_"):
-                remediation_candidate["remediation_feedback"] = str(
-                    item.get("detail") or ""
-                )[:4000]
+                remediation_candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 remediation_candidate["remediation_reason"] = reason
             elif reason == retort_remediation.RETORT_SCOPE_REASON:
-                remediation_candidate["remediation_feedback"] = str(
-                    item.get("detail") or ""
-                )[:4000]
+                remediation_candidate["remediation_feedback"] = str(item.get("detail") or "")[:4000]
                 remediation_candidate["remediation_reason"] = reason
             if continue_existing_code_task:
                 if reason.startswith("para_merge_"):

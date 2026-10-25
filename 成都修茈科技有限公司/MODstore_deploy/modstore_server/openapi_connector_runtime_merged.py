@@ -78,9 +78,7 @@ def pin_url_outbound_safe(url: str) -> PinnedOutboundTarget:
         except ValueError as exc:
             raise _facade().OutboundBlocked("端口无效") from exc
         try:
-            infos = _facade().socket.getaddrinfo(
-                host, port, type=_facade().socket.SOCK_STREAM
-            )
+            infos = _facade().socket.getaddrinfo(host, port, type=_facade().socket.SOCK_STREAM)
         except _facade().socket.gaierror as exc:
             raise _facade().OutboundBlocked(f"主机 {host} 无法安全解析") from exc
         addresses = []
@@ -183,11 +181,7 @@ def _apply_auth(
     if auth_type == "basic":
         username = str(cfg.get("username") or "")
         password = str(cfg.get("password") or "")
-        token = (
-            _facade()
-            .base64.b64encode(f"{username}:{password}".encode())
-            .decode("ascii")
-        )
+        token = _facade().base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
         headers.setdefault("Authorization", f"Basic {token}")
         return
     if auth_type == "oauth2_client_credentials":
@@ -264,16 +258,12 @@ def _safe_timeout(value: _facade().Any) -> float:
     return max(_facade()._TIMEOUT_MIN, min(_facade()._TIMEOUT_MAX, v))
 
 
-def _resolve_full_url(
-    base_url: str, path: str, *, override: _facade().Optional[str] = None
-) -> str:
+def _resolve_full_url(base_url: str, path: str, *, override: _facade().Optional[str] = None) -> str:
     base = (override or base_url or "").strip()
     if not base:
         if path.startswith(("http://", "https://")):
             return path
-        raise _facade().OutboundBlocked(
-            "连接器未配置 base_url，且 operation path 不是绝对 URL"
-        )
+        raise _facade().OutboundBlocked("连接器未配置 base_url，且 operation path 不是绝对 URL")
     path_parts = _facade().urlparse(path)
     if path_parts.scheme or path_parts.netloc:
         raise _facade().OutboundBlocked("operation path 不得覆盖连接器 host")
@@ -338,9 +328,7 @@ def _split_params(
     path_params: _facade().Dict[str, _facade().Any] = {}
     query_params: _facade().Dict[str, _facade().Any] = {}
     header_params: _facade().Dict[str, str] = {}
-    locations = {
-        str(p.get("name") or ""): str(p.get("in") or "").lower() for p in spec_params
-    }
+    locations = {str(p.get("name") or ""): str(p.get("in") or "").lower() for p in spec_params}
     required_missing: _facade().List[str] = []
     for name, value in (raw_params or {}).items():
         loc = locations.get(name, "query")
@@ -407,9 +395,7 @@ def _summarize_request(
     }
     if body is not None:
         try:
-            payload["body"] = _facade().json.loads(
-                _facade().json.dumps(body, default=str)
-            )
+            payload["body"] = _facade().json.loads(_facade().json.dumps(body, default=str))
         except (TypeError, ValueError):
             payload["body"] = repr(body)
     return _facade()._truncate(
@@ -429,9 +415,7 @@ def _summarize_response(
         info["headers"] = _facade()._redact_headers(dict(resp.headers))
     if parsed_body is not None:
         try:
-            info["body"] = _facade().json.loads(
-                _facade().json.dumps(parsed_body, default=str)
-            )
+            info["body"] = _facade().json.loads(_facade().json.dumps(parsed_body, default=str))
         except (TypeError, ValueError):
             info["body"] = repr(parsed_body)
     if error:

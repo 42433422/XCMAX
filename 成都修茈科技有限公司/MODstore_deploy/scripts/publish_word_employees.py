@@ -29,9 +29,14 @@ META = {
 
 
 def main() -> int:
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-    from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+    from modstore_server.employee_asset_pipeline import (
+        build_employee_pack_zip_for_library,
+    )
     from modstore_server.mod_scaffold_runner import modstore_library_path
     from modstore_server.models import CatalogItem, User, get_session_factory, init_db
 
@@ -45,7 +50,9 @@ def main() -> int:
         if not admin:
             admin = db.query(User).order_by(User.id.asc()).first()
         if not admin:
-            print(json.dumps({"ok": False, "error": "no user in db"}, ensure_ascii=False))
+            print(
+                json.dumps({"ok": False, "error": "no user in db"}, ensure_ascii=False)
+            )
             return 2
         author_id = int(admin.id)
 
@@ -62,7 +69,9 @@ def main() -> int:
                 return 1
             raw_mf = json.loads(mf_path.read_text(encoding="utf-8"))
             meta = META[pkg_id]
-            zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
+            zip_bytes = build_employee_pack_zip_for_library(
+                pkg_id, raw_mf, pack_dir=pack_dir
+            )
             rec = {
                 "id": pkg_id,
                 "name": meta["name"],
@@ -125,7 +134,9 @@ def main() -> int:
     except RECOVERABLE_ERRORS:
         pass
 
-    print(json.dumps({"ok": True, "published": published}, ensure_ascii=False, indent=2))
+    print(
+        json.dumps({"ok": True, "published": published}, ensure_ascii=False, indent=2)
+    )
     return 0
 
 

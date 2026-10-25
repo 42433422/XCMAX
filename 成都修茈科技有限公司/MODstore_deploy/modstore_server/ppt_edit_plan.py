@@ -97,9 +97,7 @@ def _as_int(val: Any, default: int = 0) -> int:
         return default
 
 
-def _validate_slide_spec(
-    raw: Any, idx: int, errors: List[str]
-) -> Optional[Dict[str, Any]]:
+def _validate_slide_spec(raw: Any, idx: int, errors: List[str]) -> Optional[Dict[str, Any]]:
     if not isinstance(raw, dict):
         errors.append(f"slides[{idx}] 必须为对象")
         return None
@@ -158,9 +156,7 @@ def _validate_op(raw: Any, idx: int, errors: List[str]) -> Optional[Dict[str, An
             errors.append(f"ops[{idx}] add_picture 需要 image_ref 或 path")
     elif op == "layout_pictures_row":
         ids = raw.get("logical_ids") or raw.get("shape_ids")
-        out["logical_ids"] = (
-            [str(x)[:40] for x in ids][:20] if isinstance(ids, list) else []
-        )
+        out["logical_ids"] = [str(x)[:40] for x in ids][:20] if isinstance(ids, list) else []
         out["y_emu"] = _as_int(raw.get("y_emu"), 2_667_000)
     elif op == "set_shape_position":
         out["logical_id"] = str(raw.get("logical_id") or "")[:40]
@@ -185,18 +181,12 @@ def _validate_op(raw: Any, idx: int, errors: List[str]) -> Optional[Dict[str, An
             raw.get("click_shape_id") or raw.get("click_logical_id") or "play_button"
         )[:40]
         out["target_shape_id"] = str(
-            raw.get("target_shape_id")
-            or raw.get("target_logical_id")
-            or "marquee_strip"
+            raw.get("target_shape_id") or raw.get("target_logical_id") or "marquee_strip"
         )[:40]
     elif op == "group_shapes":
         ids = raw.get("logical_ids") or raw.get("shape_ids")
-        out["logical_ids"] = (
-            [str(x)[:40] for x in ids][:30] if isinstance(ids, list) else []
-        )
-        out["group_logical_id"] = str(raw.get("group_logical_id") or "marquee_strip")[
-            :40
-        ]
+        out["logical_ids"] = [str(x)[:40] for x in ids][:30] if isinstance(ids, list) else []
+        out["group_logical_id"] = str(raw.get("group_logical_id") or "marquee_strip")[:40]
     return out
 
 
@@ -270,9 +260,7 @@ def parse_edit_plan_json(text: str) -> Tuple[Dict[str, Any], List[str]]:
     return validate_edit_plan(data)
 
 
-def plan_from_presentation(
-    table: Dict[str, Any], *, mode: str = "compose"
-) -> Dict[str, Any]:
+def plan_from_presentation(table: Dict[str, Any], *, mode: str = "compose") -> Dict[str, Any]:
     """Heuristic plan from presentation_full v1/v2 without LLM."""
     title = str(table.get("title") or "演示文稿")[:120]
     slides_out: List[Dict[str, Any]] = []
@@ -290,9 +278,7 @@ def plan_from_presentation(
                 images.append(
                     {
                         "logical_id": str(
-                            img.get("id")
-                            or img.get("logical_id")
-                            or f"img{len(images) + 1}"
+                            img.get("id") or img.get("logical_id") or f"img{len(images) + 1}"
                         ),
                         "image_ref": rel,
                         "path": rel,
@@ -303,9 +289,7 @@ def plan_from_presentation(
                 "index": int(raw.get("index") or i + 1),
                 "title": str(raw.get("title") or f"第 {i + 1} 页")[:120],
                 "bullets": [str(b)[:200] for b in bullets[:12]],
-                "notes": str(raw.get("notes_generated") or raw.get("notes") or "")[
-                    :8000
-                ],
+                "notes": str(raw.get("notes_generated") or raw.get("notes") or "")[:8000],
                 "images": images,
             }
         )

@@ -25,10 +25,7 @@ def ssot_path() -> _facade().Path:
     mono = (_facade().os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if mono:
         candidates.append(
-            _facade().Path(mono).expanduser().resolve()
-            / "FHD"
-            / "config"
-            / "release_train.json"
+            _facade().Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
         )
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
@@ -39,30 +36,19 @@ def ssot_path() -> _facade().Path:
     except RECOVERABLE_ERRORS:
         pass
     candidates.append(
-        _facade().Path(__file__).resolve().parent.parent
-        / "config"
-        / "release_train.json"
+        _facade().Path(__file__).resolve().parent.parent / "config" / "release_train.json"
     )
     for path in candidates:
         if path.is_file():
             return path
     if mono:
-        return (
-            _facade().Path(mono).expanduser().resolve()
-            / "FHD"
-            / "config"
-            / "release_train.json"
-        )
+        return _facade().Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         return repo_root() / "FHD" / "config" / "release_train.json"
     except RECOVERABLE_ERRORS:
-        return (
-            _facade().Path(__file__).resolve().parent.parent
-            / "config"
-            / "release_train.json"
-        )
+        return _facade().Path(__file__).resolve().parent.parent / "config" / "release_train.json"
 
 
 def default_state() -> _facade().Dict[str, _facade().Any]:
@@ -70,9 +56,7 @@ def default_state() -> _facade().Dict[str, _facade().Any]:
         "epoch": "1.0.0.0",
         "product_version": "1.0.0.0",
         "current": "1.0.0.0",
-        "started_at": _facade()
-        .datetime.now(_facade().timezone.utc)
-        .strftime("%Y-%m-%d"),
+        "started_at": _facade().datetime.now(_facade().timezone.utc).strftime("%Y-%m-%d"),
         "day_index": 0,
         "last_bump_at": None,
         "last_bump_day": None,
@@ -113,9 +97,7 @@ def _snapshot_state_to_history(
             fh.write(_facade().json.dumps(entry, ensure_ascii=False) + "\n")
         return snap_path
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception(
-            "release_train: snapshot history failed reason=%s", reason
-        )
+        _facade().logger.exception("release_train: snapshot history failed reason=%s", reason)
         return None
 
 
@@ -235,9 +217,7 @@ def clear_backup_guard(
     if had:
         st["backup_guard"] = None
         _facade().save_state(st, path=p)
-        _facade().logger.info(
-            "release_train: backup guard cleared reason=%s prev=%s", reason, had
-        )
+        _facade().logger.info("release_train: backup guard cleared reason=%s prev=%s", reason, had)
     return {"ok": True, "cleared": bool(had), "reason": reason, "previous": had}
 
 
@@ -292,9 +272,7 @@ def mark_backup_guard_probe_escalated(
         return {"ok": True, "skipped": True, "reason": "already_escalated"}
     guard = dict(guard)
     guard["probe_escalated"] = True
-    guard["probe_escalated_at"] = (
-        _facade().datetime.now(_facade().timezone.utc).isoformat()
-    )
+    guard["probe_escalated_at"] = _facade().datetime.now(_facade().timezone.utc).isoformat()
     st["backup_guard"] = guard
     _facade().save_state(st, path=p)
     return {"ok": True, "probe_escalated": True}
@@ -313,9 +291,7 @@ def bump_release_train(
     每次成功 bump 前会把旧 state 快照到 ``release_train_history/``（容灾 + 回滚 SSOT）。
     """
     enabled = (
-        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_ENABLED", "1") or "")
-        .strip()
-        .lower()
+        (_facade().os.environ.get("MODSTORE_RELEASE_TRAIN_ENABLED", "1") or "").strip().lower()
     )
     if enabled in ("0", "false", "no", "off"):
         st = _facade().load_state()
@@ -380,9 +356,7 @@ def bump_release_train(
         if record_id and int(record_id) > 0:
             _facade().attach_release_train_to_digest(int(record_id), result)
         return result
-    _facade()._snapshot_state_to_history(
-        st, reason="pre_bump", path=_facade().ssot_path()
-    )
+    _facade()._snapshot_state_to_history(st, reason="pre_bump", path=_facade().ssot_path())
     after, kind = _facade().bump_daily(before, day_index=day_index)
     new_day_index = day_index + 1
     now_iso = _facade().datetime.now(_facade().timezone.utc).isoformat()
@@ -395,9 +369,7 @@ def bump_release_train(
     if kind == "major":
         st["last_major_push_at"] = now_iso
     _facade().save_state(st)
-    _facade()._snapshot_state_to_history(
-        st, reason="post_bump", path=_facade().ssot_path()
-    )
+    _facade()._snapshot_state_to_history(st, reason="post_bump", path=_facade().ssot_path())
     result: _facade().Dict[str, _facade().Any] = {
         "ok": True,
         "skipped": False,
@@ -483,9 +455,7 @@ def rollback_release_train(
             if not seen or seen[-1].get("current") != v:
                 seen.append(st)
             if len([s for s in seen if str(s.get("current")) != before]) >= n:
-                target_state = dict(
-                    next((s for s in seen if str(s.get("current")) != before))
-                )
+                target_state = dict(next((s for s in seen if str(s.get("current")) != before)))
                 break
         if target_state is None:
             for st in seen:
@@ -498,18 +468,14 @@ def rollback_release_train(
     new_state = dict(cur)
     new_state["current"] = target_state.get("current")
     new_state["day_index"] = target_state.get("day_index")
-    new_state["last_bump_at"] = (
-        _facade().datetime.now(_facade().timezone.utc).isoformat()
-    )
+    new_state["last_bump_at"] = _facade().datetime.now(_facade().timezone.utc).isoformat()
     new_state["last_bump_day"] = None
     new_state["last_installer_push_at"] = target_state.get("last_installer_push_at")
     new_state["last_major_push_at"] = target_state.get("last_major_push_at")
     _facade().save_state(new_state, path=p)
     _facade()._snapshot_state_to_history(new_state, reason="rollback", path=p)
     after = str(new_state.get("current") or "")
-    _facade().logger.info(
-        "release_train rollback %s -> %s reason=%s", before, after, reason
-    )
+    _facade().logger.info("release_train rollback %s -> %s reason=%s", before, after, reason)
     return {
         "ok": True,
         "before": before,

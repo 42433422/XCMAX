@@ -24,9 +24,7 @@ def compute_period_snapshot(
     for order in all_orders:
         raw_ts = order.get("paid_at") or order.get("created_at") or ""
         try:
-            ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(
-                tzinfo=None
-            )
+            ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(tzinfo=None)
         except RECOVERABLE_ERRORS:
             continue
         if period_start <= ts < period_end:
@@ -43,9 +41,7 @@ def compute_period_snapshot(
                 refunded_in_range.append(order)
 
     trade_numbers = {
-        str(order.get("out_trade_no") or "")
-        for order in paid_in_range
-        if order.get("out_trade_no")
+        str(order.get("out_trade_no") or "") for order in paid_in_range if order.get("out_trade_no")
     }
     modstore_orders = len(paid_in_range)
     modstore_gmv = sum(float(order.get("total_amount") or 0) for order in paid_in_range)
@@ -73,9 +69,7 @@ def compute_period_snapshot(
     total_orders = modstore_orders + fhd_extra_orders
     total_gmv = modstore_gmv + fhd_extra_gmv
     refunds_count = len(refunded_in_range)
-    refunds_amount = sum(
-        float(order.get("total_amount") or 0) for order in refunded_in_range
-    )
+    refunds_amount = sum(float(order.get("total_amount") or 0) for order in refunded_in_range)
     wallet_txns = (
         session.query(Transaction)
         .filter(
@@ -128,9 +122,7 @@ def build_skill_payload(
 ) -> dict[str, Any]:
     """Build the payment-reconcile skill contract and Markdown summary."""
     total_orders = int(snap["total_orders"])
-    local_book_total = round(
-        float(snap["alipay_income"]) + float(snap["wallet_top_ups"]), 2
-    )
+    local_book_total = round(float(snap["alipay_income"]) + float(snap["wallet_top_ups"]), 2)
     diff_amount = 0.0
     diff_count = 0
     matched = total_orders
@@ -156,11 +148,7 @@ def build_skill_payload(
             ),
         }
 
-    fhd = (
-        snap.get("fhd_host_orders")
-        if isinstance(snap.get("fhd_host_orders"), dict)
-        else {}
-    )
+    fhd = snap.get("fhd_host_orders") if isinstance(snap.get("fhd_host_orders"), dict) else {}
     modstore = (
         snap.get("modstore_payment_orders")
         if isinstance(snap.get("modstore_payment_orders"), dict)

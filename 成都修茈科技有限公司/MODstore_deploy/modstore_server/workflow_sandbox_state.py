@@ -68,16 +68,12 @@ def latest_sandbox_run(
     user_id: Optional[int] = None,
     validate_only: Optional[bool] = False,
 ) -> Optional[WorkflowSandboxRun]:
-    q = db.query(WorkflowSandboxRun).filter(
-        WorkflowSandboxRun.workflow_id == workflow_id
-    )
+    q = db.query(WorkflowSandboxRun).filter(WorkflowSandboxRun.workflow_id == workflow_id)
     if user_id is not None:
         q = q.filter(WorkflowSandboxRun.user_id == user_id)
     if validate_only is not None:
         q = q.filter(WorkflowSandboxRun.validate_only == validate_only)
-    return q.order_by(
-        WorkflowSandboxRun.created_at.desc(), WorkflowSandboxRun.id.desc()
-    ).first()
+    return q.order_by(WorkflowSandboxRun.created_at.desc(), WorkflowSandboxRun.id.desc()).first()
 
 
 def sandbox_status_for_workflow(
@@ -87,9 +83,7 @@ def sandbox_status_for_workflow(
     user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     current_fp = workflow_graph_fingerprint(db, int(workflow.id))
-    latest = latest_sandbox_run(
-        db, int(workflow.id), user_id=user_id, validate_only=False
-    )
+    latest = latest_sandbox_run(db, int(workflow.id), user_id=user_id, validate_only=False)
     latest_fp = str(latest.graph_fingerprint or "") if latest else ""
     passed_for_current = bool(latest and latest.ok and latest_fp == current_fp)
     if not latest:

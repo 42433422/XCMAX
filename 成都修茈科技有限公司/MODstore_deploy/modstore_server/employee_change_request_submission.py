@@ -120,12 +120,8 @@ def defer_write_as_change_request(
                     row2 = session.get(EmployeeChangeRequest, cid)
                     if row2:
                         row2.git_branch = str(stage_out.get("branch") or "")[:256]
-                        row2.base_commit_sha = str(stage_out.get("base_commit") or "")[
-                            :64
-                        ]
-                        row2.staged_commit_sha = str(
-                            stage_out.get("staged_commit") or ""
-                        )[:64]
+                        row2.base_commit_sha = str(stage_out.get("base_commit") or "")[:64]
+                        row2.staged_commit_sha = str(stage_out.get("staged_commit") or "")[:64]
                         session.commit()
             else:
                 logger.info(

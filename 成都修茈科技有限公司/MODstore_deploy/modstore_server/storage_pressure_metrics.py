@@ -23,9 +23,7 @@ def env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def bounded_env_float(
-    name: str, default: float, minimum: float, maximum: float
-) -> float:
+def bounded_env_float(name: str, default: float, minimum: float, maximum: float) -> float:
     try:
         value = float(str(os.environ.get(name) or default).strip())
     except (TypeError, ValueError):
@@ -42,12 +40,8 @@ def bounded_env_int(name: str, default: int, minimum: int, maximum: int) -> int:
 
 
 def pressure_thresholds() -> Dict[str, Any]:
-    trigger_free_gib = bounded_env_float(
-        "MODSTORE_STORAGE_MIN_FREE_GIB", 10.0, 0.25, 4096.0
-    )
-    trigger_used_percent = bounded_env_float(
-        "MODSTORE_STORAGE_MAX_USED_PERCENT", 90.0, 50.0, 99.9
-    )
+    trigger_free_gib = bounded_env_float("MODSTORE_STORAGE_MIN_FREE_GIB", 10.0, 0.25, 4096.0)
+    trigger_used_percent = bounded_env_float("MODSTORE_STORAGE_MAX_USED_PERCENT", 90.0, 50.0, 99.9)
     recovery_free_gib = bounded_env_float(
         "MODSTORE_STORAGE_RECOVERY_MIN_FREE_GIB",
         max(12.0, trigger_free_gib),
@@ -72,9 +66,7 @@ def pressure_reasons(snapshot: Dict[str, Any], thresholds: Dict[str, Any]) -> li
     reasons: list[str] = []
     if int(snapshot.get("free_bytes") or 0) < int(thresholds["trigger_min_free_bytes"]):
         reasons.append("free_bytes_below_threshold")
-    if float(snapshot.get("used_percent") or 0.0) >= float(
-        thresholds["trigger_max_used_percent"]
-    ):
+    if float(snapshot.get("used_percent") or 0.0) >= float(thresholds["trigger_max_used_percent"]):
         reasons.append("used_percent_at_or_above_threshold")
     return reasons
 
@@ -96,9 +88,7 @@ def parse_timestamp(value: Any) -> datetime | None:
     return utc(parsed)
 
 
-def build_storage_pressure_status(
-    rows: list[Dict[str, Any]], audit_file: str
-) -> Dict[str, Any]:
+def build_storage_pressure_status(rows: list[Dict[str, Any]], audit_file: str) -> Dict[str, Any]:
     latest = rows[-1] if rows else None
     return {
         "ok": bool(latest and latest.get("ok") is True),

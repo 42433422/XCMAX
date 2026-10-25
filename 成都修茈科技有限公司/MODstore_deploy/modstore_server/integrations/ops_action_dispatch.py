@@ -106,17 +106,13 @@ def dispatch_ops_handler(
             args["lines"] = "120"
     if command_id == "pip-audit-run" and "req_file" not in args:
         args["req_file"] = str(
-            _facade().repo_root()
-            / "MODstore_deploy"
-            / "modstore_server"
-            / "requirements.txt"
+            _facade().repo_root() / "MODstore_deploy" / "modstore_server" / "requirements.txt"
         )
     if command_id == "npm-build" and "cwd" in args:
         pass
     if command_id == "git-push-branch" and (not str(args.get("remote") or "").strip()):
         args["remote"] = (
-            _facade().os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip()
-            or "origin"
+            _facade().os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip() or "origin"
         )
     timeout = float(cfg.get("timeout") or spec.default_timeout)
     timeout = min(timeout, 900.0)
@@ -168,14 +164,10 @@ def dispatch_ops_handler(
             not args.get("cwd")
         ):
             args["cwd"] = str(_facade().repo_root())
-        if command_id == "http-probe-after-deploy" and (
-            not str(args.get("url") or "").strip()
-        ):
+        if command_id == "http-probe-after-deploy" and (not str(args.get("url") or "").strip()):
             args["url"] = (
                 _facade()
-                .os.environ.get(
-                    "MODSTORE_DEPLOY_HEALTH_URL", "http://127.0.0.1:9999/api/health"
-                )
+                .os.environ.get("MODSTORE_DEPLOY_HEALTH_URL", "http://127.0.0.1:9999/api/health")
                 .strip()
             )
         if spec.kind == "local_sync":
@@ -202,13 +194,9 @@ def dispatch_ops_handler(
     shell_cwd: Optional[str] = None
     if handler == "shell_exec" and spec.kind == "shell":
         if command_id == "npm-build" and args.get("cwd"):
-            shell_cwd = str(
-                _facade().Path(_facade()._resolve_path_arg(str(args["cwd"])))
-            )
+            shell_cwd = str(_facade().Path(_facade()._resolve_path_arg(str(args["cwd"]))))
         elif args.get("cwd"):
-            shell_cwd = str(
-                _facade().Path(_facade()._resolve_path_arg(str(args["cwd"])))
-            )
+            shell_cwd = str(_facade().Path(_facade()._resolve_path_arg(str(args["cwd"]))))
         try:
             _facade()._assert_shell_paths_safe(command_id, args, shell_cwd)
         except ValueError as e:
@@ -333,9 +321,7 @@ def dispatch_ops_handler(
         got = (stdout_s or "").strip()
         if got != expect:
             exit_code = 1
-            stderr_s = (
-                (stderr_s or "") + f"\nexpected HTTP {expect}, got {got!r}"
-            ).strip()
+            stderr_s = ((stderr_s or "") + f"\nexpected HTTP {expect}, got {got!r}").strip()
     duration_ms = round((_facade().time.perf_counter() - t0) * 1000, 3)
     hid = str(cfg.get("host_id") or "")
     err_final = (stderr_s or "")[:2000] if exit_code not in (0, None) else ""

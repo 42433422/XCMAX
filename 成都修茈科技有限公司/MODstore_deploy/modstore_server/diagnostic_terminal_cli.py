@@ -29,9 +29,7 @@ def load_operator_environment(env_file: str = "") -> list[str]:
     from dotenv import load_dotenv
 
     loaded = load_modstore_env(ROOT, include_synced=False)
-    configured = (
-        env_file.strip() or (os.environ.get("MODSTORE_TERMINAL_ENV_FILE") or "").strip()
-    )
+    configured = env_file.strip() or (os.environ.get("MODSTORE_TERMINAL_ENV_FILE") or "").strip()
     candidates = (
         [Path(configured).expanduser()]
         if configured
@@ -72,8 +70,7 @@ def fetch_route_catalog(url: str) -> list[dict[str, Any]]:
         methods = [
             str(method).upper()
             for method in operations
-            if str(method).casefold()
-            in {"get", "post", "put", "patch", "delete", "head"}
+            if str(method).casefold() in {"get", "post", "put", "patch", "delete", "head"}
         ]
         names = [
             str(value.get("operationId") or "")
@@ -135,9 +132,7 @@ def run(
         session_factory = get_session_factory()
     if route_catalog is None:
         route_catalog = (
-            fetch_route_catalog(args.openapi_url)
-            if parsed.name in {"find", "routes"}
-            else []
+            fetch_route_catalog(args.openapi_url) if parsed.name in {"find", "routes"} else []
         )
     with session_factory() as db:
         if args.actor.strip():
@@ -165,9 +160,7 @@ def render_human(result: dict[str, Any]) -> str:
     metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
     if metrics:
         lines.append("\n指标")
-        lines.extend(
-            f"  {key}: {_render_value(value)}" for key, value in metrics.items()
-        )
+        lines.extend(f"  {key}: {_render_value(value)}" for key, value in metrics.items())
     items = result.get("items") if isinstance(result.get("items"), list) else []
     if items:
         lines.append("\n证据")

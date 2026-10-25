@@ -56,9 +56,7 @@ def list_ops_audit_logs(
 
 @router.get("/staged-changes")
 def list_ops_staged_changes(
-    status: str | None = Query(
-        None, description="pending|approved|rejected|deployed|failed"
-    ),
+    status: str | None = Query(None, description="pending|approved|rejected|deployed|failed"),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> dict[str, Any]:
@@ -99,10 +97,7 @@ def list_ops_approval_tokens(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(OpsApprovalToken)
-            .order_by(OpsApprovalToken.id.desc())
-            .limit(limit)
-            .all()
+            session.query(OpsApprovalToken).order_by(OpsApprovalToken.id.desc()).limit(limit).all()
         )
         items = [
             {

@@ -6,9 +6,7 @@ import json
 from typing import Any, Dict, List
 
 
-def _craft_pipeline_standby_context(
-    pkg_id: str, signals: Dict[str, Any]
-) -> Dict[str, Any]:
+def _craft_pipeline_standby_context(pkg_id: str, signals: Dict[str, Any]) -> Dict[str, Any]:
     """给待机汇报补充流水线语境，避免 LLM 误判为缺上游故障。"""
     raw_deps = signals.get("depends_on")
     deps = raw_deps if isinstance(raw_deps, list) else []
@@ -69,9 +67,9 @@ def _coerce_standby_excerpt(text: str, row: Dict[str, Any]) -> str:
 def _employee_answer_excerpt(row: Dict[str, Any], *, max_chars: int = 800) -> str:
     md = str(row.get("report_markdown") or "").strip()
     if md:
-        if row.get(
-            "report_mode"
-        ) == "standby_manifest_bench" or _is_standby_pipeline_json_noise(md):
+        if row.get("report_mode") == "standby_manifest_bench" or _is_standby_pipeline_json_noise(
+            md
+        ):
             md = _coerce_standby_excerpt(md, row)
         return md[:max_chars]
     err = str(row.get("cognition_error") or "").strip()

@@ -170,14 +170,10 @@ def _coerce_plan(
                 name=name,
                 purpose=str(item.get("purpose") or "")[:200],
                 input_schema=(
-                    item.get("input_schema")
-                    if isinstance(item.get("input_schema"), dict)
-                    else {}
+                    item.get("input_schema") if isinstance(item.get("input_schema"), dict) else {}
                 ),
                 output_schema=(
-                    item.get("output_schema")
-                    if isinstance(item.get("output_schema"), dict)
-                    else {}
+                    item.get("output_schema") if isinstance(item.get("output_schema"), dict) else {}
                 ),
                 notes=str(item.get("notes") or "")[:200],
             )
@@ -225,9 +221,7 @@ def _fallback_plan(handler: str, *, reason: str) -> EmployeePackPlan:
     )
 
 
-def inject_plan_into_manifest(
-    manifest: Dict[str, Any], plan: EmployeePackPlan
-) -> Dict[str, Any]:
+def inject_plan_into_manifest(manifest: Dict[str, Any], plan: EmployeePackPlan) -> Dict[str, Any]:
     """把规划写回 ``manifest.employee_config_v2.actions``，让 manifest 与运行时一致。
 
     幂等：重复调用结果相同。返回**新**的 manifest dict。
@@ -238,9 +232,7 @@ def inject_plan_into_manifest(
         if isinstance(out.get("employee_config_v2"), dict)
         else {}
     )
-    actions = (
-        dict(v2.get("actions") or {}) if isinstance(v2.get("actions"), dict) else {}
-    )
+    actions = dict(v2.get("actions") or {}) if isinstance(v2.get("actions"), dict) else {}
     actions["handlers"] = plan.declared_handler_names()
     if plan.tools_required:
         actions["tools_required"] = list(plan.tools_required)

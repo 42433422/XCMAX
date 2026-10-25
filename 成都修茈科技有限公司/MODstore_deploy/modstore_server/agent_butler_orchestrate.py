@@ -137,9 +137,7 @@ async def _pipeline_mod(
             snap_info = capture_manifest_snapshot(
                 mod_dir, f"butler 改写前自动备份 {time.strftime('%H:%M:%S')}"
             )
-            await _set_step(
-                sid, "snapshot", "done", f"快照 {snap_info.get('snap_id', '?')}"
-            )
+            await _set_step(sid, "snapshot", "done", f"快照 {snap_info.get('snap_id', '?')}")
         except RECOVERABLE_ERRORS as exc:
             await _set_step(sid, "snapshot", "done", f"快照失败（继续）：{exc}")
     else:
@@ -153,17 +151,13 @@ async def _pipeline_mod(
         if not user:
             await _fail_session(sid, "plan", "用户不存在")
             return
-        prov, mdl, err = await resolve_llm_provider_model_auto(
-            db, user, prov_hint, mdl_hint
-        )
+        prov, mdl, err = await resolve_llm_provider_model_auto(db, user, prov_hint, mdl_hint)
         if err:
             await _fail_session(sid, "plan", err)
             return
 
     focus_paths = focus_paths_override or _default_mod_focus(scope)
-    plan_msg = (
-        f"改写 Mod {mod_id}（scope={scope}）：{brief[:120]}；focus_paths={focus_paths}"
-    )
+    plan_msg = f"改写 Mod {mod_id}（scope={scope}）：{brief[:120]}；focus_paths={focus_paths}"
     await _set_step(sid, "plan", "done", plan_msg[:240])
 
     # ── vibe ──────────────────────────────────────────────────────────
@@ -246,17 +240,11 @@ async def _pipeline_workflow(
         if not user:
             await _fail_session(sid, "plan", "用户不存在")
             return
-        wf = (
-            db.query(Workflow)
-            .filter(Workflow.id == wf_id, Workflow.user_id == user_id)
-            .first()
-        )
+        wf = db.query(Workflow).filter(Workflow.id == wf_id, Workflow.user_id == user_id).first()
         if not wf:
             await _fail_session(sid, "plan", f"工作流 {wf_id} 不存在或无权访问")
             return
-        prov, mdl, err = await resolve_llm_provider_model_auto(
-            db, user, prov_hint, mdl_hint
-        )
+        prov, mdl, err = await resolve_llm_provider_model_auto(db, user, prov_hint, mdl_hint)
         if err:
             await _fail_session(sid, "plan", err)
             return
@@ -333,9 +321,7 @@ async def _pipeline_employee(
         if not user:
             await _fail_session(sid, "plan", "用户不存在")
             return
-        prov, mdl, err = await resolve_llm_provider_model_auto(
-            db, user, prov_hint, mdl_hint
-        )
+        prov, mdl, err = await resolve_llm_provider_model_auto(db, user, prov_hint, mdl_hint)
         if err:
             await _fail_session(sid, "plan", err)
             return
@@ -345,9 +331,7 @@ async def _pipeline_employee(
 
     if mod_dir is not None:
         # Full vibe edit on the employee-related files inside the Mod
-        await _set_step(
-            sid, "plan", "done", f"定位到 Mod 目录 {mod_dir.name}，改写员工脚本"
-        )
+        await _set_step(sid, "plan", "done", f"定位到 Mod 目录 {mod_dir.name}，改写员工脚本")
         await _set_step(sid, "vibe", "running", "vibe-coding 改写员工脚本…")
         vibe_result = await asyncio.to_thread(
             _do_vibe_edit,
@@ -359,9 +343,7 @@ async def _pipeline_employee(
             model=mdl,
         )
         if not vibe_result.get("ok"):
-            await _fail_session(
-                sid, "vibe", vibe_result.get("error", "vibe-coding 失败")
-            )
+            await _fail_session(sid, "vibe", vibe_result.get("error", "vibe-coding 失败"))
             return
         await _set_step(sid, "vibe", "done", "员工脚本已改写")
         await _set_step(sid, "validate", "done", "校验完成")
@@ -373,9 +355,7 @@ async def _pipeline_employee(
         }
     else:
         # Fallback: only refine system_prompt field via LLM
-        await _set_step(
-            sid, "plan", "done", "未找到 Mod 目录，降级为 system_prompt 优化"
-        )
+        await _set_step(sid, "plan", "done", "未找到 Mod 目录，降级为 system_prompt 优化")
         await _set_step(sid, "vibe", "running", "优化员工 system_prompt…")
         refine_result = await asyncio.to_thread(
             _do_refine_system_prompt,
@@ -385,9 +365,7 @@ async def _pipeline_employee(
             model=mdl,
         )
         if not refine_result.get("ok"):
-            await _fail_session(
-                sid, "vibe", refine_result.get("error", "system_prompt 优化失败")
-            )
+            await _fail_session(sid, "vibe", refine_result.get("error", "system_prompt 优化失败"))
             return
         await _set_step(sid, "vibe", "done", "system_prompt 已优化")
         await _set_step(sid, "validate", "done", "校验完成")
@@ -437,9 +415,7 @@ def _do_vibe_edit(
 
             try:
                 if focus_paths:
-                    patch = coder.edit_project(
-                        brief, root=root, focus_paths=focus_paths
-                    )
+                    patch = coder.edit_project(brief, root=root, focus_paths=focus_paths)
                 else:
                     patch = coder.edit_project(brief, root=root)
             except TypeError:

@@ -236,9 +236,7 @@ def _eskill_catalog_lines(db: Session, user: User, max_items: int = 40) -> str:
         .all()
     )
     if not rows:
-        return (
-            "可用 ESkill 目录：当前用户暂无 ESkill；缺失能力必须输出 skill_blueprints。"
-        )
+        return "可用 ESkill 目录：当前用户暂无 ESkill；缺失能力必须输出 skill_blueprints。"
 
     active_versions = {
         (v.eskill_id, v.version): v
@@ -261,9 +259,8 @@ def _eskill_catalog_lines(db: Session, user: User, max_items: int = 40) -> str:
                 output_var=output_var,
             )
         )
-    return (
-        "可用 ESkill 目录（优先复用 skill_id，缺失能力才输出 skill_blueprints）：\n"
-        + "\n".join(lines)
+    return "可用 ESkill 目录（优先复用 skill_id，缺失能力才输出 skill_blueprints）：\n" + "\n".join(
+        lines
     )
 
 

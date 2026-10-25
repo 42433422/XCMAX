@@ -29,9 +29,7 @@ from typing import Any, Dict, Optional, Set
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
-DEFAULT_ALLOWLIST = (
-    Path(__file__).resolve().parent.parent.parent / "runtime_allowlist.json"
-)
+DEFAULT_ALLOWLIST = Path(__file__).resolve().parent.parent.parent / "runtime_allowlist.json"
 
 
 def load(path: Optional[Path] = None) -> Dict[str, Any]:

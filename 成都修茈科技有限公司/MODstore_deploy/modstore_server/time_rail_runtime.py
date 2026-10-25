@@ -27,11 +27,7 @@ def _runtime_path() -> Path:
 
         return default_db_path().parent / "time_rail_node_runtime.json"
     except RECOVERABLE_ERRORS:
-        return (
-            Path(__file__).resolve().parent.parent
-            / "data"
-            / "time_rail_node_runtime.json"
-        )
+        return Path(__file__).resolve().parent.parent / "data" / "time_rail_node_runtime.json"
 
 
 def _load_store() -> Dict[str, Any]:
@@ -51,9 +47,7 @@ def _save_store(doc: Dict[str, Any]) -> None:
     path = _runtime_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(
-        json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
 
 

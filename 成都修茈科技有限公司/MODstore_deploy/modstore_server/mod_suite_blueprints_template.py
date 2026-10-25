@@ -16,9 +16,7 @@ def _employee_stem(emp_id: str) -> str:
     return s or "emp"
 
 
-def render_suite_blueprints_py(
-    mod_id: str, mod_name: str, employees: List[Dict[str, Any]]
-) -> str:
+def render_suite_blueprints_py(mod_id: str, mod_name: str, employees: List[Dict[str, Any]]) -> str:
     """生成可被 scan_fastapi_router_routes 扫描的 FastAPI 套件路由。"""
     rows: List[Dict[str, str]] = []
     for item in employees or []:
@@ -56,9 +54,7 @@ def render_suite_blueprints_py(
             f"        return {{'success': True, 'data': {{'employee_id': {eid_lit}, 'status': 'ready'}}}}\n"
         )
     routes_block = (
-        "\n".join(per_emp_routes)
-        if per_emp_routes
-        else "    pass  # no workflow employees\n"
+        "\n".join(per_emp_routes) if per_emp_routes else "    pass  # no workflow employees\n"
     )
 
     return (
@@ -70,9 +66,7 @@ def render_suite_blueprints_py(
         "import os\n"
         "from typing import Any, Dict, List, Optional\n\n"
         "from fastapi import APIRouter, Depends, HTTPException, Request\n\n"
-        "logger = logging.getLogger(__name__)\n\n"
-        + RUN_AUTH_GUARD_PY
-        + f"MOD_ID = {mod_lit}\n"
+        "logger = logging.getLogger(__name__)\n\n" + RUN_AUTH_GUARD_PY + f"MOD_ID = {mod_lit}\n"
         f"MOD_NAME = {name_lit}\n"
         f"EMPLOYEES: List[Dict[str, str]] = json.loads({json.dumps(employees_lit)})\n\n\n"
         "def _resolve_mod_path(mod_id: str) -> Optional[str]:\n"

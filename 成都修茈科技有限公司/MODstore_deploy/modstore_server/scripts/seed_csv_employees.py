@@ -54,9 +54,7 @@ def _build_pack(
 
     is_generate = str(pack_id or "").endswith("-generate-employee")
     rule_spec = (
-        build_csv_generate_rule_spec(brief)
-        if is_generate
-        else build_csv_read_rule_spec(brief)
+        build_csv_generate_rule_spec(brief) if is_generate else build_csv_read_rule_spec(brief)
     )
     rule_spec["pack_id"] = pack_id
     asset_manifest = {
@@ -71,9 +69,7 @@ def _build_pack(
     }
     from modstore_server.employee_asset_pipeline import _fallback_manifest
 
-    manifest = _normalize_manifest(
-        _fallback_manifest(brief, rule_spec), brief, rule_spec
-    )
+    manifest = _normalize_manifest(_fallback_manifest(brief, rule_spec), brief, rule_spec)
     manifest["id"] = pack_id
     display_name = str(spec.get("name") or manifest.get("name") or pack_id).strip()
     manifest["name"] = display_name
@@ -98,9 +94,7 @@ def _build_pack(
                 row["panel_title"] = display_name
 
     convert_py = (
-        render_csv_generate_convert_module()
-        if is_generate
-        else render_csv_read_convert_module()
+        render_csv_generate_convert_module() if is_generate else render_csv_read_convert_module()
     )
     pack_dir, raw_zip = materialize_asset_employee_pack(
         manifest=manifest,
@@ -112,15 +106,11 @@ def _build_pack(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Seed CSV read/generate employee packs"
-    )
+    parser = argparse.ArgumentParser(description="Seed CSV read/generate employee packs")
     parser.add_argument(
         "--set-public", action="store_true", help="设置 catalog_items.is_public=true"
     )
-    parser.add_argument(
-        "--force", action="store_true", help="覆盖已存在的同 pkg_id 记录"
-    )
+    parser.add_argument("--force", action="store_true", help="覆盖已存在的同 pkg_id 记录")
     parser.add_argument("--dry-run", action="store_true", help="仅构建包，不写 catalog")
     args = parser.parse_args()
 
@@ -134,12 +124,7 @@ def main() -> int:
 
     session_factory = get_session_factory()
     with session_factory() as db:
-        author = (
-            db.query(User)
-            .filter(User.is_admin.is_(True))
-            .order_by(User.id.asc())
-            .first()
-        )
+        author = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user in DB", file=sys.stderr)
@@ -152,9 +137,7 @@ def main() -> int:
         pack_id = spec["pack_id"]
         brief = spec["brief"]
         try:
-            manifest, rule_spec, raw_zip, pack_dir = _build_pack(
-                pack_id, brief, spec=spec
-            )
+            manifest, rule_spec, raw_zip, pack_dir = _build_pack(pack_id, brief, spec=spec)
         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
             print(f"[ERR] {pack_id}: build failed: {exc}")
             continue
@@ -204,9 +187,7 @@ def main() -> int:
             saved = append_package(rec, tmp_xcemp)
             with session_factory() as db:
                 upsert_catalog_item_from_xc_package_dict(db, saved, author_id=author_id)
-                row = (
-                    db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
-                )
+                row = db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
                 if row:
                     if args.set_public:
                         row.is_public = True
@@ -214,9 +195,7 @@ def main() -> int:
                     row.price = 0.0
                     row.artifact = "employee_pack"
                     row.compliance_status = "approved"
-                    row.name = str(spec.get("name") or manifest.get("name") or pack_id)[
-                        :256
-                    ]
+                    row.name = str(spec.get("name") or manifest.get("name") or pack_id)[:256]
                     row.security_level = "enterprise"
                     row.license_scope = "enterprise"
                     db.commit()

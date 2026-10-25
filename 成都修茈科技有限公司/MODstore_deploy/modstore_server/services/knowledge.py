@@ -38,9 +38,7 @@ class KnowledgeSearchHit:
 
 class KnowledgeClient(ABC):
     @abstractmethod
-    async def search(
-        self, request: KnowledgeSearchRequest
-    ) -> List[KnowledgeSearchHit]: ...
+    async def search(self, request: KnowledgeSearchRequest) -> List[KnowledgeSearchHit]: ...
 
     def index_text_chunks(
         self,
@@ -54,9 +52,7 @@ class KnowledgeClient(ABC):
         """Upsert vector chunks into the backing store (Chroma / Redis 等由实现决定)。"""
         raise NotImplementedError
 
-    def delete_vectors(
-        self, *, collection_id: int, ids: Optional[List[str]] = None
-    ) -> int:
+    def delete_vectors(self, *, collection_id: int, ids: Optional[List[str]] = None) -> int:
         """Delete vectors by id list; returns best-effort removed count."""
 
         raise NotImplementedError
@@ -87,9 +83,7 @@ class InProcessKnowledgeClient(KnowledgeClient):
             )
         )
 
-    def delete_vectors(
-        self, *, collection_id: int, ids: Optional[List[str]] = None
-    ) -> int:
+    def delete_vectors(self, *, collection_id: int, ids: Optional[List[str]] = None) -> int:
         from modstore_server.vector_engine import delete as vec_delete
         from modstore_server.vector_engine import kb_collection_name
 
@@ -103,11 +97,7 @@ class InProcessKnowledgeClient(KnowledgeClient):
             await retrieve(
                 user_id=request.user_id,
                 query=request.query,
-                employee_id=(
-                    str(request.employee_id)
-                    if request.employee_id is not None
-                    else None
-                ),
+                employee_id=(str(request.employee_id) if request.employee_id is not None else None),
                 workflow_id=request.workflow_id,
                 org_id=request.org_id,
                 extra_collection_ids=request.extra_collection_ids,

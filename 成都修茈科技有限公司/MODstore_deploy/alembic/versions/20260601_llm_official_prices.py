@@ -43,7 +43,8 @@ def upgrade() -> None:
             op.add_column("ai_model_prices", sa.Column(col, typ, nullable=True))
     if not _col_exists("ai_model_prices", "official_synced_at"):
         op.add_column(
-            "ai_model_prices", sa.Column("official_synced_at", sa.DateTime(), nullable=True)
+            "ai_model_prices",
+            sa.Column("official_synced_at", sa.DateTime(), nullable=True),
         )
 
 

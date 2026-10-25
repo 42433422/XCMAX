@@ -41,9 +41,7 @@ async def run_script_job(
             except RECOVERABLE_ERRORS:
                 pass
 
-    fake_input_files = [
-        Path(str((f or {}).get("filename") or "input.bin")) for f in files or []
-    ]
+    fake_input_files = [Path(str((f or {}).get("filename") or "input.bin")) for f in files or []]
     repair_trace: List[Dict[str, Any]] = []
     gen = await _facade()._generate_script(
         db=db,
@@ -165,9 +163,7 @@ async def run_script_job(
             }
         )
         if ok:
-            await _notify(
-                f"第 {iteration} 轮沙箱通过，已生成 {len(last_outputs)} 个文件"
-            )
+            await _notify(f"第 {iteration} 轮沙箱通过，已生成 {len(last_outputs)} 个文件")
             return {
                 "ok": True,
                 "work_dir": last_work_dir,
@@ -183,9 +179,7 @@ async def run_script_job(
         if not api_key:
             break
         no_output = result.ok and (not result.outputs)
-        await _notify(
-            f"第 {iteration} 轮{('无输出文件，回修' if no_output else '运行失败，回修')}"
-        )
+        await _notify(f"第 {iteration} 轮{('无输出文件，回修' if no_output else '运行失败，回修')}")
         failure_context = f"阶段：沙箱运行/产物验收。\nreturncode: {result.returncode}\nstdout:\n{last_stdout[-1500:]}\nstderr:\n{last_stderr[-1500:]}\noutputs: {result.outputs}\n【关键修复要求】outputs/ 下没有文件是致命错误：\n  1. 在脚本最顶层（不在 if 里）先执行 Path('outputs').mkdir(exist_ok=True)\n  2. 无论 inputs/ 是否有文件，都要无条件写至少一个结果文件，例如 outputs/summary.md\n  3. 写文件语句不能放在 for 循环或 if 分支里，即使没有输入也要有兜底 write\n  4. 每次循环后、函数末尾都要保证 outputs/ 下有至少一个文件"
         repaired = await _facade()._repair_script_once(
             provider=provider,

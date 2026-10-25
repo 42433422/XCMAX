@@ -18,9 +18,7 @@ class WorkflowExecutionRepository(Protocol):
 
     def get(self, execution_id: int) -> WorkflowExecution | None: ...
 
-    def list_for_workflow(
-        self, workflow_id: int, *, limit: int = 50
-    ) -> list[dict[str, Any]]: ...
+    def list_for_workflow(self, workflow_id: int, *, limit: int = 50) -> list[dict[str, Any]]: ...
 
 
 __all__ = ["WorkflowRepository", "WorkflowExecutionRepository"]

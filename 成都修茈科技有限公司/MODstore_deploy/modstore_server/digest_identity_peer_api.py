@@ -50,11 +50,7 @@ def inbound_enabled() -> bool:
 
 
 def upstream_base_url() -> str:
-    return (
-        (os.environ.get("MODSTORE_DIGEST_IDENTITY_UPSTREAM_URL") or "")
-        .strip()
-        .rstrip("/")
-    )
+    return (os.environ.get("MODSTORE_DIGEST_IDENTITY_UPSTREAM_URL") or "").strip().rstrip("/")
 
 
 def _bearer_token(request: Request) -> str:

@@ -143,9 +143,7 @@ async def run_script_agent_job(
             "stderr": "",
             "returncode": -1,
             "outputs": [],
-            "errors": [
-                "该供应商未配置可用 API Key（平台或 BYOK），无法调用 AI 生成脚本"
-            ],
+            "errors": ["该供应商未配置可用 API Key（平台或 BYOK），无法调用 AI 生成脚本"],
             "repair_trace": [],
         }
     base_url = _facade().resolve_base_url(db, user_id, provider)
@@ -158,9 +156,7 @@ async def run_script_agent_job(
     )
     agent_brief = _facade()._brief_from_workbench(brief, files)
     if system_hint.strip():
-        agent_brief.references["employee_orchestration_hint"] = system_hint.strip()[
-            :4000
-        ]
+        agent_brief.references["employee_orchestration_hint"] = system_hint.strip()[:4000]
     trace: List[Dict[str, Any]] = []
     final_outcome: Dict[str, Any] = {}
     error_reason = ""
@@ -168,12 +164,8 @@ async def run_script_agent_job(
     last_run: Dict[str, Any] = {}
     last_check_errors: List[str] = []
     _loop_label = "v2" if _facade()._AGENT_V2 else "v1"
-    await _notify(
-        f"规划脚本任务（最多 {max_iterations} 轮自主迭代，agent {_loop_label}）"
-    )
-    _loop_fn = (
-        _facade().run_agent_loop_v2 if _facade()._AGENT_V2 else _facade().run_agent_loop
-    )
+    await _notify(f"规划脚本任务（最多 {max_iterations} 轮自主迭代，agent {_loop_label}）")
+    _loop_fn = _facade().run_agent_loop_v2 if _facade()._AGENT_V2 else _facade().run_agent_loop
     async for ev in _loop_fn(
         agent_brief,
         llm=llm,
@@ -227,9 +219,7 @@ async def run_script_agent_job(
                 "timed_out": bool(payload.get("timed_out")),
             }
             stderr_tail = (
-                str(payload.get("stderr_tail") or "").strip().splitlines()[-1:]
-                if not ok
-                else []
+                str(payload.get("stderr_tail") or "").strip().splitlines()[-1:] if not ok else []
             )
             tail = stderr_tail[0][:80] if stderr_tail else ""
             await _notify(
@@ -256,37 +246,23 @@ async def run_script_agent_job(
             error_reason = str(
                 payload.get("reason") or final_outcome.get("error") or "脚本代理失败"
             )
-    last_result = (
-        final_outcome.get("last_result") if isinstance(final_outcome, dict) else None
-    )
+    last_result = final_outcome.get("last_result") if isinstance(final_outcome, dict) else None
     last_result = last_result if isinstance(last_result, dict) else {}
     ok = bool(final_outcome.get("ok")) if isinstance(final_outcome, dict) else False
-    script = (
-        str(final_outcome.get("final_code") or "")
-        if isinstance(final_outcome, dict)
-        else ""
-    )
-    outputs = (
-        last_result.get("outputs")
-        if isinstance(last_result.get("outputs"), list)
-        else []
-    )
+    script = str(final_outcome.get("final_code") or "") if isinstance(final_outcome, dict) else ""
+    outputs = last_result.get("outputs") if isinstance(last_result.get("outputs"), list) else []
     errors: List[str] = []
     if not ok:
         reason = error_reason or str(final_outcome.get("error") or "脚本代理未通过")
         iterations = (
-            int(final_outcome.get("iterations") or 0)
-            if isinstance(final_outcome, dict)
-            else 0
+            int(final_outcome.get("iterations") or 0) if isinstance(final_outcome, dict) else 0
         )
         parts: List[str] = [f"脚本代理运行 {iterations} 轮仍未通过；最后错误：{reason}"]
         verdict_reason = (last_verdict.get("reason") or "").strip()
         if verdict_reason and verdict_reason not in reason:
             parts.append(f"验收未通过原因：{verdict_reason[:300]}")
         suggestions = [
-            str(s).strip()
-            for s in last_verdict.get("suggestions") or []
-            if str(s).strip()
+            str(s).strip() for s in last_verdict.get("suggestions") or [] if str(s).strip()
         ]
         if suggestions:
             parts.append("验收建议：" + "；".join(suggestions[:3])[:400])
@@ -324,8 +300,7 @@ async def run_script_agent_job(
                 last_result["outputs"] = fallback_outputs
                 last_result["returncode"] = int(last_result.get("returncode") or 0)
                 last_result["stdout_tail"] = (
-                    str(last_result.get("stdout_tail") or "")
-                    + "\n已生成兜底 outputs/summary.md"
+                    str(last_result.get("stdout_tail") or "") + "\n已生成兜底 outputs/summary.md"
                 ).strip()
         timeout_failure = not ok and bool(last_result.get("timed_out"))
         if timeout_failure:

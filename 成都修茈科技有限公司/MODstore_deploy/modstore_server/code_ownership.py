@@ -118,9 +118,7 @@ def _matches(pattern: str, path: str) -> bool:
     p = _normalize_path(path)
     if not pat or not p:
         return False
-    if fnmatchcase(p, pat) or (
-        pat.endswith("/**") and p.startswith(pat[:-3].rstrip("/") + "/")
-    ):
+    if fnmatchcase(p, pat) or (pat.endswith("/**") and p.startswith(pat[:-3].rstrip("/") + "/")):
         return True
     try:
         return re.match(_glob_to_regex(pat), p) is not None
@@ -238,9 +236,7 @@ def resolve_code_owners(paths: Iterable[str], *, limit: int = 8) -> Dict[str, An
         if not eid:
             continue
         scope_globs = [str(x) for x in (row.get("scope_globs") or []) if str(x).strip()]
-        forbidden_globs = [
-            str(x) for x in (row.get("forbidden_globs") or []) if str(x).strip()
-        ]
+        forbidden_globs = [str(x) for x in (row.get("forbidden_globs") or []) if str(x).strip()]
         for path in normalized_paths:
             if any(_matches(pattern, path) for pattern in forbidden_globs):
                 continue

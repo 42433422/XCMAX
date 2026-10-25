@@ -164,7 +164,10 @@ def test_agent_runner_llm_failure_returned_as_error(tmp_path):
 
 
 def test_agent_runner_runtime_limits_are_bounded(monkeypatch, tmp_path):
-    from modstore_server.mod_employee_agent_runner import EmployeeAgentRunner, _llm_timeout_seconds
+    from modstore_server.mod_employee_agent_runner import (
+        EmployeeAgentRunner,
+        _llm_timeout_seconds,
+    )
 
     monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_MAX_ROUNDS", "2")
     monkeypatch.setenv("MODSTORE_EMPLOYEE_AGENT_LLM_TIMEOUT_SECONDS", "30")
@@ -262,7 +265,9 @@ def test_tool_run_sandboxed_python_blocks_dangerous(tmp_path):
 
 def test_blueprints_template_renders_workspace_code():
     """blueprints.py must inject workspace tools and agent_runner into ctx."""
-    from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+    from modstore_server.employee_pack_blueprints_template import (
+        render_employee_pack_blueprints_py,
+    )
 
     src = render_employee_pack_blueprints_py(
         pack_id="test-pack",
@@ -280,7 +285,9 @@ def test_blueprints_template_renders_workspace_code():
 
 def test_employee_template_renders_agent_handler():
     """employees/<stem>.py must include _handle_agent and 'agent' in _DISPATCH."""
-    from modstore_server.employee_pack_blueprints_template import render_employee_pack_employee_py
+    from modstore_server.employee_pack_blueprints_template import (
+        render_employee_pack_employee_py,
+    )
 
     src = render_employee_pack_employee_py(
         employee_id="test-emp",

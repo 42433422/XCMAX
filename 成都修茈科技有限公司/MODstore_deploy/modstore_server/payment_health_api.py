@@ -64,9 +64,7 @@ def compute_payment_health() -> dict[str, Any]:
     )
     out["java_service_healthy"] = java_up
     if backend == "java":
-        out["ready_for_java_cutover"] = java_up and not out.get(
-            "local_json_sot_writable"
-        )
+        out["ready_for_java_cutover"] = java_up and not out.get("local_json_sot_writable")
     else:
         out["ready_for_java_cutover"] = java_up
         out["note"] = (
@@ -82,8 +80,6 @@ def api_payment_health() -> dict[str, Any]:
     data = compute_payment_health()
     status = "ok"
     if data.get("payment_backend") == "java":
-        if not data.get("java_payment_reachable") or not data.get(
-            "ready_for_java_cutover"
-        ):
+        if not data.get("java_payment_reachable") or not data.get("ready_for_java_cutover"):
             status = "degraded"
     return {"status": status, **data}

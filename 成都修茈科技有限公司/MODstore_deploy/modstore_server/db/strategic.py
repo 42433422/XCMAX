@@ -42,9 +42,7 @@ class StrategicDecision(Base):
     """
 
     __tablename__ = "strategic_decisions"
-    __table_args__ = (
-        UniqueConstraint("decision_id", name="uq_strategic_decisions_decision_id"),
-    )
+    __table_args__ = (UniqueConstraint("decision_id", name="uq_strategic_decisions_decision_id"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     decision_id = Column(String(64), nullable=False, index=True)
@@ -100,9 +98,7 @@ class AutonomyBoundary(Base):
     """
 
     __tablename__ = "autonomy_boundaries"
-    __table_args__ = (
-        UniqueConstraint("rule_id", name="uq_autonomy_boundaries_rule_id"),
-    )
+    __table_args__ = (UniqueConstraint("rule_id", name="uq_autonomy_boundaries_rule_id"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     rule_id = Column(String(64), nullable=False, index=True)
@@ -111,9 +107,7 @@ class AutonomyBoundary(Base):
     # glob 或 regex 模式，匹配 action 描述
     action_pattern = Column(String(256), nullable=False)
     # auto（自动通过）| report_only（通过但记录）| require_human（升级人工）| require_council（会议决议）
-    allowed_autonomy = Column(
-        String(32), nullable=False, default="require_human", index=True
-    )
+    allowed_autonomy = Column(String(32), nullable=False, default="require_human", index=True)
     risk_level = Column(
         String(16), nullable=False, default="medium", index=True
     )  # low | medium | high | critical
@@ -131,9 +125,7 @@ class CouncilMeeting(Base):
     """员工自治会议：议程、决议、action items 闭环。"""
 
     __tablename__ = "council_meetings"
-    __table_args__ = (
-        UniqueConstraint("meeting_id", name="uq_council_meetings_meeting_id"),
-    )
+    __table_args__ = (UniqueConstraint("meeting_id", name="uq_council_meetings_meeting_id"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     meeting_id = Column(String(64), nullable=False, index=True)
@@ -171,9 +163,7 @@ class StrategicActionItem(Base):
     """行动项：与决策 + 会议关联，闭环追踪。"""
 
     __tablename__ = "strategic_action_items"
-    __table_args__ = (
-        UniqueConstraint("action_id", name="uq_strategic_action_items_action_id"),
-    )
+    __table_args__ = (UniqueConstraint("action_id", name="uq_strategic_action_items_action_id"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     action_id = Column(String(64), nullable=False, index=True)
@@ -209,9 +199,7 @@ class StrategicReport(Base):
     """战略层周报/月报：基于 daily_digest_records 聚合。"""
 
     __tablename__ = "strategic_reports"
-    __table_args__ = (
-        UniqueConstraint("report_key", name="uq_strategic_reports_report_key"),
-    )
+    __table_args__ = (UniqueConstraint("report_key", name="uq_strategic_reports_report_key"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     # weekly:2026-W29 | monthly:2026-07

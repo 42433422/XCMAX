@@ -36,13 +36,9 @@ def _read_mod_json_file(
 def _mod_shell_ui_row(
     mod_dir: _facade().Path, manifest: _facade().Dict[str, _facade().Any]
 ) -> _facade().Dict[str, _facade().Any]:
-    frontend = (
-        manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-    )
+    frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
     config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
-    shell_from_manifest = (
-        frontend.get("shell") if isinstance(frontend.get("shell"), dict) else {}
-    )
+    shell_from_manifest = frontend.get("shell") if isinstance(frontend.get("shell"), dict) else {}
     ui_shell = _facade()._read_mod_json_file(
         mod_dir, str(config.get("ui_shell") or "config/ui_shell.json")
     )
@@ -51,21 +47,14 @@ def _mod_shell_ui_row(
     industry_card = _facade()._read_mod_json_file(
         mod_dir, str(config.get("industry_card") or "config/industry_card.json")
     )
-    industry = (
-        manifest.get("industry") if isinstance(manifest.get("industry"), dict) else {}
-    )
+    industry = manifest.get("industry") if isinstance(manifest.get("industry"), dict) else {}
     industry_name = (
         str(
-            industry_card.get("name")
-            or industry.get("name")
-            or manifest.get("industry")
-            or "通用"
+            industry_card.get("name") or industry.get("name") or manifest.get("industry") or "通用"
         ).strip()
         or "通用"
     )
-    settings = (
-        ui_shell.get("settings") if isinstance(ui_shell.get("settings"), dict) else {}
-    )
+    settings = ui_shell.get("settings") if isinstance(ui_shell.get("settings"), dict) else {}
     raw_options = (
         settings.get("industry_options")
         if isinstance(settings.get("industry_options"), list)
@@ -85,9 +74,7 @@ def _mod_shell_ui_row(
         "industry_card": industry_card or {"schema_version": 1, "name": industry_name},
         "ui_shell": ui_shell,
         "sidebar_menu": (
-            ui_shell.get("sidebar_menu")
-            if isinstance(ui_shell.get("sidebar_menu"), list)
-            else []
+            ui_shell.get("sidebar_menu") if isinstance(ui_shell.get("sidebar_menu"), list) else []
         ),
         "menu_overrides": (
             ui_shell.get("menu_overrides")
@@ -114,25 +101,17 @@ def _frontend_spec_for_existing_mod(
     mod_id = str(manifest.get("id") or mod_dir.name).strip() or mod_dir.name
     mod_name = str(manifest.get("name") or mod_id).strip() or mod_id
     desc = str(manifest.get("description") or "").strip()
-    frontend = (
-        manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-    )
+    frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
     config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
     blueprint = _facade()._read_mod_json_file(
         mod_dir, str(config.get("ai_blueprint") or "config/ai_blueprint.json")
     )
-    spec = (
-        blueprint.get("frontend_app")
-        if isinstance(blueprint.get("frontend_app"), dict)
-        else {}
-    )
+    spec = blueprint.get("frontend_app") if isinstance(blueprint.get("frontend_app"), dict) else {}
     spec = dict(spec) if isinstance(spec, dict) else {}
     menu = frontend.get("menu") if isinstance(frontend.get("menu"), list) else []
     first_menu = menu[0] if menu and isinstance(menu[0], dict) else {}
     entry_path = (
-        str(
-            frontend.get("pro_entry_path") or first_menu.get("path") or f"/{mod_id}"
-        ).strip()
+        str(frontend.get("pro_entry_path") or first_menu.get("path") or f"/{mod_id}").strip()
         or f"/{mod_id}"
     )
     subtitle = str(brief or "").strip() or str(spec.get("subtitle") or desc).strip()
@@ -145,9 +124,7 @@ def _frontend_spec_for_existing_mod(
         spec["sections"] = [
             {
                 "title": str(row.get("label") or row.get("id") or "AI 员工"),
-                "description": str(
-                    row.get("panel_summary") or row.get("summary") or desc
-                ),
+                "description": str(row.get("panel_summary") or row.get("summary") or desc),
                 "items": [str(row.get("panel_title") or "自动化业务处理")],
             }
             for row in employees[:4]
@@ -187,18 +164,14 @@ def _frontend_spec_for_existing_mod(
             "subtitle": subtitle or desc or f"{mod_name} 专业版前端",
             "theme": str(spec.get("theme") or "aurora"),
             "industry": industry_name,
-            "workflow_entry_label": str(
-                spec.get("workflow_entry_label") or "查看工作流"
-            ),
+            "workflow_entry_label": str(spec.get("workflow_entry_label") or "查看工作流"),
             "chat_entry_label": str(spec.get("chat_entry_label") or "打开专业对话"),
         }
     )
     return spec
 
 
-@_facade().api_router.get(
-    "/api/health", tags=["health"], response_model=_facade().HealthResponse
-)
+@_facade().api_router.get("/api/health", tags=["health"], response_model=_facade().HealthResponse)
 def health() -> _facade().HealthResponse:
     from modstore_server.deploy_context import health_payload
 
@@ -207,9 +180,7 @@ def health() -> _facade().HealthResponse:
 
 @_facade().api_router.get("/api/mods", tags=["mods"])
 def api_list_mods(
-    user: _facade().Optional[_facade().User] = _facade().Depends(
-        _facade()._get_optional_user
-    ),
+    user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._get_optional_user),
 ):
     lib = _facade()._lib()
     if user is None:
@@ -252,19 +223,13 @@ def api_mods_shell_ui(mod_id: str = ""):
         "industry_options": industry_options or ["通用"],
         "sidebar_menu": selected.get("sidebar_menu") if selected else [],
         "menu_overrides": selected.get("menu_overrides") if selected else [],
-        "settings": (selected.get("ui_shell") or {}).get("settings", {})
-        if selected
-        else {},
-        "make_scene": (selected.get("ui_shell") or {}).get("make_scene", {})
-        if selected
-        else {},
+        "settings": (selected.get("ui_shell") or {}).get("settings", {}) if selected else {},
+        "make_scene": (selected.get("ui_shell") or {}).get("make_scene", {}) if selected else {},
     }
 
 
 @_facade().api_router.get("/api/mods/{mod_id}", tags=["mods"])
-def api_get_mod(
-    mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)
-):
+def api_get_mod(mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)):
     _facade()._assert_user_owns_mod(user, mod_id)
     d = _facade()._mod_dir(mod_id)
     data, err = _facade().read_manifest(d)
@@ -308,9 +273,7 @@ def api_authoring_extension_surface(merge_host: bool = False):
                 result["host_openapi_error"] = f"HTTP {r.status_code} from {url}"
             else:
                 spec = r.json()
-                routes = _facade().slim_openapi_paths(
-                    spec if isinstance(spec, dict) else {}
-                )
+                routes = _facade().slim_openapi_paths(spec if isinstance(spec, dict) else {})
                 result["host_openapi"] = {
                     "base_url": base,
                     "openapi_url": url,
@@ -370,12 +333,8 @@ def api_mod_authoring_summary(
     return {
         "ok": True,
         "id": mod_id,
-        "manifest_backend": data.get("backend")
-        if isinstance(data.get("backend"), dict)
-        else {},
-        "manifest_frontend": data.get("frontend")
-        if isinstance(data.get("frontend"), dict)
-        else {},
+        "manifest_backend": data.get("backend") if isinstance(data.get("backend"), dict) else {},
+        "manifest_frontend": data.get("frontend") if isinstance(data.get("frontend"), dict) else {},
         "validation_ok": len(ve) == 0,
         "warnings": ve,
         "blueprint_file": bp_file,
@@ -384,9 +343,7 @@ def api_mod_authoring_summary(
     }
 
 
-@_facade().api_router.post(
-    "/api/mods/{mod_id}/workflow-employees/scaffold", tags=["authoring"]
-)
+@_facade().api_router.post("/api/mods/{mod_id}/workflow-employees/scaffold", tags=["authoring"])
 def api_mod_workflow_employee_scaffold(
     mod_id: str,
     body: _facade().WorkflowEmployeeScaffoldDTO,
@@ -419,9 +376,7 @@ def api_export_workflow_employee_pack(
         raise _facade().HTTPException(400, err or "manifest 无效")
     rows = data.get("workflow_employees")
     if not isinstance(rows, list) or workflow_index < 0 or workflow_index >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id,
         data,
@@ -454,9 +409,7 @@ async def api_register_workflow_employee_catalog(
     rows = data.get("workflow_employees")
     idx = int(body.workflow_index)
     if not isinstance(rows, list) or idx < 0 or idx >= len(rows):
-        raise _facade().HTTPException(
-            400, "workflow_index 越界或 workflow_employees 非数组"
-        )
+        raise _facade().HTTPException(400, "workflow_index 越界或 workflow_employees 非数组")
     entry = rows[idx] if isinstance(rows[idx], dict) else {}
     raw, build_err, pack_id = _facade().build_employee_pack_zip_from_workflow(
         mod_id, data, entry, workflow_index=idx, mod_dir=d
@@ -487,9 +440,7 @@ async def api_register_workflow_employee_catalog(
         mod_id, data, entry, workflow_index=idx
     )
     if manifest_build_err or not manifest:
-        raise _facade().HTTPException(
-            400, manifest_build_err or "生成员工包 manifest 失败"
-        )
+        raise _facade().HTTPException(400, manifest_build_err or "生成员工包 manifest 失败")
     rec: _facade().Dict[str, _facade().Any] = {
         "id": pack_id,
         "name": str(manifest.get("name") or pack_id),
@@ -544,9 +495,7 @@ async def api_register_workflow_employee_catalog(
         except RECOVERABLE_ERRORS:
             import logging
 
-            logging.getLogger(__name__).exception(
-                "EmployeeApplicationService.register_pack failed"
-            )
+            logging.getLogger(__name__).exception("EmployeeApplicationService.register_pack failed")
         readiness = _facade().analyze_mod_employee_readiness(db, user, d)
     return {
         "ok": True,
@@ -556,9 +505,7 @@ async def api_register_workflow_employee_catalog(
     }
 
 
-@_facade().api_router.post(
-    "/api/mods/{mod_id}/patch-workflow-employee-nodes", tags=["authoring"]
-)
+@_facade().api_router.post("/api/mods/{mod_id}/patch-workflow-employee-nodes", tags=["authoring"])
 def api_patch_workflow_employee_nodes(
     mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)
 ):
@@ -707,9 +654,7 @@ def api_mod_frontend_regenerate(
         snap = None
     spec = _facade()._frontend_spec_for_existing_mod(mod_dir, manifest, body.brief)
     mod_name = str(manifest.get("name") or mod_id)
-    frontend = (
-        manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-    )
+    frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
     menu = (
         frontend.get("menu")
         if isinstance(frontend.get("menu"), list) and frontend.get("menu")
@@ -763,9 +708,7 @@ def api_mod_frontend_regenerate(
 
 
 @_facade().api_router.delete("/api/mods/{mod_id}", tags=["mods"])
-def api_delete_mod(
-    mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)
-):
+def api_delete_mod(mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)):
     mid = mod_id.strip()
     _facade()._assert_user_owns_mod(user, mid)
     try:
@@ -788,14 +731,10 @@ async def api_import_mod(
         raise _facade().HTTPException(400, "请上传 .zip")
     raw = await file.read()
     max_bytes = int(
-        _facade().os.environ.get(
-            "MODSTORE_CATALOG_UPLOAD_MAX_BYTES", str(80 * 1024 * 1024)
-        )
+        _facade().os.environ.get("MODSTORE_CATALOG_UPLOAD_MAX_BYTES", str(80 * 1024 * 1024))
     )
     if len(raw) > max_bytes:
-        raise _facade().HTTPException(
-            400, f"文件过大（>{max_bytes // 1024 // 1024}MB）"
-        )
+        raise _facade().HTTPException(400, f"文件过大（>{max_bytes // 1024 // 1024}MB）")
     import tempfile
 
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
@@ -812,9 +751,7 @@ async def api_import_mod(
 
 
 @_facade().api_router.get("/api/mods/{mod_id}/export", tags=["mods"])
-def api_export_mod(
-    mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)
-):
+def api_export_mod(mod_id: str, user: _facade().User = _facade().Depends(_facade()._require_user)):
     _facade()._assert_user_owns_mod(user, mod_id)
     d = _facade()._mod_dir(mod_id)
     buf = _facade().io.BytesIO()
@@ -1052,9 +989,7 @@ def _include_optional(app: _facade().FastAPI, module_path: str) -> None:
     try:
         mod = __import__(module_path, fromlist=["router"])
     except ImportError as exc:
-        _facade().logging.getLogger(__name__).info(
-            "skip optional router %s: %s", module_path, exc
-        )
+        _facade().logging.getLogger(__name__).info("skip optional router %s: %s", module_path, exc)
         return
     except RECOVERABLE_ERRORS:
         _facade().logging.getLogger(__name__).exception(
@@ -1078,9 +1013,7 @@ def _maybe_mount_dev_docs(app: _facade().FastAPI) -> None:
     docs_root = _facade().Path(__file__).resolve().parent.parent / "docs"
     if not docs_root.is_dir():
         return
-    app.mount(
-        "/dev-docs", _facade().StaticFiles(directory=str(docs_root)), name="dev-docs"
-    )
+    app.mount("/dev-docs", _facade().StaticFiles(directory=str(docs_root)), name="dev-docs")
 
 
 def _maybe_mount_ui(app: _facade().FastAPI) -> None:
@@ -1090,9 +1023,7 @@ def _maybe_mount_ui(app: _facade().FastAPI) -> None:
         return
     assets = dist / "assets"
     if assets.is_dir():
-        app.mount(
-            "/assets", _facade().StaticFiles(directory=str(assets)), name="ui-assets"
-        )
+        app.mount("/assets", _facade().StaticFiles(directory=str(assets)), name="ui-assets")
     index_file = dist / "index.html"
 
     @app.get("/")

@@ -122,9 +122,7 @@ async def admin_replay_webhook(
         }.get(refund.status, "")
         if not event_type:
             raise HTTPException(400, f"退款状态 {refund.status} 不支持重放")
-        result = webhook_dispatcher.publish_event(
-            event_type, order_no, _refund_payload(refund)
-        )
+        result = webhook_dispatcher.publish_event(event_type, order_no, _refund_payload(refund))
         return {"ok": bool(result.get("ok")), "result": result}
 
     order = payment_orders.find(order_no)
@@ -132,7 +130,5 @@ async def admin_replay_webhook(
         raise HTTPException(404, "订单不存在")
     if (order.get("status") or "").strip().lower() != "paid":
         raise HTTPException(400, f"只有已支付订单可重放 {PAYMENT_PAID}")
-    result = webhook_dispatcher.publish_event(
-        PAYMENT_PAID, order_no, _payment_payload(order)
-    )
+    result = webhook_dispatcher.publish_event(PAYMENT_PAID, order_no, _payment_payload(order))
     return {"ok": bool(result.get("ok")), "result": result}

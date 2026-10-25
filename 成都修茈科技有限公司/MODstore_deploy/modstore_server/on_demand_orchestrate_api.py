@@ -54,9 +54,7 @@ def _extract_dispatch_source(row: OnDemandOrchestrateJob) -> str:
 
 
 def _job_to_dict(row: OnDemandOrchestrateJob) -> Dict[str, Any]:
-    result_payload = (
-        _safe_loads(row.result_json) if (row.result_json or "").strip() else None
-    )
+    result_payload = _safe_loads(row.result_json) if (row.result_json or "").strip() else None
     if isinstance(result_payload, dict) and "_meta" in result_payload:
         result_payload = {k: v for k, v in result_payload.items() if k != "_meta"}
         if "payload" in result_payload and len(result_payload) == 1:
@@ -100,9 +98,7 @@ async def orchestrate_now(
     import asyncio
 
     loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        None, lambda: _run_orchestrate(body, int(user.id))
-    )
+    result = await loop.run_in_executor(None, lambda: _run_orchestrate(body, int(user.id)))
     return result
 
 
@@ -127,12 +123,7 @@ async def orchestrate_async(
             llm_provider=str(body.llm_provider or "auto")[:64],
             llm_model=str(body.llm_model or "auto")[:128],
             result_json=json.dumps(
-                {
-                    "_meta": {
-                        "dispatch_source": (body.dispatch_source or "web").strip()
-                        or "web"
-                    }
-                },
+                {"_meta": {"dispatch_source": (body.dispatch_source or "web").strip() or "web"}},
                 ensure_ascii=False,
             ),
         )
@@ -153,11 +144,7 @@ async def orchestrate_async(
         try:
             result = _run_orchestrate(body_copy, user_id)
             with sf2() as session:
-                r = (
-                    session.query(OnDemandOrchestrateJob)
-                    .filter_by(job_id=job_id)
-                    .first()
-                )
+                r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "done"
                     r.completed_at = datetime.now(UTC)
@@ -168,11 +155,7 @@ async def orchestrate_async(
         except RECOVERABLE_ERRORS as exc:
             logger.exception("async orchestrate job %s failed", job_id)
             with sf2() as session:
-                r = (
-                    session.query(OnDemandOrchestrateJob)
-                    .filter_by(job_id=job_id)
-                    .first()
-                )
+                r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
                 if r:
                     r.status = "failed"
                     r.completed_at = datetime.now(UTC)
@@ -196,9 +179,7 @@ async def get_orchestrate_job(
         if not row:
             raise HTTPException(404, f"job_id {job_id} not found")
         # 仅本人或管理员可见
-        if int(row.user_id) != int(user.id) and not bool(
-            getattr(user, "is_admin", False)
-        ):
+        if int(row.user_id) != int(user.id) and not bool(getattr(user, "is_admin", False)):
             raise HTTPException(403, "forbidden")
         return _job_to_dict(row)
 

@@ -21,9 +21,7 @@ from modstore_server.db.db_base import Base
 
 class UserLlmCredential(Base):
     __tablename__ = "user_llm_credentials"
-    __table_args__ = (
-        UniqueConstraint("user_id", "provider", name="uq_user_llm_provider"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_user_llm_provider"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)

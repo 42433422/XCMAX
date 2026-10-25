@@ -98,9 +98,7 @@ def diff_summary_path_evidence_incomplete(diff_summary: str) -> bool:
     return False
 
 
-def _changed_file_evidence(
-    changed_files: Optional[Sequence[str]], diff_summary: str
-) -> str:
+def _changed_file_evidence(changed_files: Optional[Sequence[str]], diff_summary: str) -> str:
     if changed_files:
         return "\n".join(str(path) for path in changed_files)
     return diff_summary
@@ -115,16 +113,12 @@ def should_auto_approve_staged(
     if not _env_bool("MODSTORE_OPS_STAGED_AUTO_APPROVE", "0"):
         return False
     if release_slo_halt_active():
-        logger.warning(
-            "ops staged auto-approve blocked: MODSTORE_RELEASE_SLO_HALT / smoke failed"
-        )
+        logger.warning("ops staged auto-approve blocked: MODSTORE_RELEASE_SLO_HALT / smoke failed")
         return False
     if files_changed_count <= 0 or files_changed_count > _max_files():
         return False
     if changed_files is None and diff_summary_path_evidence_incomplete(diff_summary):
-        logger.info(
-            "ops staged auto-approve blocked: diff summary path evidence is incomplete"
-        )
+        logger.info("ops staged auto-approve blocked: diff summary path evidence is incomplete")
         return False
     try:
         from modstore_server.self_maintenance_policy import (
@@ -162,9 +156,7 @@ def try_auto_deploy_staged_change(staged_id: int) -> Optional[Dict[str, Any]]:
                 return None
             files_n = int(row.files_changed_count or 0)
             diff = str(row.diff_summary or "")
-        if not should_auto_approve_staged(
-            files_changed_count=files_n, diff_summary=diff
-        ):
+        if not should_auto_approve_staged(files_changed_count=files_n, diff_summary=diff):
             logger.info(
                 "ops staged auto-approve skipped id=%s files=%s",
                 staged_id,

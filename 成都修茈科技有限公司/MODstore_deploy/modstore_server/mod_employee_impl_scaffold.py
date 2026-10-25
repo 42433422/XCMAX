@@ -170,9 +170,7 @@ def _vibe_heal_mod_employees(
         for e in employees
         if isinstance(e, dict) and str(e.get("id") or "").strip()
     ]
-    paths_hint = (
-        ", ".join(employee_paths[:6]) if employee_paths else "backend/employees/*.py"
-    )
+    paths_hint = ", ".join(employee_paths[:6]) if employee_paths else "backend/employees/*.py"
     brief = (
         f"对 mod={mod_id} 的员工实现（{paths_hint}）做最小自愈，遵守 FHD app.mod_sdk 边界。\n"
         "1) 修复语法错误、补缺失 import；保留 async def run(payload, ctx) 签名。\n"

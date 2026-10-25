@@ -43,9 +43,7 @@ def _build_fallback_manifest_result(state):
                 "version": "1.0.0",
                 "artifact": "employee_pack",
                 "name": state["name"],
-                "description": _facade()._clean_brief_for_description(
-                    state["brief"], 500
-                ),
+                "description": _facade()._clean_brief_for_description(state["brief"], 500),
             },
             "perception": {
                 "type": (
@@ -54,9 +52,7 @@ def _build_fallback_manifest_result(state):
                     else (
                         "json"
                         if state["_is_csv_gen"] or state["_is_excel_gen"]
-                        else "excel"
-                        if state["_is_excel_read"]
-                        else "file_or_text"
+                        else "excel" if state["_is_excel_read"] else "file_or_text"
                     )
                 ),
                 "accepted_extensions": state["rule_spec"].get("accepted_extensions")
@@ -69,9 +65,7 @@ def _build_fallback_manifest_result(state):
                         else (
                             [".xlsx", ".xlsm"]
                             if state["_is_excel_read"]
-                            else [".docx", ".pdf"]
-                            if state["_is_doc_review"]
-                            else [".xlsx"]
+                            else [".docx", ".pdf"] if state["_is_doc_review"] else [".xlsx"]
                         )
                     )
                 ),
@@ -96,9 +90,7 @@ def _build_fallback_manifest_result(state):
                         "top_p": 0.9,
                     },
                 },
-                "skills": [
-                    {"name": state["skill_name"], "brief": state["skill_brief"]}
-                ],
+                "skills": [{"name": state["skill_name"], "brief": state["skill_brief"]}],
             },
             "collaboration": {"workflow": {"workflow_id": 0, "name": state["name"]}},
             "actions": state["actions_cfg"],

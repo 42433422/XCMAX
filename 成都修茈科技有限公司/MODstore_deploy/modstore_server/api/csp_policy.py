@@ -16,7 +16,9 @@ def _common_directives() -> str:
 def build_enforced_csp(nonce: str) -> str:
     """Production CSP: no unsafe-eval; script via nonce + self; styles still allow inline (Vue/libs)."""
     n = nonce.replace("'", "")
-    return f"{_common_directives()}; script-src 'self' 'nonce-{n}'; style-src 'self' 'unsafe-inline'"
+    return (
+        f"{_common_directives()}; script-src 'self' 'nonce-{n}'; style-src 'self' 'unsafe-inline'"
+    )
 
 
 def build_swagger_csp() -> str:
@@ -30,4 +32,6 @@ def build_swagger_csp() -> str:
 
 def build_report_only_strict_csp() -> str:
     """Stricter policy for Report-Only: probe removal of style unsafe-inline."""
-    return f"{_common_directives()}; script-src 'self'; style-src 'self'; report-uri /api/csp-report"
+    return (
+        f"{_common_directives()}; script-src 'self'; style-src 'self'; report-uri /api/csp-report"
+    )

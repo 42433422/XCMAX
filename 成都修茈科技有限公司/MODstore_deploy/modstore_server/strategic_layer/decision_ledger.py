@@ -85,15 +85,9 @@ _ALLOWED_TRANSITIONS: Dict[DecisionStatus, frozenset[DecisionStatus]] = {
             DecisionStatus.WITHDRAWN,
         }
     ),
-    DecisionStatus.AUTO_APPROVED: frozenset(
-        {DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}
-    ),
-    DecisionStatus.APPROVED: frozenset(
-        {DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}
-    ),
-    DecisionStatus.EXECUTING: frozenset(
-        {DecisionStatus.COMPLETED, DecisionStatus.WITHDRAWN}
-    ),
+    DecisionStatus.AUTO_APPROVED: frozenset({DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}),
+    DecisionStatus.APPROVED: frozenset({DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}),
+    DecisionStatus.EXECUTING: frozenset({DecisionStatus.COMPLETED, DecisionStatus.WITHDRAWN}),
     DecisionStatus.COMPLETED: frozenset(),  # 终态（review 通过字段标记，不改 status）
     DecisionStatus.REJECTED: frozenset(),
     DecisionStatus.WITHDRAWN: frozenset(),

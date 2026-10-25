@@ -118,12 +118,8 @@ def serialize_connector(connector: OpenApiConnector) -> Dict[str, Any]:
         "operation_count": int(connector.operation_count or 0),
         "generated_version": int(connector.generated_version or 0),
         "last_error": connector.last_error or "",
-        "created_at": connector.created_at.isoformat()
-        if connector.created_at
-        else None,
-        "updated_at": connector.updated_at.isoformat()
-        if connector.updated_at
-        else None,
+        "created_at": connector.created_at.isoformat() if connector.created_at else None,
+        "updated_at": connector.updated_at.isoformat() if connector.updated_at else None,
     }
 
 
@@ -158,9 +154,7 @@ def credential_view(credential: Optional[OpenApiCredential]) -> Dict[str, Any]:
         return {"auth_type": "none", "configured": False, "config_preview": {}}
     preview: Dict[str, Any] = {}
     try:
-        decrypted = decrypt_credential_payload(
-            credential.auth_type, credential.config_encrypted
-        )
+        decrypted = decrypt_credential_payload(credential.auth_type, credential.config_encrypted)
         for key, value in decrypted.config.items():
             if key in {"key", "api_key", "token", "client_secret", "password"}:
                 preview[key] = "***"
@@ -171,23 +165,16 @@ def credential_view(credential: Optional[OpenApiCredential]) -> Dict[str, Any]:
         preview = {"__error__": "解密失败"}
     return {
         "auth_type": credential.auth_type,
-        "configured": credential.auth_type != "none"
-        and bool(credential.config_encrypted),
+        "configured": credential.auth_type != "none" and bool(credential.config_encrypted),
         "config_preview": preview,
-        "updated_at": credential.updated_at.isoformat()
-        if credential.updated_at
-        else None,
+        "updated_at": credential.updated_at.isoformat() if credential.updated_at else None,
     }
 
 
-def fetch_connector_or_404(
-    database: Session, user: User, connector_id: int
-) -> OpenApiConnector:
+def fetch_connector_or_404(database: Session, user: User, connector_id: int) -> OpenApiConnector:
     row = (
         database.query(OpenApiConnector)
-        .filter(
-            OpenApiConnector.id == connector_id, OpenApiConnector.user_id == user.id
-        )
+        .filter(OpenApiConnector.id == connector_id, OpenApiConnector.user_id == user.id)
         .first()
     )
     if not row:

@@ -106,9 +106,7 @@ def open_issue_for_proposal(
         cmd.extend(["--label", AI_IMPLEMENT_LABEL])
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"gh issue create failed (rc={result.returncode}): {result.stderr}"
-        )
+        raise RuntimeError(f"gh issue create failed (rc={result.returncode}): {result.stderr}")
 
     issue_url = result.stdout.strip()
     append_event(

@@ -83,9 +83,7 @@ def _status_outcome(status_code: int) -> str:
     return "success"
 
 
-def observe_payment_proxy(
-    method: str, path: str, status_code: int, elapsed_seconds: float
-) -> None:
+def observe_payment_proxy(method: str, path: str, status_code: int, elapsed_seconds: float) -> None:
     outcome = _status_outcome(status_code)
     status = str(status_code)
     PROXY_COUNT.labels(method, path, status, outcome).inc()

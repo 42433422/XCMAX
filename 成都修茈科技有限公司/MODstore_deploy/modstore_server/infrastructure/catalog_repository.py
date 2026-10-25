@@ -18,9 +18,7 @@ from modstore_server.models import CatalogItem as CatalogItemRow
 class FileCatalogPackageStorage:
     """Append-only package storage backed by :mod:`modstore_server.catalog_store`."""
 
-    def append_package(
-        self, record: dict[str, Any], src_file: Path | None
-    ) -> dict[str, Any]:
+    def append_package(self, record: dict[str, Any], src_file: Path | None) -> dict[str, Any]:
         return catalog_store.append_package(record, src_file)
 
 
@@ -31,11 +29,7 @@ class SqlCatalogRepository:
         self._session = session
 
     def get_by_pkg_id(self, pkg_id: str) -> CatalogDomainItem | None:
-        row = (
-            self._session.query(CatalogItemRow)
-            .filter(CatalogItemRow.pkg_id == pkg_id)
-            .first()
-        )
+        row = self._session.query(CatalogItemRow).filter(CatalogItemRow.pkg_id == pkg_id).first()
         if not row:
             return None
         return CatalogDomainItem(
@@ -52,9 +46,7 @@ class SqlCatalogRepository:
 
     def upsert(self, item: CatalogDomainItem, *, price: float) -> None:
         row = (
-            self._session.query(CatalogItemRow)
-            .filter(CatalogItemRow.pkg_id == item.pkg_id)
-            .first()
+            self._session.query(CatalogItemRow).filter(CatalogItemRow.pkg_id == item.pkg_id).first()
         )
         if not row:
             row = CatalogItemRow(pkg_id=item.pkg_id, author_id=item.author_id)
@@ -90,9 +82,7 @@ class InMemoryCatalogPackageStorage:
         self.calls: list[tuple[dict[str, Any], Path | None]] = []
         self.saved: list[dict[str, Any]] = []
 
-    def append_package(
-        self, record: dict[str, Any], src_file: Path | None
-    ) -> dict[str, Any]:
+    def append_package(self, record: dict[str, Any], src_file: Path | None) -> dict[str, Any]:
         self.calls.append((dict(record), src_file))
         rec = dict(record)
         rec.setdefault("sha256", "test-sha")

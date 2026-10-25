@@ -39,11 +39,7 @@ def api_payment_entitlements(user: User = Depends(_get_current_user)):
         )
         items = []
         for p in purchases:
-            item = (
-                session.query(CatalogItem)
-                .filter(CatalogItem.id == p.catalog_id)
-                .first()
-            )
+            item = session.query(CatalogItem).filter(CatalogItem.id == p.catalog_id).first()
             if item:
                 items.append(
                     {
@@ -53,9 +49,7 @@ def api_payment_entitlements(user: User = Depends(_get_current_user)):
                         "version": item.version,
                         "name": item.name,
                         "price_paid": p.amount,
-                        "purchased_at": p.created_at.isoformat()
-                        if p.created_at
-                        else "",
+                        "purchased_at": p.created_at.isoformat() if p.created_at else "",
                     }
                 )
         return {"items": items, "total": len(items)}
@@ -110,12 +104,7 @@ def api_payment_refund(body: RefundDTO, user: User = Depends(_get_current_user))
     with sf() as session:
         user_id = int(order.get("user_id") or 0)
         amount = float(order.get("total_amount") or 0)
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user_id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user_id, balance=0.0)
             session.add(wallet)
@@ -165,8 +154,6 @@ def api_payment_refund(body: RefundDTO, user: User = Depends(_get_current_user))
                 )
         except RECOVERABLE_ERRORS:
             logger.exception("管理员退款扣回经验失败: %s", body.out_trade_no)
-        payment_orders.merge_fields(
-            body.out_trade_no, refunded=True, refund_reason=body.reason
-        )
+        payment_orders.merge_fields(body.out_trade_no, refunded=True, refund_reason=body.reason)
         session.commit()
     return {"ok": True}

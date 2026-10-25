@@ -31,9 +31,7 @@ def market_item_public(item: Any) -> bool:
     )
 
 
-def market_item_visible_to_user(
-    item: Any, user: User | None, *, purchased: bool = False
-) -> bool:
+def market_item_visible_to_user(item: Any, user: User | None, *, purchased: bool = False) -> bool:
     return not is_planned_duty_employee_pack(item.pkg_id, item.artifact) and (
         market_item_public(item)
         or bool(user and (user.is_admin or item.author_id == user.id or purchased))
@@ -62,21 +60,15 @@ LICENSE_SCOPE_LABELS = {
 _CONTACT_EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 _CONTACT_SUBMIT_TIMES: dict[str, list[float]] = defaultdict(list)
 _CONTACT_SUBMIT_LIMIT = int(os.environ.get("MODSTORE_PUBLIC_CONTACT_LIMIT", "10"))
-_CONTACT_SUBMIT_WINDOW_SEC = int(
-    os.environ.get("MODSTORE_PUBLIC_CONTACT_WINDOW_SEC", "3600")
-)
+_CONTACT_SUBMIT_WINDOW_SEC = int(os.environ.get("MODSTORE_PUBLIC_CONTACT_WINDOW_SEC", "3600"))
 
 # 公司名联网匹配：只读、可略频繁，与表单提交分开计数
 _CONTACT_MATCH_TIMES: dict[str, list[float]] = defaultdict(list)
 _CONTACT_MATCH_LIMIT = int(os.environ.get("MODSTORE_PUBLIC_CONTACT_MATCH_LIMIT", "40"))
-_CONTACT_MATCH_WINDOW_SEC = int(
-    os.environ.get("MODSTORE_PUBLIC_CONTACT_MATCH_WINDOW_SEC", "600")
-)
+_CONTACT_MATCH_WINDOW_SEC = int(os.environ.get("MODSTORE_PUBLIC_CONTACT_MATCH_WINDOW_SEC", "600"))
 
 _WORKBENCH_MATCH_TIMES: dict[str, list[float]] = defaultdict(list)
-_WORKBENCH_MATCH_LIMIT = int(
-    os.environ.get("MODSTORE_WORKBENCH_COMPANY_MATCH_LIMIT", "80")
-)
+_WORKBENCH_MATCH_LIMIT = int(os.environ.get("MODSTORE_WORKBENCH_COMPANY_MATCH_LIMIT", "80"))
 _WORKBENCH_MATCH_WINDOW_SEC = int(
     os.environ.get("MODSTORE_WORKBENCH_COMPANY_MATCH_WINDOW_SEC", "600")
 )
@@ -131,9 +123,7 @@ def _normalize_ip_risk_level(raw: str | None) -> str:
 
 
 def _effective_license_scope(item: CatalogItem) -> str:
-    return _normalize_license_scope(
-        getattr(item, "license_scope", None), float(item.price or 0)
-    )
+    return _normalize_license_scope(getattr(item, "license_scope", None), float(item.price or 0))
 
 
 def _entitlement_metadata(item: CatalogItem, source: str) -> str:
@@ -146,9 +136,7 @@ def _entitlement_metadata(item: CatalogItem, source: str) -> str:
                 getattr(item, "artifact", None),
             ),
             "origin_type": _normalize_origin_type(getattr(item, "origin_type", None)),
-            "ip_risk_level": _normalize_ip_risk_level(
-                getattr(item, "ip_risk_level", None)
-            ),
+            "ip_risk_level": _normalize_ip_risk_level(getattr(item, "ip_risk_level", None)),
         },
         ensure_ascii=False,
         separators=(",", ":"),

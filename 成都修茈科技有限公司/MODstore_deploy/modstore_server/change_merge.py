@@ -56,9 +56,7 @@ def detect_conflict(
                 except RECOVERABLE_ERRORS:
                     pass
 
-            git_changed = (
-                _git_path_changed_since(base_sha, target_path) if base_sha else None
-            )
+            git_changed = _git_path_changed_since(base_sha, target_path) if base_sha else None
 
             if git_changed is True:
                 applied_after_base = [
@@ -70,9 +68,7 @@ def detect_conflict(
                 ]
                 if applied_after_base:
                     return True, applied_after_base
-                return True, [
-                    int(cr.id) for cr in same_path if (cr.status or "") == "applied"
-                ]
+                return True, [int(cr.id) for cr in same_path if (cr.status or "") == "applied"]
 
             if git_changed is False:
                 return False, []
@@ -197,9 +193,7 @@ def resolve_conflict(
             data = json.loads(row.diff_blob or "{}")
             path = str(data.get("path") or "").strip()
             content_b = str(data.get("content") or "")
-            ws = str(
-                data.get("workspace_root") or row.workspace_root_hint or ""
-            ).strip()
+            ws = str(data.get("workspace_root") or row.workspace_root_hint or "").strip()
 
         if merge_strategy == "fail_on_conflict":
             sf2 = get_session_factory()
@@ -224,9 +218,7 @@ def resolve_conflict(
 
                 resolved = os.path.normpath(os.path.join(ws, path)) if ws else path
                 original = (
-                    Path(resolved).read_text(encoding="utf-8")
-                    if Path(resolved).exists()
-                    else ""
+                    Path(resolved).read_text(encoding="utf-8") if Path(resolved).exists() else ""
                 )
             except RECOVERABLE_ERRORS:
                 original = ""

@@ -49,17 +49,25 @@ def upgrade() -> None:
             ),
             sa.Column("last_error", sa.String(512), nullable=False, server_default=""),
         )
-        op.create_index("ix_incident_claims_dispatch_state", "incident_claims", ["dispatch_state"])
+        op.create_index(
+            "ix_incident_claims_dispatch_state", "incident_claims", ["dispatch_state"]
+        )
 
     if "event_outbox" in tables:
-        columns = {c["name"] for c in sa.inspect(op.get_bind()).get_columns("event_outbox")}
+        columns = {
+            c["name"] for c in sa.inspect(op.get_bind()).get_columns("event_outbox")
+        }
         if "claim_token" not in columns:
             op.add_column(
                 "event_outbox",
-                sa.Column("claim_token", sa.String(64), nullable=False, server_default=""),
+                sa.Column(
+                    "claim_token", sa.String(64), nullable=False, server_default=""
+                ),
             )
         if "claim_until" not in columns:
-            op.add_column("event_outbox", sa.Column("claim_until", sa.DateTime(), nullable=True))
+            op.add_column(
+                "event_outbox", sa.Column("claim_until", sa.DateTime(), nullable=True)
+            )
 
 
 def downgrade() -> None:

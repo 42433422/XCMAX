@@ -43,9 +43,7 @@ def generated_para_merge_contract_verdict(
 
     labels = pull.get("labels") if isinstance(pull.get("labels"), list) else []
     label_names = {
-        str(label.get("name") or "").strip().lower()
-        for label in labels
-        if isinstance(label, dict)
+        str(label.get("name") or "").strip().lower() for label in labels if isinstance(label, dict)
     }
     if "risk:r0" not in label_names or "hold-merge" in label_names:
         return {"ok": False, "reason": "github_para_merge_labels_invalid"}
@@ -60,8 +58,7 @@ def generated_para_merge_contract_verdict(
         and str(check.get("status") or "").lower() == "completed"
         and str(check.get("conclusion") or "").lower() == "success"
         and str(
-            (check.get("app") if isinstance(check.get("app"), dict) else {}).get("slug")
-            or ""
+            (check.get("app") if isinstance(check.get("app"), dict) else {}).get("slug") or ""
         ).lower()
         == "github-actions"
     }

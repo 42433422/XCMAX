@@ -11,9 +11,7 @@ from typing import Any, Dict, List, Optional
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 MARKER_STATUS_FILENAME = "self_maintenance_loop_status.py"
-_INDETERMINATE_MERGE_REVIEW_CODES = frozenset(
-    {"indeterminate-review", "indeterminate_review"}
-)
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 _MODSTORE_SERVER_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/"
 _STAT_FOOTER_RE = re.compile(
@@ -98,10 +96,7 @@ def _item_actionable_merge_review_veto(item: Dict[str, Any]) -> bool:
     if not meta.get("actionable_code_findings"):
         return False
     veto = normalize_merge_review_veto_code(str(meta.get("veto_code") or ""))
-    if (
-        veto in _INDETERMINATE_MERGE_REVIEW_CODES
-        or veto == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE
-    ):
+    if veto in _INDETERMINATE_MERGE_REVIEW_CODES or veto == _DIFF_TOO_LARGE_MERGE_REVIEW_CODE:
         return False
     return True
 
@@ -228,9 +223,7 @@ def assess_loop_memory_executable_change_block(
 
     if (
         normalized
-        and all(
-            is_auxiliary_self_maintenance_evidence_path(path) for path in normalized
-        )
+        and all(is_auxiliary_self_maintenance_evidence_path(path) for path in normalized)
         and not diff_includes_modstore_server_production_path(changed_files)
     ):
         return {
@@ -446,9 +439,7 @@ def parse_diff_stat_paths(diff_summary: str) -> List[str]:
 
 def is_marker_status_path(path: str) -> bool:
     normalized = (path or "").replace("\\", "/").strip().strip('"').strip("'")
-    return normalized == MARKER_STATUS_FILENAME or normalized.endswith(
-        "/" + MARKER_STATUS_FILENAME
-    )
+    return normalized == MARKER_STATUS_FILENAME or normalized.endswith("/" + MARKER_STATUS_FILENAME)
 
 
 def should_block_marker_only_diff_summary(
@@ -467,14 +458,12 @@ def should_block_marker_only_diff_summary(
     if not requirement.get("required"):
         return {
             "blocked": False,
-            "reason": requirement.get("reason")
-            or "loop memory does not require executable change",
+            "reason": requirement.get("reason") or "loop memory does not require executable change",
             "paths": paths,
         }
     return {
         "blocked": True,
-        "reason": requirement.get("reason")
-        or "marker-only self-maintenance diff blocked",
+        "reason": requirement.get("reason") or "marker-only self-maintenance diff blocked",
         "paths": paths,
     }
 

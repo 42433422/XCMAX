@@ -25,11 +25,7 @@ def dispatch_private_rework(event_id: str, payload: dict[str, Any]) -> dict[str,
     ticket_id, owner = int(payload["ticket_id"]), int(payload["user_id"])
     sid = hashlib.sha256(f"private-rework:{event_id}".encode()).hexdigest()[:24]
     with get_session_factory()() as db:
-        ticket = (
-            db.query(CustomerServiceTicket)
-            .filter_by(id=ticket_id, user_id=owner)
-            .first()
-        )
+        ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner).first()
         if ticket is None or ticket.intent != "custom_delivery":
             return {
                 "ok": False,
@@ -46,9 +42,7 @@ def dispatch_private_rework(event_id: str, payload: dict[str, Any]) -> dict[str,
         prior = next((row for row in runs if row.get("session_id") == sid), None)
         if prior and prior.get("status") in {"done", "error"}:
             return {"ok": True, "replayed": True, "production_status": prior["status"]}
-        target = str(
-            evidence.get("runtime_mod_id") or evidence.get("target_mod_id") or ""
-        )
+        target = str(evidence.get("runtime_mod_id") or evidence.get("target_mod_id") or "")
         source_kind = (
             "employee"
             if evidence.get("kind") == "employee"
@@ -123,9 +117,7 @@ def dispatch_private_rework(event_id: str, payload: dict[str, Any]) -> dict[str,
     except BOUNDARY_ERRORS as exc:
         status, error = "error", str(exc)[:1000]
     with get_session_factory()() as db:
-        ticket = (
-            db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner).one()
-        )
+        ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner).one()
         evidence = json_loads(ticket.evidence_json, {})
         for row in evidence.get("runs", []):
             if row.get("session_id") == sid:

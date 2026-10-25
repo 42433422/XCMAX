@@ -115,9 +115,7 @@ async def stream_audio(text: str, voice: str, rs: str) -> AsyncIterator[bytes]:
                     buf.extend(data)
                     yield data
     except RECOVERABLE_ERRORS:
-        _LOG.warning(
-            "edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True
-        )
+        _LOG.warning("edge-tts stream failed text_len=%d voice=%s", len(t), voice, exc_info=True)
         raise
 
     if buf:

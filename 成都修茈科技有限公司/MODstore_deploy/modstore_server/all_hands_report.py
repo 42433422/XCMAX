@@ -253,9 +253,7 @@ async def synthesize_all_hands_answer(
     )
 
 
-async def synthesize_meeting_minutes(
-    *, report: Dict[str, Any], user_id: int
-) -> Dict[str, Any]:
+async def synthesize_meeting_minutes(*, report: Dict[str, Any], user_id: int) -> Dict[str, Any]:
     """将已成功生成的 ``build_all_hands_report`` 结果压缩为五段式「会议摘要」正文。
 
     返回 ``{ text, generated_at, model, error }``；失败时 ``text`` 可为空且 ``error`` 非空。

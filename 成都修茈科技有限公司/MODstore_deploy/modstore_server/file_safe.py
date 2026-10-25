@@ -40,9 +40,7 @@ def resolve_under_mod(mod_dir: Path, rel: str) -> Path:
         raise ValueError("路径越界") from e
     suf = candidate.suffix.lower()
     if suf not in ALLOWED_SUFFIXES:
-        raise ValueError(
-            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
-        )
+        raise ValueError(f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）")
     return candidate
 
 
@@ -73,9 +71,7 @@ def read_text_under_mod(mod_dir: Path, rel: str) -> str:
         raise ValueError("路径越界")
     suffix = os.path.splitext(candidate_text)[1].lower()
     if suffix not in ALLOWED_SUFFIXES:
-        raise ValueError(
-            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
-        )
+        raise ValueError(f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）")
     if not os.path.isfile(candidate_text):
         raise FileNotFoundError("不是文件或不存在")
     size = os.stat(candidate_text).st_size
@@ -98,9 +94,7 @@ def write_text_under_mod(mod_dir: Path, rel: str, content: str) -> Path:
         raise ValueError("路径越界")
     suffix = os.path.splitext(candidate_text)[1].lower()
     if suffix not in ALLOWED_SUFFIXES:
-        raise ValueError(
-            f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）"
-        )
+        raise ValueError(f"不允许的扩展名（允许: {', '.join(sorted(ALLOWED_SUFFIXES))}）")
     parent_text = os.path.dirname(candidate_text)
     os.makedirs(parent_text, exist_ok=True)
     with open(candidate_text, "w", encoding="utf-8", newline="\n") as handle:

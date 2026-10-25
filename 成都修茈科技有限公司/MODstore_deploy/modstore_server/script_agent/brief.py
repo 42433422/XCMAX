@@ -106,10 +106,7 @@ class ContextBundle:
     def as_system_prompt_appendix(self) -> str:
         parts: List[str] = []
         if self.allowlist_packages:
-            parts.append(
-                "可用第三方包（已审核 allowlist）："
-                + ", ".join(self.allowlist_packages)
-            )
+            parts.append("可用第三方包（已审核 allowlist）：" + ", ".join(self.allowlist_packages))
         if self.sdk_doc:
             parts.append("modstore_runtime SDK 速查：\n" + self.sdk_doc)
         if self.kb_chunks_md:

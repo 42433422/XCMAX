@@ -29,9 +29,7 @@ def _reraise_employee_pack_not_found(exc: BaseException) -> None:
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
-    ).expanduser()
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
 
 
 def _employee_download_jobs_root() -> Path:
@@ -42,9 +40,7 @@ def _employee_download_jobs_root() -> Path:
 
 def _resolve_taiyangniao_backend(input_data: Dict[str, Any]) -> None:
     """注入太阳鸟 pro 的 backend 路径（Linux 部署常用 MODSTORE_REPO_ROOT/mods/taiyangniao-pro/backend）。"""
-    if input_data.get("taiyangniao_backend_path") or input_data.get(
-        "source_backend_path"
-    ):
+    if input_data.get("taiyangniao_backend_path") or input_data.get("source_backend_path"):
         return
     tb = (os.environ.get("TAIYANGNIAO_BACKEND_PATH") or "").strip()
     if not tb:
@@ -230,9 +226,7 @@ def _persist_employee_outputs_for_download(
             dest = job_dir / f"{stem}_{i}{suf}"
         shutil.copy2(src, dest)
         label = (
-            "下载转换结果"
-            if ("输出" in dest.name or "output" in dest.name.lower())
-            else dest.name
+            "下载转换结果" if ("输出" in dest.name or "output" in dest.name.lower()) else dest.name
         )
         meta.append({"job_id": job_id, "filename": dest.name, "label": label})
     return meta

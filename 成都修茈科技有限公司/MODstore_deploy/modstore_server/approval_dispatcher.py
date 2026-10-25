@@ -33,12 +33,7 @@ logger = logging.getLogger(__name__)
 def _first_admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
-        u = (
-            session.query(User)
-            .filter(User.is_admin.is_(True))
-            .order_by(User.id.asc())
-            .first()
-        )
+        u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         if u:
             return int(u.id)
         u2 = session.query(User).order_by(User.id.asc()).first()
@@ -62,9 +57,7 @@ def _run_cmd(command_id: str, args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _notify_failure(subject: str, html: str) -> None:
-    to_email = os.environ.get(
-        "MODSTORE_DAILY_DIGEST_EMAIL", "1499383833@qq.com"
-    ).strip()
+    to_email = os.environ.get("MODSTORE_DAILY_DIGEST_EMAIL", "1499383833@qq.com").strip()
     if not to_email:
         return
     try:
@@ -85,9 +78,7 @@ def deploy_staged_change(
         if not row or row.status != "pending":
             return {"ok": False, "error": "staged change not pending"}
         branch = row.branch
-        remote = (
-            os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip() or "origin"
-        )
+        remote = os.environ.get("MODSTORE_DEPLOY_PUSH_REMOTE", "origin").strip() or "origin"
 
     audit_ids: List[int] = []
     r1 = _run_cmd("git-push-branch", {"branch": branch, "remote": remote})
@@ -168,9 +159,7 @@ def deploy_staged_change(
 
         write_public_action_board()
     except RECOVERABLE_ERRORS:
-        logger.exception(
-            "public action board after deploy failed staged_id=%s", staged_id
-        )
+        logger.exception("public action board after deploy failed staged_id=%s", staged_id)
 
     # 自动 merge PR（若启用）
     auto_pr = os.environ.get("MODSTORE_AUTO_PR_ENABLED", "1").strip().lower() in (
@@ -215,9 +204,7 @@ def _mark_staged_deployed(
             row.approved_at = row.approved_at or now
             audit_id = int(probe_audit_id or 0)
             row.deploy_audit_id = (
-                audit_id
-                if audit_id > 0 and session.get(OpsActionAuditLog, audit_id)
-                else None
+                audit_id if audit_id > 0 and session.get(OpsActionAuditLog, audit_id) else None
             )
             session.commit()
 
@@ -318,11 +305,7 @@ def handle_token_row(token_id: int, *, message_id: str = "") -> Dict[str, Any]:
 def _do_reject_all(token_id: int, all_audit: List[int]) -> Dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        q = (
-            session.query(OpsStagedChange)
-            .filter(OpsStagedChange.status == "pending")
-            .all()
-        )
+        q = session.query(OpsStagedChange).filter(OpsStagedChange.status == "pending").all()
         n = 0
         for row in q:
             row.status = "rejected"
@@ -359,9 +342,7 @@ def _maybe_merge_pr(branch: str, *, human_approved_by: str = "") -> Dict[str, An
         source="approval_dispatcher.auto_merge",
     )
     if not decision.allowed:
-        logger.info(
-            "autonomy_guard blocked PR merge for branch %s: %s", branch, decision.reason
-        )
+        logger.info("autonomy_guard blocked PR merge for branch %s: %s", branch, decision.reason)
         return {"ok": False, "risk_decision": decision.to_dict()}
     root = repo_root()
     proc = subprocess.run(
@@ -381,18 +362,12 @@ def _maybe_merge_pr(branch: str, *, human_approved_by: str = "") -> Dict[str, An
     return {"ok": True, "risk_decision": decision.to_dict()}
 
 
-def handle_incoming_approval_email(
-    *, from_addr: str, body: str, message_id: str
-) -> Dict[str, Any]:
+def handle_incoming_approval_email(*, from_addr: str, body: str, message_id: str) -> Dict[str, Any]:
     """解析一封回信：From 白名单 + 正文中的 6 位 hex token。"""
     import hashlib
     import re
 
-    auth = (
-        os.environ.get("MODSTORE_APPROVAL_AUTHORIZED_FROM", "1499383833@qq.com")
-        .strip()
-        .lower()
-    )
+    auth = os.environ.get("MODSTORE_APPROVAL_AUTHORIZED_FROM", "1499383833@qq.com").strip().lower()
     if (from_addr or "").strip().lower() != auth:
         return {"ok": False, "skip": True, "reason": "from not authorized"}
 

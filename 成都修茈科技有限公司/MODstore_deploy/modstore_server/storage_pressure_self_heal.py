@@ -47,9 +47,7 @@ _register_storage_pressure_job = _scheduler.register_storage_pressure_job
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR
-    ).expanduser()
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR).expanduser()
 
 
 def audit_path() -> Path:
@@ -400,16 +398,12 @@ def run_storage_pressure_self_heal(
             try:
                 result["incident_emitted"] = _publish_unresolved_incident(result)
             except BOUNDARY_ERRORS as incident_exc:  # noqa: BLE001
-                logger.exception(
-                    "storage pressure repair failure incident publish failed"
-                )
+                logger.exception("storage pressure repair failure incident publish failed")
                 result["incident_emitted"] = False
                 result["incident_error"] = type(incident_exc).__name__
             return _finalize(result)
 
-        free_delta = int(after.get("free_bytes") or 0) - int(
-            before.get("free_bytes") or 0
-        )
+        free_delta = int(after.get("free_bytes") or 0) - int(before.get("free_bytes") or 0)
         database_retention = (
             retention.get("database_retention")
             if isinstance(retention.get("database_retention"), dict)
@@ -418,9 +412,7 @@ def run_storage_pressure_self_heal(
         removed_files = int(retention.get("removed_count") or 0)
         removed_notifications = int(database_retention.get("removed_count") or 0)
         remaining_count = int(remaining_notifications.get("candidate_count") or 0)
-        janitor_ok = (
-            bool(retention.get("ok")) and str(retention.get("status")) != "failed"
-        )
+        janitor_ok = bool(retention.get("ok")) and str(retention.get("status")) != "failed"
         recovered = recovery_verified(after, thresholds)
         physical_reclaim_observed = free_delta > 0
         logical_retention_verified = remaining_count == 0
@@ -434,9 +426,7 @@ def run_storage_pressure_self_heal(
                     "released_file_bytes": int(retention.get("released_bytes") or 0),
                     "removed_notifications": removed_notifications,
                     "remaining_notification_candidates": remaining_count,
-                    "notification_delete_truncated": bool(
-                        database_retention.get("truncated")
-                    ),
+                    "notification_delete_truncated": bool(database_retention.get("truncated")),
                 },
                 "postcondition": {
                     "pressure_detected": True,

@@ -146,18 +146,14 @@ def build_brief_from_workflow(db: Session, workflow: Workflow) -> Brief:
         goal=goal,
         outputs=outputs,
         acceptance=acceptance,
-        inputs=[
-            BriefInputFile(filename="(无上传文件，此为节点图迁移)", description="")
-        ],
+        inputs=[BriefInputFile(filename="(无上传文件，此为节点图迁移)", description="")],
         fallback=fallback,
         references={"migrated_from_workflow_id": workflow.id},
         trigger_type=str(triggers[0].trigger_type if triggers else "manual"),
     )
 
 
-def _resolve_user_llm_for_migration(
-    db: Session, user: User
-) -> Optional[Dict[str, Any]]:
+def _resolve_user_llm_for_migration(db: Session, user: User) -> Optional[Dict[str, Any]]:
     """读 ``user.default_llm_json`` 选 provider/model，否则返回 None（跳过迁移）。"""
     raw = (user.default_llm_json or "").strip()
     if not raw:
@@ -244,9 +240,7 @@ async def migrate_one(
             workflow.id,
             ok=False,
             iterations=int((final_outcome or {}).get("iterations") or 0),
-            error=str(
-                (final_outcome or {}).get("error") or "agent loop did not converge"
-            ),
+            error=str((final_outcome or {}).get("error") or "agent loop did not converge"),
         )
 
     code = str(final_outcome.get("final_code") or "").strip()

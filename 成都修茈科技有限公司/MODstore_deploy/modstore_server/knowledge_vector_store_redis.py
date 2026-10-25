@@ -64,9 +64,7 @@ def get_redis():
 
 def _tag_value(value: Any) -> str:
     s = str(value)
-    return "".join(
-        ("\\" + ch) if ch in r" ,.<>{}[]\"':;!@#$%^&*()-+=~" else ch for ch in s
-    )
+    return "".join(("\\" + ch) if ch in r" ,.<>{}[]\"':;!@#$%^&*()-+=~" else ch for ch in s)
 
 
 def _vec_bytes(values: Iterable[float]) -> bytes:
@@ -145,9 +143,7 @@ def ensure_index() -> None:
             },
         ),
     ]
-    definition = SearchIndexDefinition(
-        prefix=[CHUNK_PREFIX], index_type=SearchIndexType.HASH
-    )
+    definition = SearchIndexDefinition(prefix=[CHUNK_PREFIX], index_type=SearchIndexType.HASH)
     try:
         r.ft(INDEX_NAME).create_index(schema, definition=definition)
     except RECOVERABLE_ERRORS as e:
@@ -292,9 +288,7 @@ def delete_document(user_id: int, doc_id: str, *, missing_ok: bool = False) -> b
     return exists
 
 
-def search(
-    user_id: int, query_embedding: List[float], limit: int = 6
-) -> List[Dict[str, Any]]:
+def search(user_id: int, query_embedding: List[float], limit: int = 6) -> List[Dict[str, Any]]:
     ensure_index()
     try:
         from redis.commands.search.query import Query
@@ -304,12 +298,8 @@ def search(
     r = get_redis()
     n = max(1, min(int(limit or 6), 20))
     q = (
-        Query(
-            f"(@user_id:{{{_tag_value(user_id)}}})=>[KNN {n} @embedding $vec AS distance]"
-        )
-        .return_fields(
-            "doc_id", "chunk_id", "filename", "content", "page_no", "distance"
-        )
+        Query(f"(@user_id:{{{_tag_value(user_id)}}})=>[KNN {n} @embedding $vec AS distance]")
+        .return_fields("doc_id", "chunk_id", "filename", "content", "page_no", "distance")
         .sort_by("distance")
         .paging(0, n)
         .dialect(2)

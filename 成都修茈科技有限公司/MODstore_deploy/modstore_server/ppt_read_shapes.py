@@ -21,9 +21,7 @@ def _deck_has_timing(pptx_path: Path) -> bool:
     return False
 
 
-def enrich_presentation_v2(
-    presentation: Dict[str, Any], src_path: Path
-) -> Dict[str, Any]:
+def enrich_presentation_v2(presentation: Dict[str, Any], src_path: Path) -> Dict[str, Any]:
     src_path = Path(src_path)
     out = dict(presentation or {})
     out["schema_version"] = 2
@@ -39,9 +37,7 @@ def enrich_presentation_v2(
     prs = Presentation(str(src_path))
     slides_in = out.get("slides") if isinstance(out.get("slides"), list) else []
     slide_by_index = {
-        int(s.get("index") or i + 1): s
-        for i, s in enumerate(slides_in)
-        if isinstance(s, dict)
+        int(s.get("index") or i + 1): s for i, s in enumerate(slides_in) if isinstance(s, dict)
     }
 
     for slide_idx, slide in enumerate(prs.slides, start=1):

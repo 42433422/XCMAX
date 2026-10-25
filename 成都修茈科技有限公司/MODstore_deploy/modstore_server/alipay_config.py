@@ -144,9 +144,7 @@ def diagnostics_snapshot() -> dict[str, Any]:
 def private_key_source() -> str:
     if pem_from_env("ALIPAY_APP_PRIVATE_KEY"):
         return "env"
-    if env("ALIPAY_APP_PRIVATE_KEY_PATH") and read_file_from_env(
-        "ALIPAY_APP_PRIVATE_KEY_PATH"
-    ):
+    if env("ALIPAY_APP_PRIVATE_KEY_PATH") and read_file_from_env("ALIPAY_APP_PRIVATE_KEY_PATH"):
         return "path"
     return "missing"
 
@@ -154,9 +152,7 @@ def private_key_source() -> str:
 def public_key_source() -> str:
     if pem_from_env("ALIPAY_ALIPAY_PUBLIC_KEY"):
         return "env"
-    if env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH") and read_file_from_env(
-        "ALIPAY_ALIPAY_PUBLIC_KEY_PATH"
-    ):
+    if env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH") and read_file_from_env("ALIPAY_ALIPAY_PUBLIC_KEY_PATH"):
         return "path"
     if default_bundled_alipay_public_key():
         return "bundled"

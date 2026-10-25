@@ -32,9 +32,7 @@ def capture_manifest_snapshot(mod_root: Path, label: str = "") -> Dict[str, Any]
         "label": (label or "").strip()[:240],
         "manifest": data,
     }
-    snap_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    snap_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return {
         "snap_id": sid,
         "created_at": payload["created_at"],
@@ -63,9 +61,7 @@ def list_manifest_snapshots(mod_root: Path) -> List[Dict[str, Any]]:
     return out
 
 
-def restore_manifest_snapshot(
-    mod_root: Path, snap_id: str
-) -> Tuple[Dict[str, Any], List[str]]:
+def restore_manifest_snapshot(mod_root: Path, snap_id: str) -> Tuple[Dict[str, Any], List[str]]:
     sid = (snap_id or "").strip()
     if not re.match(r"^[a-f0-9]{12}$", sid):
         raise ValueError("snap_id 无效")

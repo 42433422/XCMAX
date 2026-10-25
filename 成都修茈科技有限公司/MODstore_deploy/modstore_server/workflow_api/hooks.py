@@ -19,9 +19,7 @@ from modstore_server.workflow_event_runner import run_workflow_for_trigger
 workflow_hooks_router = APIRouter(prefix="/api/workflow-hooks", tags=["workflow-hooks"])
 
 
-@workflow_hooks_router.post(
-    "/webhook/{trigger_key}", summary="外部 Webhook 触发工作流（无需 JWT）"
-)
+@workflow_hooks_router.post("/webhook/{trigger_key}", summary="外部 Webhook 触发工作流（无需 JWT）")
 async def public_webhook_run_workflow(
     trigger_key: str,
     request: Request,
@@ -40,9 +38,7 @@ async def public_webhook_run_workflow(
         raise HTTPException(404, "触发器不存在或未激活")
 
     cfg = json.loads(trig.config_json or "{}")
-    secret = str(
-        cfg.get("secret") or os.getenv("WORKFLOW_WEBHOOK_DEFAULT_SECRET") or ""
-    ).strip()
+    secret = str(cfg.get("secret") or os.getenv("WORKFLOW_WEBHOOK_DEFAULT_SECRET") or "").strip()
     if not secret:
         raise HTTPException(503, "Webhook 签名密钥未配置，入口已禁用")
     body_bytes = await request.body()
@@ -51,9 +47,7 @@ async def public_webhook_run_workflow(
     )
     if not sig:
         raise HTTPException(401, "缺少签名头 X-Webhook-Signature")
-    expected = (
-        "sha256=" + hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
-    )
+    expected = "sha256=" + hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
     if not sig.isascii() or not hmac.compare_digest(sig, expected):
         raise HTTPException(403, "签名校验失败")
 

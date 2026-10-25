@@ -5,9 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-_PRE_EXECUTION_STATES = frozenset(
-    "accepted approved signed assigned claimed dispatched".split()
-)
+_PRE_EXECUTION_STATES = frozenset("accepted approved signed assigned claimed dispatched".split())
 
 
 def execution_succeeded(result: Any) -> bool:
@@ -55,8 +53,7 @@ def execution_succeeded(result: Any) -> bool:
     nested = result.get("result")
     if isinstance(nested, dict) and nested:
         if any(
-            key in nested
-            for key in ("ok", "success", "status", "execution_status", "error")
+            key in nested for key in ("ok", "success", "status", "execution_status", "error")
         ) and not execution_succeeded(nested):
             return False
         outputs = nested.get("outputs")
@@ -160,9 +157,7 @@ def para_task_succeeded(
     if task.get("status") not in {"completed", "merged"} or task.get("error"):
         return False
     children = task.get("subTasks", task.get("subtasks", []))
-    if not isinstance(children, list) or any(
-        not isinstance(child, dict) for child in children
-    ):
+    if not isinstance(children, list) or any(not isinstance(child, dict) for child in children):
         return False
     returned = {str(child.get("id") or "") for child in children}
     if planned_devices:
@@ -170,8 +165,7 @@ def para_task_succeeded(
             return False
         if len(required_ids or []) < len(planned_devices):
             devices = {
-                str(child.get("device_id") or child.get("deviceId") or "")
-                for child in children
+                str(child.get("device_id") or child.get("deviceId") or "") for child in children
             }
             if not set(planned_devices).issubset(devices):
                 return False  # Missing POST receipts need an explicit device/child readback.
@@ -188,8 +182,7 @@ def execution_pending(result: dict[str, Any]) -> bool:
     outputs = nested.get("outputs") if isinstance(nested, dict) else None
     decisive = [row for row in outputs or [result] if not _is_informational_row(row)]
     return any(execution_requires_reconciliation(row) for row in decisive) and all(
-        execution_requires_reconciliation(row) or execution_succeeded(row)
-        for row in decisive
+        execution_requires_reconciliation(row) or execution_succeeded(row) for row in decisive
     )
 
 
@@ -235,8 +228,7 @@ def role_progress_state(row: dict[str, Any]) -> str:
         return "manual_review"
     outputs = [o for o in outputs if not _is_informational_row(o)]
     if any(
-        str(o.get("status") or o.get("execution_status") or "").lower()
-        in terminal_failure
+        str(o.get("status") or o.get("execution_status") or "").lower() in terminal_failure
         or (
             (o.get("ok") is False or o.get("success") is False or o.get("error"))
             and not execution_requires_reconciliation(o)
@@ -271,9 +263,7 @@ def team_action_state(
     rows: list[dict[str, Any]], *, team_ok: bool | None = None
 ) -> tuple[str, list[str]]:
     states = {role_progress_state(row) for row in rows}
-    failed = [
-        str(row.get("role")) for row in rows if role_progress_state(row) == "failed"
-    ]
+    failed = [str(row.get("role")) for row in rows if role_progress_state(row) == "failed"]
     if failed or not rows:
         return "failed", failed
     return (
@@ -285,16 +275,10 @@ def team_action_state(
     )
 
 
-def projected_dispatch_status(
-    status: str, action_type: str, result: Any, error: str = ""
-) -> str:
+def projected_dispatch_status(status: str, action_type: str, result: Any, error: str = "") -> str:
     """Correct only provable legacy waiting projections; retain the stored history."""
     rows = result.get("roles") if isinstance(result, dict) else None
-    if (
-        status != "failed"
-        or action_type != "employee.dispatch"
-        or not isinstance(rows, list)
-    ):
+    if status != "failed" or action_type != "employee.dispatch" or not isinstance(rows, list):
         return status
     if (
         len(rows) != 3
@@ -340,8 +324,7 @@ def team_succeeded(rows: list[dict[str, Any]]) -> bool:
     )
     fix_attempt = by_role.get("fix", {}).get("attempt_id")
     return successful and (
-        not fix_attempt
-        or by_role.get("verify", {}).get("verified_fix_attempt_id") == fix_attempt
+        not fix_attempt or by_role.get("verify", {}).get("verified_fix_attempt_id") == fix_attempt
     )
 
 
@@ -361,9 +344,7 @@ def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:
         route="private_mod" if custom else "shared_core",
     )
     resolution.setdefault("state", "received")
-    resolution.setdefault(
-        "source_ref", str(evidence.get("source_ref") or ticket.ticket_no)
-    )
+    resolution.setdefault("source_ref", str(evidence.get("source_ref") or ticket.ticket_no))
     resolution.setdefault("original_title", str(ticket.title or ""))
     resolution.setdefault("original_request", str(ticket.summary or ""))
     if evidence.get("target_mod_id"):
@@ -374,9 +355,7 @@ def issue_resolution(ticket: Any, evidence: dict[str, Any]) -> dict[str, Any]:
     if evidence.get("installed_version"):
         resolution["reported_version"] = str(evidence["installed_version"])
     if evidence.get("shared_core_prerequisite"):
-        resolution["shared_core_prerequisite"] = str(
-            evidence["shared_core_prerequisite"]
-        )
+        resolution["shared_core_prerequisite"] = str(evidence["shared_core_prerequisite"])
     return resolution
 
 
@@ -410,10 +389,7 @@ def record_team_progress(
         }.get(action_state, "processing"),
         incident_event_id=int(event_id),
         **repair_verification("incident_team" if successful else None),
-        team=[
-            {k: row.get(k) for k in ("role", "employee_id", "ok", "status")}
-            for row in rows
-        ],
+        team=[{k: row.get(k) for k in ("role", "employee_id", "ok", "status")} for row in rows],
         updated_at=datetime.now(UTC).isoformat(),
     )
     from modstore_server.incident_team_handler_digest import handler_output_digest
@@ -421,9 +397,7 @@ def record_team_progress(
     resolution["processing"] = [
         {
             "role": row.get("role"),
-            **handler_output_digest(
-                {**row["handler_outputs"], "result": row["handler_outputs"]}
-            ),
+            **handler_output_digest({**row["handler_outputs"], "result": row["handler_outputs"]}),
         }
         for row in rows
         if isinstance(row.get("handler_outputs"), dict)

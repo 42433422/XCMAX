@@ -99,8 +99,7 @@ def normalize_document_payload(data: Any) -> Dict[str, Any]:
     for key in ("document_full", "document", "doc"):
         nested = data.get(key)
         if isinstance(nested, dict) and (
-            isinstance(nested.get("paragraphs"), list)
-            or isinstance(nested.get("plain_text"), str)
+            isinstance(nested.get("paragraphs"), list) or isinstance(nested.get("plain_text"), str)
         ):
             return nested
 
@@ -129,9 +128,7 @@ def normalize_document_payload(data: Any) -> Dict[str, Any]:
     plain = data.get("plain_text")
     if isinstance(plain, str) and plain.strip():
         return {
-            "metadata": data.get("metadata")
-            if isinstance(data.get("metadata"), dict)
-            else {},
+            "metadata": data.get("metadata") if isinstance(data.get("metadata"), dict) else {},
             "paragraphs": [{"index": 0, "text": plain[:50000], "is_heading": False}],
             "tables": [],
             "outline": [],
@@ -146,9 +143,7 @@ def normalize_document_payload(data: Any) -> Dict[str, Any]:
 def build_quant_summary(
     doc: Dict[str, Any], *, max_outline: int = 24, max_tables: int = 8
 ) -> Dict[str, Any]:
-    paragraphs = (
-        doc.get("paragraphs") if isinstance(doc.get("paragraphs"), list) else []
-    )
+    paragraphs = doc.get("paragraphs") if isinstance(doc.get("paragraphs"), list) else []
     tables = doc.get("tables") if isinstance(doc.get("tables"), list) else []
     outline = doc.get("outline") if isinstance(doc.get("outline"), list) else []
 
@@ -156,9 +151,7 @@ def build_quant_summary(
     for p in paragraphs[:500]:
         if not isinstance(p, dict):
             continue
-        if p.get("is_heading") or (
-            p.get("heading_level") and int(p.get("heading_level") or 0) > 0
-        ):
+        if p.get("is_heading") or (p.get("heading_level") and int(p.get("heading_level") or 0) > 0):
             headings.append(
                 {
                     "level": int(p.get("heading_level") or 1),
@@ -185,15 +178,9 @@ def build_quant_summary(
         )
 
     meta = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
-    core = (
-        doc.get("core_properties")
-        if isinstance(doc.get("core_properties"), dict)
-        else {}
-    )
+    core = doc.get("core_properties") if isinstance(doc.get("core_properties"), dict) else {}
     title = (
-        str(
-            meta.get("title") or core.get("title") or core.get("dc:title") or ""
-        ).strip()
+        str(meta.get("title") or core.get("title") or core.get("dc:title") or "").strip()
         or str(headings[0]["text"] if headings else "")[:120]
         or "未命名文档"
     )

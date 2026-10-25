@@ -54,9 +54,7 @@ def compact_routing_brief(text: str, *, max_len: int = 200) -> str:
     return out[:max_len] if out else ""
 
 
-def extract_routing_brief(
-    payload: Optional[Dict[str, Any]], *, fallback: str = ""
-) -> str:
+def extract_routing_brief(payload: Optional[Dict[str, Any]], *, fallback: str = "") -> str:
     """Best-effort brief for is_word_full_extract / asset routing."""
     if not isinstance(payload, dict):
         return compact_routing_brief(fallback)

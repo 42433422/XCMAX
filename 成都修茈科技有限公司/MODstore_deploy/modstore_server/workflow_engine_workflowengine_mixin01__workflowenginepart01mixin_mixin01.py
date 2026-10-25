@@ -163,9 +163,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             .all()
         )
         node_map = {node.id: node for node in nodes}
-        source_to_targets: _facade().Dict[
-            int, _facade().List[_facade().WorkflowEdge]
-        ] = {}
+        source_to_targets: _facade().Dict[int, _facade().List[_facade().WorkflowEdge]] = {}
         for edge in edges:
             source_to_targets.setdefault(edge.source_node_id, []).append(edge)
         for k in source_to_targets:
@@ -212,9 +210,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 break
             t0 = _facade().time.perf_counter()
             data_before = _facade()._json_safe(current_data) if collect_trace else {}
-            config = (
-                _facade().json.loads(current_node.config) if current_node.config else {}
-            )
+            config = _facade().json.loads(current_node.config) if current_node.config else {}
             node_output = self._execute_node(
                 current_node,
                 current_data,
@@ -303,9 +299,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             if collect_trace and steps:
                 steps[-1]["edge_taken"] = edge_taken
             if next_node is None and next_edges:
-                run_warnings.append(
-                    f"节点「{current_node.name}」无有向边条件命中，流程停止"
-                )
+                run_warnings.append(f"节点「{current_node.name}」无有向边条件命中，流程停止")
             current_node = next_node
         if not reached_end:
             raise WorkflowGraphError(
@@ -385,9 +379,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             },
             "employee_id": employee_id,
             "task": task,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_openapi_operation_mock(
@@ -406,9 +398,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
             },
             "connector_id": config.get("connector_id"),
             "operation_id": config.get("operation_id"),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_knowledge_search_mock(
@@ -426,9 +416,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 "count": 0,
             },
             "knowledge_search_collections": list(config.get("collection_ids") or []),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_eskill_node_mock(
@@ -447,9 +435,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 "echo_keys": list(data.keys())[:24],
             },
             "eskill_id": config.get("skill_id"),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_vibe_node_mock(
@@ -460,11 +446,7 @@ class __WorkflowEnginePart01MixinPart01Mixin:
     ) -> _facade().Dict[str, _facade().Any]:
         out_var = str(
             config.get("output_var")
-            or (
-                "vibe_result"
-                if node.node_type == "vibe_skill"
-                else "vibe_workflow_result"
-            )
+            or ("vibe_result" if node.node_type == "vibe_skill" else "vibe_workflow_result")
         )
         return {
             out_var: {
@@ -473,7 +455,5 @@ class __WorkflowEnginePart01MixinPart01Mixin:
                 "brief": str(config.get("brief") or "")[:240],
                 "echo_keys": list(data.keys())[:24],
             },
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }

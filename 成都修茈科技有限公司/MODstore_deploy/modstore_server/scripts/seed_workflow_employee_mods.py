@@ -66,9 +66,7 @@ def _load_deploy_env() -> None:
 
 def main() -> int:
     _load_deploy_env()
-    parser = argparse.ArgumentParser(
-        description="Seed 6 workflow employee mods into catalog"
-    )
+    parser = argparse.ArgumentParser(description="Seed 6 workflow employee mods into catalog")
     parser.add_argument(
         "--mods-dir",
         type=Path,
@@ -78,12 +76,8 @@ def main() -> int:
     parser.add_argument(
         "--set-public", action="store_true", help="设置 catalog_items.is_public=true"
     )
-    parser.add_argument(
-        "--force", action="store_true", help="覆盖已存在的同 pkg_id 记录"
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="仅打包校验，不写 catalog"
-    )
+    parser.add_argument("--force", action="store_true", help="覆盖已存在的同 pkg_id 记录")
+    parser.add_argument("--dry-run", action="store_true", help="仅打包校验，不写 catalog")
     args = parser.parse_args()
 
     mods_dir: Path = args.mods_dir.expanduser().resolve()
@@ -106,18 +100,12 @@ def main() -> int:
     if not args.dry_run:
         with session_factory() as db:
             row = db.execute(
-                text(
-                    "SELECT id FROM users WHERE is_admin IS TRUE ORDER BY id ASC LIMIT 1"
-                ),
+                text("SELECT id FROM users WHERE is_admin IS TRUE ORDER BY id ASC LIMIT 1"),
             ).fetchone()
             if not row:
-                row = db.execute(
-                    text("SELECT id FROM users ORDER BY id ASC LIMIT 1")
-                ).fetchone()
+                row = db.execute(text("SELECT id FROM users ORDER BY id ASC LIMIT 1")).fetchone()
             if not row:
-                print(
-                    "No user in DB (skip catalog upsert or migrate DB)", file=sys.stderr
-                )
+                print("No user in DB (skip catalog upsert or migrate DB)", file=sys.stderr)
                 return 3
             author_id = int(row[0])
 
@@ -142,9 +130,7 @@ def main() -> int:
 
         if not args.dry_run:
             with session_factory() as db:
-                exists = (
-                    db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
-                )
+                exists = db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
             if exists and not args.force:
                 print(f"[SKIP] {pack_id}: already in catalog (use --force)")
                 continue
@@ -185,9 +171,7 @@ def main() -> int:
             saved = append_package(rec, tmp_xcmod)
             with session_factory() as db:
                 upsert_catalog_item_from_xc_package_dict(db, saved, author_id=author_id)
-                row = (
-                    db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
-                )
+                row = db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
                 if row:
                     if args.set_public:
                         row.is_public = True

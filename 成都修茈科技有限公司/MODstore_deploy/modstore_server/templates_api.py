@@ -66,9 +66,7 @@ class SaveAsTemplateBody(BaseModel):
     industry: str = Field("通用", max_length=64)
 
 
-def _serialize_template_summary(
-    row: CatalogItem, *, with_graph: bool = False
-) -> Dict[str, Any]:
+def _serialize_template_summary(row: CatalogItem, *, with_graph: bool = False) -> Dict[str, Any]:
     payload: Dict[str, Any] = {
         "id": row.id,
         "pkg_id": row.pkg_id,
@@ -121,9 +119,7 @@ async def list_templates(
     )
     if q.strip():
         kw = f"%{q.strip()}%"
-        query = query.filter(
-            or_(CatalogItem.name.ilike(kw), CatalogItem.description.ilike(kw))
-        )
+        query = query.filter(or_(CatalogItem.name.ilike(kw), CatalogItem.description.ilike(kw)))
     if category.strip():
         query = query.filter(CatalogItem.template_category == category.strip())
     if difficulty.strip():
@@ -133,9 +129,7 @@ async def list_templates(
     if sort == "newest":
         query = query.order_by(desc(CatalogItem.created_at))
     else:
-        query = query.order_by(
-            desc(CatalogItem.install_count), desc(CatalogItem.created_at)
-        )
+        query = query.order_by(desc(CatalogItem.install_count), desc(CatalogItem.created_at))
     rows = query.limit(limit).offset(offset).all()
     return {
         "total": total,
@@ -317,9 +311,7 @@ async def save_workflow_as_template(
     user: User = Depends(_get_current_user),
 ):
     workflow = (
-        db.query(Workflow)
-        .filter(Workflow.id == workflow_id, Workflow.user_id == user.id)
-        .first()
+        db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
     )
     if not workflow:
         raise HTTPException(404, "工作流不存在")

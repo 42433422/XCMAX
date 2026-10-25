@@ -131,18 +131,14 @@ async def employee_publish(
         raw_mf = _load_registry_aligned_employee_manifest(pack_dir, employee_id)
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(500, f"manifest.json 读取失败: {exc}") from exc
-    mf_path.write_text(
-        json.dumps(raw_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    mf_path.write_text(json.dumps(raw_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
         pkg_id = str(raw_mf.get("id") or employee_id).strip() or employee_id
         from modstore_server.employee_asset_pipeline import (
             build_employee_pack_zip_for_library,
         )
 
-        zip_bytes = build_employee_pack_zip_for_library(
-            pkg_id, raw_mf, pack_dir=pack_dir
-        )
+        zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
@@ -182,9 +178,7 @@ async def employee_publish(
     sf = ports.database()
     with sf() as db:
         try:
-            upsert_catalog_item_from_xc_package_dict(
-                db, saved, author_id=cast(int, user.id)
-            )
+            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=cast(int, user.id))
             row = store_catalog_row(
                 db,
                 pack_id=pkg_id,
@@ -299,9 +293,7 @@ async def employee_sync_test(
             build_employee_pack_zip_for_library,
         )
 
-        zip_bytes = build_employee_pack_zip_for_library(
-            pkg_id, raw_mf, pack_dir=pack_dir
-        )
+        zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
@@ -337,9 +329,7 @@ async def employee_sync_test(
     sf2 = ports.database()
     with sf2() as db2:
         try:
-            upsert_catalog_item_from_xc_package_dict(
-                db2, saved, author_id=cast(int, user.id)
-            )
+            upsert_catalog_item_from_xc_package_dict(db2, saved, author_id=cast(int, user.id))
             store_catalog_row(
                 db2,
                 pack_id=pkg_id,

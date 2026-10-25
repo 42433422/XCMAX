@@ -67,9 +67,7 @@ def _save(event_id: int, key: str, changes: dict) -> dict:
         _, blocked = active_context(db, event, receipt=receipt)
         receipt.update(changes, updated_at=_now())
         if blocked:
-            receipt.update(
-                state="cancelled", requires_reconciliation=False, error=blocked
-            )
+            receipt.update(state="cancelled", requires_reconciliation=False, error=blocked)
         _write(db, event, payload)
         return dict(receipt)
 
@@ -165,10 +163,7 @@ def request_incident_escalation(
                     role,
                     attempt,
                 ]
-                key = (
-                    "escalation-"
-                    + hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:32]
-                )
+                key = "escalation-" + hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:32]
                 receipt = _receipts(payload).get(key)
                 if receipt is None:
                     receipt = {
@@ -184,12 +179,9 @@ def request_incident_escalation(
                         "category": category,
                         "reason": safe_text(reason),
                         "attempted_actions": {
-                            name: value
-                            if isinstance(value, (bool, int))
-                            else safe_text(value, 150)
+                            name: value if isinstance(value, (bool, int)) else safe_text(value, 150)
                             for name, value in (attempted_actions or {}).items()
-                            if name
-                            in {"action", "attempts", "max_rounds", "last_category"}
+                            if name in {"action", "attempts", "max_rounds", "last_category"}
                         },
                         "requested_at": _now(),
                         "updated_at": _now(),
@@ -237,9 +229,7 @@ def _reconcile_one(event_id: int, key: str, *, base: str, fetcher) -> bool:
             try:
                 changes = task_receipt(receipt, fetcher(base, receipt["task_id"]))
             except RECOVERABLE_ERRORS as exc:
-                changes = {
-                    "poll_error": f"original_task_unavailable:{type(exc).__name__}"
-                }
+                changes = {"poll_error": f"original_task_unavailable:{type(exc).__name__}"}
             _save(event_id, key, changes)
         else:
             _save(
@@ -263,23 +253,16 @@ def reconcile_incident_escalations(*, event_id=None, limit=20, fetcher=None) -> 
     fetcher = fetcher or _fetch_para_task_state
     base = _api_base()
     with get_session_factory()() as db:
-        query = db.query(IncidentEvent).filter(
-            IncidentEvent.payload_json.contains('"escalations"')
-        )
+        query = db.query(IncidentEvent).filter(IncidentEvent.payload_json.contains('"escalations"'))
         if event_id is not None:
             query = query.filter(IncidentEvent.id == event_id)
         after = _CURSOR if event_id is None else 0
         events = (
-            query.filter(IncidentEvent.id > after)
-            .order_by(IncidentEvent.id)
-            .limit(limit)
-            .all()
+            query.filter(IncidentEvent.id > after).order_by(IncidentEvent.id).limit(limit).all()
         )
         if not events and event_id is None:
             events = query.order_by(IncidentEvent.id).limit(limit).all()
-        items = [
-            (int(ev.id), list(_receipts(object_json(ev.payload_json)))) for ev in events
-        ]
+        items = [(int(ev.id), list(_receipts(object_json(ev.payload_json)))) for ev in events]
         if event_id is None:
             _CURSOR = int(events[-1].id) if events else 0
     changed = 0

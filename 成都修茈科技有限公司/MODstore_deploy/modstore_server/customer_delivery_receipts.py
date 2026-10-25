@@ -16,9 +16,7 @@ _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 
 def canonical_sha256(value: dict[str, Any]) -> str:
     return hashlib.sha256(
-        json.dumps(
-            value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-        ).encode()
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
 
 
@@ -83,9 +81,7 @@ def record_receipt(
         None,
     )
     if not grant:
-        raise HTTPException(
-            409, "回执与当前工单授权下载的产物、版本、摘要或生产轮次不匹配"
-        )
+        raise HTTPException(409, "回执与当前工单授权下载的产物、版本、摘要或生产轮次不匹配")
     if grant.get("client_instance_id") and grant["client_instance_id"] != client_id:
         raise HTTPException(409, "下载回执凭证已绑定其他客户端")
     grant["client_instance_id"] = client_id
@@ -124,10 +120,7 @@ def record_receipt(
             raise HTTPException(409, "请先提交同一客户端、同一产物的安装回执")
         probe = body.get("business_verification") or {}
         case_id = str(grant.get("verification_case_id") or "")
-        observed = {
-            k: probe.get(k)
-            for k in ("case_id", "passed", "observations", "observed_at")
-        }
+        observed = {k: probe.get(k) for k in ("case_id", "passed", "observations", "observed_at")}
         if (
             not case_id
             or observed["case_id"] != case_id
@@ -151,11 +144,7 @@ def record_receipt(
             business_verification=probe,
             verification_case_id=case_id,
         )
-        if (
-            release
-            and release.get("git_sha") == host_sha
-            and release.get("source_ref") == "main"
-        ):
+        if release and release.get("git_sha") == host_sha and release.get("source_ref") == "main":
             row.update(verified=stage == "running", release_evidence=release)
         else:
             row["blocker"] = "host_release_provenance_unverified"
@@ -177,9 +166,7 @@ def record_receipt(
 
 
 def all_artifacts_running(ticket: Any, evidence: dict[str, Any]) -> bool:
-    artifacts = [
-        r for r in evidence.get("delivery_artifacts", []) if isinstance(r, dict)
-    ]
+    artifacts = [r for r in evidence.get("delivery_artifacts", []) if isinstance(r, dict)]
     records = [r for r in evidence.get("receipt_events", []) if isinstance(r, dict)]
     generation = str(evidence.get("delivery_generation") or "")
     clients = {str(row.get("client_instance_id") or "") for row in records}

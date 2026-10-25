@@ -29,9 +29,7 @@ def _runtime_manifest() -> tuple[Optional[Path], Dict[str, Any]]:
     candidates = [Path(configured).expanduser()] if configured else []
     runtime_root = (os.environ.get("MODSTORE_RUNTIME_ROOT") or "").strip()
     if runtime_root:
-        candidates.append(
-            Path(runtime_root).expanduser() / ".xcmax-runtime-provenance.json"
-        )
+        candidates.append(Path(runtime_root).expanduser() / ".xcmax-runtime-provenance.json")
     for path in candidates:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -86,9 +84,7 @@ def collect_runtime_provenance(
     built SHA and expected SHA are present and equal.
     """
 
-    target = str(
-        target_branch or os.environ.get("MODSTORE_PARA_BRANCH") or "main"
-    ).strip()
+    target = str(target_branch or os.environ.get("MODSTORE_PARA_BRANCH") or "main").strip()
     expected = str(
         expected_sha
         or os.environ.get("MODSTORE_EXPECTED_GIT_SHA")

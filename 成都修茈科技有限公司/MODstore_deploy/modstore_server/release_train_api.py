@@ -27,9 +27,7 @@ class ReleaseTrainRollbackDTO(BaseModel):
     to_version: Optional[str] = Field(
         None, description="回退到指定四段版本（如 1.0.0.8）；优先于 steps"
     )
-    steps: int = Field(
-        1, ge=1, le=100, description="未指定版本时按步数回退（默认上一步）"
-    )
+    steps: int = Field(1, ge=1, le=100, description="未指定版本时按步数回退（默认上一步）")
     reason: str = Field("manual", description="审计原因")
 
 

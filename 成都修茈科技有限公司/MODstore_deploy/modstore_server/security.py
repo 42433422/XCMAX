@@ -136,17 +136,14 @@ def validate_secure_config() -> dict[str, bool]:
         ),
         "admin_token_set": bool(
             get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN")
-            and get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN")
-            not in _INSECURE_ADMIN_TOKEN_DEFAULTS
+            and get_env_var("MODSTORE_ADMIN_RECHARGE_TOKEN") not in _INSECURE_ADMIN_TOKEN_DEFAULTS
         ),
         "payment_secret_set": bool(
             get_env_var("PAYMENT_SECRET_KEY")
-            and get_env_var("PAYMENT_SECRET_KEY")
-            not in _INSECURE_PAYMENT_SECRET_DEFAULTS
+            and get_env_var("PAYMENT_SECRET_KEY") not in _INSECURE_PAYMENT_SECRET_DEFAULTS
         ),
         "alipay_configured": bool(
-            get_env_var("ALIPAY_APP_ID")
-            and get_env_var("ALIPAY_APP_ID") != "your-alipay-app-id"
+            get_env_var("ALIPAY_APP_ID") and get_env_var("ALIPAY_APP_ID") != "your-alipay-app-id"
         ),
         "smtp_configured": bool(
             get_env_var("MODSTORE_SMTP_PASSWORD")

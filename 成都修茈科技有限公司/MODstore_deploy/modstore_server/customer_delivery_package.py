@@ -16,9 +16,7 @@ def verify_delivery_package(raw: bytes) -> dict[str, Any]:
         # Resolve only relative to trusted server source, never a customer path.
         fhd = Path(__file__).resolve().parents[3] / "FHD"
         if not (fhd / "app/infrastructure/mods/package_signing.py").is_file():
-            raise RuntimeError(
-                "宿主签名校验组件不可用，不能交付未经验证的产物"
-            ) from None
+            raise RuntimeError("宿主签名校验组件不可用，不能交付未经验证的产物") from None
         if str(fhd) not in sys.path:
             sys.path.append(str(fhd))
         from app.infrastructure.mods.package_signing import verify_signed_package_bytes

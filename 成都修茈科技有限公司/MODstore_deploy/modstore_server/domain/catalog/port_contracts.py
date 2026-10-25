@@ -19,9 +19,7 @@ class CatalogRepository(Protocol):
 class CatalogPackageStorage(Protocol):
     """Append-only package blob storage (filesystem or object store)."""
 
-    def append_package(
-        self, record: dict[str, Any], src_file: Path | None
-    ) -> dict[str, Any]: ...
+    def append_package(self, record: dict[str, Any], src_file: Path | None) -> dict[str, Any]: ...
 
 
 __all__ = ["CatalogRepository", "CatalogPackageStorage"]

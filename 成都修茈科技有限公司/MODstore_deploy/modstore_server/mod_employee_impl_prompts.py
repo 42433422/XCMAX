@@ -129,12 +129,8 @@ def _employee_brief_lines(
     label = str(emp.get("label") or emp.get("panel_title") or eid).strip()
     panel_title = str(emp.get("panel_title") or "").strip()
     panel_summary = str(emp.get("panel_summary") or "").strip()
-    capabilities = (
-        emp.get("capabilities") if isinstance(emp.get("capabilities"), list) else []
-    )
-    data_sources = (
-        emp.get("data_sources") if isinstance(emp.get("data_sources"), list) else []
-    )
+    capabilities = emp.get("capabilities") if isinstance(emp.get("capabilities"), list) else []
+    data_sources = emp.get("data_sources") if isinstance(emp.get("data_sources"), list) else []
     outputs = emp.get("outputs") if isinstance(emp.get("outputs"), list) else []
     wf = emp.get("workflow") if isinstance(emp.get("workflow"), dict) else {}
     wf_desc = str(wf.get("description") or "").strip()

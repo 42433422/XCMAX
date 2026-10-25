@@ -91,9 +91,7 @@ def query_similar(
 
     where_filter = None
     if filter_meta:
-        where_filter = {
-            "$and": [{k: {"$eq": v}} for k, v in filter_meta.items() if v is not None]
-        }
+        where_filter = {"$and": [{k: {"$eq": v}} for k, v in filter_meta.items() if v is not None]}
 
     with _lock:
         col = _collection()

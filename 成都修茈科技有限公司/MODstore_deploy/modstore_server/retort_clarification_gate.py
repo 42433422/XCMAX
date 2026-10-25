@@ -75,9 +75,7 @@ def _text(value: Any, limit: int = 4000) -> str:
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
-    ).expanduser()
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
 
 
 def clarification_ledger_path() -> Path:
@@ -99,9 +97,7 @@ def ttl_seconds() -> int:
 
 def max_open_sessions() -> int:
     try:
-        return max(
-            1, int(os.environ.get("MODSTORE_RETORT_CLARIFICATION_MAX_OPEN") or "50")
-        )
+        return max(1, int(os.environ.get("MODSTORE_RETORT_CLARIFICATION_MAX_OPEN") or "50"))
     except ValueError:
         return 50
 
@@ -109,17 +105,14 @@ def max_open_sessions() -> int:
 def expire_fallback() -> str:
     """fail_closed | cancel | degrade_intent"""
     raw = _text(
-        os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK")
-        or "fail_closed",
+        os.environ.get("MODSTORE_RETORT_CLARIFICATION_EXPIRE_FALLBACK") or "fail_closed",
         32,
     )
     return raw if raw in {"fail_closed", "cancel", "degrade_intent"} else "fail_closed"
 
 
 def gate_enabled() -> bool:
-    return _text(
-        os.environ.get("MODSTORE_RETORT_CLARIFICATION_ENABLED") or "1", 16
-    ).lower() in {
+    return _text(os.environ.get("MODSTORE_RETORT_CLARIFICATION_ENABLED") or "1", 16).lower() in {
         "1",
         "true",
         "yes",
@@ -136,11 +129,7 @@ def _subject_key(
 ) -> str:
     if change_request_id and int(change_request_id) > 0:
         return f"cr:{int(change_request_id)}"
-    parts = [
-        p
-        for p in (_text(proposal_id, 128), _text(run_id, 128), _text(package_id, 128))
-        if p
-    ]
+    parts = [p for p in (_text(proposal_id, 128), _text(run_id, 128), _text(package_id, 128)) if p]
     return "council:" + "|".join(parts) if parts else f"anon:{uuid.uuid4().hex[:12]}"
 
 
@@ -222,9 +211,7 @@ def _load_clarification_builder():
 
 
 def _load_alignment():
-    return load_repository_module(
-        "retort_engine.intent_alignment"
-    ).assess_change_intent_alignment
+    return load_repository_module("retort_engine.intent_alignment").assess_change_intent_alignment
 
 
 def _normalize_changed_for_alignment(
@@ -242,9 +229,7 @@ def _normalize_changed_for_alignment(
                 rows.append(
                     {
                         "path": path,
-                        "hunks": item.get("hunks")
-                        if isinstance(item.get("hunks"), list)
-                        else [],
+                        "hunks": item.get("hunks") if isinstance(item.get("hunks"), list) else [],
                     }
                 )
     return rows
@@ -295,8 +280,7 @@ def _expire_boss_inbox_for_sessions(session_ids: Sequence[str]) -> int:
     except RECOVERABLE_ERRORS:
         return 0
     fingerprints = [
-        hashlib.sha256(f"retort-clarification:{sid}".encode()).hexdigest()[:32]
-        for sid in ids
+        hashlib.sha256(f"retort-clarification:{sid}".encode()).hexdigest()[:32] for sid in ids
     ]
     expired = 0
     try:
@@ -351,9 +335,7 @@ def sweep_expired_clarifications(*, now: Optional[datetime] = None) -> dict[str,
                 for sid, row in sessions.items()
                 if isinstance(row, dict) and row.get("status") in _TERMINAL
             ),
-            key=lambda item: str(
-                item[1].get("updated_at") or item[1].get("created_at") or ""
-            ),
+            key=lambda item: str(item[1].get("updated_at") or item[1].get("created_at") or ""),
         )
         overflow = max(0, len(terminals) - 200)
         for sid, _row in terminals[:overflow]:

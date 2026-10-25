@@ -28,9 +28,7 @@ def _narrow_ci_enabled() -> bool:
 
 def _pytest_timeout_sec() -> float:
     try:
-        return max(
-            10.0, float(os.environ.get("MODSTORE_CR_NARROW_CI_PYTEST_TIMEOUT", "120"))
-        )
+        return max(10.0, float(os.environ.get("MODSTORE_CR_NARROW_CI_PYTEST_TIMEOUT", "120")))
     except ValueError:
         return 120.0
 
@@ -118,9 +116,7 @@ def _prepare_overlay_root(
             overlay_rel = f"MODstore_deploy/{deploy_rel}"
         elif (root / "成都修茈科技有限公司" / "MODstore_deploy").is_dir():
             deploy = root / "成都修茈科技有限公司" / "MODstore_deploy"
-            _copytree_filtered(
-                deploy, overlay / "成都修茈科技有限公司" / "MODstore_deploy"
-            )
+            _copytree_filtered(deploy, overlay / "成都修茈科技有限公司" / "MODstore_deploy")
             overlay_rel = f"成都修茈科技有限公司/MODstore_deploy/{deploy_rel}"
         else:
             for child in ("modstore_server", "tests"):
@@ -144,9 +140,7 @@ def _prepare_overlay_root(
         raise
 
 
-def infer_related_test_files(
-    rel_path: str, *, root: Optional[Path] = None
-) -> List[str]:
+def infer_related_test_files(rel_path: str, *, root: Optional[Path] = None) -> List[str]:
     """根据变更文件推断可跑的窄 pytest 目标。"""
     rp = _strip_modstore_deploy_prefix(rel_path)
     if not rp:
@@ -353,9 +347,7 @@ def run_narrow_ci_validation(
         }
 
     try:
-        overlay_tmp, overlay_root, overlay_rel = _prepare_overlay_root(
-            root, rel, content
-        )
+        overlay_tmp, overlay_root, overlay_rel = _prepare_overlay_root(root, rel, content)
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         overlay_out = {
             "error": str(exc)[:800],

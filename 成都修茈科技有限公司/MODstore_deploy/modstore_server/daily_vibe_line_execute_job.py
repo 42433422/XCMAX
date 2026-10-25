@@ -43,11 +43,7 @@ def find_digest_record_for_execute(
             .first()
         )
         if row is None:
-            row = (
-                session.query(DailyDigestRecord)
-                .order_by(DailyDigestRecord.id.desc())
-                .first()
-            )
+            row = session.query(DailyDigestRecord).order_by(DailyDigestRecord.id.desc()).first()
         return int(row.id) if row else None
 
 
@@ -56,11 +52,7 @@ def run_daily_vibe_line_execute_job(
     record_id: Optional[int] = None,
     force: bool = False,
 ) -> Dict[str, Any]:
-    raw = (
-        (os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1") or "")
-        .strip()
-        .lower()
-    )
+    raw = (os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1") or "").strip().lower()
     if raw in ("0", "false", "no", "off"):
         return {
             "ok": True,
@@ -136,9 +128,7 @@ def cron_trigger_for_vibe_line_execute():
 
         from apscheduler.triggers.cron import CronTrigger
 
-        tz = ZoneInfo(
-            os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_TZ", "Asia/Shanghai").strip()
-        )
+        tz = ZoneInfo(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_TZ", "Asia/Shanghai").strip())
         hour = int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_HOUR", "8"))
         minute = int(os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_MINUTE", "15"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)

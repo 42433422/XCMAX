@@ -11,9 +11,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def auto_start_enabled() -> bool:
-    return (
-        os.environ.get("MODSTORE_SURFACE_AUDIT_AUTO_START", "1") or ""
-    ).strip().lower() not in (
+    return (os.environ.get("MODSTORE_SURFACE_AUDIT_AUTO_START", "1") or "").strip().lower() not in (
         "0",
         "false",
         "no",
@@ -41,9 +39,7 @@ def repo_root() -> Path:
 def fhd_root() -> Path:
     candidates: List[Path] = []
     explicit = (
-        os.environ.get("XCAGI_FHD_ROOT")
-        or os.environ.get("MODSTORE_DAILY_FHD_ROOT")
-        or ""
+        os.environ.get("XCAGI_FHD_ROOT") or os.environ.get("MODSTORE_DAILY_FHD_ROOT") or ""
     ).strip()
     if explicit:
         candidates.append(Path(explicit).expanduser().resolve())

@@ -256,9 +256,7 @@ class AutonomyEvaluator:
         if session is None:
             session = get_session_factory()()
         try:
-            stmt = select(AutonomyBoundaryModel).where(
-                AutonomyBoundaryModel.enabled.is_(True)
-            )
+            stmt = select(AutonomyBoundaryModel).where(AutonomyBoundaryModel.enabled.is_(True))
             rows = session.execute(stmt).scalars().all()
             if not rows:
                 # 表为空 → seed 默认规则
@@ -291,9 +289,7 @@ class AutonomyEvaluator:
             if r.enabled and (scope == "both" or r.scope == "both" or r.scope == scope)
         ]
         # 按风险等级优先级排序（critical 优先）
-        candidates.sort(
-            key=lambda r: (_RISK_PRIORITY.get(r.risk_level.value, 99), r.rule_id)
-        )
+        candidates.sort(key=lambda r: (_RISK_PRIORITY.get(r.risk_level.value, 99), r.rule_id))
         for rule in candidates:
             if rule.matches(action):
                 return AutonomyEvaluation(

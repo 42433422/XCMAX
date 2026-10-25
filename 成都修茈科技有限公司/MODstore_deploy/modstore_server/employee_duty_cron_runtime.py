@@ -73,9 +73,7 @@ def _require_success(result: Any) -> dict[str, Any]:
         or result.get("blocked_by_risk_gate")
         or status in {"failed", "handler_failed", "blocked_by_risk_gate"}
     ):
-        raise RuntimeError(
-            f"employee_cron_unsuccessful:{_unsuccessful_code(result, status)}"
-        )
+        raise RuntimeError(f"employee_cron_unsuccessful:{_unsuccessful_code(result, status)}")
     return result
 
 
@@ -147,9 +145,7 @@ def execute_employee_cron_duty(
                 # Scheduled duty is a platform expense, independent of stale
                 # provider/model names in an old employee manifest.
                 bench_llm_override=(
-                    (bench_provider, bench_model)
-                    if bench_provider and bench_model
-                    else None
+                    (bench_provider, bench_model) if bench_provider and bench_model else None
                 ),
             )
         except RECOVERABLE_ERRORS as exc:

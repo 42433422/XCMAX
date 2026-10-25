@@ -19,15 +19,11 @@ def _facade():
 
 def _cap_for_key(counter_key: str) -> int:
     if counter_key == "bucket:daily_digest":
-        return max(
-            1, int(_facade().os.environ.get("MODSTORE_DIGEST_RESEARCH_CAP", "64"))
-        )
+        return max(1, int(_facade().os.environ.get("MODSTORE_DIGEST_RESEARCH_CAP", "64")))
     if counter_key == "bucket:agent_tool":
         return max(
             1,
-            int(
-                _facade().os.environ.get("MODSTORE_AGENT_RESEARCH_TOOL_DAILY_CAP", "80")
-            ),
+            int(_facade().os.environ.get("MODSTORE_AGENT_RESEARCH_TOOL_DAILY_CAP", "80")),
         )
     return max(
         1,
@@ -125,9 +121,7 @@ def _contact_searxng_fallback_bases() -> _facade().List[str]:
     raw = (_facade().os.environ.get("MODSTORE_CONTACT_SEARXNG_FALLBACKS") or "").strip()
     bases: _facade().List[str] = []
     if raw:
-        bases.extend(
-            (part.strip().rstrip("/") for part in raw.split(",") if part.strip())
-        )
+        bases.extend((part.strip().rstrip("/") for part in raw.split(",") if part.strip()))
     primary = _facade().searxng_instance_url()
     if primary:
         bases.insert(0, primary)
@@ -161,9 +155,7 @@ async def contact_searxng_search(
     return []
 
 
-def extract_github_pairs(
-    text: str, limit: int = 24
-) -> _facade().List[_facade().Tuple[str, str]]:
+def extract_github_pairs(text: str, limit: int = 24) -> _facade().List[_facade().Tuple[str, str]]:
     seen: _facade().Set[_facade().Tuple[str, str]] = set()
     out: _facade().List[_facade().Tuple[str, str]] = []
     for m in _facade()._GH_URL_RE.finditer(text or ""):
@@ -187,11 +179,7 @@ def extract_github_pairs(
 
 def web_search_use_tavily() -> bool:
     """是否允许 Tavily 兜底（测试默认关：MODSTORE_WEB_SEARCH_USE_TAVILY=0）。"""
-    raw = (
-        (_facade().os.environ.get("MODSTORE_WEB_SEARCH_USE_TAVILY") or "1")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_WEB_SEARCH_USE_TAVILY") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -323,9 +311,7 @@ async def duckduckgo_html_search(
         if not title and (not content):
             return
         seen.add(result_url)
-        out.append(
-            {"title": title or result_url, "url": result_url, "content": content}
-        )
+        out.append({"title": title or result_url, "url": result_url, "content": content})
 
     def _parse_ddg_html(
         html: str,
@@ -369,9 +355,7 @@ async def duckduckgo_html_search(
     for endpoint_tpl in _facade()._DDG_HTML_ENDPOINTS:
         url = endpoint_tpl.format(query=encoded_query)
         try:
-            r = await client.get(
-                url, headers=headers, timeout=20.0, follow_redirects=True
-            )
+            r = await client.get(url, headers=headers, timeout=20.0, follow_redirects=True)
             r.raise_for_status()
             parsed_results = _parse_ddg_html(r.text or "")
             if parsed_results:
@@ -379,9 +363,7 @@ async def duckduckgo_html_search(
             errors.append(f"{_facade().urlparse(url).netloc} 无可解析结果")
         except RECOVERABLE_ERRORS as e:
             errors.append(
-                f"{_facade().urlparse(url).netloc}: {_facade()._request_error_fragment(e)}"[
-                    :160
-                ]
+                f"{_facade().urlparse(url).netloc}: {_facade()._request_error_fragment(e)}"[:160]
             )
     if errors:
         raise RuntimeError(" ; ".join(errors)[:320])
@@ -390,11 +372,7 @@ async def duckduckgo_html_search(
 
 def web_crawl_engines_from_env() -> _facade().List[str]:
     """启用的 HTML 爬虫引擎（默认仅 bing）。MODSTORE_WEB_CRAWL_ENGINES=bing"""
-    raw = (
-        (_facade().os.environ.get("MODSTORE_WEB_CRAWL_ENGINES") or "bing")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_WEB_CRAWL_ENGINES") or "bing").strip().lower()
     allowed = {"bing", "microsoft", "msedge"}
     out: _facade().List[str] = []
     for part in raw.split(","):
@@ -411,9 +389,7 @@ def web_crawl_engines_from_env() -> _facade().List[str]:
 def web_crawl_per_engine_limit() -> int:
     """每个搜索引擎并行抓取的结果条数（默认 5，允许 3–5）。"""
     try:
-        n = int(
-            (_facade().os.environ.get("MODSTORE_WEB_CRAWL_PER_ENGINE") or "5").strip()
-        )
+        n = int((_facade().os.environ.get("MODSTORE_WEB_CRAWL_PER_ENGINE") or "5").strip())
     except ValueError:
         n = 5
     return max(3, min(n, 5))
@@ -461,9 +437,7 @@ def format_web_results_combined(
     """将并行爬取的网页结果按引擎分组，拼成综合摘要文本。"""
     if not results:
         return "（无结果）"
-    by_engine: _facade().Dict[
-        str, _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = {}
+    by_engine: _facade().Dict[str, _facade().List[_facade().Dict[str, _facade().Any]]] = {}
     for it in results:
         eng = str(it.get("crawl_engine") or "web")
         by_engine.setdefault(eng, []).append(it)
@@ -481,9 +455,7 @@ def format_web_results_combined(
                     page_content=str(it.get("page_content") or ""),
                 )
             )
-        sections.append(
-            f"## {label}（{len(blocks)} 条）\n\n" + "\n\n---\n\n".join(blocks)
-        )
+        sections.append(f"## {label}（{len(blocks)} 条）\n\n" + "\n\n---\n\n".join(blocks))
     return "\n\n".join(sections)
 
 
@@ -505,9 +477,7 @@ async def _crawl_one_engine(
 
 async def web_search_crawl_parallel(
     query: str, *, max_results: int = 10
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]]:
     """并行爬取各搜索引擎（每引擎 3–5 条），合并去重。返回 (results, via, errors)。"""
     q = (query or "").strip()
     if len(q) < 2:
@@ -546,9 +516,7 @@ async def web_search_with_fallback(
         return ([], "", "query 过短")
     rn = max(1, min(int(max_results), 50))
     err_parts: _facade().List[str] = []
-    crawled, via, crawl_errors = await _facade().web_search_crawl_parallel(
-        q, max_results=rn
-    )
+    crawled, via, crawl_errors = await _facade().web_search_crawl_parallel(q, max_results=rn)
     err_parts.extend(crawl_errors)
     if crawled:
         return (crawled, via, None)
@@ -563,9 +531,7 @@ async def web_search_with_fallback(
                 return (tv, "tavily", None)
         except RECOVERABLE_ERRORS as e:
             err_parts.append(f"tavily: {_facade()._request_error_fragment(e)}"[:140])
-    free_results, free_err, free_via = await _facade()._web_search_free_tier(
-        q, per_engine
-    )
+    free_results, free_err, free_via = await _facade()._web_search_free_tier(q, per_engine)
     if free_results:
         for it in free_results:
             if isinstance(it, dict):
@@ -678,10 +644,7 @@ def extract_company_names_from_text(
         return []
     candidates.sort(
         key=lambda n: (
-            1
-            if _facade()._normalize_company_key(q)
-            == _facade()._normalize_company_key(n)
-            else 0,
+            1 if _facade()._normalize_company_key(q) == _facade()._normalize_company_key(n) else 0,
             1 if _facade()._query_matches_company_name(q, n) else 0,
             len(n),
         ),
@@ -690,17 +653,13 @@ def extract_company_names_from_text(
     return candidates[: max(1, limit)]
 
 
-def _extract_companies_for_query(
-    blob: str, query: str, *, limit: int
-) -> _facade().List[str]:
+def _extract_companies_for_query(blob: str, query: str, *, limit: int) -> _facade().List[str]:
     names = _facade().extract_company_names_from_text(blob, query, limit=limit)
     if names:
         return names
     q = (query or "").strip()
     if q.startswith("深圳") and (not q.startswith("深圳市")):
-        names = _facade().extract_company_names_from_text(
-            blob, "深圳市" + q[2:], limit=limit
-        )
+        names = _facade().extract_company_names_from_text(blob, "深圳市" + q[2:], limit=limit)
         if names:
             return names
     skip = frozenset({"深圳", "北京", "上海", "包装", "工商", "公司", "有限公司"})
@@ -716,11 +675,7 @@ def _extract_companies_for_query(
 
 
 def contact_web_company_search_enabled() -> bool:
-    raw = (
-        (_facade().os.environ.get("MODSTORE_CONTACT_WEB_COMPANY_SEARCH") or "1")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_CONTACT_WEB_COMPANY_SEARCH") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -744,9 +699,7 @@ def clean_web_company_candidate(title: str, query: str = "") -> str:
         if head.endswith(marker):
             head = head[: -len(marker)].rstrip(" -_｜|").strip()
             head_compact = _facade().re.sub("\\s+", "", head)
-    names = _facade().extract_company_names_from_text(
-        head_compact or head, query, limit=1
-    )
+    names = _facade().extract_company_names_from_text(head_compact or head, query, limit=1)
     if names and _facade().is_plausible_company_name(names[0]):
         return names[0]
     return ""
@@ -817,9 +770,7 @@ async def _contact_company_web_fetch_one(
     user_query: str,
     max_results: int,
     timeout_sec: float | None = None,
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]]:
     from modstore_server.contact_company_web_search import (
         _contact_company_web_fetch_one as impl,
     )
@@ -834,9 +785,7 @@ async def _contact_company_web_fetch_one(
 
 async def _contact_company_web_raw_results(
     query: str, *, max_results: int
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], str, _facade().List[str]]:
     from modstore_server.contact_company_web_search import (
         _contact_company_web_raw_results as impl,
     )
@@ -863,9 +812,7 @@ async def _web_search_free_tier(
     err_parts: _facade().List[str] = []
     ddg_results: _facade().List[_facade().Dict[str, _facade().Any]] = []
     try:
-        ddg_results = await _facade().duckduckgo_html_search(
-            query, max_results=max_results
-        )
+        ddg_results = await _facade().duckduckgo_html_search(query, max_results=max_results)
     except RECOVERABLE_ERRORS as e:
         err_parts.append(f"duckduckgo: {_facade()._request_error_fragment(e)}")
     if ddg_results:
@@ -883,9 +830,7 @@ async def _web_search_free_tier(
     return ([], "；".join(err_parts)[:400], "")
 
 
-async def github_repo_meta(
-    owner: str, repo: str, token: str
-) -> _facade().Dict[str, _facade().Any]:
+async def github_repo_meta(owner: str, repo: str, token: str) -> _facade().Dict[str, _facade().Any]:
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "MODstore-Workbench/1.0",
@@ -997,9 +942,7 @@ async def fetch_web_search_context_pack(
         warnings.append(f"联网检索失败：{web_err}"[:220])
     enriched = await _facade()._web_results_for_llm(results, max_results=rn)
     body = _facade().format_web_results_combined(enriched, per_content_cap=420)
-    pages_ok = sum(
-        (1 for it in enriched if isinstance(it, dict) and it.get("page_fetched"))
-    )
+    pages_ok = sum((1 for it in enriched if isinstance(it, dict) and it.get("page_fetched")))
     if pages_ok:
         warnings.append(f"已抓取 {pages_ok} 条链接页正文。")
     sources: _facade().List[_facade().Dict[str, str]] = []
@@ -1041,9 +984,7 @@ async def internet_search_tool(
         return {"ok": False, "error": "query 过短", "text": ""}
     if not _facade().consume_agent_tool_quota():
         return {"ok": False, "error": "今日 Agent 联网检索次数已达上限", "text": ""}
-    results, via, err = await _facade().web_search_with_fallback(
-        q, max_results=max_results
-    )
+    results, via, err = await _facade().web_search_with_fallback(q, max_results=max_results)
     if not results:
         return {"ok": False, "error": err or "无结果", "text": "", "via": via}
     enriched = await _facade()._web_results_for_llm(results, max_results=max_results)
@@ -1154,9 +1095,9 @@ async def build_research_context(
     web_results, via, web_err = await _facade().web_search_with_fallback(
         search_query, max_results=12
     )
-    tavily_results: _facade().List[
-        _facade().Dict[str, _facade().Any]
-    ] = await _facade()._web_results_for_llm(web_results, max_results=max_web)
+    tavily_results: _facade().List[_facade().Dict[str, _facade().Any]] = (
+        await _facade()._web_results_for_llm(web_results, max_results=max_web)
+    )
     pairs_ordered: _facade().List[_facade().Tuple[str, str]] = []
     if via and "+" in via:
         warnings.append(
@@ -1220,9 +1161,7 @@ async def build_research_context(
     web_section = header_web + sep_web.join(web_blocks) if web_blocks else ""
     inter_section = "\n\n---\n\n"
     gh_head = "## GitHub 公开资料\n\n"
-    gh_budget = (
-        max_chars - len(web_section) - (len(inter_section) if web_section else 0)
-    )
+    gh_budget = max_chars - len(web_section) - (len(inter_section) if web_section else 0)
     gh_budget = max(0, gh_budget)
     parts: _facade().List[str] = []
     used = 0
@@ -1239,16 +1178,14 @@ async def build_research_context(
                 desc = str(meta.get("description") or "").strip()
                 topics = meta.get("topics")
                 if isinstance(topics, list) and topics:
-                    block_lines.append(
-                        "Topics: " + ", ".join((str(t) for t in topics[:12]))
-                    )
+                    block_lines.append("Topics: " + ", ".join((str(t) for t in topics[:12])))
                 if desc:
                     block_lines.append("Description: " + _facade().truncate(desc, 500))
             readme = await _facade().github_readme_raw(owner, repo, token)
             if readme:
-                prefix_cost = (
-                    len(gh_head) if not parts else gh_consumed + len(sep_gh)
-                ) + len("\n".join(block_lines))
+                prefix_cost = (len(gh_head) if not parts else gh_consumed + len(sep_gh)) + len(
+                    "\n".join(block_lines)
+                )
                 readme_cap = gh_budget - prefix_cost - len("README（摘录）:\n") - 8
                 readme_cap = max(0, min(4500, readme_cap))
                 if readme_cap > 80:

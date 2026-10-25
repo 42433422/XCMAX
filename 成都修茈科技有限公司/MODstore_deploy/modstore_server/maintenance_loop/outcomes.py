@@ -27,10 +27,7 @@ def _close_items_resolved_by_final(
         decision = {}
     action = str(decision.get("action") or "")
     status = str(final.get("status") or "")
-    if (
-        action not in {"auto_merged_low_risk", "auto_continue"}
-        and status != "completed_merged"
-    ):
+    if action not in {"auto_merged_low_risk", "auto_continue"} and status != "completed_merged":
         return {"closed_count": 0, "closed_items": []}
     run_ids: List[str] = []
     task_ids: List[str] = []
@@ -59,9 +56,7 @@ def _close_items_resolved_by_final(
         memory,
         actor="self_maintenance_loop",
         branches=branches,
-        resolution_reason=str(
-            decision.get("reason") or status or "resolved_by_successful_loop"
-        ),
+        resolution_reason=str(decision.get("reason") or status or "resolved_by_successful_loop"),
         run_ids=run_ids,
         task_ids=task_ids,
     )
@@ -106,9 +101,7 @@ def _reconcile_requested_merge_feedback(
         try:
             task = fetcher(base, task_id)
         except RECOVERABLE_ERRORS:
-            config.logger.exception(
-                "failed to reconcile requested Para merge task_id=%s", task_id
-            )
+            config.logger.exception("failed to reconcile requested Para merge task_id=%s", task_id)
             continue
         task_status = str(task.get("status") or "").strip().lower()
         branch = str(run.get("branch") or "").strip()
@@ -184,8 +177,7 @@ def _reconcile_requested_merge_feedback(
         already_open = any(
             (
                 isinstance(item, dict)
-                and str(item.get("task_id") or item.get("para_task_id") or "")
-                == task_id
+                and str(item.get("task_id") or item.get("para_task_id") or "") == task_id
                 and (item.get("reason") == reason)
                 and (item.get("kind") == item_kind)
                 for item in open_items
@@ -193,13 +185,13 @@ def _reconcile_requested_merge_feedback(
         )
         if not already_open:
             rejected_branch = str(conflict.get("branch_name") or branch).strip()
-            resume_from_clean_baseline = self_maintenance_para_merge_remediation.resume_from_clean_baseline_for_para_merge(
-                reason, detail
+            resume_from_clean_baseline = (
+                self_maintenance_para_merge_remediation.resume_from_clean_baseline_for_para_merge(
+                    reason, detail
+                )
             )
             veto_meta = (
-                self_maintenance_para_merge_remediation.classify_para_merge_review_detail(
-                    detail
-                )
+                self_maintenance_para_merge_remediation.classify_para_merge_review_detail(detail)
                 if source == "ai-review-veto"
                 else {}
             )
@@ -219,12 +211,8 @@ def _reconcile_requested_merge_feedback(
                 "task_id": task_id,
             }
             if source == "ai-review-veto":
-                open_item["review_actionable_findings"] = veto_meta.get(
-                    "actionable_code_findings"
-                )
-                open_item["review_veto_branch_hint"] = (
-                    veto_meta.get("branch_hint") or ""
-                )
+                open_item["review_actionable_findings"] = veto_meta.get("actionable_code_findings")
+                open_item["review_veto_branch_hint"] = veto_meta.get("branch_hint") or ""
                 open_item["review_veto_code"] = veto_meta.get("veto_code") or ""
                 if veto_meta.get("review_diff_chars") is not None:
                     open_item["review_diff_chars"] = veto_meta["review_diff_chars"]
@@ -257,9 +245,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
     raw_steps = final.get("steps")
     steps = raw_steps if isinstance(raw_steps, list) else []
     failed_steps = [
-        step.get("step")
-        for step in steps
-        if isinstance(step, dict) and not step.get("ok")
+        step.get("step") for step in steps if isinstance(step, dict) and not step.get("ok")
     ]
     if failed_steps:
         run_id = str(final.get("run_id") or "")
@@ -302,9 +288,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             para_task_id = str(final.get("para_task_id") or "").strip()
             if branch or para_task_id:
                 for idx, item in reversed(list(enumerate(open_items))):
-                    if not (
-                        isinstance(item, dict) and item.get("kind") == "failed_steps"
-                    ):
+                    if not (isinstance(item, dict) and item.get("kind") == "failed_steps"):
                         continue
                     item_branch = str(item.get("branch") or "").strip()
                     item_task_id = str(
@@ -319,9 +303,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                         break
         if existing_idx is not None:
             previous = open_items[existing_idx]
-            old_task = str(
-                previous.get("task_id") or previous.get("para_task_id") or ""
-            ).strip()
+            old_task = str(previous.get("task_id") or previous.get("para_task_id") or "").strip()
             new_task = str(final.get("para_task_id") or "").strip()
             old_branch = str(previous.get("branch") or "").strip()
             new_branch = str(final.get("branch") or "").strip()
@@ -378,9 +360,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         memory, final, memory_domain._close_open_items_in_memory
     )
     resolution_record = _close_items_resolved_by_final(memory, final)
-    knowledge_record = self_evolution_knowledge.record_loop_evolution_knowledge(
-        final, gate
-    )
+    knowledge_record = self_evolution_knowledge.record_loop_evolution_knowledge(final, gate)
     salvage_summary: Optional[Dict[str, Any]] = None
     try:
         para_task_id = final.get("para_task_id") or ""
@@ -393,8 +373,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             para_workspace=para_workspace, run_id=str(final.get("run_id") or "")
         )
         if salvage_summary and (
-            salvage_summary.get("salvaged_fixes")
-            or salvage_summary.get("salvaged_patterns")
+            salvage_summary.get("salvaged_fixes") or salvage_summary.get("salvaged_patterns")
         ):
             config.logger.info(
                 "kb salvage run_id=%s salvaged_fixes=%s salvaged_patterns=%s",
@@ -407,16 +386,12 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 "phase": "kb_salvage",
                 "run_id": final.get("run_id"),
                 "para_task_id": final.get("para_task_id"),
-                "salvaged_fixes": salvage_summary.get("salvaged_fixes")
-                if salvage_summary
-                else 0,
+                "salvaged_fixes": salvage_summary.get("salvaged_fixes") if salvage_summary else 0,
                 "salvaged_patterns": (
                     salvage_summary.get("salvaged_patterns") if salvage_summary else 0
                 ),
                 "skipped": salvage_summary.get("skipped") if salvage_summary else 0,
-                "workspace": salvage_summary.get("workspace")
-                if salvage_summary
-                else None,
+                "workspace": salvage_summary.get("workspace") if salvage_summary else None,
                 "timestamp": config._iso(config._utc_now()),
             }
         )
@@ -469,17 +444,13 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             "roster_gate_out_of_roster_ids": (
                 decision.get("roster_gate", {}).get("out_of_roster_ids")
                 if isinstance(decision.get("roster_gate"), dict)
-                and isinstance(
-                    decision.get("roster_gate", {}).get("out_of_roster_ids"), list
-                )
+                and isinstance(decision.get("roster_gate", {}).get("out_of_roster_ids"), list)
                 else []
             ),
             "roster_gate_not_deployed_ids": (
                 decision.get("roster_gate", {}).get("not_deployed_ids")
                 if isinstance(decision.get("roster_gate"), dict)
-                and isinstance(
-                    decision.get("roster_gate", {}).get("not_deployed_ids"), list
-                )
+                and isinstance(decision.get("roster_gate", {}).get("not_deployed_ids"), list)
                 else []
             ),
             "run_id": final.get("run_id"),
@@ -496,14 +467,10 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
         evict_summary = memory_domain._evict_loop_memory_items(memory, actor="auto")
     except RECOVERABLE_ERRORS:
         evict_summary = {"evicted_count": 0, "error": "evict_failed"}
-        config.logger.exception(
-            "loop memory auto-evict failed run_id=%s", final.get("run_id")
-        )
+        config.logger.exception("loop memory auto-evict failed run_id=%s", final.get("run_id"))
     memory.update(
         {
-            "evicted_items": memory.get("evicted_items", [])[
-                -config.LOOP_EVICT_MAX_ITEMS :
-            ],
+            "evicted_items": memory.get("evicted_items", [])[-config.LOOP_EVICT_MAX_ITEMS :],
             "last_evict_summary": evict_summary,
             "last_gate": gate,
             "last_knowledge_record": knowledge_record,

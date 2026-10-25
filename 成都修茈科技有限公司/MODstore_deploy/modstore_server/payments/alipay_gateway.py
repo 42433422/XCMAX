@@ -342,9 +342,7 @@ class AlipayGateway:
             return {"ok": False, "message": str(e), "raw": None}
         req_no = out_request_no or out_trade_no
         try:
-            result = client.api_alipay_trade_fastpay_refund_query(
-                req_no, out_trade_no=out_trade_no
-            )
+            result = client.api_alipay_trade_fastpay_refund_query(req_no, out_trade_no=out_trade_no)
         except RECOVERABLE_ERRORS as e:
             logger.exception("alipay.trade.fastpay.refund.query 请求异常")
             return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}

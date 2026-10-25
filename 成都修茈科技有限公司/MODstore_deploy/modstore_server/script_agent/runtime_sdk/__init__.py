@@ -45,9 +45,7 @@ class _RpcClient:
         # 默认子进程后端是 ``127.0.0.1``。
         host = os.environ.get("MODSTORE_RUNTIME_HOST") or "127.0.0.1"
         if not port or not token:
-            raise RuntimeSdkError(
-                "modstore_runtime: 当前不在受控沙箱内运行，缺少 RPC 配置。"
-            )
+            raise RuntimeSdkError("modstore_runtime: 当前不在受控沙箱内运行，缺少 RPC 配置。")
         self._token = token
         self._sock = socket.create_connection((host, int(port)), timeout=120)
         self._buf = b""
@@ -56,9 +54,7 @@ class _RpcClient:
         self._send({"hello": token})
         hello = self._recv()
         if not hello.get("ok"):
-            raise RuntimeSdkError(
-                f"modstore_runtime: 握手失败: {hello.get('error') or hello}"
-            )
+            raise RuntimeSdkError(f"modstore_runtime: 握手失败: {hello.get('error') or hello}")
 
     def _readline(self) -> bytes:
         while b"\n" not in self._buf:

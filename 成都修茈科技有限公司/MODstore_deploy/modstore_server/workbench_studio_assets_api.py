@@ -275,9 +275,7 @@ def download_studio_asset(
     with sf() as session:
         row = (
             session.query(UserStudioAsset)
-            .filter(
-                UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id)
-            )
+            .filter(UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id))
             .first()
         )
         if not row or not row.storage_relpath:
@@ -302,9 +300,7 @@ def delete_studio_asset(
     with sf() as session:
         row = (
             session.query(UserStudioAsset)
-            .filter(
-                UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id)
-            )
+            .filter(UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id))
             .first()
         )
         if not row:
@@ -335,9 +331,7 @@ def patch_studio_asset_metadata(
     with sf() as session:
         row = (
             session.query(UserStudioAsset)
-            .filter(
-                UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id)
-            )
+            .filter(UserStudioAsset.id == asset_id, UserStudioAsset.user_id == int(user.id))
             .first()
         )
         if not row:

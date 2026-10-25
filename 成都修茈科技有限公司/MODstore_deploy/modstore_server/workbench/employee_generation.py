@@ -29,13 +29,9 @@ class EmployeeGenerationPorts:
     scaffold: Callable[..., Awaitable[dict[str, Any]]]
 
 
-async def generate_employee(
-    state: EmployeeBuildState, *, ports: EmployeeGenerationPorts
-) -> bool:
+async def generate_employee(state: EmployeeBuildState, *, ports: EmployeeGenerationPorts) -> bool:
     if state.should_skip("generate"):
-        await ports.progress.set_step(
-            state.session_id, "generate", "done", "已完成（重试复用）"
-        )
+        await ports.progress.set_step(state.session_id, "generate", "done", "已完成（重试复用）")
     else:
         state.current_step = "generate"
         _gen_running_msg = (
@@ -47,9 +43,7 @@ async def generate_employee(
                 else None
             )
         )
-        await ports.progress.set_step(
-            state.session_id, "generate", "running", _gen_running_msg
-        )
+        await ports.progress.set_step(state.session_id, "generate", "running", _gen_running_msg)
         _plan_payload = dict(state.payload) if isinstance(state.payload, dict) else {}
         if isinstance(state.employee_plan, dict) and state.employee_plan:
             _plan_payload["employee_plan"] = state.employee_plan
@@ -109,9 +103,7 @@ async def generate_employee(
             state.result = (
                 _gen_result["res"]
                 if _gen_result
-                else await run_asset_employee_scaffold_async(
-                    ports.db, ports.user, **_scaffold_kw
-                )
+                else await run_asset_employee_scaffold_async(ports.db, ports.user, **_scaffold_kw)
             )
         elif state.needs_llm_reasoning and state.uploaded_docx:
             from modstore_server.employee_asset_pipeline import (
@@ -133,9 +125,7 @@ async def generate_employee(
             state.result = (
                 _gen_result["res"]
                 if _gen_result
-                else await run_asset_employee_scaffold_async(
-                    ports.db, ports.user, **_scaffold_kw
-                )
+                else await run_asset_employee_scaffold_async(ports.db, ports.user, **_scaffold_kw)
             )
         else:
             state.result = await ports.scaffold(
@@ -197,11 +187,7 @@ async def generate_employee(
                     f"领域冒烟未通过：{_ds_gate.get('error') or 'failed'}"[:1000],
                 )
                 return True
-            if (
-                _gc_gate
-                and _gc_gate.get("golden_pack_id")
-                and (not _gc_gate.get("passed"))
-            ):
+            if _gc_gate and _gc_gate.get("golden_pack_id") and (not _gc_gate.get("passed")):
                 await ports.progress.fail(
                     state.session_id,
                     "generate",
@@ -212,18 +198,14 @@ async def generate_employee(
                 return True
         _package_path = str(state.result.get("path") or "").strip()
         if not _package_path:
-            await ports.progress.fail(
-                state.session_id, "generate", "员工生成结果缺少包目录"
-            )
+            await ports.progress.fail(state.session_id, "generate", "员工生成结果缺少包目录")
             return True
         _gen_pack_dir = Path(_package_path)
         if state.use_word_extract and _gen_pack_dir.is_dir():
             reconcile_employee_pack_manifest(_gen_pack_dir, brief=state.employee_brief)
             _gx_errs, _ = validate_word_extract_backend(_gen_pack_dir)
             if _gx_errs:
-                await ports.progress.fail(
-                    state.session_id, "generate", "；".join(_gx_errs[:3])
-                )
+                await ports.progress.fail(state.session_id, "generate", "；".join(_gx_errs[:3]))
                 return True
         asset_count = (
             len((state.result.get("asset_manifest") or {}).get("assets") or [])
@@ -255,13 +237,9 @@ async def generate_employee(
             _gen_done_msg = "已生成 LLM 驱动文档审核员工包"
         else:
             _gen_done_msg = None
-        await ports.progress.set_step(
-            state.session_id, "generate", "done", _gen_done_msg
-        )
+        await ports.progress.set_step(state.session_id, "generate", "done", _gen_done_msg)
     if state.should_skip("validate"):
-        await ports.progress.set_step(
-            state.session_id, "validate", "done", "已完成（重试复用）"
-        )
+        await ports.progress.set_step(state.session_id, "validate", "done", "已完成（重试复用）")
     else:
         state.current_step = "validate"
         await ports.progress.set_step(state.session_id, "validate", "running")
@@ -295,9 +273,7 @@ async def generate_employee(
                 ports.sessions.persist(state.session_id)
         if validate_errors:
             msg = "；".join((str(x) for x in validate_errors[:5]))
-            await ports.progress.set_step(
-                state.session_id, "validate", "error", msg[:480]
-            )
+            await ports.progress.set_step(state.session_id, "validate", "error", msg[:480])
             await ports.progress.fail(state.session_id, "validate", msg[:1000])
             return True
         await ports.progress.set_step(

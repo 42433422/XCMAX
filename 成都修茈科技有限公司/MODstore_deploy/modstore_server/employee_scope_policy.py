@@ -26,11 +26,7 @@ def workspace_policy_from_manifest(
         return [], [], []
     sg = [str(x).strip() for x in (wp.get("scope_globs") or []) if str(x).strip()]
     fg = [str(x).strip() for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
-    ag = [
-        str(x).strip()
-        for x in (wp.get("approval_required_globs") or [])
-        if str(x).strip()
-    ]
+    ag = [str(x).strip() for x in (wp.get("approval_required_globs") or []) if str(x).strip()]
     return sg, fg, ag
 
 
@@ -43,9 +39,7 @@ def relative_path_under_repo(resolved_file: Path) -> str:
         return ""
 
 
-def safe_resolve_under_directory(
-    root: Path, fragment: str
-) -> tuple[Optional[Path], Optional[str]]:
+def safe_resolve_under_directory(root: Path, fragment: str) -> tuple[Optional[Path], Optional[str]]:
     """将 ``fragment`` 解析为 ``root`` 下的绝对路径；禁止绝对路径与 ``..`` 穿越。"""
     raw = str(fragment or "").strip()
     if not raw:

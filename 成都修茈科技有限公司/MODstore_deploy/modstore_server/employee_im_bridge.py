@@ -90,9 +90,7 @@ def notify_boss(
 
     url = _internal_im_url()
     payload: dict[str, Any] = {
-        "boss_user_id": int(boss_user_id or 0)
-        if int(boss_user_id or 0) > 0
-        else _boss_user_id(),
+        "boss_user_id": int(boss_user_id or 0) if int(boss_user_id or 0) > 0 else _boss_user_id(),
         "employee_id": str(employee_id or "").strip(),
         "mod_id": mod_id or "",
         "display_name": display_name or "",

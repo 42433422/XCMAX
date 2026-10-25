@@ -56,8 +56,6 @@ def register_neurobus_diagnostics(app: FastAPI) -> None:
                 "has_stats": hasattr(neuro_bus, "get_stats"),
             }
 
-        logger.info(
-            "Registered NeuroBus diagnostics (/api/neurobus/stats, /api/neurobus/health)"
-        )
+        logger.info("Registered NeuroBus diagnostics (/api/neurobus/stats, /api/neurobus/health)")
     except RECOVERABLE_ERRORS:
         logger.debug("NeuroBus diagnostics skipped", exc_info=True)

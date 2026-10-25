@@ -133,9 +133,7 @@ def load_store() -> Dict[str, Any]:
 def save_store(data: Dict[str, Any]) -> None:
     p = packages_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=p.parent, delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=p.parent, delete=False) as f:
         tmp = Path(f.name)
         try:
             f.write(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
@@ -170,10 +168,7 @@ def market_archive_path(filename: Any, expected_sha256: Any) -> Path | None:
 
 
 def market_item_available(item: Any) -> bool:
-    if (
-        str(item.artifact or "").lower() == "workflow_template"
-        and not item.stored_filename
-    ):
+    if str(item.artifact or "").lower() == "workflow_template" and not item.stored_filename:
         try:
             graph = json.loads(item.graph_snapshot or "{}")
             return (
@@ -195,12 +190,8 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
     """
     try:
         with zipfile.ZipFile(path) as zf:
-            manifest_names = (
-                ["manifest.json"] if "manifest.json" in zf.namelist() else []
-            ) + [
-                n
-                for n in zf.namelist()
-                if n.count("/") == 1 and n.endswith("/manifest.json")
+            manifest_names = (["manifest.json"] if "manifest.json" in zf.namelist() else []) + [
+                n for n in zf.namelist() if n.count("/") == 1 and n.endswith("/manifest.json")
             ]
             if not manifest_names:
                 return None
@@ -210,9 +201,7 @@ def read_package_manifest_from_zip(path: Path) -> Dict[str, Any] | None:
         return None
 
 
-def package_manifest_alignment_errors(
-    record: Dict[str, Any], archive_path: Path
-) -> List[str]:
+def package_manifest_alignment_errors(record: Dict[str, Any], archive_path: Path) -> List[str]:
     """Validate catalog metadata against the manifest embedded in the archive.
 
     If employee.id or workflow_employees[].id differ from the expected pack id,
@@ -241,9 +230,7 @@ def package_manifest_alignment_errors(
     expected_ver = norm_version(record.get("version"))
     inner_ver = norm_version(inner.get("version"))
     if expected_ver and inner_ver and expected_ver != inner_ver:
-        errors.append(
-            f"metadata.version={expected_ver} 与包内 manifest.version={inner_ver} 不一致"
-        )
+        errors.append(f"metadata.version={expected_ver} 与包内 manifest.version={inner_ver} 不一致")
 
     if str(record.get("artifact") or "").strip().lower() == "employee_pack":
         _needs_repair = False
@@ -281,9 +268,7 @@ def package_manifest_alignment_errors(
                 if _top_dir:
                     _mf_key = _top_dir + "/manifest.json"
                     _tmp_path = archive_path.with_suffix(".xcemp.tmp")
-                    with _zipfile.ZipFile(
-                        _tmp_path, "w", compression=_zipfile.ZIP_DEFLATED
-                    ) as _zw:
+                    with _zipfile.ZipFile(_tmp_path, "w", compression=_zipfile.ZIP_DEFLATED) as _zw:
                         _zw.writestr(
                             _mf_key,
                             json.dumps(inner, ensure_ascii=False, indent=2) + "\n",
@@ -292,9 +277,7 @@ def package_manifest_alignment_errors(
                             for _n in _other_entries:
                                 _zw.writestr(_n, _zr.read(_n))
                     _shutil.move(str(_tmp_path), str(archive_path))
-                    _LOG_ALIGN.info(
-                        "AUTO-REPAIR: package archive rewritten successfully"
-                    )
+                    _LOG_ALIGN.info("AUTO-REPAIR: package archive rewritten successfully")
             except RECOVERABLE_ERRORS as _repair_exc:
                 _LOG_ALIGN.error("AUTO-REPAIR failed (%s)", type(_repair_exc).__name__)
 
@@ -342,11 +325,7 @@ def list_versions(id_: str) -> List[Dict[str, Any]]:
     if not pid:
         return []
     with _lock:
-        rows = [
-            dict(r)
-            for r in load_store().get("packages") or []
-            if str(r.get("id")) == pid
-        ]
+        rows = [dict(r) for r in load_store().get("packages") or [] if str(r.get("id")) == pid]
     rows.sort(
         key=lambda r: (str(r.get("created_at") or ""), str(r.get("version") or "")),
         reverse=True,
@@ -375,8 +354,7 @@ def promote_draft_to_stable(id_: str, from_version: str) -> Dict[str, Any]:
             (
                 r
                 for r in pkgs
-                if norm_pkg_id(r.get("id")) == pid
-                and norm_version(r.get("version")) == src_ver
+                if norm_pkg_id(r.get("id")) == pid and norm_version(r.get("version")) == src_ver
             ),
             None,
         )
@@ -386,9 +364,7 @@ def promote_draft_to_stable(id_: str, from_version: str) -> Dict[str, Any]:
         target = base_target
         bump = 1
         existing_versions = {
-            norm_version(r.get("version"))
-            for r in pkgs
-            if norm_pkg_id(r.get("id")) == pid
+            norm_version(r.get("version")) for r in pkgs if norm_pkg_id(r.get("id")) == pid
         }
         while target in existing_versions:
             bump += 1
@@ -431,25 +407,19 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
             ext = src_file.suffix.lower()
             if ext not in {".xcemp", ".xcmod", ".zip"}:
                 ext = ".xcmod"
-            storage_id = hashlib.sha256(
-                f"{pid}\0{ver}\0{rec['sha256']}".encode()
-            ).hexdigest()
+            storage_id = hashlib.sha256(f"{pid}\0{ver}\0{rec['sha256']}".encode()).hexdigest()
             dest = files_dir() / f"package_{storage_id}{ext}"
             rec["stored_filename"] = dest.name
         with catalog_write_lock():
             path = packages_path()
             data = (
-                json.loads(path.read_text(encoding="utf-8"))
-                if path.exists()
-                else {"packages": []}
+                json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"packages": []}
             )
             if not isinstance(data, dict) or not isinstance(data.get("packages"), list):
                 raise ValueError("Catalog 格式损坏，拒绝覆盖已有发布记录")
             packages = list(data["packages"])
             same_id = [r for r in packages if norm_pkg_id(r.get("id")) == pid]
-            existing = next(
-                (r for r in same_id if norm_version(r.get("version")) == ver), None
-            )
+            existing = next((r for r in same_id if norm_version(r.get("version")) == ver), None)
             if existing is not None:
                 if not rec.get("sha256") or existing.get("sha256") != rec["sha256"]:
                     raise PackageConflictError(
@@ -462,9 +432,7 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
                     if str(row.get("version") or "").startswith("draft-"):
                         continue
                     if stable_version(row.get("version")) >= candidate:
-                        raise PackageConflictError(
-                            "自动发布 version 必须严格高于已有版本"
-                        )
+                        raise PackageConflictError("自动发布 version 必须严格高于已有版本")
             if staged is not None and dest is not None:
                 if dest.exists():
                     if sha256_file(dest) != rec["sha256"]:
@@ -486,9 +454,7 @@ def append_package(record: Dict[str, Any], src_file: Path | None) -> Dict[str, A
             staged.unlink(missing_ok=True)
 
 
-def remove_package(
-    pkg_id: str, version: str | None = None, *, remove_files: bool = True
-) -> int:
+def remove_package(pkg_id: str, version: str | None = None, *, remove_files: bool = True) -> int:
     """从 packages.json 移除记录；若 ``version`` 为 ``None`` 则移除该 ``pkg_id`` 下全部版本。
 
     同时删除 ``stored_filename`` 指向的 ``files/`` 下本地文件（若存在）。

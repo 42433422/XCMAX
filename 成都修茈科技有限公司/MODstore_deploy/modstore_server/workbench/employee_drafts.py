@@ -54,9 +54,7 @@ async def employee_ai_draft(
 
     async def _stream() -> AsyncIterator[bytes]:
         with sf() as db:
-            prov, mdl, err = await ports.resolve_model(
-                db, user, body.provider, body.model
-            )
+            prov, mdl, err = await ports.resolve_model(db, user, body.provider, body.model)
             if err or not prov or not mdl:
                 err_ev = {"event": "pipeline_error", "stage": "init", "error": err}
                 yield f"data: {json.dumps(err_ev, ensure_ascii=False)}\n\n".encode()
@@ -99,18 +97,14 @@ async def employee_ai_draft(
                     "id": w.id,
                     "name": w.name or "",
                     "description": w.description or "",
-                    "sandbox_passed": bool(
-                        getattr(w, "sandbox_passed_for_current_graph", False)
-                    ),
+                    "sandbox_passed": bool(getattr(w, "sandbox_passed_for_current_graph", False)),
                 }
                 for w in wf_rows
             ]
 
             async def _gen_wf_fallback() -> Dict[str, Any]:
                 _pack_id = (body.suggested_id or "").strip() or None
-                _pack_label = (
-                    body.brief[:40] if body.brief else ""
-                ).strip() or _pack_id
+                _pack_label = (body.brief[:40] if body.brief else "").strip() or _pack_id
                 with sf() as db2:
                     return await ports.generate_workflow(
                         db2,

@@ -46,9 +46,7 @@ def _execute_employee_task_with_retries(
     user_id: int,
 ) -> Dict[str, Any]:
     retries = max(0, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRIES", 2))
-    delay_sec = max(
-        1, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRY_DELAY_SEC", 10)
-    )
+    delay_sec = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_STEP_RETRY_DELAY_SEC", 10))
     attempts = retries + 1
     bench_override = _loop_platform_bench_override()
     result: Dict[str, Any] = {}
@@ -70,9 +68,7 @@ def _execute_employee_task_with_retries(
         if results._employee_result_ok(result):
             result["self_maintenance_retry_attempts"] = attempt
             return result
-        if attempt >= attempts or not results._is_transient_employee_dispatch_failure(
-            result
-        ):
+        if attempt >= attempts or not results._is_transient_employee_dispatch_failure(result):
             result["self_maintenance_retry_attempts"] = attempt
             return result
         config.logger.warning(
@@ -108,19 +104,13 @@ def _run_step_with_inner_retries(
     are recorded as ``phase=step_retry`` without polluting the final step list.
     """
     if step_name == "code":
-        inner_max = max(
-            1, config._env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1
-        )
+        inner_max = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_CODE_FIX_RETRIES", 2) + 1)
         retry_kind = "code_fix"
     else:
-        inner_max = max(
-            1, config._env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 2) + 1
-        )
+        inner_max = max(1, config._env_int("MODSTORE_SELF_MAINTENANCE_MARKER_RETRIES", 2) + 1)
         retry_kind = "marker"
     marker = (
-        config.STRUCTURED_REVIEW_MARKER
-        if step_name == "review"
-        else config.STRUCTURED_QA_MARKER
+        config.STRUCTURED_REVIEW_MARKER if step_name == "review" else config.STRUCTURED_QA_MARKER
     )
     last_task_text = task_text
     result: Dict[str, Any] = {}
@@ -143,20 +133,14 @@ def _run_step_with_inner_retries(
         )
         if para_report_excerpt:
             report_excerpt = (report_excerpt + "\n" + para_report_excerpt)[-10000:]
-        failure_reason = (
-            "" if ok else results._extract_failure_reason(result, para_meta)
-        )
+        failure_reason = "" if ok else results._extract_failure_reason(result, para_meta)
         is_final = attempt >= inner_max
         should_retry = False
         if not ok and (not is_final):
-            if retry_kind == "code_fix" and (
-                not results._is_accepted_para_wait_timeout(result)
-            ):
+            if retry_kind == "code_fix" and (not results._is_accepted_para_wait_timeout(result)):
                 should_retry = True
         elif ok and retry_kind == "marker" and (not is_final):
-            protocol_ok, protocol_reason = review._structured_protocol_ok(
-                step_name, report_excerpt
-            )
+            protocol_ok, protocol_reason = review._structured_protocol_ok(step_name, report_excerpt)
             if not protocol_ok:
                 failure_reason = protocol_reason or "structured_protocol_invalid"
                 should_retry = True
@@ -164,9 +148,7 @@ def _run_step_with_inner_retries(
                 qa_json = review._structured_report_from_step(
                     {"report_excerpt": report_excerpt}, config.STRUCTURED_QA_MARKER
                 )
-                if self_maintenance_quality_gate.qa_executor_infrastructure_unavailable(
-                    qa_json
-                ):
+                if self_maintenance_quality_gate.qa_executor_infrastructure_unavailable(qa_json):
                     failure_reason = "structured_qa_executor_unavailable"
                     should_retry = True
         if not is_final and should_retry:
@@ -198,10 +180,8 @@ def _run_step_with_inner_retries(
             )
             code_fix_retry_rounds = attempt
         elif failure_reason == "structured_qa_executor_unavailable":
-            last_task_text = (
-                self_maintenance_remediation_prompts.qa_executor_retry_prompt(
-                    task_text, attempt, inner_max
-                )
+            last_task_text = self_maintenance_remediation_prompts.qa_executor_retry_prompt(
+                task_text, attempt, inner_max
             )
             marker_retry_rounds = attempt
         else:
@@ -237,8 +217,7 @@ def _base_para_input(
         "suppress_lifecycle_events": True,
         "wait_for_para": True,
         "wait_timeout_sec": config._env_int("MODSTORE_PARA_WAIT_TIMEOUT_SEC", 1800),
-        "project_root": os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT")
-        or "/root/XCMAX",
+        "project_root": os.environ.get("MODSTORE_SELF_MAINTENANCE_PROJECT_ROOT") or "/root/XCMAX",
     }
     if extra:
         data.update(extra)

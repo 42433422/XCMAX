@@ -86,9 +86,7 @@ logger = logging.getLogger(__name__)
 
 
 def _gateway() -> AlipayGateway:
-    return AlipayGateway(
-        build_client, credentials_ready, alipay_debug, notify_url_default
-    )
+    return AlipayGateway(build_client, credentials_ready, alipay_debug, notify_url_default)
 
 
 def _build_common_kwargs(
@@ -153,9 +151,7 @@ def verify_notify(data: dict[str, str], signature: str) -> bool:
     return _gateway().verify(data, signature)
 
 
-def query_order(
-    *, out_trade_no: str | None = None, trade_no: str | None = None
-) -> dict[str, Any]:
+def query_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
     return _gateway().query(out_trade_no=out_trade_no, trade_no=trade_no)
 
 
@@ -176,18 +172,12 @@ def refund_order(
     )
 
 
-def close_order(
-    *, out_trade_no: str | None = None, trade_no: str | None = None
-) -> dict[str, Any]:
+def close_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
     return _gateway().close(out_trade_no=out_trade_no, trade_no=trade_no)
 
 
-def query_refund(
-    *, out_trade_no: str, out_request_no: str | None = None
-) -> dict[str, Any]:
-    return _gateway().query_refund(
-        out_trade_no=out_trade_no, out_request_no=out_request_no
-    )
+def query_refund(*, out_trade_no: str, out_request_no: str | None = None) -> dict[str, Any]:
+    return _gateway().query_refund(out_trade_no=out_trade_no, out_request_no=out_request_no)
 
 
 def precreate_order(

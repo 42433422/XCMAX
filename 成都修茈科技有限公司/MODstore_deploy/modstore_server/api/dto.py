@@ -41,9 +41,7 @@ class ModAiScaffoldDTO(BaseModel):
     )
     provider: Optional[str] = Field(None, max_length=64)
     model: Optional[str] = Field(None, max_length=128)
-    manifest_override: Optional[Dict[str, Any]] = Field(
-        None, alias="_manifest_override"
-    )
+    manifest_override: Optional[Dict[str, Any]] = Field(None, alias="_manifest_override")
 
 
 class FrontendRegenerateDTO(BaseModel):

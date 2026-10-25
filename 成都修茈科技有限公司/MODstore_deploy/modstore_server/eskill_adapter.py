@@ -25,9 +25,7 @@ def dumps(value: Any) -> str:
 
 
 def render_template(template: str, values: Dict[str, Any]) -> str:
-    flat = {
-        str(key): "" if value is None else str(value) for key, value in values.items()
-    }
+    flat = {str(key): "" if value is None else str(value) for key, value in values.items()}
     rendered = Template(template or "").safe_substitute(flat)
     return re.sub(r"\s+", " ", rendered).strip()
 
@@ -57,11 +55,7 @@ class RuleBasedESkillAdapter:
             prior_changes = prior.get("changes")
             if isinstance(prior_changes, dict):
                 changes.update(
-                    {
-                        key: value
-                        for key, value in prior_changes.items()
-                        if key != "metadata"
-                    }
+                    {key: value for key, value in prior_changes.items() if key != "metadata"}
                 )
                 changes["metadata"]["reused_patch"] = True
                 return {

@@ -52,9 +52,7 @@ def platform_require_priced_row() -> bool:
 
 def new_model_preauth_multiplier() -> float:
     try:
-        return float(
-            os.environ.get("MODSTORE_LLM_NEW_MODEL_PREAUTH_MULT", "1.5") or "1.5"
-        )
+        return float(os.environ.get("MODSTORE_LLM_NEW_MODEL_PREAUTH_MULT", "1.5") or "1.5")
     except ValueError:
         return 1.5
 
@@ -73,16 +71,12 @@ def json_loads(raw: str | None, default: Any) -> Any:
 async def catalog_model_ids(session: Session, user_id: int, provider: str) -> Set[str]:
     if provider not in KNOWN_PROVIDERS:
         return set()
-    block = await get_models_for_provider(
-        session, user_id, provider, force_refresh=False
-    )
+    block = await get_models_for_provider(session, user_id, provider, force_refresh=False)
     models = block.get("runtime_models") or block.get("models") or []
     return {str(x).strip() for x in models if str(x).strip()}
 
 
-def _get_priced_row(
-    session: Session, provider: str, model: str
-) -> Optional[AiModelPrice]:
+def _get_priced_row(session: Session, provider: str, model: str) -> Optional[AiModelPrice]:
     return (
         session.query(AiModelPrice)
         .filter(
@@ -94,14 +88,10 @@ def _get_priced_row(
     )
 
 
-def _get_capability(
-    session: Session, provider: str, model: str
-) -> Optional[LlmModelCapability]:
+def _get_capability(session: Session, provider: str, model: str) -> Optional[LlmModelCapability]:
     return (
         session.query(LlmModelCapability)
-        .filter(
-            LlmModelCapability.provider == provider, LlmModelCapability.model == model
-        )
+        .filter(LlmModelCapability.provider == provider, LlmModelCapability.model == model)
         .first()
     )
 
@@ -111,9 +101,7 @@ def l3_approved(session: Session, provider: str, model: str) -> bool:
     return bool(row and (row.l3_status or "") == "approved")
 
 
-def l2_platform_billing_allowed(
-    session: Session, provider: str, model: str
-) -> Tuple[bool, str]:
+def l2_platform_billing_allowed(session: Session, provider: str, model: str) -> Tuple[bool, str]:
     """平台代付时 L2：是否允许按平台规则计费（含默认定价）。"""
     if not platform_require_priced_row():
         return True, ""
@@ -176,9 +164,7 @@ async def model_allowed_for_default(
     is_byok: bool,
 ) -> bool:
     try:
-        await assert_llm_chat_allowed(
-            session, user_id, provider, model, is_byok=is_byok
-        )
+        await assert_llm_chat_allowed(session, user_id, provider, model, is_byok=is_byok)
     except HTTPException:
         return False
     if not is_byok:
@@ -187,9 +173,7 @@ async def model_allowed_for_default(
     return True
 
 
-def ensure_capability_stubs(
-    session: Session, provider: str, model_ids: List[str]
-) -> int:
+def ensure_capability_stubs(session: Session, provider: str, model_ids: List[str]) -> int:
     """为目录中的模型插入占位行（L1 pending），返回新增行数近似。"""
     added = 0
     for mid in model_ids:
@@ -198,9 +182,7 @@ def ensure_capability_stubs(
             continue
         exists = (
             session.query(LlmModelCapability.id)
-            .filter(
-                LlmModelCapability.provider == provider, LlmModelCapability.model == mid
-            )
+            .filter(LlmModelCapability.provider == provider, LlmModelCapability.model == mid)
             .first()
         )
         if exists:
@@ -247,9 +229,7 @@ def capability_public_dict(
     )
     hint = ""
     if (row.l1_status or "") == "ok" and tier == "catalog_only":
-        hint = (
-            "已通过 L1 技术探针；平台代付若需稳定上架请联系管理员登记定价或 L3 批准。"
-        )
+        hint = "已通过 L1 技术探针；平台代付若需稳定上架请联系管理员登记定价或 L3 批准。"
     elif (row.l1_status or "") == "pending":
         hint = "L1 探针排队中或待触发。"
     elif (row.l1_status or "") == "failed":
@@ -269,9 +249,7 @@ def capability_public_dict(
     }
 
 
-def merge_catalog_capabilities(
-    session: Session, providers_out: List[Dict[str, Any]]
-) -> None:
+def merge_catalog_capabilities(session: Session, providers_out: List[Dict[str, Any]]) -> None:
     """就地写入 models_detailed[].capability。"""
     for block in providers_out:
         prov = str(block.get("provider") or "")
@@ -292,17 +270,11 @@ def merge_catalog_capabilities(
 def load_capabilities_for_provider(
     session: Session, provider: str
 ) -> Dict[str, LlmModelCapability]:
-    rows = (
-        session.query(LlmModelCapability)
-        .filter(LlmModelCapability.provider == provider)
-        .all()
-    )
+    rows = session.query(LlmModelCapability).filter(LlmModelCapability.provider == provider).all()
     return {str(r.model): r for r in rows}
 
 
-async def run_l1_probe(
-    session: Session, user_id: int, provider: str, model: str
-) -> None:
+async def run_l1_probe(session: Session, user_id: int, provider: str, model: str) -> None:
     """对单行执行 L1 探针并写回。"""
     row = _get_capability(session, provider, model)
     if not row:
@@ -359,9 +331,7 @@ async def run_l1_probe(
     session.commit()
 
 
-async def drain_pending_l1_probes(
-    session: Session, user_id: int, *, limit: int = 12
-) -> int:
+async def drain_pending_l1_probes(session: Session, user_id: int, *, limit: int = 12) -> int:
     """处理一批 pending L1（同一请求内顺序执行，避免过多并发）。"""
     rows = (
         session.query(LlmModelCapability)

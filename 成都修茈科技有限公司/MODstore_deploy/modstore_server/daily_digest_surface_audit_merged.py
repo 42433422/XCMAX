@@ -42,8 +42,7 @@ class SurfaceTarget:
 
 def _base_url() -> str:
     raw = (
-        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL")
-        or "https://xiu-ci.com"
+        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
     ).strip()
     return raw.rstrip("/")
 
@@ -63,18 +62,12 @@ def _ps_base_url() -> str:
 
 
 def _ps_audit_enabled() -> bool:
-    raw = (
-        (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or "")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_PS_ENABLED", "1") or "").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
 def _safe_slug_name(name: str) -> str:
-    return (
-        _facade().re.sub('[\\\\/:*?"<>|]+', "-", str(name or "")).strip()[:96] or "page"
-    )
+    return _facade().re.sub('[\\\\/:*?"<>|]+', "-", str(name or "")).strip()[:96] or "page"
 
 
 def _fetch_market_catalog_sync(
@@ -102,9 +95,7 @@ def _fetch_market_catalog_sync(
             )
             try:
                 with _facade().urllib.request.urlopen(req, timeout=60) as resp:
-                    payload = _facade().json.loads(
-                        resp.read().decode("utf-8", errors="replace")
-                    )
+                    payload = _facade().json.loads(resp.read().decode("utf-8", errors="replace"))
             except (
                 _facade().urllib.error.URLError,
                 TimeoutError,
@@ -133,9 +124,7 @@ def _fetch_market_catalog_sync(
 
 def _surface_audit_mode() -> str:
     return (
-        (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_MODE") or "daily")
-        .strip()
-        .lower()
+        (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_MODE") or "daily").strip().lower()
     )
 
 
@@ -148,15 +137,11 @@ def _is_sample_surface_audit() -> bool:
 
 
 def _is_daily_surface_audit() -> bool:
-    return not _facade()._is_full_surface_audit() and (
-        not _facade()._is_sample_surface_audit()
-    )
+    return not _facade()._is_full_surface_audit() and (not _facade()._is_sample_surface_audit())
 
 
 def _max_targets_per_lane() -> int:
-    raw = (
-        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE") or "1"
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_MAX_PER_LANE") or "1").strip()
     try:
         return max(1, int(raw))
     except ValueError:
@@ -164,9 +149,7 @@ def _max_targets_per_lane() -> int:
 
 
 def _catalog_screenshot_max() -> int:
-    raw = (
-        _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_CATALOG_MAX") or "3"
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_CATALOG_MAX") or "3").strip()
     try:
         return max(0, int(raw))
     except ValueError:
@@ -176,11 +159,7 @@ def _catalog_screenshot_max() -> int:
 def _catalog_fetch_enabled() -> bool:
     if _facade()._catalog_screenshot_max() <= 0:
         return False
-    raw = (
-        (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG") or "")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG") or "").strip().lower()
     if _facade()._is_daily_surface_audit():
         if not raw:
             return True
@@ -204,9 +183,7 @@ def _stable_sample_catalog_items(
         items,
         key=lambda item: (
             _facade()
-            .hashlib.sha256(
-                f"{day}:{item.get('id') or item.get('pkg_id') or ''}".encode()
-            )
+            .hashlib.sha256(f"{day}:{item.get('id') or item.get('pkg_id') or ''}".encode())
             .hexdigest()
         ),
     )
@@ -214,14 +191,10 @@ def _stable_sample_catalog_items(
 
 
 def _is_ai_employee_material(item: _facade().Dict[str, _facade().Any]) -> bool:
-    cat = (
-        str(item.get("material_category") or item.get("category") or "").strip().lower()
-    )
+    cat = str(item.get("material_category") or item.get("category") or "").strip().lower()
     if cat == "ai_employee":
         return True
-    artifact = (
-        str(item.get("artifact_type") or item.get("artifact") or "").strip().lower()
-    )
+    artifact = str(item.get("artifact_type") or item.get("artifact") or "").strip().lower()
     return artifact in ("ai_employee", "workflow_employee")
 
 
@@ -231,15 +204,9 @@ def _filter_catalog_ai_employee_items(
     """catalog 详情截图：先筛 AI 员工类商品，再稳定抽 1–3 张（默认 3）。"""
     if not items:
         return []
-    ai_only = [
-        x
-        for x in items
-        if isinstance(x, dict) and _facade()._is_ai_employee_material(x)
-    ]
+    ai_only = [x for x in items if isinstance(x, dict) and _facade()._is_ai_employee_material(x)]
     pool = ai_only if ai_only else items
-    return _facade()._stable_sample_catalog_items(
-        pool, _facade()._catalog_screenshot_max()
-    )
+    return _facade()._stable_sample_catalog_items(pool, _facade()._catalog_screenshot_max())
 
 
 def _is_ai_employee_store_target(t: SurfaceTarget) -> bool:
@@ -353,24 +320,16 @@ def _pw_catalog_items_for_daily(
     """日更 P-W：公开商品详情抽样 1–3（其余 P-W 页全量）。"""
     if _facade()._catalog_screenshot_max() <= 0:
         return []
-    raw = (
-        (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG") or "")
-        .strip()
-        .lower()
-    )
+    raw = (_facade().os.environ.get("MODSTORE_SURFACE_AUDIT_SKIP_CATALOG") or "").strip().lower()
     if raw in ("1", "true", "yes", "on"):
         return []
-    return _facade()._filter_catalog_ai_employee_items(
-        _facade()._fetch_market_catalog_sync(base)
-    )
+    return _facade()._filter_catalog_ai_employee_items(_facade()._fetch_market_catalog_sync(base))
 
 
 def _build_pw_full_targets(
     base: str,
     *,
-    catalog: _facade().Optional[
-        _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = None,
+    catalog: _facade().Optional[_facade().List[_facade().Dict[str, _facade().Any]]] = None,
 ) -> _facade().List[SurfaceTarget]:
     """P-W 全量页面清单；``catalog`` 由调用方注入（日更为 1–3 张商品详情）。"""
     items = catalog if catalog is not None else []
@@ -430,17 +389,13 @@ def build_digest_surface_targets() -> _facade().List[SurfaceTarget]:
     base = _facade()._base_url()
     out: _facade().List[_facade().SurfaceTarget] = []
     out.extend(
-        _facade()._build_pw_full_targets(
-            base, catalog=_facade()._pw_catalog_items_for_daily(base)
-        )
+        _facade()._build_pw_full_targets(base, catalog=_facade()._pw_catalog_items_for_daily(base))
     )
     if _facade()._ps_audit_enabled():
         ps_base = _facade()._ps_base_url()
         for name, path in _facade()._PS_DESKTOP_PAGES:
             out.append(
-                _facade().SurfaceTarget(
-                    "P-S", "软件 P-S", name, path, "desktop", base=ps_base
-                )
+                _facade().SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
             )
     for name, path in _facade()._PAPP_PUBLIC_PAGES:
         out.append(_facade().SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -472,9 +427,7 @@ def build_surface_targets() -> _facade().List[SurfaceTarget]:
         ps_base = _facade()._ps_base_url()
         for name, path in _facade()._PS_DESKTOP_PAGES:
             out.append(
-                _facade().SurfaceTarget(
-                    "P-S", "软件 P-S", name, path, "desktop", base=ps_base
-                )
+                _facade().SurfaceTarget("P-S", "软件 P-S", name, path, "desktop", base=ps_base)
             )
     for name, path in _facade()._PAPP_PUBLIC_PAGES:
         out.append(_facade().SurfaceTarget("P-App", "App P-App", name, path, "mobile"))
@@ -507,11 +460,7 @@ def _repo_root() -> _facade().Path:
 
         return _facade().Path(root_fn())
     except _facade().RECOVERABLE_ERRORS:
-        return (
-            _facade()
-            .Path(_facade().os.environ.get("MODSTORE_REPO_ROOT", "."))
-            .resolve()
-        )
+        return _facade().Path(_facade().os.environ.get("MODSTORE_REPO_ROOT", ".")).resolve()
 
 
 def _png_fingerprint(path: _facade().Path) -> str:
@@ -532,9 +481,7 @@ def compute_surface_baseline_delta(
     if root is None:
         return {"ok": True, "skipped": True, "reason": "no save dir", "rows": []}
     prev_day = (
-        _facade()
-        .datetime.strptime(day, "%Y-%m-%d")
-        .replace(tzinfo=_facade().timezone.utc)
+        _facade().datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=_facade().timezone.utc)
         - _facade().timedelta(days=1)
     ).strftime("%Y-%m-%d")
     prev_root = root.parent / prev_day
@@ -639,15 +586,11 @@ def _surface_demo_account_defaults() -> _facade().Tuple[str, str]:
     raw_cfg = (_facade().os.environ.get("MODSTORE_RUNTIME_CONFIG_ROOT") or "").strip()
     if raw_cfg:
         candidates.append(
-            _facade().Path(raw_cfg).expanduser().resolve()
-            / "surface_audit_demo_account.json"
+            _facade().Path(raw_cfg).expanduser().resolve() / "surface_audit_demo_account.json"
         )
     try:
         candidates.append(
-            _facade()._repo_root()
-            / "FHD"
-            / "config"
-            / "surface_audit_demo_account.json"
+            _facade()._repo_root() / "FHD" / "config" / "surface_audit_demo_account.json"
         )
     except RECOVERABLE_ERRORS:
         pass
@@ -678,8 +621,7 @@ def _surface_audit_login_api_base(account_kind: str) -> str:
         )
         return str(raw).strip().rstrip("/")
     raw = (
-        _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL")
-        or _facade()._internal_api_base()
+        _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_API_URL") or _facade()._internal_api_base()
     )
     return str(raw).strip().rstrip("/")
 
@@ -693,9 +635,7 @@ def _login_surface_audit_sync(
 ) -> _facade().Dict[str, _facade().Any]:
     """Playwright 截图前登录对应系统，并返回可注入的 token/cookie/session。"""
     account_kind = (
-        account_kind
-        or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND")
-        or "admin"
+        account_kind or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_ACCOUNT_KIND") or "admin"
     ).strip()
     api_base = _facade()._surface_audit_login_api_base(account_kind)
     if account_kind == "enterprise":
@@ -715,13 +655,9 @@ def _login_surface_audit_sync(
             or demo_password
         )
     else:
-        user = (
-            user or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin"
-        )
+        user = user or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_USER") or "admin"
         password = (
-            password
-            or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD")
-            or "admin123"
+            password or _facade().os.environ.get("MODSTORE_SURFACE_AUDIT_PASSWORD") or "admin123"
         )
     user = str(user).strip()
     password = str(password).strip()
@@ -743,9 +679,7 @@ def _login_surface_audit_sync(
             if cookie_hdr:
                 headers["Cookie"] = cookie_hdr
             data = _facade().json.dumps(payload).encode("utf-8")
-            req = _facade().urllib.request.Request(
-                url, data=data, headers=headers, method="POST"
-            )
+            req = _facade().urllib.request.Request(url, data=data, headers=headers, method="POST")
         else:
             req = _facade().urllib.request.Request(url, headers=headers, method="GET")
         with _facade().urllib.request.urlopen(req, timeout=45) as resp:
@@ -798,13 +732,9 @@ def _login_surface_audit_sync(
     if account_kind == "enterprise" and ok and session_id and (not access):
         try:
             handoff, _ = _req(f"{api_base}/api/market/session-handoff")
-            handoff_data = (
-                handoff.get("data") if isinstance(handoff.get("data"), dict) else {}
-            )
+            handoff_data = handoff.get("data") if isinstance(handoff.get("data"), dict) else {}
             access = str(
-                handoff_data.get("market_access_token")
-                or handoff_data.get("token")
-                or ""
+                handoff_data.get("market_access_token") or handoff_data.get("token") or ""
             ).strip()
             refresh = str(
                 handoff_data.get("market_refresh_token")
@@ -818,9 +748,7 @@ def _login_surface_audit_sync(
                 api_base,
                 exc,
             )
-    has_required_state = bool(access) or (
-        account_kind == "enterprise" and bool(session_id)
-    )
+    has_required_state = bool(access) or (account_kind == "enterprise" and bool(session_id))
     if not ok or not has_required_state:
         _facade().logger.warning(
             "surface audit: %s login rejected base=%s msg=%s",
@@ -878,9 +806,7 @@ async def _inject_admin_digest(context: _facade().Any, code: str) -> None:
     c = str(code or "").strip().upper()
     if not c:
         return
-    payload = _facade().json.dumps(
-        {"code": c, "ts": int(__import__("time").time() * 1000)}
-    )
+    payload = _facade().json.dumps({"code": c, "ts": int(__import__("time").time() * 1000)})
     script = (
         "(function(){try{localStorage.setItem('xcmax_digest_identity_code',"
         + _facade().json.dumps(payload)
@@ -889,9 +815,7 @@ async def _inject_admin_digest(context: _facade().Any, code: str) -> None:
     await context.add_init_script(script)
 
 
-async def _prepare_admin_digest(
-    context: _facade().Any, auth: _facade().Dict[str, str]
-) -> None:
+async def _prepare_admin_digest(context: _facade().Any, auth: _facade().Dict[str, str]) -> None:
     code = _facade()._fetch_admin_digest_code_sync(auth)
     if code:
         try:
@@ -917,15 +841,11 @@ async def _prepare_admin_digest(
             with _facade().urllib.request.urlopen(req, timeout=30):
                 pass
         except RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning(
-                "surface audit: verify-admin-digest-code failed: %s", exc
-            )
+            _facade().logger.warning("surface audit: verify-admin-digest-code failed: %s", exc)
     await _facade()._inject_admin_digest(context, code)
 
 
-def _cookie_url_for_auth(
-    target_url: str, auth: _facade().Dict[str, _facade().Any]
-) -> str:
+def _cookie_url_for_auth(target_url: str, auth: _facade().Dict[str, _facade().Any]) -> str:
     for candidate in (target_url, str(auth.get("api_base") or "")):
         try:
             parsed = _facade().urllib.parse.urlsplit(candidate)
@@ -1003,9 +923,7 @@ async def _inject_market_auth(
     await context.add_init_script(script)
 
 
-async def _goto_with_retry(
-    page: _facade().Any, url: str, *, timeout_ms: int
-) -> _facade().Any:
+async def _goto_with_retry(page: _facade().Any, url: str, *, timeout_ms: int) -> _facade().Any:
     """远程站点易抖动：domcontentloaded 失败后降级 commit 再试（对齐 run_surface_audit.mjs）。"""
     try:
         return await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
@@ -1025,9 +943,7 @@ async def _goto_with_retry(
 
 
 def _surface_capture_retry_count() -> int:
-    raw = (
-        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_RETRIES") or "2"
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_RETRIES") or "2").strip()
     try:
         return max(0, min(4, int(raw)))
     except ValueError:
@@ -1036,9 +952,7 @@ def _surface_capture_retry_count() -> int:
 
 def _is_retryable_surface_row(row: _facade().Dict[str, _facade().Any]) -> bool:
     err = str(row.get("error") or "")
-    if err and any(
-        (marker in err for marker in _facade()._TRANSIENT_NAV_ERROR_MARKERS)
-    ):
+    if err and any((marker in err for marker in _facade()._TRANSIENT_NAV_ERROR_MARKERS)):
         return True
     try:
         status = int(row.get("status") or 0)
@@ -1068,30 +982,22 @@ async def _wait_page_ready(page: _facade().Any, *, timeout_ms: int) -> None:
     await page.wait_for_timeout(1500)
 
 
-async def _apply_page_prepare(
-    page: _facade().Any, prepare: str, timeout_ms: int
-) -> None:
+async def _apply_page_prepare(page: _facade().Any, prepare: str, timeout_ms: int) -> None:
     for step in [s.strip() for s in str(prepare or "").split("|") if s.strip()]:
         await _facade()._apply_page_prepare_step(page, step, timeout_ms)
 
 
-async def _apply_page_prepare_step(
-    page: _facade().Any, prepare: str, timeout_ms: int
-) -> None:
+async def _apply_page_prepare_step(page: _facade().Any, prepare: str, timeout_ms: int) -> None:
     if prepare == "admin_digest":
         try:
-            unlock_btn = page.get_by_role(
-                "button", name=_facade().re.compile("解锁管理端")
-            )
+            unlock_btn = page.get_by_role("button", name=_facade().re.compile("解锁管理端"))
             if await unlock_btn.is_visible(timeout=2500):
                 await unlock_btn.click(timeout=5000)
                 await page.wait_for_timeout(1000)
         except RECOVERABLE_ERRORS:
             pass
         try:
-            await page.wait_for_selector(
-                ".wb-sidebar-admin-nav, #app .app-shell", timeout=12000
-            )
+            await page.wait_for_selector(".wb-sidebar-admin-nav, #app .app-shell", timeout=12000)
         except RECOVERABLE_ERRORS:
             pass
         return
@@ -1119,9 +1025,7 @@ async def _apply_page_prepare_step(
         try:
             btn = page.locator(".store-adv-toggle").filter(has_text="高级筛选")
             await btn.first.click(timeout=min(timeout_ms, 15000))
-            await page.wait_for_selector(
-                ".store-adv-filters", state="visible", timeout=6000
-            )
+            await page.wait_for_selector(".store-adv-filters", state="visible", timeout=6000)
             await page.wait_for_timeout(600)
         except RECOVERABLE_ERRORS:
             pass
@@ -1140,15 +1044,9 @@ async def _capture_one(
     console_errors: _facade().List[str] = []
     page.on(
         "console",
-        lambda msg: (
-            console_errors.append(str(msg.text)) if msg.type == "error" else None
-        ),
+        lambda msg: (console_errors.append(str(msg.text)) if msg.type == "error" else None),
     )
-    vp = (
-        _facade()._MOBILE_VIEWPORT
-        if viewport == "mobile"
-        else _facade()._DESKTOP_VIEWPORT
-    )
+    vp = _facade()._MOBILE_VIEWPORT if viewport == "mobile" else _facade()._DESKTOP_VIEWPORT
     await page.set_viewport_size(vp)
     status: _facade().Optional[int] = None
     title = ""
@@ -1229,16 +1127,12 @@ def lane_employee_ids(lane: str, *, limit: int = 6) -> _facade().List[str]:
             from modstore_server.duty_roster import SIX_LINE_DEPARTMENTS
 
             dept = SIX_LINE_DEPARTMENTS.get(dept_key) or {}
-            subzones = (
-                dept.get("subzones") if isinstance(dept.get("subzones"), dict) else {}
-            )
+            subzones = dept.get("subzones") if isinstance(dept.get("subzones"), dict) else {}
             for sz in subzones.values():
                 for pid in sz.get("ids") or [] if isinstance(sz, dict) else []:
                     _push(pid)
         except RECOVERABLE_ERRORS:
-            _facade().logger.debug(
-                "surface audit: lane_employee_ids fallback lane=%s", lane
-            )
+            _facade().logger.debug("surface audit: lane_employee_ids fallback lane=%s", lane)
     for pid in _facade()._LANE_OWNER_FALLBACK.get(lane, []):
         _push(pid)
     return out[: max(1, limit)]
@@ -1265,9 +1159,7 @@ def _rule_based_lane_analysis(
 
 
 def _surface_analysis_timeout_sec() -> float:
-    raw = (
-        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC") or "90"
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_ANALYSIS_TIMEOUT_SEC") or "90").strip()
     try:
         return max(10.0, min(600.0, float(raw)))
     except ValueError:
@@ -1280,9 +1172,7 @@ def _build_lane_analysis_user_content(
     lines: _facade().List[str] = []
     for r in rows:
         ce = r.get("console_errors") or []
-        ce_part = (
-            "；console: " + " | ".join((str(x)[:160] for x in ce[:3])) if ce else ""
-        )
+        ce_part = "；console: " + " | ".join((str(x)[:160] for x in ce[:3])) if ce else ""
         err_part = f"；抓取错误: {r.get('error')}" if r.get("error") else ""
         lines.append(
             f"- {r.get('name')}（{r.get('viewport')}）｜URL {r.get('url')}｜HTTP {r.get('status') or '—'}｜标题「{str(r.get('title') or '')[:80]}」{ce_part}{err_part}"
@@ -1338,9 +1228,7 @@ async def analyze_surface_lanes(
                 "markdown": rule_md,
                 "owners": owners,
                 "model": "",
-                "error": ""
-                if enabled in ("0", "false", "no", "off")
-                else "bench LLM 未配置",
+                "error": "" if enabled in ("0", "false", "no", "off") else "bench LLM 未配置",
                 "source": "rule",
             }
             if enabled not in ("0", "false", "no", "off"):
@@ -1393,11 +1281,7 @@ async def analyze_surface_lanes(
             md = str(result.get("content") or "").strip()
             if not md:
                 choices = result.get("choices")
-                if (
-                    isinstance(choices, list)
-                    and choices
-                    and isinstance(choices[0], dict)
-                ):
+                if isinstance(choices, list) and choices and isinstance(choices[0], dict):
                     msg0 = choices[0].get("message")
                     if isinstance(msg0, dict):
                         md = str(msg0.get("content") or "").strip()
@@ -1415,9 +1299,7 @@ async def analyze_surface_lanes(
                 if isinstance(result, dict)
                 else "bench LLM 返回为空"
             )
-            _facade().logger.warning(
-                "surface audit: lane analysis empty lane=%s err=%s", lane, err
-            )
+            _facade().logger.warning("surface audit: lane analysis empty lane=%s err=%s", lane, err)
             out[lane] = {
                 "markdown": rule_md,
                 "owners": owners,
@@ -1457,9 +1339,7 @@ async def _capture_surface_target_async(
         ctx_kwargs["viewport"] = _facade()._DESKTOP_VIEWPORT
     context = await browser.new_context(**ctx_kwargs)
     try:
-        if market_auth and (
-            target.lane == "P-S" or _facade()._path_needs_market_auth(target.path)
-        ):
+        if market_auth and (target.lane == "P-S" or _facade()._path_needs_market_auth(target.path)):
             await _facade()._inject_market_auth(context, market_auth, url)
         if target.prepare == "admin_digest" and market_auth:
             await _facade()._prepare_admin_digest(context, market_auth)
@@ -1483,9 +1363,7 @@ async def _capture_surface_target_async(
                     "title": "",
                     "console_errors": [],
                     "error": str(exc),
-                    "screenshot_saved": str(save_path)
-                    if save_path and save_path.is_file()
-                    else "",
+                    "screenshot_saved": str(save_path) if save_path and save_path.is_file() else "",
                     "viewport": target.viewport,
                     "prepare": target.prepare or "",
                 }
@@ -1518,9 +1396,7 @@ async def _capture_surface_target_async(
     if target.lane == "P-S":
         title = str(row.get("title") or "")
         final_url = str(row.get("url") or url)
-        console_blob = "\n".join(
-            (str(x) for x in (row.get("console_errors") or [])[:10])
-        )
+        console_blob = "\n".join((str(x) for x in (row.get("console_errors") or [])[:10]))
         auth_bad = (
             "登录" in title
             or "/login" in final_url
@@ -1533,9 +1409,7 @@ async def _capture_surface_target_async(
             row["error"] = "P-S enterprise auth state invalid: landed on login/401"
     if "/market/admin/" in str(target.path or ""):
         row["admin"] = True
-        row["digest_unlock_ok"] = bool(
-            not row.get("error") and int(row.get("status") or 0) < 400
-        )
+        row["digest_unlock_ok"] = bool(not row.get("error") and int(row.get("status") or 0) < 400)
     return row
 
 
@@ -1564,11 +1438,7 @@ async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
     try:
         timeout_ms = max(
             10000,
-            int(
-                _facade().os.environ.get(
-                    "MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "90000"
-                )
-            ),
+            int(_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "90000")),
         )
     except ValueError:
         timeout_ms = 90000
@@ -1724,9 +1594,7 @@ async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
                     await browser.close()
     results = android_rows + normalized
     ok = all(((r.get("status") or 0) < 400 and (not r.get("error")) for r in results))
-    baseline_delta = _facade().compute_surface_baseline_delta(
-        day, results, save_root=save_root
-    )
+    baseline_delta = _facade().compute_surface_baseline_delta(day, results, save_root=save_root)
     if save_root is not None and results:
         try:
             (save_root / "manifest.json").write_text(
@@ -1768,9 +1636,7 @@ async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
     }
 
 
-def _lane_summary(
-    results: _facade().List[_facade().Dict[str, _facade().Any]], lane: str
-) -> str:
+def _lane_summary(results: _facade().List[_facade().Dict[str, _facade().Any]], lane: str) -> str:
     rows = [r for r in results if r.get("lane") == lane]
     if not rows:
         return "（无）"
@@ -1788,11 +1654,7 @@ def _lane_summary(
 
 
 def _lane_analysis_md(report: _facade().Dict[str, _facade().Any], lane: str) -> str:
-    la = (
-        report.get("lane_analysis")
-        if isinstance(report.get("lane_analysis"), dict)
-        else {}
-    )
+    la = report.get("lane_analysis") if isinstance(report.get("lane_analysis"), dict) else {}
     row = la.get(lane) if isinstance(la, dict) else None
     if not isinstance(row, dict):
         return ""
@@ -1800,9 +1662,7 @@ def _lane_analysis_md(report: _facade().Dict[str, _facade().Any], lane: str) -> 
     if not md:
         return ""
     owners = row.get("owners") or []
-    owner_line = (
-        f"（对应员工：{', '.join((str(o) for o in owners[:4]))}）" if owners else ""
-    )
+    owner_line = f"（对应员工：{', '.join((str(o) for o in owners[:4]))}）" if owners else ""
     return f"\n**分析**{owner_line}\n{md}"
 
 
@@ -1816,20 +1676,12 @@ def surface_audit_excerpt_markdown(report: _facade().Dict[str, _facade().Any]) -
         return "（无巡检结果）"
     delta_md = ""
     if isinstance(report.get("baseline_delta"), dict):
-        delta_md = "\n\n" + _facade().baseline_delta_excerpt_markdown(
-            report["baseline_delta"]
-        )
+        delta_md = "\n\n" + _facade().baseline_delta_excerpt_markdown(report["baseline_delta"])
     return f"### P-W 网站\n{_facade()._lane_summary(results, 'P-W')}{_facade()._lane_analysis_md(report, 'P-W')}\n\n### P-S 软件\n{_facade()._lane_summary(results, 'P-S')}{_facade()._lane_analysis_md(report, 'P-S')}\n\n### P-App 移动 / App 面\n{_facade()._lane_summary(results, 'P-App')}{_facade()._lane_analysis_md(report, 'P-App')}{delta_md}"
 
 
-def _render_analysis_block_html(
-    report: _facade().Dict[str, _facade().Any], lane: str
-) -> str:
-    la = (
-        report.get("lane_analysis")
-        if isinstance(report.get("lane_analysis"), dict)
-        else {}
-    )
+def _render_analysis_block_html(report: _facade().Dict[str, _facade().Any], lane: str) -> str:
+    la = report.get("lane_analysis") if isinstance(report.get("lane_analysis"), dict) else {}
     row = la.get(lane) if isinstance(la, dict) else None
     if not isinstance(row, dict):
         return ""
@@ -1844,9 +1696,7 @@ def _render_analysis_block_html(
     )
     src = str(row.get("source") or "")
     src_badge = (
-        '<span style="font-size:10px;color:#94a3b8">· 规则化兜底</span>'
-        if src == "rule"
-        else ""
+        '<span style="font-size:10px;color:#94a3b8">· 规则化兜底</span>' if src == "rule" else ""
     )
     body_lines = "".join(
         (
@@ -1879,9 +1729,7 @@ def _render_lane_html(
         if ce:
             ce_html = (
                 '<ul style="margin:4px 0 0;padding-left:18px;font-size:12px;color:#92400e">'
-                + "".join(
-                    (f"<li>{_facade().html.escape(str(x)[:200])}</li>" for x in ce[:3])
-                )
+                + "".join((f"<li>{_facade().html.escape(str(x)[:200])}</li>" for x in ce[:3]))
                 + "</ul>"
             )
         saved = r.get("screenshot_saved") or ""
@@ -1994,18 +1842,14 @@ def _surface_audit_badge(
 
 
 def _email_lane_row_cap() -> int:
-    raw = (
-        _facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_EMAIL_MAX_ROWS") or "8"
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_EMAIL_MAX_ROWS") or "8").strip()
     try:
         return max(3, int(raw))
     except ValueError:
         return 8
 
 
-def build_surface_audit_html_sync() -> _facade().Tuple[
-    str, _facade().Dict[str, _facade().Any]
-]:
+def build_surface_audit_html_sync() -> _facade().Tuple[str, _facade().Dict[str, _facade().Any]]:
     """同步入口：供 ``run_daily_digest_email`` 调用。返回 (html, report_dict)。
 
     任一页截图/分析失败即抛错，不生成「存在异常页」兜底 HTML。
@@ -2026,12 +1870,8 @@ def build_surface_audit_html_sync() -> _facade().Tuple[
     lanes_html = "".join(
         [
             _facade()._render_lane_html("P-W", "P-W · 获客网站", results, report),
-            _facade()._render_lane_html(
-                "P-S", "P-S · MODstore 软件面", results, report
-            ),
-            _facade()._render_lane_html(
-                "P-App", "P-App · 移动端 / adb 原生屏", results, report
-            ),
+            _facade()._render_lane_html("P-S", "P-S · MODstore 软件面", results, report),
+            _facade()._render_lane_html("P-App", "P-App · 移动端 / adb 原生屏", results, report),
         ]
     )
     badge, badge_color, badge_sub = _facade()._surface_audit_badge(results)

@@ -42,9 +42,7 @@ async def workbench_vibe_code_skill(
 
     sf = ports.database()
     with sf() as db:
-        prov, mdl, err = await resolve_llm_provider_model_auto(
-            db, user, body.provider, body.model
-        )
+        prov, mdl, err = await resolve_llm_provider_model_auto(db, user, body.provider, body.model)
         if err:
             raise HTTPException(400, err)
 

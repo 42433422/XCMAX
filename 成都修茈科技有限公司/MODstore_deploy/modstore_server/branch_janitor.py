@@ -28,9 +28,7 @@ _CLEAN_PREFIXES = ("cr/", "auto/daily-")
 _PROTECTED = {"main", "master", "auto/daily", "HEAD"}
 
 
-def _git(
-    root: str, args: List[str], *, timeout: float = 60.0
-) -> subprocess.CompletedProcess:
+def _git(root: str, args: List[str], *, timeout: float = 60.0) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args],
         cwd=root,
@@ -42,9 +40,7 @@ def _git(
 
 
 def _enabled() -> bool:
-    return (
-        os.environ.get("MODSTORE_BRANCH_CLEANUP_ENABLED", "1") or ""
-    ).strip().lower() in (
+    return (os.environ.get("MODSTORE_BRANCH_CLEANUP_ENABLED", "1") or "").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -89,9 +85,7 @@ def prune_stale_branches(
 
     base_ref = (base or os.environ.get("MODSTORE_AUTO_PR_BASE_BRANCH", "")).strip()
     if not base_ref:
-        head = _git(
-            root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]
-        ).stdout.strip()
+        head = _git(root, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]).stdout.strip()
         base_ref = head.rsplit("/", 1)[-1] if head else "main"
 
     current = _git(root, ["rev-parse", "--abbrev-ref", "HEAD"]).stdout.strip()

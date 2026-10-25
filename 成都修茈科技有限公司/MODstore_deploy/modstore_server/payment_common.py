@@ -34,9 +34,7 @@ class _ReplayGuard:
 
     __slots__ = ("_data", "_lock", "_window", "_soft_limit", "_calls_since_prune")
 
-    def __init__(
-        self, *, window_seconds: float = REPLAY_WINDOW, soft_limit: int = 50_000
-    ) -> None:
+    def __init__(self, *, window_seconds: float = REPLAY_WINDOW, soft_limit: int = 50_000) -> None:
         self._data: dict[str, float] = {}
         self._lock = threading.Lock()
         self._window = float(window_seconds)
@@ -149,9 +147,7 @@ class CheckoutDTO(BaseModel):
     total_amount: float = 0
     subject: str = ""
     wallet_recharge: bool = False
-    pay_channel: str = Field(
-        default="alipay", description="alipay 或 wechat，不参与签名字段"
-    )
+    pay_channel: str = Field(default="alipay", description="alipay 或 wechat，不参与签名字段")
     request_id: str = Field(..., description="请求唯一标识")
     timestamp: int = Field(..., description="请求时间戳")
     signature: str = Field(..., description="请求签名")
@@ -208,9 +204,7 @@ def _parse_money(value: Any) -> Optional[float]:
         return None
 
 
-def _amounts_match(
-    order_amount: Any, paid_amount: Any, *, tol: float = _AMOUNT_TOLERANCE
-) -> bool:
+def _amounts_match(order_amount: Any, paid_amount: Any, *, tol: float = _AMOUNT_TOLERANCE) -> bool:
     """比较本地订单金额与支付宝返回金额是否在容差内。"""
     a = _parse_money(order_amount)
     b = _parse_money(paid_amount)
@@ -247,9 +241,7 @@ def canonical_checkout_sign_data(body: CheckoutDTO) -> dict[str, str]:
 def _plan_rows(session) -> list[PlanTemplate]:
     rows = [
         row
-        for row in session.query(PlanTemplate)
-        .filter(PlanTemplate.is_active.is_(True))
-        .all()
+        for row in session.query(PlanTemplate).filter(PlanTemplate.is_active.is_(True)).all()
         if not is_account_license_plan_id(row.id)
     ]
     rows.sort(
@@ -400,10 +392,7 @@ def _resolve_checkout_fields(
         item = session.query(CatalogItem).filter(CatalogItem.id == body.item_id).first()
         if not item:
             raise HTTPException(404, "商品不存在")
-        if (
-            not item.is_public
-            or (getattr(item, "compliance_status", "") or "") == "delisted"
-        ):
+        if not item.is_public or (getattr(item, "compliance_status", "") or "") == "delisted":
             raise HTTPException(403, "该商品已下架，无法购买")
         if item.price <= 0:
             raise HTTPException(400, "免费商品，无需支付")
@@ -441,7 +430,5 @@ def _checkout_return_url(request, out_trade_no: str) -> str | None:
     if prefix and not prefix.startswith("/"):
         prefix = "/" + prefix
     prefix = prefix.rstrip("/")
-    path = (
-        f"{prefix}/checkout/{out_trade_no}" if prefix else f"/checkout/{out_trade_no}"
-    )
+    path = f"{prefix}/checkout/{out_trade_no}" if prefix else f"/checkout/{out_trade_no}"
     return f"{origin}{path}"

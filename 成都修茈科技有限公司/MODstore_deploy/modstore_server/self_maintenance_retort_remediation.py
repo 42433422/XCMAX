@@ -135,9 +135,7 @@ def retort_scope_only_clarification(value: Any) -> bool:
     """Return whether Retort only asks to reduce an oversized change."""
 
     gate = value if isinstance(value, dict) else {}
-    clarification = (
-        gate.get("clarification") if isinstance(gate.get("clarification"), dict) else {}
-    )
+    clarification = gate.get("clarification") if isinstance(gate.get("clarification"), dict) else {}
     questions = clarification.get("questions")
     return bool(questions) and all(
         isinstance(question, dict)

@@ -13,10 +13,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR")
-        or Path.home() / ".xcmax" / "modstore-daily"
-    )
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
 
 
 def _env_float(name: str, default: float) -> float:
@@ -57,9 +54,7 @@ def _metric(metrics: Dict[str, Any], name: str, default: float) -> float:
 
 
 def _release_related(event_type: str, payload: Dict[str, Any]) -> bool:
-    text = json.dumps(
-        {"event_type": event_type, "payload": payload}, ensure_ascii=False
-    ).lower()
+    text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
     return any(
         token in text
         for token in (
@@ -76,14 +71,10 @@ def _release_related(event_type: str, payload: Dict[str, Any]) -> bool:
     )
 
 
-def build_adaptive_release_plan(
-    *, event_type: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def build_adaptive_release_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     metrics = {**_load_runtime_slo(), **_payload_slo(payload)}
     try:
-        priority = (
-            int(payload.get("priority")) if payload.get("priority") is not None else 50
-        )
+        priority = int(payload.get("priority")) if payload.get("priority") is not None else 50
     except (TypeError, ValueError):
         priority = 50
     error_rate = _metric(metrics, "error_rate", 0.0)
@@ -128,12 +119,8 @@ def build_adaptive_release_plan(
         "release_related": related,
         "schema_version": 1,
         "slo_thresholds": {
-            "availability_rollback": _env_float(
-                "MODSTORE_SLO_AVAILABILITY_ROLLBACK", 0.995
-            ),
-            "autoscale_saturation": _env_float(
-                "MODSTORE_SLO_AUTOSCALE_SATURATION", 0.82
-            ),
+            "availability_rollback": _env_float("MODSTORE_SLO_AVAILABILITY_ROLLBACK", 0.995),
+            "autoscale_saturation": _env_float("MODSTORE_SLO_AUTOSCALE_SATURATION", 0.82),
             "error_rate_rollback": _env_float("MODSTORE_SLO_ERROR_RATE_ROLLBACK", 0.03),
             "p95_ms_rollback": _env_float("MODSTORE_SLO_P95_MS_ROLLBACK", 2500.0),
         },

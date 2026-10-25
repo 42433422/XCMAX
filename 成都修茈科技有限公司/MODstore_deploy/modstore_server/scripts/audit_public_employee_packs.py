@@ -51,11 +51,7 @@ async def audit_one(
         brief=use_brief,
         catalog_registered=True,
     )
-    six = (
-        report.get("six_dimension")
-        if isinstance(report.get("six_dimension"), dict)
-        else {}
-    )
+    six = report.get("six_dimension") if isinstance(report.get("six_dimension"), dict) else {}
     gate = report.get("gate") if isinstance(report.get("gate"), dict) else {}
     return {
         "pkg_id": pkg_id,
@@ -106,9 +102,7 @@ def _apply_fix(row: Any, result: Dict[str, Any], *, write_cache: bool) -> List[s
         changes.append(f"security_level: {row.security_level!r} -> enterprise")
         row.security_level = "enterprise"
     if str(getattr(row, "license_scope", "") or "").strip() != "enterprise":
-        changes.append(
-            f"license_scope: {getattr(row, 'license_scope', '')!r} -> enterprise"
-        )
+        changes.append(f"license_scope: {getattr(row, 'license_scope', '')!r} -> enterprise")
         row.license_scope = "enterprise"
 
     if write_cache:
@@ -139,9 +133,7 @@ async def main_async(args: argparse.Namespace) -> int:
             pkg_ids.append(pid.strip())
 
     if not pkg_ids:
-        print(
-            "No pkg_id specified. Use --all-public-tabular or --pkg-id", file=sys.stderr
-        )
+        print("No pkg_id specified. Use --all-public-tabular or --pkg-id", file=sys.stderr)
         return 2
 
     sf = get_session_factory()
@@ -181,11 +173,7 @@ async def main_async(args: argparse.Namespace) -> int:
     if args.fix or args.write_cache:
         with sf() as db:
             for r in results:
-                row = (
-                    db.query(CatalogItem)
-                    .filter(CatalogItem.pkg_id == r["pkg_id"])
-                    .first()
-                )
+                row = db.query(CatalogItem).filter(CatalogItem.pkg_id == r["pkg_id"]).first()
                 if not row:
                     print(f"[WARN] no catalog row for {r['pkg_id']}")
                     continue
@@ -201,18 +189,10 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit public tabular employee packs")
-    parser.add_argument(
-        "--pkg-id", action="append", default=[], help="指定 pkg_id，可重复"
-    )
-    parser.add_argument(
-        "--all-public-tabular", action="store_true", help="审计 8 个公开表格员工包"
-    )
-    parser.add_argument(
-        "--fix", action="store_true", help="修复 catalog name/compliance 等"
-    )
-    parser.add_argument(
-        "--write-cache", action="store_true", help="写入 graph_snapshot 质量缓存"
-    )
+    parser.add_argument("--pkg-id", action="append", default=[], help="指定 pkg_id，可重复")
+    parser.add_argument("--all-public-tabular", action="store_true", help="审计 8 个公开表格员工包")
+    parser.add_argument("--fix", action="store_true", help="修复 catalog name/compliance 等")
+    parser.add_argument("--write-cache", action="store_true", help="写入 graph_snapshot 质量缓存")
     args = parser.parse_args()
     return asyncio.run(main_async(args))
 

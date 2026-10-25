@@ -31,9 +31,7 @@ async def run_ppt_generate(
     rule_spec = dict(rule_spec or {})
     warnings: List[str] = []
 
-    user_q = str(
-        payload.get("user_query") or ctx.get("user_query") or payload.get("task") or ""
-    )
+    user_q = str(payload.get("user_query") or ctx.get("user_query") or payload.get("task") or "")
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     pptx_path = output_dir / "output.pptx"
@@ -43,9 +41,7 @@ async def run_ppt_generate(
         pptx_path = output_dir / Path(str(rule_spec.get("default_output_relpath"))).name
 
     workspace = Path(str(payload.get("workspace_root") or output_dir))
-    route = resolve_task_route(
-        user_query=user_q, template_path=template_path, payload=payload
-    )
+    route = resolve_task_route(user_query=user_q, template_path=template_path, payload=payload)
     mode = str(route.get("mode") or "compose")
     recipe = str(route.get("recipe") or "")
 
@@ -66,9 +62,7 @@ async def run_ppt_generate(
     presentation: Optional[Dict[str, Any]] = None
     images_index: Optional[Dict[str, Any]] = None
     try:
-        table, spec_warnings = await resolve_presentation_spec(
-            src_path, payload, ctx, rule_spec
-        )
+        table, spec_warnings = await resolve_presentation_spec(src_path, payload, ctx, rule_spec)
         warnings.extend(spec_warnings or [])
         if isinstance(table, dict) and table.get("slides"):
             presentation = table
@@ -113,9 +107,7 @@ async def run_ppt_generate(
     warnings.extend(plan_errs)
 
     plan_path = output_dir / "ppt_edit_plan.json"
-    plan_path.write_text(
-        json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    plan_path.write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
 
     if mode == "enhance" and template_path and template_path.is_file():
         base_meta = copy_template_base(template_path, pptx_path)

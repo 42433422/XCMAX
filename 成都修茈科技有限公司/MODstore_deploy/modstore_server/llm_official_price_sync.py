@@ -56,15 +56,11 @@ def _per_1m_to_per_1k_cny(amount_per_1m: float, currency: str) -> Decimal:
     return per_1k.quantize(Decimal("0.000001"))
 
 
-def _quote_from_entry(
-    entry: Dict[str, Any], currency: str, source: str
-) -> OfficialQuote:
+def _quote_from_entry(entry: Dict[str, Any], currency: str, source: str) -> OfficialQuote:
     in_p = _per_1m_to_per_1k_cny(float(entry.get("input_per_1m") or 0), currency)
     out_p = _per_1m_to_per_1k_cny(float(entry.get("output_per_1m") or 0), currency)
     min_c = Decimal(str(entry.get("min_charge") or 0.01))
-    return OfficialQuote(
-        input_per_1k=in_p, output_per_1k=out_p, min_charge=min_c, source=source
-    )
+    return OfficialQuote(input_per_1k=in_p, output_per_1k=out_p, min_charge=min_c, source=source)
 
 
 def load_curated_catalog() -> Dict[str, Any]:
@@ -167,9 +163,7 @@ def resolve_official_quote(
     return or_q or cur_q
 
 
-def _get_or_create_price_row(
-    session: Session, provider: str, model_id: str
-) -> AiModelPrice:
+def _get_or_create_price_row(session: Session, provider: str, model_id: str) -> AiModelPrice:
     row = (
         session.query(AiModelPrice)
         .filter(AiModelPrice.provider == provider, AiModelPrice.model == model_id)
@@ -300,7 +294,6 @@ def list_official_sources_for_provider(provider: str) -> Dict[str, Any]:
         "provider": provider,
         "source_url": block.get("source_url") or "",
         "currency": block.get("currency") or "CNY",
-        "openrouter_supported": provider
-        in (data.get("openrouter_provider_map") or {}).values()
+        "openrouter_supported": provider in (data.get("openrouter_provider_map") or {}).values()
         or provider in (data.get("openrouter_provider_map") or {}),
     }

@@ -23,9 +23,7 @@ class EmployeeMetricsRepository(Protocol):
 
     def record_execution(self, execution: EmployeeExecution) -> None: ...
 
-    def list_recent(
-        self, employee_id: str, *, limit: int = 20
-    ) -> list[dict[str, Any]]: ...
+    def list_recent(self, employee_id: str, *, limit: int = 20) -> list[dict[str, Any]]: ...
 
 
 __all__ = ["EmployeeRepository", "EmployeeMetricsRepository"]

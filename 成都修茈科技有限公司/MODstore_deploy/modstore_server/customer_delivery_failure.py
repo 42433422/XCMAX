@@ -42,11 +42,7 @@ def apply_runtime_failure(
     evidence["automatic_rework_generations"] = [*handled, generation]
     evidence["runtime_mod_id"] = record["id"]
     source: dict[str, Any] = next(
-        (
-            row
-            for row in evidence.get("delivery_artifacts", [])
-            if row.get("id") == record["id"]
-        ),
+        (row for row in evidence.get("delivery_artifacts", []) if row.get("id") == record["id"]),
         {},
     )
     evidence["rework_artifact_kind"] = (
@@ -58,9 +54,7 @@ def apply_runtime_failure(
     evidence["runtime_failure"] = record["business_verification"]
     resolution["state"] = "queued_rework"
     ticket.evidence_json = json_dumps(evidence)
-    enqueue_issue(
-        db, ticket, revision=f"runtime-failed:{generation}", private_factory=True
-    )
+    enqueue_issue(db, ticket, revision=f"runtime-failed:{generation}", private_factory=True)
 
 
 def reconcile_runtime_failures(db: Any, ticket: Any) -> bool:

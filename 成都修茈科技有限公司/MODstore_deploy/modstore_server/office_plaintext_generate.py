@@ -92,9 +92,7 @@ def build_word_spec_from_text(text: str) -> Dict[str, Any]:
         if not t:
             continue
         is_heading = len(t) < 80 and (
-            t.endswith("：")
-            or t.endswith(":")
-            or re.match(r"^第[一二三四五六七八九十\d]+", t)
+            t.endswith("：") or t.endswith(":") or re.match(r"^第[一二三四五六七八九十\d]+", t)
         )
         paragraphs.append(
             {
@@ -109,9 +107,7 @@ def build_word_spec_from_text(text: str) -> Dict[str, Any]:
     return {"plain_text": plain, "paragraphs": paragraphs, "tables": [], "blocks": []}
 
 
-def build_table_spec_from_text(
-    text: str, *, sheet_name: str = "Sheet1"
-) -> Dict[str, Any]:
+def build_table_spec_from_text(text: str, *, sheet_name: str = "Sheet1") -> Dict[str, Any]:
     plain = (text or "").strip()
     lines = [ln for ln in plain.splitlines() if ln.strip()]
     if not lines:
@@ -125,15 +121,10 @@ def build_table_spec_from_text(
         reader = csv.reader(io.StringIO("\n".join(lines)))
         rows_raw = list(reader)
         if rows_raw:
-            columns = [
-                str(c).strip() or f"列{i + 1}" for i, c in enumerate(rows_raw[0])
-            ]
+            columns = [str(c).strip() or f"列{i + 1}" for i, c in enumerate(rows_raw[0])]
             rows = []
             for r in rows_raw[1:]:
-                row = {
-                    columns[i]: (r[i] if i < len(r) else "")
-                    for i in range(len(columns))
-                }
+                row = {columns[i]: (r[i] if i < len(r) else "") for i in range(len(columns))}
                 rows.append(row)
             if not rows and len(rows_raw) == 1:
                 rows = [{columns[0]: rows_raw[0][0] if rows_raw[0] else ""}]
@@ -314,9 +305,7 @@ async def resolve_generate_spec(
         if _validate_structured(fmt, data):
             return data, warnings
         nested = (
-            data.get("document_full")
-            or data.get("presentation_full")
-            or data.get("table_json")
+            data.get("document_full") or data.get("presentation_full") or data.get("table_json")
         )
         if isinstance(nested, dict) and _validate_structured(fmt, nested):
             return nested, warnings

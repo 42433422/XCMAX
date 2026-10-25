@@ -68,12 +68,9 @@ def trigger_dependabot_autofix(
 
     pr_number = int(pr_event.get("number", 0) or 0)
     pr_url = str(
-        pr_event.get("html_url", "")
-        or pr_event.get("pull_request", {}).get("html_url", "")
+        pr_event.get("html_url", "") or pr_event.get("pull_request", {}).get("html_url", "")
     )
-    pr_title = str(
-        pr_event.get("title", "") or pr_event.get("pull_request", {}).get("title", "")
-    )
+    pr_title = str(pr_event.get("title", "") or pr_event.get("pull_request", {}).get("title", ""))
 
     # 从 PR 标题解析版本变更类型
     # Dependabot 标题格式："Bump foo from 1.0.0 to 1.1.0" 或 "Bump foo from 1.0.0 to 2.0.0"
@@ -154,9 +151,7 @@ def _classify_dependabot_update(pr_title: str) -> str:
         return "unknown"
 
     # 匹配 "from X.Y.Z to A.B.C" 模式
-    match = re.search(
-        r"from\s+(\d+)\.(\d+)\.(\d+)\s+to\s+(\d+)\.(\d+)\.(\d+)", pr_title
-    )
+    match = re.search(r"from\s+(\d+)\.(\d+)\.(\d+)\s+to\s+(\d+)\.(\d+)\.(\d+)", pr_title)
     if not match:
         return "unknown"
 
@@ -221,11 +216,7 @@ def trigger_gitleaks_response(
     other_leaks = []
     for leak in leaks:
         rule_id = str(leak.get("RuleID", "") or leak.get("rule_id", ""))
-        if (
-            rule_id in high_risk_types
-            or "private" in rule_id.lower()
-            or "key" in rule_id.lower()
-        ):
+        if rule_id in high_risk_types or "private" in rule_id.lower() or "key" in rule_id.lower():
             high_risk_leaks.append(leak)
         else:
             other_leaks.append(leak)
@@ -271,13 +262,9 @@ def trigger_gitleaks_response(
             # 不传 leaks 原文，避免 secret 明文进入建议单
             "leaks_summary": [
                 {
-                    "rule_id": str(
-                        leak_item.get("RuleID", "") or leak_item.get("rule_id", "")
-                    ),
+                    "rule_id": str(leak_item.get("RuleID", "") or leak_item.get("rule_id", "")),
                     "file": str(leak_item.get("File", "") or leak_item.get("file", "")),
-                    "line": leak_item.get(
-                        "StartLine", leak_item.get("start_line", "?")
-                    ),
+                    "line": leak_item.get("StartLine", leak_item.get("start_line", "?")),
                 }
                 for leak_item in leaks[:50]
             ],
@@ -334,13 +321,9 @@ def trigger_codeql_response(
         return {"ok": True, "skipped": True, "reason": "codeql response disabled"}
 
     rule = alert.get("rule", {}) or {}
-    severity = str(
-        rule.get("security_severity_level", "") or rule.get("severity", "low")
-    ).lower()
+    severity = str(rule.get("security_severity_level", "") or rule.get("severity", "low")).lower()
     rule_id = str(rule.get("id", "") or rule.get("name", "unknown"))
-    rule_description = str(
-        rule.get("description", "") or rule.get("short_description", "")
-    )
+    rule_description = str(rule.get("description", "") or rule.get("short_description", ""))
 
     instance = alert.get("most_recent_instance", {}) or {}
     location = instance.get("location", {}) or {}

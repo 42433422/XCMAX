@@ -58,9 +58,7 @@ class AccountExperienceLedger(Base):
 
 class Quota(Base):
     __tablename__ = "quotas"
-    __table_args__ = (
-        UniqueConstraint("user_id", "quota_type", name="uq_user_quota_type"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "quota_type", name="uq_user_quota_type"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -80,9 +78,7 @@ class Entitlement(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=True, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=True, index=True)
     entitlement_type = Column(String(32), nullable=False, index=True)
     source_order_id = Column(String(64), default="", index=True)
     metadata_json = Column(Text, default="{}")

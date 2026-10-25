@@ -36,9 +36,7 @@ DIMENSION_WEIGHTS = {
     "workflow_connectivity": 1.2,
     "domain_delivery": 1.3,
 }
-CRITICAL_DIMENSION_KEYS = frozenset(
-    {"executability", "pack_compliance", "domain_delivery"}
-)
+CRITICAL_DIMENSION_KEYS = frozenset({"executability", "pack_compliance", "domain_delivery"})
 PASS_OVERALL = 70.0
 PASS_EACH_DIM = 50.0
 PASS_CRITICAL_DIM = 60.0
@@ -109,9 +107,7 @@ def finalize_dimension_report(
         weighted_sum += weight * float(dims[key]["score"])
         weight_total += weight
     overall = round(weighted_sum / weight_total, 1) if weight_total else 0.0
-    failed_dims = [
-        key for key in SIX_DIMENSION_KEYS if dims[key]["score"] < PASS_EACH_DIM
-    ]
+    failed_dims = [key for key in SIX_DIMENSION_KEYS if dims[key]["score"] < PASS_EACH_DIM]
     critical_failed_dims = [
         key for key in CRITICAL_DIMENSION_KEYS if dims[key]["score"] < PASS_CRITICAL_DIM
     ]

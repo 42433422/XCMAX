@@ -140,7 +140,11 @@ def test_damaged_incident_cannot_dispatch_or_replace_evidence(fresh_db, monkeypa
         eid = event.id
     from modstore_server.employee_task_market import rank_market_candidates
 
-    for dispatch in (orchestrate_incident, _dispatch_incident_body, rank_market_candidates):
+    for dispatch in (
+        orchestrate_incident,
+        _dispatch_incident_body,
+        rank_market_candidates,
+    ):
         with pytest.raises(ValueError):
             dispatch(eid)
         with models.get_session_factory()() as db:

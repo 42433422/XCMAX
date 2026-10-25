@@ -26,11 +26,7 @@ def _env_int(name: str, default: int) -> int:
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = _facade().os.environ.get(name)
-    return (
-        default
-        if raw is None
-        else str(raw).strip().lower() in {"1", "true", "yes", "on"}
-    )
+    return default if raw is None else str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _business_misfire_grace_time() -> int:
@@ -53,9 +49,7 @@ def required_scheduler_job_ids() -> tuple[str, ...]:
     if _facade()._env_bool("MODSTORE_LLM_AUTOPILOT_ENABLED", False):
         required.add("llm_route_autopilot")
     if _facade()._env_bool("MODSTORE_DAILY_CHAIN_CRON_FALLBACK_ENABLED", False):
-        required.update(
-            {"daily_release_train_orchestrator_job", "daily_vibe_line_execute_job"}
-        )
+        required.update({"daily_release_train_orchestrator_job", "daily_vibe_line_execute_job"})
     if _facade()._env_bool("MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", False):
         required.add("post_deploy_smoke_interval")
     return tuple(sorted(required))
@@ -85,9 +79,7 @@ def scheduler_integrity_status() -> dict[str, _facade().Any]:
     }
 
 
-def _run_scheduler_startup_probe(
-    stage: str, fn: _facade().Callable[[], _facade().Any]
-) -> bool:
+def _run_scheduler_startup_probe(stage: str, fn: _facade().Callable[[], _facade().Any]) -> bool:
     """Run an eager probe without allowing one dependency to truncate registration."""
     try:
         fn()
@@ -107,17 +99,13 @@ def _run_scheduler_startup_probe(
         return False
 
 
-def _startup_recovery_kwargs(
-    job_id: str, *, delay_seconds: int
-) -> dict[str, _facade().datetime]:
+def _startup_recovery_kwargs(job_id: str, *, delay_seconds: int) -> dict[str, _facade().datetime]:
     """Schedule one catch-up run when a critical daily job is missing or stale."""
     if not _facade()._env_bool("MODSTORE_SCHEDULER_STARTUP_RECOVERY_ENABLED", True):
         return {}
     stale_after = max(
         3600,
-        _facade()._env_int(
-            "MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600
-        ),
+        _facade()._env_int("MODSTORE_SCHEDULER_STARTUP_RECOVERY_STALE_SECONDS", 26 * 3600),
     )
     due = True
     state = "missing"
@@ -126,19 +114,13 @@ def _startup_recovery_kwargs(
 
         runtime = get_runtime_status(stale_after_seconds=stale_after)
         row = next(
-            (
-                item
-                for item in runtime.get("jobs") or []
-                if item.get("job_id") == job_id
-            ),
+            (item for item in runtime.get("jobs") or [] if item.get("job_id") == job_id),
             None,
         )
         state = str((row or {}).get("state") or "missing")
         due = not runtime.get("ok") or row is None or state in {"stale", "failing"}
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception(
-            "scheduler startup recovery status failed: job_id=%s", job_id
-        )
+        _facade().logger.exception("scheduler startup recovery status failed: job_id=%s", job_id)
     if not due:
         return {}
     now = _facade().datetime.now(_facade().timezone.utc)
@@ -312,9 +294,7 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
             result.get("reason") or (result.get("gate") or {}).get("reason"),
         )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception(
-            "incident-driven self-maintenance failed: source=%s", source
-        )
+        _facade().logger.exception("incident-driven self-maintenance failed: source=%s", source)
 
 
 def _run_collector_with_timeout(
@@ -334,9 +314,7 @@ def _run_collector_with_timeout(
 
     async def _wrapped() -> _facade().Any:
         loop = _facade().asyncio.get_running_loop()
-        return await _facade().asyncio.wait_for(
-            loop.run_in_executor(None, fn), timeout=timeout
-        )
+        return await _facade().asyncio.wait_for(loop.run_in_executor(None, fn), timeout=timeout)
 
     return _facade().asyncio.run(_wrapped())
 
@@ -346,9 +324,7 @@ def _run_collector_with_timeout(
 
 
 def _employee_auto_cron_enabled() -> bool:
-    return _facade().os.environ.get(
-        "MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1"
-    ).strip().lower() in (
+    return _facade().os.environ.get("MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED", "1").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -357,9 +333,7 @@ def _employee_auto_cron_enabled() -> bool:
 
 
 def _employee_cron_job_id(employee_id: str) -> str:
-    safe = "".join((c for c in employee_id or "" if c.isalnum() or c in ("-", "_")))[
-        :64
-    ]
+    safe = "".join((c for c in employee_id or "" if c.isalnum() or c in ("-", "_")))[:64]
     return f"{_facade()._EMPLOYEE_CRON_JOB_PREFIX}{safe or 'unknown'}"
 
 
@@ -392,9 +366,7 @@ def _employee_project_root() -> str:
     monorepo parent makes perception scan the entire checkout and none of the
     employee scopes match.
     """
-    configured = str(
-        _facade().os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or ""
-    ).strip()
+    configured = str(_facade().os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or "").strip()
     if configured:
         target = _facade().Path(configured).expanduser().resolve()
         if target.is_dir():
@@ -425,9 +397,7 @@ def _register_employee_cron_jobs() -> None:
     if _facade()._scheduler is None:
         return
     if not _facade()._employee_auto_cron_enabled():
-        _facade().logger.info(
-            "employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)"
-        )
+        _facade().logger.info("employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)")
         return
     try:
         task_router = importlib.import_module("modstore_server.task_router")
@@ -462,17 +432,13 @@ def _register_employee_cron_jobs() -> None:
         session_factory=get_session_factory(),
     )
     if not candidates:
-        _facade().logger.info(
-            "employee cron: no catalog profiles or duty contracts found"
-        )
+        _facade().logger.info("employee cron: no catalog profiles or duty contracts found")
         return
     registered = 0
     skipped = 0
     represented_ids: set[str] = set()
     for emp_id, manifest, contract in candidates:
-        sched = _facade()._extract_employee_schedule(manifest) or contract_schedule(
-            contract
-        )
+        sched = _facade()._extract_employee_schedule(manifest) or contract_schedule(contract)
         if not sched:
             skipped += 1
             continue
@@ -493,9 +459,7 @@ def _register_employee_cron_jobs() -> None:
             elif isinstance(interval_seconds, (int, float)) and interval_seconds >= 60:
                 trigger = _facade().IntervalTrigger(seconds=int(interval_seconds))
         except RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning(
-                "employee cron: invalid trigger for %s: %s", emp_id, exc
-            )
+            _facade().logger.warning("employee cron: invalid trigger for %s: %s", emp_id, exc)
             skipped += 1
             continue
         if trigger is None:
@@ -529,9 +493,7 @@ def _register_employee_cron_jobs() -> None:
                 _facade().logger.exception("employee cron job failed: %s", eid)
 
         try:
-            _facade()._scheduler.add_job(
-                _runner, trigger, id=job_id, replace_existing=True
-            )
+            _facade()._scheduler.add_job(_runner, trigger, id=job_id, replace_existing=True)
             registered += 1
             represented_ids.add(emp_id)
             record_employee_cron_registration(emp_id, status="success")
@@ -549,12 +511,8 @@ def _register_employee_cron_jobs() -> None:
     try:
         reconcile_employee_cron_registrations(represented_ids)
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception(
-            "employee cron: registration ledger reconciliation failed"
-        )
-    _facade().logger.info(
-        "employee cron: registered=%d skipped=%d", registered, skipped
-    )
+        _facade().logger.exception("employee cron: registration ledger reconciliation failed")
+    _facade().logger.info("employee cron: registered=%d skipped=%d", registered, skipped)
 
 
 def list_employee_cron_jobs() -> list:
@@ -572,16 +530,12 @@ def list_employee_cron_jobs() -> list:
         jid = job.id or ""
         if not jid.startswith(_facade()._EMPLOYEE_CRON_JOB_PREFIX):
             continue
-        contract = (
-            work_contracts.get(jid[len(_facade()._EMPLOYEE_CRON_JOB_PREFIX) :]) or {}
-        )
+        contract = work_contracts.get(jid[len(_facade()._EMPLOYEE_CRON_JOB_PREFIX) :]) or {}
         out.append(
             {
                 "job_id": jid,
                 "employee_id": jid[len(_facade()._EMPLOYEE_CRON_JOB_PREFIX) :],
-                "next_run_time": job.next_run_time.isoformat()
-                if job.next_run_time
-                else None,
+                "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
                 "trigger": str(job.trigger),
                 "contract_mode": str(contract.get("mode") or ""),
                 "risk_level": str(contract.get("risk_level") or ""),
@@ -606,10 +560,7 @@ def reload_employee_cron_jobs() -> dict:
 
 
 def stop_scheduler() -> None:
-    global \
-        _scheduler, \
-        _scheduler_registration_complete, \
-        _scheduler_startup_probe_failures
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
     global _scheduler_startup_recovery_deadlines
     if _facade()._scheduler is not None:
         _facade()._scheduler.shutdown(wait=False)
@@ -638,9 +589,7 @@ def _load_triggers() -> None:
             .all()
         )
     for t in rows:
-        _facade()._register_cron_trigger(
-            t.id, t.workflow_id, t.user_id, t.config_json or "{}"
-        )
+        _facade()._register_cron_trigger(t.id, t.workflow_id, t.user_id, t.config_json or "{}")
 
 
 def _register_cron_trigger(
@@ -659,13 +608,9 @@ def _register_cron_trigger(
 
     def job_wrapper() -> None:
         try:
-            _facade().run_workflow_for_trigger(
-                workflow_id=wf_id, user_id=uid, input_data={}
-            )
+            _facade().run_workflow_for_trigger(workflow_id=wf_id, user_id=uid, input_data={})
         except RECOVERABLE_ERRORS as e:
-            _facade().logger.exception(
-                "cron workflow failed workflow_id=%s: %s", wf_id, e
-            )
+            _facade().logger.exception("cron workflow failed workflow_id=%s: %s", wf_id, e)
 
     jid = _facade()._job_id(trigger_id)
     try:
@@ -710,9 +655,7 @@ def refresh_cron_trigger(trigger_id: int) -> None:
     if not t or not t.is_active or (t.trigger_type or "").lower() != "cron":
         _facade().unregister_cron_trigger(trigger_id)
         return
-    _facade()._register_cron_trigger(
-        t.id, t.workflow_id, t.user_id, t.config_json or "{}"
-    )
+    _facade()._register_cron_trigger(t.id, t.workflow_id, t.user_id, t.config_json or "{}")
 
 
 def reload_all_cron_triggers() -> None:

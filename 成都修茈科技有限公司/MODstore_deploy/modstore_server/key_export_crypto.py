@@ -61,9 +61,7 @@ def encrypt_json_to_recipient(recipient_spki_der: bytes, plaintext: bytes) -> by
     nonce = os.urandom(12)
     aes = AESGCM(key)
     ct = aes.encrypt(nonce, plaintext, associated_data=_MAGIC + bytes([_VERSION]))
-    header = (
-        _MAGIC + bytes([_VERSION]) + struct.pack("!H", len(eph_der)) + eph_der + nonce
-    )
+    header = _MAGIC + bytes([_VERSION]) + struct.pack("!H", len(eph_der)) + eph_der + nonce
     return header + ct
 
 

@@ -76,7 +76,10 @@ def probe_contract_alignment(
 
     gateway = PaymentGatewayService(backend=payment_backend, java_url=java_url)
     ok = gateway.backend == "java"
-    proxied = {prefix: gateway.should_proxy_to_java(prefix + "/probe") for prefix in PROXY_PREFIXES}
+    proxied = {
+        prefix: gateway.should_proxy_to_java(prefix + "/probe")
+        for prefix in PROXY_PREFIXES
+    }
     if ok and not all(proxied.values()):
         ok = False
         message = "Gateway is in java mode but not all contract prefixes are proxied"
@@ -100,8 +103,14 @@ def probe_actuator_health(base_url: str) -> ProbeResult:
     url = f"{base_url.rstrip('/')}/actuator/health"
     status, body, error = _http_get(url)
     if error:
-        return ProbeResult(name="actuator_health", ok=False, detail={"url": url}, message=error)
-    ok = status == 200 and isinstance(body, dict) and str(body.get("status", "")).upper() == "UP"
+        return ProbeResult(
+            name="actuator_health", ok=False, detail={"url": url}, message=error
+        )
+    ok = (
+        status == 200
+        and isinstance(body, dict)
+        and str(body.get("status", "")).upper() == "UP"
+    )
     return ProbeResult(
         name="actuator_health",
         ok=bool(ok),
@@ -114,8 +123,12 @@ def probe_payment_plans(base_url: str) -> ProbeResult:
     url = f"{base_url.rstrip('/')}/api/payment/plans"
     status, body, error = _http_get(url)
     if error:
-        return ProbeResult(name="payment_plans", ok=False, detail={"url": url}, message=error)
-    ok = status == 200 and isinstance(body, dict) and isinstance(body.get("plans"), list)
+        return ProbeResult(
+            name="payment_plans", ok=False, detail={"url": url}, message=error
+        )
+    ok = (
+        status == 200 and isinstance(body, dict) and isinstance(body.get("plans"), list)
+    )
     return ProbeResult(
         name="payment_plans",
         ok=bool(ok),
@@ -124,15 +137,21 @@ def probe_payment_plans(base_url: str) -> ProbeResult:
             "status_code": status,
             "plan_count": len(body["plans"]) if ok and isinstance(body, dict) else 0,
         },
-        message="" if ok else f"Unexpected /api/payment/plans response: status={status}",
+        message=""
+        if ok
+        else f"Unexpected /api/payment/plans response: status={status}",
     )
 
 
 def probe_payment_diagnostics(base_url: str, admin_token: str) -> ProbeResult:
     url = f"{base_url.rstrip('/')}/api/payment/diagnostics"
-    status, body, error = _http_get(url, headers={"Authorization": f"Bearer {admin_token}"})
+    status, body, error = _http_get(
+        url, headers={"Authorization": f"Bearer {admin_token}"}
+    )
     if error:
-        return ProbeResult(name="payment_diagnostics", ok=False, detail={"url": url}, message=error)
+        return ProbeResult(
+            name="payment_diagnostics", ok=False, detail={"url": url}, message=error
+        )
     if (
         status == 200
         and isinstance(body, dict)
@@ -182,7 +201,9 @@ def format_report(results: Sequence[ProbeResult]) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Java payment service gray release preflight")
+    parser = argparse.ArgumentParser(
+        description="Java payment service gray release preflight"
+    )
     parser.add_argument(
         "--base-url",
         default=os.environ.get("JAVA_PAYMENT_SERVICE_URL", "http://127.0.0.1:8080"),
@@ -198,7 +219,9 @@ def main(argv: list[str] | None = None) -> int:
         default=os.environ.get("PAYMENT_BACKEND"),
         help="Override PAYMENT_BACKEND for the contract alignment probe",
     )
-    parser.add_argument("--json", action="store_true", help="Print machine-readable JSON only")
+    parser.add_argument(
+        "--json", action="store_true", help="Print machine-readable JSON only"
+    )
     args = parser.parse_args(argv)
 
     results = run_probes(

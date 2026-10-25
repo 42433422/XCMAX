@@ -29,9 +29,7 @@ class _WorkflowEnginePart02Mixin:
         resolved = _facade().resolve_value(config.get("value"), ctx)
         return {name: resolved}
 
-    def _evaluate_condition(
-        self, condition: str, data: _facade().Dict[str, _facade().Any]
-    ) -> bool:
+    def _evaluate_condition(self, condition: str, data: _facade().Dict[str, _facade().Any]) -> bool:
         return _facade().eval_condition(condition, data)
 
     def _execute_http_request_node(
@@ -60,9 +58,7 @@ class _WorkflowEnginePart02Mixin:
         timeout_s = max(1, min(float(config.get("timeout") or 30), 120))
         retries = max(0, min(int(config.get("retries") or 0), 5))
         allow_http = [
-            h.strip()
-            for h in str(config.get("allow_http_domains") or "").split(",")
-            if h.strip()
+            h.strip() for h in str(config.get("allow_http_domains") or "").split(",") if h.strip()
         ]
         if str(url).startswith("http://"):
             from urllib.parse import urlparse as _urlparse
@@ -77,9 +73,7 @@ class _WorkflowEnginePart02Mixin:
 
                 async def _do():
                     async with httpx.AsyncClient(timeout=timeout_s) as client:
-                        r = await client.request(
-                            method, str(url), headers=headers, json=body
-                        )
+                        r = await client.request(method, str(url), headers=headers, json=body)
                         r.raise_for_status()
                         return r
 
@@ -102,18 +96,12 @@ class _WorkflowEnginePart02Mixin:
                 else:
                     resp = loop.run_until_complete(_do())
                 result_data = (
-                    resp.json()
-                    if "json" in (resp.headers.get("content-type") or "")
-                    else resp.text
+                    resp.json() if "json" in (resp.headers.get("content-type") or "") else resp.text
                 )
                 return {
                     output_var: result_data,
-                    "http_status": resp.status_code
-                    if hasattr(resp, "status_code")
-                    else 200,
-                    "execution_time": _facade()
-                    .datetime.now(_facade().timezone.utc)
-                    .isoformat(),
+                    "http_status": resp.status_code if hasattr(resp, "status_code") else 200,
+                    "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
                 }
             except RECOVERABLE_ERRORS as exc:
                 last_exc = exc
@@ -121,9 +109,7 @@ class _WorkflowEnginePart02Mixin:
                     import time as _t
 
                     _t.sleep(0.5 * (attempt + 1))
-        raise RuntimeError(
-            f"http_request 节点执行失败（重试 {retries} 次）: {last_exc}"
-        )
+        raise RuntimeError(f"http_request 节点执行失败（重试 {retries} 次）: {last_exc}")
 
     def _execute_http_request_mock(
         self,
@@ -135,9 +121,7 @@ class _WorkflowEnginePart02Mixin:
         return {
             output_var: {"sandbox": True, "message": "沙盒 Mock：未发送真实 HTTP 请求"},
             "http_status": 200,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_code_execute_node(
@@ -165,9 +149,7 @@ class _WorkflowEnginePart02Mixin:
             result = local_ns.get("result", local_ns.get("output", None))
             return {
                 output_var: result,
-                "execution_time": _facade()
-                .datetime.now(_facade().timezone.utc)
-                .isoformat(),
+                "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
         except RECOVERABLE_ERRORS as exc:
             raise RuntimeError(f"code_execute 节点执行失败: {exc}") from exc
@@ -181,9 +163,7 @@ class _WorkflowEnginePart02Mixin:
         output_var = str(config.get("output_var") or "code_result")
         return {
             output_var: {"sandbox": True, "message": "沙盒 Mock：未执行真实代码"},
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_data_transform_node(
@@ -242,9 +222,7 @@ class _WorkflowEnginePart02Mixin:
             result = {"value": result}
         return {
             output_var: result,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_data_transform_mock(
@@ -256,9 +234,7 @@ class _WorkflowEnginePart02Mixin:
         output_var = str(config.get("output_var") or "transform_result")
         return {
             output_var: {"sandbox": True, "message": "沙盒 Mock：未执行真实数据转换"},
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_loop_node(
@@ -276,9 +252,7 @@ class _WorkflowEnginePart02Mixin:
             nodes_ctx = data.get("nodes") if isinstance(data.get("nodes"), dict) else {}
             ctx = {**data, "nodes": nodes_ctx, "global": data, "result": data}
             items = (
-                _facade().resolve_value(items_path, ctx)
-                if items_path
-                else data.get("items", [])
+                _facade().resolve_value(items_path, ctx) if items_path else data.get("items", [])
             )
             if not isinstance(items, list):
                 items = list(items) if items else []
@@ -288,9 +262,7 @@ class _WorkflowEnginePart02Mixin:
             condition = str(config.get("condition") or "")
             iteration = 0
             while iteration < max_iterations:
-                nodes_ctx = (
-                    data.get("nodes") if isinstance(data.get("nodes"), dict) else {}
-                )
+                nodes_ctx = data.get("nodes") if isinstance(data.get("nodes"), dict) else {}
                 ctx = {
                     **data,
                     "nodes": nodes_ctx,
@@ -306,9 +278,7 @@ class _WorkflowEnginePart02Mixin:
         return {
             output_var: results,
             "loop_count": len(results),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_loop_mock(
@@ -321,9 +291,7 @@ class _WorkflowEnginePart02Mixin:
         return {
             output_var: [{"sandbox": True, "message": "沙盒 Mock：未执行真实循环"}],
             "loop_count": 1,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_parallel_node(
@@ -360,9 +328,7 @@ class _WorkflowEnginePart02Mixin:
         return {
             output_var: results,
             "parallel_count": len(results),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_parallel_mock(
@@ -380,9 +346,7 @@ class _WorkflowEnginePart02Mixin:
                 }
             },
             "parallel_count": 1,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_sub_workflow_node(
@@ -415,9 +379,7 @@ class _WorkflowEnginePart02Mixin:
             output_var: sub_result,
             "sub_workflow_id": int(sub_workflow_id),
             "sub_depth": current_depth,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_sub_workflow_mock(
@@ -430,7 +392,5 @@ class _WorkflowEnginePart02Mixin:
         return {
             output_var: {"sandbox": True, "message": "沙盒 Mock：未执行真实子工作流"},
             "sub_workflow_id": config.get("workflow_id"),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }

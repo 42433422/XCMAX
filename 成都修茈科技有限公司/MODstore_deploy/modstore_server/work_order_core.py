@@ -100,11 +100,7 @@ def classify_track(
     # 3) 行业共性
     raw_intent = ctx.get("intent_result")
     intent_result: dict[str, Any] = raw_intent if isinstance(raw_intent, dict) else {}
-    if (
-        ctx.get("industry")
-        or intent_result.get("industry")
-        or skill_proposal.get("industry")
-    ):
+    if ctx.get("industry") or intent_result.get("industry") or skill_proposal.get("industry"):
         return "industry_mod"
     return "product_line"
 

@@ -18,9 +18,7 @@ from .self_maintenance_policy import (
 )
 from .self_maintenance_remediation_lineage import normalize_automated_remediation_reason
 
-_INDETERMINATE_MERGE_REVIEW_CODES = frozenset(
-    {"indeterminate-review", "indeterminate_review"}
-)
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 
 _OPERATIONAL_MERGE_FAILURE_PREFIXES = (
@@ -150,9 +148,7 @@ def para_merge_conflict_continues_on_rejected_branch(detail: str) -> bool:
         lowered = candidate.lower()
         if any(marker in lowered for marker in _GIT_CONTENT_CONFLICT_MARKERS):
             return False
-        if any(
-            lowered.startswith(prefix) for prefix in _OPERATIONAL_MERGE_FAILURE_PREFIXES
-        ):
+        if any(lowered.startswith(prefix) for prefix in _OPERATIONAL_MERGE_FAILURE_PREFIXES):
             return True
         if any(token in lowered for token in _BRANCH_PRESERVING_MERGE_WORKER_TOKENS):
             return True
@@ -166,9 +162,7 @@ def resume_from_clean_baseline_for_para_merge(reason: str, detail: str) -> bool:
     if normalized == "para_ai_review_rejected":
         # AI review vetoes always restart from the clean base unless merge-worker
         # already proved the rejected branch has no remaining executable delta.
-        if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(
-            detail
-        ):
+        if is_changed_files_empty_detail(detail) or is_pr_closed_without_merge_detail(detail):
             return False
         return True
     if normalized.startswith("para_merge_") and (
@@ -383,18 +377,14 @@ def reconcile_absorbed_para_merge_remediations(
             and not branch_preserving_infra
         ):
             continue
-        rejected_branch = str(
-            item.get("rejected_branch") or item.get("branch") or ""
-        ).strip()
+        rejected_branch = str(item.get("rejected_branch") or item.get("branch") or "").strip()
         cache_key = f"{base_ref}\0{rejected_branch}"
         if cache_key not in assessment_cache:
-            assessment_cache[cache_key] = (
-                rejected_branch_production_delta_absorbed_by_main(
-                    rejected_branch,
-                    base_ref=base_ref,
-                    repo_root=repo_root,
-                    run_git=run_git,
-                )
+            assessment_cache[cache_key] = rejected_branch_production_delta_absorbed_by_main(
+                rejected_branch,
+                base_ref=base_ref,
+                repo_root=repo_root,
+                run_git=run_git,
             )
         assessment = assessment_cache[cache_key]
         if not assessment.get("absorbed"):
@@ -412,9 +402,7 @@ def reconcile_absorbed_para_merge_remediations(
             memory.setdefault("absorbed_para_merge_reconciliations", []).append(
                 {
                     "assessment": assessment,
-                    "closed_at": _maintenance_config._iso(
-                        _maintenance_config._utc_now()
-                    ),
+                    "closed_at": _maintenance_config._iso(_maintenance_config._utc_now()),
                     "rejected_branch": rejected_branch,
                     "task_id": task_id,
                 }
@@ -454,9 +442,7 @@ def resume_candidate_from_para_ai_review_item(
         "review_actionable_findings": veto_meta.get("actionable_code_findings"),
         "review_feedback": feedback,
         "review_veto_branch_hint": veto_meta.get("branch_hint") or "",
-        "review_veto_code": str(
-            item.get("review_veto_code") or veto_meta.get("veto_code") or ""
-        ),
+        "review_veto_code": str(item.get("review_veto_code") or veto_meta.get("veto_code") or ""),
     }
 
 

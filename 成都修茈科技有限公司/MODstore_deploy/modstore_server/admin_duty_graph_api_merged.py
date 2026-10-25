@@ -111,18 +111,11 @@ def _resolve_llm_state(
     provider_status_map: _facade().Mapping[str, _facade().Mapping[str, _facade().Any]],
     fernet_ok: bool,
 ) -> _facade().Dict[str, _facade().Any]:
-    needs_llm = any(
-        (_facade()._as_str(h) not in _facade()._LLM_FREE_HANDLERS for h in handlers)
-    )
-    cog = (
-        config.get("cognition")
-        if isinstance(config.get("cognition"), _facade().Mapping)
-        else {}
-    )
+    needs_llm = any((_facade()._as_str(h) not in _facade()._LLM_FREE_HANDLERS for h in handlers))
+    cog = config.get("cognition") if isinstance(config.get("cognition"), _facade().Mapping) else {}
     agent = (
         cog.get("agent")
-        if isinstance(cog, _facade().Mapping)
-        and isinstance(cog.get("agent"), _facade().Mapping)
+        if isinstance(cog, _facade().Mapping) and isinstance(cog.get("agent"), _facade().Mapping)
         else {}
     )
     model_cfg = (
@@ -184,9 +177,7 @@ def _detect_risk(
                 {
                     "reason": "ops_command",
                     "command_id": command_id,
-                    "requires_approval": bool(spec.requires_approval)
-                    if spec
-                    else False,
+                    "requires_approval": bool(spec.requires_approval) if spec else False,
                 }
             )
         elif handler.startswith("vibe_"):
@@ -270,9 +261,7 @@ def _load_manifest_for_employee(
         return manifest_cache[employee_id]
     if _facade().is_planned_duty_employee_pack(employee_id, "employee_pack"):
         try:
-            manifest_cache[employee_id] = _facade().load_reviewed_duty_manifest(
-                employee_id
-            )
+            manifest_cache[employee_id] = _facade().load_reviewed_duty_manifest(employee_id)
         except RECOVERABLE_ERRORS:
             manifest_cache[employee_id] = None
         return manifest_cache[employee_id]
@@ -335,9 +324,7 @@ def _analyze_employee_capability(
         base["reasons"] = ["无法读取员工包 manifest"]
         return base
     cfg = _facade().parse_employee_config_v2(manifest)
-    actions_cfg = (
-        cfg.get("actions") if isinstance(cfg.get("actions"), _facade().Mapping) else {}
-    )
+    actions_cfg = cfg.get("actions") if isinstance(cfg.get("actions"), _facade().Mapping) else {}
     handlers = _facade()._clean_handlers(actions_cfg)
     deps = _facade()._extract_manifest_dependencies(manifest)
     llm_state = _facade()._resolve_llm_state(
@@ -429,9 +416,7 @@ def _topo_sort(
 """Implementation extracted from the public facade module."""
 
 
-def _serialize_run(
-    session: _facade().Session, run_id: int
-) -> _facade().Dict[str, _facade().Any]:
+def _serialize_run(session: _facade().Session, run_id: int) -> _facade().Dict[str, _facade().Any]:
     run = session.get(_facade().DutyGraphRun, int(run_id))
     if not run:
         raise _facade().HTTPException(404, "运行记录不存在")
@@ -612,10 +597,7 @@ def get_duty_graph_no_key_employees(
         provider_map = _facade()._build_provider_status_map(session, int(admin_user.id))
         fernet_ok = _facade().fernet_configured()
         any_provider_ok = any(
-            (
-                _facade()._provider_has_usable_key(row, fernet_ok)
-                for row in provider_map.values()
-            )
+            (_facade()._provider_has_usable_key(row, fernet_ok) for row in provider_map.values())
         )
         manifest_cache: _facade().Dict[
             str, _facade().Optional[_facade().Dict[str, _facade().Any]]
@@ -701,9 +683,7 @@ def execute_duty_graph_programmatic(
         }
         if _facade().norm_pkg_id(target) not in employee_index:
             return {"ok": False, "error": "目标员工未部署（执行库未注册）"}
-        provider_map = _facade()._build_provider_status_map(
-            session, int(created_by_user_id)
-        )
+        provider_map = _facade()._build_provider_status_map(session, int(created_by_user_id))
         fernet_ok = _facade().fernet_configured()
         manifest_cache: _facade().Dict[
             str, _facade().Optional[_facade().Dict[str, _facade().Any]]
@@ -784,9 +764,7 @@ def execute_duty_graph_programmatic(
             )
             relevant = [x for x in d or [] if x in selected]
             layer_index[eid] = (
-                max((layer_index.get(x, -1) for x in relevant), default=-1) + 1
-                if relevant
-                else 0
+                max((layer_index.get(x, -1) for x in relevant), default=-1) + 1 if relevant else 0
             )
         layers: _facade().Dict[int, _facade().List[str]] = {}
         for eid, lvl in layer_index.items():
@@ -813,9 +791,7 @@ def execute_duty_graph_programmatic(
                     return
                 deps_local = _facade()._json_loads(node.depends_on_json or "[]", [])
                 with status_lock:
-                    blocked = [
-                        d for d in deps_local if node_status.get(d) not in ("success",)
-                    ]
+                    blocked = [d for d in deps_local if node_status.get(d) not in ("success",)]
                 if blocked:
                     node.status = "skipped"
                     node.error = f"上游未成功：{', '.join(blocked)}"
@@ -842,41 +818,25 @@ def execute_duty_graph_programmatic(
                     manifest_cache=manifest_cache,
                 )
                 if not bool(cap.get("executable")):
-                    reasons = (
-                        cap.get("reasons")
-                        if isinstance(cap.get("reasons"), list)
-                        else []
-                    )
+                    reasons = cap.get("reasons") if isinstance(cap.get("reasons"), list) else []
                     node.status = "skipped"
                     node.error = (
-                        "；".join(
-                            (
-                                _facade()._as_str(r)
-                                for r in reasons
-                                if _facade()._as_str(r)
-                            )
-                        )
+                        "；".join((_facade()._as_str(r) for r in reasons if _facade()._as_str(r)))
                         or "员工当前不可执行"
                     )
                     node.summary = "capability blocked"
                     node.completed_at = _facade().datetime.now(_facade().timezone.utc)
-                    node.result_json = _facade()._json_dumps(
-                        {"capability": cap}, max_chars=3000
-                    )
+                    node.result_json = _facade()._json_dumps({"capability": cap}, max_chars=3000)
                     sess2.commit()
                     with status_lock:
                         node_status[eid] = "skipped"
                     return
-                if bool(cap.get("risk", {}).get("high_risk")) and (
-                    not allow_high_risk_real_run
-                ):
+                if bool(cap.get("risk", {}).get("high_risk")) and (not allow_high_risk_real_run):
                     node.status = "skipped"
                     node.error = "高风险动作未确认（allow_high_risk_real_run=false）"
                     node.summary = "confirmation required"
                     node.completed_at = _facade().datetime.now(_facade().timezone.utc)
-                    node.result_json = _facade()._json_dumps(
-                        {"capability": cap}, max_chars=3000
-                    )
+                    node.result_json = _facade()._json_dumps({"capability": cap}, max_chars=3000)
                     sess2.commit()
                     with status_lock:
                         node_status[eid] = "skipped"
@@ -906,9 +866,7 @@ def execute_duty_graph_programmatic(
                 )
 
                 result = (
-                    run_res
-                    if isinstance(run_res, dict)
-                    else {"error": "invalid result payload"}
+                    run_res if isinstance(run_res, dict) else {"error": "invalid result payload"}
                 )
                 succeeded, reason = _evaluate_execution_success(result)
                 if not succeeded:
@@ -938,8 +896,7 @@ def execute_duty_graph_programmatic(
                     sess3.query(_facade().EmployeeExecutionMetric)
                     .filter(
                         _facade().EmployeeExecutionMetric.employee_id == eid,
-                        _facade().EmployeeExecutionMetric.user_id
-                        == int(created_by_user_id),
+                        _facade().EmployeeExecutionMetric.user_id == int(created_by_user_id),
                     )
                     .order_by(_facade().EmployeeExecutionMetric.id.desc())
                     .first()
@@ -990,9 +947,7 @@ def execute_duty_graph_programmatic(
         run_row.failed_count = failed_count
         run_row.skipped_count = skipped_count
         run_row.status = (
-            "failed"
-            if failed_count > 0
-            else ("blocked" if skipped_count > 0 else "completed")
+            "failed" if failed_count > 0 else ("blocked" if skipped_count > 0 else "completed")
         )
         run_row.error = first_error
         run_row.completed_at = _facade().datetime.now(_facade().timezone.utc)

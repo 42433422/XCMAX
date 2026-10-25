@@ -241,15 +241,12 @@ def maybe_auto_approve(
                 )
 
                 if not skip_retort_block_check:
-                    clar_block = clarification_blocks_auto_approve(
-                        int(change_request_id)
-                    )
+                    clar_block = clarification_blocks_auto_approve(int(change_request_id))
                     if clar_block.get("blocked"):
                         return {
                             "auto_approved": False,
                             "reason": str(
-                                clar_block.get("reason")
-                                or "retort_clarification_pending"
+                                clar_block.get("reason") or "retort_clarification_pending"
                             ),
                             "retort_clarification": clar_block,
                         }
@@ -271,9 +268,7 @@ def maybe_auto_approve(
             try:
                 ag_from_row = [
                     str(x).strip()
-                    for x in json.loads(
-                        getattr(row, "approval_required_globs_json", "[]") or "[]"
-                    )
+                    for x in json.loads(getattr(row, "approval_required_globs_json", "[]") or "[]")
                     if str(x).strip()
                 ]
             except RECOVERABLE_ERRORS:
@@ -287,11 +282,7 @@ def maybe_auto_approve(
             # 尝试读取员工 scope 策略
             try:
                 pack = load_employee_pack(session, str(row.source_employee_id or ""))
-                manifest = (
-                    pack.get("manifest")
-                    if isinstance(pack.get("manifest"), dict)
-                    else {}
-                )
+                manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
                 sg, fg, ag = workspace_policy_from_manifest(manifest)
                 ag = list(dict.fromkeys([*ag, *ag_snapshot, *ag_from_row]))
             except RECOVERABLE_ERRORS:

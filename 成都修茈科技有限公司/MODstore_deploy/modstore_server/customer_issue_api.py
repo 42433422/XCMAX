@@ -105,11 +105,7 @@ async def intake_customer_issue(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    if (
-        body.target_mod_id
-        or body.issue_domain == "custom"
-        or body.source == "private_mod_rework"
-    ):
+    if body.target_mod_id or body.issue_domain == "custom" or body.source == "private_mod_rework":
         if (
             not body.target_mod_id
             or not db.query(UserMod)
@@ -121,18 +117,13 @@ async def intake_customer_issue(
     bundle_b64 = str(values.get("support_bundle_base64") or "")
     bundle_sha = str(values.get("support_bundle_sha256") or "")
     if bool(bundle_b64) != bool(bundle_sha):
-        raise HTTPException(
-            400, "support bundle data and SHA256 must be supplied together"
-        )
+        raise HTTPException(400, "support bundle data and SHA256 must be supplied together")
     if bundle_b64:
         try:
             bundle = base64.b64decode(bundle_b64, validate=True)
             with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
                 entries = archive.infolist()
-                if (
-                    len(entries) > 500
-                    or sum(item.file_size for item in entries) > 2_000_000
-                ):
+                if len(entries) > 500 or sum(item.file_size for item in entries) > 2_000_000:
                     raise ValueError("bundle expands beyond limits")
                 if archive.testzip() is not None:
                     raise ValueError("corrupt zip")
@@ -152,24 +143,14 @@ async def intake_customer_issue(
     if body.target_mod_id:
         # Runtime identity is trusted source configuration; the caller supplies
         # only the entitlement identity already checked against UserMod above.
-        catalog = (
-            Path(__file__).resolve().parents[3] / "FHD/config/customer_delivery.json"
-        )
+        catalog = Path(__file__).resolve().parents[3] / "FHD/config/customer_delivery.json"
         if catalog.is_file():
-            deliveries = json.loads(catalog.read_text(encoding="utf-8")).get(
-                "deliveries", []
-            )
+            deliveries = json.loads(catalog.read_text(encoding="utf-8")).get("deliveries", [])
             delivery: dict[str, Any] = next(
-                (
-                    row
-                    for row in deliveries
-                    if row.get("legacy_mod_id") == body.target_mod_id
-                ),
+                (row for row in deliveries if row.get("legacy_mod_id") == body.target_mod_id),
                 {},
             )
-            values["runtime_mod_id"] = str(
-                delivery.get("runtime_mod_id") or body.target_mod_id
-            )
+            values["runtime_mod_id"] = str(delivery.get("runtime_mod_id") or body.target_mod_id)
     if body.source == "private_mod_rework":
         values["issue_domain"] = "custom"
     number = request_identity(int(user.id), body.source, body.source_ref)
@@ -198,9 +179,7 @@ async def intake_customer_issue(
         }
 
     existing = (
-        db.query(CustomerServiceTicket)
-        .filter_by(ticket_no=number, user_id=int(user.id))
-        .first()
+        db.query(CustomerServiceTicket).filter_by(ticket_no=number, user_id=int(user.id)).first()
     )
     if existing:
         return response(existing, replayed=True)
@@ -340,11 +319,7 @@ def shared_issue_runtime_receipt(
 ) -> dict[str, Any]:
     from modstore_server.customer_issue_shared_release import record_shared_runtime
 
-    ticket = (
-        db.query(CustomerServiceTicket)
-        .filter_by(id=ticket_id, user_id=int(user.id))
-        .first()
-    )
+    ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=int(user.id)).first()
     if ticket is None:
         raise HTTPException(404, "原工单不存在")
     outcome = record_shared_runtime(db, ticket, body.model_dump(), int(user.id))
@@ -416,12 +391,8 @@ def decide_product_issue(
         raise HTTPException(400, "请说明原问题现在的使用结果（至少4个字）")
     evidence = json_loads(ticket.evidence_json, {})
     digest = hashlib.sha256(json.dumps([body.decision, note]).encode()).hexdigest()
-    decisions = [
-        r for r in evidence.get("customer_decisions") or [] if isinstance(r, dict)
-    ]
-    prior = next(
-        (r for r in decisions if r.get("idempotency_key") == body.idempotency_key), None
-    )
+    decisions = [r for r in evidence.get("customer_decisions") or [] if isinstance(r, dict)]
+    prior = next((r for r in decisions if r.get("idempotency_key") == body.idempotency_key), None)
     if prior:
         if prior.get("request_sha256") != digest:
             raise HTTPException(409, "同一操作标识不可绑定不同内容")
@@ -470,9 +441,7 @@ def decide_product_issue(
     else:
         if not closed and resolution.get("state") in {"received", "reopened"}:
             raise HTTPException(409, "工单仍在处理中，请等处理结果出来后再决定")
-        history = [
-            r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)
-        ]
+        history = [r for r in evidence.get("reopen_history") or [] if isinstance(r, dict)]
         evidence["reopen_history"] = [
             *history,
             {

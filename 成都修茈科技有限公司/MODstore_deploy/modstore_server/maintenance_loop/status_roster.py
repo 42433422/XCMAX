@@ -16,9 +16,7 @@ def _build_roster_alignment(
     try:
         planned_ids = set(all_planned_employee_ids())
     except RECOVERABLE_ERRORS as exc:
-        config.logger.exception(
-            "failed to load duty roster ids for self-maintenance status"
-        )
+        config.logger.exception("failed to load duty roster ids for self-maintenance status")
         planned_ids = set()
         load_error = str(exc)[:300]
     else:
@@ -26,31 +24,23 @@ def _build_roster_alignment(
     try:
         deployed_ids = set(duty_employee_registry.duty_employee_records().keys())
     except RECOVERABLE_ERRORS as exc:
-        config.logger.exception(
-            "failed to load duty employee registry for self-maintenance status"
-        )
+        config.logger.exception("failed to load duty employee registry for self-maintenance status")
         deployed_ids = set()
         deployed_error = str(exc)[:300]
     else:
         deployed_error = ""
     participant_ids = sorted(participants.keys())
     in_roster_ids = [emp_id for emp_id in participant_ids if emp_id in planned_ids]
-    out_of_roster_ids = [
-        emp_id for emp_id in participant_ids if emp_id not in planned_ids
-    ]
+    out_of_roster_ids = [emp_id for emp_id in participant_ids if emp_id not in planned_ids]
     in_deployed_ids = [emp_id for emp_id in in_roster_ids if emp_id in deployed_ids]
-    not_deployed_ids = [
-        emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids
-    ]
+    not_deployed_ids = [emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids]
     in_roster_set = set(in_roster_ids)
     coverage: List[Dict[str, Any]] = []
     covered_ids: set[str] = set()
     for dept_key, dept in duty_roster.SIX_LINE_DEPARTMENTS.items():
         if not isinstance(dept, dict):
             continue
-        dept_ids = [
-            emp_id for emp_id in department_employee_ids(dept) if emp_id in planned_ids
-        ]
+        dept_ids = [emp_id for emp_id in department_employee_ids(dept) if emp_id in planned_ids]
         hits = [emp_id for emp_id in dept_ids if emp_id in in_roster_set]
         if not hits:
             continue

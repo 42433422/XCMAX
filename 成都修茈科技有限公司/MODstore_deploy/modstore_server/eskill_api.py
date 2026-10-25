@@ -57,9 +57,7 @@ def _dumps(value: Any) -> str:
     return json.dumps(value or {}, ensure_ascii=False)
 
 
-def _skill_to_dict(
-    skill: ESkill, version: Optional[ESkillVersion] = None
-) -> Dict[str, Any]:
+def _skill_to_dict(skill: ESkill, version: Optional[ESkillVersion] = None) -> Dict[str, Any]:
     return {
         "id": skill.id,
         "name": skill.name,
@@ -84,10 +82,7 @@ async def list_eskills(
     user: User = Depends(_get_current_user),
 ):
     rows = (
-        db.query(ESkill)
-        .filter(ESkill.user_id == user.id)
-        .order_by(ESkill.updated_at.desc())
-        .all()
+        db.query(ESkill).filter(ESkill.user_id == user.id).order_by(ESkill.updated_at.desc()).all()
     )
     versions = {
         (v.eskill_id, v.version): v
@@ -95,10 +90,7 @@ async def list_eskills(
         .filter(ESkillVersion.eskill_id.in_([s.id for s in rows] or [0]))
         .all()
     }
-    return [
-        _skill_to_dict(skill, versions.get((skill.id, skill.active_version)))
-        for skill in rows
-    ]
+    return [_skill_to_dict(skill, versions.get((skill.id, skill.active_version))) for skill in rows]
 
 
 @router.post("")
@@ -141,11 +133,7 @@ async def get_eskill(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    skill = (
-        db.query(ESkill)
-        .filter(ESkill.id == eskill_id, ESkill.user_id == user.id)
-        .first()
-    )
+    skill = db.query(ESkill).filter(ESkill.id == eskill_id, ESkill.user_id == user.id).first()
     if not skill:
         raise HTTPException(404, "ESkill 不存在")
     versions = (

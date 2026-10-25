@@ -78,9 +78,7 @@ class SqlNotificationRepository:
         kind: str | None = None,
         limit: int = 50,
     ) -> list[DomainNotification]:
-        q = self._session.query(NotificationRow).filter(
-            NotificationRow.user_id == user_id
-        )
+        q = self._session.query(NotificationRow).filter(NotificationRow.user_id == user_id)
         if unread_only:
             q = q.filter(NotificationRow.is_read.is_(False))
         normalised_kind = (kind or "").strip()

@@ -45,9 +45,7 @@ def _serialize(row: EmployeeChangeRequest) -> Dict[str, Any]:
         "diff_blob": str(row.diff_blob or ""),
         "status": str(row.status or ""),
         "risk_level": str(row.risk_level or ""),
-        "approved_by_user_id": int(row.approved_by_user_id)
-        if row.approved_by_user_id
-        else None,
+        "approved_by_user_id": int(row.approved_by_user_id) if row.approved_by_user_id else None,
         "approved_at": row.approved_at.isoformat() if row.approved_at else None,
         "applied_at": row.applied_at.isoformat() if row.applied_at else None,
         "rejected_reason": str(row.rejected_reason or ""),
@@ -66,9 +64,7 @@ def list_change_requests(
     lim = max(1, min(int(limit or 50), 200))
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeChangeRequest).order_by(
-            EmployeeChangeRequest.id.desc()
-        )
+        q = session.query(EmployeeChangeRequest).order_by(EmployeeChangeRequest.id.desc())
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeChangeRequest.status == st)

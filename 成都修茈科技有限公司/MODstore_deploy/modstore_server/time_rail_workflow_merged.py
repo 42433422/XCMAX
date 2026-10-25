@@ -36,10 +36,7 @@ def graph_json_path() -> _facade().Path:
         return _facade().Path(env).expanduser().resolve()
     candidates = [
         _facade()._repo_root() / "FHD" / "config" / "time_rail_workflow_graph.json",
-        _facade()._repo_root()
-        / "docs"
-        / "xcagi-dashboard"
-        / "time_rail_workflow_graph.json",
+        _facade()._repo_root() / "docs" / "xcagi-dashboard" / "time_rail_workflow_graph.json",
         _facade().Path(__file__).resolve().parents[3]
         / "FHD"
         / "config"
@@ -84,9 +81,7 @@ def _node_status_shell(
     detail: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
     observed: _facade().Optional[bool] = None,
     proof_status: _facade().Optional[str] = None,
-    evidence: _facade().Optional[
-        _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = None,
+    evidence: _facade().Optional[_facade().List[_facade().Dict[str, _facade().Any]]] = None,
     missing_evidence: _facade().Optional[_facade().List[str]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     ev = list(evidence or [])
@@ -197,9 +192,7 @@ def _status_from_block(
         source=source,
         detail=detail_out,
         observed=True,
-        proof_status="shadow_observed"
-        if block.get("shadow") or block.get("dry_run")
-        else None,
+        proof_status="shadow_observed" if block.get("shadow") or block.get("dry_run") else None,
     )
 
 
@@ -233,9 +226,7 @@ def _derive_mapped_node(
     detail: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     detail_out = {"from_node": from_node.get("node_id")}
-    detail_out.update(
-        from_node.get("detail") if isinstance(from_node.get("detail"), dict) else {}
-    )
+    detail_out.update(from_node.get("detail") if isinstance(from_node.get("detail"), dict) else {})
     detail_out.update(detail or {})
     proof_status = from_node.get("proof_status")
     if proof_status not in (
@@ -278,9 +269,7 @@ def _line_total_sections(
     line_dispatch: _facade().Dict[str, _facade().Any], line: str
 ) -> _facade().Optional[int]:
     meta = (
-        line_dispatch.get("line_meta")
-        if isinstance(line_dispatch.get("line_meta"), dict)
-        else {}
+        line_dispatch.get("line_meta") if isinstance(line_dispatch.get("line_meta"), dict) else {}
     )
     row = meta.get(line) if isinstance(meta.get(line), dict) else None
     if not row:
@@ -423,15 +412,10 @@ def _latest_ops_staged_change() -> _facade().Optional[_facade().Any]:
         session_factory = get_session_factory()
         with session_factory() as session:
             return (
-                session.query(OpsStagedChange)
-                .order_by(OpsStagedChange.id.desc())
-                .limit(1)
-                .first()
+                session.query(OpsStagedChange).order_by(OpsStagedChange.id.desc()).limit(1).first()
             )
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.debug(
-            "time_rail: ops staged change unavailable", exc_info=True
-        )
+        _facade().logger.debug("time_rail: ops staged change unavailable", exc_info=True)
         return None
 
 
@@ -460,15 +444,11 @@ def _action_item_stats(
 
         items = list_action_items(day=day or None, limit=2000)
         if record_id:
-            items = [
-                it for it in items if int(it.get("record_id") or 0) == int(record_id)
-            ]
+            items = [it for it in items if int(it.get("record_id") or 0) == int(record_id)]
         by_kind: _facade().Dict[str, int] = {}
         by_status: _facade().Dict[str, int] = {}
         for it in items:
-            by_kind[str(it.get("kind") or "")] = (
-                by_kind.get(str(it.get("kind") or ""), 0) + 1
-            )
+            by_kind[str(it.get("kind") or "")] = by_kind.get(str(it.get("kind") or ""), 0) + 1
             by_status[str(it.get("status") or "")] = (
                 by_status.get(str(it.get("status") or ""), 0) + 1
             )
@@ -479,24 +459,18 @@ def _action_item_stats(
             "by_status": by_status,
         }
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.debug(
-            "time_rail: action item stats unavailable", exc_info=True
-        )
+        _facade().logger.debug("time_rail: action item stats unavailable", exc_info=True)
         return {"ok": False, "total": 0, "by_kind": {}, "by_status": {}}
 
 
-def _maintenance_backlog_by_node() -> _facade().Dict[
-    str, _facade().Dict[str, _facade().Any]
-]:
+def _maintenance_backlog_by_node() -> _facade().Dict[str, _facade().Dict[str, _facade().Any]]:
     """读取已排队的时间轨自维护任务，作为缺证节点的可证明状态。"""
     try:
         from modstore_server.six_line_event_router import read_digest_backlog_entries
 
         rows = read_digest_backlog_entries()
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.debug(
-            "time_rail: maintenance backlog unavailable", exc_info=True
-        )
+        _facade().logger.debug("time_rail: maintenance backlog unavailable", exc_info=True)
         return {}
     out: _facade().Dict[str, _facade().Dict[str, _facade().Any]] = {}
     for row in rows:
@@ -587,9 +561,7 @@ def collect_node_runtime_status(
             detail = row.get("detail") if isinstance(row.get("detail"), dict) else {}
             if not detail and isinstance(row.get("meta"), dict):
                 detail = row.get("meta") or {}
-            evidence = (
-                row.get("evidence") if isinstance(row.get("evidence"), list) else []
-            )
+            evidence = row.get("evidence") if isinstance(row.get("evidence"), list) else []
             proof_status = row.get("proof_status")
             if not proof_status and (detail.get("shadow") or detail.get("dry_run")):
                 proof_status = "shadow_observed"
@@ -605,18 +577,12 @@ def collect_node_runtime_status(
                 "source": row.get("source") or "",
                 "detail": detail,
                 "observed": bool(row.get("observed"))
-                or bool(
-                    row.get("last_run")
-                    or row.get("source")
-                    or row.get("ok") is not None
-                ),
+                or bool(row.get("last_run") or row.get("source") or row.get("ok") is not None),
                 "proof_status": proof_status
                 or (
                     "proved_ok"
                     if row.get("ok") is True
-                    else "proved_failed"
-                    if row.get("ok") is False
-                    else "observed"
+                    else "proved_failed" if row.get("ok") is False else "observed"
                 ),
                 "evidence": evidence
                 or [
@@ -700,8 +666,7 @@ def collect_node_runtime_status(
             "label": row.get("label") or "",
             "phase": row.get("phase") or "",
             "kind": row.get("kind") or "",
-            "reason": "; ".join(row.get("missing_evidence") or [])
-            or "missing runtime evidence",
+            "reason": "; ".join(row.get("missing_evidence") or []) or "missing runtime evidence",
         }
         for (nid, row) in nodes.items()
         if not row.get("observed")
@@ -728,27 +693,17 @@ def collect_node_runtime_status(
         "maintenance_queued_nodes": len(maintenance_queued_ids),
         "state_classified_nodes": len(nodes),
         "missing_evidence_nodes": len(missing_nodes),
-        "status_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1)
-        if ids
-        else 100.0,
-        "observable_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1)
-        if ids
-        else 100.0,
-        "observed_coverage_pct": round(len(observed_ids) / len(ids) * 100.0, 1)
-        if ids
-        else 100.0,
-        "proved_coverage_pct": round(len(proved_ids) / len(ids) * 100.0, 1)
-        if ids
-        else 100.0,
+        "status_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1) if ids else 100.0,
+        "observable_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1) if ids else 100.0,
+        "observed_coverage_pct": round(len(observed_ids) / len(ids) * 100.0, 1) if ids else 100.0,
+        "proved_coverage_pct": round(len(proved_ids) / len(ids) * 100.0, 1) if ids else 100.0,
         "runtime_evidence_coverage_pct": (
             round(len(runtime_evidence_ids) / len(ids) * 100.0, 1) if ids else 100.0
         ),
         "maintenance_queued_coverage_pct": (
             round(len(maintenance_queued_ids) / len(ids) * 100.0, 1) if ids else 0.0
         ),
-        "state_classified_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1)
-        if ids
-        else 100.0,
+        "state_classified_coverage_pct": round(len(nodes) / len(ids) * 100.0, 1) if ids else 100.0,
     }
     return {
         "contract_version": _facade().STATUS_CONTRACT_VERSION,
@@ -765,9 +720,7 @@ def collect_node_runtime_status(
     }
 
 
-def sync_missing_evidence_backlog(
-    *, limit: int = 32
-) -> _facade().Dict[str, _facade().Any]:
+def sync_missing_evidence_backlog(*, limit: int = 32) -> _facade().Dict[str, _facade().Any]:
     """把缺证节点写入事件轨 digest backlog，让次日 Vibe 自动生成维护任务。"""
     status = _facade().collect_node_runtime_status()
     missing = list(status.get("missing_evidence") or [])[: max(1, int(limit))]
@@ -870,9 +823,7 @@ def _derive_from_sources() -> _facade().Dict[str, _facade().Dict[str, _facade().
         )
         derived["DRPROBE"] = _facade()._node_status_shell(
             "DRPROBE",
-            last_run=_facade()._iso_or_none(
-                guard.get("last_probe_at") or guard.get("set_at")
-            ),
+            last_run=_facade()._iso_or_none(guard.get("last_probe_at") or guard.get("set_at")),
             ok=guard.get("probe_escalated") is not True,
             guard_active=True,
             source="release_train.backup_guard",
@@ -909,26 +860,20 @@ def _derive_from_sources() -> _facade().Dict[str, _facade().Dict[str, _facade().
         from modstore_server.release_train import history_dir
 
         hdir = history_dir()
-        ondemand = sorted(
-            hdir.glob("*ondemand*.json"), key=lambda p: p.name, reverse=True
-        )
+        ondemand = sorted(hdir.glob("*ondemand*.json"), key=lambda p: p.name, reverse=True)
         if ondemand:
             latest_ondemand = ondemand[0]
             derived["BKOND"] = _facade()._node_status_shell(
                 "BKOND",
                 last_run=_facade()
-                .datetime.fromtimestamp(
-                    latest_ondemand.stat().st_mtime, _facade().timezone.utc
-                )
+                .datetime.fromtimestamp(latest_ondemand.stat().st_mtime, _facade().timezone.utc)
                 .isoformat(),
                 ok=True,
                 source="release_train_history.ondemand",
                 detail={"name": latest_ondemand.name, "path": str(latest_ondemand)},
             )
     except RECOVERABLE_ERRORS:
-        _facade().logger.debug(
-            "time_rail: ondemand backup history unavailable", exc_info=True
-        )
+        _facade().logger.debug("time_rail: ondemand backup history unavailable", exc_info=True)
     if rt_state:
         current = str(rt_state.get("current") or "1.0.0.0")
         day_index = int(rt_state.get("day_index") or 0)

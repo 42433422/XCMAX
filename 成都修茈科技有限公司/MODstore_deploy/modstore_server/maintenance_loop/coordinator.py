@@ -52,18 +52,12 @@ class MaintenanceRuntime:
         new_run_id: Optional[Callable[[], str]] = None,
     ) -> None:
         self.state = state if state is not None else RuntimeState.configured()
-        self.recovery = (
-            recovery if recovery is not None else RuntimeRecovery.configured()
-        )
+        self.recovery = recovery if recovery is not None else RuntimeRecovery.configured()
         self.policy = policy if policy is not None else RuntimePolicy.configured()
-        self.execution = (
-            execution if execution is not None else RuntimeExecution.configured()
-        )
+        self.execution = execution if execution is not None else RuntimeExecution.configured()
         self.prompts = prompts if prompts is not None else RuntimePrompts.configured()
         self.now = now if now is not None else config._utc_now
-        self.new_run_id = (
-            new_run_id if new_run_id is not None else lambda: str(uuid.uuid4())
-        )
+        self.new_run_id = new_run_id if new_run_id is not None else lambda: str(uuid.uuid4())
 
     @platform_llm_scope.platform_llm_scoped
     def run(
@@ -241,13 +235,9 @@ class MaintenanceRuntime:
     def _execute(self, context: _RunContext, plan: list) -> Dict[str, Any]:
         for employee_id, step_name, task_text, extra in plan:
             if step_name == "review":
-                task_text = self.prompts.review(
-                    context.run_id, context.branch, context.memory
-                )
+                task_text = self.prompts.review(context.run_id, context.branch, context.memory)
             elif step_name == "qa":
-                task_text = self.prompts.qa(
-                    context.run_id, context.branch, context.memory
-                )
+                task_text = self.prompts.qa(context.run_id, context.branch, context.memory)
             if context.para_task_id and step_name == "code":
                 extra = {**extra, "para_task_id": context.para_task_id}
             elif context.para_task_id:
@@ -262,9 +252,7 @@ class MaintenanceRuntime:
                 stopped = self._retort_stop(context, employee_id)
                 if stopped is not None:
                     return stopped
-            record = self._dispatch_step(
-                context, employee_id, step_name, task_text, extra
-            )
+            record = self._dispatch_step(context, employee_id, step_name, task_text, extra)
             if not record["ok"]:
                 return self._finish(
                     context,
@@ -306,9 +294,7 @@ class MaintenanceRuntime:
                     )
         return self._finish(context, status="completed")
 
-    def _retort_stop(
-        self, context: _RunContext, employee_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def _retort_stop(self, context: _RunContext, employee_id: str) -> Optional[Dict[str, Any]]:
         gate = self.execution.retort_before_review(
             run_id=context.run_id,
             branch=context.branch,
@@ -361,18 +347,14 @@ class MaintenanceRuntime:
         task_text: str,
         extra: dict,
     ) -> Dict[str, Any]:
-        base_branch = (
-            str(extra.get("branch") or "").strip() if step_name == "code" else ""
-        )
-        result, ok, failure, para, report, code_retries, marker_retries = (
-            self.execution.run_step(
-                employee_id=employee_id,
-                step_name=step_name,
-                task_text=task_text,
-                extra=extra,
-                user_id=context.user_id,
-                run_id=context.run_id,
-            )
+        base_branch = str(extra.get("branch") or "").strip() if step_name == "code" else ""
+        result, ok, failure, para, report, code_retries, marker_retries = self.execution.run_step(
+            employee_id=employee_id,
+            step_name=step_name,
+            task_text=task_text,
+            extra=extra,
+            user_id=context.user_id,
+            run_id=context.run_id,
         )
         if para.get("task_id") and context.para_task_id is None:
             context.para_task_id = str(para["task_id"])

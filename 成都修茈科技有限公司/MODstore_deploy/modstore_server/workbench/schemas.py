@@ -156,9 +156,7 @@ def _parse_workbench_session_create(meta: Dict[str, Any]) -> WorkbenchSessionCre
             elif msg:
                 parts.append(msg)
         detail = "；".join(parts)[:1800] if parts else str(e)
-        raise HTTPException(
-            status_code=422, detail=f"工作台请求参数无效：{detail}"
-        ) from e
+        raise HTTPException(status_code=422, detail=f"工作台请求参数无效：{detail}") from e
 
 
 class WorkbenchEdgeTtsBody(BaseModel):
@@ -166,18 +164,14 @@ class WorkbenchEdgeTtsBody(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=5000)
     voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
-    rate: float = Field(
-        1.0, ge=0.6, le=1.6, description="相对语速，约映射到 Edge 的 rate 百分比"
-    )
+    rate: float = Field(1.0, ge=0.6, le=1.6, description="相对语速，约映射到 Edge 的 rate 百分比")
 
 
 class WorkbenchUnifiedTtsBody(BaseModel):
     """统一 TTS：优先 MiMo，失败回退 Edge 神经音。"""
 
     text: str = Field(..., min_length=1, max_length=5000)
-    voice: str = Field(
-        "", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认"
-    )
+    voice: str = Field("", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认")
     edge_voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
     rate: float = Field(1.0, ge=0.6, le=1.6)
 

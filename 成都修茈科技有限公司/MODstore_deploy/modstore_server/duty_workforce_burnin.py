@@ -65,18 +65,10 @@ def burn_in_scheduler_enabled() -> bool:
 
 def burn_in_limits() -> Dict[str, int]:
     return {
-        "max_candidates": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", 2, 1, 8
-        ),
-        "max_concurrency": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_MAX_CONCURRENCY", 1, 1, 2
-        ),
-        "timeout_seconds": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_TIMEOUT_SECONDS", 240, 30, 300
-        ),
-        "cooldown_hours": _bounded_int(
-            "MODSTORE_EMPLOYEE_BURN_IN_COOLDOWN_HOURS", 6, 1, 168
-        ),
+        "max_candidates": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_MAX_PER_RUN", 2, 1, 8),
+        "max_concurrency": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_MAX_CONCURRENCY", 1, 1, 2),
+        "timeout_seconds": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_TIMEOUT_SECONDS", 240, 30, 300),
+        "cooldown_hours": _bounded_int("MODSTORE_EMPLOYEE_BURN_IN_COOLDOWN_HOURS", 6, 1, 168),
     }
 
 
@@ -87,11 +79,7 @@ def _runtime_dir() -> Path:
 
 def burn_in_audit_path() -> Path:
     raw = str(os.environ.get("MODSTORE_EMPLOYEE_BURN_IN_AUDIT_PATH") or "").strip()
-    return (
-        Path(raw).expanduser()
-        if raw
-        else _runtime_dir() / "duty_workforce_burnin.jsonl"
-    )
+    return Path(raw).expanduser() if raw else _runtime_dir() / "duty_workforce_burnin.jsonl"
 
 
 def _append_audit(payload: Dict[str, Any]) -> None:
@@ -104,9 +92,7 @@ def _append_audit(payload: Dict[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with _audit_lock, path.open("a", encoding="utf-8") as fh:
-            fh.write(
-                json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n"
-            )
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     except OSError:
         logger.exception("duty burn-in audit write failed path=%s", path)
 

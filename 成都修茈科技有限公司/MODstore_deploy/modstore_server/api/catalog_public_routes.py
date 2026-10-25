@@ -89,10 +89,7 @@ def api_list_packages(
         rows = [
             r
             for r in rows
-            if any(
-                needle in str(r.get(key) or "").lower()
-                for key in ("name", "id", "description")
-            )
+            if any(needle in str(r.get(key) or "").lower() for key in ("name", "id", "description"))
         ]
     return {
         "packages": rows[offset : offset + limit],
@@ -170,9 +167,7 @@ def api_download(pkg_id: str, version: str):
     r = get_package(pkg_id, version)
     if not r:
         raise HTTPException(404, "未找到")
-    if not package_row_eligible_for_public_index(
-        r, public_pkg_ids=_public_pkg_ids_from_db()
-    ):
+    if not package_row_eligible_for_public_index(r, public_pkg_ids=_public_pkg_ids_from_db()):
         raise HTTPException(404, "该版本尚未公开发布")
     name = r.get("stored_filename")
     if not name:
@@ -200,9 +195,7 @@ async def api_upload_package(
         raise HTTPException(400, "metadata 须为 JSON")
     if not isinstance(meta, dict):
         raise HTTPException(400, "metadata 须为对象")
-    if not (
-        str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()
-    ):
+    if not (str(meta.get("id") or "").strip() and str(meta.get("version") or "").strip()):
         raise HTTPException(400, "metadata 须含 id 与 version")
     rec: Dict[str, Any] = dict(meta)
     public_listing = rec.get("public_listing", False)
@@ -213,9 +206,7 @@ async def api_upload_package(
     if public_listing and auth_mode != "auto_publish":
         raise HTTPException(403, "公开上架必须使用自动发布专用凭证")
     if is_private_package(rec):
-        raise HTTPException(
-            403, "客户私包须走已绑定 owner 的工单生产中心，禁止通用 Catalog 上传"
-        )
+        raise HTTPException(403, "客户私包须走已绑定 owner 的工单生产中心，禁止通用 Catalog 上传")
     artifact = str(rec.get("artifact") or "").strip().lower()
     pkg_id = str(rec.get("id") or "").strip()
     version = str(rec.get("version") or "").strip()
@@ -268,9 +259,7 @@ async def api_upload_package(
     if existing and public_listing and is_private_package(existing):
         raise HTTPException(403, "已有客户/内部包不能通过通用重试改为公开")
     if existing and str(existing.get("sha256") or "") != raw_sha256:
-        raise HTTPException(
-            409, "已发布 version 不可覆盖；源码变更须提升 manifest.version"
-        )
+        raise HTTPException(409, "已发布 version 不可覆盖；源码变更须提升 manifest.version")
     # Inspect the actual archive as well as caller metadata: public metadata must
     # not disguise a private/customer manifest, including idempotent retries.
     with tempfile.TemporaryDirectory() as td:
@@ -288,10 +277,7 @@ async def api_upload_package(
             require_public_manifest(manifest)
         except ValueError as exc:
             raise HTTPException(403, str(exc)) from exc
-    if (
-        str(manifest.get("id") or "") != pkg_id
-        or str(manifest.get("version") or "") != version
-    ):
+    if str(manifest.get("id") or "") != pkg_id or str(manifest.get("version") or "") != version:
         raise HTTPException(400, "metadata 与包内 manifest id/version 不一致")
     if public_listing:
         from modstore_server.customer_delivery_package import verify_delivery_package
@@ -301,10 +287,7 @@ async def api_upload_package(
             verified = verify_delivery_package(raw_bytes)
         except BOUNDARY_ERRORS as exc:
             raise HTTPException(400, "公开发布包必须通过宿主受信 Ed25519 验签") from exc
-        if (
-            verified.get("manifest") != manifest
-            or verified.get("package_sha256") != raw_sha256
-        ):
+        if verified.get("manifest") != manifest or verified.get("package_sha256") != raw_sha256:
             raise HTTPException(400, "受信签名包身份与发布 metadata 不一致")
     existing_review = existing.get("review") if isinstance(existing, dict) else None
     if (
@@ -353,9 +336,7 @@ async def api_upload_package(
                     "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs),
                 )
         if public_listing and sha256_file(tmp) != raw_sha256:
-            raise HTTPException(
-                400, "审核后的包摘要与来源证明不一致；修正源码后重新打包"
-            )
+            raise HTTPException(400, "审核后的包摘要与来源证明不一致；修正源码后重新打包")
         try:
             saved = append_package(rec, tmp)
         except PackageConflictError as exc:
@@ -398,9 +379,7 @@ def api_search_semantic(
     if industry:
         filter_meta["industry"] = industry
 
-    results = query_similar(
-        q, limit=limit, filter_meta=filter_meta if filter_meta else None
-    )
+    results = query_similar(q, limit=limit, filter_meta=filter_meta if filter_meta else None)
     return {"results": results, "total": len(results)}
 
 

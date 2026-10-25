@@ -58,16 +58,12 @@ class LintResult:
         }
 
 
-def _python_lint(
-    content: str, filepath: str, *, max_line_length: int = 200
-) -> LintResult:
+def _python_lint(content: str, filepath: str, *, max_line_length: int = 200) -> LintResult:
     result = LintResult(file=filepath)
     lines = content.split("\n")
 
     if not lines or not lines[0].startswith("# "):
-        result.errors.append(
-            LintError(line=1, rule="MD041", description=_MD_RULES["MD041"])
-        )
+        result.errors.append(LintError(line=1, rule="MD041", description=_MD_RULES["MD041"]))
 
     prev_heading_level = 0
     in_code_block = False
@@ -82,19 +78,13 @@ def _python_lint(
             continue
 
         if stripped != line:
-            result.errors.append(
-                LintError(line=i, rule="MD009", description=_MD_RULES["MD009"])
-            )
+            result.errors.append(LintError(line=i, rule="MD009", description=_MD_RULES["MD009"]))
 
         if "\t" in line:
-            result.errors.append(
-                LintError(line=i, rule="MD010", description=_MD_RULES["MD010"])
-            )
+            result.errors.append(LintError(line=i, rule="MD010", description=_MD_RULES["MD010"]))
 
         if len(line) > max_line_length:
-            result.errors.append(
-                LintError(line=i, rule="MD013", description=_MD_RULES["MD013"])
-            )
+            result.errors.append(LintError(line=i, rule="MD013", description=_MD_RULES["MD013"]))
 
         heading_match = re.match(r"^(#{1,6})\s", line)
         if heading_match:
@@ -142,9 +132,7 @@ def _cli_lint(filepath: str, *, cwd: Optional[str] = None) -> LintResult:
                         )
                     )
             except (json.JSONDecodeError, KeyError, IndexError):
-                for m in re.finditer(
-                    r"(\S+):(\d+)(?::\d+)?\s+(\S+)\s+(.*)", proc.stdout
-                ):
+                for m in re.finditer(r"(\S+):(\d+)(?::\d+)?\s+(\S+)\s+(.*)", proc.stdout):
                     result.errors.append(
                         LintError(
                             line=int(m.group(2)),
@@ -164,9 +152,7 @@ def _cli_lint(filepath: str, *, cwd: Optional[str] = None) -> LintResult:
             LintError(line=0, rule="TIMEOUT", description="markdownlint timed out")
         )
     except RECOVERABLE_ERRORS as exc:
-        result.errors.append(
-            LintError(line=0, rule="ERROR", description=str(exc)[:200])
-        )
+        result.errors.append(LintError(line=0, rule="ERROR", description=str(exc)[:200]))
     return result
 
 
@@ -183,9 +169,7 @@ def lint_file(
             return _python_lint(content, filepath, max_line_length=max_line_length)
         except OSError as exc:
             result = LintResult(file=filepath)
-            result.errors.append(
-                LintError(line=0, rule="OSERROR", description=str(exc)[:200])
-            )
+            result.errors.append(LintError(line=0, rule="OSERROR", description=str(exc)[:200]))
             return result
     if mode == "cli":
         return _cli_lint(filepath, cwd=cwd)
@@ -195,9 +179,7 @@ def lint_file(
         return _python_lint(content, filepath, max_line_length=max_line_length)
     except OSError as exc:
         result = LintResult(file=filepath)
-        result.errors.append(
-            LintError(line=0, rule="OSERROR", description=str(exc)[:200])
-        )
+        result.errors.append(LintError(line=0, rule="OSERROR", description=str(exc)[:200]))
         return result
 
 

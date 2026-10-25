@@ -28,9 +28,7 @@ class HealthWaiter(Protocol):
     def __call__(self, url: str, *, label: str, tries: int = 45) -> bool: ...
 
 
-def wait_for_health(
-    url: str, *, label: str, probe: Callable[[str], bool], tries: int = 45
-) -> bool:
+def wait_for_health(url: str, *, label: str, probe: Callable[[str], bool], tries: int = 45) -> bool:
     for _ in range(max(1, tries)):
         if probe(url):
             logger.info("surface audit deps: %s ready %s", label, url)
@@ -107,9 +105,7 @@ class SurfaceServices:
             ]
         else:
             env["FASTAPI_PORT"] = str(api_port)
-        out = self.spawn(
-            "fhd-api", cmd, cwd=xcagi if run_py.parent == xcagi else fhd, env=env
-        )
+        out = self.spawn("fhd-api", cmd, cwd=xcagi if run_py.parent == xcagi else fhd, env=env)
         out["ready"] = self.wait_fhd_health(health, label="FHD API")
         out["url"] = health
         return out
@@ -130,9 +126,7 @@ class SurfaceServices:
             return {"ok": False, "error": f"frontend missing: {frontend}"}
         npm = shutil.which("npm") or "npm"
         env = {
-            "VITE_XCAGI_PRODUCT_SKU": os.environ.get(
-                "SURFACE_AUDIT_PRODUCT_SKU", "enterprise"
-            ),
+            "VITE_XCAGI_PRODUCT_SKU": os.environ.get("SURFACE_AUDIT_PRODUCT_SKU", "enterprise"),
             "VITE_API_BASE": f"http://127.0.0.1:{api_port}",
         }
         out = self.spawn(

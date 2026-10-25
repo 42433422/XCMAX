@@ -142,16 +142,12 @@ def _oai_model_entry(
     return entry
 
 
-async def _build_catalog_model_entries(
-    db: Session, user_id: int
-) -> List[Dict[str, Any]]:
+async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[str, Any]]:
     """从完整平台目录展开 ``provider/model``，保留 category / pricing / selectable。"""
     providers_out: List[Dict[str, Any]] = []
     for provider in KNOWN_PROVIDERS:
         try:
-            block = await get_models_for_provider(
-                db, user_id, provider, force_refresh=False
-            )
+            block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
         except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.exception("gateway /v1/models catalog fetch failed for %s", provider)
             block = {"models": [], "models_detailed": []}
@@ -197,9 +193,7 @@ async def _build_catalog_model_entries(
                         display_name=str(row.get("display_name") or mid),
                         runtime_selectable=bool(row.get("runtime_selectable")),
                         pricing=(
-                            row.get("pricing")
-                            if isinstance(row.get("pricing"), dict)
-                            else None
+                            row.get("pricing") if isinstance(row.get("pricing"), dict) else None
                         ),
                         capabilities=(
                             row.get("capabilities")
@@ -217,9 +211,7 @@ async def _build_catalog_model_entries(
             if oid in seen:
                 continue
             seen.add(oid)
-            data.append(
-                _oai_model_entry(oid, provider, category="llm", display_name=text)
-            )
+            data.append(_oai_model_entry(oid, provider, category="llm", display_name=text))
     # 稳定排序：按 category 序再按 id
     order = {c: i for i, c in enumerate(CATEGORY_ORDER)}
     data.sort(
@@ -261,9 +253,7 @@ async def openai_list_models(
         catalog_rows = await _build_catalog_model_entries(db, int(user.id))
         data.extend(catalog_rows)
     except BOUNDARY_ERRORS:  # noqa: BLE001
-        logger.exception(
-            "gateway /v1/models full catalog failed; returning virtual models only"
-        )
+        logger.exception("gateway /v1/models full catalog failed; returning virtual models only")
     return {
         "object": "list",
         "data": data,

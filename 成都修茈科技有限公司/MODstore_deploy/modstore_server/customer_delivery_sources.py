@@ -15,9 +15,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Iterator, cast
 
-_LIBRARY: ContextVar[Path | None] = ContextVar(
-    "private_delivery_source_library", default=None
-)
+_LIBRARY: ContextVar[Path | None] = ContextVar("private_delivery_source_library", default=None)
 _SESSION_ID = re.compile(r"[0-9a-f]{16,32}\Z")
 
 
@@ -60,15 +58,12 @@ def migrate_private_delivery_state(
             if member.is_symlink():
                 raise ValueError(f"迁移目录不接受符号链接: {member}")
     legacy_deploy, runtime_root, library, legacy_library = (
-        path.resolve()
-        for path in (legacy_deploy, runtime_root, library, legacy_library)
+        path.resolve() for path in (legacy_deploy, runtime_root, library, legacy_library)
     )
     release = legacy_deploy.parents[1]
     for path in (release, legacy_deploy.parent, legacy_deploy):
         _require_directory(path)
-    bootstrap = release.parent.name != "releases" or not re.fullmatch(
-        r"[0-9a-f]{40}", release.name
-    )
+    bootstrap = release.parent.name != "releases" or not re.fullmatch(r"[0-9a-f]{40}", release.name)
     if bootstrap:
         if (
             bootstrap_source is None
@@ -219,13 +214,9 @@ def migrate_private_delivery_state(
                 raise ValueError("迁移产物不属于原会话固定发行路径")
             if not package.is_file():
                 raise ValueError("迁移缺少原正式签名包")
-            _verify_artifact_record(
-                package.read_bytes(), record, owner_id=owner, ticket_id=ticket
-            )
+            _verify_artifact_record(package.read_bytes(), record, owner_id=owner, ticket_id=ticket)
             pinned = (manifest.get("private_mod_sources") or {}).get(mod_id) or {}
-            actual_files, actual_hash = source_fingerprints(
-                source_root / "library" / mod_id
-            )
+            actual_files, actual_hash = source_fingerprints(source_root / "library" / mod_id)
             if (
                 record.get("source_git_sha") != release.name
                 or record.get("source_git_tree") != pinned.get("git_tree")
@@ -247,9 +238,7 @@ def migrate_private_delivery_state(
                         raise ValueError(f"持久状态迁移冲突: {destination}")
                     continue
                 destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-                with tempfile.NamedTemporaryFile(
-                    dir=destination.parent, delete=False
-                ) as handle:
+                with tempfile.NamedTemporaryFile(dir=destination.parent, delete=False) as handle:
                     temporary = Path(handle.name)
                     staged.append((temporary, destination, expected))
                     fd = os.open(source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -318,9 +307,7 @@ def _read_regular_json(marker: Path, *, max_bytes: int | None = None) -> dict[st
         raise ValueError("私有生产目录记录无效") from None
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or (
-            max_bytes is not None and info.st_size > max_bytes
-        ):
+        if not stat.S_ISREG(info.st_mode) or (max_bytes is not None and info.st_size > max_bytes):
             raise ValueError("私有生产目录记录无效")
         stream = os.fdopen(fd, "r", encoding="utf-8")
     except (OSError, ValueError):
@@ -373,9 +360,7 @@ def _existing_scope_path(owner_id: int, session_id: str) -> Path:
     return target
 
 
-def create_private_source_scope(
-    owner_id: int, session_id: str, ticket_id: int
-) -> dict[str, Any]:
+def create_private_source_scope(owner_id: int, session_id: str, ticket_id: int) -> dict[str, Any]:
     if ticket_id <= 0:
         raise ValueError("私有生产必须关联原工单")
     created = _scope_path(owner_id, session_id)
@@ -405,9 +390,7 @@ def create_private_source_scope(
     return scope
 
 
-def source_library(
-    scope: dict[str, Any], owner_id: int, session_id: str, ticket_id: int
-) -> Path:
+def source_library(scope: dict[str, Any], owner_id: int, session_id: str, ticket_id: int) -> Path:
     expected = {
         "owner_user_id": owner_id,
         "session_id": session_id,
@@ -492,9 +475,7 @@ def seed_previous_delivery(scope: dict[str, Any], evidence: dict[str, Any]) -> N
                 continue
             with zipfile.ZipFile(io.BytesIO(raw)) as archive:
                 for name, digest in signed["files_sha256"].items():
-                    data = archive.read(
-                        name if name in archive.namelist() else f"{mid}/{name}"
-                    )
+                    data = archive.read(name if name in archive.namelist() else f"{mid}/{name}")
                     path = (destination / name).resolve()
                     if (
                         not path.is_relative_to(destination.resolve())
@@ -519,9 +500,7 @@ def _previous_source_records(
             continue
         rows = run.get("verified_artifacts") or []
         if not rows and run.get("session_id"):
-            persisted = workbench_api._load_workbench_session_unlocked(
-                str(run["session_id"])
-            )
+            persisted = workbench_api._load_workbench_session_unlocked(str(run["session_id"]))
             if (
                 persisted
                 and persisted.get("id") == run["session_id"]
@@ -531,17 +510,11 @@ def _previous_source_records(
                 rows = persisted.get("verified_artifacts") or []
         full.extend(rows)
     records = list(evidence.get("delivery_artifacts") or []) or full
-    failed_id = (
-        str(evidence.get("runtime_mod_id") or "")
-        if evidence.get("runtime_failure")
-        else ""
-    )
+    failed_id = str(evidence.get("runtime_mod_id") or "") if evidence.get("runtime_failure") else ""
     if failed_id:
         records = [row for row in records if row.get("id") == failed_id]
         if not records:
-            raise ValueError(
-                "失败产物缺少上一轮可信源码记录，原单等待恢复，不能从零覆盖"
-            )
+            raise ValueError("失败产物缺少上一轮可信源码记录，原单等待恢复，不能从零覆盖")
     selected: list[dict[str, Any]] = []
     failed_generation = (evidence.get("resolution") or {}).get("failed_generation")
     for row in records:
@@ -558,16 +531,12 @@ def _previous_source_records(
                 and item.get("owner_user_id") == scope["owner_user_id"]
                 and item.get("ticket_id") == scope["ticket_id"]
                 and item.get("generation") != scope["session_id"]
-                and (
-                    not failed_generation or item.get("generation") == failed_generation
-                )
+                and (not failed_generation or item.get("generation") == failed_generation)
             ),
             None,
         )
         if match is None:
-            raise ValueError(
-                "上一轮交付身份、版本或摘要没有匹配的可信源码记录，不能从零覆盖"
-            )
+            raise ValueError("上一轮交付身份、版本或摘要没有匹配的可信源码记录，不能从零覆盖")
         if match not in selected:
             selected.append(match)
     return selected

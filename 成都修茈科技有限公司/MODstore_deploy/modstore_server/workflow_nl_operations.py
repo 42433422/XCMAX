@@ -44,9 +44,7 @@ def _sanitize_static_logic(
         warnings.append(
             f"Skill {name!r} static_logic.type={logic_type!r} 不支持，已改为 template_transform"
         )
-        return _facade()._default_static_logic(
-            name, str(logic.get("output_var") or "result")
-        )
+        return _facade()._default_static_logic(name, str(logic.get("output_var") or "result"))
     if logic_type == "template_transform":
         output_var = str(logic.get("output_var") or "result").strip() or "result"
         template = str(logic.get("template") or f"{name}: " + "${value}")
@@ -60,9 +58,7 @@ def _sanitize_static_logic(
             sanitized["required_fields"] = [str(x) for x in required if str(x).strip()]
         domain_keywords = logic.get("domain_keywords")
         if isinstance(domain_keywords, list):
-            sanitized["domain_keywords"] = [
-                str(x) for x in domain_keywords if str(x).strip()
-            ]
+            sanitized["domain_keywords"] = [str(x) for x in domain_keywords if str(x).strip()]
         dynamic_template = logic.get("dynamic_template")
         if isinstance(dynamic_template, str) and dynamic_template.strip():
             sanitized["dynamic_template"] = dynamic_template
@@ -70,9 +66,7 @@ def _sanitize_static_logic(
         if isinstance(fallback_template, str) and fallback_template.strip():
             sanitized["fallback_template"] = fallback_template
         if "allow_steps" in logic:
-            sanitized["allow_steps"] = _facade()._safe_bool(
-                logic.get("allow_steps"), False
-            )
+            sanitized["allow_steps"] = _facade()._safe_bool(logic.get("allow_steps"), False)
         metadata = logic.get("metadata")
         if isinstance(metadata, dict):
             sanitized["metadata"] = metadata
@@ -93,33 +87,23 @@ def _sanitize_static_logic(
             warnings.append(
                 f"Skill {name!r} 缺少 employee_id，employee_task 已降级为 template_transform"
             )
-            return _facade()._default_static_logic(
-                name, str(logic.get("output_var") or "result")
-            )
+            return _facade()._default_static_logic(name, str(logic.get("output_var") or "result"))
         return {
             "type": "employee_task",
             "employee_id": employee_id,
-            "task_template": str(
-                logic.get("task_template") or logic.get("task") or name
-            ),
+            "task_template": str(logic.get("task_template") or logic.get("task") or name),
             "output_var": str(logic.get("output_var") or "employee_result"),
         }
     steps_in = logic.get("steps")
     if not isinstance(steps_in, list) or not steps_in:
-        warnings.append(
-            f"Skill {name!r} pipeline 缺少 steps，已改为 template_transform"
-        )
-        return _facade()._default_static_logic(
-            name, str(logic.get("output_var") or "result")
-        )
+        warnings.append(f"Skill {name!r} pipeline 缺少 steps，已改为 template_transform")
+        return _facade()._default_static_logic(name, str(logic.get("output_var") or "result"))
     steps: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for idx, step in enumerate(steps_in[:12]):
         if not isinstance(step, dict):
             continue
         step_type = str(step.get("type") or "template_transform").strip()
-        output_var = str(
-            step.get("output_var") or step.get("id") or f"step_{idx}"
-        ).strip()
+        output_var = str(step.get("output_var") or step.get("id") or f"step_{idx}").strip()
         if step_type == "template_transform":
             steps.append(
                 {
@@ -138,17 +122,13 @@ def _sanitize_static_logic(
                     "output_var": output_var or f"step_{idx}",
                 }
             )
-        elif (
-            step_type == "employee_task" and str(step.get("employee_id") or "").strip()
-        ):
+        elif step_type == "employee_task" and str(step.get("employee_id") or "").strip():
             steps.append(
                 {
                     "id": str(step.get("id") or output_var),
                     "type": "employee_task",
                     "employee_id": str(step.get("employee_id") or "").strip(),
-                    "task_template": str(
-                        step.get("task_template") or step.get("task") or name
-                    ),
+                    "task_template": str(step.get("task_template") or step.get("task") or name),
                     "output_var": output_var or f"step_{idx}",
                 }
             )
@@ -157,9 +137,7 @@ def _sanitize_static_logic(
                 f"Skill {name!r} pipeline step #{idx} 类型 {step_type!r} 不可用，已跳过"
             )
     if not steps:
-        return _facade()._default_static_logic(
-            name, str(logic.get("output_var") or "result")
-        )
+        return _facade()._default_static_logic(name, str(logic.get("output_var") or "result"))
     return {"type": "pipeline", "steps": steps}
 
 
@@ -287,9 +265,7 @@ def _normalize_node(
             cfg.get("temp_skill_id") or cfg.get("skill_ref") or cfg.get("temp_id"), ""
         )
         task = str(cfg.get("task") or "").strip()
-        output_var = (
-            str(cfg.get("output_var") or "eskill_output").strip() or "eskill_output"
-        )
+        output_var = str(cfg.get("output_var") or "eskill_output").strip() or "eskill_output"
         input_mapping = cfg.get("input_mapping")
         if not isinstance(input_mapping, dict):
             input_mapping = {}
@@ -333,9 +309,7 @@ def _normalize_node(
             "output_var": out_var,
         }
         if not cid:
-            warnings.append(
-                f"OpenAPI 节点 {name!r} 缺少有效 connector_id，已写 0，请在画布中修改"
-            )
+            warnings.append(f"OpenAPI 节点 {name!r} 缺少有效 connector_id，已写 0，请在画布中修改")
         if not oid:
             warnings.append(f"OpenAPI 节点 {name!r} 缺少 operation_id，请在画布中补全")
     elif nt == "knowledge_search":
@@ -365,10 +339,7 @@ def _normalize_node(
             cfg["kb_id"] = kb_id
     elif nt == "webhook_trigger":
         secret = str(cfg.get("secret") or "").strip()
-        payload_var = (
-            str(cfg.get("payload_var") or "webhook_payload").strip()
-            or "webhook_payload"
-        )
+        payload_var = str(cfg.get("payload_var") or "webhook_payload").strip() or "webhook_payload"
         cfg = {"secret": secret, "payload_var": payload_var}
     elif nt == "cron_trigger":
         cron = str(cfg.get("cron") or "0 * * * *").strip() or "0 * * * *"

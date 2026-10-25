@@ -21,15 +21,9 @@ if str(MODSTORE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODSTORE_ROOT))
 
 _REPO_SIBLING = MODSTORE_ROOT.parent
-_DEFAULT_PACK = (
-    _REPO_SIBLING / "FHD" / "mods" / "_employees" / "xcagi-host-foundation-employee"
-)
+_DEFAULT_PACK = _REPO_SIBLING / "FHD" / "mods" / "_employees" / "xcagi-host-foundation-employee"
 _DEFAULT_XCMAX = (
-    MODSTORE_ROOT.parent.parent
-    / "FHD"
-    / "mods"
-    / "_employees"
-    / "xcagi-host-foundation-employee"
+    MODSTORE_ROOT.parent.parent / "FHD" / "mods" / "_employees" / "xcagi-host-foundation-employee"
 )
 DEFAULT_PACK_DIR = _DEFAULT_PACK if _DEFAULT_PACK.is_dir() else _DEFAULT_XCMAX
 
@@ -68,15 +62,9 @@ def _load_deploy_env() -> None:
 
 def main() -> int:
     _load_deploy_env()
-    parser = argparse.ArgumentParser(
-        description="Seed host foundation employee pack into catalog"
-    )
-    parser.add_argument(
-        "--pack-dir", type=Path, default=DEFAULT_PACK_DIR, help="员工包目录"
-    )
-    parser.add_argument(
-        "--set-public", action="store_true", help="catalog_items.is_public=true"
-    )
+    parser = argparse.ArgumentParser(description="Seed host foundation employee pack into catalog")
+    parser.add_argument("--pack-dir", type=Path, default=DEFAULT_PACK_DIR, help="员工包目录")
+    parser.add_argument("--set-public", action="store_true", help="catalog_items.is_public=true")
     parser.add_argument("--force", action="store_true", help="覆盖已存在记录")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -115,9 +103,7 @@ def main() -> int:
             text("SELECT id FROM users WHERE is_admin IS TRUE ORDER BY id ASC LIMIT 1"),
         ).fetchone()
         if not row:
-            row = db.execute(
-                text("SELECT id FROM users ORDER BY id ASC LIMIT 1")
-            ).fetchone()
+            row = db.execute(text("SELECT id FROM users ORDER BY id ASC LIMIT 1")).fetchone()
         if not row:
             print("No user in DB", file=sys.stderr)
             return 3

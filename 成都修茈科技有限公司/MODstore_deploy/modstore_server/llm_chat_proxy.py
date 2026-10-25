@@ -62,9 +62,7 @@ _STREAM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=20
 
 def _normalize_openai_base(provider: str, base_url: Optional[str]) -> str:
     b = (base_url or openai_compat_default_root(provider)).rstrip("/")
-    if not (
-        b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")
-    ):
+    if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
         b = b + "/v1"
     return b
 
@@ -127,10 +125,7 @@ def _openai_assistant_message_parts(msg: Dict[str, Any]) -> tuple[str, str]:
         return "", ""
     content = str(msg.get("content") or "").strip()
     reasoning = str(
-        msg.get("reasoning_content")
-        or msg.get("reasoning")
-        or msg.get("thinking")
-        or ""
+        msg.get("reasoning_content") or msg.get("reasoning") or msg.get("thinking") or ""
     ).strip()
     return content, reasoning
 
@@ -189,9 +184,7 @@ async def chat_dispatch(
                 response_format=response_format,
             )
         if provider == "anthropic":
-            return await chat_anthropic(
-                api_key, model, messages, max_tokens=max_tokens or 1024
-            )
+            return await chat_anthropic(api_key, model, messages, max_tokens=max_tokens or 1024)
         if provider == "google":
             return await chat_google(api_key, model, messages)
         return {"ok": False, "error": f"unsupported provider: {provider}"}
@@ -240,9 +233,7 @@ async def chat_dispatch(
     import asyncio as _asyncio
 
     try:
-        result = await _asyncio.wait_for(
-            _primary_with_retries(), timeout=float(timeout_fallback_s)
-        )
+        result = await _asyncio.wait_for(_primary_with_retries(), timeout=float(timeout_fallback_s))
         if result.get("ok"):
             return result
         # provider returned error — fall through to fallback
@@ -252,9 +243,7 @@ async def chat_dispatch(
 
     # ---- fallback
     fb_provider = str(fallback_provider)
-    fb_model = normalize_model(
-        fb_provider, str(fallback_model), fallback_base_url or base_url
-    )
+    fb_model = normalize_model(fb_provider, str(fallback_model), fallback_base_url or base_url)
     fb_key = str(fallback_api_key or api_key)
     fb_base = fallback_base_url or base_url
     try:

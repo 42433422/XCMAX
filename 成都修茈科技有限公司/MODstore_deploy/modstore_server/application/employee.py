@@ -87,9 +87,7 @@ class EmployeeApplicationService:
             )
             raise
 
-    def register_pack(
-        self, *, author_id: int, mod_id: str, pack_id: str, version: str
-    ) -> None:
+    def register_pack(self, *, author_id: int, mod_id: str, pack_id: str, version: str) -> None:
         _ = self._repository
         self._bus.publish(
             new_event(

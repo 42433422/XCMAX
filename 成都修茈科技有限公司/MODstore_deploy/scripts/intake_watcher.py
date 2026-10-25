@@ -34,7 +34,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MODSTORE_ROOT = REPO_ROOT / "MODstore_deploy"
 MIANSHI_DIR = REPO_ROOT / "mianshi"
 STATE_FILE = REPO_ROOT / "MODstore_deploy" / "var" / "intake_watcher_state.json"
-EVENT_OUTBOX = REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
+EVENT_OUTBOX = (
+    REPO_ROOT / "MODstore_deploy" / "modstore_server" / "data" / "event_outbox.jsonl"
+)
 
 
 def _load_state() -> dict[str, dict]:
@@ -48,7 +50,9 @@ def _load_state() -> dict[str, dict]:
 
 def _save_state(state: dict[str, dict]) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    STATE_FILE.write_text(
+        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def _file_signature(p: Path) -> str:
@@ -101,7 +105,11 @@ def _emit_event(name: str, payload: dict) -> None:
             sys.path.insert(0, modstore_path)
         from modstore_server.incident_bus import publish
 
-        ok = publish(name, payload if isinstance(payload, dict) else {}, source="intake-dispatcher")
+        ok = publish(
+            name,
+            payload if isinstance(payload, dict) else {},
+            source="intake-dispatcher",
+        )
         if ok:
             return
     except RECOVERABLE_ERRORS:
@@ -109,12 +117,18 @@ def _emit_event(name: str, payload: dict) -> None:
     _emit_event_fallback_jsonl(name, payload)
 
 
-def _stream_subscribe_loop(*, interval_seconds: int, filter_prefix: str = "ops.intake.") -> int:
+def _stream_subscribe_loop(
+    *, interval_seconds: int, filter_prefix: str = "ops.intake."
+) -> int:
     modstore_path = str(MODSTORE_ROOT)
     if modstore_path not in sys.path:
         sys.path.insert(0, modstore_path)
     try:
-        from modstore_server.eventing.redis_stream_bus import ack, read_group, stream_enabled
+        from modstore_server.eventing.redis_stream_bus import (
+            ack,
+            read_group,
+            stream_enabled,
+        )
     except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         print(f"[ERR] redis stream module unavailable: {exc}")
         return 2
@@ -128,7 +142,9 @@ def _stream_subscribe_loop(*, interval_seconds: int, filter_prefix: str = "ops.i
     print(f"[WATCH] subscribing Redis Stream as group={group} consumer={consumer}")
     try:
         while True:
-            out = read_group(group, consumer, count=20, block_ms=max(1000, interval_seconds * 1000))
+            out = read_group(
+                group, consumer, count=20, block_ms=max(1000, interval_seconds * 1000)
+            )
             events = out.get("events") if isinstance(out.get("events"), list) else []
             if not out.get("ok"):
                 reason = out.get("reason") or out.get("error") or "unknown"
@@ -145,7 +161,9 @@ def _stream_subscribe_loop(*, interval_seconds: int, filter_prefix: str = "ops.i
                 et = str(ev.get("event_type") or "")
                 if filter_prefix and not et.startswith(filter_prefix):
                     continue
-                payload = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                payload = (
+                    ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
+                )
                 subject = str(
                     payload.get("subject_id")
                     or payload.get("ticket_no")
@@ -186,8 +204,12 @@ def scan_once() -> list[dict]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
-    parser.add_argument("--watch", action="store_true", help="Long-running mode (poll every 60s).")
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0] if __doc__ else ""
+    )
+    parser.add_argument(
+        "--watch", action="store_true", help="Long-running mode (poll every 60s)."
+    )
     parser.add_argument("--interval", type=int, default=60)
     parser.add_argument(
         "--stream-subscribe",

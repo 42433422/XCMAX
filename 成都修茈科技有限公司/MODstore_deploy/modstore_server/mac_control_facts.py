@@ -49,9 +49,7 @@ def customer_facts(db, customer_id=None, ticket_id=None):
                     "id": row.id,
                     "customer_id": row.user_id,
                     "source": f"customer_service_tickets:{row.id}",
-                    "updated_at": row.updated_at.isoformat()
-                    if row.updated_at
-                    else None,
+                    "updated_at": row.updated_at.isoformat() if row.updated_at else None,
                     "error": "invalid_delivery_evidence",
                     "delivery_verification": {
                         "completed": False,
@@ -111,14 +109,11 @@ def customer_facts(db, customer_id=None, ticket_id=None):
                 },
                 "delivery_verification": {
                     "source": "customer_service_delivery_completion+customer_delivery_receipts",
-                    "customer_acceptance": evidence.get("acceptance_status")
-                    or "unknown",
+                    "customer_acceptance": evidence.get("acceptance_status") or "unknown",
                     "runtime_business_verified": running,
                     "verified_host_shas": verified_hosts,
                     "completed": bool(
-                        row.status == "resolved"
-                        and evidence.get("delivered_at")
-                        and running
+                        row.status == "resolved" and evidence.get("delivered_at") and running
                     ),
                     "delivered_at": evidence.get("delivered_at"),
                     "generation": generation,
@@ -143,9 +138,7 @@ def customer_facts(db, customer_id=None, ticket_id=None):
         )
     deliveries = build_standard_delivery_rows(db)
     if customer_id:
-        deliveries = [
-            r for r in deliveries if (r.get("account") or {}).get("id") == customer_id
-        ]
+        deliveries = [r for r in deliveries if (r.get("account") or {}).get("id") == customer_id]
     return {
         "source": "customer_service_tickets+standard_delivery_api",
         "observed_at": time.time(),
@@ -175,15 +168,11 @@ def context_facts(db, request):
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        result["sources"].append(
-            {"source": "modstore:health", "error": type(exc).__name__}
-        )
+        result["sources"].append({"source": "modstore:health", "error": type(exc).__name__})
     try:
         from modstore_server.xiaoc_cs_ssot import retrieve_knowledge_for_mode
 
-        chunks = retrieve_knowledge_for_mode(
-            request.get("message", ""), mode="admin", top_k=3
-        )
+        chunks = retrieve_knowledge_for_mode(request.get("message", ""), mode="admin", top_k=3)
         result["sources"].append(
             {
                 "source": "persy",

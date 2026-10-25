@@ -22,9 +22,7 @@ router = sys.modules["modstore_server.admin_employee_autonomy_api"].router
 
 @router.get("/questions")
 def list_pending_human_questions(
-    include_history: bool = Query(
-        False, description="true 则包含 answered/expired 历史"
-    ),
+    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -75,9 +73,7 @@ def list_pending_human_questions(
             continue
         if not include_history and row.get("status") != "open":
             continue
-        questions = (
-            row.get("questions") if isinstance(row.get("questions"), list) else []
-        )
+        questions = row.get("questions") if isinstance(row.get("questions"), list) else []
         primary = ""
         for q in questions:
             if isinstance(q, dict) and str(q.get("question") or "").strip():
@@ -101,9 +97,7 @@ def list_pending_human_questions(
                     "change_request_id": row.get("change_request_id"),
                 },
                 "status": (
-                    "pending"
-                    if row.get("status") == "open"
-                    else str(row.get("status") or "")
+                    "pending" if row.get("status") == "open" else str(row.get("status") or "")
                 ),
                 "answer": "",
                 "asked_at": row.get("created_at"),
@@ -116,9 +110,7 @@ def list_pending_human_questions(
 
     # Pending Retort first, then soon-to-expire.
     def _sort_key(item: Dict[str, Any]) -> tuple:
-        is_retort = (
-            0 if str(item.get("employee_id") or "") == "retort-clarification" else 1
-        )
+        is_retort = 0 if str(item.get("employee_id") or "") == "retort-clarification" else 1
         remaining = item.get("seconds_remaining")
         remaining_key = int(remaining) if isinstance(remaining, int) else 10**9
         return (is_retort, remaining_key, str(item.get("asked_at") or ""))
@@ -152,9 +144,7 @@ def answer_human_question(
     if not answer and not isinstance(raw_answers, (dict, list)):
         raise HTTPException(400, "answer or answers is required")
 
-    payload_answers: Any = (
-        raw_answers if isinstance(raw_answers, (dict, list)) else answer
-    )
+    payload_answers: Any = raw_answers if isinstance(raw_answers, (dict, list)) else answer
     raw_id = str(question_id or "").strip()
     if raw_id.startswith("retort:"):
         from modstore_server.retort_clarification_gate import answer_clarification
@@ -286,9 +276,7 @@ def human_questions_stats(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(
-                PendingHumanQuestion.status, func.count(PendingHumanQuestion.id)
-            )
+            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
             .filter(PendingHumanQuestion.user_id == _admin_user.id)
             .group_by(PendingHumanQuestion.status)
             .all()
@@ -311,9 +299,7 @@ def human_questions_stats(
 def get_employee_scorecard_api(
     employee_id: str,
     days: int = Query(7, ge=1, le=90, description="回看多少天"),
-    human_friendly: bool = Query(
-        False, description="true 则返回人话文本，否则返回 JSON"
-    ),
+    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。

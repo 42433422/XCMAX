@@ -63,9 +63,7 @@ class CustomerServiceTicket(Base):
     summary = Column(Text, default="")
     decision_status = Column(String(24), default="pending", index=True)
     automation_level = Column(String(24), default="auto", index=True)
-    assigned_admin_id = Column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True
-    )
+    assigned_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     expected_completion_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
     updated_at = Column(
@@ -155,9 +153,7 @@ class CustomerServiceDecision(Base):
 class CustomerServiceAction(Base):
     __tablename__ = "customer_service_actions"
     __table_args__ = (
-        UniqueConstraint(
-            "idempotency_key", name="uq_customer_service_action_idempotency"
-        ),
+        UniqueConstraint("idempotency_key", name="uq_customer_service_action_idempotency"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -190,9 +186,7 @@ class CustomerServiceIntegration(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(128), nullable=False, index=True)
     integration_type = Column(String(32), default="openapi", index=True)
-    connector_id = Column(
-        Integer, ForeignKey("openapi_connectors.id"), nullable=True, index=True
-    )
+    connector_id = Column(Integer, ForeignKey("openapi_connectors.id"), nullable=True, index=True)
     workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=True, index=True)
     scenario = Column(String(64), default="general", index=True)
     config_json = Column(Text, default="{}")

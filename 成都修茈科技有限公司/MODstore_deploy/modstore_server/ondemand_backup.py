@@ -18,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _enabled() -> bool:
-    return (
-        os.environ.get("MODSTORE_ONDEMAND_BACKUP_ENABLED", "1") or ""
-    ).strip().lower() not in (
+    return (os.environ.get("MODSTORE_ONDEMAND_BACKUP_ENABLED", "1") or "").strip().lower() not in (
         "0",
         "false",
         "no",

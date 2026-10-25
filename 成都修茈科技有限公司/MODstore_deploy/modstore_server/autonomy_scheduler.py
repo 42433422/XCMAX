@@ -57,22 +57,15 @@ def _int_env(name: str, default: int, *, minimum: int = 0) -> int:
 
 def _rollout_recovery_deadline() -> datetime | None:
     """Anchor cross-stack startup grace to the immutable release, not process restarts."""
-    if (
-        str(os.environ.get("MODSTORE_DEPLOY_TIER") or "").strip().lower()
-        != "production"
-    ):
+    if str(os.environ.get("MODSTORE_DEPLOY_TIER") or "").strip().lower() != "production":
         return None
     configured = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
     manifest_path = (
-        Path(configured)
-        if configured
-        else Path("/opt/xcmax/current/.xcmax-release.json")
+        Path(configured) if configured else Path("/opt/xcmax/current/.xcmax-release.json")
     )
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        built_at = datetime.fromisoformat(
-            str(payload["built_at"]).replace("Z", "+00:00")
-        )
+        built_at = datetime.fromisoformat(str(payload["built_at"]).replace("Z", "+00:00"))
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
         return None
     if built_at.tzinfo is None:
@@ -134,9 +127,7 @@ def _remediation_lineage_by_run_id() -> dict[str, dict[str, str]]:
         lineage[run_id] = {
             "origin_run_id": str(row.get("origin_run_id") or run_id).strip(),
             "origin_triggered_by": origin_triggered_by,
-            "origin_reason": str(
-                row.get("origin_reason") or row.get("reason") or ""
-            ).strip(),
+            "origin_reason": str(row.get("origin_reason") or row.get("reason") or "").strip(),
         }
     return lineage
 
@@ -161,9 +152,7 @@ def _with_remediation_lineage(
     return candidate
 
 
-def _remediation_priority(
-    candidate: dict[str, Any], item_index: int
-) -> tuple[int, int]:
+def _remediation_priority(candidate: dict[str, Any], item_index: int) -> tuple[int, int]:
     """Prioritize safety recovery while preserving newest-first behavior per class."""
     origin = str(candidate.get("origin_triggered_by") or "").strip()
     origin_priority = {
@@ -199,11 +188,7 @@ def pending_automated_remediation() -> dict[str, Any] | None:
         if kind == "failed_steps":
             raw_steps = item.get("steps")
             steps = (
-                [
-                    str(step)
-                    for step in raw_steps
-                    if str(step) in {"code", "review", "qa"}
-                ]
+                [str(step) for step in raw_steps if str(step) in {"code", "review", "qa"}]
                 if isinstance(raw_steps, list)
                 else []
             )
@@ -219,9 +204,7 @@ def pending_automated_remediation() -> dict[str, Any] | None:
                     item,
                     lineage_by_run_id,
                 )
-                candidates.append(
-                    (_remediation_priority(candidate, item_index), candidate)
-                )
+                candidates.append((_remediation_priority(candidate, item_index), candidate))
             continue
         if kind != "automated_remediation":
             continue
@@ -294,8 +277,7 @@ def _reserve_remediation_attempt(pending: dict[str, Any]) -> set[tuple[str, ...]
     active = {
         tuple(_remediation_key(item))
         for item in items
-        if isinstance(item, dict)
-        and item.get("kind") in {"automated_remediation", "failed_steps"}
+        if isinstance(item, dict) and item.get("kind") in {"automated_remediation", "failed_steps"}
     }
     blocked = {
         tuple(_remediation_key(item))
@@ -408,9 +390,7 @@ def run_pending_automated_remediation() -> dict[str, Any]:
                 "scheduler_status": "deferred",
             }
         else:
-            raise RuntimeError(
-                f"automated self-maintenance remediation failed: {error}"
-            )
+            raise RuntimeError(f"automated self-maintenance remediation failed: {error}")
     if blocked:
         from modstore_server.maintenance_loop.store import _load_loop_memory
 
@@ -441,9 +421,7 @@ def register_autonomy_jobs(
             with track_job_run("self_maintenance_remediation_loop"):
                 result = run_pending_automated_remediation()
                 if result.get("scheduler_status") == "deferred":
-                    raise DeferredJobRun(
-                        str(result.get("scheduler_reason") or "policy_hold")
-                    )
+                    raise DeferredJobRun(str(result.get("scheduler_reason") or "policy_hold"))
             logger.info(
                 "self-maintenance remediation scheduler status=%s runtime_status=%s reason=%s",
                 result.get("status"),

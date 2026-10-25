@@ -96,9 +96,7 @@ def _contact_query_match_core(query: str) -> str:
     return core if len(core) >= 2 else qn
 
 
-def rank_contact_serp_rows(
-    query: str, rows: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def rank_contact_serp_rows(query: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """联系页 SERP 按与查询相关性排序（避免「成都市_百度百科」等泛结果压过目标公司）。"""
     if not rows:
         return []
@@ -128,16 +126,12 @@ def rank_contact_serp_rows(
     return good if good else [row for _, row in scored]
 
 
-async def contact_known_site_company_lookup(
-    query: str, *, max_results: int = 5
-) -> List[str]:
+async def contact_known_site_company_lookup(query: str, *, max_results: int = 5) -> List[str]:
     """从配置的官网域名 HTML 提取公司全称（不依赖搜索引擎，避免百度验证/ Bing 泛结果）。"""
     q = (query or "").strip()
     if len(q) < 2:
         return []
-    raw_domains = (
-        os.environ.get("MODSTORE_CONTACT_COMPANY_DOMAINS") or "xiu-ci.com"
-    ).strip()
+    raw_domains = (os.environ.get("MODSTORE_CONTACT_COMPANY_DOMAINS") or "xiu-ci.com").strip()
     domains = [d.strip().lstrip(".") for d in raw_domains.split(",") if d.strip()]
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -244,9 +238,7 @@ async def _contact_company_web_fetch_one(
 
     for label, coro in ordered:
         try:
-            rows = rank_contact_serp_rows(
-                uq, await asyncio.wait_for(coro, timeout=per_try)
-            )
+            rows = rank_contact_serp_rows(uq, await asyncio.wait_for(coro, timeout=per_try))
             if rows:
                 _append_rows(rows, label)
                 if label not in via_labels:
@@ -256,9 +248,7 @@ async def _contact_company_web_fetch_one(
         except RECOVERABLE_ERRORS as e:
             err_parts.append(f"{label}: {_request_error_fragment(e)}"[:140])
 
-    tasks: List[Tuple[str, Any]] = [
-        ("duckduckgo", duckduckgo_html_search(sq, max_results=rn))
-    ]
+    tasks: List[Tuple[str, Any]] = [("duckduckgo", duckduckgo_html_search(sq, max_results=rn))]
 
     outcomes = await asyncio.gather(
         *[
@@ -286,9 +276,7 @@ async def _contact_company_web_raw_results(
     query: str, *, max_results: int
 ) -> Tuple[List[Dict[str, Any]], str, List[str]]:
     """联系页联网：多搜索变体 + 百度优先（国内公司名）。"""
-    return await _contact_company_web_fetch_one(
-        query, user_query=query, max_results=max_results
-    )
+    return await _contact_company_web_fetch_one(query, user_query=query, max_results=max_results)
 
 
 async def search_company_names_via_web(
@@ -328,9 +316,7 @@ async def search_company_names_via_web(
         names = web_search_result_titles(results, limit=max_results, query=q)
         if names:
             return names, None, via
-    err = (
-        " ; ".join(dict.fromkeys(err_parts))
-        if err_parts
-        else "未从网页标题解析到公司全称"
-    )[:320]
+    err = (" ; ".join(dict.fromkeys(err_parts)) if err_parts else "未从网页标题解析到公司全称")[
+        :320
+    ]
     return [], err or None, via

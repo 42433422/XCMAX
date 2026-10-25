@@ -81,9 +81,7 @@ class EmployeeReporter:
                 for w in rc.get("warnings") or []:
                     warns.append(str(w))
             except RECOVERABLE_ERRORS as exc:
-                logger.warning(
-                    "all_hands research failed pkg_id=%s err=%s", pkg_id, exc
-                )
+                logger.warning("all_hands research failed pkg_id=%s err=%s", pkg_id, exc)
                 warns.append(f"research 失败：{exc}")
         excerpt, yg_warns = self.pack_excerpt(pkg_id)
         warns.extend(yg_warns)
@@ -92,9 +90,7 @@ class EmployeeReporter:
         signals = self.manifest(pkg_id)
         user_q = (user_question or "").strip()
         if user_q:
-            task_text = self.qa_template.format(
-                employee_id=pkg_id, user_question=user_q
-            )
+            task_text = self.qa_template.format(employee_id=pkg_id, user_question=user_q)
         else:
             task_text = self.report_template.format(employee_id=pkg_id)
         inp: Dict[str, Any] = {

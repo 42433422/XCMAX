@@ -23,19 +23,13 @@ def _register_scheduler_phase_03():
             )
 
             threshold = int(
-                _facade().os.environ.get(
-                    "MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3"
-                )
+                _facade().os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_THRESHOLD", "3")
             )
             sync_limit = int(
-                _facade().os.environ.get(
-                    "MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32"
-                )
+                _facade().os.environ.get("MODSTORE_TIME_RAIL_MISSING_EVIDENCE_LIMIT", "32")
             )
             min_queue_gap = int(
-                _facade().os.environ.get(
-                    "MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1"
-                )
+                _facade().os.environ.get("MODSTORE_TIME_RAIL_MAINTENANCE_MIN_QUEUE_GAP", "1")
             )
             cooldown_seconds = int(
                 _facade().os.environ.get(
@@ -53,8 +47,7 @@ def _register_scheduler_phase_03():
             now = _facade().time.time()
             if (
                 _facade()._LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS > 0
-                and now - _facade()._LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS
-                < cooldown_seconds
+                and now - _facade()._LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS < cooldown_seconds
             ):
                 _facade().logger.info(
                     "time rail observability sync skipped: cooldown_not_elapsed",
@@ -82,10 +75,7 @@ def _register_scheduler_phase_03():
             if (
                 _facade()._LAST_TIME_RAIL_OBSERVABILITY_MISSING >= 0
                 and missing <= _facade()._LAST_TIME_RAIL_OBSERVABILITY_MISSING
-                and (
-                    now - _facade()._LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS
-                    < cooldown_seconds
-                )
+                and (now - _facade()._LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS < cooldown_seconds)
             ):
                 _facade().logger.info(
                     "time rail observability sync skipped: no_new_missing_and_cooldown",
@@ -164,9 +154,7 @@ def _register_scheduler_phase_03():
             _facade().logger.exception("email intake poll job failed")
 
     try:
-        intake_secs = int(
-            _facade().os.environ.get("MODSTORE_EMAIL_INTAKE_POLL_SECONDS", "120")
-        )
+        intake_secs = int(_facade().os.environ.get("MODSTORE_EMAIL_INTAKE_POLL_SECONDS", "120"))
     except ValueError:
         intake_secs = 120
     _facade()._scheduler.add_job(
@@ -193,9 +181,7 @@ def _register_scheduler_phase_03():
                     brief_limit = 20
                 try:
                     sug_limit = int(
-                        _facade().os.environ.get(
-                            "MODSTORE_SUGGESTION_DISPATCH_BATCH", "20"
-                        )
+                        _facade().os.environ.get("MODSTORE_SUGGESTION_DISPATCH_BATCH", "20")
                     )
                 except ValueError:
                     sug_limit = 20
@@ -211,9 +197,7 @@ def _register_scheduler_phase_03():
                     s.get("skipped"),
                 )
 
-            _facade()._run_tracked_scheduler_job(
-                "employee_autonomy_dispatch_loop", _run
-            )
+            _facade()._run_tracked_scheduler_job("employee_autonomy_dispatch_loop", _run)
         except RECOVERABLE_ERRORS:
             _facade().logger.exception("employee autonomy dispatch loop failed")
 
@@ -284,25 +268,19 @@ def _register_scheduler_phase_03():
 
                 try:
                     lookback = int(
-                        _facade().os.environ.get(
-                            "MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24"
-                        )
+                        _facade().os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24")
                     )
                 except ValueError:
                     lookback = 24
                 try:
                     min_fail = int(
-                        _facade().os.environ.get(
-                            "MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3"
-                        )
+                        _facade().os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3")
                     )
                 except ValueError:
                     min_fail = 3
                 try:
                     lim = int(
-                        _facade().os.environ.get(
-                            "MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20"
-                        )
+                        _facade().os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20")
                     )
                 except ValueError:
                     lim = 20
@@ -327,9 +305,7 @@ def _register_scheduler_phase_03():
 
     try:
         evolution_minutes = int(
-            _facade().os.environ.get(
-                "MODSTORE_EMPLOYEE_EVOLUTION_INTERVAL_MINUTES", "60"
-            )
+            _facade().os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_INTERVAL_MINUTES", "60")
         )
     except ValueError:
         evolution_minutes = 60
@@ -362,9 +338,7 @@ def _register_scheduler_phase_03():
             _facade().logger.exception("employee health scan loop failed")
 
     try:
-        health_minutes = int(
-            _facade().os.environ.get("MODSTORE_HEALTH_SCAN_INTERVAL_MIN", "30")
-        )
+        health_minutes = int(_facade().os.environ.get("MODSTORE_HEALTH_SCAN_INTERVAL_MIN", "30"))
     except ValueError:
         health_minutes = 30
     _facade()._scheduler.add_job(
@@ -406,9 +380,7 @@ def _register_scheduler_phase_03():
                 misfire_grace_time=_facade()._business_misfire_grace_time(),
                 coalesce=True,
                 max_instances=1,
-                **_facade()._startup_recovery_kwargs(
-                    "boss_daily_im_report", delay_seconds=60
-                ),
+                **_facade()._startup_recovery_kwargs("boss_daily_im_report", delay_seconds=60),
             )
     except RECOVERABLE_ERRORS:
         _facade().logger.exception("register boss daily im report cron failed")

@@ -50,10 +50,7 @@ def _parse_domain_clarify_reply(text: str) -> str:
     }
     if t in exact:
         return exact[t]
-    if (
-        any((x in t for x in ("客户定制", "账号定制", "定制员工", "定制线")))
-        and len(t) <= 24
-    ):
+    if any((x in t for x in ("客户定制", "账号定制", "定制员工", "定制线"))) and len(t) <= 24:
         return "custom"
     if any((x in t for x in ("是平台", "平台问题", "宿主问题"))) and len(t) <= 24:
         return "platform"
@@ -141,9 +138,7 @@ def resolve_triage_lane(intent: str) -> str:
 def _account_word_is_product_defect(text: str) -> bool:
     """「账号」弱信号：同句已描述产品缺陷时归 product_issue，避免硬吞建单。"""
     defect_words = ("产品问题", "功能问题", "缺陷")
-    return _facade()._looks_like_product_issue(text) or any(
-        (w in text for w in defect_words)
-    )
+    return _facade()._looks_like_product_issue(text) or any((w in text for w in defect_words))
 
 
 def wants_ticket_escalation(text: str) -> bool:
@@ -192,9 +187,7 @@ def infer_intent(
     }
     if scene in scene_map:
         return scene_map[scene]
-    complaint_type = str(
-        extracted.get("complaint_type") or ctx.get("complaint_type") or ""
-    ).lower()
+    complaint_type = str(extracted.get("complaint_type") or ctx.get("complaint_type") or "").lower()
     if complaint_type in {"plagiarism", "license", "download", "侵权", "抄袭"}:
         return "catalog_complaint"
     if complaint_type in {"refund", "退款"}:
@@ -256,10 +249,7 @@ def infer_intent(
                 "大模型扩展",
             )
         )
-    ) or (
-        ("模型" in text or "model" in lowered)
-        and ("扩展" in text or "上架" in text or "审核" in text)
-    ):
+    ) or (("模型" in text or "model" in lowered) and ("扩展" in text or "上架" in text or "审核" in text)):
         return "llm_extension"
     return "general"
 
@@ -356,9 +346,7 @@ def _parse_intent_json(
     if not m:
         return None
     conf_m = _facade().re.search('"confidence"\\s*:\\s*([0-9]*\\.?[0-9]+)', chunk)
-    need_m = _facade().re.search(
-        '"need_ticket"\\s*:\\s*(true|false)', chunk, _facade().re.I
-    )
+    need_m = _facade().re.search('"need_ticket"\\s*:\\s*(true|false)', chunk, _facade().re.I)
     return {
         "intent": m.group(1).lower(),
         "need_ticket": need_m.group(1).lower() == "true" if need_m else False,
@@ -412,11 +400,7 @@ def _llm_classify_intent(
             blocks = out["raw"].get("content")
             if isinstance(blocks, list):
                 for b in blocks:
-                    if (
-                        isinstance(b, dict)
-                        and b.get("type") == "text"
-                        and b.get("text")
-                    ):
+                    if isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
                         content = str(b["text"])
                         break
         return _facade()._parse_intent_json(content)
@@ -479,9 +463,7 @@ def ensure_session(
         )
         if row:
             try:
-                prev = (
-                    _facade().json_loads(row.context_json) if row.context_json else {}
-                )
+                prev = _facade().json_loads(row.context_json) if row.context_json else {}
                 if not isinstance(prev, dict):
                     prev = {}
                 merged = {
@@ -532,14 +514,10 @@ def handle_customer_message(
         image_data_url = ""
     if not text and image_data_url:
         text = "[用户补充了图片资料]"
-    session = _facade().ensure_session(
-        db, user=user, session_id=session_id, context=context
-    )
+    session = _facade().ensure_session(db, user=user, session_id=session_id, context=context)
     session.last_message = text
     session.updated_at = _facade().datetime.now(_facade().timezone.utc)
-    ctx_for_store = {
-        k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}
-    }
+    ctx_for_store = {k: v for (k, v) in (context or {}).items() if k not in {"image_data_url"}}
     if image_data_url:
         ctx_for_store["has_image"] = True
     user_payload: _facade().Dict[str, _facade().Any] = {"context": ctx_for_store}
@@ -614,18 +592,13 @@ def handle_customer_message(
     classify_text = text
     prior_issue = ""
     if _facade()._is_escalate_only(text) or (
-        _facade().wants_ticket_escalation(text)
-        and (not _facade()._looks_like_concrete_issue(text))
+        _facade().wants_ticket_escalation(text) and (not _facade()._looks_like_concrete_issue(text))
     ):
-        ctx_reason = str(
-            (context or {}).get("reason") or extracted.get("reason") or ""
-        ).strip()
+        ctx_reason = str((context or {}).get("reason") or extracted.get("reason") or "").strip()
         if ctx_reason and (not _facade()._is_escalate_only(ctx_reason)):
             prior_issue = ctx_reason
         else:
-            prior_issue = _facade()._peek_prior_user_issue(
-                db, session=session, exclude_text=text
-            )
+            prior_issue = _facade()._peek_prior_user_issue(db, session=session, exclude_text=text)
         if prior_issue:
             classify_text = prior_issue
             for k, v in _facade().extract_fields(prior_issue, context).items():
@@ -690,9 +663,7 @@ def handle_customer_message(
                 "reason": "privilege_escalation_refused",
             },
         }
-    classified = _facade().classify_customer_intent(
-        classify_text, extracted, context=context
-    )
+    classified = _facade().classify_customer_intent(classify_text, extracted, context=context)
     intent = str(classified.get("intent") or "general")
     need_ticket = bool(classified.get("need_ticket"))
     if _facade().wants_ticket_escalation(text):
@@ -724,19 +695,12 @@ def handle_customer_message(
     open_ticket = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(
-            _facade().CustomerServiceTicket.status.in_(
-                ["open", "waiting_user", "processing"]
-            )
-        )
+        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
     if open_ticket:
-        if (
-            open_ticket.status == "waiting_user"
-            and intent in _facade().FOLLOWUP_INTENTS
-        ):
+        if open_ticket.status == "waiting_user" and intent in _facade().FOLLOWUP_INTENTS:
             intent = open_ticket.intent or intent
             session.intent = intent
             need_ticket = True
@@ -759,9 +723,7 @@ def handle_customer_message(
                 or (not _facade()._looks_like_concrete_issue(text))
             ):
                 extracted["reason"] = prior_summary[:500]
-                extracted["_issue_summary"] = _facade()._summarize_user_issue(
-                    prior_summary
-                )
+                extracted["_issue_summary"] = _facade()._summarize_user_issue(prior_summary)
     if need_ticket:
         _facade()._enrich_extracted_from_prior_issue(
             db, session=session, text=text, extracted=extracted
@@ -878,9 +840,7 @@ def handle_customer_message(
                 reply = xiaoc_reply
         if ticket and issue_text and (not _facade()._is_escalate_only(issue_text)):
             ticket.summary = issue_text[:2000]
-            ticket.title = _facade().title_for_intent(
-                intent, {**extracted, "reason": issue_text}
-            )
+            ticket.title = _facade().title_for_intent(intent, {**extracted, "reason": issue_text})
             ev = _facade().json_loads(ticket.evidence_json, {})
             if not isinstance(ev, dict):
                 ev = {}
@@ -899,9 +859,7 @@ def handle_customer_message(
                         "type": "domain_clarify",
                         "text": str(extracted.get("user_followup") or text)[:200],
                         "issue_domain": extracted.get("issue_domain"),
-                        "at": _facade()
-                        .datetime.now(_facade().timezone.utc)
-                        .isoformat(),
+                        "at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
                     }
                 )
                 ev["followups"] = followups[-20:]
@@ -1040,11 +998,7 @@ def ensure_ticket(
     existing = (
         db.query(_facade().CustomerServiceTicket)
         .filter(_facade().CustomerServiceTicket.session_id == session.id)
-        .filter(
-            _facade().CustomerServiceTicket.status.in_(
-                ["open", "waiting_user", "processing"]
-            )
-        )
+        .filter(_facade().CustomerServiceTicket.status.in_(["open", "waiting_user", "processing"]))
         .order_by(_facade().CustomerServiceTicket.id.desc())
         .first()
     )
@@ -1136,9 +1090,7 @@ def decide(
     return row
 
 
-def missing_fields(
-    intent: str, extracted: _facade().Dict[str, _facade().Any]
-) -> list[str]:
+def missing_fields(intent: str, extracted: _facade().Dict[str, _facade().Any]) -> list[str]:
     required = {
         "refund": ["order_no", "reason"],
         "catalog_complaint": ["catalog_id", "complaint_type", "reason"],
@@ -1160,9 +1112,7 @@ def humanize_field_names(keys: list[str]) -> list[str]:
     return [labels.get(k, k) for k in keys]
 
 
-def _attach_image_to_ticket(
-    ticket: _facade().CustomerServiceTicket, *, message_id: int
-) -> None:
+def _attach_image_to_ticket(ticket: _facade().CustomerServiceTicket, *, message_id: int) -> None:
     """把用户附图记入工单证据（完整图片在消息 payload，工单侧只留索引）。"""
     evidence = _facade().json_loads(ticket.evidence_json, {})
     if not isinstance(evidence, dict):
@@ -1309,9 +1259,7 @@ def _maybe_dispatch_employee_followup(
             request={"brief": brief[:2000], "intent": intent},
         )
         action.status = "completed" if ok else "failed"
-        action.result_json = _facade().json_dumps(
-            {"ok": ok, "summary": str(out)[:4000]}
-        )
+        action.result_json = _facade().json_dumps({"ok": ok, "summary": str(out)[:4000]})
         action.error = "" if ok else str(out.get("error") or "")[:1000]
         db.flush()
         return action
@@ -1568,9 +1516,7 @@ def _xiaoc_general_reply(
     tips = _facade()._human_kb_tips(kb)
     concrete = _facade()._looks_like_concrete_issue(user_text)
     if concrete:
-        return _facade()._ack_concrete_issue_reply(
-            user_text, hello=hello, ticketed=ticketed
-        )
+        return _facade()._ack_concrete_issue_reply(user_text, hello=hello, ticketed=ticketed)
     if tips:
         body = "；".join(tips)
         return f"我是小C。{hello}{body} 若还要补充，直接说具体场景就行。"
@@ -1599,14 +1545,11 @@ def build_reply(
     if intent == "account_support":
         reply = "我是小C。已记下你的账号/余额问题。请补充最近一次充值或扣费的时间、金额，或钱包页截图；发完后我会继续处理。"
     elif decision.decision == "needs_more_info":
-        reply = (
-            f"我是小C。{intent_cn}已收到。{decision.rationale}直接在对话里补充即可。"
-        )
+        reply = f"我是小C。{intent_cn}已收到。{decision.rationale}直接在对话里补充即可。"
     elif decision.decision == "accepted":
         reply = f"我是小C。你的{intent_cn}已登记，正在跟进处理；还不会结案。可继续补充截图或具体页面，我们会尽快回复。"
     elif intent == "refund" and any(
-        getattr(a, "action_type", "") == "refund.apply"
-        and getattr(a, "status", "") == "failed"
+        getattr(a, "action_type", "") == "refund.apply" and getattr(a, "status", "") == "failed"
         for a in actions
     ):
         reply = "我是小C。退款申请未确认提交成功，不能视为已退款。原工单继续处理中，请保留支付凭证以便核对。"
@@ -1653,9 +1596,7 @@ def build_reply(
         },
     ]
     if actions:
-        cards.append(
-            {"type": "actions", "items": [_facade().action_payload(a) for a in actions]}
-        )
+        cards.append({"type": "actions", "items": [_facade().action_payload(a) for a in actions]})
     return (reply, cards)
 
 
@@ -1726,12 +1667,7 @@ def resolve_issue_domain(
         return _pack("software", "rules_catalog_intent")
     if catalog_id not in (None, "", 0, "0") or pkg_id:
         return _pack("software", "rules_catalog_ref")
-    if any(
-        (
-            x in t
-            for x in ("商品", "这个 mod", "这个Mod", "员工包", "扩展市场", "我买的")
-        )
-    ):
+    if any((x in t for x in ("商品", "这个 mod", "这个Mod", "员工包", "扩展市场", "我买的"))):
         return _pack("software", "rules_software_text")
     llm_d = str(llm_domain or data.get("issue_domain") or "").strip().lower()
     if llm_d in _facade().ISSUE_DOMAINS:
@@ -1768,22 +1704,15 @@ def title_for_intent(intent: str, extracted: _facade().Dict[str, _facade().Any])
         "greeting": "平台客服咨询",
     }
     suffix = (
-        extracted.get("order_no")
-        or extracted.get("catalog_id")
-        or extracted.get("pkg_id")
-        or ""
+        extracted.get("order_no") or extracted.get("catalog_id") or extracted.get("pkg_id") or ""
     )
     if intent == "llm_extension":
-        suffix = (
-            f"{extracted.get('provider') or ''}/{extracted.get('model') or ''}".strip(
-                "/"
-            )
-        )
+        suffix = f"{extracted.get('provider') or ''}/{extracted.get('model') or ''}".strip("/")
     if intent in {"general", "greeting"}:
         issue = str(extracted.get("reason") or extracted.get("_issue_summary") or "")
-        if _facade()._looks_like_product_issue(
+        if _facade()._looks_like_product_issue(issue) or _facade()._looks_like_concrete_issue(
             issue
-        ) or _facade()._looks_like_concrete_issue(issue):
+        ):
             return domain_title.get(domain, "功能问题反馈")
     return f"{labels.get(intent, '平台客服咨询')}{(f' #{suffix}' if suffix else '')}"
 
@@ -1860,9 +1789,7 @@ def _enrich_extracted_from_prior_issue(
         return
     if not _facade().wants_ticket_escalation(text):
         return
-    if _facade()._looks_like_concrete_issue(text) and (
-        not _facade()._is_escalate_only(text)
-    ):
+    if _facade()._looks_like_concrete_issue(text) and (not _facade()._is_escalate_only(text)):
         extracted["reason"] = text[:500]
         extracted["_issue_summary"] = _facade()._summarize_user_issue(text)
         return
@@ -1914,14 +1841,10 @@ from modstore_server.customer_issue_delivery_contract import (
     team_succeeded,
 )
 
-CLOSED_CUSTOMER_ISSUE_STATES = frozenset(
-    {"resolved", "closed", "done", "rejected", "expired"}
-)
+CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected", "expired"})
 
 
-def ticket_lifecycle_stage(
-    status: str | None = None, decision_status: str | None = None
-) -> int:
+def ticket_lifecycle_stage(status: str | None = None, decision_status: str | None = None) -> int:
     """用户侧五阶段：1已收到 → 2处理中 → 3有结果 → 4待补充 → 5已完成。"""
     s = str(status or "").strip().lower()
     d = str(decision_status or "").strip().lower()
@@ -1951,17 +1874,9 @@ def _summarize_incident_team_rows(
     for row in team_rows or []:
         if not isinstance(row, dict):
             continue
-        role = role_cn.get(
-            str(row.get("role") or "").strip(), str(row.get("role") or "执行")
-        )
+        role = role_cn.get(str(row.get("role") or "").strip(), str(row.get("role") or "执行"))
         state = role_progress_state(row)
-        outcome = (
-            "已完成"
-            if state == "completed"
-            else "未完成"
-            if state == "failed"
-            else "处理中"
-        )
+        outcome = "已完成" if state == "completed" else "未完成" if state == "failed" else "处理中"
         outputs = (row.get("handler_outputs") or {}).get("outputs", [])
         details = [
             "；".join(
@@ -2068,9 +1983,7 @@ def apply_customer_ticket_incident_progress(
             "ticket_id": int(ticket.id),
             "team_ok": team_ok,
         }
-    resolution = record_team_progress(
-        ticket, ev, event_id=event_id, rows=rows, team_ok=team_ok
-    )
+    resolution = record_team_progress(ticket, ev, event_id=event_id, rows=rows, team_ok=team_ok)
     # 内部明细（含报错原文）只进 action.result_json 与审计 detail；客户消息/证据只用客服话术。
     progress = _facade()._summarize_incident_team_rows(rows)
     customer_progress = _customer_incident_progress(rows)
@@ -2096,13 +2009,9 @@ def apply_customer_ticket_incident_progress(
             else "继续排查或转人工处理，请保留原工单。"
         )
     )
-    outputs = [
-        o for r in rows for o in (r.get("handler_outputs") or {}).get("outputs") or []
-    ]
+    outputs = [o for r in rows for o in (r.get("handler_outputs") or {}).get("outputs") or []]
     outputs = [o for o in outputs if isinstance(o, dict)]
-    tasks = sorted(
-        {str(o.get("para_task_id") or o.get("task_id") or "") for o in outputs} - {""}
-    )
+    tasks = sorted({str(o.get("para_task_id") or o.get("task_id") or "") for o in outputs} - {""})
     request = {
         "event_id": int(event_id or 0),
         "team_ok": bool(team_ok),
@@ -2111,12 +2020,7 @@ def apply_customer_ticket_incident_progress(
         "tools": sorted({str(o.get("tool_name") or "") for o in outputs} - {""}),
         "executor": executor,
     }
-    tried = [
-        t
-        for o in outputs
-        for t in o.get("codex_models_tried") or []
-        if isinstance(t, dict)
-    ]
+    tried = [t for o in outputs for t in o.get("codex_models_tried") or [] if isinstance(t, dict)]
     if tried:
         # 内部动作记录尝试过的 Codex 模型（不进客户消息）。
         request["codex_models_tried"] = tried[:8]
@@ -2132,9 +2036,7 @@ def apply_customer_ticket_incident_progress(
     )
     action.status, failed = team_action_state(rows, team_ok=team_ok)
     action.request_json = _facade().json_dumps(request)
-    action.result_json = _facade().json_dumps(
-        {"ok": team_ok, **progress_record, **request}
-    )
+    action.result_json = _facade().json_dumps({"ok": team_ok, **progress_record, **request})
     action.error = f"未成功角色：{'、'.join(failed)}" if failed else ""
     db.flush()
     _facade().delivery_policy.apply_ticket_outcome(ticket, team_ok, delivery_managed)
@@ -2170,9 +2072,7 @@ def apply_customer_ticket_incident_progress(
                         "ticket_no": ticket.ticket_no,
                         "status": ticket.status,
                         "intent": ticket.intent,
-                        **_facade().ticket_lifecycle_payload(
-                            ticket.status, ticket.decision_status
-                        ),
+                        **_facade().ticket_lifecycle_payload(ticket.status, ticket.decision_status),
                     }
                 ],
                 "employee_progress": customer_record,
@@ -2211,9 +2111,7 @@ def apply_customer_ticket_incident_progress(
     return {
         "ok": True,
         "ticket_id": int(ticket.id),
-        "lifecycle_stage": _facade().ticket_lifecycle_stage(
-            ticket.status, ticket.decision_status
-        ),
+        "lifecycle_stage": _facade().ticket_lifecycle_stage(ticket.status, ticket.decision_status),
         "lifecycle_label": _facade()
         .ticket_lifecycle_payload(ticket.status, ticket.decision_status)
         .get("lifecycle_label"),
@@ -2244,11 +2142,7 @@ def ticket_lifecycle_payload(
             {
                 "stage": num,
                 "label": name,
-                "state": "done"
-                if num < stage
-                else "current"
-                if num == stage
-                else "todo",
+                "state": "done" if num < stage else "current" if num == stage else "todo",
             }
             for (num, name) in _facade().TICKET_LIFECYCLE_STEPS
         ],
@@ -2267,9 +2161,7 @@ def ticket_payload(
         domain = ""
     expected_completion_at = getattr(row, "expected_completion_at", None)
     if expected_completion_at is not None and expected_completion_at.tzinfo is None:
-        expected_completion_at = expected_completion_at.replace(
-            tzinfo=_facade().timezone.utc
-        )
+        expected_completion_at = expected_completion_at.replace(tzinfo=_facade().timezone.utc)
     return {
         "id": row.id,
         # 管理端必须用稳定的市场用户 ID 把交付工单关联到客户资料。
@@ -2357,13 +2249,11 @@ def customer_issue_payload(row: _facade().CustomerServiceTicket) -> dict[str, An
         "summary": row.summary,
         "status": row.status,
         "state": state,
-        "lifecycle_label": _facade().ticket_lifecycle_payload(
-            row.status, row.decision_status
-        )["lifecycle_label"],
+        "lifecycle_label": _facade().ticket_lifecycle_payload(row.status, row.decision_status)[
+            "lifecycle_label"
+        ],
         "latest_result": (
-            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")}
-            if reports
-            else None
+            {k: reports[-1].get(k) for k in ("team_ok", "progress", "at")} if reports else None
         ),
         "last_error": str(resolution.get("last_error") or ""),
         "closed_at": row.closed_at.isoformat() if row.closed_at else "",

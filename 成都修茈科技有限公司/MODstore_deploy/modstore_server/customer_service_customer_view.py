@@ -74,9 +74,7 @@ def customer_ticket(ticket: Any) -> dict[str, Any]:
 def customer_actions(actions: Any) -> list[dict[str, Any]]:
     out = []
     for row in actions if isinstance(actions, list) else []:
-        kind = (
-            str((row or {}).get("action_type") or "") if isinstance(row, dict) else ""
-        )
+        kind = str((row or {}).get("action_type") or "") if isinstance(row, dict) else ""
         if kind in BUSINESS_ACTIONS:
             out.append(_pick(row, ("id", "action_type", "status", "created_at")))
         elif kind == "employee.dispatch":

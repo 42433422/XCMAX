@@ -126,9 +126,9 @@ async def run_pack_domain_smoke(
                 out["output_json_keys"] = []
         out["ok"] = bool(ok and out.get("output_exists"))
         if not out["ok"]:
-            out["error"] = str(
-                inner.get("error") or inner.get("summary") or "domain smoke failed"
-            )[:500]
+            out["error"] = str(inner.get("error") or inner.get("summary") or "domain smoke failed")[
+                :500
+            ]
         return out
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
         out["error"] = str(exc)[:800]

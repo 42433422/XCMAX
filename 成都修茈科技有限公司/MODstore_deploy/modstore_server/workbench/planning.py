@@ -23,17 +23,12 @@ class PlanningPorts:
     chat: Callable[..., Awaitable[dict[str, Any]]]
 
 
-def _script_workflow_brief(
-    payload: Dict[str, Any], files: List[Dict[str, Any]]
-) -> Dict[str, Any]:
+def _script_workflow_brief(payload: Dict[str, Any], files: List[Dict[str, Any]]) -> Dict[str, Any]:
     brief = (payload.get("brief") or "").strip()
     filenames = [str((f or {}).get("filename") or "upload.bin") for f in files or []]
     return {
         "goal": brief,
-        "inputs": [
-            {"filename": name, "description": "工作台上传样本文件"}
-            for name in filenames
-        ],
+        "inputs": [{"filename": name, "description": "工作台上传样本文件"} for name in filenames],
         "outputs": "生成处理后的结果文件到 outputs/，用于下载和沙箱复核",
         "acceptance": "脚本运行成功，outputs/ 至少生成一个结果文件",
         "fallback": "",
@@ -52,9 +47,7 @@ def _strip_json_fence(text: str) -> str:
     return t.strip()
 
 
-def _fallback_employee_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def _fallback_employee_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from modstore_server.csv_tabular_runtime import (
         is_csv_full_read,
         is_csv_generate,
@@ -89,9 +82,7 @@ def _fallback_employee_orchestration_plan(
     )
 
     routing_brief = extract_routing_brief(
-        cast(dict[str, Any], payload)
-        if isinstance(payload, dict)
-        else {"brief": brief},
+        cast(dict[str, Any], payload) if isinstance(payload, dict) else {"brief": brief},
         fallback=brief,
     )
     if is_csv_full_read(routing_brief) or is_csv_generate(routing_brief):
@@ -116,9 +107,7 @@ def _fallback_employee_orchestration_plan(
     doc_hint = ""
     if isinstance(source_docs, list) and source_docs:
         names = [
-            str((x or {}).get("name") or "").strip()
-            for x in source_docs
-            if isinstance(x, dict)
+            str((x or {}).get("name") or "").strip() for x in source_docs if isinstance(x, dict)
         ]
         doc_hint = "参考资料：" + "、".join([n for n in names if n][:8])
     merged = "\n".join(
@@ -132,9 +121,7 @@ def _fallback_employee_orchestration_plan(
             if x
         )
     ).strip()
-    short = (
-        compact_routing_brief(routing_brief, max_len=40) or "员工助手"
-    ).strip() or "员工助手"
+    short = (compact_routing_brief(routing_brief, max_len=40) or "员工助手").strip() or "员工助手"
     bl = (routing_brief or "").lower()
     is_word_extract = any(
         (k in bl for k in ("word", "docx", "doc", "txt", "文本", "文档"))
@@ -160,8 +147,7 @@ def _fallback_employee_orchestration_plan(
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": script_runtime,
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": workflow_brief,
         "acceptance": [
             "员工包可安装并能解释自己的职责",
@@ -180,9 +166,7 @@ def _planning_record(payload: Dict[str, Any]) -> Dict[str, Any]:
         "brief": (payload.get("brief") or "").strip(),
         "plan_notes": (payload.get("plan_notes") or "").strip(),
         "messages": cast(list[Any], messages) if isinstance(messages, list) else [],
-        "execution_checklist": cast(list[Any], checklist)
-        if isinstance(checklist, list)
-        else [],
+        "execution_checklist": cast(list[Any], checklist) if isinstance(checklist, list) else [],
         "source_documents": cast(list[Any], docs) if isinstance(docs, list) else [],
         "created_at": datetime.now(timezone.utc).isoformat() + "Z",
     }
@@ -246,12 +230,8 @@ async def _build_employee_orchestration_plan(
     docs = payload.get("source_documents")
     planning_context = {
         "brief": routing_brief,
-        "execution_checklist": cast(list[Any], checklist)
-        if isinstance(checklist, list)
-        else [],
-        "planning_messages": cast(list[Any], messages)
-        if isinstance(messages, list)
-        else [],
+        "execution_checklist": cast(list[Any], checklist) if isinstance(checklist, list) else [],
+        "planning_messages": cast(list[Any], messages) if isinstance(messages, list) else [],
         "source_documents": cast(list[Any], docs) if isinstance(docs, list) else [],
     }
     sys_prompt = "你是 XCAGI「做员工」一站式编排规划器。只输出 JSON 对象，不要 markdown。\n你要把同一个用户需求拆成三份互相一致的 brief：\n1 employee_brief：给员工包生成器，描述角色、边界、输出格式。\n2 script_brief：给 Python 脚本工作流生成器，描述如何读取 inputs/、写 outputs/，没有输入也能空跑生成说明文件。\n3 workflow_brief：给画布 Skill 组生成器，描述多步自动化流程。\n字段必须包含：employee_name, employee_brief, script_workflow_name, script_brief, script_runtime_notes, workflow_name, workflow_brief, acceptance。\nscript_brief 必须明确：只能读 inputs/、只能写 outputs/；如需遍历文件，用 os.walk('inputs')；输出 Markdown 或 JSON 结果文件。\n若需求是 Word 全量提取（段落/表格/图片/样式/元数据），employee_brief 必须要求 direct_python + document_full.json，script_brief 必须要求 python-docx/zipfile 解析，workflow_brief 必须包含上传→解析→校验→交付步骤。\n不要让脚本读取真实磁盘绝对路径，不要要求联网。"
@@ -303,9 +283,7 @@ async def _build_employee_orchestration_plan(
 async def _resolve_default_llm_for_pipeline(db: Any, user_id: int) -> tuple:
     from modstore_server.llm_api import resolve_default_llm_route
 
-    _LOG.debug(
-        "pipeline: provider/model missing, resolving default for user=%s", user_id
-    )
+    _LOG.debug("pipeline: provider/model missing, resolving default for user=%s", user_id)
     try:
         resolved = await resolve_default_llm_route(db, user_id)
         rp = str(resolved.get("provider") or "").strip() or None

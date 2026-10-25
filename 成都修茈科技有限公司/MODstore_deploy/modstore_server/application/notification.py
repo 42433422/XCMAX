@@ -87,9 +87,7 @@ class NotificationApplicationService:
         kind: str | None = None,
         limit: int = 50,
     ) -> list[Notification]:
-        return self._repo.list_for_user(
-            user_id, unread_only=unread_only, kind=kind, limit=limit
-        )
+        return self._repo.list_for_user(user_id, unread_only=unread_only, kind=kind, limit=limit)
 
     def count_unread(self, user_id: int) -> int:
         return self._repo.count_unread(user_id)

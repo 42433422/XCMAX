@@ -45,9 +45,7 @@ def execute_digest_line_work_units(
     _work_units_to_subtasks = facade._work_units_to_subtasks
     _resolve_user_id = facade._resolve_user_id
     _platform_bench_override = facade._platform_bench_override
-    _mark_local_verified_action_items_merged = (
-        facade._mark_local_verified_action_items_merged
-    )
+    _mark_local_verified_action_items_merged = facade._mark_local_verified_action_items_merged
     logger = facade.logger
 
     if not _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ENABLED", "1"):
@@ -209,9 +207,7 @@ def execute_digest_line_work_units(
                 min(
                     int(
                         max_concurrency
-                        or os.environ.get(
-                            "MODSTORE_DAILY_VIBE_EXECUTE_CONCURRENCY", "2"
-                        )
+                        or os.environ.get("MODSTORE_DAILY_VIBE_EXECUTE_CONCURRENCY", "2")
                     ),
                     8,
                 ),
@@ -219,9 +215,7 @@ def execute_digest_line_work_units(
         except ValueError:
             conc = 2
         if allow_high_risk_real_run is None:
-            allow_high_risk = _env_bool(
-                "MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK", "0"
-            )
+            allow_high_risk = _env_bool("MODSTORE_DAILY_VIBE_EXECUTE_ALLOW_HIGH_RISK", "0")
         else:
             allow_high_risk = bool(allow_high_risk_real_run)
 
@@ -248,8 +242,7 @@ def execute_digest_line_work_units(
         remote_results = list(remote_out.get("results") or [])
         all_results = [*local_results, *remote_results]
         dispatch_out = {
-            "ok": bool(remote_out.get("ok"))
-            and all(bool(r.get("ok")) for r in local_results),
+            "ok": bool(remote_out.get("ok")) and all(bool(r.get("ok")) for r in local_results),
             "results": all_results,
             "handoff_chain": remote_out.get("handoff_chain") or [],
             "local_verified_count": len(local_units),
@@ -273,9 +266,7 @@ def execute_digest_line_work_units(
                 "results_count": len(dispatch_out.get("results") or []),
                 "handoff_chain": dispatch_out.get("handoff_chain") or [],
                 "local_verified_count": dispatch_out.get("local_verified_count", 0),
-                "remote_dispatched_count": dispatch_out.get(
-                    "remote_dispatched_count", 0
-                ),
+                "remote_dispatched_count": dispatch_out.get("remote_dispatched_count", 0),
                 "local_results": local_results,
             },
             "started_at": started_at,
@@ -309,16 +300,14 @@ def execute_digest_line_work_units(
                         record_id,
                     )
             except RECOVERABLE_ERRORS:
-                logger.exception(
-                    "action_items dispatch writeback failed record_id=%s", record_id
-                )
+                logger.exception("action_items dispatch writeback failed record_id=%s", record_id)
             try:
                 from modstore_server.strategic_layer.digest_strategic_bridge import (
                     sync_record_after_status_writeback,
                 )
 
-                run_payload["strategic_action_bridge"] = (
-                    sync_record_after_status_writeback(record_id=int(record_id))
+                run_payload["strategic_action_bridge"] = sync_record_after_status_writeback(
+                    record_id=int(record_id)
                 )
             except RECOVERABLE_ERRORS:
                 logger.exception(

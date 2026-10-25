@@ -20,9 +20,7 @@ from modstore_server.db.db_base import Base
 class UpdateInstallationReceipt(Base):
     __tablename__ = "update_installation_receipts"
     __table_args__ = (
-        UniqueConstraint(
-            "idempotency_key", name="uq_update_install_receipt_idempotency"
-        ),
+        UniqueConstraint("idempotency_key", name="uq_update_install_receipt_idempotency"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -38,9 +36,7 @@ class UpdateInstallationReceipt(Base):
     status = Column(String(32), default="installed", nullable=False, index=True)
     error = Column(Text, default="", nullable=False)
     source = Column(String(32), default="desktop_ota", nullable=False)
-    reported_at = Column(
-        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
-    )
+    reported_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
     updated_at = Column(
         DateTime,
@@ -60,19 +56,13 @@ class AssetInstallCommand(Base):
 
     __tablename__ = "asset_install_commands"
     __table_args__ = (
-        UniqueConstraint(
-            "idempotency_key", name="uq_asset_install_command_idempotency"
-        ),
+        UniqueConstraint("idempotency_key", name="uq_asset_install_command_idempotency"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    purchase_id = Column(
-        Integer, ForeignKey("purchases.id"), nullable=False, index=True
-    )
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    purchase_id = Column(Integer, ForeignKey("purchases.id"), nullable=False, index=True)
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     installation_id = Column(String(64), default="*", nullable=False, index=True)
     idempotency_key = Column(String(192), nullable=False, index=True)
     source = Column(String(32), default="user_click", nullable=False, index=True)
@@ -83,9 +73,7 @@ class AssetInstallCommand(Base):
     error = Column(Text, default="", nullable=False)
     claimed_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)
     updated_at = Column(
         DateTime,
         default=lambda: datetime.now(UTC),
@@ -97,9 +85,7 @@ class AssetInstallCommand(Base):
 class CommerceAdminAction(Base):
     __tablename__ = "commerce_admin_actions"
     __table_args__ = (
-        UniqueConstraint(
-            "idempotency_key", name="uq_commerce_admin_action_idempotency"
-        ),
+        UniqueConstraint("idempotency_key", name="uq_commerce_admin_action_idempotency"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -112,6 +98,4 @@ class CommerceAdminAction(Base):
     reason = Column(Text, default="", nullable=False)
     before_json = Column(Text, default="{}", nullable=False)
     after_json = Column(Text, default="{}", nullable=False)
-    created_at = Column(
-        DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True
-    )
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False, index=True)

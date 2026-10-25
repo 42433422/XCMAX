@@ -47,9 +47,7 @@ from modstore_server.surface_audit_services import SurfaceServices, wait_for_hea
 def _spawn(
     name: str, cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None
 ) -> dict[str, Any]:
-    return SurfaceProcessLauncher(_pids_dir(), _logs_dir()).spawn(
-        name, cmd, cwd=cwd, env=env
-    )
+    return SurfaceProcessLauncher(_pids_dir(), _logs_dir()).spawn(name, cmd, cwd=cwd, env=env)
 
 
 def _wait_http(url: str, *, label: str, tries: int = 45) -> bool:

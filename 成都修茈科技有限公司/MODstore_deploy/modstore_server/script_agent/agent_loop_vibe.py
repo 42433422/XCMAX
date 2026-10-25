@@ -91,9 +91,7 @@ async def run_vibe_agent_loop(
                 model=model,
             )
     except VibeIntegrationError as exc:
-        outcome = _facade().AgentLoopOutcome(
-            ok=False, iterations=0, error=str(exc), trace=trace
-        )
+        outcome = _facade().AgentLoopOutcome(ok=False, iterations=0, error=str(exc), trace=trace)
         yield _facade().AgentEvent(
             "error",
             0,
@@ -132,8 +130,7 @@ async def run_vibe_agent_loop(
                     "stderr": last_failure.get("stderr") or "",
                     "stdout": last_failure.get("stdout") or "",
                     "verdict_reason": last_failure.get("verdict_reason") or "",
-                    "verdict_suggestions": last_failure.get("verdict_suggestions")
-                    or [],
+                    "verdict_suggestions": last_failure.get("verdict_suggestions") or [],
                 }
                 skill = await asyncio.to_thread(
                     coder.code_factory.repair,
@@ -142,9 +139,7 @@ async def run_vibe_agent_loop(
                 )
                 phase_label = "repair"
         except RECOVERABLE_ERRORS as exc:
-            yield _facade().AgentEvent(
-                "error", i, {"reason": f"vibe {phase_label} failed: {exc}"}
-            )
+            yield _facade().AgentEvent("error", i, {"reason": f"vibe {phase_label} failed: {exc}"})
             final_outcome.error = f"vibe {phase_label}: {exc}"
             yield _facade().AgentEvent(
                 "error", i, {"outcome": _facade()._outcome_dict(final_outcome)}
@@ -164,9 +159,7 @@ async def run_vibe_agent_loop(
             return
         last_skill = skill
         skill_id_hint = getattr(skill, "skill_id", None) or skill_id_hint
-        yield _facade().AgentEvent(
-            phase_label, i, {"code": code, "skill_id": skill_id_hint}
-        )
+        yield _facade().AgentEvent(phase_label, i, {"code": code, "skill_id": skill_id_hint})
         trace.append(
             {
                 "phase": phase_label,
@@ -177,9 +170,7 @@ async def run_vibe_agent_loop(
             }
         )
         static_errors = _facade().validate_script(code)
-        yield _facade().AgentEvent(
-            "check", i, {"ok": not static_errors, "errors": static_errors}
-        )
+        yield _facade().AgentEvent("check", i, {"ok": not static_errors, "errors": static_errors})
         trace.append(
             {
                 "phase": "check",
@@ -247,9 +238,7 @@ async def run_vibe_agent_loop(
                 result.outputs = fallback_outputs
                 result.timed_out = False
                 result.returncode = 0
-                result.stdout = (
-                    result.stdout + "\n已生成 outputs/summary.md（超时兜底）"
-                ).strip()
+                result.stdout = (result.stdout + "\n已生成 outputs/summary.md（超时兜底）").strip()
                 final_outcome.last_result = result
                 final_outcome.ok = True
                 final_outcome.final_code = code
@@ -322,9 +311,7 @@ async def run_vibe_agent_loop(
             "verdict_suggestions": verdict.suggestions,
         }
     final_outcome.error = "vibe agent 已达最大迭代轮数仍未通过验收"
-    final_outcome.final_code = (
-        getattr(last_skill, "code", "") or "" if last_skill else ""
-    )
+    final_outcome.final_code = getattr(last_skill, "code", "") or "" if last_skill else ""
     yield _facade().AgentEvent(
         "error",
         max_iterations - 1,

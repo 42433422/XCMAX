@@ -396,9 +396,7 @@ def api_get_report(
     sf = get_session_factory()
     with sf() as session:
         report = (
-            session.query(ReconciliationReport)
-            .filter(ReconciliationReport.id == report_id)
-            .first()
+            session.query(ReconciliationReport).filter(ReconciliationReport.id == report_id).first()
         )
         if not report:
             raise HTTPException(404, "对账报告不存在")
@@ -414,9 +412,7 @@ def api_get_report(
         for o in all_orders:
             raw_ts = o.get("paid_at") or o.get("created_at") or ""
             try:
-                ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
+                ts = datetime.fromisoformat(str(raw_ts).replace("Z", "+00:00")).replace(tzinfo=None)
             except RECOVERABLE_ERRORS:
                 continue
             if period_start <= ts < period_end:
@@ -473,9 +469,7 @@ def api_confirm_report(
     sf = get_session_factory()
     with sf() as session:
         report = (
-            session.query(ReconciliationReport)
-            .filter(ReconciliationReport.id == report_id)
-            .first()
+            session.query(ReconciliationReport).filter(ReconciliationReport.id == report_id).first()
         )
         if not report:
             raise HTTPException(404, "对账报告不存在")

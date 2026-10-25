@@ -18,7 +18,9 @@ def upgrade() -> None:
         return
     columns = {str(row["name"]) for row in inspector.get_columns(_TABLE)}
     if "expected_completion_at" not in columns:
-        op.add_column(_TABLE, sa.Column("expected_completion_at", sa.DateTime(), nullable=True))
+        op.add_column(
+            _TABLE, sa.Column("expected_completion_at", sa.DateTime(), nullable=True)
+        )
 
 
 def downgrade() -> None:

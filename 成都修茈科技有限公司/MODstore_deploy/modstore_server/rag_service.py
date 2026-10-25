@@ -112,9 +112,7 @@ def visible_collection_ids(
     for row in owned_q.all():
         candidates[int(row.id)] = row
 
-    grant_rows = (
-        session.query(KnowledgeMembership).filter(_or_grantee_filter(identities)).all()
-    )
+    grant_rows = session.query(KnowledgeMembership).filter(_or_grantee_filter(identities)).all()
     if grant_rows:
         granted_ids = []
         allowed_grants: Dict[int, str] = {}
@@ -123,9 +121,7 @@ def visible_collection_ids(
             granted_ids.append(cid)
             allowed_grants[cid] = (g.permission or "read").lower()
         for row in (
-            session.query(KnowledgeCollection)
-            .filter(KnowledgeCollection.id.in_(granted_ids))
-            .all()
+            session.query(KnowledgeCollection).filter(KnowledgeCollection.id.in_(granted_ids)).all()
         ):
             cid = int(row.id)
             if write_only:
@@ -316,9 +312,7 @@ async def retrieve(
     chunks.sort(key=lambda c: c.distance)
     chunks = chunks[:n]
 
-    retrieval_mode = (
-        (os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector").strip().lower()
-    )
+    retrieval_mode = (os.environ.get("MODSTORE_RAG_RETRIEVAL_MODE") or "vector").strip().lower()
     if retrieval_mode == "hybrid":
         try:
             from modstore_server.hybrid_retriever import get_hybrid_retriever
@@ -327,9 +321,7 @@ async def retrieve(
             retriever = get_hybrid_retriever()
             chunks = retriever.fuse(chunks, q, corpus=corpus, final_top_k=n)
         except RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "rag_service.retrieve: hybrid fusion failed, using vector: %s", exc
-            )
+            logger.warning("rag_service.retrieve: hybrid fusion failed, using vector: %s", exc)
 
     chunks = _maybe_rerank(q, chunks)
     return chunks
@@ -348,8 +340,7 @@ def _maybe_rerank(query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChu
     except BOUNDARY_ERRORS:  # noqa: BLE001
         return chunks
     model_name = (
-        os.environ.get("MODSTORE_RAG_RERANK_MODEL")
-        or "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        os.environ.get("MODSTORE_RAG_RERANK_MODEL") or "cross-encoder/ms-marco-MiniLM-L-6-v2"
     ).strip()
     try:
         ce = CrossEncoder(model_name)
@@ -418,9 +409,7 @@ def inject_rag_into_messages(
     )
     if sys_idx >= 0:
         existing = out[sys_idx].get("content") or ""
-        out[sys_idx]["content"] = (
-            f"{existing}\n\n{suffix}" if existing.strip() else suffix
-        )
+        out[sys_idx]["content"] = f"{existing}\n\n{suffix}" if existing.strip() else suffix
     else:
         out.insert(0, {"role": "system", "content": suffix})
     return out

@@ -49,7 +49,8 @@ def test_production_line_mutations_require_admin_and_ignore_body_identity() -> N
     step = SimpleNamespace(step_id="P1", status=SimpleNamespace(value="approved"))
     approve = AsyncMock(return_value=step)
     with patch(
-        "modstore_server.production_line_orchestrator.approve_production_line_step", approve
+        "modstore_server.production_line_orchestrator.approve_production_line_step",
+        approve,
     ):
         r = client.post(
             "/api/admin/production-line/steps/P1/approve",
@@ -319,7 +320,9 @@ def _host_auth(request, x_user_id=None):
 
 @pytest.mark.parametrize("kind", ["employee_pack", "mod_suite"])
 def test_generated_employee_run_routes_require_host_login(monkeypatch, tmp_path, kind) -> None:
-    from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+    from modstore_server.employee_pack_blueprints_template import (
+        render_employee_pack_blueprints_py,
+    )
     from modstore_server.mod_suite_blueprints_template import render_suite_blueprints_py
 
     if kind == "employee_pack":

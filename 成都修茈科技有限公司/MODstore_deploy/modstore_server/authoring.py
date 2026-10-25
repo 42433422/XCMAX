@@ -5,9 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 
-def slim_openapi_paths(
-    spec: Dict[str, Any], *, max_items: int = 1000
-) -> List[Dict[str, Any]]:
+def slim_openapi_paths(spec: Dict[str, Any], *, max_items: int = 1000) -> List[Dict[str, Any]]:
     paths = spec.get("paths")
     if not isinstance(paths, dict):
         return []
@@ -21,8 +19,7 @@ def slim_openapi_paths(
             m.upper()
             for m in ops
             if isinstance(m, str)
-            and m.lower()
-            in ("get", "post", "put", "delete", "patch", "head", "options")
+            and m.lower() in ("get", "post", "put", "delete", "patch", "head", "options")
         ]
         if methods:
             out.append({"path": path, "methods": sorted(set(methods))})

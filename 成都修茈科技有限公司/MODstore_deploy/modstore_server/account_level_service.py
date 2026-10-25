@@ -93,9 +93,7 @@ def build_level_profile(experience: int | None) -> LevelProfile:
     for idx, row in enumerate(LEVEL_THRESHOLDS):
         if exp >= row[1]:
             current = row
-            next_threshold = (
-                LEVEL_THRESHOLDS[idx + 1] if idx + 1 < len(LEVEL_THRESHOLDS) else None
-            )
+            next_threshold = LEVEL_THRESHOLDS[idx + 1] if idx + 1 < len(LEVEL_THRESHOLDS) else None
         else:
             break
 

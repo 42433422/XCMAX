@@ -146,12 +146,16 @@ async def main() -> int:
     async def _execute_once(current_pack_dir: Path) -> dict:
         backend = current_pack_dir / "backend"
         for key in list(sys.modules):
-            if key == "taiyangniao_attendance" or key.startswith("taiyangniao_attendance."):
+            if key == "taiyangniao_attendance" or key.startswith(
+                "taiyangniao_attendance."
+            ):
                 sys.modules.pop(key, None)
         if str(backend) not in sys.path:
             sys.path.insert(0, str(backend))
         employee_path = backend / "employees" / "taiyangniao_attendance.py"
-        spec = importlib.util.spec_from_file_location("smoke_taiyangniao_employee", employee_path)
+        spec = importlib.util.spec_from_file_location(
+            "smoke_taiyangniao_employee", employee_path
+        )
         if spec is None or spec.loader is None:
             raise RuntimeError(f"cannot load {employee_path}")
         mod = importlib.util.module_from_spec(spec)
@@ -165,7 +169,10 @@ async def main() -> int:
         sf2 = models.get_session_factory()
         db2 = sf2()
         try:
-            u2 = db2.query(User).filter(User.username == "admin").first() or db2.query(User).first()
+            u2 = (
+                db2.query(User).filter(User.username == "admin").first()
+                or db2.query(User).first()
+            )
             api_key, _ = resolve_api_key(db2, u2.id, provider)  # type: ignore[union-attr]
             if not api_key:
                 return None, {"warning": f"{provider} missing api key"}
@@ -237,7 +244,9 @@ async def main() -> int:
         payload["workspace_root"] = str(pack_dir)
         result = await _execute_once(pack_dir)
 
-    output_path = Path(str(((result.get("items") or [{}])[0] or {}).get("output_path") or ""))
+    output_path = Path(
+        str(((result.get("items") or [{}])[0] or {}).get("output_path") or "")
+    )
     xcemp_path = pack_dir / "taiyangniao-attendance-employee.xcemp"
     try:
         with zipfile.ZipFile(io.BytesIO(raw_zip), "r"):
@@ -256,7 +265,9 @@ async def main() -> int:
             "id": manifest.get("id"),
             "name": manifest.get("name"),
             "handlers": (
-                ((manifest.get("employee_config_v2") or {}).get("actions") or {}).get("handlers")
+                ((manifest.get("employee_config_v2") or {}).get("actions") or {}).get(
+                    "handlers"
+                )
             ),
             "direct_python": (
                 ((manifest.get("employee_config_v2") or {}).get("actions") or {}).get(

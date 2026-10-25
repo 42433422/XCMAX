@@ -23,11 +23,7 @@ def _object(value: Any) -> dict:
 
 
 def _rows(value: Any) -> list[dict]:
-    return (
-        [row for row in value if isinstance(row, dict)]
-        if isinstance(value, list)
-        else []
-    )
+    return [row for row in value if isinstance(row, dict)] if isinstance(value, list) else []
 
 
 def _current_claim(db, ticket, resolution):
@@ -78,8 +74,7 @@ def _receipts(claim: dict) -> list[dict]:
                     "task_id": task_id,
                     "accepted": output.get("accepted") is True and bool(task_id),
                     "completed": execution_succeeded(output),
-                    "requires_reconciliation": output.get("requires_reconciliation")
-                    is True,
+                    "requires_reconciliation": output.get("requires_reconciliation") is True,
                     "updated_at": output.get("updated_at"),
                 }
             )
@@ -103,16 +98,13 @@ def _receipts(claim: dict) -> list[dict]:
                 and receipt.get("accepted") is True
                 and bool(task_id),
                 "completed": state == "completed" and receipt.get("completed") is True,
-                "requires_reconciliation": receipt.get("requires_reconciliation")
-                is True,
+                "requires_reconciliation": receipt.get("requires_reconciliation") is True,
                 "updated_at": receipt.get("updated_at"),
             }
         )
     return [
         {
-            key: value
-            if isinstance(value, bool) or value is None
-            else _reader_text(value, 160)
+            key: value if isinstance(value, bool) or value is None else _reader_text(value, 160)
             for key, value in receipt.items()
         }
         for receipt in receipts
@@ -138,15 +130,12 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
     if ticket.status in {"resolved", "closed", "expired"}:
         return "none", "原单已结束；如问题复现，由客户从原单重开", "none"
     if any(
-        row.get("requires_reconciliation")
-        or row.get("state") in {"unknown", "dispatching"}
+        row.get("requires_reconciliation") or row.get("state") in {"unknown", "dispatching"}
         for row in receipts
     ):
         return "reconcile_task", "查询已有任务回执，确认结果后继续", "task_receipt"
     if any(
-        row.get("kind") == "escalation"
-        and row.get("accepted")
-        and not row.get("completed")
+        row.get("kind") == "escalation" and row.get("accepted") and not row.get("completed")
         for row in receipts
     ):
         return (
@@ -173,11 +162,7 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
         and team_action_state(rows)[0] == "pending"
     )
     failed = next(
-        (
-            row
-            for row in rows
-            if role_progress_state(row) in {"failed", "manual_review"}
-        ),
+        (row for row in rows if role_progress_state(row) in {"failed", "manual_review"}),
         None,
     )
     if failed or (
@@ -252,16 +237,12 @@ def ticket_execution_overview(db, ticket) -> dict:
         claim_verified=event_id is not None and bool(claim_rows),
     )
     current = next((row for row in rows if row.get("ok") is not True), {})
-    assignee = (
-        db.get(User, ticket.assigned_admin_id) if ticket.assigned_admin_id else None
-    )
+    assignee = db.get(User, ticket.assigned_admin_id) if ticket.assigned_admin_id else None
     accepted_review = next(
         (
             r
             for r in receipts
-            if r.get("kind") == "escalation"
-            and r.get("accepted")
-            and not r.get("completed")
+            if r.get("kind") == "escalation" and r.get("accepted") and not r.get("completed")
         ),
         {},
     )

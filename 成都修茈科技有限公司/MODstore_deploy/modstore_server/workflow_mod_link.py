@@ -75,9 +75,7 @@ def append_workflow_link_to_manifest(
                 existing_ids.add(eid)
             wid = it.get("workflow_id")
             if wid is not None and int(wid) == int(body.workflow_id):
-                raise ValueError(
-                    f"该 Mod 已关联 workflow_id={body.workflow_id}，请勿重复添加"
-                )
+                raise ValueError(f"该 Mod 已关联 workflow_id={body.workflow_id}，请勿重复添加")
 
     emp_id = (body.id or "").strip()
     if emp_id:
@@ -158,10 +156,7 @@ def merge_workflow_id_into_existing_entry(
         new_entry["label"] = (body.label or "").strip()
     elif not str(new_entry.get("label") or "").strip():
         new_entry["label"] = wn
-    if (
-        not str(new_entry.get("panel_title") or "").strip()
-        and (body.panel_title or "").strip()
-    ):
+    if not str(new_entry.get("panel_title") or "").strip() and (body.panel_title or "").strip():
         new_entry["panel_title"] = (body.panel_title or "").strip()
     elif not str(new_entry.get("panel_title") or "").strip():
         new_entry["panel_title"] = str(new_entry.get("label") or wn)

@@ -49,7 +49,9 @@ def _build_pack(spec: dict) -> tuple[Path, bytes, dict, dict]:
     build_rule = getattr(tx, spec["build_rule"])
     convert_fn = getattr(tx, spec["convert"])
     rule_spec = build_rule(brief)
-    manifest = _normalize_manifest(_fallback_manifest(brief, rule_spec), brief, rule_spec)
+    manifest = _normalize_manifest(
+        _fallback_manifest(brief, rule_spec), brief, rule_spec
+    )
     manifest["id"] = spec["pack_id"]
     manifest["name"] = manifest.get("name") or spec["pack_id"]
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
@@ -69,7 +71,9 @@ def main() -> int:
     parser.add_argument(
         "--publish", action="store_true", help="Write to catalog_store + catalog_items"
     )
-    parser.add_argument("--public", action="store_true", help="Set is_public=true on catalog rows")
+    parser.add_argument(
+        "--public", action="store_true", help="Set is_public=true on catalog rows"
+    )
     args = parser.parse_args()
 
     from modstore_server.mod_scaffold_runner import import_zip, modstore_library_path
@@ -90,8 +94,12 @@ def main() -> int:
             continue
 
         from modstore_server.catalog_store import append_package
-        from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
-        from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+        from modstore_server.catalog_sync import (
+            upsert_catalog_item_from_xc_package_dict,
+        )
+        from modstore_server.employee_asset_pipeline import (
+            mirror_catalog_file_to_market_files,
+        )
         from modstore_server.models import CatalogItem, get_session_factory
 
         pid = spec["pack_id"]

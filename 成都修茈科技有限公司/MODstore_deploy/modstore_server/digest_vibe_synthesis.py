@@ -42,19 +42,13 @@ def _build_llm_user_content(
             format_evolution_signals_for_prompt,
         )
 
-        evolution_block = format_evolution_signals_for_prompt(
-            collect_evolution_signals()
-        )
+        evolution_block = format_evolution_signals_for_prompt(collect_evolution_signals())
     except RECOVERABLE_ERRORS:
-        _facade().logger.debug(
-            "digest_vibe_prep: evolution signals unavailable", exc_info=True
-        )
+        _facade().logger.debug("digest_vibe_prep: evolution signals unavailable", exc_info=True)
     return f"模式：{mode}\n摘要日期：{digest_day}\n摘要主题：{digest_subject}\n基线版本：{ver.get('base_version') or '（待写入）'}\n更新清单版本：{ver.get('updates_version') or ''}\n补丁清单版本：{ver.get('patches_version') or ''}\n\n## 进化事实信号（优先于截图）\n{evolution_block}\n\n## 每日摘要正文节选\n{digest_excerpt or '（无）'}\n\n## 员工大会摘要节选\n{meeting_excerpt or '（无）'}\n\n## 三端页面截图巡检节选（辅助 · P-W 网站 · P-S 软件 · P-App 移动）\n{surface_audit_excerpt or '（无）'}\n\n## 员工快照 JSON（{len(employees)} 人）\n```json\n{emp_json}\n```"
 
 
-async def _synthesize_vibe_markdowns(
-    *, user_content: str, user_id: int
-) -> Dict[str, Any]:
+async def _synthesize_vibe_markdowns(*, user_content: str, user_id: int) -> Dict[str, Any]:
     bench_prov, bench_mdl = _facade().resolve_platform_bench_llm()
     if not bench_prov or not bench_mdl:
         return {
@@ -178,9 +172,7 @@ async def build_digest_vibe_prep(
             _facade().logger.debug("digest_vibe_prep progress cb failed: %s", exc)
 
     pairs = _facade()._resolve_employee_pairs(employee_ids, max_employees=cap)
-    await _emit(
-        {"stage": "prepare", "total": len(pairs), "completed": 0, "mode": mode_norm}
-    )
+    await _emit({"stage": "prepare", "total": len(pairs), "completed": 0, "mode": mode_norm})
     if not pairs:
         return {
             "ok": False,
@@ -195,9 +187,7 @@ async def build_digest_vibe_prep(
     digest_excerpt = (digest_body_text or "").strip()
     if not digest_excerpt:
         digest_excerpt = _facade()._strip_html_to_text(digest_body_html)
-    meeting_excerpt = _facade()._strip_html_to_text(
-        meeting_minutes_html, max_chars=6000
-    )
+    meeting_excerpt = _facade()._strip_html_to_text(meeting_minutes_html, max_chars=6000)
     surface_excerpt = (surface_audit_excerpt or "").strip()
     if mode_norm == "manual":
         employees = await _facade()._collect_manual_reports(

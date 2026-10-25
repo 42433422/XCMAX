@@ -20,19 +20,11 @@ def _derive_from_sources_tail_phase_02(state):
             "id": getattr(state["staged"], "id", None),
             "branch": getattr(state["staged"], "branch", ""),
             "status": getattr(state["staged"], "status", ""),
-            "files_changed_count": getattr(
-                state["staged"], "files_changed_count", None
-            ),
+            "files_changed_count": getattr(state["staged"], "files_changed_count", None),
         }
-        state["created"] = _facade()._iso_or_none(
-            getattr(state["staged"], "created_at", None)
-        )
-        state["approved"] = _facade()._iso_or_none(
-            getattr(state["staged"], "approved_at", None)
-        )
-        state["deployed"] = _facade()._iso_or_none(
-            getattr(state["staged"], "deployed_at", None)
-        )
+        state["created"] = _facade()._iso_or_none(getattr(state["staged"], "created_at", None))
+        state["approved"] = _facade()._iso_or_none(getattr(state["staged"], "approved_at", None))
+        state["deployed"] = _facade()._iso_or_none(getattr(state["staged"], "deployed_at", None))
         state["derived"]["STG"] = _facade()._node_status_shell(
             "STG",
             last_run=state["created"],
@@ -71,26 +63,20 @@ def _derive_from_sources_tail_phase_02(state):
                 ("WB_M", "ops_staged_change_not_deployed"),
             ):
                 if state["nid"] not in state["derived"]:
-                    state["derived"][state["nid"]] = (
-                        _facade()._decision_not_taken_status(
-                            state["nid"],
-                            last_run=state["approved"] or state["created"],
-                            source="ops_staged_changes",
-                            reason=state["reason"],
-                            detail=state["staged_detail"],
-                        )
+                    state["derived"][state["nid"]] = _facade()._decision_not_taken_status(
+                        state["nid"],
+                        last_run=state["approved"] or state["created"],
+                        source="ops_staged_changes",
+                        reason=state["reason"],
+                        detail=state["staged_detail"],
                     )
     state["cr"] = _facade()._latest_change_request()
     if state["cr"] is not None:
         state["branch"] = str(getattr(state["cr"], "git_branch", "") or "")
         state["base_sha"] = str(getattr(state["cr"], "base_commit_sha", "") or "")
         state["staged_sha"] = str(getattr(state["cr"], "staged_commit_sha", "") or "")
-        state["approved"] = _facade()._iso_or_none(
-            getattr(state["cr"], "approved_at", None)
-        )
-        state["applied"] = _facade()._iso_or_none(
-            getattr(state["cr"], "applied_at", None)
-        )
+        state["approved"] = _facade()._iso_or_none(getattr(state["cr"], "approved_at", None))
+        state["applied"] = _facade()._iso_or_none(getattr(state["cr"], "applied_at", None))
         state["cr_detail"] = {
             "id": getattr(state["cr"], "id", None),
             "source_employee_id": getattr(state["cr"], "source_employee_id", ""),
@@ -101,8 +87,7 @@ def _derive_from_sources_tail_phase_02(state):
             "staged_commit_sha": state["staged_sha"],
         }
         state["created"] = _facade()._iso_or_none(
-            getattr(state["cr"], "created_at", None)
-            or getattr(state["cr"], "submitted_at", None)
+            getattr(state["cr"], "created_at", None) or getattr(state["cr"], "submitted_at", None)
         )
         state["derived"]["CS_CHG"] = _facade()._node_status_shell(
             "CS_CHG",
@@ -120,11 +105,7 @@ def _derive_from_sources_tail_phase_02(state):
                 detail=state["cr_detail"],
                 observed=True,
             )
-            if (
-                "STG" not in state["derived"]
-                and state["branch"]
-                and state["staged_sha"]
-            ):
+            if "STG" not in state["derived"] and state["branch"] and state["staged_sha"]:
                 state["derived"]["STG"] = _facade()._node_status_shell(
                     "STG",
                     last_run=state["created"],

@@ -75,16 +75,13 @@ async def run_agent_loop_v2(
             sys_msg = (system or "").strip()
             if json_mode:
                 sys_msg = (
-                    (sys_msg + "\n\n" if sys_msg else "")
-                    + "Return only one valid JSON object. Do not wrap it in Markdown fences."
-                )
+                    sys_msg + "\n\n" if sys_msg else ""
+                ) + "Return only one valid JSON object. Do not wrap it in Markdown fences."
             msgs = []
             if sys_msg:
                 msgs.append({"role": "system", "content": sys_msg})
             msgs.append({"role": "user", "content": user or ""})
-            result = await _maybe_await(
-                llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS)
-            )
+            result = await _maybe_await(llm.chat(msgs, max_tokens=SCRIPT_AGENT_CODE_MAX_TOKENS))
             return str(result or "")
 
     ctx = await _facade().collect_context(brief, user_id=user_id, upload_items=files)
@@ -168,9 +165,7 @@ async def run_agent_loop_v2(
                     errs = list(out.get("errors") or [])
                 ok = not errs
                 yield _facade().AgentEvent("check", it, {"ok": ok, "errors": errs})
-                trace.append(
-                    {"phase": "check", "iteration": it, "errors": errs, "engine": "v2"}
-                )
+                trace.append({"phase": "check", "iteration": it, "errors": errs, "engine": "v2"})
                 last_iteration = it
             elif tname == "run_sandbox":
                 out = payload.get("output") or {}

@@ -38,9 +38,7 @@ async def manual_sandbox_run(
     if wf.status not in ("sandbox_testing", "active"):
         raise _facade().HTTPException(400, f"当前状态 {wf.status} 不支持沙箱试用")
     files_data = await _facade()._read_uploads(files)
-    llm_cfg = _facade()._resolve_llm_for_user(
-        db, user, hint_provider=None, hint_model=None
-    )
+    llm_cfg = _facade()._resolve_llm_for_user(db, user, hint_provider=None, hint_model=None)
     cv = _facade()._current_version(db, workflow_id)
     run = _facade().ScriptWorkflowRun(
         workflow_id=wf.id,
@@ -65,9 +63,7 @@ async def manual_sandbox_run(
     run.stdout = result.stdout[-8000:]
     run.stderr = result.stderr[-8000:]
     run.outputs_meta_json = _facade().json.dumps(result.outputs, ensure_ascii=False)
-    run.runtime_sdk_calls_json = _facade().json.dumps(
-        result.sdk_calls, ensure_ascii=False
-    )
+    run.runtime_sdk_calls_json = _facade().json.dumps(result.sdk_calls, ensure_ascii=False)
     if result.timed_out:
         run.status = "timeout"
         run.error_message = "脚本超时"
@@ -131,9 +127,7 @@ async def deactivate_workflow(
     return _facade()._serialize_workflow(wf)
 
 
-@router.post(
-    "/{workflow_id}/edit-with-ai", summary="对已保存脚本继续 agent loop 改（SSE）"
-)
+@router.post("/{workflow_id}/edit-with-ai", summary="对已保存脚本继续 agent loop 改（SSE）")
 async def edit_with_ai(
     workflow_id: int,
     body: EditWithAiBody,
@@ -179,9 +173,7 @@ async def edit_with_ai(
     )
 
 
-@router.post(
-    "/{workflow_id}/run", summary="生产调用（mode=production；仅 active 可调）"
-)
+@router.post("/{workflow_id}/run", summary="生产调用（mode=production；仅 active 可调）")
 async def production_run(
     workflow_id: int,
     files: List[UploadFile] = File(default_factory=list),
@@ -192,9 +184,7 @@ async def production_run(
     if wf.status != "active":
         raise _facade().HTTPException(400, "工作流未启用，无法进行生产调用")
     files_data = await _facade()._read_uploads(files)
-    llm_cfg = _facade()._resolve_llm_for_user(
-        db, user, hint_provider=None, hint_model=None
-    )
+    llm_cfg = _facade()._resolve_llm_for_user(db, user, hint_provider=None, hint_model=None)
     cv = _facade()._current_version(db, workflow_id)
     run = _facade().ScriptWorkflowRun(
         workflow_id=wf.id,
@@ -219,9 +209,7 @@ async def production_run(
     run.stdout = result.stdout[-8000:]
     run.stderr = result.stderr[-8000:]
     run.outputs_meta_json = _facade().json.dumps(result.outputs, ensure_ascii=False)
-    run.runtime_sdk_calls_json = _facade().json.dumps(
-        result.sdk_calls, ensure_ascii=False
-    )
+    run.runtime_sdk_calls_json = _facade().json.dumps(result.sdk_calls, ensure_ascii=False)
     if result.timed_out:
         run.status = "timeout"
         run.error_message = "脚本超时"
@@ -285,10 +273,7 @@ async def list_runs(
     if mode:
         q = q.filter(_facade().ScriptWorkflowRun.mode == mode)
     rows = (
-        q.order_by(_facade().ScriptWorkflowRun.started_at.desc())
-        .limit(limit)
-        .offset(offset)
-        .all()
+        q.order_by(_facade().ScriptWorkflowRun.started_at.desc()).limit(limit).offset(offset).all()
     )
     return [_facade()._serialize_run(r) for r in rows]
 

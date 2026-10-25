@@ -9,9 +9,7 @@ from datetime import UTC, date, datetime, timedelta
 
 def daily_digest_identity_code(day: str | None = None) -> str:
     d = (day or date.today().isoformat()).strip()
-    secret = (
-        os.environ.get("XCMAX_DIGEST_IDENTITY_SECRET") or "xcmax-local-digest-dev"
-    ).strip()
+    secret = (os.environ.get("XCMAX_DIGEST_IDENTITY_SECRET") or "xcmax-local-digest-dev").strip()
     digest = hashlib.sha256(f"{secret}:{d}".encode()).hexdigest()
     return digest[:6].upper()
 

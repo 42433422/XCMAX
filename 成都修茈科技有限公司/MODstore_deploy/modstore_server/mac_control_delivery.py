@@ -57,8 +57,7 @@ def release_facts(receipt, github, runtime):
         "source_commit": sha,
         "source_archive_sha256": receipt["archive_sha256"],
         "runtime": {
-            k: runtime.get(k)
-            for k in ("git_sha", "deploy_tier", "artifact_sha256", "release_id")
+            k: runtime.get(k) for k in ("git_sha", "deploy_tier", "artifact_sha256", "release_id")
         },
         "stages": [
             stage("code", "recorded", "executor_git_readback", sha),
@@ -80,9 +79,7 @@ def release_facts(receipt, github, runtime):
         and ((p.get("base") or {}).get("repo") or {}).get("full_name") == REPOSITORY
     ]
     if len(matches) != 1:
-        result["error"] = (
-            "pull_request_missing" if not matches else "pull_request_ambiguous"
-        )
+        result["error"] = "pull_request_missing" if not matches else "pull_request_ambiguous"
         return result
     pull = matches[0]
     number = pull.get("number")
@@ -102,29 +99,16 @@ def release_facts(receipt, github, runtime):
     runs = checks.get("check_runs") if isinstance(checks, dict) else None
     if not isinstance(runs, list) or checks.get("total_count", 101) > len(runs):
         raise ValueError("ci_evidence_unavailable_or_truncated")
-    tests = [
-        r
-        for r in runs
-        if re.search(r"test|smoke|contract", str(r.get("name", "")), re.I)
-    ]
-    result["checks"] = [
-        {k: r.get(k) for k in ("name", "status", "conclusion")} for r in tests
-    ]
+    tests = [r for r in runs if re.search(r"test|smoke|contract", str(r.get("name", "")), re.I)]
+    result["checks"] = [{k: r.get(k) for k in ("name", "status", "conclusion")} for r in tests]
     if tests:
-        state = (
-            "passed"
-            if all(r.get("conclusion") == "success" for r in tests)
-            else "pending"
-        )
+        state = "passed" if all(r.get("conclusion") == "success" for r in tests) else "pending"
         if any(
-            r.get("conclusion")
-            in {"failure", "cancelled", "timed_out", "action_required"}
+            r.get("conclusion") in {"failure", "cancelled", "timed_out", "action_required"}
             for r in tests
         ):
             state = "failed"
-        stages["tests"].update(
-            state=state, source="github_check_runs", reference=link + "/checks"
-        )
+        stages["tests"].update(state=state, source="github_check_runs", reference=link + "/checks")
     if not isinstance(reviews, list) or len(reviews) >= 100:
         raise ValueError("review_evidence_unavailable_or_truncated")
     latest = {}
@@ -134,27 +118,19 @@ def release_facts(receipt, github, runtime):
     approval = (
         "changes_requested"
         if "CHANGES_REQUESTED" in latest.values()
-        else "approved"
-        if "APPROVED" in latest.values()
-        else "not_recorded"
+        else "approved" if "APPROVED" in latest.values() else "not_recorded"
     )
-    stages["approval"].update(
-        state=approval, source="github_pull_reviews", reference=link
-    )
+    stages["approval"].update(state=approval, source="github_pull_reviews", reference=link)
     merge_sha = str(pull.get("merge_commit_sha") or "")
     if not pull.get("merged_at") or not SHA.fullmatch(merge_sha):
-        stages["merged"].update(
-            state="pending", source="github_pull_request", reference=link
-        )
+        stages["merged"].update(state="pending", source="github_pull_request", reference=link)
         return result
     main = github.get(f"compare/main...{merge_sha}")
     if not isinstance(main, dict) or main.get("status") not in {"behind", "identical"}:
         result["error"] = "merged_commit_not_verified_on_main"
         return result
     result["merge_commit_sha"] = merge_sha
-    stages["merged"].update(
-        state="verified", source="github_main_ancestry", reference=merge_sha
-    )
+    stages["merged"].update(state="verified", source="github_main_ancestry", reference=merge_sha)
     release_id = str(runtime.get("release_id") or "")
     identity_matches = release_id == merge_sha or bool(
         re.fullmatch(r"xcagi-[0-9A-Za-z][0-9A-Za-z._+-]*-" + merge_sha, release_id)
@@ -255,9 +231,7 @@ def delivery_trace(db, task, customer=None):
         else (
             "unavailable"
             if result.get("error")
-            else "fresh"
-            if row and now - row.observed_at < 180
-            else "stale"
+            else "fresh" if row and now - row.observed_at < 180 else "stale"
         )
     )
     result.setdefault(
@@ -284,9 +258,7 @@ def delivery_trace(db, task, customer=None):
             "receipt_received"
             if any(
                 any(
-                    r.get("stage") == "installed"
-                    and merge_sha
-                    and r.get("host_sha") == merge_sha
+                    r.get("stage") == "installed" and merge_sha and r.get("host_sha") == merge_sha
                     for r in v.get("receipts", [])
                 )
                 for v in verified
@@ -297,10 +269,7 @@ def delivery_trace(db, task, customer=None):
     accepted = (
         "verified"
         if bound
-        and all(
-            v.get("completed") and v.get("customer_acceptance") == "accepted"
-            for v in verified
-        )
+        and all(v.get("completed") and v.get("customer_acceptance") == "accepted" for v in verified)
         else "unknown"
     )
     result["stages"] = result["stages"] + [

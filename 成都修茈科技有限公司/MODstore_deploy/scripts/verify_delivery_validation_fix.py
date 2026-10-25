@@ -34,7 +34,9 @@ from modstore_server.self_maintenance_loop_runner import (  # noqa: E402
     _find_delivery_validation,
 )
 
-DEFAULT_LEDGER = Path.home() / ".xcmax" / "modstore-daily" / "self_maintenance_loop_runs.jsonl"
+DEFAULT_LEDGER = (
+    Path.home() / ".xcmax" / "modstore-daily" / "self_maintenance_loop_runs.jsonl"
+)
 DEFAULT_OUTPUT = (
     Path.home()
     / ".xcmax"
@@ -77,7 +79,9 @@ def _classify_reason(reason: str) -> str:
     return "other"
 
 
-def _rebuild_result_from_step(step: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def _rebuild_result_from_step(
+    step: Dict[str, Any],
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """从 ledger step 记录重建 result dict 与 para_meta。
 
     ledger step 结构:
@@ -239,7 +243,9 @@ def _collect_samples(ledger_path: Path, max_samples: int) -> List[Dict[str, Any]
     return samples
 
 
-def _extract_from_sample(sample: Dict[str, Any], inject_dv: bool = False) -> Dict[str, Any]:
+def _extract_from_sample(
+    sample: Dict[str, Any], inject_dv: bool = False
+) -> Dict[str, Any]:
     """对单条样本重建 result 并调用 _extract_failure_reason。"""
     step = sample["step"]
     result, para_meta = _rebuild_result_from_step(step)
@@ -249,7 +255,9 @@ def _extract_from_sample(sample: Dict[str, Any], inject_dv: bool = False) -> Dic
     baseline_category = _classify_reason(baseline_reason)
 
     if inject_dv:
-        _inject_synthetic_delivery_validation(result, marker=f"synthetic-{sample['line_no']}")
+        _inject_synthetic_delivery_validation(
+            result, marker=f"synthetic-{sample['line_no']}"
+        )
         # 验证 _find_delivery_validation 能找到注入的 dv
         dv_found = _find_delivery_validation(result)
         reason = _extract_failure_reason(result, para_meta)
@@ -286,7 +294,9 @@ def _print_summary(
 ) -> None:
     success_pct = (meaningful / total * 100) if total else 0.0
     failed_pct = (failed_meaningful / failed_total * 100) if failed_total else 0.0
-    injected_pct = (injected_meaningful / injected_total * 100) if injected_total else 0.0
+    injected_pct = (
+        (injected_meaningful / injected_total * 100) if injected_total else 0.0
+    )
 
     print("=" * 72)
     print("delivery_validation fix verification (2026-07-20)")

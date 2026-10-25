@@ -56,15 +56,10 @@ def load_java_payment_orders(window_days: int) -> list[dict[str, Any]]:
             payload = response.json()
             if not isinstance(payload, dict):
                 raise RuntimeError("java_payment_evidence_payload_invalid")
-            if (
-                payload.get("ok") is not True
-                or payload.get("source") != "java_postgresql"
-            ):
+            if payload.get("ok") is not True or payload.get("source") != "java_postgresql":
                 raise RuntimeError("java_payment_evidence_source_untrusted")
             page = payload.get("orders")
-            if not isinstance(page, list) or any(
-                not isinstance(item, dict) for item in page
-            ):
+            if not isinstance(page, list) or any(not isinstance(item, dict) for item in page):
                 raise RuntimeError("java_payment_evidence_orders_invalid")
             total = int(payload.get("total") or 0)
             if total < 0 or total > _JAVA_MAX_ORDERS:
@@ -124,9 +119,7 @@ def load_authoritative_payment_orders(
     }
 
 
-def payment_evidence_marker(
-    *, provider: str, verification: str, trade_no: str
-) -> dict[str, Any]:
+def payment_evidence_marker(*, provider: str, verification: str, trade_no: str) -> dict[str, Any]:
     """Canonical fields written only after a gateway verification succeeds."""
 
     deploy_tier = _text(os.environ.get("MODSTORE_DEPLOY_TIER") or "local", 32).lower()

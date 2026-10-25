@@ -60,9 +60,7 @@ class CatalogComplaint(Base):
     __tablename__ = "catalog_complaints"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     complaint_type = Column(String(32), default="other", index=True)
     reason = Column(Text, default="")
@@ -102,15 +100,11 @@ class UserMod(Base):
 
 class Review(Base):
     __tablename__ = "reviews"
-    __table_args__ = (
-        UniqueConstraint("user_id", "catalog_id", name="uq_review_user_catalog"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "catalog_id", name="uq_review_user_catalog"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     rating = Column(Integer, nullable=False)
     content = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
@@ -118,15 +112,11 @@ class Review(Base):
 
 class Favorite(Base):
     __tablename__ = "favorites"
-    __table_args__ = (
-        UniqueConstraint("user_id", "catalog_id", name="uq_favorite_user_catalog"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "catalog_id", name="uq_favorite_user_catalog"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 

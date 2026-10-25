@@ -135,9 +135,7 @@ async def customer_service_chat(
     if not message and not image:
         raise HTTPException(status_code=400, detail="请输入文字或上传图片")
     if image and not image.startswith("data:image/"):
-        raise HTTPException(
-            status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等"
-        )
+        raise HTTPException(status_code=400, detail="图片格式无效，请上传 png/jpg/webp 等")
     if len(image) > 4_500_000:
         raise HTTPException(status_code=400, detail="图片过大，请压缩后再传")
     ctx = dict(body.context or {})
@@ -179,9 +177,7 @@ async def list_sessions(
     rows = (
         db.query(CustomerServiceSession)
         .filter(CustomerServiceSession.user_id == user.id)
-        .order_by(
-            CustomerServiceSession.updated_at.desc(), CustomerServiceSession.id.desc()
-        )
+        .order_by(CustomerServiceSession.updated_at.desc(), CustomerServiceSession.id.desc())
         .limit(limit)
         .all()
     )
@@ -259,9 +255,7 @@ async def list_tickets(
         q = q.filter(or_(*matches))
     total = q.count()
     rows = (
-        q.order_by(
-            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
-        )
+        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -269,16 +263,13 @@ async def list_tickets(
     view = ticket_payload if user.is_admin else customer_view.customer_ticket_row
     payload = {
         "items": [
-            reader_ticket(db, r) if isinstance(user, TicketReader) else view(r)
-            for r in rows
+            reader_ticket(db, r) if isinstance(user, TicketReader) else view(r) for r in rows
         ],
         "total": total,
         "offset": offset,
     }
     if isinstance(user, TicketReader):
-        payload.update(
-            scope=user.scope(), limit=limit, has_more=offset + len(rows) < total
-        )
+        payload.update(scope=user.scope(), limit=limit, has_more=offset + len(rows) < total)
     return payload
 
 
@@ -324,53 +315,35 @@ async def ticket_detail(
 
     def related(model: Any, descending: bool = False) -> list[Any]:
         order = model.id.desc() if descending else model.id.asc()
-        return list(
-            db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all()
-        )
+        return list(db.query(model).filter(model.ticket_id == ticket.id).order_by(order).all())
 
     decisions = [decision_payload(d) for d in related(CustomerServiceDecision, True)]
     actions = [action_payload(a) for a in related(CustomerServiceAction)]
     from modstore_server.customer_ticket_execution import ticket_execution_overview
 
     return {
-        **(
-            {"execution_overview": ticket_execution_overview(db, ticket)}
-            if user.is_admin
-            else {}
-        ),
+        **({"execution_overview": ticket_execution_overview(db, ticket)} if user.is_admin else {}),
         "ticket": (
-            ticket_payload(ticket)
-            if user.is_admin
-            else customer_view.customer_ticket_row(ticket)
+            ticket_payload(ticket) if user.is_admin else customer_view.customer_ticket_row(ticket)
         ),
         "decisions": (
-            decisions
-            if user.is_admin
-            else [customer_view.customer_decision(d) for d in decisions]
+            decisions if user.is_admin else [customer_view.customer_decision(d) for d in decisions]
         ),
-        "actions": actions
-        if user.is_admin
-        else customer_view.customer_actions(actions),
+        "actions": actions if user.is_admin else customer_view.customer_actions(actions),
         "audit_logs": (
-            [_audit_payload(a) for a in related(CustomerServiceAuditLog)]
-            if user.is_admin
-            else []
+            [_audit_payload(a) for a in related(CustomerServiceAuditLog)] if user.is_admin else []
         ),
     }
 
 
-@router.patch(
-    "/tickets/{ticket_id}/expected-completion", dependencies=[Depends(_require_admin)]
-)
+@router.patch("/tickets/{ticket_id}/expected-completion", dependencies=[Depends(_require_admin)])
 async def update_ticket_expected_completion(
     ticket_id: int,
     body: CustomerTicketEtaBody,
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    ticket = _update_expected_completion(
-        db, ticket_id, user, body.expected_completion_at
-    )
+    ticket = _update_expected_completion(db, ticket_id, user, body.expected_completion_at)
     return {"ticket": ticket_payload(ticket)}
 
 
@@ -390,10 +363,7 @@ async def list_actions(
             CustomerServiceTicket,
             CustomerServiceAction.ticket_id == CustomerServiceTicket.id,
         ).filter(CustomerServiceTicket.user_id == user.id)
-    rows = [
-        action_payload(r)
-        for r in q.order_by(CustomerServiceAction.id.desc()).limit(limit)
-    ]
+    rows = [action_payload(r) for r in q.order_by(CustomerServiceAction.id.desc()).limit(limit)]
     return {"items": rows if user.is_admin else customer_view.customer_actions(rows)}
 
 
@@ -402,11 +372,7 @@ async def list_standards(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    rows = (
-        db.query(CustomerServiceStandard)
-        .order_by(CustomerServiceStandard.priority.asc())
-        .all()
-    )
+    rows = db.query(CustomerServiceStandard).order_by(CustomerServiceStandard.priority.asc()).all()
     # SSOT 四种默认标准：库空时自愈补种（避免发布/迁库后后台空白）
     if not rows:
         try:
@@ -446,9 +412,7 @@ async def update_standard(
     user: User = Depends(_require_admin),
 ):
     row = (
-        db.query(CustomerServiceStandard)
-        .filter(CustomerServiceStandard.id == standard_id)
-        .first()
+        db.query(CustomerServiceStandard).filter(CustomerServiceStandard.id == standard_id).first()
     )
     if not row:
         raise HTTPException(404, "审核标准不存在")
@@ -464,11 +428,7 @@ async def list_integrations(
     db: Session = Depends(get_db),
     user: User = Depends(_require_admin),
 ):
-    rows = (
-        db.query(CustomerServiceIntegration)
-        .order_by(CustomerServiceIntegration.id.desc())
-        .all()
-    )
+    rows = db.query(CustomerServiceIntegration).order_by(CustomerServiceIntegration.id.desc()).all()
     return {"items": [_integration_payload(r) for r in rows]}
 
 

@@ -20,14 +20,8 @@ def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
     """从 execute_employee_task 返回值判定真实成功与否（非仅「未抛异常」）。"""
     if not isinstance(result, dict):
         return False, "invalid result payload"
-    if (
-        result.get("ok") is False
-        or result.get("success") is False
-        or result.get("error")
-    ):
-        return False, str(
-            result.get("error") or result.get("message") or "execution failed"
-        )
+    if result.get("ok") is False or result.get("success") is False or result.get("error"):
+        return False, str(result.get("error") or result.get("message") or "execution failed")
     if str(result.get("status") or "").lower() in {
         "failed",
         "error",
@@ -99,12 +93,7 @@ def _resolve_uid(created_by_user_id: int) -> int:
     if uid <= 0:
         sf = get_session_factory()
         with sf() as session:
-            u = (
-                session.query(User)
-                .filter(User.is_admin.is_(True))
-                .order_by(User.id.asc())
-                .first()
-            )
+            u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()
@@ -259,9 +248,7 @@ def _topo_layers(subtasks: List[SubTask]) -> List[List[SubTask]]:
     layers: List[List] = []
 
     while remaining:
-        layer = [
-            st for st in remaining if all(d in done_ids for d in (st.depends_on or []))
-        ]
+        layer = [st for st in remaining if all(d in done_ids for d in (st.depends_on or []))]
         if not layer:
             raise ValueError("subtask dependencies contain a cycle or missing employee")
 
@@ -289,9 +276,7 @@ def _run_layer(
         import time
 
         blocked = [
-            dep
-            for dep in st.depends_on or []
-            if completed.get(dep, {}).get("ok") is not True
+            dep for dep in st.depends_on or [] if completed.get(dep, {}).get("ok") is not True
         ]
         if blocked:
             return {
@@ -304,9 +289,7 @@ def _run_layer(
         input_data = dict(st.input_data or {})
         for dep_id in st.depends_on or []:
             if dep_id in completed:
-                input_data.setdefault("upstream_results", {})[dep_id] = completed[
-                    dep_id
-                ]
+                input_data.setdefault("upstream_results", {})[dep_id] = completed[dep_id]
         t0 = time.perf_counter()
         try:
             result = execute_employee_task(
@@ -317,9 +300,7 @@ def _run_layer(
                 bench_llm_override=bench_llm_override,
             )
             ok, reason = _evaluate_execution_success(
-                result
-                if isinstance(result, dict)
-                else {"error": "invalid result payload"}
+                result if isinstance(result, dict) else {"error": "invalid result payload"}
             )
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             if not ok:
@@ -358,10 +339,7 @@ def _run_layer(
     with ThreadPoolExecutor(max_workers=min(max_concurrency, len(layer))) as pool:
         # 用 copy_context() 把当前上下文（含平台模型作用域）带进池内线程，
         # 否则后台 loop 的平台作用域会在子线程丢失而静默回落到用户配额。
-        futures = {
-            pool.submit(contextvars.copy_context().run, _run_one, st): st
-            for st in layer
-        }
+        futures = {pool.submit(contextvars.copy_context().run, _run_one, st): st for st in layer}
         for fut in as_completed(futures):
             results.append(fut.result())
     return results

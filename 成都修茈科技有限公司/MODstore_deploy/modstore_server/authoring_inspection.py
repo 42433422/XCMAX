@@ -96,12 +96,8 @@ def authoring_summary(
     return {
         "ok": True,
         "id": mod_id,
-        "manifest_backend": data.get("backend")
-        if isinstance(data.get("backend"), dict)
-        else {},
-        "manifest_frontend": data.get("frontend")
-        if isinstance(data.get("frontend"), dict)
-        else {},
+        "manifest_backend": data.get("backend") if isinstance(data.get("backend"), dict) else {},
+        "manifest_frontend": data.get("frontend") if isinstance(data.get("frontend"), dict) else {},
         "validation_ok": len(warnings) == 0,
         "warnings": warnings,
         "blueprint_file": blueprint_file,

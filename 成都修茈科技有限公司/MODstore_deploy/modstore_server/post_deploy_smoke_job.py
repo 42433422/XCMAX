@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def cron_smoke_enabled() -> bool:
-    return os.environ.get(
-        "MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", "0"
-    ).strip().lower() in (
+    return os.environ.get("MODSTORE_POST_DEPLOY_SMOKE_CRON_ENABLED", "0").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -60,8 +58,6 @@ def cron_smoke_interval_minutes() -> Optional[int]:
     if not cron_smoke_enabled():
         return None
     try:
-        return max(
-            5, int(os.environ.get("MODSTORE_POST_DEPLOY_SMOKE_INTERVAL_MIN", "30"))
-        )
+        return max(5, int(os.environ.get("MODSTORE_POST_DEPLOY_SMOKE_INTERVAL_MIN", "30")))
     except ValueError:
         return 30

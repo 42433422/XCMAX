@@ -28,10 +28,7 @@ _semantic_index_future: Future[bool] | None = None
 
 
 def is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
-    return (
-        str((row or {}).get("artifact") or "").strip().lower()
-        == "customer_delivery_seed"
-    )
+    return str((row or {}).get("artifact") or "").strip().lower() == "customer_delivery_seed"
 
 
 def catalog_cache_scope() -> str:
@@ -113,9 +110,7 @@ async def try_index_catalog_item(record: Dict[str, Any]) -> bool:
         return False
     timeout = _semantic_index_timeout_seconds()
     try:
-        return await asyncio.wait_for(
-            asyncio.shield(asyncio.wrap_future(future)), timeout=timeout
-        )
+        return await asyncio.wait_for(asyncio.shield(asyncio.wrap_future(future)), timeout=timeout)
     except TimeoutError:
         logger.warning(
             "catalog semantic indexing exceeded %.2fs; publication continues pkg_id=%s version=%s",
@@ -143,9 +138,7 @@ def require_upload(authorization: Optional[str]) -> None:
     authorize_upload(authorization)
 
 
-def validated_automation_provenance(
-    value: Any, *, package_sha256: str
-) -> Dict[str, str]:
+def validated_automation_provenance(value: Any, *, package_sha256: str) -> Dict[str, str]:
     if not isinstance(value, dict):
         raise HTTPException(400, "自动上架必须提供 automation_provenance")
     repository = str(value.get("source_repository") or "").strip()
@@ -190,11 +183,7 @@ def upsert_market_listing(saved: Dict[str, Any], *, public_listing: bool) -> Non
         sf = get_session_factory()
         with sf() as db:
             upsert_catalog_item_from_xc_package_dict(db, saved, author_id=None)
-            row = (
-                db.query(CatalogItem)
-                .filter(CatalogItem.pkg_id == str(saved.get("id")))
-                .first()
-            )
+            row = db.query(CatalogItem).filter(CatalogItem.pkg_id == str(saved.get("id"))).first()
             if row and public_listing:
                 row.is_public = True
                 row.compliance_status = "approved"

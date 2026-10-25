@@ -48,9 +48,7 @@ def _webhook_url() -> str:
 
 
 def _api_base() -> str:
-    return (
-        (_facade().os.environ.get("MODSTORE_PARA_API_BASE") or "").strip().rstrip("/")
-    )
+    return (_facade().os.environ.get("MODSTORE_PARA_API_BASE") or "").strip().rstrip("/")
 
 
 def _api_timeout() -> float:
@@ -75,9 +73,7 @@ def _wait_timeout_sec(req: _facade().Dict[str, _facade().Any]) -> float:
 
 def _wait_poll_sec() -> float:
     try:
-        return max(
-            1.0, float(_facade().os.environ.get("MODSTORE_PARA_WAIT_POLL_SEC", "5"))
-        )
+        return max(1.0, float(_facade().os.environ.get("MODSTORE_PARA_WAIT_POLL_SEC", "5")))
     except ValueError:
         return 5.0
 
@@ -106,9 +102,7 @@ def _project_root(input_data: _facade().Dict[str, _facade().Any]) -> str:
     ).strip()
 
 
-def _mode_for_employee(
-    employee_id: str, input_data: _facade().Dict[str, _facade().Any]
-) -> str:
+def _mode_for_employee(employee_id: str, input_data: _facade().Dict[str, _facade().Any]) -> str:
     requested = str(input_data.get("para_mode") or input_data.get("mode") or "").strip()
     if requested:
         return requested
@@ -138,9 +132,7 @@ def _build_request(
             payload=input_data.get("incident") or {},
             role=role,
         )
-        budget = (
-            {"role": role, **route.get("budget", {})} if route.get("budget") else {}
-        )
+        budget = {"role": role, **route.get("budget", {})} if route.get("budget") else {}
     workspace_root = _facade()._project_root(input_data)
     mode = _facade()._mode_for_employee(employee_id, input_data)
     report_only = _facade()._coerce_bool(
@@ -185,27 +177,17 @@ def _build_request(
         "prompt": str(input_data.get("prompt") or task or ""),
         "workspace_root": workspace_root,
         "repo_url": str(
-            input_data.get("repo_url")
-            or _facade().os.environ.get("MODSTORE_PARA_REPO_URL")
-            or ""
+            input_data.get("repo_url") or _facade().os.environ.get("MODSTORE_PARA_REPO_URL") or ""
         ),
         "branch": branch,
         "device_id": str(
-            input_data.get("device_id")
-            or _facade().os.environ.get("MODSTORE_PARA_DEVICE_ID")
-            or ""
+            input_data.get("device_id") or _facade().os.environ.get("MODSTORE_PARA_DEVICE_ID") or ""
         ),
-        "tool_name": str(
-            input_data.get("tool_name") or input_data.get("dev_tool") or ""
-        ),
+        "tool_name": str(input_data.get("tool_name") or input_data.get("dev_tool") or ""),
         "depends_on": (
-            input_data.get("depends_on")
-            if isinstance(input_data.get("depends_on"), list)
-            else []
+            input_data.get("depends_on") if isinstance(input_data.get("depends_on"), list) else []
         ),
-        "para_task_id": str(
-            input_data.get("para_task_id") or input_data.get("task_id") or ""
-        ),
+        "para_task_id": str(input_data.get("para_task_id") or input_data.get("task_id") or ""),
         "dispatch_line": str(input_data.get("dispatch_line") or ""),
         "priority": str(input_data.get("priority") or ""),
         "action_item_id": input_data.get("action_item_id"),
@@ -213,9 +195,7 @@ def _build_request(
         "wait_for_para": input_data.get("wait_for_para"),
         "wait_timeout_sec": input_data.get("wait_timeout_sec"),
         "evidence": (
-            input_data.get("evidence")
-            if isinstance(input_data.get("evidence"), dict)
-            else {}
+            input_data.get("evidence") if isinstance(input_data.get("evidence"), dict) else {}
         ),
         "raw_input": input_data,
     }
@@ -246,9 +226,7 @@ def _write_outbox(req: _facade().Dict[str, _facade().Any]) -> _facade().Path:
         _facade()._outbox_dir()
         / f"{req.get('created_at', '').replace(':', '').replace('+', 'Z')}-{req['request_id']}.json"
     )
-    out.write_text(
-        _facade().json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    out.write_text(_facade().json.dumps(req, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return out
 
 
@@ -332,12 +310,7 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
             "执行器回执须区分请求预算与实际应用，CLI 输出 token 上限未强制。"
         )
     if report_only:
-        return (
-            "MODSTORE_REPORT_ONLY=1\nreport_only=true\n\n"
-            + prompt
-            + "\n"
-            + "\n".join(context)
-        )
+        return "MODSTORE_REPORT_ONLY=1\nreport_only=true\n\n" + prompt + "\n" + "\n".join(context)
     return prompt + "\n" + "\n".join(context)
 
 
@@ -361,9 +334,7 @@ def _get_para_token(
     if cached:
         return {"token": cached, "source": "guest_cache"}
     if not _facade()._env_bool("MODSTORE_PARA_GUEST_AUTH", "1"):
-        raise RuntimeError(
-            "MODSTORE_PARA_AUTH_TOKEN 未配置，且 MODSTORE_PARA_GUEST_AUTH=0"
-        )
+        raise RuntimeError("MODSTORE_PARA_AUTH_TOKEN 未配置，且 MODSTORE_PARA_GUEST_AUTH=0")
     resp = client.post(f"{base}/api/auth/guest")
     body: _facade().Any = {}
     try:
@@ -371,9 +342,7 @@ def _get_para_token(
     except RECOVERABLE_ERRORS:
         body = {"raw": resp.text[:1000]}
     if resp.status_code >= 400:
-        raise RuntimeError(
-            str(body.get("error") or body.get("detail") or resp.text[:500])
-        )
+        raise RuntimeError(str(body.get("error") or body.get("detail") or resp.text[:500]))
     guest_token = str(body.get("token") or "").strip()
     if not guest_token:
         raise RuntimeError("Para guest auth response missing token")
@@ -387,9 +356,7 @@ def _summarize_para_response(body: _facade().Any) -> _facade().Dict[str, _facade
     task = body.get("task") if isinstance(body.get("task"), dict) else {}
     subtask = body.get("subtask") if isinstance(body.get("subtask"), dict) else {}
     if not subtask:
-        subtasks = (
-            task.get("subTasks") if isinstance(task.get("subTasks"), list) else []
-        )
+        subtasks = task.get("subTasks") if isinstance(task.get("subTasks"), list) else []
         subtask = subtasks[0] if subtasks and isinstance(subtasks[0], dict) else {}
     return {
         "task_id": task.get("id"),
@@ -414,9 +381,7 @@ def _resolve_max_attempts(req: _facade().Dict[str, _facade().Any]) -> int:
     return max(1, min(5, value))
 
 
-def _git_preflight_branch(
-    repo_url: str, branch: str
-) -> _facade().Dict[str, _facade().Any]:
+def _git_preflight_branch(repo_url: str, branch: str) -> _facade().Dict[str, _facade().Any]:
     """派工前校验远程分支；失败则不创建注定失败的任务。"""
     url = (repo_url or "").strip()
     ref = (branch or "main").strip() or "main"
@@ -434,9 +399,7 @@ def _git_preflight_branch(
             ["git", "ls-remote", "--heads", "--exit-code", url, ref],
             capture_output=True,
             text=True,
-            timeout=float(
-                _facade().os.environ.get("MODSTORE_PARA_GIT_PREFLIGHT_SEC") or "12"
-            ),
+            timeout=float(_facade().os.environ.get("MODSTORE_PARA_GIT_PREFLIGHT_SEC") or "12"),
             env={**_facade().os.environ, "GIT_TERMINAL_PROMPT": "0"},
             check=False,
         )
@@ -563,18 +526,11 @@ def _ticket_route_hops(input_data: dict) -> list[dict]:
     if input_data.get("device_id") or input_data.get("event_type") != _TICKET_EVENT:
         return []
     hops: list[dict] = []
-    for item in (_facade().os.environ.get("MODSTORE_PARA_TICKET_ROUTE") or "").split(
-        ","
-    ):
+    for item in (_facade().os.environ.get("MODSTORE_PARA_TICKET_ROUTE") or "").split(","):
         tool_raw, sep, device_id = item.strip().partition("@")
         tool = _facade()._normalize_tool_name(tool_raw)
         hop = {"tool_name": tool, "device_id": device_id.strip()}
-        if (
-            sep
-            and hop["device_id"]
-            and tool in _facade()._VALID_DEV_TOOLS
-            and hop not in hops
-        ):
+        if sep and hop["device_id"] and tool in _facade()._VALID_DEV_TOOLS and hop not in hops:
             hops.append(hop)
     return hops
 
@@ -608,10 +564,7 @@ def _ticket_hop_should_handoff(result: dict) -> bool:
         and result.get("status") == "blocked_no_online_para_device"
         and result.get("accepted") is False
         and result.get("queued") is False
-        and not any(
-            result.get(key)
-            for key in ("outbox_path", "task_id", "devices", "para_result")
-        )
+        and not any(result.get(key) for key in ("outbox_path", "task_id", "devices", "para_result"))
     )
 
 
@@ -626,20 +579,13 @@ def _post_ticket_route(req: dict, hops: list[dict]) -> dict:
         result = _facade()._post_para_api_once(hop_req)
         if not isinstance(result, dict):
             result = {"ok": False, "status": "para_ticket_requires_reconciliation"}
-        safe = not req.get("para_task_id") and _facade()._ticket_hop_should_handoff(
-            result
-        )
-        if (
-            not result.get("ok")
-            and result.get("status") not in _TICKET_NO_HANDOFF_STATUSES
-        ):
+        safe = not req.get("para_task_id") and _facade()._ticket_hop_should_handoff(result)
+        if not result.get("ok") and result.get("status") not in _TICKET_NO_HANDOFF_STATUSES:
             result["ticket_route_requires_reconciliation"] = not safe
         if not safe or index == len(hops) - 1:
             break
         attempts.append(
-            dict(
-                hop, status=result["status"], error=str(result.get("error") or "")[:500]
-            )
+            dict(hop, status=result["status"], error=str(result.get("error") or "")[:500])
         )
     result["ticket_route"] = [hop["tool_name"] for hop in hops]
     if attempts:
@@ -705,9 +651,7 @@ def _wait_for_para_task(
             incomplete = status in {"completed", "merged"} and not ok
             return {
                 "ok": ok,
-                "status": "para_task_incomplete"
-                if incomplete
-                else "para_task_" + status,
+                "status": "para_task_incomplete" if incomplete else "para_task_" + status,
                 "error": "" if ok else _handler._first_para_error(snapshot),
                 "snapshot": snapshot,
             }
@@ -735,11 +679,7 @@ def _req_with_excluded_tools(
     req: _facade().Dict[str, _facade().Any], excluded: set[str]
 ) -> _facade().Dict[str, _facade().Any]:
     work = dict(req or {})
-    raw = (
-        dict(work.get("raw_input") or {})
-        if isinstance(work.get("raw_input"), dict)
-        else {}
-    )
+    raw = dict(work.get("raw_input") or {}) if isinstance(work.get("raw_input"), dict) else {}
     merged = sorted(set(excluded) | _facade()._excluded_tools(work))
     raw["_para_exclude_tools"] = merged
     work["raw_input"] = raw
@@ -860,9 +800,7 @@ def _independent_check_plan(req):
             or not row.get("attempt_id")
             or row.get("attempt_id") != raw.get("attempt_id")
         ):
-            raise ValueError(
-                "Independent check plan or attempt does not match the incident"
-            )
+            raise ValueError("Independent check plan or attempt does not match the incident")
         fix = next((r for r in claim.get("team") or [] if r.get("role") == "fix"), {})
         fixed = {
             str(output.get("merge_commit_sha") or "")
@@ -888,9 +826,7 @@ def _independent_check_plan(req):
             revisions.add(str(unit["source_revision"]))
     if not revisions and role == "verify":
         revisions = fixed
-    if len(revisions) != 1 or not re.fullmatch(
-        r"[0-9a-fA-F]{40}", next(iter(revisions), "")
-    ):
+    if len(revisions) != 1 or not re.fullmatch(r"[0-9a-fA-F]{40}", next(iter(revisions), "")):
         raise ValueError("Independent checks require one immutable source revision")
     revision = next(iter(revisions))
     if role == "verify" and (not fix.get("ok") or fixed != {revision}):
@@ -928,14 +864,10 @@ def _excluded_tools(req: _facade().Dict[str, _facade().Any]) -> set[str]:
     for key in ("_para_exclude_tools", "para_exclude_tools"):
         blob = raw.get(key)
         if isinstance(blob, (list, tuple, set)):
-            excluded.update(
-                str(item or "").strip() for item in blob if str(item or "").strip()
-            )
+            excluded.update(str(item or "").strip() for item in blob if str(item or "").strip())
     top = req.get("_para_exclude_tools")
     if isinstance(top, (list, tuple, set)):
-        excluded.update(
-            str(item or "").strip() for item in top if str(item or "").strip()
-        )
+        excluded.update(str(item or "").strip() for item in top if str(item or "").strip())
     return {item for item in excluded if item in _facade()._VALID_DEV_TOOLS}
 
 
@@ -951,9 +883,7 @@ def _tool_candidates(req: _facade().Dict[str, _facade().Any]) -> list[str]:
     explicit = _facade()._normalize_tool_name(
         str(req.get("tool_name") or raw.get("tool_name") or raw.get("dev_tool") or "")
     )
-    preferred = (
-        explicit if explicit in _facade()._VALID_DEV_TOOLS else _facade()._dev_tool()
-    )
+    preferred = explicit if explicit in _facade()._VALID_DEV_TOOLS else _facade()._dev_tool()
     order = _facade()._fallback_order_tools()
     if not _facade()._tool_fallback_allowed(req):
         candidates = [preferred]
@@ -1035,9 +965,7 @@ def _device_tool_entry(
     return None
 
 
-def _device_has_capability(
-    caps: _facade().Dict[str, _facade().Any], tool_name: str
-) -> bool:
+def _device_has_capability(caps: _facade().Dict[str, _facade().Any], tool_name: str) -> bool:
     for key in _facade()._TOOL_CAP_ALIASES.get(tool_name, (f"{tool_name}_cli",)):
         if caps.get(key) is True:
             return True
@@ -1058,11 +986,7 @@ def _device_eligible(item: _facade().Any, tool_name: str) -> bool:
     if tool and str(tool.get("status") or "") == "running" and tool.get("currentTask"):
         return False
     if not tool:
-        caps = (
-            item.get("capabilities")
-            if isinstance(item.get("capabilities"), dict)
-            else {}
-        )
+        caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
         if _facade()._device_has_capability(caps, tool_name):
             return True
         dev_tool = str(item.get("devTool") or "").strip()
@@ -1071,9 +995,7 @@ def _device_eligible(item: _facade().Any, tool_name: str) -> bool:
     return True
 
 
-def _selected_tool_for_device(
-    item: _facade().Any, req: _facade().Dict[str, _facade().Any]
-) -> str:
+def _selected_tool_for_device(item: _facade().Any, req: _facade().Dict[str, _facade().Any]) -> str:
     for tool_name in _facade()._tool_candidates(req):
         if _facade()._device_eligible(item, tool_name):
             return tool_name
@@ -1098,9 +1020,7 @@ def _select_local_device_with_fallback(
             if isinstance(item, dict) and str(item.get("id") or "") == local_id
         )
     else:
-        primary = [
-            item for item in devices if isinstance(item, dict) and item.get("isPrimary")
-        ]
+        primary = [item for item in devices if isinstance(item, dict) and item.get("isPrimary")]
         ordered.extend(primary or [item for item in devices if isinstance(item, dict)])
     for item in ordered:
         selected_tool = _facade()._selected_tool_for_device(item, req)
@@ -1115,9 +1035,7 @@ def _select_fleet_devices_with_fallback(
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
     target = raw.get("target_devices")
     targets = (
-        {str(x).strip() for x in target if str(x).strip()}
-        if isinstance(target, list)
-        else {"all"}
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
     )
     candidates: list = []
     for item in devices:
@@ -1142,9 +1060,7 @@ def _filter_executor_ready(devices: list, tool_name: str) -> list:
 
 def _resolve_tier(req: _facade().Dict[str, _facade().Any]) -> int:
     """一级(1) / 二级(2)。默认一级，按需升二级。读 req.raw_input + 任务文本。"""
-    forced = (
-        (_facade().os.environ.get("MODSTORE_PARA_FORCE_TIER") or "").strip().lower()
-    )
+    forced = (_facade().os.environ.get("MODSTORE_PARA_FORCE_TIER") or "").strip().lower()
     if forced in {"1", "local", "single", "本机"}:
         return 1
     if forced in {"2", "fleet", "multi", "多设备"}:
@@ -1168,9 +1084,7 @@ def _resolve_tier(req: _facade().Dict[str, _facade().Any]) -> int:
         if len(specific) > 1:
             return 2
     text = f"{req.get('task') or ''} {req.get('prompt') or ''}"
-    if any(
-        m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")
-    ):
+    if any(m in text for m in ("多设备", "所有设备", "全部设备", "调用所有设备", "跨设备")):
         return 2
     return 1
 
@@ -1212,9 +1126,7 @@ def _select_fleet_devices(
     raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
     target = raw.get("target_devices")
     targets = (
-        {str(x).strip() for x in target if str(x).strip()}
-        if isinstance(target, list)
-        else {"all"}
+        {str(x).strip() for x in target if str(x).strip()} if isinstance(target, list) else {"all"}
     )
     candidates: list = []
     for item in devices:
@@ -1234,9 +1146,7 @@ def _select_fleet_devices(
 
 def _fetch_devices(client: _facade().httpx.Client, base: str, token: str) -> list:
     try:
-        resp = client.get(
-            f"{base}/api/devices", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get(f"{base}/api/devices", headers={"Authorization": f"Bearer {token}"})
     except RECOVERABLE_ERRORS:
         return []
     if resp.status_code >= 400:
@@ -1313,9 +1223,7 @@ def _multi_device_prompt(
     return _facade().insert_before_loop_context(base_prompt, suffix)
 
 
-def _para_subtask_title(
-    req: _facade().Dict[str, _facade().Any], index: int, total: int
-) -> str:
+def _para_subtask_title(req: _facade().Dict[str, _facade().Any], index: int, total: int) -> str:
     title = str(req.get("title") or "MODstore loop task")
     if total <= 1:
         return f"{req.get('mode') or 'code'}: {title}"[:240]
@@ -1394,12 +1302,8 @@ def _post_para_api_once(
     dispatched: list = []
     dispatch_failures: list = []
     try:
-        with _facade().httpx.Client(
-            timeout=_facade()._api_timeout(), trust_env=False
-        ) as client:
-            grant_task = str(
-                req.get("para_task_id") or req.get("request_id") or ""
-            ).strip()
+        with _facade().httpx.Client(timeout=_facade()._api_timeout(), trust_env=False) as client:
+            grant_task = str(req.get("para_task_id") or req.get("request_id") or "").strip()
             token_info = _facade()._get_para_token(client, base, grant_task)
             token = token_info["token"]
             if task_id:
@@ -1418,13 +1322,11 @@ def _post_para_api_once(
                     "outcome": (
                         "terminal"
                         if ok
-                        or final.get("status")
-                        in {"para_task_failed", "para_task_merge_conflict"}
+                        or final.get("status") in {"para_task_failed", "para_task_merge_conflict"}
                         else "unknown"
                     ),
                     "requires_reconciliation": not ok
-                    and final.get("status")
-                    not in {"para_task_failed", "para_task_merge_conflict"},
+                    and final.get("status") not in {"para_task_failed", "para_task_merge_conflict"},
                     "required_subtask_ids": req.get("required_subtask_ids") or [],
                     **(req.get("execution_identity") or {}),
                 }
@@ -1457,8 +1359,7 @@ def _post_para_api_once(
                 return h._outbox_response(
                     req,
                     status="blocked_no_online_para_device",
-                    error=select_reason
-                    or "未发现在线可用 Para 工作设备（executorReady）",
+                    error=select_reason or "未发现在线可用 Para 工作设备（executorReady）",
                     queued=True,
                 )
             prepare_task_group(
@@ -1562,8 +1463,7 @@ def _post_para_api_once(
                     or not accepted.get("subtask_id")
                     or (task_id and accepted_task_id != task_id)
                     or any(
-                        row.get("subtask_id") == accepted.get("subtask_id")
-                        for row in dispatched
+                        row.get("subtask_id") == accepted.get("subtask_id") for row in dispatched
                     )
                 ):
                     return {
@@ -1586,8 +1486,7 @@ def _post_para_api_once(
                 dispatched.append(
                     {
                         "device_id": device_id,
-                        "device_name": accepted.get("device_name")
-                        or device.get("name"),
+                        "device_name": accepted.get("device_name") or device.get("name"),
                         "subtask_id": accepted.get("subtask_id"),
                         "tool_name": selected_tool or h._dev_tool(),
                         **({"unit_id": unit["unit_id"]} if unit else {}),
@@ -1603,9 +1502,7 @@ def _post_para_api_once(
                     status="para_api_no_subtask_created",
                     error="Para API 未创建任何 subtask",
                 )
-            should_wait = h._coerce_bool(
-                req.get("wait_for_para"), h._wait_for_completion_default()
-            )
+            should_wait = h._coerce_bool(req.get("wait_for_para"), h._wait_for_completion_default())
             device_scope = "local_device" if tier == 1 else "all_devices"
             result = {
                 "handler": "para_delegate",
@@ -1622,9 +1519,7 @@ def _post_para_api_once(
                 "devices": dispatched,
                 "planned_devices": payload_group.planned_devices,
                 "required_subtask_ids": [
-                    str(device["subtask_id"])
-                    for device in dispatched
-                    if device.get("subtask_id")
+                    str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
                 ],
                 "dispatch_failures": dispatch_failures,
                 "partial": bool(dispatch_failures)
@@ -1670,9 +1565,7 @@ def _post_para_api_once(
                 "error": (
                     ""
                     if complete
-                    else str(
-                        final.get("error") or "Para required child dispatch incomplete"
-                    )
+                    else str(final.get("error") or "Para required child dispatch incomplete")
                 ),
             }
     except RECOVERABLE_ERRORS as exc:
@@ -1682,9 +1575,7 @@ def _post_para_api_once(
                 "para_task_id": task_id,
                 "para_payload": payload_group.first_payload,
                 "required_subtask_ids": [
-                    str(device["subtask_id"])
-                    for device in dispatched
-                    if device.get("subtask_id")
+                    str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
                 ],
                 "planned_devices": payload_group.planned_devices,
                 "dispatch_failures": dispatch_failures,
@@ -1704,9 +1595,7 @@ def _post_para_api_once(
             planned_devices=payload_group.planned_devices,
             dispatch_failures=dispatch_failures,
             required_subtask_ids=[
-                str(device["subtask_id"])
-                for device in dispatched
-                if device.get("subtask_id")
+                str(device["subtask_id"]) for device in dispatched if device.get("subtask_id")
             ],
             partial=bool(payload_group.planned_devices)
             and len(dispatched) < len(payload_group.planned_devices),
@@ -1746,11 +1635,7 @@ def _post_webhook(
         }
     if not url:
         raw = req.get("raw_input") if isinstance(req.get("raw_input"), dict) else {}
-        hops = (
-            raw.get("_ticket_route")
-            if isinstance(raw.get("_ticket_route"), list)
-            else []
-        )
+        hops = raw.get("_ticket_route") if isinstance(raw.get("_ticket_route"), list) else []
         if hops:
             return _facade()._post_ticket_route(req, hops)
         return _facade()._post_para_api(req)
@@ -1758,9 +1643,7 @@ def _post_webhook(
         resp = _facade().httpx.post(
             url,
             json=req,
-            timeout=float(
-                _facade().os.environ.get("MODSTORE_PARA_WEBHOOK_TIMEOUT_SEC", "60")
-            ),
+            timeout=float(_facade().os.environ.get("MODSTORE_PARA_WEBHOOK_TIMEOUT_SEC", "60")),
             trust_env=False,
         )
         body: _facade().Any = {}
@@ -1772,9 +1655,7 @@ def _post_webhook(
         accepted = body.get("accepted") is True and bool(
             body.get("task_id") or body.get("para_task_id")
         )
-        completed = (
-            accepted and body.get("completed") is True and body.get("ok") is True
-        )
+        completed = accepted and body.get("completed") is True and body.get("ok") is True
         ok = resp.status_code < 400 and (completed or accepted)
         return {
             "handler": "para_delegate",
@@ -1787,18 +1668,14 @@ def _post_webhook(
             "status": (
                 "para_task_completed"
                 if completed
-                else "para_task_accepted"
-                if accepted
-                else "para_webhook_unknown"
+                else "para_task_accepted" if accepted else "para_webhook_unknown"
             ),
             "outcome": "terminal" if completed else "unknown",
             "requires_reconciliation": not completed,
             "retryable": False,
             "response": body,
             "request": _facade()._public_request(req),
-            "error": ""
-            if ok
-            else str(body.get("error") or body.get("detail") or resp.text[:500]),
+            "error": "" if ok else str(body.get("error") or body.get("detail") or resp.text[:500]),
         }
     except RECOVERABLE_ERRORS as exc:
         return _facade()._outbox_response(

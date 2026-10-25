@@ -91,12 +91,8 @@ class TaskEventListener:
         self.lock = threading.Lock()
         self.socket = None
         self.threads = [
-            threading.Thread(
-                target=self._receive, name="para-task-events", daemon=True
-            ),
-            threading.Thread(
-                target=self._drain, name="para-task-readback", daemon=True
-            ),
+            threading.Thread(target=self._receive, name="para-task-events", daemon=True),
+            threading.Thread(target=self._drain, name="para-task-readback", daemon=True),
         ]
 
     def enqueue(self, task_id):
@@ -133,9 +129,7 @@ class TaskEventListener:
             try:
                 self.on_notice(task_id)
             except RECOVERABLE_ERRORS as exc:
-                _LOG.warning(
-                    "Para notification readback deferred: %s", type(exc).__name__
-                )
+                _LOG.warning("Para notification readback deferred: %s", type(exc).__name__)
             finally:
                 with self.lock:
                     self.queued.discard(task_id)

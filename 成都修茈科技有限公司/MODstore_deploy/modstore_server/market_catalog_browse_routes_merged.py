@@ -34,9 +34,7 @@ def api_market_facets():
             {
                 _facade()._normalize_material_category(r.material_category, r.artifact)
                 for r in rows
-                if _facade()._normalize_material_category(
-                    r.material_category, r.artifact
-                )
+                if _facade()._normalize_material_category(r.material_category, r.artifact)
             }
         )
         license_scopes = sorted(
@@ -46,9 +44,7 @@ def api_market_facets():
                 if _facade()._normalize_license_scope(r.license_scope, 0)
             }
         )
-        compliance_statuses = sorted(
-            {r.compliance_status for r in rows if r.compliance_status}
-        )
+        compliance_statuses = sorted({r.compliance_status for r in rows if r.compliance_status})
         result = {
             "industries": industries,
             "artifacts": artifacts,
@@ -70,15 +66,15 @@ def api_market_catalog(
     industry: _facade().Optional[str] = _facade().Query(None),
     license_scope: _facade().Optional[str] = _facade().Query(None),
     security_level: _facade().Optional[str] = _facade().Query(None),
-    collection: _facade().Optional[str] = _facade().Query(
+    collection: _facade()
+    .Optional[str] = _facade()
+    .Query(
         None,
         description="主题集合：office_employee_pack=办公员工包（10 个表格类）；office_employee_aux_pack_1=办公员工附属包1",
     ),
     limit: int = _facade().Query(50, ge=1, le=200),
     offset: int = _facade().Query(0, ge=0),
-    user: _facade().Optional[_facade().User] = _facade().Depends(
-        _facade()._optional_current_user
-    ),
+    user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._optional_current_user),
 ):
     from modstore_server.catalog_store import market_item_available
 
@@ -118,37 +114,27 @@ def api_market_catalog(
         if collection == "office_employee_pack":
             from modstore_server.office_employee_pack import OFFICE_EMPLOYEE_PKG_IDS
 
-            query = query.filter(
-                _facade().CatalogItem.pkg_id.in_(list(OFFICE_EMPLOYEE_PKG_IDS))
-            )
+            query = query.filter(_facade().CatalogItem.pkg_id.in_(list(OFFICE_EMPLOYEE_PKG_IDS)))
         elif collection == "office_employee_aux_pack_1":
             from modstore_server.office_employee_aux_pack_1 import (
                 OFFICE_AUX_PACK_1_PKG_IDS_LIST,
             )
 
-            query = query.filter(
-                _facade().CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_1_PKG_IDS_LIST)
-            )
+            query = query.filter(_facade().CatalogItem.pkg_id.in_(OFFICE_AUX_PACK_1_PKG_IDS_LIST))
         elif collection == "workflow_employee":
             from modstore_server.workflow_employee_pack import WORKFLOW_EMPLOYEE_PKG_IDS
 
-            query = query.filter(
-                _facade().CatalogItem.pkg_id.in_(list(WORKFLOW_EMPLOYEE_PKG_IDS))
-            )
+            query = query.filter(_facade().CatalogItem.pkg_id.in_(list(WORKFLOW_EMPLOYEE_PKG_IDS)))
         elif collection == "host_foundation":
             from modstore_server.host_foundation_pack import (
                 HOST_FOUNDATION_EMPLOYEE_PACK_ID,
             )
 
-            query = query.filter(
-                _facade().CatalogItem.pkg_id == HOST_FOUNDATION_EMPLOYEE_PACK_ID
-            )
+            query = query.filter(_facade().CatalogItem.pkg_id == HOST_FOUNDATION_EMPLOYEE_PACK_ID)
         elif not collection:
             from modstore_server.host_foundation_pack import INFRASTRUCTURE_PKG_IDS
 
-            query = query.filter(
-                ~_facade().CatalogItem.pkg_id.in_(list(INFRASTRUCTURE_PKG_IDS))
-            )
+            query = query.filter(~_facade().CatalogItem.pkg_id.in_(list(INFRASTRUCTURE_PKG_IDS)))
             query = query.filter(~_facade().CatalogItem.pkg_id.like("xcagi-%-bridge"))
         available_rows = query.order_by(
             _facade().CatalogItem.rank_score.desc(),
@@ -182,25 +168,19 @@ def api_market_catalog(
                     )
                     favorited_ids = {int(r[0]) for r in fav_rows}
                 except _facade().RECOVERABLE_ERRORS as exc:
-                    _facade().logger.warning(
-                        "market catalog: favorited ids unavailable (%s)", exc
-                    )
+                    _facade().logger.warning("market catalog: favorited ids unavailable (%s)", exc)
             try:
                 from sqlalchemy import func
 
                 count_rows = (
-                    session.query(
-                        _facade().Favorite.catalog_id, func.count(_facade().Favorite.id)
-                    )
+                    session.query(_facade().Favorite.catalog_id, func.count(_facade().Favorite.id))
                     .filter(_facade().Favorite.catalog_id.in_(ids))
                     .group_by(_facade().Favorite.catalog_id)
                     .all()
                 )
                 favorite_counts = {int(cid): int(cnt) for cid, cnt in count_rows}
             except _facade().RECOVERABLE_ERRORS as exc:
-                _facade().logger.warning(
-                    "market catalog: favorite counts unavailable (%s)", exc
-                )
+                _facade().logger.warning("market catalog: favorite counts unavailable (%s)", exc)
             try:
                 counts = (
                     session.query(
@@ -211,13 +191,9 @@ def api_market_catalog(
                     .all()
                 )
                 for catalog_id, _ in counts:
-                    complaint_counts[int(catalog_id)] = (
-                        complaint_counts.get(int(catalog_id), 0) + 1
-                    )
+                    complaint_counts[int(catalog_id)] = complaint_counts.get(int(catalog_id), 0) + 1
             except _facade().RECOVERABLE_ERRORS as exc:
-                _facade().logger.warning(
-                    "market catalog: complaint counts unavailable (%s)", exc
-                )
+                _facade().logger.warning("market catalog: complaint counts unavailable (%s)", exc)
         result = {
             "items": [
                 _facade()._catalog_item_payload(
@@ -359,16 +335,12 @@ def api_workflow_employee_pack_bundle(
 @_facade().router.get("/market/catalog/{item_id}")
 def api_market_catalog_detail(
     item_id: int,
-    user: _facade().Optional[_facade().User] = _facade().Depends(
-        _facade()._optional_current_user
-    ),
+    user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._optional_current_user),
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
         item = (
-            session.query(_facade().CatalogItem)
-            .filter(_facade().CatalogItem.id == item_id)
-            .first()
+            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
         )
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
@@ -386,9 +358,7 @@ def api_market_catalog_detail(
                 .first()
                 is not None
             )
-            if not _facade()._market_item_visible_to_user(
-                item, user, purchased=purchased
-            ):
+            if not _facade()._market_item_visible_to_user(item, user, purchased=purchased):
                 raise _facade().HTTPException(404, "商品不存在")
             favorited = (
                 session.query(_facade().Favorite)
@@ -421,9 +391,7 @@ def api_market_catalog_detail(
                 .count()
             )
         except _facade().RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning(
-                "market catalog detail: complaint count skipped (%s)", exc
-            )
+            _facade().logger.warning("market catalog detail: complaint count skipped (%s)", exc)
             complaint_count = 0
         payload = _facade()._catalog_item_payload(
             item,
@@ -453,15 +421,11 @@ def _enrich_catalog_creator_profile(
             .count()
         )
         reviews = (
-            session.query(_facade().Review)
-            .filter(_facade().Review.catalog_id == item.id)
-            .all()
+            session.query(_facade().Review).filter(_facade().Review.catalog_id == item.id).all()
         )
         review_count = len(reviews)
         if reviews:
-            avg_rating = round(
-                sum((int(r.rating or 0) for r in reviews)) / len(reviews), 2
-            )
+            avg_rating = round(sum((int(r.rating or 0) for r in reviews)) / len(reviews), 2)
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.debug("creator stats skipped for catalog %s: %s", item.id, exc)
     works_count = 0
@@ -469,9 +433,7 @@ def _enrich_catalog_creator_profile(
     if item.author_id:
         try:
             author = (
-                session.query(_facade().User)
-                .filter(_facade().User.id == item.author_id)
-                .first()
+                session.query(_facade().User).filter(_facade().User.id == item.author_id).first()
             )
             if author:
                 uname = str(author.username or "").strip() or f"用户{item.author_id}"
@@ -490,9 +452,7 @@ def _enrich_catalog_creator_profile(
                 .count()
             )
         except _facade().RECOVERABLE_ERRORS as exc:
-            _facade().logger.debug(
-                "creator author skipped for catalog %s: %s", item.id, exc
-            )
+            _facade().logger.debug("creator author skipped for catalog %s: %s", item.id, exc)
     payload["author"] = author_payload
     payload["creator_stats"] = {
         "favorite_count": fav_count,

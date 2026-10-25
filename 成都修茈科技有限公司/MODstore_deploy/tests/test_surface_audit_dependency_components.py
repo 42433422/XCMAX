@@ -12,7 +12,9 @@ import pytest
 from modstore_server import surface_audit_deps as deps
 
 
-def test_playwright_install_nonzero_is_a_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_playwright_install_nonzero_is_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("MODSTORE_SURFACE_AUDIT_AUTO_START", "1")
     monkeypatch.setitem(
         sys.modules, "playwright.async_api", SimpleNamespace(async_playwright=object())
@@ -29,7 +31,13 @@ def test_playwright_install_nonzero_is_a_failure(monkeypatch: pytest.MonkeyPatch
 
     assert result["ok"] is False
     assert "synthetic browser download failed" in result["error"]
-    assert calls[0][0] == ["synthetic-python", "-m", "playwright", "install", "chromium"]
+    assert calls[0][0] == [
+        "synthetic-python",
+        "-m",
+        "playwright",
+        "install",
+        "chromium",
+    ]
     assert calls[0][1]["timeout"] == 300
 
 

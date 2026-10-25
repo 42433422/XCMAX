@@ -20,9 +20,7 @@ def _facade():
 def _strip_fence(text: str) -> str:
     s = (text or "").strip()
     if s.startswith("```"):
-        s = _facade().re.sub(
-            "^```(?:json)?\\s*", "", s, flags=_facade().re.I | _facade().re.S
-        )
+        s = _facade().re.sub("^```(?:json)?\\s*", "", s, flags=_facade().re.I | _facade().re.S)
         s = _facade().re.sub("\\s*```\\s*$", "", s)
     return s.strip()
 
@@ -145,9 +143,7 @@ async def generate_bench_tasks(
             tasks.append(
                 {
                     "level": lv,
-                    "tasks": [
-                        {"id": f"{lv}-1", "task_desc": f"[Lv{lv}] {brief[:40]}（补位）"}
-                    ],
+                    "tasks": [{"id": f"{lv}-1", "task_desc": f"[Lv{lv}] {brief[:40]}（补位）"}],
                 }
             )
     tasks.sort(key=lambda x: x["level"])
@@ -182,9 +178,7 @@ def _derive_bench_execution_ok(raw: _facade().Dict[str, _facade().Any]) -> bool:
     return True
 
 
-def _extract_output_preview(
-    raw: _facade().Dict[str, _facade().Any], limit: int = 500
-) -> str:
+def _extract_output_preview(raw: _facade().Dict[str, _facade().Any], limit: int = 500) -> str:
     """抽取员工输出摘要供裁判模型评分。"""
     if not isinstance(raw, dict):
         return ""
@@ -346,10 +340,7 @@ def _run_single_task(
         if isinstance(res, dict):
             ok = _facade()._derive_bench_execution_ok(res)
             cost_tokens = int(
-                res.get("llm_tokens")
-                or res.get("cost_tokens")
-                or res.get("tokens_used")
-                or 0
+                res.get("llm_tokens") or res.get("cost_tokens") or res.get("tokens_used") or 0
             )
         else:
             ok = bool(res)
@@ -382,9 +373,7 @@ def _score_level(
     if not level_results:
         return 0.0
     scores = [
-        100.0
-        * (1.0 if r["ok"] else 0.0)
-        * _facade()._efficiency_factor(r["cost_tokens"])
+        100.0 * (1.0 if r["ok"] else 0.0) * _facade()._efficiency_factor(r["cost_tokens"])
         for r in level_results
     ]
     return sum(scores) / len(scores)
@@ -393,10 +382,7 @@ def _score_level(
 def _weighted_overall(level_scores: _facade().Dict[int, float]) -> float:
     total_w = sum((_facade()._LEVEL_WEIGHTS[lv] for lv in range(1, 6)))
     weighted = sum(
-        (
-            _facade()._LEVEL_WEIGHTS.get(lv, 1.0) * level_scores.get(lv, 0.0)
-            for lv in range(1, 6)
-        )
+        (_facade()._LEVEL_WEIGHTS.get(lv, 1.0) * level_scores.get(lv, 0.0) for lv in range(1, 6))
     )
     return weighted / total_w if total_w else 0.0
 
@@ -411,9 +397,7 @@ def _parse_machine_score_from_text(text: str) -> _facade().Optional[int]:
         return None
     lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
     for ln in reversed(lines[-8:]):
-        m = _facade().re.match(
-            "^MACHINE_SCORE\\s*=\\s*(\\d{1,3})\\s*$", ln, flags=_facade().re.I
-        )
+        m = _facade().re.match("^MACHINE_SCORE\\s*=\\s*(\\d{1,3})\\s*$", ln, flags=_facade().re.I)
         if m:
             v = int(m.group(1))
             return max(0, min(100, v))
@@ -431,9 +415,7 @@ def _peer_review_gate_enabled() -> bool:
 
 
 def _peer_review_min_score() -> float:
-    raw = (
-        _facade().os.environ.get("MODSTORE_BENCH_PEER_REVIEW_MIN_SCORE", "55") or ""
-    ).strip()
+    raw = (_facade().os.environ.get("MODSTORE_BENCH_PEER_REVIEW_MIN_SCORE", "55") or "").strip()
     try:
         return float(raw)
     except ValueError:
@@ -451,9 +433,7 @@ async def _run_pack_peer_review_optional(
 
     质询员工（如 ``employee-pack-quality-interviewer``）须在输出**最后一行**写 ``MACHINE_SCORE=整数``。
     """
-    reviewer = (
-        _facade().os.environ.get("MODSTORE_PACK_PEER_REVIEW_EMPLOYEE") or ""
-    ).strip()
+    reviewer = (_facade().os.environ.get("MODSTORE_PACK_PEER_REVIEW_EMPLOYEE") or "").strip()
     if not reviewer:
         return None
     if not bench_llm_override:
@@ -490,9 +470,7 @@ async def _run_pack_peer_review_optional(
     excerpt = _facade().json.dumps(manifest, ensure_ascii=False, indent=2)
     max_chars = int(
         (
-            _facade().os.environ.get(
-                "MODSTORE_PACK_PEER_REVIEW_MAX_MANIFEST_CHARS", "14000"
-            )
+            _facade().os.environ.get("MODSTORE_PACK_PEER_REVIEW_MAX_MANIFEST_CHARS", "14000")
             or "14000"
         ).strip()
         or "14000"
@@ -529,9 +507,7 @@ async def _run_pack_peer_review_optional(
             "subject_employee_id": subject_employee_id,
         }
     text = ""
-    res_block = (
-        exec_out.get("result") if isinstance(exec_out.get("result"), dict) else {}
-    )
+    res_block = exec_out.get("result") if isinstance(exec_out.get("result"), dict) else {}
     for block in res_block.get("outputs") or []:
         if isinstance(block, dict) and block.get("handler") == "llm_md":
             text = str(block.get("output") or "")
@@ -573,8 +549,7 @@ def _read_employee_brief(employee_id: str) -> _facade().Tuple[str, str]:
     except (OSError, _facade().json.JSONDecodeError):
         return ("", "")
     brief = (
-        str(mf.get("description") or "")
-        or str((mf.get("identity") or {}).get("description") or "")
+        str(mf.get("description") or "") or str((mf.get("identity") or {}).get("description") or "")
     )[:800]
     rows = mf.get("workflow_employees") or []
     panel_summary = ""
@@ -590,11 +565,7 @@ def _collect_reviewer_candidate_ids(subject_id: str) -> _facade().List[str]:
     subject_id = (subject_id or "").strip()
     raw = (os.environ.get("MODSTORE_BENCH_REVIEWER_POOL") or "").strip()
     ids = [x.strip() for x in raw.split(",") if x.strip()]
-    flag = (
-        (os.environ.get("MODSTORE_BENCH_REVIEWER_POOL_FROM_CATALOG") or "")
-        .strip()
-        .lower()
-    )
+    flag = (os.environ.get("MODSTORE_BENCH_REVIEWER_POOL_FROM_CATALOG") or "").strip().lower()
     if flag in ("1", "true", "yes", "on"):
         try:
             from modstore_server import catalog_store
@@ -674,10 +645,7 @@ async def _llm_assign_reviewers_to_dimensions(
         return ({}, None)
     allowed = {c["id"] for c in candidates if c.get("id")}
     dim_lines = "\n".join(
-        (
-            f"- {d}: {_facade()._DIM_LABELS_ZH.get(d, d)}"
-            for d in _facade().AUDIT_DIMENSIONS
-        )
+        (f"- {d}: {_facade()._DIM_LABELS_ZH.get(d, d)}" for d in _facade().AUDIT_DIMENSIONS)
     )
     system = f"""你是员工包「五维沙盒审核」的评审路由编排器。\n沙盒会对**评审参考包本身**跑静态五维打分；合成报告时，每个维度可以引用不同参考包在该维上的得分。\n\n当前只需要为下列**尚未指定**的维度，各选一个**最合适**的候选包 id（必须从候选列表中选，禁止编造 id）。\n尚未指定维度：{", ".join(holes)}\n\n五维含义：\n{dim_lines}\n\n规则：\n1. 输出**仅**一个 JSON 对象，不要 markdown。\n2. 每个键必须是下列之一：{", ".join(_facade().AUDIT_DIMENSIONS)}\n3. **只输出你需要填写的维度**（通常是 holes 中的维度）；每个值必须是候选中的 id 字符串。\n4. 优先让五个维度覆盖不同候选（若候选不足再复用）。\n5. 结合「被测员工」的领域与候选包的名称/简介做语义匹配。\n\n示例：{{"manifest_compliance":"pkg-a","metadata_quality":"pkg-b"}}"""
     payload = {
@@ -876,11 +844,7 @@ async def _run_five_dim_audit(
                 effective_map[dim] = v
     if per_dimension_ids:
         effective_map.update(
-            {
-                k: v
-                for (k, v) in per_dimension_ids.items()
-                if k in _facade().AUDIT_DIMENSIONS and v
-            }
+            {k: v for (k, v) in per_dimension_ids.items() if k in _facade().AUDIT_DIMENSIONS and v}
         )
     pack_ids_needed: set[str] = {employee_id}
     for dim in _facade().AUDIT_DIMENSIONS:
@@ -925,9 +889,7 @@ async def _run_five_dim_audit(
         merged_dims[dim] = entry
     scores = [int(merged_dims[d].get("score") or 0) for d in _facade().AUDIT_DIMENSIONS]
     average = round(sum(scores) / len(scores), 1) if scores else 0.0
-    manifest_ok = (
-        int(merged_dims.get("manifest_compliance", {}).get("score") or 0) >= 40
-    )
+    manifest_ok = int(merged_dims.get("manifest_compliance", {}).get("score") or 0) >= 40
     orig_manifest_err = bool(
         primary_audit.get("summary", {}).get("pass") is False
         and (not primary_audit.get("dimensions"))
@@ -940,9 +902,7 @@ async def _run_five_dim_audit(
         "summary": {
             "average": average,
             "pass": passed,
-            "artifact": (primary_audit.get("summary") or {}).get(
-                "artifact", "employee_pack"
-            ),
+            "artifact": (primary_audit.get("summary") or {}).get("artifact", "employee_pack"),
             "composite": bool(effective_map),
         },
     }
@@ -981,9 +941,9 @@ async def run_and_score_bench(
     import asyncio
 
     tasks_result: _facade().List[_facade().Dict[str, _facade().Any]] = []
-    level_results: _facade().Dict[
-        int, _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = {lv: [] for lv in range(1, 6)}
+    level_results: _facade().Dict[int, _facade().List[_facade().Dict[str, _facade().Any]]] = {
+        lv: [] for lv in range(1, 6)
+    }
     for level_group in task_list:
         lv = int(level_group.get("level") or 0)
         if lv < 1 or lv > 5:
@@ -1015,9 +975,7 @@ async def run_and_score_bench(
             }
             tasks_result.append(entry)
             level_results[lv].append(run_result)
-    scoring_meta: _facade().Dict[str, _facade().Any] = {
-        "method": "heuristic_ok_token_efficiency"
-    }
+    scoring_meta: _facade().Dict[str, _facade().Any] = {"method": "heuristic_ok_token_efficiency"}
     if bench_llm_override:
         prov, mdl = bench_llm_override
         rubric_items = [
@@ -1060,11 +1018,7 @@ async def run_and_score_bench(
             vals = list(rubric_map.values())
             all_near_max = bool(vals) and all((float(v) >= 98.0 for v in vals))
             mostly_blank_out = sum(
-                (
-                    1
-                    for e in tasks_result
-                    if len((e.get("output_preview") or "").strip()) < 15
-                )
+                (1 for e in tasks_result if len((e.get("output_preview") or "").strip()) < 15)
             ) >= max(1, (len(tasks_result) + 1) // 2)
             if all_near_max and mostly_blank_out:
                 scoring_meta["suspect_rubric_inflated"] = True
@@ -1082,8 +1036,7 @@ async def run_and_score_bench(
         overall_score = round(_facade()._weighted_overall(level_scores), 1)
     else:
         level_scores = {
-            lv: round(_facade()._score_level(results), 1)
-            for (lv, results) in level_results.items()
+            lv: round(_facade()._score_level(results), 1) for (lv, results) in level_results.items()
         }
         overall_score = round(_facade()._weighted_overall(level_scores), 1)
     explicit_dims = {
@@ -1116,14 +1069,10 @@ async def run_and_score_bench(
             elif not peer.get("pass_peer"):
                 peer_blocks_pass = True
     passed = (
-        overall_score >= _facade()._PASS_OVERALL_SCORE
-        and audit_passed
-        and (not peer_blocks_pass)
+        overall_score >= _facade()._PASS_OVERALL_SCORE and audit_passed and (not peer_blocks_pass)
     )
     six_dimension: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
-    six_dimension_llm_meta: _facade().Optional[_facade().Dict[str, _facade().Any]] = (
-        None
-    )
+    six_dimension_llm_meta: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
     if bench_llm_override:
         try:
             from modstore_server.catalog_quality import (
@@ -1188,9 +1137,7 @@ async def run_and_score_bench(
                     require_llm=True,
                 )
         except RECOVERABLE_ERRORS as exc:
-            _facade().logger.warning(
-                "bench six_dimension LLM failed for %s: %s", employee_id, exc
-            )
+            _facade().logger.warning("bench six_dimension LLM failed for %s: %s", employee_id, exc)
             six_dimension_llm_meta = {"llm_error": str(exc)[:300]}
     out: _facade().Dict[str, _facade().Any] = {
         "tasks_result": tasks_result,

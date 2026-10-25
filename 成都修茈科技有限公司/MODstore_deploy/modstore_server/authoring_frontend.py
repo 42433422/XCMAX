@@ -26,9 +26,7 @@ def regenerate_frontend(mod_dir: Path, mod_id: str, brief: str) -> Dict[str, Any
         snapshot = None
     spec = CatalogShellService.frontend_spec_for_existing_mod(mod_dir, manifest, brief)
     mod_name = str(manifest.get("name") or mod_id)
-    frontend = (
-        manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-    )
+    frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
     menu = frontend.get("menu")
     if not isinstance(menu, list) or not menu:
         menu = [

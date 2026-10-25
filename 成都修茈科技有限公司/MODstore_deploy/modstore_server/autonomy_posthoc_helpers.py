@@ -38,17 +38,12 @@ def safe_repo_path(value: Any) -> str:
 
 def recorded_at_or_after(record: dict[str, Any], allowed_at: datetime) -> bool:
     raw = str(
-        record.get("created_at")
-        or record.get("completed_at")
-        or record.get("observed_at")
-        or ""
+        record.get("created_at") or record.get("completed_at") or record.get("observed_at") or ""
     ).strip()
     if not raw:
         return False
     try:
-        return utc(datetime.fromisoformat(raw.replace("Z", "+00:00"))) >= utc(
-            allowed_at
-        )
+        return utc(datetime.fromisoformat(raw.replace("Z", "+00:00"))) >= utc(allowed_at)
     except ValueError:
         return False
 
@@ -58,9 +53,7 @@ def failed_merge_request_attempt(
 ) -> dict[str, Any] | None:
     for record in reversed(records):
         policy = (
-            record.get("policy_decision")
-            if isinstance(record.get("policy_decision"), dict)
-            else {}
+            record.get("policy_decision") if isinstance(record.get("policy_decision"), dict) else {}
         )
         if (
             str(record.get("phase") or "") == "complete"

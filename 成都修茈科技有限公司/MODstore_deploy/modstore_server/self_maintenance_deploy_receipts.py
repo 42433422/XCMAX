@@ -72,8 +72,7 @@ class BuildIdentity:
         if not _COMMIT_RE.fullmatch(self.git_sha):
             raise DeploymentReceiptError(f"{source}_missing_git_sha")
         if not (
-            _ARTIFACT_RE.fullmatch(self.artifact_sha256)
-            or _IMAGE_RE.fullmatch(self.image_digest)
+            _ARTIFACT_RE.fullmatch(self.artifact_sha256) or _IMAGE_RE.fullmatch(self.image_digest)
         ):
             raise DeploymentReceiptError(f"{source}_missing_artifact_digest")
         return self
@@ -87,9 +86,7 @@ class DispatchReceipt:
     action_id: str
     url: str = ""
 
-    def require_correlation(
-        self, *, merge_sha: str, environment: str
-    ) -> DispatchReceipt:
+    def require_correlation(self, *, merge_sha: str, environment: str) -> DispatchReceipt:
         if not str(self.workflow_run_id or "").strip():
             raise DeploymentReceiptError("dispatch_missing_workflow_run_id")
         if _sha(self.head_sha) != merge_sha:
@@ -120,9 +117,7 @@ class WorkflowCompletion:
 
 
 class DeploymentReceiptGateway(Protocol):
-    def dispatch(
-        self, *, environment: str, merge_sha: str, action_id: str
-    ) -> DispatchReceipt: ...
+    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt: ...
 
     def wait_for_success(self, receipt: DispatchReceipt) -> WorkflowCompletion: ...
 
@@ -406,11 +401,7 @@ def resolve_pending_merge_request(
     # trusted workflow also carries the exact requested run id and branch.
     attested_branch = str(attested_branch or "").strip()
     attested_head = _sha(attested_branch_head_sha)
-    if (
-        not requested_run_id
-        or not attested_branch
-        or not _COMMIT_RE.fullmatch(attested_head)
-    ):
+    if not requested_run_id or not attested_branch or not _COMMIT_RE.fullmatch(attested_head):
         raise DeploymentReceiptError("pending_merge_not_found")
 
     attested_matches: List[Dict[str, Any]] = []

@@ -72,9 +72,7 @@ async def mark_read(
 
 
 @router.post("/read-all")
-async def mark_all_read(
-    db: Session = Depends(get_db), user: User = Depends(_get_current_user)
-):
+async def mark_all_read(db: Session = Depends(get_db), user: User = Depends(_get_current_user)):
     db.execute(
         update(Notification)
         .where(Notification.user_id == user.id, Notification.is_read.is_(False))

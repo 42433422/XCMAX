@@ -304,11 +304,7 @@ def dispatch_incident(event_id: int) -> DispatchReport:
     started = datetime.now(UTC)
     sf = get_session_factory()
     with sf() as session:
-        ev = (
-            session.query(IncidentEvent)
-            .filter(IncidentEvent.id == int(event_id))
-            .first()
-        )
+        ev = session.query(IncidentEvent).filter(IncidentEvent.id == int(event_id)).first()
         if not ev:
             return DispatchReport(
                 event_id=int(event_id),
@@ -373,14 +369,10 @@ def dispatch_incident(event_id: int) -> DispatchReport:
                             "event_id": event_id,
                             "event_type": event_type,
                             "payload_excerpt": {
-                                k: v
-                                for k, v in payload.items()
-                                if k != "_unified_orchestration"
+                                k: v for k, v in payload.items() if k != "_unified_orchestration"
                             },
                             "redeploy_result": (
-                                result.to_dict()
-                                if hasattr(result, "to_dict")
-                                else asdict(result)
+                                result.to_dict() if hasattr(result, "to_dict") else asdict(result)
                             ),
                         },
                         ensure_ascii=False,

@@ -76,9 +76,7 @@ async def align_catalog_employee_packs_llm_from_deepseek(
             aid = int(row.author_id) if row and row.author_id else int(admin_user.id)
             eff_user = db.query(User).filter(User.id == aid).first() or admin_user
 
-            new_p, new_m, err = await resolve_llm_provider_model_auto(
-                db, eff_user, None, None
-            )
+            new_p, new_m, err = await resolve_llm_provider_model_auto(db, eff_user, None, None)
             if err or not new_p or not new_m:
                 errors.append({"pack_id": pack_id, "error": err or "无法解析可用 LLM"})
                 continue

@@ -45,9 +45,7 @@ from modstore_server.models import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
-router = APIRouter(
-    prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"]
-)
+router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
 
 
 @router.get("/dashboard")
@@ -220,12 +218,8 @@ def batch_review_employee_suggestions(
 ) -> Dict[str, Any]:
     ids_raw = body.get("ids") if isinstance(body.get("ids"), list) else []
     action = str(body.get("action") or "").strip().lower()
-    approve_ids = (
-        body.get("approve_ids") if isinstance(body.get("approve_ids"), list) else []
-    )
-    reject_ids = (
-        body.get("reject_ids") if isinstance(body.get("reject_ids"), list) else []
-    )
+    approve_ids = body.get("approve_ids") if isinstance(body.get("approve_ids"), list) else []
+    reject_ids = body.get("reject_ids") if isinstance(body.get("reject_ids"), list) else []
     if not ids_raw and approve_ids and reject_ids:
         raise HTTPException(400, "approve_ids/reject_ids 不能同时提交")
     if not ids_raw and approve_ids:
@@ -269,9 +263,7 @@ def batch_review_employee_suggestions(
             ok += 1
         else:
             failed += 1
-            errors.append(
-                {"id": sid, "error": str(out.get("error") or "unknown")[:300]}
-            )
+            errors.append({"id": sid, "error": str(out.get("error") or "unknown")[:300]})
     return {
         "ok": True,
         "action": action,
@@ -353,9 +345,7 @@ def list_collab_threads(
     _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeCollabThread).order_by(
-            EmployeeCollabThread.updated_at.desc()
-        )
+        q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeCollabThread.status == st)
@@ -382,9 +372,7 @@ def create_collab_thread_api(
 ) -> Dict[str, Any]:
     _ = _admin_user
     title = str(body.get("title") or "").strip() or "协作线程"
-    participants = (
-        body.get("participants") if isinstance(body.get("participants"), list) else []
-    )
+    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
     created_by = str(body.get("created_by_employee_id") or "admin").strip() or "admin"
     out = create_collab_thread(
         title=title,

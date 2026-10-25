@@ -7,9 +7,7 @@ from typing import Any
 
 REGISTRATION_PREFIX = "employee_cron_registered:"
 DEFERRED_STATUS = "deferred"
-APPROVAL_REQUIRED_HIGH_RISK_CODE = (
-    "employee_cron_policy_deferred:approval_required_high_risk"
-)
+APPROVAL_REQUIRED_HIGH_RISK_CODE = "employee_cron_policy_deferred:approval_required_high_risk"
 
 
 def defer_employee_cron_if_approval_required(

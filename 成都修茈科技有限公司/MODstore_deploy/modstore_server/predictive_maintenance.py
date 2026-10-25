@@ -17,10 +17,7 @@ WINDOW_DAYS = 30
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR")
-        or Path.home() / ".xcmax" / "modstore-daily"
-    )
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
 
 
 def _kb_fixes_dir() -> Path:
@@ -112,15 +109,11 @@ def forecast_next_24h(*, window_days: int = WINDOW_DAYS) -> Dict[str, Any]:
                     (cur["created_at"] - prev["created_at"]).total_seconds() / 3600.0,
                 )
             )
-        avg_gap = (
-            sum(gaps_hours) / len(gaps_hours) if gaps_hours else float(window_days * 24)
-        )
+        avg_gap = sum(gaps_hours) / len(gaps_hours) if gaps_hours else float(window_days * 24)
         last_age = max(0.0, (now - rows[-1]["created_at"]).total_seconds() / 3600.0)
         frequency_score = min(1.0, count / max(1.0, window_days / 3.0))
         due_score = min(1.0, last_age / max(1.0, avg_gap))
-        confidence = round(
-            min(0.95, 0.35 + frequency_score * 0.35 + due_score * 0.25), 3
-        )
+        confidence = round(min(0.95, 0.35 + frequency_score * 0.35 + due_score * 0.25), 3)
         eta_hours = max(1.0, avg_gap - last_age)
         forecasts.append(
             {
@@ -154,9 +147,7 @@ def run_predictive_maintenance_once() -> Dict[str, Any]:
         json.dumps(forecast, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    threshold = float(
-        os.environ.get("MODSTORE_PREDICTIVE_MAINTENANCE_CONFIDENCE", "0.7")
-    )
+    threshold = float(os.environ.get("MODSTORE_PREDICTIVE_MAINTENANCE_CONFIDENCE", "0.7"))
     emitted = False
     top = forecast.get("predictions", [{}])[0] if forecast.get("predictions") else {}
     if isinstance(top, dict) and float(top.get("confidence") or 0.0) >= threshold:

@@ -51,9 +51,7 @@ def _legacy_db_path() -> Path:
     """Allow a one-time migration from the former tmp-backed outbox."""
 
     return Path(
-        os.environ.get(
-            "MODSTORE_LEGACY_CS_WEBHOOK_OUTBOX_PATH", str(_LEGACY_OUTBOX_PATH)
-        )
+        os.environ.get("MODSTORE_LEGACY_CS_WEBHOOK_OUTBOX_PATH", str(_LEGACY_OUTBOX_PATH))
     ).expanduser()
 
 
@@ -146,9 +144,7 @@ def _migrate_legacy_outbox(conn: sqlite3.Connection) -> None:
         while batch := legacy_rows.fetchmany(_LEGACY_MIGRATION_BATCH_SIZE):
             for row in batch:
                 source_status = str(row[6] or "pending")
-                status = (
-                    "recovery_pending" if source_status == "pending" else source_status
-                )
+                status = "recovery_pending" if source_status == "pending" else source_status
                 conn.execute(
                     """
                     INSERT INTO cs_webhook_outbox (
@@ -195,9 +191,7 @@ def outbox_status_summary() -> dict[str, Any]:
     counts = {str(row[0]): int(row[1]) for row in rows}
     path = _db_path()
     return {
-        "storage": "tmp_fallback"
-        if path.parent == Path("/tmp/modstore_data")
-        else "configured",
+        "storage": "tmp_fallback" if path.parent == Path("/tmp/modstore_data") else "configured",
         "counts": counts,
         "pending_count": counts.get("pending", 0),
         "recovery_pending_count": counts.get("recovery_pending", 0),
@@ -207,9 +201,7 @@ def outbox_status_summary() -> dict[str, Any]:
 
 def retry_interval_seconds() -> int:
     try:
-        configured = int(
-            os.environ.get("MODSTORE_CS_WEBHOOK_OUTBOX_RETRY_SECONDS", "60")
-        )
+        configured = int(os.environ.get("MODSTORE_CS_WEBHOOK_OUTBOX_RETRY_SECONDS", "60"))
     except ValueError:
         configured = 60
     return max(30, min(configured, 3600))

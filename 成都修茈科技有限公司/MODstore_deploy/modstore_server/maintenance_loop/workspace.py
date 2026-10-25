@@ -32,9 +32,7 @@ def _run_cmd(
     )
     output = (proc.stdout or "").strip()
     if proc.returncode != 0:
-        raise RuntimeError(
-            f"command failed ({proc.returncode}): {' '.join(args)}\n{output}"
-        )
+        raise RuntimeError(f"command failed ({proc.returncode}): {' '.join(args)}\n{output}")
     return output
 
 
@@ -43,9 +41,7 @@ def _cleanup_merge_workspace(workspace: Path) -> bool:
     root = (config._runtime_dir() / config.DEFAULT_MERGE_WORKSPACE_ROOT).resolve()
     candidate = workspace.resolve()
     if candidate == root or root not in candidate.parents:
-        config.logger.error(
-            "refusing to clean merge workspace outside root: %s", candidate
-        )
+        config.logger.error("refusing to clean merge workspace outside root: %s", candidate)
         return False
     try:
         shutil.rmtree(candidate)
@@ -239,9 +235,7 @@ def _changed_files_for_branch(
     return [line.strip() for line in diff.splitlines() if line.strip()]
 
 
-def _diff_numstat_for_branch(
-    *, base_branch: str, branch: str, workspace: Path
-) -> Dict[str, Any]:
+def _diff_numstat_for_branch(*, base_branch: str, branch: str, workspace: Path) -> Dict[str, Any]:
     diff = _run_cmd(
         [
             "git",
@@ -343,10 +337,7 @@ def _normalize_repo_path(file_name: str) -> str:
 def _diff_stats_changed_files_consistency(
     files: List[str], diff_stats: Dict[str, Any]
 ) -> Dict[str, Any]:
-    if (
-        not isinstance(diff_stats, dict)
-        or diff_stats.get("source") != "git_diff_numstat"
-    ):
+    if not isinstance(diff_stats, dict) or diff_stats.get("source") != "git_diff_numstat":
         return {
             "ok": True,
             "reason": "diff_stats_consistency_not_enforced_for_legacy_input",
@@ -354,9 +345,7 @@ def _diff_stats_changed_files_consistency(
     expected = {_normalize_repo_path(file_name) for file_name in files if file_name}
     stats_changed = diff_stats.get("changed_files")
     if not isinstance(stats_changed, list):
-        file_stats = (
-            diff_stats.get("files") if isinstance(diff_stats.get("files"), dict) else {}
-        )
+        file_stats = diff_stats.get("files") if isinstance(diff_stats.get("files"), dict) else {}
         if not isinstance(file_stats, dict):
             file_stats = {}
         binary_files = (
@@ -367,11 +356,7 @@ def _diff_stats_changed_files_consistency(
         if not isinstance(binary_files, list):
             binary_files = []
         stats_changed = list(file_stats.keys()) + binary_files
-    actual = {
-        _normalize_repo_path(str(file_name))
-        for file_name in stats_changed
-        if str(file_name)
-    }
+    actual = {_normalize_repo_path(str(file_name)) for file_name in stats_changed if str(file_name)}
     missing_from_numstat = sorted(expected - actual)
     extra_in_numstat = sorted(actual - expected)
     if missing_from_numstat or extra_in_numstat:

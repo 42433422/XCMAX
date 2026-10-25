@@ -83,8 +83,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
             except (TypeError, ValueError):
                 ticket_id_hint = 0
             customer_ticket = ticket_id_hint > 0 and (
-                str(payload.get("source") or source or "").strip().lower()
-                == "customer_ticket"
+                str(payload.get("source") or source or "").strip().lower() == "customer_ticket"
                 or event_type == "ops.intake.customer_ticket"
                 or str(payload.get("ticket_no") or "").startswith("CS")
             )
@@ -102,9 +101,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     checks = team_plan.get("independent_checks")
     if checks is None:
         try:
-            checks = json.loads(
-                os.environ.get("MODSTORE_INCIDENT_TEAM_CHECKS_JSON") or "{}"
-            )
+            checks = json.loads(os.environ.get("MODSTORE_INCIDENT_TEAM_CHECKS_JSON") or "{}")
         except (TypeError, ValueError):
             checks = {}
     team_plan = {
@@ -140,8 +137,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
                 and ticket.status == "processing"
                 and not ticket.closed_at
                 and original_resolution.get("reopened_at")
-                and original_resolution.get("reopened_at")
-                == resolution.get("reopened_at")
+                and original_resolution.get("reopened_at") == resolution.get("reopened_at")
             ):
                 # A fresh reopen owns a new event; an old event keeps its old timestamp.
                 resolution.update(state="processing", incident_event_id=int(event_id))
@@ -178,9 +174,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     try:
         from modstore_server.release_recovery_orchestrator import maybe_execute_recovery
 
-        recovery = maybe_execute_recovery(
-            event_id=event_id, event_type=event_type, payload=payload
-        )
+        recovery = maybe_execute_recovery(event_id=event_id, event_type=event_type, payload=payload)
     except RECOVERABLE_ERRORS as exc:
         recovery = {"ok": False, "error": str(exc)[:500]}
     with sf() as session:
@@ -193,9 +187,7 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
     return advance_team(int(event_id))
 
 
-def _write_repair_loop(
-    session, ticket, event_id: int, follow_ups: list[dict[str, Any]]
-) -> None:
+def _write_repair_loop(session, ticket, event_id: int, follow_ups: list[dict[str, Any]]) -> None:
     """把失败分类、处置次数、原因、是否升级回写工单（仅管理端证据与审计，客户视图白名单不含）。"""
     from modstore_server.customer_service_tools import audit
     from modstore_server.incident_team_failure_loop import loop_summary
@@ -208,9 +200,7 @@ def _write_repair_loop(
     escalated = [item for item in summary if item.get("escalated_to")]
     audit(
         session,
-        event_type="incident.repair_loop_escalated"
-        if escalated
-        else "incident.repair_loop",
+        event_type="incident.repair_loop_escalated" if escalated else "incident.repair_loop",
         detail={"event_id": event_id, "items": summary},
         ticket_id=int(ticket.id),
         actor_type="system",
@@ -268,9 +258,7 @@ def member_runtime_input(
                 "role": role,
                 "attempt_id": attempt_id,
                 "previous_fix": (
-                    role_handoff(fix_result, "fix")
-                    if role == "fix" and fix_result
-                    else None
+                    role_handoff(fix_result, "fix") if role == "fix" and fix_result else None
                 ),
             },
         }

@@ -70,9 +70,7 @@ class FlowStep:
 
 def _bind_step_executors(steps: _facade().List[FlowStep]) -> _facade().List[FlowStep]:
     return [
-        _facade().replace(
-            s, executor=_facade()._STEP_EXECUTOR_MAP.get(s.step_id, "fhd")
-        )
+        _facade().replace(s, executor=_facade()._STEP_EXECUTOR_MAP.get(s.step_id, "fhd"))
         for s in steps
     ]
 
@@ -133,9 +131,7 @@ def get_five_line_status() -> _facade().Dict[str, _facade().Any]:
         mapped = [sid for sid in defn.step_ids if sid in statuses]
         completed = sum((1 for sid in mapped if statuses[sid] == "completed"))
         live_rate = (
-            round(completed / len(mapped) * 100, 1)
-            if mapped
-            else defn.baseline_automation_rate
+            round(completed / len(mapped) * 100, 1) if mapped else defn.baseline_automation_rate
         )
         display_rate = (
             max(live_rate, defn.baseline_automation_rate)
@@ -194,17 +190,11 @@ async def run_production_line(
     context: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
     orch = _facade().get_production_line_orchestrator()
-    lt = (
-        _facade().LineType.PRODUCTION
-        if line == "production"
-        else _facade().LineType.OPERATIONS
-    )
+    lt = _facade().LineType.PRODUCTION if line == "production" else _facade().LineType.OPERATIONS
     return await orch.run_full_pipeline(line=lt, start_from=start_from, context=context)
 
 
-async def approve_production_line_step(
-    step_id: str, admin_user_id: int = 0
-) -> StepResult:
+async def approve_production_line_step(step_id: str, admin_user_id: int = 0) -> StepResult:
     orch = _facade().get_production_line_orchestrator()
     return await orch.approve_step(step_id, admin_user_id=admin_user_id)
 

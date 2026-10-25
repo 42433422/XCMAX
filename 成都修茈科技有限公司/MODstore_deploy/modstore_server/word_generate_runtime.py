@@ -70,9 +70,7 @@ def is_word_generate(brief: str) -> bool:
 
     if is_word_full_extract(brief) and not has_gen:
         return False
-    if has_gen and any(
-        k in bl for k in ("生成", "写入", "write", "generate", "render", "build")
-    ):
+    if has_gen and any(k in bl for k in ("生成", "写入", "write", "generate", "render", "build")):
         return True
     return False
 
@@ -80,8 +78,7 @@ def is_word_generate(brief: str) -> bool:
 def word_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / Word 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200]
-        or "由 JSON 结构化数据生成 Word 文档",
+        "goal": (brief or "").strip().splitlines()[0][:200] or "由 JSON 结构化数据生成 Word 文档",
         "input": "document_full.json / user_query 纯文本 / .txt + 可选 template.docx",
         "output": "outputs/generated_document.docx",
         "output_schema": {
@@ -359,8 +356,7 @@ def validate_word_generate_backend(pack_dir: Path) -> Tuple[List[str], List[str]
     if not has_convert:
         errors.append("backend/vendor 中缺少 convert_file 实现")
     if not any(
-        tok in py_blob
-        for tok in ("docx", "document", "add_paragraph", "generated_document")
+        tok in py_blob for tok in ("docx", "document", "add_paragraph", "generated_document")
     ):
         warnings.append("未发现 docx 生成相关代码")
     for tok in ("template", "json", "heading"):
@@ -409,16 +405,12 @@ def minimal_document_full_json() -> Dict[str, Any]:
             {"type": "paragraph", "index": 2},
             {"type": "table", "index": 0},
         ],
-        "outline": [
-            {"level": 1, "title": "第一章 概述", "paragraph_index": 0, "children": []}
-        ],
+        "outline": [{"level": 1, "title": "第一章 概述", "paragraph_index": 0, "children": []}],
         "plain_text": "第一章 概述\n这是正文段落。\n列表项一",
     }
 
 
-def word_generate_orchestration_plan(
-    brief: str, payload: Dict[str, Any]
-) -> Dict[str, Any]:
+def word_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     checklist = payload.get("execution_checklist")
@@ -444,8 +436,7 @@ def word_generate_orchestration_plan(
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "允许 python-docx；读 inputs/ 写 outputs/；禁止联网。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
-        or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
         "workflow_brief": (
             f"{merged or clean}\n\nSkill：上传 JSON → 可选模板 → 生成 docx → 校验 → 交付。"
         ),

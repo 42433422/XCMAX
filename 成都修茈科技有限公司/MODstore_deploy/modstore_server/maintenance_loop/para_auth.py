@@ -33,9 +33,7 @@ def _para_tls_verify():
     if ca_bundle:
         ca_path = Path(ca_bundle).expanduser()
         if not ca_path.is_file():
-            raise FileNotFoundError(
-                f"MODSTORE_PARA_CA_BUNDLE does not exist: {ca_path}"
-            )
+            raise FileNotFoundError(f"MODSTORE_PARA_CA_BUNDLE does not exist: {ca_path}")
         return ssl.create_default_context(cafile=str(ca_path))
     return ssl.create_default_context()
 
@@ -64,9 +62,7 @@ def _guest_auth_headers(api_base: str) -> Dict[str, str]:
     local_token = _mint_local_para_guest_auth_token(cache_key)
     if local_token:
         return {"Authorization": f"Bearer {local_token}"}
-    with httpx.Client(
-        timeout=20.0, trust_env=False, verify=_para_tls_verify()
-    ) as client:
+    with httpx.Client(timeout=20.0, trust_env=False, verify=_para_tls_verify()) as client:
         resp = None
         for attempt in range(3):
             resp = client.post(f"{api_base.rstrip('/')}/api/auth/guest")
@@ -104,9 +100,7 @@ def _read_para_guest_auth_file(
     except FileNotFoundError:
         return None
     except RECOVERABLE_ERRORS:
-        config.logger.warning(
-            "failed to read Para guest auth cache file", exc_info=True
-        )
+        config.logger.warning("failed to read Para guest auth cache file", exc_info=True)
         return None
     if not isinstance(data, dict):
         return None
@@ -130,9 +124,7 @@ def _write_para_guest_auth_file(api_base: str, token: str, expires_at: float) ->
         "api_base": api_base.rstrip("/"),
         "created_at": config._utc_now().isoformat(),
         "expires_at": expires_at,
-        "expires_at_iso": datetime.fromtimestamp(
-            expires_at, tz=timezone.utc
-        ).isoformat(),
+        "expires_at_iso": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(),
         "token": token,
     }
     try:
@@ -148,9 +140,7 @@ def _write_para_guest_auth_file(api_base: str, token: str, expires_at: float) ->
         except OSError:
             pass
     except RECOVERABLE_ERRORS:
-        config.logger.warning(
-            "failed to write Para guest auth cache file", exc_info=True
-        )
+        config.logger.warning("failed to write Para guest auth cache file", exc_info=True)
 
 
 def _base64url_json(payload: Dict[str, Any]) -> str:
@@ -197,9 +187,7 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
     )
     unsigned = f"{header}.{payload}"
     signature = _base64url_bytes(
-        hmac.new(
-            secret.encode("utf-8"), unsigned.encode("ascii"), hashlib.sha256
-        ).digest()
+        hmac.new(secret.encode("utf-8"), unsigned.encode("ascii"), hashlib.sha256).digest()
     )
     token = f"{unsigned}.{signature}"
     cache_key = api_base.rstrip("/")

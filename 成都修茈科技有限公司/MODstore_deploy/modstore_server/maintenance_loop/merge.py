@@ -94,9 +94,7 @@ def _auto_merge_low_risk_branch(
             "status": "pending",
         }
         store._append_ledger(merge_request_record)
-        store._append_governance_audit(
-            {**merge_request_record, "kind": "merge_requested"}
-        )
+        store._append_governance_audit({**merge_request_record, "kind": "merge_requested"})
         return {
             "ok": True,
             "base_head_sha": base_head_sha or "",

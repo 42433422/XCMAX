@@ -186,9 +186,7 @@ def validate_script(
                 if top in ALWAYS_DENY_TOP:
                     errors.append(f"禁止 import {alias.name}（位于禁用列表）")
                 elif top not in allowed_top:
-                    errors.append(
-                        f"禁止 import {alias.name}（未在 stdlib 或第三方 allowlist 中）"
-                    )
+                    errors.append(f"禁止 import {alias.name}（未在 stdlib 或第三方 allowlist 中）")
         elif isinstance(node, ast.ImportFrom):
             top = (node.module or "").split(".")[0]
             if not top:

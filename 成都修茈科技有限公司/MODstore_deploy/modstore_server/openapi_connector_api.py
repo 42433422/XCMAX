@@ -110,9 +110,7 @@ def _persist_parsed_spec(
     db.flush()
 
     if existing:
-        db.query(OpenApiOperation).filter(
-            OpenApiOperation.connector_id == connector.id
-        ).delete()
+        db.query(OpenApiOperation).filter(OpenApiOperation.connector_id == connector.id).delete()
         db.flush()
 
     for op in parsed.operations:
@@ -194,9 +192,7 @@ async def import_connector(
     user: User = Depends(_get_current_user),
 ):
     if not fernet_configured():
-        raise HTTPException(
-            503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存连接器鉴权"
-        )
+        raise HTTPException(503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存连接器鉴权")
     spec_text = _spec_text_from_request(body)
     if len(spec_text) > _MAX_SPEC_BYTES:
         raise HTTPException(400, "spec 过大（>4MB）")
@@ -269,15 +265,9 @@ async def delete_connector(
     user: User = Depends(_get_current_user),
 ):
     connector = _fetch_connector_or_404(db, user, connector_id)
-    db.query(OpenApiCallLog).filter(
-        OpenApiCallLog.connector_id == connector.id
-    ).delete()
-    db.query(OpenApiCredential).filter(
-        OpenApiCredential.connector_id == connector.id
-    ).delete()
-    db.query(OpenApiOperation).filter(
-        OpenApiOperation.connector_id == connector.id
-    ).delete()
+    db.query(OpenApiCallLog).filter(OpenApiCallLog.connector_id == connector.id).delete()
+    db.query(OpenApiCredential).filter(OpenApiCredential.connector_id == connector.id).delete()
+    db.query(OpenApiOperation).filter(OpenApiOperation.connector_id == connector.id).delete()
     db.delete(connector)
     db.commit()
     cleanup_old_versions(int(connector_id), keep_versions=())
@@ -296,9 +286,7 @@ async def put_credentials(
     if auth_type not in SUPPORTED_AUTH_TYPES:
         raise HTTPException(400, f"不支持的 auth_type: {auth_type}")
     if not fernet_configured():
-        raise HTTPException(
-            503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存连接器鉴权"
-        )
+        raise HTTPException(503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存连接器鉴权")
     try:
         ciphertext = encrypt_credential_payload(auth_type, body.config or {})
     except RuntimeError as exc:
@@ -350,9 +338,7 @@ async def delete_credentials(
     return {"ok": True}
 
 
-@router.patch(
-    "/{connector_id}/operations/{operation_id}", summary="启用/禁用 operation"
-)
+@router.patch("/{connector_id}/operations/{operation_id}", summary="启用/禁用 operation")
 async def patch_operation(
     connector_id: int,
     operation_id: str,
@@ -368,9 +354,7 @@ async def patch_operation(
     return {"ok": True, "operation": _serialize_operation(op)}
 
 
-@router.post(
-    "/{connector_id}/operations/{operation_id}/test", summary="服务端试调用 operation"
-)
+@router.post("/{connector_id}/operations/{operation_id}/test", summary="服务端试调用 operation")
 async def test_operation(
     connector_id: int,
     operation_id: str,
@@ -393,9 +377,7 @@ async def test_operation(
     return result
 
 
-@router.post(
-    "/{connector_id}/publish-workflow-node", summary="把 operation 发布为工作流节点"
-)
+@router.post("/{connector_id}/publish-workflow-node", summary="把 operation 发布为工作流节点")
 async def publish_workflow_node(
     connector_id: int,
     body: PublishWorkflowNodeBody,

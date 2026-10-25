@@ -17,9 +17,7 @@ def _validate_production_secrets():
     """拒绝空 JWT 密钥启动，除非显式 ``MODSTORE_INSECURE_EMPTY_JWT=1``（仅本地一次性脚本）。"""
     env = os.environ.get("MODSTORE_ENV", "development")
     secret = (os.environ.get("MODSTORE_JWT_SECRET") or "").strip()
-    insecure = (
-        os.environ.get("MODSTORE_INSECURE_EMPTY_JWT") or ""
-    ).strip().lower() in (
+    insecure = (os.environ.get("MODSTORE_INSECURE_EMPTY_JWT") or "").strip().lower() in (
         "1",
         "true",
         "yes",

@@ -96,20 +96,11 @@ async def update_custom_delivery_crm(
         if status in {"partial", "paid"} and (body.amount is None or body.amount <= 0):
             raise HTTPException(422, "到账金额必须大于 0")
         if status in {"partial", "paid"} and not body.reference.strip():
-            raise HTTPException(
-                422, "收款状态不能只靠手工点选，请填写支付流水或线下凭证"
-            )
+            raise HTTPException(422, "收款状态不能只靠手工点选，请填写支付流水或线下凭证")
         quote_amount = float(crm.get("quote", {}).get("amount") or 0)
-        if (
-            status == "paid"
-            and quote_amount > 0
-            and float(body.amount or 0) < quote_amount
-        ):
+        if status == "paid" and quote_amount > 0 and float(body.amount or 0) < quote_amount:
             raise HTTPException(409, "到账金额小于已确认报价，应记为部分收款")
-        if (
-            status == "paid"
-            and custom_delivery_pricing_mode(evidence) == "post_delivery_addon"
-        ):
+        if status == "paid" and custom_delivery_pricing_mode(evidence) == "post_delivery_addon":
             order = find_matching_paid_order(
                 int(ticket.user_id),
                 expected_out_trade_no=body.reference.strip(),

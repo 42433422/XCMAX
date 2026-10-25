@@ -51,9 +51,7 @@ async def create_workbench_session(
             if not isinstance(meta, dict):
                 raise HTTPException(400, "metadata 必须是 JSON 对象")
             body = _parse_workbench_session_create(meta)
-            uploads = [
-                v for _, v in form.multi_items() if isinstance(v, StarletteUploadFile)
-            ]
+            uploads = [v for _, v in form.multi_items() if isinstance(v, StarletteUploadFile)]
             raw_files = await read_workbench_uploads(uploads)
         finally:
             await form.close()
@@ -119,9 +117,7 @@ async def create_workbench_script_session(
             "script_result": None,
         }
         ports.sessions.persist(sid)
-    _script_task = asyncio.create_task(
-        ports.run_pipeline(sid, cast(int, user.id), payload)
-    )
+    _script_task = asyncio.create_task(ports.run_pipeline(sid, cast(int, user.id), payload))
     _script_task.add_done_callback(ports.sessions.task_failsafe(sid))
     return {"session_id": sid, "status": "running"}
 
@@ -175,17 +171,13 @@ async def retry_workbench_session(
         raise HTTPException(403, "无权访问此会话")
     checkpoint = old.get("_pipeline_checkpoint") or {}
     failed_step = checkpoint.get("failed_step")
-    can_resume = bool(
-        failed_step and checkpoint.get("res") and checkpoint.get("pack_dir")
-    )
+    can_resume = bool(failed_step and checkpoint.get("res") and checkpoint.get("pack_dir"))
     if can_resume:
         new_sid = uuid.uuid4().hex[:24]
         steps = _default_steps(
             old.get("intent", "employee"),
             old.get("planning_record", {}).get("execution_mode") or "employee",
-            employee_target=str(
-                checkpoint.get("employee_target") or "pack_plus_workflow"
-            ),
+            employee_target=str(checkpoint.get("employee_target") or "pack_plus_workflow"),
         )
         _step_order = [s["id"] for s in steps]
         if failed_step in _step_order:
@@ -210,9 +202,7 @@ async def retry_workbench_session(
             }
             ports.sessions.persist(new_sid)
         _task = asyncio.create_task(
-            ports.run_pipeline(
-                new_sid, cast(int, user.id), old.get("planning_record") or {}
-            )
+            ports.run_pipeline(new_sid, cast(int, user.id), old.get("planning_record") or {})
         )
         _task.add_done_callback(ports.sessions.task_failsafe(new_sid))
         return {"session_id": new_sid, "status": "running", "resumed_from": failed_step}
@@ -232,9 +222,7 @@ async def retry_workbench_session(
             "steps": _default_steps(
                 payload.get("intent") or old.get("intent", "employee"),
                 payload.get("execution_mode") or "employee",
-                employee_target=str(
-                    payload.get("employee_target") or "pack_plus_workflow"
-                ),
+                employee_target=str(payload.get("employee_target") or "pack_plus_workflow"),
             ),
             "planning_record": dict(payload),
             "artifact": None,
@@ -244,8 +232,6 @@ async def retry_workbench_session(
             "script_result": None,
         }
         ports.sessions.persist(new_sid)
-    _task = asyncio.create_task(
-        ports.run_pipeline(new_sid, cast(int, user.id), payload)
-    )
+    _task = asyncio.create_task(ports.run_pipeline(new_sid, cast(int, user.id), payload))
     _task.add_done_callback(ports.sessions.task_failsafe(new_sid))
     return {"session_id": new_sid, "status": "running"}

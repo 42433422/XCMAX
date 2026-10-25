@@ -36,7 +36,9 @@ DEFAULT_EVIDENCE_ROW_LIMIT = 240
 
 DEFAULT_EVIDENCE_SCAN_LIMIT = 5000
 
-DEFAULT_STATUS_FILE = "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
+DEFAULT_STATUS_FILE = (
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_maintenance_loop_status.py"
+)
 
 DEFAULT_AUTO_MERGE_GLOBS = [DEFAULT_STATUS_FILE]
 

@@ -181,10 +181,7 @@ def dataset_allowed_for_mode(dataset_id: str, *, mode: str = "admin") -> bool:
     if did == INTERNAL_DATASET_ID and key != "admin":
         return False
     allowed = list(
-        (permission_policy(mode=key).get("knowledge") or {})
-        .get("datasets", {})
-        .get("read")
-        or []
+        (permission_policy(mode=key).get("knowledge") or {}).get("datasets", {}).get("read") or []
     )
     return did in allowed
 
@@ -202,16 +199,11 @@ def format_knowledge_block(
     for i, chunk in enumerate(chunks[:limit], 1):
         if not isinstance(chunk, dict):
             continue
-        text = str(
-            chunk.get("text") or chunk.get("content") or chunk.get("snippet") or ""
-        ).strip()
+        text = str(chunk.get("text") or chunk.get("content") or chunk.get("snippet") or "").strip()
         if not text:
             continue
         source = str(
-            chunk.get("source")
-            or chunk.get("document_id")
-            or chunk.get("filename")
-            or ""
+            chunk.get("source") or chunk.get("document_id") or chunk.get("filename") or ""
         ).strip()
         head = f"{i}. ({source}) " if source else f"{i}. "
         lines.append(head + text[:800])
@@ -297,9 +289,7 @@ def _local_retrieve(
             access = DatasetAccessContext(
                 actor_id="xiaoc-cs-ssot",
                 tenant_id="",
-                permissions=frozenset(
-                    {DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}
-                ),
+                permissions=frozenset({DATASET_READ_PERMISSION, DATASET_ADMIN_PERMISSION}),
                 is_admin=True,
             )
             result = get_dataset_rag_app_service().query(
@@ -344,9 +334,7 @@ def retrieve_knowledge_for_mode(
     if not q:
         return []
     policy = permission_policy(mode=mode)
-    read_ids = list(
-        (policy.get("knowledge") or {}).get("datasets", {}).get("read") or []
-    )
+    read_ids = list((policy.get("knowledge") or {}).get("datasets", {}).get("read") or [])
     k = max(1, min(int(top_k or 5), 12))
     out: List[Dict[str, Any]] = []
     per_ds = max(1, (k + max(len(read_ids), 1) - 1) // max(len(read_ids), 1))
@@ -366,9 +354,7 @@ def retrieve_knowledge_for_mode(
     return out
 
 
-def knowledge_block_for_query(
-    query: str, *, top_k: int = 5, mode: str = "external"
-) -> str:
+def knowledge_block_for_query(query: str, *, top_k: int = 5, mode: str = "external") -> str:
     """按 mode 组装知识库摘录块（默认偏保守：仅公开库）。"""
     chunks = retrieve_knowledge_for_mode(query, mode=mode, top_k=top_k)
     if not chunks:

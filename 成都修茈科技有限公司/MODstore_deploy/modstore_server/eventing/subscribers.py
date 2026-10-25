@@ -163,9 +163,7 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
     try:
         with sf() as session:
             if strategy.is_already_fulfilled(session, ctx):
-                logger.debug(
-                    "entitlement already fulfilled for %s, skipping", out_trade_no
-                )
+                logger.debug("entitlement already fulfilled for %s, skipping", out_trade_no)
                 return
             from datetime import datetime
 
@@ -181,13 +179,9 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
                 payment_orders.merge_fields(out_trade_no, fulfilled=True)
             session.commit()
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "entitlement_granted").inc()
-        logger.info(
-            "Entitlement granted via NeuroBus subscriber for order %s", out_trade_no
-        )
+        logger.info("Entitlement granted via NeuroBus subscriber for order %s", out_trade_no)
     except RECOVERABLE_ERRORS:
-        logger.exception(
-            "payment.paid entitlement subscriber failed for %s", out_trade_no
-        )
+        logger.exception("payment.paid entitlement subscriber failed for %s", out_trade_no)
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
 
@@ -246,9 +240,7 @@ def _on_payment_paid_asset_install(event: DomainEvent) -> None:
             event_id=f"payment.paid:{str(payload.get('out_trade_no') or event.subject_id or '').strip()}",
         )
         outcome = (
-            "asset_install_queued"
-            if int(result.get("queued") or 0)
-            else "asset_install_duplicate"
+            "asset_install_queued" if int(result.get("queued") or 0) else "asset_install_duplicate"
         )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, outcome).inc()
     except RECOVERABLE_ERRORS:

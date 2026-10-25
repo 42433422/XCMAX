@@ -61,9 +61,7 @@ def _sanitize_python_identifier(name: str) -> str:
 
 def _format_function(op: ParsedOperation) -> str:
     symbol = _sanitize_python_identifier(op.generated_symbol or op.operation_id)
-    summary = (
-        (op.summary or op.description or op.operation_id).replace("\n", " ").strip()
-    )
+    summary = (op.summary or op.description or op.operation_id).replace("\n", " ").strip()
     summary_safe = summary.replace('"""', "'''")[:300]
     return (
         f"\ndef {symbol}(\n"
@@ -123,9 +121,7 @@ def generate_client_files(
     version: int,
     artifacts_root: Optional[Path] = None,
 ) -> GeneratedArtifacts:
-    root = (
-        (artifacts_root or default_artifacts_root()) / str(connector_id) / f"v{version}"
-    )
+    root = (artifacts_root or default_artifacts_root()) / str(connector_id) / f"v{version}"
     _ensure_dir(root)
     init_file = root / "__init__.py"
     client_file = root / "client.py"
@@ -133,9 +129,7 @@ def generate_client_files(
 
     operations = list(parsed.operations)
     init_file.write_text(
-        _build_init_module(
-            connector_id, version, parsed.base_url, parsed.spec_hash, operations
-        ),
+        _build_init_module(connector_id, version, parsed.base_url, parsed.spec_hash, operations),
         encoding="utf-8",
     )
     body = _HEADER + "\n" + "\n".join(_format_function(op) for op in operations)
@@ -195,9 +189,7 @@ def load_operations_metadata(
     *,
     artifacts_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    root = (
-        (artifacts_root or default_artifacts_root()) / str(connector_id) / f"v{version}"
-    )
+    root = (artifacts_root or default_artifacts_root()) / str(connector_id) / f"v{version}"
     metadata_file = root / "operations.json"
     if not metadata_file.is_file():
         return {}

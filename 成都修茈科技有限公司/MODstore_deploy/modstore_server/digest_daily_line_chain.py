@@ -116,9 +116,7 @@ def _ci_correlation(kind: str, step_ids: Sequence[str]) -> Dict[str, Any]:
     }
 
 
-def _build_chain_context(
-    record_id: int, release_train: str, release_kind: str
-) -> Dict[str, Any]:
+def _build_chain_context(record_id: int, release_train: str, release_kind: str) -> Dict[str, Any]:
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
@@ -152,9 +150,7 @@ def _dispatch_employee_chain(
     all_ok = True
 
     for step_id, employee_id, brief in steps:
-        full_brief = (
-            f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
-        )
+        full_brief = f"[{step_id} · release_train {release_train} · {release_kind}]\n{brief}"
         if shadow:
             step_results.append(
                 {
@@ -175,9 +171,7 @@ def _dispatch_employee_chain(
                 target_employee_id=employee_id,
                 created_by_user_id=0,
                 include_dependencies=True,
-                allow_high_risk_real_run=_env_bool(
-                    "MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"
-                ),
+                allow_high_risk_real_run=_env_bool("MODSTORE_INSTALLER_PUSH_ALLOW_HIGH_RISK", "0"),
             )
             step_ok = bool(out.get("ok"))
             step_results.append(

@@ -92,9 +92,7 @@ def _compose_role_block(role: Any) -> str:
     if tone:
         parts.append(f"语气: {tone}")
     if isinstance(exp, list) and exp:
-        parts.append(
-            "专长: " + ", ".join(str(x).strip() for x in exp if str(x).strip())
-        )
+        parts.append("专长: " + ", ".join(str(x).strip() for x in exp if str(x).strip()))
     if not parts:
         return ""
     return "【角色设定】\n" + "\n".join(parts)
@@ -167,11 +165,7 @@ def translate_v2_to_executor_config(v2: Dict[str, Any]) -> Dict[str, Any]:
         return {}
     out = copy.deepcopy(v2)
 
-    perc = (
-        dict(out.get("perception") or {})
-        if isinstance(out.get("perception"), dict)
-        else {}
-    )
+    perc = dict(out.get("perception") or {}) if isinstance(out.get("perception"), dict) else {}
     inferred = _infer_perception_type(perc)
     if inferred is not None:
         perc = {**perc, "type": inferred}
@@ -219,8 +213,7 @@ def needs_executor_translation(v2: Dict[str, Any]) -> bool:
         agent = cog.get("agent")
         if isinstance(agent, dict):
             if any(
-                agent.get(x) is not None
-                for x in ("role", "behavior_rules", "few_shot_examples")
+                agent.get(x) is not None for x in ("role", "behavior_rules", "few_shot_examples")
             ):
                 return True
     act = v2.get("actions")

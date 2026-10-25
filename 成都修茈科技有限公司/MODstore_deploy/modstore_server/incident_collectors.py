@@ -26,9 +26,7 @@ _NGINX_MAX_NEW_BYTES = 256 * 1024
 def collect_pytest_failures() -> bool:
     """``lastfailed`` 非空且内容变化 → ``on_quality_fail``。"""
     global _LAST_FAIL_SNAPSHOT
-    path = (
-        repo_root() / "MODstore_deploy" / ".pytest_cache" / "v" / "cache" / "lastfailed"
-    )
+    path = repo_root() / "MODstore_deploy" / ".pytest_cache" / "v" / "cache" / "lastfailed"
     try:
         if not path.is_file() or path.stat().st_size == 0:
             return False
@@ -55,9 +53,7 @@ def collect_nginx_error_tail() -> bool:
     首次启动以及日志轮转/截断后只记录当前位置，避免把历史错误重复派发为新事故。
     """
     global _LAST_NGINX_FILE_ID, _LAST_NGINX_OFFSET
-    log_path = (
-        os.environ.get("OPS_NGINX_ERROR_LOG", "").strip() or "/var/log/nginx/error.log"
-    )
+    log_path = os.environ.get("OPS_NGINX_ERROR_LOG", "").strip() or "/var/log/nginx/error.log"
     p = Path(log_path)
     if not p.is_file():
         return False
@@ -144,11 +140,7 @@ _LAST_CI_FAIL_HASH: str | None = None
 
 def _deployed_head_state_path() -> Path:
     runtime = str(os.environ.get("MODSTORE_RUNTIME_DIR") or "").strip()
-    root = (
-        Path(runtime).expanduser()
-        if runtime
-        else Path.home() / ".xcmax" / "modstore-daily"
-    )
+    root = Path(runtime).expanduser() if runtime else Path.home() / ".xcmax" / "modstore-daily"
     return root / "deployed-head-sha"
 
 

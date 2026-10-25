@@ -26,9 +26,7 @@ async def start_workbench_session_for_user(
     )
 
 
-async def get_workbench_session_snapshot(
-    session_id: str, user_id: int
-) -> dict[str, Any] | None:
+async def get_workbench_session_snapshot(session_id: str, user_id: int) -> dict[str, Any] | None:
     from modstore_server.workbench_api import (
         get_workbench_session_snapshot as operation,
     )

@@ -87,9 +87,7 @@ class AllHandsRepository:
             if hours > 0:
                 from datetime import timedelta
 
-                cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(
-                    hours=hours
-                )
+                cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=hours)
             q = session.query(EmployeeExecutionMetric).filter(
                 EmployeeExecutionMetric.employee_id == employee_id
             )
@@ -119,11 +117,8 @@ class AllHandsRepository:
                         "error": err[:600],
                         "created_at": (
                             r.created_at.replace(tzinfo=timezone.utc).isoformat()
-                            if isinstance(r.created_at, datetime)
-                            and r.created_at.tzinfo is None
-                            else r.created_at.isoformat()
-                            if r.created_at
-                            else None
+                            if isinstance(r.created_at, datetime) and r.created_at.tzinfo is None
+                            else r.created_at.isoformat() if r.created_at else None
                         ),
                     }
                 )
@@ -156,15 +151,11 @@ class AllHandsRepository:
                             "diff_summary": str(r.diff_summary or "")[:400],
                             "target_paths": (
                                 json.loads(str(r.target_paths_json or "[]"))[:6]
-                                if str(r.target_paths_json or "")
-                                .strip()
-                                .startswith("[")
+                                if str(r.target_paths_json or "").strip().startswith("[")
                                 else []
                             ),
                             "git_branch": str(r.git_branch or "")[:120],
-                            "created_at": r.created_at.isoformat()
-                            if r.created_at
-                            else None,
+                            "created_at": r.created_at.isoformat() if r.created_at else None,
                         }
                     )
         except RECOVERABLE_ERRORS as exc:

@@ -81,9 +81,7 @@ def _format_handlers_summary(result: Dict[str, Any]) -> str:
     return "\n".join(lines) if lines else "无 handler 执行"
 
 
-def _format_changed_files(
-    result: Dict[str, Any], path_guard: Optional[Dict[str, Any]]
-) -> str:
+def _format_changed_files(result: Dict[str, Any], path_guard: Optional[Dict[str, Any]]) -> str:
     """改动文件 + path_guard 检查结果。"""
     pg = path_guard or {}
     if not pg.get("checked"):
@@ -136,7 +134,9 @@ def _format_handoff(result: Dict[str, Any]) -> str:
     msg_id = h.get("message_id") or 0
 
     if skipped:
-        return f"⚠️ 转交被跳过：{_safe_str(h.get('to'), 40) or '（空）'} — {skip_reason or '未知原因'}"
+        return (
+            f"⚠️ 转交被跳过：{_safe_str(h.get('to'), 40) or '（空）'} — {skip_reason or '未知原因'}"
+        )
     if not h.get("ok"):
         return f"❌ 转交失败：{skip_reason or '未知原因'}"
 
@@ -197,9 +197,7 @@ def _format_verification(result: Dict[str, Any]) -> str:
     total_count = v.get("total_count", 0)
     failed_count = v.get("failed_count", 0)
     summary = _safe_str(v.get("summary"), 200)
-    lines = [
-        f"程序化验证（{ok_count}/{total_count} 通过，{failed_count} 失败）：{summary}"
-    ]
+    lines = [f"程序化验证（{ok_count}/{total_count} 通过，{failed_count} 失败）：{summary}"]
     for c in checks:
         if not isinstance(c, dict):
             continue
@@ -273,9 +271,7 @@ def build_human_report(
             tc_reason = _safe_str(tc.get("reason"), 120)
             should_ho = tc.get("should_handoff")
             icon = "🔁" if should_ho else "🏷️"
-            findings.append(
-                f"- {icon} 任务分类：{cat or 'unknown'}（置信度 {conf}）— {tc_reason}"
-            )
+            findings.append(f"- {icon} 任务分类：{cat or 'unknown'}（置信度 {conf}）— {tc_reason}")
             if should_ho:
                 findings.append("- ⚠️ 任务分类提示转交，可考虑 handoff_to")
     if isinstance(memory, dict):
@@ -318,16 +314,10 @@ def build_human_report(
     sec2 = ["## 发现什么"] + (findings if findings else ["- （无明显发现）"])
 
     # ── 3. 修了什么 ──
-    handlers_summary = _format_handlers_summary(
-        result if isinstance(result, dict) else {}
-    )
+    handlers_summary = _format_handlers_summary(result if isinstance(result, dict) else {})
     path_guard = result.get("path_guard") if isinstance(result, dict) else None
-    files_summary = _format_changed_files(
-        result if isinstance(result, dict) else {}, path_guard
-    )
-    verification_summary = _format_verification(
-        result if isinstance(result, dict) else {}
-    )
+    files_summary = _format_changed_files(result if isinstance(result, dict) else {}, path_guard)
+    verification_summary = _format_verification(result if isinstance(result, dict) else {})
     evolution_summary = _format_evolution(result if isinstance(result, dict) else {})
     handoff_summary = _format_handoff(result if isinstance(result, dict) else {})
     sec3 = [
@@ -349,9 +339,7 @@ def build_human_report(
     if exec_status == "handler_failed":
         outputs = result.get("outputs") or [] if isinstance(result, dict) else []
         failed = [
-            o
-            for o in outputs
-            if isinstance(o, dict) and (o.get("ok") is False or o.get("error"))
+            o for o in outputs if isinstance(o, dict) and (o.get("ok") is False or o.get("error"))
         ]
         if failed:
             remainders.append(f"- {len(failed)} 个 handler 失败，详见上方「修了什么」")
@@ -387,21 +375,15 @@ def build_human_report(
                 f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），等对方判断是否接手"
             )
         else:
-            remainders.append(
-                f"- ❌ 转交 @{tgt} 失败：{_safe_str(ho.get('skip_reason'), 100)}"
-            )
+            remainders.append(f"- ❌ 转交 @{tgt} 失败：{_safe_str(ho.get('skip_reason'), 100)}")
     # Phase-D 待回答
     pd_text = _format_phase_d(reasoning if isinstance(reasoning, dict) else {})
     if pd_text:
-        remainders.append(
-            f"- Phase-D 主动沟通：\n  {pd_text.replace(chr(10), chr(10) + '  ')}"
-        )
+        remainders.append(f"- Phase-D 主动沟通：\n  {pd_text.replace(chr(10), chr(10) + '  ')}")
     # CR 桥
     cr_ids = result.get("change_request_ids") if isinstance(result, dict) else None
     if isinstance(cr_ids, list) and cr_ids:
-        remainders.append(
-            f"- 已生成 {len(cr_ids)} 个 change request（ID: {cr_ids[:5]}）"
-        )
+        remainders.append(f"- 已生成 {len(cr_ids)} 个 change request（ID: {cr_ids[:5]}）")
 
     if not remainders:
         remainders.append("- ✅ 全部 handler 成功执行，无遗留事项")
@@ -414,13 +396,9 @@ def build_human_report(
     if pd:
         confirmations.append("- ⚠️ 我问了老板一个问题（见上方），请确认或答复")
     if exec_status == "blocked_by_path_guard":
-        confirmations.append(
-            "- ⚠️ 我尝试改了不属于自己范围的文件，请确认是否允许此次越权"
-        )
+        confirmations.append("- ⚠️ 我尝试改了不属于自己范围的文件，请确认是否允许此次越权")
     if exec_status == "handler_failed":
-        confirmations.append(
-            "- ⚠️ 部分操作失败，请老板判断是否需要换人 / 加资源 / 改任务"
-        )
+        confirmations.append("- ⚠️ 部分操作失败，请老板判断是否需要换人 / 加资源 / 改任务")
     # evolution_signal 需要进化 → 请老板确认是否触发 prompt evolution
     evo = result.get("evolution_signal") if isinstance(result, dict) else None
     if isinstance(evo, dict) and evo.get("needed"):

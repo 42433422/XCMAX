@@ -104,16 +104,12 @@ def _append_receipt(record: Mapping[str, Any]) -> None:
             archive.unlink(missing_ok=True)
             path.replace(archive)
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(
-                json.dumps(dict(record), ensure_ascii=False, sort_keys=True) + "\n"
-            )
+            fh.write(json.dumps(dict(record), ensure_ascii=False, sort_keys=True) + "\n")
             fh.flush()
             os.fsync(fh.fileno())
 
 
-def _query_rows(
-    statement: str, parameters: Mapping[str, Any] | None = None
-) -> list[dict]:
+def _query_rows(statement: str, parameters: Mapping[str, Any] | None = None) -> list[dict]:
     """Run one bounded read through the configured application database."""
 
     from sqlalchemy import text
@@ -204,19 +200,13 @@ def _delivery_input(_now: datetime) -> ResolvedDutyInput:
         evidence = evidence if isinstance(evidence, dict) else {}
         raw_sla = evidence.get("sla") if isinstance(evidence.get("sla"), dict) else {}
         delivery = {
-            "partner_id": _pseudonym(
-                "customer", row.get("customer_ref") or row.get("receipt_id")
-            ),
+            "partner_id": _pseudonym("customer", row.get("customer_ref") or row.get("receipt_id")),
             "delivery_receipt_id": str(row.get("receipt_id") or ""),
             "owner": str(row.get("source_employee_id") or "delivery-receipt-officer"),
-            "sla_status": str(
-                evidence.get("sla_status") or raw_sla.get("status") or ""
-            ),
+            "sla_status": str(evidence.get("sla_status") or raw_sla.get("status") or ""),
             "observed_at": str(row.get("occurred_at") or "")[:32],
         }
-        next_step = str(
-            evidence.get("next_step") or raw_sla.get("next_step") or ""
-        ).strip()
+        next_step = str(evidence.get("next_step") or raw_sla.get("next_step") or "").strip()
         if next_step:
             delivery["next_step"] = next_step[:500]
         deliveries.append(delivery)
@@ -278,19 +268,13 @@ def _quality_input(now: datetime) -> ResolvedDutyInput:
     manifest = load_reviewed_duty_manifest(employee_id)
     config = manifest.get("employee_config_v2") or {}
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    direct = (
-        actions.get("direct_python")
-        if isinstance(actions.get("direct_python"), dict)
-        else {}
-    )
+    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
     contract = contracts.get(employee_id) or {}
     capability: dict[str, Any] = {
         "employee_id": employee_id,
         "manifest_version": str(manifest.get("version") or ""),
         "input_contract": (
-            direct.get("input_schema")
-            if isinstance(direct.get("input_schema"), dict)
-            else {}
+            direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
         ),
         "handlers": list(actions.get("handlers") or []),
         "acceptance": list(contract.get("acceptance") or []),
@@ -441,9 +425,7 @@ def _investor_portal_input(_now: datetime) -> ResolvedDutyInput:
                     "id": f"gap-{dimension_id}",
                     "severity": "high" if remaining >= 50 else "medium",
                     "status": "open",
-                    "mitigation": str(row.get("next_gap") or "补齐可验证运行证据")[
-                        :300
-                    ],
+                    "mitigation": str(row.get("next_gap") or "补齐可验证运行证据")[:300],
                 }
             )
     if not milestones:

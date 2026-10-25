@@ -186,7 +186,9 @@ def test_loop_never_reaches_git_merge_when_domain_guard_denies(monkeypatch) -> N
     monkeypatch.setenv("MODSTORE_PARA_BRANCH", "main")
     monkeypatch.setenv("MODSTORE_PARA_API_BASE", "http://127.0.0.1:9")
     monkeypatch.setattr(
-        _maintenance_workspace, "_changed_files_for_branch", lambda **kwargs: ["safe.py"]
+        _maintenance_workspace,
+        "_changed_files_for_branch",
+        lambda **kwargs: ["safe.py"],
     )
     monkeypatch.setattr(
         _maintenance_workspace,

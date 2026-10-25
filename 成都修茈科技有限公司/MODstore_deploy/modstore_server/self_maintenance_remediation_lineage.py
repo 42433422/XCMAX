@@ -83,13 +83,9 @@ def normalize_automated_remediation_reason(
     if str(decision.get("reason") or "").strip() != "structured_qa_verdict_not_pass":
         return reason
     structured_gate = (
-        decision.get("structured_gate")
-        if isinstance(decision.get("structured_gate"), dict)
-        else {}
+        decision.get("structured_gate") if isinstance(decision.get("structured_gate"), dict) else {}
     )
-    qa = (
-        structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
-    )
+    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
     if qa.get("target_branch_available") is not False:
         return reason
     blocking = qa.get("blocking_findings")
@@ -134,9 +130,7 @@ def resume_candidate_from_context(
     for item in reversed(open_items):
         if not isinstance(item, dict) or item.get("escalated"):
             continue
-        item_task_id = str(
-            item.get("task_id") or item.get("para_task_id") or ""
-        ).strip()
+        item_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
         if (
             str(item.get("run_id") or "").strip() == run_id
             and str(item.get("branch") or "").strip() == branch

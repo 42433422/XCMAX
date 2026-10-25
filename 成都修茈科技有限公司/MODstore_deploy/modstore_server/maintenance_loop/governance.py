@@ -42,9 +42,7 @@ def _governance_audit_summary(
     success_count = sum(
         (1 for item in items if isinstance(item, dict) and item.get("ok") is not False)
     )
-    failure_count = sum(
-        (1 for item in items if isinstance(item, dict) and item.get("ok") is False)
-    )
+    failure_count = sum((1 for item in items if isinstance(item, dict) and item.get("ok") is False))
     consecutive_failures = 0
     for item in reversed(items):
         if isinstance(item, dict) and item.get("ok") is False:
@@ -56,11 +54,7 @@ def _governance_audit_summary(
         "success_count": success_count,
         "failure_count": failure_count,
         "consecutive_failures": consecutive_failures,
-        "health": "bad"
-        if consecutive_failures >= 2
-        else "warn"
-        if failure_count
-        else "ok",
+        "health": "bad" if consecutive_failures >= 2 else "warn" if failure_count else "ok",
     }
 
 
@@ -72,9 +66,7 @@ def _governance_audit_gate() -> Dict[str, Any]:
         "ok": ok,
         "blocking": not ok,
         "action": "allow" if ok else "hold_for_governance_review",
-        "reason": "governance_audit_healthy"
-        if ok
-        else "governance_audit_consecutive_failures",
+        "reason": "governance_audit_healthy" if ok else "governance_audit_consecutive_failures",
         "summary": summary,
         "policy": "consecutive_governance_action_failures_pause_auto_continue_and_auto_merge",
     }
@@ -208,15 +200,9 @@ def _loop_steps_roster_gate(
             "policy": "only_registered_duty_roster_participants_can_pass_self_maintenance_policy",
             "reason": "duty_employee_registry_load_error",
         }
-    in_roster_ids = sorted(
-        (emp_id for emp_id in participant_ids if emp_id in planned_ids)
-    )
-    out_of_roster_ids = sorted(
-        (emp_id for emp_id in participant_ids if emp_id not in planned_ids)
-    )
-    not_deployed_ids = sorted(
-        (emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids)
-    )
+    in_roster_ids = sorted((emp_id for emp_id in participant_ids if emp_id in planned_ids))
+    out_of_roster_ids = sorted((emp_id for emp_id in participant_ids if emp_id not in planned_ids))
+    not_deployed_ids = sorted((emp_id for emp_id in in_roster_ids if emp_id not in deployed_ids))
     if out_of_roster_ids:
         return {
             "action": "isolate",

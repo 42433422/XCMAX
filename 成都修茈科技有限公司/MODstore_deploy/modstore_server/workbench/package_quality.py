@@ -288,9 +288,7 @@ def _employee_quality_extras(
                 "note": (
                     "；".join(rx_errs[:2])
                     if rx_errs
-                    else "；".join(rx_warns[:2])
-                    if rx_warns
-                    else ""
+                    else "；".join(rx_warns[:2]) if rx_warns else ""
                 ),
                 "critical": True,
             }
@@ -327,9 +325,7 @@ def _employee_quality_extras(
         from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
 
         _rt = (
-            cast(dict[str, Any], runtime_generation)
-            if isinstance(runtime_generation, dict)
-            else {}
+            cast(dict[str, Any], runtime_generation) if isinstance(runtime_generation, dict) else {}
         )
         _llm_ok = is_llm_codegen_source(_rt)
         items.append(
@@ -356,11 +352,7 @@ def _employee_quality_extras(
         if _ds.get("ok") is False and pipeline_label == "word_full_extract":
             critical_failed = True
             runnable = False
-    _gc = (
-        cast(dict[str, Any], golden_comparison)
-        if isinstance(golden_comparison, dict)
-        else {}
-    )
+    _gc = cast(dict[str, Any], golden_comparison) if isinstance(golden_comparison, dict) else {}
     if _gc.get("golden_pack_id"):
         items.append(
             {

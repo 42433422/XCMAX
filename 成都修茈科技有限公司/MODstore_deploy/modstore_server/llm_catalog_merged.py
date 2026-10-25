@@ -26,9 +26,7 @@ def clear_all_catalog_cache() -> None:
 
 async def _fetch_openai_compatible_records(
     base_url: str, api_key: str, *, provider: str = "", httpx_timeout: float = 30.0
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = f"{base_url.rstrip('/')}/models"
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -69,9 +67,7 @@ async def _fetch_openai_compatible_records(
                     timeout=httpx_timeout,
                 )
                 if video_response.status_code < 400:
-                    video_items = (
-                        _facade()._openai_style_items(video_response.json()) or []
-                    )
+                    video_items = _facade()._openai_style_items(video_response.json()) or []
                     for video_item in video_items:
                         architecture = video_item.get("architecture")
                         if not isinstance(architecture, dict):
@@ -98,9 +94,7 @@ async def _fetch_openai_compatible_records(
                     )
                     if typed_response.status_code >= 400:
                         return []
-                    typed_items = (
-                        _facade()._openai_style_items(typed_response.json()) or []
-                    )
+                    typed_items = _facade()._openai_style_items(typed_response.json()) or []
                     for typed_item in typed_items:
                         typed_item.setdefault("type", model_type)
                     return typed_items
@@ -113,10 +107,7 @@ async def _fetch_openai_compatible_records(
                     return []
 
             typed_groups = await _facade().asyncio.gather(
-                *[
-                    _typed_items(model_type)
-                    for model_type in ("text", "image", "audio", "video")
-                ]
+                *[_typed_items(model_type) for model_type in ("text", "image", "audio", "video")]
             )
             for typed_items in typed_groups:
                 items.extend(typed_items)
@@ -142,9 +133,7 @@ async def _fetch_openai_compatible_records(
             return ([], "empty model list")
         return (records, None)
     except _facade().RECOVERABLE_ERRORS as e:
-        _facade().logger.warning(
-            "openai_compatible models fetch failed: %s", type(e).__name__
-        )
+        _facade().logger.warning("openai_compatible models fetch failed: %s", type(e).__name__)
         return ([], str(e))
 
 
@@ -159,9 +148,7 @@ async def _fetch_openai_compatible(
 
 async def _fetch_anthropic_compatible_records(
     api_key: str, *, base_url: str, provider_label: str, httpx_timeout: float = 30.0
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = f"{base_url.rstrip('/')}/v1/models"
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -200,9 +187,7 @@ async def _fetch_anthropic_compatible_records(
 
 async def _fetch_anthropic_records(
     api_key: str, *, httpx_timeout: float = 30.0
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     return await _facade()._fetch_anthropic_compatible_records(
         api_key,
         base_url="https://api.anthropic.com",
@@ -216,9 +201,7 @@ async def _fetch_minimax_token_plan_records(
     *,
     base_url: _facade().Optional[str] = None,
     httpx_timeout: float = 30.0,
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     return await _facade()._fetch_anthropic_compatible_records(
         _facade().normalize_minimax_api_key(api_key),
         base_url=_facade().minimax_anthropic_base_url(base_url),
@@ -230,17 +213,13 @@ async def _fetch_minimax_token_plan_records(
 async def _fetch_anthropic(
     api_key: str, *, httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[str], _facade().Optional[str]]:
-    records, error = await _facade()._fetch_anthropic_records(
-        api_key, httpx_timeout=httpx_timeout
-    )
+    records, error = await _facade()._fetch_anthropic_records(api_key, httpx_timeout=httpx_timeout)
     return (sorted({str(item.get("id") or "") for item in records}), error)
 
 
 async def _fetch_google_records(
     api_key: str, *, httpx_timeout: float = 30.0
-) -> _facade().Tuple[
-    _facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]
-]:
+) -> _facade().Tuple[_facade().List[_facade().Dict[str, _facade().Any]], _facade().Optional[str]]:
     url = "https://generativelanguage.googleapis.com/v1beta/models"
     from modstore_server.infrastructure.http_clients import get_external_client
 
@@ -271,16 +250,12 @@ async def _fetch_google_records(
 async def _fetch_google(
     api_key: str, *, httpx_timeout: float = 30.0
 ) -> _facade().Tuple[_facade().List[str], _facade().Optional[str]]:
-    records, error = await _facade()._fetch_google_records(
-        api_key, httpx_timeout=httpx_timeout
-    )
+    records, error = await _facade()._fetch_google_records(api_key, httpx_timeout=httpx_timeout)
     return (sorted({str(item.get("id") or "") for item in records}), error)
 
 
 def _merge_fallback(provider: str, remote: _facade().List[str]) -> _facade().List[str]:
-    return _facade().merge_model_records(
-        remote, _facade()._load_fallback().get(provider) or []
-    )
+    return _facade().merge_model_records(remote, _facade()._load_fallback().get(provider) or [])
 
 
 def _metadata_by_model(
@@ -294,9 +269,7 @@ def _metadata_by_model(
 def _models_detailed(
     provider: str,
     model_ids: _facade().List[str],
-    remote_records: _facade().Optional[
-        _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = None,
+    remote_records: _facade().Optional[_facade().List[_facade().Dict[str, _facade().Any]]] = None,
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     return _facade().build_models_detailed(
         provider,
@@ -387,12 +360,7 @@ async def get_models_for_credentials(
     elif provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         raw_base = base_url
         b = (raw_base or _facade().openai_compat_default_root(provider)).rstrip("/")
-        if not (
-            b.endswith("/v1")
-            or b.endswith("/v2")
-            or b.endswith("/v3")
-            or b.endswith("/v4")
-        ):
+        if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
             b = b + "/v1"
         remote_records, err = await _facade()._fetch_openai_compatible_records(
             b, api_key, provider=provider
@@ -415,8 +383,7 @@ async def get_models_for_credentials(
         {
             _facade()._model_id(item)
             for item in remote_records
-            if _facade()._model_id(item)
-            and (not _facade()._model_id(item).startswith("ft:"))
+            if _facade()._model_id(item) and (not _facade()._model_id(item).startswith("ft:"))
         }
     )
     merged = _facade()._merge_fallback(provider, remote)
@@ -432,10 +399,7 @@ async def get_models_for_credentials(
                 err = err or "catalog_static_fallback_only"
         elif err:
             src = "fallback_after_error"
-    wall = (
-        _facade()._dt.datetime.now(_facade()._dt.UTC).replace(microsecond=0).isoformat()
-        + "Z"
-    )
+    wall = _facade()._dt.datetime.now(_facade()._dt.UTC).replace(microsecond=0).isoformat() + "Z"
     _facade()._cache[ck] = {
         "mono": now,
         "models": merged,
@@ -474,12 +438,7 @@ async def _probe_one_provider_list(
         )
     if provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         b = _facade().openai_compat_default_root(provider).rstrip("/")
-        if not (
-            b.endswith("/v1")
-            or b.endswith("/v2")
-            or b.endswith("/v3")
-            or b.endswith("/v4")
-        ):
+        if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
             b = b + "/v1"
         remote, _ = await _facade()._fetch_openai_compatible(
             b, api_key, provider=provider, httpx_timeout=_facade()._PROBE_HTTPX_TIMEOUT
@@ -507,10 +466,7 @@ async def probe_first_matching_provider(api_key: str) -> _facade().Optional[str]
     if not key or len(key) < 8:
         return None
     results = await _facade().asyncio.gather(
-        *[
-            _facade()._probe_one_provider_list(p, key)
-            for p in _facade().KNOWN_PROVIDERS
-        ],
+        *[_facade()._probe_one_provider_list(p, key) for p in _facade().KNOWN_PROVIDERS],
         return_exceptions=True,
     )
     for p, res in zip(_facade().KNOWN_PROVIDERS, results):

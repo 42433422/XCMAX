@@ -51,8 +51,7 @@ def _scan_auto_merge_metrics() -> List[Dict[str, Any]]:
             (
                 1
                 for r in auto_merge_runs
-                if isinstance(r, dict)
-                and "completed" in str(r.get("status") or "").lower()
+                if isinstance(r, dict) and "completed" in str(r.get("status") or "").lower()
             )
         )
         success_rate = auto_merge_success / auto_merge_total

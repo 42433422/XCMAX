@@ -62,9 +62,7 @@ def fresh_accepted_receipt_identities(
             continue
         if row.get("status") != "accepted" or row.get("receipt_accepted") is not True:
             continue
-        acceptance = (
-            row.get("acceptance") if isinstance(row.get("acceptance"), dict) else {}
-        )
+        acceptance = row.get("acceptance") if isinstance(row.get("acceptance"), dict) else {}
         if acceptance.get("passed") is not True:
             continue
         employee_id = str(row.get("employee_id") or "").strip()

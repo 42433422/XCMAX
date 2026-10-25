@@ -49,10 +49,7 @@ def _scan_coverage_ratchet_gap() -> List[Dict[str, Any]]:
             return signals
 
         def _valid_rec(rec: _facade().Dict[str, _facade().Any]) -> bool:
-            return (
-                rec.get("backend_lines") is not None
-                or rec.get("frontend_lines") is not None
-            )
+            return rec.get("backend_lines") is not None or rec.get("frontend_lines") is not None
 
         valid = [r for r in records if _valid_rec(r)]
         if len(valid) < 2:

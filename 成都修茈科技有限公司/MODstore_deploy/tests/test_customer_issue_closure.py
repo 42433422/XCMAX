@@ -70,7 +70,10 @@ def test_o7_error_and_lineage(monkeypatch):
         lambda *args: None,
     )
     from modstore_server import employee_orchestrator
-    from modstore_server.production_line_orchestrator import ProductionLineOrchestrator, StepStatus
+    from modstore_server.production_line_orchestrator import (
+        ProductionLineOrchestrator,
+        StepStatus,
+    )
 
     orch = ProductionLineOrchestrator()
     orch._release_train_subset = True
@@ -165,14 +168,18 @@ def running(body):
 
 def test_wrapped_employee_completion_uses_delivered_module_identity(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+    from modstore_server.customer_service_delivery_completion import (
+        complete_delivery_if_ready,
+    )
 
     ticket, evidence, body = receipt_case
     evidence["kind"] = "employee"
     evidence["runs"][-1]["artifact"] = {"pack_id": "customer-mod"}
     evidence["delivery_artifacts"][0]["source_employee_pack_id"] = "customer-mod"
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     record_receipt(ticket, evidence, body, owner_id=11)
     complete_delivery_if_ready(ticket, evidence)
@@ -185,7 +192,9 @@ def test_wrapped_employee_completion_uses_delivered_module_identity(receipt_case
 
 def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+    from modstore_server.customer_service_delivery_completion import (
+        complete_delivery_if_ready,
+    )
 
     ticket, evidence, body = receipt_case
     evidence["kind"] = "bundle"
@@ -198,10 +207,16 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
         }
     )
     evidence["download_grants"].append(
-        {**evidence["download_grants"][0], "id": "wrapped-employee", "token": "second-grant"}
+        {
+            **evidence["download_grants"][0],
+            "id": "wrapped-employee",
+            "token": "second-grant",
+        }
     )
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     record_receipt(ticket, evidence, body, owner_id=11)
     record_receipt(ticket, evidence, running(body), owner_id=11)
@@ -217,7 +232,10 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "processing"
     record_receipt(
-        ticket, evidence, {**running(employee), "receipt_id": "employee-running"}, owner_id=11
+        ticket,
+        evidence,
+        {**running(employee), "receipt_id": "employee-running"},
+        owner_id=11,
     )
     complete_delivery_if_ready(ticket, evidence)
     assert ticket.status == "resolved"
@@ -225,7 +243,9 @@ def test_bundle_waits_for_wrapped_employee_runtime_on_same_client(receipt_case, 
 
 def test_install_is_not_complete_and_retry_can_verify_release(receipt_case, monkeypatch):
     from modstore_server import customer_delivery_receipts as receipts
-    from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+    from modstore_server.customer_service_delivery_completion import (
+        complete_delivery_if_ready,
+    )
 
     ticket, evidence, body = receipt_case
     record_receipt(ticket, evidence, body, owner_id=11)
@@ -429,7 +449,10 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
         )
         assert len(events) == 1
         payload = json.loads(events[0].payload_json)
-        assert [payload["work_order_id"], payload["support_bundle_sha256"]] == [wo_id, sha]
+        assert [payload["work_order_id"], payload["support_bundle_sha256"]] == [
+            wo_id,
+            sha,
+        ]
         assert base64.b64decode(payload["support_bundle_base64"]) == raw
         wo_events = (
             db.query(WorkOrderEvent).filter_by(wo_id=wo_id).order_by(WorkOrderEvent.id).all()
@@ -490,7 +513,13 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
         replay_payload = json.loads(restored[-1].payload_json)
         assert all(
             replay_payload[k] == payload[k]
-            for k in ("ticket_id", "user_id", "ticket_no", "work_order_id", "support_bundle_base64")
+            for k in (
+                "ticket_id",
+                "user_id",
+                "ticket_no",
+                "work_order_id",
+                "support_bundle_base64",
+            )
         )
         if incident_state != "healthy":
             assert replay_payload["_incident_replay"] == {
@@ -526,7 +555,9 @@ def test_unknown_host_failure_stays_pending_and_same_id_can_be_verified(receipt_
     assert first["record"]["failure_recorded"] is False
     assert first["record"]["verified"] is False
     monkeypatch.setattr(
-        receipts, "trusted_host_release", lambda sha: {"git_sha": sha, "source_ref": "main"}
+        receipts,
+        "trusted_host_release",
+        lambda sha: {"git_sha": sha, "source_ref": "main"},
     )
     second = record_receipt(ticket, evidence, failed, owner_id=11)
     assert second["record"]["failure_recorded"] is True and second["record"]["verified"] is False
@@ -581,12 +612,18 @@ def test_same_work_order_support_reports_are_durable(client, auth_headers, monke
     assert first.status_code == 200, first.text
     for metadata in (
         {},
-        {"customer_instance_id": "mac", "product_version": "1.0.0.5", "git_sha": "b" * 40},
+        {
+            "customer_instance_id": "mac",
+            "product_version": "1.0.0.5",
+            "git_sha": "b" * 40,
+        },
     ):
         supplement = {**body, **bundles[1], **metadata}
         for _ in range(2):
             result = client.post(
-                "/api/customer-service/issues/intake", json=supplement, headers=auth_headers
+                "/api/customer-service/issues/intake",
+                json=supplement,
+                headers=auth_headers,
             )
             assert result.status_code == 200, result.text
             assert result.json()["ticket_id"] == first.json()["ticket_id"]

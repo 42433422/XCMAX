@@ -233,8 +233,6 @@ def format_visitor_block(identity: Optional[VisitorIdentity]) -> str:
         parts.append(f"邮箱={identity.email_hint}")
     parts.append(f"入口={identity.source}")
     return (
-        "【当前对话对象】"
-        + "；".join(parts)
-        + "。可自然称呼并按会员/角色调整话术（如权益说明），"
+        "【当前对话对象】" + "；".join(parts) + "。可自然称呼并按会员/角色调整话术（如权益说明），"
         "勿复读整段 ID/内部字段，勿向访客复述敏感信息。"
     )

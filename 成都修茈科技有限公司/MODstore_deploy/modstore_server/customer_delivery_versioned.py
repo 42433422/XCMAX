@@ -20,9 +20,7 @@ MOD_ID = "sunbird-attendance-custom"
 LEGACY_ID = "taiyangniao-pro"
 
 
-def select_main_rework_source(
-    evidence: dict[str, Any], user_id: int, action: str
-) -> None:
+def select_main_rework_source(evidence: dict[str, Any], user_id: int, action: str) -> None:
     if (
         action != "rework"
         or evidence.get("kind") != "module"
@@ -65,9 +63,9 @@ def assert_owner_source(owner_id: int, mod_id: str) -> None:
     from modstore_server.models import User, get_session_factory, get_user_mod_ids
 
     root = Path(__file__).resolve().parents[3]
-    rows = json.loads(
-        (root / "FHD/config/customer_delivery.json").read_text(encoding="utf-8")
-    )["deliveries"]
+    rows = json.loads((root / "FHD/config/customer_delivery.json").read_text(encoding="utf-8"))[
+        "deliveries"
+    ]
     allowed = any(
         row.get("delivery_id") == "customer-taiyangniao"
         and row.get("runtime_mod_id") == mod_id == MOD_ID
@@ -85,8 +83,7 @@ def assert_owner_source(owner_id: int, mod_id: str) -> None:
         or account != "sunbird"
         or owner is None
         or getattr(owner, "deleted_at", None) is not None
-        or str(owner.account_state or "")
-        in {"deleted", "disabled", "suspended", "blocked"}
+        or str(owner.account_state or "") in {"deleted", "disabled", "suspended", "blocked"}
         or not owner.is_enterprise
         or LEGACY_ID not in get_user_mod_ids(owner_id)
     ):
@@ -194,18 +191,14 @@ async def start_versioned_main_run(
         try:
             await workbench._set_step(session_id, "source", "running")
             library = source_library(scope, user_id, session_id, ticket_id)
-            target = await asyncio.to_thread(
-                _copy_validated_source, library, provenance
-            )
+            target = await asyncio.to_thread(_copy_validated_source, library, provenance)
             await workbench._set_step(session_id, "source", "done", "发行源码摘要一致")
             step = "mod_sandbox"
             await workbench._set_step(session_id, "mod_sandbox", "running")
             from modstore_server.mod_scaffold_runner import mod_compileall_warnings
 
             def compile_separate_copy() -> list[str]:
-                with tempfile.TemporaryDirectory(
-                    prefix="sunbird-source-check-"
-                ) as temporary:
+                with tempfile.TemporaryDirectory(prefix="sunbird-source-check-") as temporary:
                     source_copy = shutil.copytree(target, Path(temporary) / MOD_ID)
                     return cast(list[str], mod_compileall_warnings(source_copy))
 

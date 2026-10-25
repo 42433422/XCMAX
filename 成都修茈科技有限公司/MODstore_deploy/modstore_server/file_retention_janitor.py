@@ -321,9 +321,7 @@ def run_retention_janitor(
     started_at = datetime.now(UTC)
     t0 = time.perf_counter()
     is_dry = is_dry_run() if dry_run is None else bool(dry_run)
-    database_is_dry = (
-        is_dry if notification_dry_run is None else bool(notification_dry_run)
-    )
+    database_is_dry = is_dry if notification_dry_run is None else bool(notification_dry_run)
 
     target_reports: List[TargetReport] = []
     cumulative_released = 0

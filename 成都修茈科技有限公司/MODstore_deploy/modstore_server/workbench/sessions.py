@@ -26,11 +26,7 @@ def session_store_directory() -> Path:
     )
 
     configured = os.environ.get("MODSTORE_RUNTIME_DIR", "").strip()
-    runtime = (
-        Path(configured)
-        if configured
-        else Path(tempfile.gettempdir()) / "modstore_runtime"
-    )
+    runtime = Path(configured) if configured else Path(tempfile.gettempdir()) / "modstore_runtime"
     directory = require_private_directory(runtime / "workbench_sessions")
     directory.mkdir(parents=True, mode=448, exist_ok=True)
     return directory
@@ -38,9 +34,7 @@ def session_store_directory() -> Path:
 
 def session_filename(sid: str) -> str:
     normalized = str(sid or "").strip().lower()
-    if not 16 <= len(normalized) <= 32 or any(
-        (c not in "0123456789abcdef" for c in normalized)
-    ):
+    if not 16 <= len(normalized) <= 32 or any((c not in "0123456789abcdef" for c in normalized)):
         raise ValueError("invalid session id")
     return f"{normalized}.json"
 
@@ -106,9 +100,7 @@ class SessionStore:
             try:
                 self._write(path, raw)
             except OSError:
-                _LOG.debug(
-                    "workbench snapshot migration failed sid=%s", sid, exc_info=True
-                )
+                _LOG.debug("workbench snapshot migration failed sid=%s", sid, exc_info=True)
         return raw
 
     def hydrate(self, sid: str) -> None:
@@ -135,9 +127,7 @@ class SessionStore:
                 return
             if error is None:
                 return
-            _LOG.exception(
-                "workbench task failed session=%s: %s", sid, error, exc_info=error
-            )
+            _LOG.exception("workbench task failed session=%s: %s", sid, error, exc_info=error)
             session = self.data.get(sid)
             if not session:
                 return
@@ -237,9 +227,7 @@ class SessionProgress:
                 None,
             )
             if selected is None:
-                selected = next(
-                    (step for step in session["steps"] if step["id"] == step_id), None
-                )
+                selected = next((step for step in session["steps"] if step["id"] == step_id), None)
             if selected is not None:
                 selected.update(status="error", message=message)
             self.store.persist(sid)

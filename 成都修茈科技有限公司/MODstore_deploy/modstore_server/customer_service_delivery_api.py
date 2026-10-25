@@ -55,9 +55,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         sid = str(row.get("session_id") or "")
         latest_generation = sid
         snapshot = (
-            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0))
-            if sid
-            else None
+            await get_workbench_session_snapshot(sid, int(ticket.user_id or 0)) if sid else None
         )
         latest_snapshot = snapshot or {}
         item = dict(row)
@@ -82,9 +80,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     pricing_mode = custom_delivery_pricing_mode(evidence)
     commerce_blockers = custom_delivery_commerce_blockers(evidence)
     artifact = (
-        latest_snapshot.get("artifact")
-        if isinstance(latest_snapshot.get("artifact"), dict)
-        else {}
+        latest_snapshot.get("artifact") if isinstance(latest_snapshot.get("artifact"), dict) else {}
     )
     raw_validation = artifact.get("validation_summary")
     validation = raw_validation if isinstance(raw_validation, dict) else {}
@@ -105,8 +101,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = (
             "rework",
             str(
-                (evidence.get("resolution") or {}).get("last_error")
-                or "业务验证未通过，原单返工中"
+                (evidence.get("resolution") or {}).get("last_error") or "业务验证未通过，原单返工中"
             ),
         )
     elif (evidence.get("resolution") or {}).get("state") == "awaiting_runtime":
@@ -130,9 +125,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
         stage, label = "acceptance", "内部确认完成，待客户本人验收"
     elif not latest_snapshot:
         stage, label = (
-            ("rework", "生产会话已不可读取，请在原单返工")
-            if run_rows
-            else ("queued", "已受理")
+            ("rework", "生产会话已不可读取，请在原单返工") if run_rows else ("queued", "已受理")
         )
     elif str(latest_snapshot.get("status") or "") == "error":
         stage, label = "rework", "生产失败，待返工"
@@ -144,9 +137,7 @@ async def _custom_delivery_payload(ticket: CustomerServiceTicket) -> dict[str, A
     elif str(latest_snapshot.get("status") or "") == "done":
         gate_ok, _ = quality_gate(latest_snapshot)
         stage, label = (
-            ("acceptance", "质量门通过，待您验收")
-            if gate_ok
-            else ("rework", "质量门未通过")
+            ("acceptance", "质量门通过，待您验收") if gate_ok else ("rework", "质量门未通过")
         )
     else:
         stage, label = "production", "生产员工制作中"
@@ -232,15 +223,11 @@ async def list_custom_deliveries(
         reconcile_custom_delivery_payment,
     )
 
-    q = db.query(CustomerServiceTicket).filter(
-        CustomerServiceTicket.intent == "custom_delivery"
-    )
+    q = db.query(CustomerServiceTicket).filter(CustomerServiceTicket.intent == "custom_delivery")
     if not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
     rows = (
-        q.order_by(
-            CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc()
-        )
+        q.order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
         .limit(limit)
         .all()
     )
@@ -290,24 +277,18 @@ async def decide_custom_delivery(
         verified_runs = custom.get("runs") or []
         if verified_runs and verified_runs[-1].get("verified_artifacts"):
             evidence["runs"] = verified_runs
-            evidence["delivery_generation"] = str(
-                verified_runs[-1].get("session_id") or ""
-            )
+            evidence["delivery_generation"] = str(verified_runs[-1].get("session_id") or "")
             evidence["delivery_artifacts"] = verified_runs[-1]["verified_artifacts"]
         evidence["acceptance_status"] = "internal_approved" if is_admin else "accepted"
         evidence["accepted_at"] = datetime.now(UTC).isoformat() if not is_admin else ""
-        evidence["internal_approved_at"] = (
-            datetime.now(UTC).isoformat() if is_admin else ""
-        )
+        evidence["internal_approved_at"] = datetime.now(UTC).isoformat() if is_admin else ""
         evidence["acceptance_actor"] = "admin_internal" if is_admin else "customer"
         evidence["accepted_by_user_id"] = int(user.id)
         evidence["acceptance_note"] = body.note.strip()[:4000]
         ticket.decision_status = "reviewed" if is_admin else "approved"
         ticket.status = "processing"
         decision_event = (
-            "custom_delivery_internal_approved"
-            if is_admin
-            else "custom_delivery_accepted"
+            "custom_delivery_internal_approved" if is_admin else "custom_delivery_accepted"
         )
     else:
         note = body.note.strip()
@@ -382,8 +363,7 @@ async def download_custom_delivery_artifact(
     candidates = [
         row
         for row in artifacts
-        if row.get("kind") == artifact_kind
-        and (not artifact_id or row.get("id") == artifact_id)
+        if row.get("kind") == artifact_kind and (not artifact_id or row.get("id") == artifact_id)
     ]
     if len(candidates) > 1:
         raise HTTPException(409, "组合交付包含多个同类产物，请指定 artifact_id")
@@ -414,9 +394,7 @@ async def download_custom_delivery_artifact(
         raise HTTPException(409, f"交付产物尚未通过可信签名校验：{exc}") from exc
     manifest = signed["manifest"]
     stream = BytesIO(raw)
-    filename = (
-        f"{artifact_id}.xcmod" if artifact_kind == "module" else f"{artifact_id}.xcemp"
-    )
+    filename = f"{artifact_id}.xcmod" if artifact_kind == "module" else f"{artifact_id}.xcemp"
     runtime_files_sha256 = canonical_sha256(signed["files_sha256"])
     package_sha256 = hashlib.sha256(raw).hexdigest()
     version = str(manifest.get("version") or "").strip()
@@ -476,9 +454,7 @@ async def download_custom_delivery_artifact(
         grant_verified_delivery_access,
     )
 
-    grant_verified_delivery_access(
-        db, ticket, evidence, manifest, owner_id=int(user.id)
-    )
+    grant_verified_delivery_access(db, ticket, evidence, manifest, owner_id=int(user.id))
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)
     db.commit()

@@ -37,16 +37,12 @@ def _last_change_id(conn: sqlite3.Connection) -> int:
 
 
 def _inbox_pending_count(conn: sqlite3.Connection) -> int:
-    row = conn.execute(
-        "SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='pending'"
-    ).fetchone()
+    row = conn.execute("SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='pending'").fetchone()
     return int(row["c"] or 0)
 
 
 def _inbox_conflict_count(conn: sqlite3.Connection) -> int:
-    row = conn.execute(
-        "SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='conflict'"
-    ).fetchone()
+    row = conn.execute("SELECT COUNT(1) AS c FROM xcmax_inbox WHERE status='conflict'").fetchone()
     return int(row["c"] or 0)
 
 
@@ -126,9 +122,7 @@ async def sync_changes(
         return {"success": True, "data": [], "count": 0, "note": _SYNC_UNAVAILABLE}
 
 
-@router.post(
-    "/sync/receive", response_model=None, dependencies=[Depends(require_sync_peer)]
-)
+@router.post("/sync/receive", response_model=None, dependencies=[Depends(require_sync_peer)])
 async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]:
     """接收来自本地节点的变更。
 
@@ -156,9 +150,7 @@ async def sync_receive(body: dict | list = Body(default=None)) -> dict[str, Any]
                     payload_json = json.dumps(payload, ensure_ascii=False, default=str)
                 except RECOVERABLE_ERRORS:
                     payload_json = "{}"
-                origin_node = (
-                    str(raw.get("origin_node") or "remote").strip() or "remote"
-                )
+                origin_node = str(raw.get("origin_node") or "remote").strip() or "remote"
                 conn.execute(
                     "INSERT INTO xcmax_inbox(entity_type, entity_id, operation, payload_json, origin_node, status, received_at) VALUES(?, ?, ?, ?, ?, 'pending', ?)",
                     (
@@ -315,12 +307,9 @@ async def _sse_generator(request: Request, since_cursor: int):
                     status = {
                         "healthy": True,
                         "local_cursor": _facade()._last_change_id(conn),
-                        "remote_cursor": int(
-                            _facade()._meta_get(conn, "remote_cursor", "0") or 0
-                        ),
+                        "remote_cursor": int(_facade()._meta_get(conn, "remote_cursor", "0") or 0),
                         "outbox_count": _facade()._inbox_pending_count(conn),
-                        "last_sync_at": _facade()._meta_get(conn, "last_sync_at", "")
-                        or None,
+                        "last_sync_at": _facade()._meta_get(conn, "last_sync_at", "") or None,
                         "conflict_count": _facade()._inbox_conflict_count(conn),
                         "role": "server",
                     }

@@ -52,9 +52,7 @@ def _timeout_seconds() -> float:
             15.0,
             min(
                 180.0,
-                float(
-                    os.environ.get("MODSTORE_FOUNDER_SCORECARD_TIMEOUT_SECONDS", "90")
-                ),
+                float(os.environ.get("MODSTORE_FOUNDER_SCORECARD_TIMEOUT_SECONDS", "90")),
             ),
         )
     except ValueError:
@@ -76,20 +74,13 @@ def _issue_market_admin_bearer() -> str:
 
     session_factory = get_session_factory()
     with session_factory() as session:
-        admin = (
-            session.query(User)
-            .filter(User.is_admin.is_(True))
-            .order_by(User.id.asc())
-            .first()
-        )
+        admin = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         if admin is None:
             raise RuntimeError("founder scorecard refresh has no market admin identity")
         user_id = int(admin.id)
         username = str(admin.username or "").strip()
     if user_id <= 0 or not username:
-        raise RuntimeError(
-            "founder scorecard refresh has invalid market admin identity"
-        )
+        raise RuntimeError("founder scorecard refresh has invalid market admin identity")
     return create_access_token(
         user_id,
         username,
@@ -132,17 +123,11 @@ def publish_founder_scorecard() -> dict[str, Any]:
         raise RuntimeError("founder scorecard refresh endpoint rejected publication")
     snapshot = payload.get("data") if isinstance(payload.get("data"), dict) else {}
     dimensions = snapshot.get("dimensions")
-    publication = (
-        payload.get("publication")
-        if isinstance(payload.get("publication"), dict)
-        else {}
-    )
+    publication = payload.get("publication") if isinstance(payload.get("publication"), dict) else {}
     if not isinstance(dimensions, list) or len(dimensions) != 7:
         raise RuntimeError("founder scorecard refresh returned incomplete dimensions")
     if not publication.get("ok"):
-        raise RuntimeError(
-            "founder scorecard public projection was not fully published"
-        )
+        raise RuntimeError("founder scorecard public projection was not fully published")
 
     return {
         "ok": True,
@@ -173,9 +158,7 @@ def register_founder_scorecard_job(scheduler: Any) -> None:
     scheduler.add_job(
         _refresh,
         IntervalTrigger(
-            minutes=_int_env(
-                "MODSTORE_FOUNDER_SCORECARD_REFRESH_MINUTES", 15, minimum=5
-            )
+            minutes=_int_env("MODSTORE_FOUNDER_SCORECARD_REFRESH_MINUTES", 15, minimum=5)
         ),
         id="founder_scorecard_refresh",
         replace_existing=True,

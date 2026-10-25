@@ -38,9 +38,7 @@ async def _start_custom_delivery_run(
     started = await start_workbench_session_for_user(
         int(user_id),
         payload,
-        delivery_context={"ticket_id": ticket_id, "evidence": evidence}
-        if ticket_id
-        else None,
+        delivery_context={"ticket_id": ticket_id, "evidence": evidence} if ticket_id else None,
     )
     return {
         "kind": kind,

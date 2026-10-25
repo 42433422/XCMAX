@@ -102,9 +102,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             "provider": config.get("provider") or "",
             "model": config.get("model") or "",
         }
-        result = execute_vibe_workflow_kind(
-            logic, dict(data), user_id=int(user_id or 0)
-        )
+        result = execute_vibe_workflow_kind(logic, dict(data), user_id=int(user_id or 0))
         if not result.get("ok") and result.get("error"):
             raise RuntimeError(result.get("error"))
         result.setdefault(
@@ -156,9 +154,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
         employee_id = str(config.get("employee_id") or "") or None
         workflow_id_cfg = config.get("workflow_id")
         try:
-            workflow_id_int = (
-                int(workflow_id_cfg) if workflow_id_cfg is not None else None
-            )
+            workflow_id_int = int(workflow_id_cfg) if workflow_id_cfg is not None else None
         except RECOVERABLE_ERRORS:
             workflow_id_int = None
 
@@ -181,16 +177,12 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             _facade().logger.warning("knowledge_search 节点执行失败: %s", e)
             return {
                 out_var: {"items": [], "count": 0, "error": str(e)},
-                "execution_time": _facade()
-                .datetime.now(_facade().timezone.utc)
-                .isoformat(),
+                "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
         items = [c.to_dict() for c in chunks or []]
         return {
             out_var: {"items": items, "count": len(items), "query": query_text},
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
 
     def _execute_start_node(
@@ -226,9 +218,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             raise ValueError("员工节点缺少必要的配置: employee_id 和 task")
         nodes_ctx = data.get("nodes") if isinstance(data.get("nodes"), dict) else {}
         tmpl_ctx = {"nodes": nodes_ctx, "global": data, "result": data}
-        input_data = _facade().resolve_value(
-            config.get("input_mapping") or data, tmpl_ctx
-        )
+        input_data = _facade().resolve_value(config.get("input_mapping") or data, tmpl_ctx)
         timeout_seconds = int(config.get("timeout_seconds") or 30)
         retry_count = int(config.get("retry_count") or 0)
         output_mapping = config.get("output_mapping") or {}
@@ -262,9 +252,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
                 "employee_result": result,
                 "employee_id": employee_id,
                 "task": task,
-                "execution_time": _facade()
-                .datetime.now(_facade().timezone.utc)
-                .isoformat(),
+                "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
             }
             if isinstance(mapped, dict):
                 base.update(mapped)
@@ -293,9 +281,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             raise ValueError("ESkill 节点 skill_id 必须是数字") from exc
         nodes_ctx = data.get("nodes") if isinstance(data.get("nodes"), dict) else {}
         tmpl_ctx = {"nodes": nodes_ctx, "global": data, "result": data}
-        input_data = _facade().resolve_value(
-            config.get("input_mapping") or data, tmpl_ctx
-        )
+        input_data = _facade().resolve_value(config.get("input_mapping") or data, tmpl_ctx)
         if not isinstance(input_data, dict):
             input_data = {"value": input_data}
         logic_overrides: _facade().Dict[str, _facade().Any] = {}
@@ -338,9 +324,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             "eskill_result": result,
             "eskill_id": eskill_id,
             "eskill_stage": result.get("stage"),
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
         if output_var:
             base[output_var] = runtime_output
@@ -407,9 +391,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
             "openapi_result": last_result,
             "connector_id": connector_id_int,
             "operation_id": operation_id,
-            "execution_time": _facade()
-            .datetime.now(_facade().timezone.utc)
-            .isoformat(),
+            "execution_time": _facade().datetime.now(_facade().timezone.utc).isoformat(),
         }
         if isinstance(mapped, dict):
             base.update(mapped)
@@ -435,8 +417,7 @@ class __WorkflowEnginePart01MixinPart02Mixin:
         """触发器节点：运行时由 HTTP/cron 调度；图内执行仅保证 payload 变量存在。"""
         _facade().logger.info("执行 Webhook 触发器节点（图内占位）: %s", node.name)
         payload_var = (
-            str(config.get("payload_var") or "webhook_payload").strip()
-            or "webhook_payload"
+            str(config.get("payload_var") or "webhook_payload").strip() or "webhook_payload"
         )
         return {payload_var: data.get(payload_var, {})}
 

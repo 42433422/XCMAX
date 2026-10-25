@@ -19,9 +19,7 @@ def project_governance_state(state):
             memory=state["memory"] if isinstance(state["memory"], dict) else {},
         )
         kb_search = (
-            kb_context.get("kb_search")
-            if isinstance(kb_context.get("kb_search"), dict)
-            else {}
+            kb_context.get("kb_search") if isinstance(kb_context.get("kb_search"), dict) else {}
         )
         fix_hits = (
             kb_context.get("fix_knowledge_hits")
@@ -34,9 +32,7 @@ def project_governance_state(state):
             else []
         )
         inventory = (
-            kb_context.get("inventory")
-            if isinstance(kb_context.get("inventory"), dict)
-            else {}
+            kb_context.get("inventory") if isinstance(kb_context.get("inventory"), dict) else {}
         )
         state["kb_summary"] = {
             "fix_count": int(inventory.get("fix_count") or 0),
@@ -51,10 +47,7 @@ def project_governance_state(state):
             "top_fix_hits": [
                 {
                     "symptom": str(
-                        item.get("symptom")
-                        or item.get("summary")
-                        or item.get("id")
-                        or ""
+                        item.get("symptom") or item.get("summary") or item.get("id") or ""
                     )[:180],
                     "root_cause": str(item.get("root_cause") or "")[:180],
                     "fix_diff": str(item.get("fix_diff") or "")[:2000],
@@ -73,10 +66,7 @@ def project_governance_state(state):
                         else []
                     ),
                     "rollback_plan": (
-                        str(
-                            item.get("executable_template", {}).get("rollback_plan")
-                            or ""
-                        )[:1000]
+                        str(item.get("executable_template", {}).get("rollback_plan") or "")[:1000]
                         if isinstance(item.get("executable_template"), dict)
                         else ""
                     ),
@@ -88,16 +78,11 @@ def project_governance_state(state):
             "top_pattern_hits": [
                 {
                     "pattern": str(
-                        item.get("pattern")
-                        or item.get("summary")
-                        or item.get("id")
-                        or ""
+                        item.get("pattern") or item.get("summary") or item.get("id") or ""
                     )[:180],
                     "summary": str(item.get("summary") or "")[:180],
                     "applicability": str(
-                        item.get("applicability")
-                        or item.get("applicability_check")
-                        or ""
+                        item.get("applicability") or item.get("applicability_check") or ""
                     )[:1000],
                     "patch_strategy": str(item.get("patch_strategy") or "")[:1000],
                     "path": item.get("_path"),
@@ -131,9 +116,7 @@ def project_governance_state(state):
             "history_count": 0,
         }
     metric_windows = (
-        metrics_gate.get("windows")
-        if isinstance(metrics_gate.get("windows"), list)
-        else []
+        metrics_gate.get("windows") if isinstance(metrics_gate.get("windows"), list) else []
     )
     state["evolution_metrics_summary"] = {
         "pause": bool(metrics_gate.get("pause")),
@@ -176,9 +159,7 @@ def project_governance_state(state):
             "status": "trigger" if state["gate"].get("should_run") is True else "idle",
             "ok": True,
             "blocking": False,
-            "reason": state["gate"].get("reason")
-            or state["gate"].get("trigger_reason")
-            or "",
+            "reason": state["gate"].get("reason") or state["gate"].get("trigger_reason") or "",
             "detail": f"missing={state['gate'].get('missing_count', 0)} threshold={state['gate'].get('threshold', '')}",
         },
         {
@@ -202,9 +183,7 @@ def project_governance_state(state):
         {
             "key": "evolution",
             "label": "Evolution Metrics",
-            "status": "pause"
-            if state["evolution_metrics_summary"].get("pause")
-            else "allow",
+            "status": "pause" if state["evolution_metrics_summary"].get("pause") else "allow",
             "ok": not bool(state["evolution_metrics_summary"].get("pause")),
             "blocking": bool(state["evolution_metrics_summary"].get("pause")),
             "reason": state["evolution_metrics_summary"].get("reason") or "",
@@ -239,9 +218,7 @@ def project_governance_state(state):
         ][:80]
         participant_count = len(state["participants_by_id"])
         open_count = len(state["open_run_ids"])
-        governance_health = str(
-            state["governance_audit_summary"].get("health") or ""
-        ).strip()
+        governance_health = str(state["governance_audit_summary"].get("health") or "").strip()
         governance_consecutive = int(
             state["governance_audit_summary"].get("consecutive_failures") or 0
         )
@@ -257,7 +234,9 @@ def project_governance_state(state):
             ui_state = "requires_duty_registration"
             tone = "bad"
             title = "编制员工未登记上岗"
-            detail = "Loop 参与者命中编制基线但未完成 duty registry 上岗登记，必须先在编制图谱补登记。"
+            detail = (
+                "Loop 参与者命中编制基线但未完成 duty registry 上岗登记，必须先在编制图谱补登记。"
+            )
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "register_duty_employees"
@@ -269,9 +248,7 @@ def project_governance_state(state):
             ui_state = "requires_roster_isolation"
             tone = "bad"
             title = "Loop 混入非编制员工"
-            detail = (
-                "检测到非编制 employee_id，必须在编制图谱隔离，不能进入上岗员工执行面。"
-            )
+            detail = "检测到非编制 employee_id，必须在编制图谱隔离，不能进入上岗员工执行面。"
             primary_surface = "duty_roster_graph"
             primary_view = "loop"
             primary_action = "isolate_out_of_roster_participants"
@@ -429,25 +406,19 @@ def project_governance_state(state):
             ],
             "employee_space": {
                 "role": "execution_surface",
-                "title": title
-                if primary_surface == "employee_space"
-                else "员工空间只展示执行现场",
+                "title": title if primary_surface == "employee_space" else "员工空间只展示执行现场",
                 "detail": (
                     detail
                     if primary_surface == "employee_space"
                     else "补登记、隔离、数据源修复统一在编制图谱处理，避免工位页绕过上岗门禁。"
                 ),
-                "cta": "看执行现场"
-                if primary_surface == "employee_space"
-                else "去编制图谱处理",
+                "cta": "看执行现场" if primary_surface == "employee_space" else "去编制图谱处理",
             },
             "duty_roster_graph": {
                 "role": "governance_surface",
                 "title": title,
                 "detail": detail,
-                "cta": "执行治理动作"
-                if primary_surface == "duty_roster_graph"
-                else "查看编制准入",
+                "cta": "执行治理动作" if primary_surface == "duty_roster_graph" else "查看编制准入",
             },
         }
 

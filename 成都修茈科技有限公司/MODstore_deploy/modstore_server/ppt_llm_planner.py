@@ -72,9 +72,7 @@ async def plan_with_llm(
             "slides": presentation.get("slides", [])[:15],
             "has_timing": presentation.get("has_timing"),
         }
-        context_parts.append(
-            "presentation_full:\n" + json.dumps(slim, ensure_ascii=False)[:12000]
-        )
+        context_parts.append("presentation_full:\n" + json.dumps(slim, ensure_ascii=False)[:12000])
     if images_index:
         context_parts.append(
             "images_index:\n" + json.dumps(images_index, ensure_ascii=False)[:8000]
@@ -125,9 +123,7 @@ async def plan_with_llm(
     return _heuristic_compose_plan(user_query, mode=mode), warnings
 
 
-def _heuristic_compose_plan(
-    user_query: str, *, mode: str = "compose"
-) -> Dict[str, Any]:
+def _heuristic_compose_plan(user_query: str, *, mode: str = "compose") -> Dict[str, Any]:
     q = (user_query or "").strip()
     slide_count = 3
     m = re.search(r"(\d+)\s*页", q)

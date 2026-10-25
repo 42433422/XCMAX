@@ -26,13 +26,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".json", ".csv", ".pdf", ".docx", ".xlsx"}
-MAX_UPLOAD_BYTES = int(
-    os.environ.get("MODSTORE_KB_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024))
-)
+MAX_UPLOAD_BYTES = int(os.environ.get("MODSTORE_KB_MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
 
-_CHUNK_STRATEGY = (
-    (os.environ.get("MODSTORE_KB_CHUNK_STRATEGY") or "fixed").strip().lower()
-)
+_CHUNK_STRATEGY = (os.environ.get("MODSTORE_KB_CHUNK_STRATEGY") or "fixed").strip().lower()
 
 
 def _chunk_size() -> int:
@@ -44,21 +40,15 @@ def _chunk_overlap() -> int:
 
 
 def _semantic_threshold() -> float:
-    return max(
-        0.1, min(float(os.environ.get("MODSTORE_KB_SEMANTIC_THRESHOLD", "0.5")), 0.95)
-    )
+    return max(0.1, min(float(os.environ.get("MODSTORE_KB_SEMANTIC_THRESHOLD", "0.5")), 0.95))
 
 
 def _semantic_min_chunk() -> int:
-    return max(
-        100, min(int(os.environ.get("MODSTORE_KB_SEMANTIC_MIN_CHUNK", "200")), 2000)
-    )
+    return max(100, min(int(os.environ.get("MODSTORE_KB_SEMANTIC_MIN_CHUNK", "200")), 2000))
 
 
 def _semantic_max_chunk() -> int:
-    return max(
-        400, min(int(os.environ.get("MODSTORE_KB_SEMANTIC_MAX_CHUNK", "2000")), 8000)
-    )
+    return max(400, min(int(os.environ.get("MODSTORE_KB_SEMANTIC_MAX_CHUNK", "2000")), 8000))
 
 
 def _decode_text(raw: bytes) -> str:
@@ -115,13 +105,9 @@ def _parse_xlsx(raw: bytes) -> str:
         from openpyxl.utils import get_column_letter
     except ImportError as e:
         raise HTTPException(503, "服务器未安装 openpyxl，暂不能解析 XLSX") from e
-    max_rows = max(
-        10, min(int(os.environ.get("MODSTORE_XLSX_PREVIEW_ROWS", "80")), 300)
-    )
+    max_rows = max(10, min(int(os.environ.get("MODSTORE_XLSX_PREVIEW_ROWS", "80")), 300))
     max_cols = max(8, min(int(os.environ.get("MODSTORE_XLSX_PREVIEW_COLS", "40")), 120))
-    max_formulas = max(
-        0, min(int(os.environ.get("MODSTORE_XLSX_MAX_FORMULAS", "80")), 500)
-    )
+    max_formulas = max(0, min(int(os.environ.get("MODSTORE_XLSX_MAX_FORMULAS", "80")), 500))
     max_scan_cells = max(
         1000, min(int(os.environ.get("MODSTORE_XLSX_SCAN_CELLS", "30000")), 200000)
     )
@@ -144,9 +130,7 @@ def _parse_xlsx(raw: bytes) -> str:
         return fmt(text).replace("|", "\\|")
 
     wb_values = openpyxl.load_workbook(io.BytesIO(raw), read_only=False, data_only=True)
-    wb_formulas = openpyxl.load_workbook(
-        io.BytesIO(raw), read_only=False, data_only=False
-    )
+    wb_formulas = openpyxl.load_workbook(io.BytesIO(raw), read_only=False, data_only=False)
     lines: List[str] = []
     for ws in wb_formulas.worksheets:
         vws = wb_values[ws.title]
@@ -157,8 +141,7 @@ def _parse_xlsx(raw: bytes) -> str:
         merged = [str(rng) for rng in getattr(ws, "merged_cells", []).ranges]
         if merged:
             lines.append(
-                f"- Merged cells: {', '.join(merged[:40])}"
-                + (" ..." if len(merged) > 40 else "")
+                f"- Merged cells: {', '.join(merged[:40])}" + (" ..." if len(merged) > 40 else "")
             )
 
         row_limit = min(ws.max_row or 0, max_rows)
@@ -184,9 +167,7 @@ def _parse_xlsx(raw: bytes) -> str:
                 if has_value:
                     lines.append("| " + " | ".join([str(r), *cells]) + " |")
             if (ws.max_row or 0) > row_limit or (ws.max_column or 0) > col_limit:
-                lines.append(
-                    f"... preview limited to {row_limit} rows x {col_limit} columns"
-                )
+                lines.append(f"... preview limited to {row_limit} rows x {col_limit} columns")
 
         if max_formulas > 0:
             formulas: List[str] = []
@@ -228,16 +209,12 @@ def parse_upload(filename: str, raw: bytes) -> str:
         text = _decode_text(raw)
     elif suffix == ".json":
         try:
-            text = json.dumps(
-                json.loads(_decode_text(raw)), ensure_ascii=False, indent=2
-            )
+            text = json.dumps(json.loads(_decode_text(raw)), ensure_ascii=False, indent=2)
         except json.JSONDecodeError:
             text = _decode_text(raw)
     elif suffix == ".csv":
         rows = csv.reader(io.StringIO(_decode_text(raw)))
-        text = "\n".join(
-            " | ".join(cell.strip() for cell in row if cell.strip()) for row in rows
-        )
+        text = "\n".join(" | ".join(cell.strip() for cell in row if cell.strip()) for row in rows)
     elif suffix == ".pdf":
         text = _parse_pdf(raw)
     elif suffix == ".docx":
@@ -303,9 +280,7 @@ class SemanticChunker:
 
         embeddings = await self._embed_sentences(sentences)
         if embeddings is None:
-            logger.info(
-                "SemanticChunker: embedding unavailable, falling back to fixed chunking"
-            )
+            logger.info("SemanticChunker: embedding unavailable, falling back to fixed chunking")
             return chunk_text(text)
 
         boundaries = self._detect_boundaries(sentences, embeddings)
@@ -323,9 +298,7 @@ class SemanticChunker:
         )
         return chunk_text(text)
 
-    async def _embed_sentences(
-        self, sentences: List[str]
-    ) -> Optional[List[List[float]]]:
+    async def _embed_sentences(self, sentences: List[str]) -> Optional[List[List[float]]]:
         try:
             from modstore_server.embedding_service import embed_texts
 
@@ -336,9 +309,7 @@ class SemanticChunker:
             logger.warning("SemanticChunker: embedding failed: %s", exc)
         return None
 
-    def _detect_boundaries(
-        self, sentences: List[str], embeddings: List[List[float]]
-    ) -> List[int]:
+    def _detect_boundaries(self, sentences: List[str], embeddings: List[List[float]]) -> List[int]:
         """Return sentence indices where a chunk boundary should be inserted."""
         boundaries: List[int] = [0]
         for i in range(1, len(sentences)):
@@ -347,25 +318,15 @@ class SemanticChunker:
                 boundaries.append(i)
         return boundaries
 
-    def _merge_sentences(
-        self, sentences: List[str], boundaries: List[int]
-    ) -> List[str]:
+    def _merge_sentences(self, sentences: List[str], boundaries: List[int]) -> List[str]:
         """Merge sentences between boundaries, respecting size limits."""
         chunks: List[str] = []
         for start_idx in range(len(boundaries)):
             start = boundaries[start_idx]
-            end = (
-                boundaries[start_idx + 1]
-                if start_idx + 1 < len(boundaries)
-                else len(sentences)
-            )
+            end = boundaries[start_idx + 1] if start_idx + 1 < len(boundaries) else len(sentences)
             current = ""
             for si in range(start, end):
-                candidate = (
-                    (current + " " + sentences[si]).strip()
-                    if current
-                    else sentences[si]
-                )
+                candidate = (current + " " + sentences[si]).strip() if current else sentences[si]
                 if len(candidate) > self.max_chunk and current:
                     chunks.append(current)
                     current = sentences[si]
@@ -389,9 +350,7 @@ def _get_chunker(
     """Return a SemanticChunker if strategy is 'semantic', else None."""
     effective = (strategy or _CHUNK_STRATEGY).strip().lower()
     if effective == "semantic":
-        return SemanticChunker(
-            threshold=threshold, min_chunk=min_chunk, max_chunk=max_chunk
-        )
+        return SemanticChunker(threshold=threshold, min_chunk=min_chunk, max_chunk=max_chunk)
     return None
 
 

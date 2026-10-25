@@ -93,9 +93,7 @@ def _prepare_work_dir(session_id: str, *, script_root: Path) -> Path:
     # Session ids are remote input and must never influence a filesystem path.
     # ``mkdtemp`` supplies the unique, opaque run identity instead.
     del session_id
-    work_text = os.path.realpath(
-        os.path.abspath(tempfile.mkdtemp(prefix="run_", dir=root_text))
-    )
+    work_text = os.path.realpath(os.path.abspath(tempfile.mkdtemp(prefix="run_", dir=root_text)))
     root_prefix = root_text.rstrip(os.sep) + os.sep
     if work_text != root_text and not work_text.startswith(root_prefix):
         raise ValueError("sandbox work directory escaped script root")
@@ -200,9 +198,7 @@ async def run_in_sandbox(
     :func:`modstore_server.script_agent.docker_runner.run_in_docker`，
     用 docker-per-run 提供 namespace + cgroup 强隔离；默认仍是 subprocess。
     """
-    backend = (
-        (os.environ.get("MODSTORE_SANDBOX_BACKEND") or "subprocess").strip().lower()
-    )
+    backend = (os.environ.get("MODSTORE_SANDBOX_BACKEND") or "subprocess").strip().lower()
     if backend == "docker":
         from modstore_server.script_agent.docker_runner import run_in_docker
 
@@ -227,9 +223,7 @@ async def run_in_sandbox(
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
         input_root_text = os.path.realpath(os.path.abspath(str(input_dir)))
-        input_path_text = os.path.realpath(
-            os.path.abspath(os.path.join(input_root_text, name))
-        )
+        input_path_text = os.path.realpath(os.path.abspath(os.path.join(input_root_text, name)))
         input_root_prefix = input_root_text.rstrip(os.sep) + os.sep
         if not input_path_text.startswith(input_root_prefix):
             raise ValueError("sandbox input path escapes run directory")
@@ -242,9 +236,7 @@ async def run_in_sandbox(
 
     allow_t: Optional[tuple[str, ...]] = None
     if employee_run_allowlist:
-        allow_t = tuple(
-            str(x).strip() for x in employee_run_allowlist if str(x).strip()
-        )
+        allow_t = tuple(str(x).strip() for x in employee_run_allowlist if str(x).strip())
     ctx = SandboxHostContext(
         user_id=int(user_id),
         provider=provider,

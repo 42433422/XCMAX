@@ -47,9 +47,7 @@ async def _run_workbench_script_pipeline(
         await ports.progress.set_step(
             sid, "validate", "error", "；".join(result.get("errors") or [])
         )
-        await ports.progress.fail(
-            sid, "validate", "；".join(result.get("errors") or [])
-        )
+        await ports.progress.fail(sid, "validate", "；".join(result.get("errors") or []))
         async with ports.sessions.lock:
             sess = ports.sessions.data.get(sid)
             if sess:
@@ -64,9 +62,7 @@ async def _run_workbench_script_pipeline(
         await ports.progress.set_step(
             sid, "run", "error", (result.get("stderr") or "脚本执行失败")[:300]
         )
-        await ports.progress.fail(
-            sid, "run", (result.get("stderr") or "脚本执行失败")[:1000]
-        )
+        await ports.progress.fail(sid, "run", (result.get("stderr") or "脚本执行失败")[:1000])
     else:
         try:
             script_wf = ports.commit(

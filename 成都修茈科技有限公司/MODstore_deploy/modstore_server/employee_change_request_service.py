@@ -92,9 +92,7 @@ def apply_employee_change_request(
             pack = load_employee_pack(session, str(row.source_employee_id or ""))
         except ValueError:
             pack = {"manifest": {}}
-        manifest = (
-            pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-        )
+        manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
         sg, fg, ag = workspace_policy_from_manifest(manifest)
         if not ag and isinstance(data, dict):
             ag = [
@@ -126,9 +124,7 @@ def apply_employee_change_request(
                 return {"ok": False, "error": msg_sc}
 
         # 冲突检测
-        merge_strategy = (
-            os.environ.get("MODSTORE_CR_MERGE_STRATEGY", "overwrite").strip().lower()
-        )
+        merge_strategy = os.environ.get("MODSTORE_CR_MERGE_STRATEGY", "overwrite").strip().lower()
         if merge_strategy in ("fail_on_conflict", "llm_merge"):
             try:
                 from modstore_server.change_merge import (
@@ -136,9 +132,7 @@ def apply_employee_change_request(
                     resolve_conflict,
                 )
 
-                has_conflict, conflicting_ids = detect_conflict(
-                    int(change_request_id), rel
-                )
+                has_conflict, conflicting_ids = detect_conflict(int(change_request_id), rel)
                 if has_conflict:
                     logger.info(
                         "apply_CR %d: conflict detected with CRs %s, strategy=%s",
@@ -163,9 +157,7 @@ def apply_employee_change_request(
                     if merged is not None:
                         content = merged
             except RECOVERABLE_ERRORS:
-                logger.exception(
-                    "conflict detection failed for CR %d", change_request_id
-                )
+                logger.exception("conflict detection failed for CR %d", change_request_id)
 
         try:
             with _workspace_fd(ws, rel, write=True) as fd:
@@ -214,9 +206,7 @@ def apply_employee_change_request(
         source_employee_id=src or "system",
     )
     ci_out = (
-        verify_out.get("pytest")
-        if isinstance(verify_out.get("pytest"), dict)
-        else {"ran": False}
+        verify_out.get("pytest") if isinstance(verify_out.get("pytest"), dict) else {"ran": False}
     )
     consistency_out = (
         verify_out.get("consistency")
@@ -239,13 +229,9 @@ def apply_employee_change_request(
 
     verify_ok = bool(verify_out.get("ok"))
     failed_checks = (
-        verify_out.get("failed_checks")
-        if isinstance(verify_out.get("failed_checks"), list)
-        else []
+        verify_out.get("failed_checks") if isinstance(verify_out.get("failed_checks"), list) else []
     )
-    failed_names = [
-        str(x.get("name") or "") for x in failed_checks if isinstance(x, dict)
-    ]
+    failed_names = [str(x.get("name") or "") for x in failed_checks if isinstance(x, dict)]
     verify_reason = (
         f"post apply verify failed: {', '.join(x for x in failed_names if x) or 'unknown'}"
         if not verify_ok
@@ -264,9 +250,7 @@ def apply_employee_change_request(
                 "repo_relative_path": (rel_repo or rel)[:500],
                 "consistency_ran": bool(consistency_out.get("ran")),
                 "consistency_ok": bool(consistency_out.get("ok")),
-                "consistency_total_errors": int(
-                    consistency_out.get("total_errors") or 0
-                ),
+                "consistency_total_errors": int(consistency_out.get("total_errors") or 0),
             },
             source=src or "system",
             fingerprint=None,
@@ -288,9 +272,7 @@ def apply_employee_change_request(
     if verify_ok:
         _publish_cr_result(int(change_request_id), src or "system", True, verify_reason)
     else:
-        _publish_cr_result(
-            int(change_request_id), src or "system", False, verify_reason
-        )
+        _publish_cr_result(int(change_request_id), src or "system", False, verify_reason)
         self_repair_out = _request_post_apply_self_repair(
             change_request_id=int(change_request_id),
             source_employee_id=src or "",
@@ -331,9 +313,7 @@ def apply_employee_change_request(
                 risk_level=str(risk_level_snapshot or ""),
             )
     except RECOVERABLE_ERRORS:
-        logger.exception(
-            "cr_git_pipeline post-apply hooks failed for CR %d", change_request_id
-        )
+        logger.exception("cr_git_pipeline post-apply hooks failed for CR %d", change_request_id)
 
     gs = _git_suggestions(
         int(change_request_id),
@@ -382,9 +362,7 @@ def apply_employee_change_request(
     }
 
 
-def _publish_cr_result(
-    cr_id: int, source_employee_id: str, ok: bool, reason: str
-) -> None:
+def _publish_cr_result(cr_id: int, source_employee_id: str, ok: bool, reason: str) -> None:
     """发布 change_request.result 事件，让员工订阅自己的 CR 审批结果。"""
     try:
         from modstore_server.incident_bus import publish
@@ -424,15 +402,11 @@ def reject_employee_change_request(
         row.status = "rejected"
         row.rejected_reason = (rejected_reason or "")[:4000]
         actor_id = int(rejected_by_user_id or 0)
-        row.approved_by_user_id = (
-            actor_id if actor_id > 0 and session.get(User, actor_id) else None
-        )
+        row.approved_by_user_id = actor_id if actor_id > 0 and session.get(User, actor_id) else None
         row.approved_at = datetime.now(UTC)
         session.commit()
 
-    _publish_cr_result(
-        int(change_request_id), src, False, rejected_reason or "rejected"
-    )
+    _publish_cr_result(int(change_request_id), src, False, rejected_reason or "rejected")
     return {"ok": True}
 
 

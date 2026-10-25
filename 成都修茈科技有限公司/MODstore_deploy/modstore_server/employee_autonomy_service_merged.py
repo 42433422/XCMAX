@@ -87,8 +87,7 @@ def _suggestion_auto_dispatch_enabled() -> bool:
 
 def _brief_auto_dispatch_enabled() -> bool:
     return (
-        _facade().os.environ.get("MODSTORE_DAILY_BRIEF_TODO_DISPATCH_ENABLED", "1")
-        or ""
+        _facade().os.environ.get("MODSTORE_DAILY_BRIEF_TODO_DISPATCH_ENABLED", "1") or ""
     ).strip().lower() in ("1", "true", "yes", "on")
 
 
@@ -109,9 +108,7 @@ def _infer_suggestion_targets(
     payload: _facade().Dict[str, _facade().Any],
     explicit_targets: _facade().Sequence[str] | None = None,
 ) -> _facade().List[str]:
-    direct = _facade()._dedupe_strs(
-        explicit_targets or payload.get("target_employee_ids") or []
-    )
+    direct = _facade()._dedupe_strs(explicit_targets or payload.get("target_employee_ids") or [])
     if direct:
         return direct
     target_one = str(payload.get("target_employee_id") or "").strip()
@@ -257,9 +254,7 @@ def create_employee_suggestion(
 ) -> _facade().Dict[str, _facade().Any]:
     src = str(source_employee_id or "").strip() or "system"
     pl = dict(payload or {})
-    targets = _facade()._infer_suggestion_targets(
-        src, pl, explicit_targets=target_employee_ids
-    )
+    targets = _facade()._infer_suggestion_targets(src, pl, explicit_targets=target_employee_ids)
     targets = _facade()._dedupe_strs(targets)
     risk = str(risk_level or "medium").strip().lower()
     if risk not in ("low", "medium", "high"):
@@ -290,16 +285,12 @@ def create_employee_suggestion(
         "summary": (summary or "")[:500],
         "risk_level": risk,
         "thread_id": int(thread_id) if thread_id else None,
-        **{
-            k: v for (k, v) in pl.items() if k not in ("summary", "target_employee_ids")
-        },
+        **{k: v for (k, v) in pl.items() if k not in ("summary", "target_employee_ids")},
     }
     if emit_event:
         _facade()._publish_event("employee.suggestion.created", payload_evt, source=src)
     if auto_dispatch and _facade()._suggestion_auto_dispatch_enabled():
-        _facade().dispatch_suggestion(
-            sid, approved_by_user_id=0, force_approve_if_needed=True
-        )
+        _facade().dispatch_suggestion(sid, approved_by_user_id=0, force_approve_if_needed=True)
     try:
         from modstore_server.notification_service import employee_message_to_boss
 
@@ -339,9 +330,7 @@ def ingest_suggestion_event_payload(
                         force_approve_if_needed=False,
                     )
                 return {"ok": True, "suggestion_id": sid_existing, "existing": True}
-    summary = str(
-        pl.get("summary") or pl.get("detail") or pl.get("kind") or "员工建议"
-    ).strip()
+    summary = str(pl.get("summary") or pl.get("detail") or pl.get("kind") or "员工建议").strip()
     detail = str(pl.get("detail") or "").strip()
     kind = str(pl.get("kind") or "general").strip() or "general"
     risk = str(pl.get("risk_level") or "medium").strip() or "medium"
@@ -393,9 +382,7 @@ def approve_suggestion(
         source="admin",
     )
     if dispatch_now:
-        return _facade().dispatch_suggestion(
-            sid, approved_by_user_id=approved_by_user_id
-        )
+        return _facade().dispatch_suggestion(sid, approved_by_user_id=approved_by_user_id)
     return {"ok": True, "suggestion_id": sid}
 
 
@@ -637,9 +624,7 @@ def enqueue_daily_brief_todos(
         for item in tasks:
             fp = (
                 _facade()
-                .hashlib.sha256(
-                    f"daily_brief|{owner}|{source_key}|{item}".encode("utf-8")
-                )
+                .hashlib.sha256(f"daily_brief|{owner}|{source_key}|{item}".encode("utf-8"))
                 .hexdigest()[:64]
             )
             exists = (
@@ -681,9 +666,7 @@ def list_pending_brief_tasks(
     lim = max(1, min(int(limit or 100), 500))
     sf = _facade().get_session_factory()
     with sf() as session:
-        q = session.query(_facade().PendingBriefTask).order_by(
-            _facade().PendingBriefTask.id.desc()
-        )
+        q = session.query(_facade().PendingBriefTask).order_by(_facade().PendingBriefTask.id.desc())
         st = str(status or "").strip()
         if st:
             q = q.filter(_facade().PendingBriefTask.status == st)
@@ -697,9 +680,7 @@ def list_pending_brief_tasks(
                 "task_brief": str(r.task_brief or ""),
                 "status": str(r.status or ""),
                 "created_at": r.created_at.isoformat() if r.created_at else None,
-                "dispatched_at": r.dispatched_at.isoformat()
-                if r.dispatched_at
-                else None,
+                "dispatched_at": r.dispatched_at.isoformat() if r.dispatched_at else None,
                 "completed_at": r.completed_at.isoformat() if r.completed_at else None,
                 "error": str(r.error or ""),
             }
@@ -762,9 +743,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> _facade().Dict[str, _facade
                     if row2:
                         row2.status = "failed"
                         row2.error = str(exc)[:2000]
-                        row2.completed_at = _facade().datetime.now(
-                            _facade().timezone.utc
-                        )
+                        row2.completed_at = _facade().datetime.now(_facade().timezone.utc)
                         session.commit()
                 failed += 1
             continue
@@ -782,9 +761,7 @@ def dispatch_pending_brief_tasks(limit: int = 20) -> _facade().Dict[str, _facade
                 row2 = session.get(_facade().PendingBriefTask, tid)
                 if row2:
                     row2.status = "done" if ok else "failed"
-                    row2.dispatched_result_json = _facade()._jdumps(
-                        out, max_chars=120000
-                    )
+                    row2.dispatched_result_json = _facade()._jdumps(out, max_chars=120000)
                     row2.error = str(out.get("error") or "")[:2000]
                     row2.completed_at = _facade().datetime.now(_facade().timezone.utc)
                     session.commit()
@@ -839,9 +816,9 @@ def trigger_doc_autofix_from_report(
             "created_suggestions": 0,
             "created_tasks": 0,
         }
-    by_employee: _facade().Dict[
-        str, _facade().List[_facade().Dict[str, _facade().Any]]
-    ] = _facade().defaultdict(list)
+    by_employee: _facade().Dict[str, _facade().List[_facade().Dict[str, _facade().Any]]] = (
+        _facade().defaultdict(list)
+    )
     for it in issues:
         if not isinstance(it, dict):
             continue
@@ -922,9 +899,7 @@ class _PlatformBenchLlmClient:
 """Implementation extracted from the public facade module."""
 
 
-def _alert_evolution_quota_circuit_break(
-    quota_failures: int, lookback_hours: int
-) -> None:
+def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
     """配额耗尽触发自进化熔断：高优先级告警日志（供 ops 监控/告警管道捕获）。
 
     改 prompt 无法修复额度耗尽，继续重写只会再发 LLM 调用、放大 403 死亡螺旋；
@@ -972,9 +947,7 @@ def _evolution_failure_candidates(
         query = query.filter(~task_col.like(f"%{marker}%"))
     query = query.filter(
         ~_facade().and_(
-            _facade().EmployeeExecutionMetric.employee_id.in_(
-                _facade()._PARA_DELEGATE_EMPLOYEES
-            ),
+            _facade().EmployeeExecutionMetric.employee_id.in_(_facade()._PARA_DELEGATE_EMPLOYEES),
             _facade().func.lower(err_col) == _facade()._GENERIC_HANDLER_FAILURE,
         )
     )
@@ -1017,8 +990,7 @@ def run_employee_evolution_scan(
             .filter(
                 _facade().EmployeeExecutionMetric.created_at >= cutoff,
                 _facade().EmployeeExecutionMetric.status != "success",
-                _facade().EmployeeExecutionMetric.failure_kind
-                == _facade().FAILURE_KIND_QUOTA,
+                _facade().EmployeeExecutionMetric.failure_kind == _facade().FAILURE_KIND_QUOTA,
             )
             .scalar()
             or 0
@@ -1077,9 +1049,7 @@ def run_employee_evolution_scan(
                 pack = load_employee_pack(session, employee_id)
             except RECOVERABLE_ERRORS:
                 continue
-            manifest = (
-                pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-            )
+            manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
             cfg = parse_employee_config_v2(manifest)
             cog = cfg.get("cognition") if isinstance(cfg.get("cognition"), dict) else {}
             agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
@@ -1166,9 +1136,7 @@ def run_employee_evolution_scan(
                 if apply_meta.get("applied"):
                     sf4 = _facade().get_session_factory()
                     with sf4() as session:
-                        row = session.get(
-                            _facade().EmployeeEvolutionRecord, evolution_record_id
-                        )
+                        row = session.get(_facade().EmployeeEvolutionRecord, evolution_record_id)
                         if row is not None:
                             row.status = "applied"
                             session.commit()
@@ -1177,9 +1145,7 @@ def run_employee_evolution_scan(
                     revert = apply_meta.get("ab", {})
                     sf4 = _facade().get_session_factory()
                     with sf4() as session:
-                        row = session.get(
-                            _facade().EmployeeEvolutionRecord, evolution_record_id
-                        )
+                        row = session.get(_facade().EmployeeEvolutionRecord, evolution_record_id)
                         if row is not None:
                             row.status = "ab_rejected"
                             row.error = str(revert)[:2000]
@@ -1301,9 +1267,7 @@ def aggregate_admin_suggestion_dashboard(
             {
                 "id": int(r.id),
                 "source_employee_id": str(r.source_employee_id or ""),
-                "target_employee_ids": _facade()._jloads(
-                    r.target_employee_ids_json or "[]", []
-                ),
+                "target_employee_ids": _facade()._jloads(r.target_employee_ids_json or "[]", []),
                 "kind": str(r.kind or ""),
                 "summary": str(r.summary or ""),
                 "status": str(r.status or ""),

@@ -109,9 +109,7 @@ def _security_check(src: str) -> Optional[str]:
                 root_mod = node.module.split(".")[0]
                 if root_mod in _FORBIDDEN_IMPORTS:
                     violations.append(f"禁止 from {node.module} import ...")
-                if root_mod == "app" and not node.module.startswith(
-                    _ALLOWED_MOD_SDK_PREFIX
-                ):
+                if root_mod == "app" and not node.module.startswith(_ALLOWED_MOD_SDK_PREFIX):
                     violations.append(
                         f"仅允许 from app.mod_sdk.<子模块> import ...，禁止 from {node.module}"
                     )
@@ -151,9 +149,7 @@ def _behavior_check(src: str) -> Optional[str]:
         return "缺少 async def run(payload, ctx) 函数定义"
 
     if not re.search(r"(?m)^\s*SYSTEM_PROMPT\s*=", src):
-        return (
-            "缺少 SYSTEM_PROMPT 常量定义（宿主 agent_runner / call_llm 依赖模块级指引）"
-        )
+        return "缺少 SYSTEM_PROMPT 常量定义（宿主 agent_runner / call_llm 依赖模块级指引）"
 
     return None
 
@@ -221,9 +217,7 @@ async def _generate_one_employee_py(
     )
     if not res.get("ok"):
         return {"ok": False, "error": res.get("error") or "upstream error"}
-    raw_orig = finalize_extracted_python(
-        _strip_code_fence(str(res.get("content") or ""))
-    )[0]
+    raw_orig = finalize_extracted_python(_strip_code_fence(str(res.get("content") or "")))[0]
     current_source = raw_orig
 
     last_err: Optional[str] = None
@@ -441,9 +435,7 @@ async def generate_mod_employee_impls_async(
 
         return entry
 
-    results = await asyncio.gather(
-        *[_gen_one(i, e) for i, e in enumerate(valid_employees)]
-    )
+    results = await asyncio.gather(*[_gen_one(i, e) for i, e in enumerate(valid_employees)])
 
     generated = list(results)
     errors = [e for e in generated if e.get("fallback") and e.get("note")]
@@ -451,9 +443,7 @@ async def generate_mod_employee_impls_async(
     heal_report: Dict[str, Any] = {"enabled": False}
     if enable_vibe_heal and prov and mdl:
         if status_hook:
-            await status_hook(
-                "vibe-coding 自愈中：对生成的员工脚本做静态校验与补丁修复…"
-            )
+            await status_hook("vibe-coding 自愈中：对生成的员工脚本做静态校验与补丁修复…")
         heal_report = await asyncio.to_thread(
             _vibe_heal_mod_employees,
             db,

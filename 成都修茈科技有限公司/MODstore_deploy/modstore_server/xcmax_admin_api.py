@@ -220,9 +220,7 @@ def _collect_catalog_modules() -> list[dict[str, Any]]:
                     "route": "",
                     "source": source,
                     "sync_scope": "module_info",
-                    "active": bool(
-                        it.get("status", "active") not in ("delisted", "draft")
-                    ),
+                    "active": bool(it.get("status", "active") not in ("delisted", "draft")),
                     "version": str(it.get("version") or ""),
                 }
             )
@@ -265,9 +263,7 @@ async def remote_status() -> dict[str, Any]:
             "reachable": True,
             "latency_ms": 0,
             "version": str(ctx.get("git_sha") or "0.2.0"),
-            "deploy_time": datetime.fromtimestamp(
-                _PROCESS_START_TS, tz=UTC
-            ).isoformat(),
+            "deploy_time": datetime.fromtimestamp(_PROCESS_START_TS, tz=UTC).isoformat(),
             "hostname": str(ctx.get("hostname") or ""),
             "deploy_tier": str(ctx.get("deploy_tier") or "local"),
         },

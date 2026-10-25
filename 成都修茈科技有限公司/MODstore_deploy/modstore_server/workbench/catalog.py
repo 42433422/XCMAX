@@ -58,9 +58,7 @@ def store_catalog_row(
     return row
 
 
-def _load_registry_aligned_employee_manifest(
-    pack_dir: Path, pack_id: str
-) -> Dict[str, Any]:
+def _load_registry_aligned_employee_manifest(pack_dir: Path, pack_id: str) -> Dict[str, Any]:
     mf = pack_dir / "manifest.json"
     raw = json.loads(mf.read_text(encoding="utf-8"))
     aligned, errs = normalize_editor_manifest_for_registry(raw, pack_id)
@@ -72,9 +70,7 @@ def _load_registry_aligned_employee_manifest(
     return dict(aligned)
 
 
-def _refresh_employee_pack_catalog_zip(
-    db: Session, user: User, pack_dir: Path
-) -> Dict[str, Any]:
+def _refresh_employee_pack_catalog_zip(db: Session, user: User, pack_dir: Path) -> Dict[str, Any]:
     """Rebuild stored .xcemp after in-place manifest edits.
 
     ``run_employee_ai_scaffold_async`` first imports/saves the package, then the
@@ -91,9 +87,7 @@ def _refresh_employee_pack_catalog_zip(
     raw = _load_registry_aligned_employee_manifest(pack_dir, pack_dir.name)
     pack_id = str(raw.get("id") or pack_dir.name).strip() or pack_dir.name
     mf_path = pack_dir / "manifest.json"
-    mf_path.write_text(
-        json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    mf_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
         reconcile_employee_pack_manifest(pack_dir, brief="")
         raw = json.loads(mf_path.read_text(encoding="utf-8"))
@@ -125,9 +119,7 @@ def _refresh_employee_pack_catalog_zip(
         }
         align_errs = package_manifest_alignment_errors(rec, tmp_path)
         if align_errs:
-            raise ValueError(
-                "员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs)
-            )
+            raise ValueError("员工包 metadata 与包内 manifest 不一致: " + "; ".join(align_errs))
         saved = append_package(rec, tmp_path)
         row = store_catalog_row(
             db,
@@ -231,9 +223,7 @@ def _employee_pack_workflow_reference_report(
             if not isinstance(item, dict):
                 continue
             try:
-                sid = int(
-                    item.get("script_workflow_id") or item.get("workflow_id") or 0
-                )
+                sid = int(item.get("script_workflow_id") or item.get("workflow_id") or 0)
             except (TypeError, ValueError):
                 sid = 0
             if sid > 0 and sid not in script_workflow_ids:
@@ -259,9 +249,7 @@ def _employee_pack_workflow_reference_report(
     for sid in script_workflow_ids:
         row = (
             db.query(ScriptWorkflow)
-            .filter(
-                ScriptWorkflow.id == sid, ScriptWorkflow.user_id == cast(int, user.id)
-            )
+            .filter(ScriptWorkflow.id == sid, ScriptWorkflow.user_id == cast(int, user.id))
             .first()
         )
         if row:
@@ -297,11 +285,7 @@ def _write_workflow_reference_report(
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
-    meta = (
-        cast(dict[str, Any], v2.get("metadata"))
-        if isinstance(v2.get("metadata"), dict)
-        else {}
-    )
+    meta = cast(dict[str, Any], v2.get("metadata")) if isinstance(v2.get("metadata"), dict) else {}
     meta["workflow_reference_report"] = report
     meta["workflow_runtime_check"] = (
         "employee_pack 不内嵌 workflow/script_workflow；上线前须确认目标库存在这些 ID 或重新绑定。"

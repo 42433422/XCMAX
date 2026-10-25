@@ -76,9 +76,7 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
             return trusted
         validated = ensure_within_workspace(raw, user_id=int(user_id or 0))
         return str(validated)
-    except (
-        RECOVERABLE_ERRORS
-    ):  # VibePathError or any OS error — re-raise so caller can surface it
+    except RECOVERABLE_ERRORS:  # VibePathError or any OS error — re-raise so caller can surface it
         raise
 
 
@@ -340,9 +338,7 @@ def execute_vibe_workflow_kind(
                 )
             )
         except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.warning(
-                "vibe_workflow: project_root 分析失败，已跳过", exc_info=True
-            )
+            logger.warning("vibe_workflow: project_root 分析失败，已跳过", exc_info=True)
 
     sf = get_session_factory()
     try:

@@ -123,9 +123,7 @@ def _manifest_from_employee_yaml(
                     {
                         "title": str(ex.get("title") or "").strip()[:128],
                         "description": str(ex.get("description") or "").strip()[:500],
-                        "input": ex.get("input")
-                        if isinstance(ex.get("input"), dict)
-                        else {},
+                        "input": ex.get("input") if isinstance(ex.get("input"), dict) else {},
                     }
                 )
         examples = [e for e in examples if e.get("title")]
@@ -239,13 +237,9 @@ def _manifest_from_employee_yaml(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Onboard yuangon employees into MODstore catalog"
-    )
+    parser = argparse.ArgumentParser(description="Onboard yuangon employees into MODstore catalog")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
-    parser.add_argument(
-        "--force", action="store_true", help="Re-register existing employee packs"
-    )
+    parser.add_argument("--force", action="store_true", help="Re-register existing employee packs")
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate only; do not write catalog/DB"
     )
@@ -290,12 +284,7 @@ def main() -> int:
 
     session_factory = get_session_factory()
     with session_factory() as db:
-        author = (
-            db.query(User)
-            .filter(User.is_admin.is_(True))
-            .order_by(User.id.asc())
-            .first()
-        )
+        author = db.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
         author = author or db.query(User).order_by(User.id.asc()).first()
         if not author:
             print("No user exists in DB; cannot determine author_id.", file=sys.stderr)
@@ -320,9 +309,7 @@ def main() -> int:
             failed += 1
             continue
 
-        manifest, error = _manifest_from_employee_yaml(
-            data, pack_dir=employee_file.parent
-        )
+        manifest, error = _manifest_from_employee_yaml(data, pack_dir=employee_file.parent)
         if not manifest:
             print(f"[ERR] {rel}: {error}")
             failed += 1

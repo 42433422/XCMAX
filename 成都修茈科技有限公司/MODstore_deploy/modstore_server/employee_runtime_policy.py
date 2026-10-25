@@ -23,10 +23,7 @@ DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
 
 
 def _runtime_dir() -> Path:
-    return Path(
-        os.environ.get("MODSTORE_RUNTIME_DIR")
-        or Path.home() / ".xcmax" / "modstore-daily"
-    )
+    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
 
 
 def policy_path() -> Path:
@@ -48,9 +45,7 @@ def load_policy() -> Dict[str, Any]:
         if not encrypted:
             return {"employees": {}, "schema_version": 1}
         data = json.loads(decrypt_employee_policy(encrypted))
-        return (
-            data if isinstance(data, dict) else {"employees": {}, "schema_version": 1}
-        )
+        return data if isinstance(data, dict) else {"employees": {}, "schema_version": 1}
     except FileNotFoundError:
         return {"employees": {}, "schema_version": 1}
     except RECOVERABLE_ERRORS:
@@ -67,9 +62,7 @@ def save_policy(policy: Dict[str, Any]) -> Dict[str, Any]:
     envelope = {
         "schema": "xcagi.employee_runtime_policy.encrypted/v1",
         "ciphertext": encrypt_employee_policy(
-            json.dumps(
-                payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True
-            )
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         ),
         "updated_at": payload["updated_at"],
     }
@@ -97,12 +90,8 @@ def record_employee_degradation(
     employees = policy.get("employees")
     if not isinstance(employees, dict):
         employees = {}
-    fallback_provider = (
-        os.environ.get("MODSTORE_EMPLOYEE_FALLBACK_PROVIDER") or "auto"
-    ).strip()
-    fallback_model = (
-        os.environ.get("MODSTORE_EMPLOYEE_FALLBACK_MODEL") or "auto"
-    ).strip()
+    fallback_provider = (os.environ.get("MODSTORE_EMPLOYEE_FALLBACK_PROVIDER") or "auto").strip()
+    fallback_model = (os.environ.get("MODSTORE_EMPLOYEE_FALLBACK_MODEL") or "auto").strip()
     temperature = 0.1 if severity == "deactivate" else 0.2
     row = {
         "fail_count": int(fail_count or 0),
@@ -160,9 +149,7 @@ def apply_policy_to_config(
     try:
         multiplier = float(policy.get("max_tokens_multiplier") or 1.0)
         if multiplier > 0 and model.get("max_tokens"):
-            model["max_tokens"] = max(
-                512, int(int(model.get("max_tokens") or 4000) * multiplier)
-            )
+            model["max_tokens"] = max(512, int(int(model.get("max_tokens") or 4000) * multiplier))
     except RECOVERABLE_ERRORS:
         pass
     append = str(policy.get("system_prompt_append") or "").strip()

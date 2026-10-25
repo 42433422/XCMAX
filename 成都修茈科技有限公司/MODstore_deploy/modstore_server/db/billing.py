@@ -43,9 +43,7 @@ class UserPlan(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    plan_id = Column(
-        String(64), ForeignKey("plan_templates.id"), nullable=False, index=True
-    )
+    plan_id = Column(String(64), ForeignKey("plan_templates.id"), nullable=False, index=True)
     started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)
@@ -56,9 +54,7 @@ class UserPlan(Base):
 
 class Quota(Base):
     __tablename__ = "quotas"
-    __table_args__ = (
-        UniqueConstraint("user_id", "quota_type", name="uq_user_quota_type"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "quota_type", name="uq_user_quota_type"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -78,9 +74,7 @@ class Entitlement(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=True, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=True, index=True)
     entitlement_type = Column(String(32), nullable=False, index=True)
     source_order_id = Column(String(64), default="", index=True)
     metadata_json = Column(Text, default="{}")
@@ -213,9 +207,7 @@ class GrayRelease(Base):
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     version = Column(String(64), nullable=False, index=True)
     # 放量比例 0.0-1.0（基于 user_id 哈希分桶）。
     rollout_percent = Column(Float, default=0.0)
@@ -238,14 +230,10 @@ class ModReview(Base):
     """MOD/AI 商品评价（阶段 9）：评分 + 文字，作者可回复。"""
 
     __tablename__ = "mod_reviews"
-    __table_args__ = (
-        UniqueConstraint("catalog_id", "user_id", name="uq_review_item_user"),
-    )
+    __table_args__ = (UniqueConstraint("catalog_id", "user_id", name="uq_review_item_user"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    catalog_id = Column(
-        Integer, ForeignKey("catalog_items.id"), nullable=False, index=True
-    )
+    catalog_id = Column(Integer, ForeignKey("catalog_items.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     rating = Column(Integer, nullable=False)  # 1-5
     content = Column(Text, default="")

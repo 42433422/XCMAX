@@ -35,9 +35,7 @@ def enterprise_input(now: datetime):
     tenants = []
     for user in users:
         user_id = user.get("id")
-        user_transactions = [
-            row for row in transactions if row.get("user_id") == user_id
-        ]
+        user_transactions = [row for row in transactions if row.get("user_id") == user_id]
         user_purchases = [row for row in purchases if row.get("user_id") == user_id]
         user_llm = [row for row in llm_calls if row.get("user_id") == user_id]
         activity_days = set()
@@ -45,17 +43,14 @@ def enterprise_input(now: datetime):
             activity_days.update(core._activity_days(activity, cutoff=cutoff))
         features = []
         if any(
-            str(row.get("status") or "").lower() in {"success", "completed"}
-            for row in user_llm
+            str(row.get("status") or "").lower() in {"success", "completed"} for row in user_llm
         ):
             features.append("ai_chat")
         if user_transactions:
             features.append("billing_wallet")
         if user_purchases:
             features.append("modstore_purchase")
-        paid_purchase = any(
-            core._to_cents(row.get("amount")) > 0 for row in user_purchases
-        )
+        paid_purchase = any(core._to_cents(row.get("amount")) > 0 for row in user_purchases)
         blockers = []
         if not activity_days:
             blockers.append("no_verified_30d_activity")

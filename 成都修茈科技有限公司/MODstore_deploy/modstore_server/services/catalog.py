@@ -16,9 +16,7 @@ class CatalogClient(ABC):
     """Public surface other domains may use to read/write the public catalog."""
 
     @abstractmethod
-    def append_package(
-        self, record: Dict[str, Any], src_file: Path | None
-    ) -> Dict[str, Any]: ...
+    def append_package(self, record: Dict[str, Any], src_file: Path | None) -> Dict[str, Any]: ...
 
     @abstractmethod
     def get_package(self, id_: str, version: str) -> Dict[str, Any] | None: ...
@@ -37,9 +35,7 @@ class CatalogClient(ABC):
 class InProcessCatalogClient(CatalogClient):
     """Wraps legacy :mod:`catalog_store` for in-process wiring."""
 
-    def append_package(
-        self, record: Dict[str, Any], src_file: Path | None
-    ) -> Dict[str, Any]:
+    def append_package(self, record: Dict[str, Any], src_file: Path | None) -> Dict[str, Any]:
         from modstore_server.catalog_store import append_package as _append
 
         return _append(record, src_file)

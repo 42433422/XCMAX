@@ -67,9 +67,7 @@ def reply_to_ticket(db: Session, user: User, ticket_id: int, body: TicketReplyBo
             role="assistant",
             content=note,
             created_at=now,
-            payload_json=json_dumps(
-                {"origin": "admin_reply", "operator_user_id": user.id}
-            ),
+            payload_json=json_dumps({"origin": "admin_reply", "operator_user_id": user.id}),
         )
     )
     db.add(
@@ -122,18 +120,14 @@ class IntegrationBody(BaseModel):
     enabled: bool = True
 
 
-def own_session_or_404(
-    db: Session, user: User, session_id: int
-) -> CustomerServiceSession:
+def own_session_or_404(db: Session, user: User, session_id: int) -> CustomerServiceSession:
     row = db.get(CustomerServiceSession, session_id)
     if row is None or row.user_id != user.id:
         raise HTTPException(404, "客服会话不存在")
     return row
 
 
-def visible_ticket_or_404(
-    db: Session, user: User, ticket_id: int
-) -> CustomerServiceTicket:
+def visible_ticket_or_404(db: Session, user: User, ticket_id: int) -> CustomerServiceTicket:
     from modstore_server.customer_ticket_reader import TicketReader
 
     row = db.get(CustomerServiceTicket, ticket_id)
@@ -183,9 +177,7 @@ def _row_payload(row: Any, fields: str) -> dict[str, Any]:
 def standard_payload(
     row: CustomerServiceStandard, *, include_policy: bool = False
 ) -> dict[str, Any]:
-    payload = _row_payload(
-        row, "id name scenario description auto_enabled risk_level priority"
-    )
+    payload = _row_payload(row, "id name scenario description auto_enabled risk_level priority")
     payload["rules"] = json_loads(row.rules_json, {})
     if include_policy:
         payload["action_policy"] = json_loads(row.action_policy_json, {})
@@ -204,16 +196,12 @@ def integration_payload(row: CustomerServiceIntegration) -> dict[str, Any]:
 
 def audit_payload(row: CustomerServiceAuditLog) -> dict[str, Any]:
     return {
-        **_row_payload(
-            row, "id ticket_id session_id actor_user_id actor_type event_type"
-        ),
+        **_row_payload(row, "id ticket_id session_id actor_user_id actor_type event_type"),
         "detail": json_loads(row.detail_json, {}),
     }
 
 
-def close_ticket_with_evidence(
-    db: Session, user: User, ticket_id: int, request: dict[str, str]
-):
+def close_ticket_with_evidence(db: Session, user: User, ticket_id: int, request: dict[str, str]):
     ticket = visible_ticket_or_404(db, user, ticket_id)
     disposition = request.get("disposition", "resolved")
     expired = disposition == "expired"
@@ -225,9 +213,7 @@ def close_ticket_with_evidence(
         or issue_resolution(ticket, evidence).get("route") == "private_mod"
         or evidence.get("delivery_managed_by") == "custom_delivery"
     ):
-        raise HTTPException(
-            409, "产品问题和定制交付必须由原客户通过运行回执或原工单决策完成验收"
-        )
+        raise HTTPException(409, "产品问题和定制交付必须由原客户通过运行回执或原工单决策完成验收")
     key = f"admin-ticket-close:{ticket_id}:{request['request_id']}"
     existing = db.query(CustomerServiceAction).filter_by(idempotency_key=key).first()
     if existing:
@@ -248,9 +234,7 @@ def close_ticket_with_evidence(
         cutoff = datetime(
             year, month + 1, min(today.day, monthrange(year, month + 1)[1])
         ) - timedelta(hours=8)
-        recent = (
-            max(ticket.created_at, ticket.updated_at or ticket.created_at) >= cutoff
-        )
+        recent = max(ticket.created_at, ticket.updated_at or ticket.created_at) >= cutoff
         for model in (
             CustomerServiceAuditLog,
             CustomerServiceMessage,
@@ -301,9 +285,7 @@ def close_ticket_with_evidence(
             target_id=str(ticket.id),
             status="completed",
             request_json=json_dumps(request),
-            result_json=json_dumps(
-                {"status": disposition, "closed_at": now.isoformat()}
-            ),
+            result_json=json_dumps({"status": disposition, "closed_at": now.isoformat()}),
             idempotency_key=key,
         )
     )

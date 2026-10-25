@@ -47,9 +47,7 @@ def shared_repair_signature(ticket: Any) -> str:
     ):
         return ""
     sha = str(evidence.get("git_sha") or "")
-    version = str(
-        evidence.get("product_version") or evidence.get("installed_version") or ""
-    )
+    version = str(evidence.get("product_version") or evidence.get("installed_version") or "")
     description = " ".join(str(ticket.summary or "").split())
     if not re.fullmatch(r"[0-9a-f]{40}", sha) or not version or len(description) < 4:
         return ""
@@ -114,10 +112,7 @@ def active_shared_repair(db: Session, ticket: Any) -> dict[str, Any] | None:
             action_type=_ACTION,
             status="completed",
         )
-        .filter(
-            CustomerServiceAction.id
-            > _integer(resolution.get("reopen_after_action_id"))
-        )
+        .filter(CustomerServiceAction.id > _integer(resolution.get("reopen_after_action_id")))
         .order_by(CustomerServiceAction.id.desc())
         .first()
     )
@@ -132,12 +127,7 @@ def active_shared_repair(db: Session, ticket: Any) -> dict[str, Any] | None:
     source = db.get(CustomerServiceTicket, _integer(link.get("source_ticket_id")))
     original = db.get(CustomerServiceAction, _integer(link.get("source_action_id")))
     cr = _source_repair(db, source, original, signature)
-    if (
-        source is None
-        or original is None
-        or cr is None
-        or str(cr.id) != action.target_id
-    ):
+    if source is None or original is None or cr is None or str(cr.id) != action.target_id:
         return None
     return {
         "action_id": int(action.id),
@@ -154,16 +144,12 @@ def _in_flight(db: Session, ticket: Any) -> bool:
     actions = (
         db.query(CustomerServiceAction)
         .filter_by(ticket_id=ticket.id, user_id=ticket.user_id)
-        .filter(
-            CustomerServiceAction.id
-            > _integer(resolution.get("reopen_after_action_id"))
-        )
+        .filter(CustomerServiceAction.id > _integer(resolution.get("reopen_after_action_id")))
         .all()
     )
     if any(
         a.action_type == "employee.dispatch"
-        and a.status
-        in {"pending", "running", "dispatching", "partial", "manual_review"}
+        and a.status in {"pending", "running", "dispatching", "partial", "manual_review"}
         for a in actions
     ):
         return True
@@ -205,8 +191,7 @@ def _in_flight(db: Session, ticket: Any) -> bool:
         receipts = claim.get("escalations") or {}
         if isinstance(receipts, dict) and any(
             isinstance(receipt, dict)
-            and receipt.get("state")
-            in {"requested", "dispatching", "accepted", "unknown"}
+            and receipt.get("state") in {"requested", "dispatching", "accepted", "unknown"}
             for receipt in receipts.values()
         ):
             return True
@@ -340,9 +325,7 @@ def link_shared_repair(
         status="completed",
         idempotency_key=key,
         request_json=json_dumps(link),
-        result_json=json_dumps(
-            {"source_repair_verified": True, "customer_accepted": False}
-        ),
+        result_json=json_dumps({"source_repair_verified": True, "customer_accepted": False}),
     )
     db.add(action)
     db.flush()

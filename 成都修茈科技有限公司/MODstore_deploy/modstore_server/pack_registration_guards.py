@@ -65,9 +65,7 @@ def workflow_automation_block_reason(
             if not isinstance(item, dict):
                 continue
             if int(
-                item.get("workflow_index")
-                if item.get("workflow_index") is not None
-                else -1
+                item.get("workflow_index") if item.get("workflow_index") is not None else -1
             ) != int(workflow_index):
                 continue
             if item.get("automation_complete") is True:
@@ -148,11 +146,7 @@ def registration_metadata_mismatches(
         mismatches.append(f"owner/author: Mod {mod_owner!r} ≠ 包内 {am_owner!r}")
 
     wf_emp = wf.get("id")
-    am_emp = (
-        (am.get("employee") or {}).get("id")
-        if isinstance(am.get("employee"), dict)
-        else None
-    )
+    am_emp = (am.get("employee") or {}).get("id") if isinstance(am.get("employee"), dict) else None
     if wf_emp and am_emp and str(wf_emp).strip() != str(am_emp).strip():
         mismatches.append(f"employee.id: 条目 {wf_emp!r} ≠ 包内 {am_emp!r}")
 
@@ -235,9 +229,7 @@ def audit_failure_error_payload(
         "audit_passed": False,
         "catalog_registered": False,
         "xcemp_path": None,
-        "audit_summary": audit.get("summary")
-        if isinstance(audit.get("summary"), dict)
-        else {},
+        "audit_summary": audit.get("summary") if isinstance(audit.get("summary"), dict) else {},
         "audit_classification": classification,
         "dynamic_repair_allowed": bool(classification.get("dynamic_repair_allowed")),
         "escalate_to_human": bool(classification.get("escalate_to_human")),

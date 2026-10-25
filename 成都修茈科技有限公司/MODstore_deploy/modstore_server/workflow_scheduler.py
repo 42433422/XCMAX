@@ -118,10 +118,7 @@ from modstore_server.workflow_scheduler_merged import (
 
 
 def start_scheduler() -> None:
-    global \
-        _scheduler, \
-        _scheduler_registration_complete, \
-        _scheduler_startup_probe_failures
+    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
     global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         return

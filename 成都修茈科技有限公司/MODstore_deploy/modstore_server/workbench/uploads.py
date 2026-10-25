@@ -26,9 +26,7 @@ async def read_workbench_uploads(files: Sequence[UploadFile]) -> list[dict[str, 
                 content.extend(chunk)
                 if len(content) > MAX_UPLOAD_BYTES:
                     raise HTTPException(400, f"文件过大: {upload.filename}")
-            result.append(
-                {"filename": upload.filename or "upload.bin", "content": bytes(content)}
-            )
+            result.append({"filename": upload.filename or "upload.bin", "content": bytes(content)})
         return result
     finally:
         for upload in files or []:

@@ -22,9 +22,7 @@ from modstore_server.customer_value_evidence import (
 from modstore_server.models import User
 
 router = APIRouter(prefix="/api/customer-value", tags=["customer-value-lifecycle"])
-admin_router = APIRouter(
-    prefix="/api/admin/customer-value", tags=["admin-customer-value"]
-)
+admin_router = APIRouter(prefix="/api/admin/customer-value", tags=["admin-customer-value"])
 # Optional-router loader includes ``open_router`` as the module's second router.
 # The name is legacy loader terminology; this router is still admin-protected.
 open_router = admin_router
@@ -86,10 +84,7 @@ class OutcomeReceiptBody(BaseModel):
 
 def _authoritative_order(order_no: str, user_id: int | None = None) -> dict[str, Any]:
     source = load_authoritative_payment_orders(3650)
-    if (
-        source.get("source_available") is not True
-        or source.get("source_authoritative") is not True
-    ):
+    if source.get("source_available") is not True or source.get("source_authoritative") is not True:
         raise HTTPException(503, "权威支付数据源不可用")
     wanted = order_no.strip()
     order = next(
@@ -97,8 +92,7 @@ def _authoritative_order(order_no: str, user_id: int | None = None) -> dict[str,
             dict(row)
             for row in source.get("orders") or []
             if isinstance(row, dict)
-            and str(row.get("out_trade_no") or row.get("order_no") or "").strip()
-            == wanted
+            and str(row.get("out_trade_no") or row.get("order_no") or "").strip() == wanted
         ),
         None,
     )

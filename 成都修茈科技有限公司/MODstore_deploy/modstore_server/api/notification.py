@@ -39,9 +39,7 @@ async def list_notifications(
     service: NotificationApplicationService = Depends(_service),
     user: User = Depends(get_current_user),
 ):
-    notifications = service.list_for_user(
-        user.id, unread_only=unread_only, kind=kind, limit=limit
-    )
+    notifications = service.list_for_user(user.id, unread_only=unread_only, kind=kind, limit=limit)
     unread_count = service.count_unread(user.id)
     return {
         "notifications": [

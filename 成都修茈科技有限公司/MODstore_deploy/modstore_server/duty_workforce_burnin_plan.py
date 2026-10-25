@@ -45,9 +45,7 @@ def _load_manifest(employee_id: str) -> Dict[str, Any]:
 
 def _candidate_task(employee_id: str, contract: Dict[str, Any], marker: str) -> str:
     acceptance = [
-        str(item).strip()
-        for item in contract.get("acceptance") or []
-        if str(item).strip()
+        str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()
     ]
     return f"{marker} 执行一次岗位只读巡检回执。岗位：{employee_id}。任务：{str(contract.get('mission') or '').strip()}。必须至少调用一次工作区只读工具获取真实证据；禁止写文件、运行命令、访问外网、发消息、转交任务、创建变更或执行任何业务副作用。验收要求：{'；'.join(acceptance) or '输出可追溯证据'}。认知结果与最终答案都必须使用 JSON 对象，包含 status=success、不少于 10 个字的 summary 和 evidence 字段，并且只能根据工具真实结果下结论；缺证据就明确失败，不得伪造回执。"
 
@@ -75,9 +73,7 @@ def build_burn_in_plan(
         1, min(int(limit or limits["max_candidates"]), limits["max_candidates"], 8)
     )
     contracts = _contracts if _contracts is not None else workforce_contract_map()
-    proven_override = (
-        {str(item) for item in _proven_ids} if _proven_ids is not None else None
-    )
+    proven_override = {str(item) for item in _proven_ids} if _proven_ids is not None else None
     accepted_receipts = (
         {}
         if proven_override is not None
@@ -92,9 +88,7 @@ def build_burn_in_plan(
     )
     recent_manifest_shas = (
         {
-            str(employee_id): {
-                str(value).strip().lower() for value in values if str(value).strip()
-            }
+            str(employee_id): {str(value).strip().lower() for value in values if str(value).strip()}
             for (employee_id, values) in _recent_manifest_shas.items()
         }
         if _recent_manifest_shas is not None
@@ -110,9 +104,7 @@ def build_burn_in_plan(
         contract = dict(contracts[employee_id] or {})
         contract.setdefault("employee_id", employee_id)
         try:
-            manifest = manifests.get(employee_id) or _facade()._load_manifest(
-                employee_id
-            )
+            manifest = manifests.get(employee_id) or _facade()._load_manifest(employee_id)
         except RECOVERABLE_ERRORS as exc:
             skipped.append(
                 {
@@ -126,25 +118,18 @@ def build_burn_in_plan(
         has_fresh_proof = (
             employee_id in proven_override
             if proven_override is not None
-            else (manifest_sha256, contract_sha256)
-            in accepted_receipts.get(employee_id, set())
+            else (manifest_sha256, contract_sha256) in accepted_receipts.get(employee_id, set())
         )
         if has_fresh_proof:
             fresh_proven_count += 1
-            skipped.append(
-                {"employee_id": employee_id, "reason": "fresh_receipt_exists"}
-            )
+            skipped.append({"employee_id": employee_id, "reason": "fresh_receipt_exists"})
             continue
         if employee_id in recent:
             attempted_shas = recent_manifest_shas.get(employee_id) or set()
             if not attempted_shas or manifest_sha256 in attempted_shas:
-                skipped.append(
-                    {"employee_id": employee_id, "reason": "attempt_cooldown"}
-                )
+                skipped.append({"employee_id": employee_id, "reason": "attempt_cooldown"})
                 continue
-        eligibility = _facade().assess_burn_in_eligibility(
-            employee_id, contract, manifest
-        )
+        eligibility = _facade().assess_burn_in_eligibility(employee_id, contract, manifest)
         if eligibility.get("eligible") is not True:
             skipped.append(
                 {
@@ -161,9 +146,7 @@ def build_burn_in_plan(
                 "mission": str(contract.get("mission") or ""),
                 "acceptance": list(contract.get("acceptance") or []),
                 "handlers": list(eligibility.get("handlers") or []),
-                "capability_handlers": list(
-                    eligibility.get("capability_handlers") or []
-                ),
+                "capability_handlers": list(eligibility.get("capability_handlers") or []),
                 "manifest_source": "reviewed_duty_ssot",
                 "manifest_sha256": manifest_sha256,
                 "contract_sha256": contract_sha256,
@@ -172,19 +155,14 @@ def build_burn_in_plan(
                 "prohibited_semantics_fixture_override": bool(
                     eligibility.get("prohibited_semantics_fixture_override")
                 ),
-                "high_risk_fixture_only": bool(
-                    eligibility.get("high_risk_fixture_only")
-                ),
+                "high_risk_fixture_only": bool(eligibility.get("high_risk_fixture_only")),
             }
         )
     selected = candidates[:max_candidates]
     deferred = candidates[max_candidates:]
     if deferred:
         skipped.extend(
-            (
-                {"employee_id": item["employee_id"], "reason": "per_run_limit"}
-                for item in deferred
-            )
+            ({"employee_id": item["employee_id"], "reason": "per_run_limit"} for item in deferred)
         )
     reason_counts = Counter((item["reason"].split(":", 1)[0] for item in skipped))
     return {

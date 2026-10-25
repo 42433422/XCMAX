@@ -101,17 +101,14 @@ def queue_install_command(
     source_event_id: str = "",
     idempotency_key: str = "",
 ) -> tuple[AssetInstallCommand, bool]:
-    if int(purchase.user_id) != int(user_id) or int(purchase.catalog_id) != int(
-        catalog_id
-    ):
+    if int(purchase.user_id) != int(user_id) or int(purchase.catalog_id) != int(catalog_id):
         raise ValueError("安装命令与购买记录归属不一致")
     target = str(installation_id or "*").strip() or "*"
     # Never put a caller-controlled idempotency key in the global unique column.
     # Scope and hash it so another account cannot collide with or read this row.
     request_key = str(idempotency_key or source_event_id or "").strip()
     material = (
-        f"asset-install:{int(user_id)}:{int(purchase.id)}:{target}:"
-        f"{source}:{request_key}"
+        f"asset-install:{int(user_id)}:{int(purchase.id)}:{target}:" f"{source}:{request_key}"
     )
     stable_key = hashlib.sha256(material.encode("utf-8")).hexdigest()
     existing = (
@@ -136,9 +133,7 @@ def queue_install_command(
     return row, True
 
 
-def queue_paid_asset_installation(
-    *, user_id: int, catalog_id: int, event_id: str
-) -> dict:
+def queue_paid_asset_installation(*, user_id: int, catalog_id: int, event_id: str) -> dict:
     """Called by ``payment.paid`` after entitlement fulfilment.
 
     This is the server-side active push decision.  The transport is a durable
@@ -154,15 +149,11 @@ def queue_paid_asset_installation(
     with sf() as session:
         purchase = (
             session.query(Purchase)
-            .filter(
-                Purchase.user_id == int(user_id), Purchase.catalog_id == int(catalog_id)
-            )
+            .filter(Purchase.user_id == int(user_id), Purchase.catalog_id == int(catalog_id))
             .order_by(Purchase.id.desc())
             .first()
         )
-        item = (
-            session.query(CatalogItem).filter(CatalogItem.id == int(catalog_id)).first()
-        )
+        item = session.query(CatalogItem).filter(CatalogItem.id == int(catalog_id)).first()
         if purchase is None or item is None:
             return {"queued": 0, "reason": "purchase_not_fulfilled_yet"}
         if not _purchase_is_current(session, int(user_id), int(catalog_id)):
@@ -285,9 +276,7 @@ def list_asset_install_commands(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    query = db.query(AssetInstallCommand).filter(
-        AssetInstallCommand.user_id == int(user.id)
-    )
+    query = db.query(AssetInstallCommand).filter(AssetInstallCommand.user_id == int(user.id))
     target = installation_id.strip()
     if target:
         if target not in _latest_owned_installation_ids(db, int(user.id)):
@@ -296,9 +285,7 @@ def list_asset_install_commands(
     if pending_only:
         # A desktop may restart after claiming but before reporting the result.
         # Returning its device-bound claim makes the delivery resumable.
-        query = query.filter(
-            AssetInstallCommand.status.in_(["pending", "failed", "claimed"])
-        )
+        query = query.filter(AssetInstallCommand.status.in_(["pending", "failed", "claimed"]))
     rows = query.order_by(AssetInstallCommand.id.asc()).limit(limit).all()
     item_ids = {int(row.catalog_id) for row in rows}
     items = (
@@ -310,10 +297,7 @@ def list_asset_install_commands(
         else {}
     )
     return {
-        "items": [
-            serialize_install_command(row, items.get(int(row.catalog_id)))
-            for row in rows
-        ],
+        "items": [serialize_install_command(row, items.get(int(row.catalog_id))) for row in rows],
         "total": len(rows),
     }
 
@@ -490,9 +474,7 @@ def complete_asset_install_command(
         db.commit()
         raise HTTPException(403, "该资产购买权益已退款或撤销")
     if body.status == "installed":
-        item = (
-            db.query(CatalogItem).filter(CatalogItem.id == int(row.catalog_id)).first()
-        )
+        item = db.query(CatalogItem).filter(CatalogItem.id == int(row.catalog_id)).first()
         if item is None:
             raise HTTPException(410, "资产已从目录移除")
         if body.installed_mod_id.strip() != str(item.pkg_id or "").strip():

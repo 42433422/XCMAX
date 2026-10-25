@@ -40,9 +40,7 @@ def _github_repository_identity(repo_url: str) -> Optional[Tuple[str, str]]:
     return owner, repo
 
 
-def github_compare_changed_files(
-    *, repo_url: str, base_branch: str, branch: str
-) -> List[str]:
+def github_compare_changed_files(*, repo_url: str, base_branch: str, branch: str) -> List[str]:
     """Fetch GitHub's server-side compare paths as a bounded diff fallback.
 
     A response capped by GitHub at 300 paths remains safe: downstream policy
@@ -120,9 +118,7 @@ def resolve_retort_change_evidence(
     if not changed_files:
         memory_files = memory.get("changed_files") if isinstance(memory, dict) else None
         if isinstance(memory_files, list):
-            changed_files = [
-                str(item).strip() for item in memory_files if str(item).strip()
-            ][:80]
+            changed_files = [str(item).strip() for item in memory_files if str(item).strip()][:80]
             if changed_files:
                 source = "memory"
 

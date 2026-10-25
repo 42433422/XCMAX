@@ -42,9 +42,7 @@ class AccountLifecycle:
         return asdict(self)
 
 
-def _active_plan(
-    session: Session, user_id: int, *, account_license: bool
-) -> UserPlan | None:
+def _active_plan(session: Session, user_id: int, *, account_license: bool) -> UserPlan | None:
     now = datetime.now(UTC)
     rows = (
         session.query(UserPlan)
@@ -101,9 +99,7 @@ def lifecycle_for_user(session: Session, user: User) -> AccountLifecycle:
     if state == ACCOUNT_SUSPENDED:
         return AccountLifecycle(state, "contact_support", False, "", "", "suspended")
     if state == ACCOUNT_PENDING_PAYMENT:
-        return AccountLifecycle(
-            state, "complete_payment", False, "", "", "registration"
-        )
+        return AccountLifecycle(state, "complete_payment", False, "", "", "registration")
     return AccountLifecycle(
         ACCOUNT_PENDING_PLAN,
         "select_plan",
@@ -129,9 +125,7 @@ def lifecycle_for_user_id(user_id: int) -> AccountLifecycle:
         return lifecycle_for_user(session, user)
 
 
-def auth_user_payload(
-    user: User, lifecycle: AccountLifecycle | None = None
-) -> dict[str, Any]:
+def auth_user_payload(user: User, lifecycle: AccountLifecycle | None = None) -> dict[str, Any]:
     """Return the canonical public user shape used by authentication routes."""
 
     resolved = lifecycle or lifecycle_for_user_id(int(user.id))
@@ -146,9 +140,7 @@ def auth_user_payload(
     }
 
 
-def auth_token_response(
-    user: User, access_token: str, refresh_token: str
-) -> dict[str, Any]:
+def auth_token_response(user: User, access_token: str, refresh_token: str) -> dict[str, Any]:
     """Build one consistent registration/login/refresh token response."""
 
     lifecycle = lifecycle_for_user_id(int(user.id))

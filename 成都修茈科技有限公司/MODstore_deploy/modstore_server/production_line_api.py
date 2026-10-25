@@ -111,9 +111,7 @@ async def api_operations_health():
     import httpx
 
     fhd = (
-        os.environ.get("XCAGI_FHD_INTERNAL_URL")
-        or os.environ.get("FHD_INTERNAL_URL")
-        or ""
+        os.environ.get("XCAGI_FHD_INTERNAL_URL") or os.environ.get("FHD_INTERNAL_URL") or ""
     ).rstrip("/")
     if fhd:
         try:
@@ -170,15 +168,11 @@ async def api_operations_incident(body: Dict[str, Any]):
             publish_unified_incident(
                 scope=str(payload.get("scope") or "ops")[:64],
                 summary=summary,
-                source=str(payload.get("source") or "fhd_production_line_incident")[
-                    :64
-                ],
+                source=str(payload.get("source") or "fhd_production_line_incident")[:64],
                 event_type=event_type,
                 payload=payload,
                 priority=(
-                    payload.get("priority")
-                    if isinstance(payload.get("priority"), int)
-                    else None
+                    payload.get("priority") if isinstance(payload.get("priority"), int) else None
                 ),
             )
         )
@@ -263,9 +257,7 @@ async def api_pipeline_steps(line: str = "production"):
     )
 
     orch = get_production_line_orchestrator()
-    steps_list = (
-        PRODUCTION_LINE_STEPS if line == "production" else OPERATIONS_LINE_STEPS
-    )
+    steps_list = PRODUCTION_LINE_STEPS if line == "production" else OPERATIONS_LINE_STEPS
     steps = []
     for s in steps_list:
         status = orch.get_step_status(s.step_id)

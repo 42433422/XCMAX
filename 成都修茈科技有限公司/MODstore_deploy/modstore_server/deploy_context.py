@@ -37,11 +37,7 @@ def _repo_root() -> Path:
 
 def normalized_deploy_tier() -> str:
     raw = (
-        (
-            os.environ.get("MODSTORE_DEPLOY_TIER")
-            or os.environ.get("DEPLOYMENT_ENV")
-            or ""
-        )
+        (os.environ.get("MODSTORE_DEPLOY_TIER") or os.environ.get("DEPLOYMENT_ENV") or "")
         .strip()
         .lower()
     )
@@ -49,9 +45,7 @@ def normalized_deploy_tier() -> str:
         return "local"
     raw = _ALIASES.get(raw, raw)
     if raw not in _VALID_TIERS:
-        logger.warning(
-            "unknown MODSTORE_DEPLOY_TIER/DEPLOYMENT_ENV %r — using local", raw
-        )
+        logger.warning("unknown MODSTORE_DEPLOY_TIER/DEPLOYMENT_ENV %r — using local", raw)
         return "local"
     return raw
 
@@ -105,9 +99,7 @@ def _release_identity() -> Dict[str, str]:
         if isinstance(payload, dict):
             return {
                 "artifact_sha256": str(payload.get("artifact_sha256") or ""),
-                "release_id": str(
-                    payload.get("release_id") or payload.get("git_sha") or ""
-                ),
+                "release_id": str(payload.get("release_id") or payload.get("git_sha") or ""),
             }
     return {"artifact_sha256": "", "release_id": ""}
 

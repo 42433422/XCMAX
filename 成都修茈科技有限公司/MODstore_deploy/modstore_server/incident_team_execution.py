@@ -24,9 +24,7 @@ def locked_ticket_repair(db, payload):
     from modstore_server.customer_issue_shared_repairs import active_shared_repair
     from modstore_server.models_cs import CustomerServiceTicket
 
-    ticket = db.get(
-        CustomerServiceTicket, int(payload.get("ticket_id") or 0), with_for_update=True
-    )
+    ticket = db.get(CustomerServiceTicket, int(payload.get("ticket_id") or 0), with_for_update=True)
     return ticket, active_shared_repair(db, ticket)
 
 
@@ -62,9 +60,7 @@ def _context(event_id):
             return None
         ticket, shared_repair = locked_ticket_repair(db, payload)
         if ticket is not None:
-            resolution = (
-                json.loads(ticket.evidence_json or "{}").get("resolution") or {}
-            )
+            resolution = json.loads(ticket.evidence_json or "{}").get("resolution") or {}
             if (
                 ticket.user_id != int(payload.get("user_id") or 0)
                 or ticket.status in {"resolved", "closed", "reopened"}
@@ -91,9 +87,7 @@ def _complete_plan(claim):
 
 def _next_member(claim):
     if not _complete_plan(claim):
-        return (
-            None  # Legacy receipts without a complete saved plan only permit readback.
-        )
+        return None  # Legacy receipts without a complete saved plan only permit readback.
     rows = {row.get("role"): row for row in claim.get("team") or []}
     for role in _ROLES:
         row = rows.get(role)
@@ -157,9 +151,7 @@ def execute_member(event_id, member, plan, payload, event_type, source, rows):
         attempt_id=attempt,
         fix_result=previous.get("fix"),
     )
-    runtime["release_recovery"] = (payload.get("_team_claim") or {}).get(
-        "recovery"
-    ) or {}
+    runtime["release_recovery"] = (payload.get("_team_claim") or {}).get("recovery") or {}
     row = {
         "role": role,
         "employee_id": employee,
@@ -189,11 +181,7 @@ def execute_member(event_id, member, plan, payload, event_type, source, rows):
         ok=succeeded,
         handler_outputs=handler_output_digest(result),
         route=route,
-        status="pending"
-        if pending
-        else "completed"
-        if succeeded
-        else status or "failed",
+        status="pending" if pending else "completed" if succeeded else status or "failed",
     )
     row.pop("outcome", None)
     persist_role_attempt(event_id, row, expected_attempt=attempt)
@@ -205,9 +193,7 @@ def _follow_up(event_id, context):
     from modstore_server.node_coordinator import assert_incident_claim
 
     payload, claim, event_type, source = context
-    if not _complete_plan(claim) or not facade._env_bool(
-        facade._HANDLER_FAILED_FOLLOWUP_ENV, True
-    ):
+    if not _complete_plan(claim) or not facade._env_bool(facade._HANDLER_FAILED_FOLLOWUP_ENV, True):
         return
     handled = list(claim.get("failure_handled_attempts") or [])
     interrupted = {
@@ -224,9 +210,7 @@ def _follow_up(event_id, context):
                 return
             saved = current["_team_claim"]
             for attempt, intent in interrupted.items():
-                row = next(
-                    (r for r in saved["team"] if r.get("role") == intent["role"]), {}
-                )
+                row = next((r for r in saved["team"] if r.get("role") == intent["role"]), {})
                 evidence = row.get("attempt_id") not in (None, attempt) or any(
                     receipt.get("attempt_id") == attempt
                     for receipt in (saved.get("escalations") or {}).values()
@@ -236,9 +220,9 @@ def _follow_up(event_id, context):
                     saved["follow_up_intents"][attempt]["state"] = "receipt_recorded"
                 else:
                     row.update(ok=False, status="manual_review", outcome="unknown")
-                    row.setdefault("handler_outputs", {})["poll_error"] = (
-                        "Follow-up interrupted before a durable retry or handoff receipt; do not replay"
-                    )
+                    row.setdefault("handler_outputs", {})[
+                        "poll_error"
+                    ] = "Follow-up interrupted before a durable retry or handoff receipt; do not replay"
                     saved["follow_up_intents"][attempt]["state"] = "unknown"
             saved["failure_handled_attempts"] = handled
             _write_payload(db, event, current)
@@ -336,9 +320,7 @@ def project_team(event_id: int) -> dict[str, Any]:
         claim["handler_failed_count"] = len(claim["handler_failed_roles"])
         ticket, shared_repair = locked_ticket_repair(db, payload)
         resolution = (
-            json.loads(str(ticket.evidence_json or "{}")).get("resolution") or {}
-            if ticket
-            else {}
+            json.loads(str(ticket.evidence_json or "{}")).get("resolution") or {} if ticket else {}
         )
         if ticket and (
             not shared_repair
@@ -375,9 +357,7 @@ def project_team(event_id: int) -> dict[str, Any]:
                     )
                 }
             except BOUNDARY_ERRORS as exc:
-                facade.logger.exception(
-                    "incident team progress failed event_id=%s", event_id
-                )
+                facade.logger.exception("incident team progress failed event_id=%s", event_id)
                 progress = {"ok": False, "error": str(exc)[:300]}
         _write_payload(db, event, payload)
         db.commit()
