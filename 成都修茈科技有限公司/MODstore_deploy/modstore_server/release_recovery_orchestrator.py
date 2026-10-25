@@ -13,11 +13,16 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR")
+        or Path.home() / ".xcmax" / "modstore-daily"
+    )
 
 
 def _looks_release_related(event_type: str, payload: Dict[str, Any]) -> bool:
-    text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
+    text = json.dumps(
+        {"event_type": event_type, "payload": payload}, ensure_ascii=False
+    ).lower()
     return any(
         token in text
         for token in (
@@ -38,7 +43,9 @@ def _looks_release_related(event_type: str, payload: Dict[str, Any]) -> bool:
 
 def build_recovery_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     try:
-        from modstore_server.adaptive_release_controller import build_adaptive_release_plan
+        from modstore_server.adaptive_release_controller import (
+            build_adaptive_release_plan,
+        )
 
         adaptive = build_adaptive_release_plan(event_type=event_type, payload=payload)
     except RECOVERABLE_ERRORS as exc:
@@ -65,7 +72,8 @@ def build_recovery_plan(*, event_type: str, payload: Dict[str, Any]) -> Dict[str
         "priority": priority_num,
         "release_related": release_related,
         "schema_version": 2,
-        "strategy": adaptive.get("strategy") or ("rollback" if action == "rollback" else "rolling"),
+        "strategy": adaptive.get("strategy")
+        or ("rollback" if action == "rollback" else "rolling"),
     }
 
 
@@ -78,7 +86,9 @@ def _run_command(command: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        timeout=int(os.environ.get("MODSTORE_AUTO_RECOVERY_COMMAND_TIMEOUT_SEC", "300")),
+        timeout=int(
+            os.environ.get("MODSTORE_AUTO_RECOVERY_COMMAND_TIMEOUT_SEC", "300")
+        ),
         check=False,
     )
     return {

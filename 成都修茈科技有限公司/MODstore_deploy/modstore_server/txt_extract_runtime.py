@@ -43,9 +43,13 @@ def is_txt_generate(brief: str) -> bool:
         return False
     if not _has_txt_doc_signal(bl):
         return False
-    if _has_word_doc_signal(bl) and any(k in bl for k in ("docx", "word", ".doc", "word文档")):
+    if _has_word_doc_signal(bl) and any(
+        k in bl for k in ("docx", "word", ".doc", "word文档")
+    ):
         return False
-    if _has_word_doc_signal(bl) and not any(k in bl for k in (".txt", "txt文件", "txt 文件")):
+    if _has_word_doc_signal(bl) and not any(
+        k in bl for k in (".txt", "txt文件", "txt 文件")
+    ):
         return False
     if any(k in bl for k in TXT_GENERATE_EXCLUDE) and not any(
         k in bl for k in TXT_GENERATE_ACTION_KEYWORDS
@@ -73,7 +77,8 @@ def is_txt_full_read(brief: str) -> bool:
 def txt_read_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / TXT 全量读取",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "上传 .txt 并原样读出全部纯文本",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "上传 .txt 并原样读出全部纯文本",
         "input": "用户上传的 .txt 文件",
         "output": "outputs/document_full.txt + outputs/document_meta.json",
         "output_schema": {
@@ -93,7 +98,8 @@ def txt_read_structured_spec(brief: str) -> Dict[str, Any]:
 def txt_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / TXT 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "上传 TXT，结构化 JSON 并写出 txt",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "上传 TXT，结构化 JSON 并写出 txt",
         "input": "用户上传的 .txt 文件",
         "output": "outputs/document_parsed.json + outputs/generated_document.txt",
         "output_schema": {
@@ -132,7 +138,9 @@ def build_txt_read_rule_spec(brief: str) -> Dict[str, Any]:
 
 def build_txt_generate_rule_spec(brief: str) -> Dict[str, Any]:
     bl = _brief_lower(brief)
-    wants_polish = any(k in bl for k in ("润色", "改写", "生成正文", "polish", "rewrite"))
+    wants_polish = any(
+        k in bl for k in ("润色", "改写", "生成正文", "polish", "rewrite")
+    )
     return {
         "brief": brief,
         "mode": "direct_python_file_transform",
@@ -348,7 +356,9 @@ def _validate_txt_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -368,7 +378,11 @@ def _validate_txt_backend(
                 pass
     if not has_convert:
         errors.append("backend/vendor 中缺少 convert_file 实现")
-    if ".txt" not in py_blob and "read_bytes" not in py_blob and "read_text" not in py_blob:
+    if (
+        ".txt" not in py_blob
+        and "read_bytes" not in py_blob
+        and "read_text" not in py_blob
+    ):
         warnings.append("未发现 txt 读取相关代码")
     for tok in required_tokens:
         if tok.lower() not in py_blob:
@@ -406,7 +420,8 @@ def txt_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "只能读 inputs/、写 outputs/；禁止联网。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": f"{merged or clean}\n\nSkill：上传 txt → 全量读取 → 交付 document_full.txt。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -416,7 +431,9 @@ def txt_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
     }
 
 
-def txt_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def txt_generate_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     checklist = payload.get("execution_checklist")
@@ -442,7 +459,8 @@ def txt_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "direct_python 读写在先；agent 仅用于可选润色。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": (
             f"{merged or clean}\n\nSkill：上传 → 读取 → JSON → 写 generated txt → 可选润色。"
         ),
@@ -454,7 +472,9 @@ def txt_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
     }
 
 
-def resolve_txt_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def resolve_txt_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     if is_txt_generate(brief):
         return txt_generate_orchestration_plan(brief, payload)
     return txt_read_orchestration_plan(brief, payload)

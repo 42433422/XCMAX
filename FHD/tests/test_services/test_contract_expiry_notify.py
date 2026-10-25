@@ -33,7 +33,10 @@ def test_notify_dry_run_no_push(mock_load, mock_save, items):
 @patch(
     "app.infrastructure.persistence.contract_expiry_notification_repository.get_contract_expiry_notification_repository"
 )
-@patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name", return_value="wx-contact")
+@patch(
+    "app.domain.shared_services.user_cs_intake_notice._primary_contact_name",
+    return_value="wx-contact",
+)
 @patch("app.desktop_automation.service.get_desktop_automation_service")
 @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
 @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")

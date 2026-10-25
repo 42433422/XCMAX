@@ -18,7 +18,9 @@ def _clean_tts_text(text: str) -> str:
     return t
 
 
-def _completed_parts(text: str, splitter: re.Pattern[str], tail_re: re.Pattern[str]) -> list[str]:
+def _completed_parts(
+    text: str, splitter: re.Pattern[str], tail_re: re.Pattern[str]
+) -> list[str]:
     parts = [p for p in splitter.split(text) if p.strip()]
     if not parts:
         return []

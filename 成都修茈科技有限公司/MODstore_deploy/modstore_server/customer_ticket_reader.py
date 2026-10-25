@@ -39,7 +39,9 @@ logger.setLevel(logging.INFO)
 logger.propagate = False
 if not logger.handlers:
     audit_handler = logging.StreamHandler()
-    audit_handler.setFormatter(logging.Formatter("%(asctime)s ticket_read_audit %(message)s"))
+    audit_handler.setFormatter(
+        logging.Formatter("%(asctime)s ticket_read_audit %(message)s")
+    )
     logger.addHandler(audit_handler)
 
 
@@ -86,7 +88,11 @@ def resolve_reader(token: str, request: Request) -> TicketReader:
                 raise ValueError("unprotected grant configuration")
             config = json.load(stream)
         instance = os.environ["MODSTORE_INSTANCE_ID"]
-        if not instance or config["instance_id"] != instance or not config["company_id"]:
+        if (
+            not instance
+            or config["instance_id"] != instance
+            or not config["company_id"]
+        ):
             raise ValueError("instance mismatch")
         owners = config["owner_user_ids"]
         if (
@@ -96,7 +102,11 @@ def resolve_reader(token: str, request: Request) -> TicketReader:
         ):
             raise ValueError("explicit company membership required")
         digest = hashlib.sha256(token.encode()).hexdigest()
-        grant = next(g for g in config["grants"] if hmac.compare_digest(g["token_sha256"], digest))
+        grant = next(
+            g
+            for g in config["grants"]
+            if hmac.compare_digest(g["token_sha256"], digest)
+        )
         grant_id = grant["id"]
         expires = datetime.fromisoformat(grant["expires_at"].replace("Z", "+00:00"))
         if (
@@ -112,15 +122,21 @@ def resolve_reader(token: str, request: Request) -> TicketReader:
     if (
         request is None
         or request.method != "GET"
-        or not re.fullmatch(r"/api/customer-service/tickets(?:/[0-9]+)?", request.url.path)
+        or not re.fullmatch(
+            r"/api/customer-service/tickets(?:/[0-9]+)?", request.url.path
+        )
     ):
         logger.warning("ticket_read denied grant=%s reason=route", grant_id)
         raise HTTPException(403, "此服务身份仅允许读取工单列表和详情")
     if set(request.query_params) - {"status", "search", "offset", "limit"}:
         logger.warning("ticket_read denied grant=%s reason=query_scope", grant_id)
         raise HTTPException(403, "工单公司范围由服务器固定，不接受范围覆盖参数")
-    logger.info("ticket_read allowed grant=%s method=GET path=%s", grant_id, request.url.path)
-    return TicketReader(grant_id, grant["principal"], config["company_id"], instance, tuple(owners))
+    logger.info(
+        "ticket_read allowed grant=%s method=GET path=%s", grant_id, request.url.path
+    )
+    return TicketReader(
+        grant_id, grant["principal"], config["company_id"], instance, tuple(owners)
+    )
 
 
 async def reader_boundary(request: Request, call_next):
@@ -190,7 +206,9 @@ def reader_ticket(db, row) -> dict:
     for key, value in payload.items():
         if isinstance(value, str):
             payload[key] = _reader_text(value)
-    payload.update({key: _reader_text(getattr(row, key), 4000) for key in ("title", "summary")})
+    payload.update(
+        {key: _reader_text(getattr(row, key), 4000) for key in ("title", "summary")}
+    )
     payload.update(
         {
             key: value.isoformat() if value else None

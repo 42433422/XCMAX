@@ -174,7 +174,8 @@ class AllHandsBench:
                 (
                     1
                     for row in employees
-                    if isinstance(row, dict) and str(row.get("employee_id") or "") in self.craft_ids
+                    if isinstance(row, dict)
+                    and str(row.get("employee_id") or "") in self.craft_ids
                 )
             )
             if craft_n:
@@ -218,13 +219,22 @@ class AllHandsBench:
             factory = self.session_provider()
             with factory() as session:
                 result = await self.dispatch(
-                    session, int(user_id or 0), provider, model, messages, max_tokens=max_tokens
+                    session,
+                    int(user_id or 0),
+                    provider,
+                    model,
+                    messages,
+                    max_tokens=max_tokens,
                 )
         except RECOVERABLE_ERRORS as exc:
             logger.exception("all_hands bench dispatch failed")
             return BenchReply(error=f"{exception_prefix}{exc}")
         if not isinstance(result, dict) or not result.get("ok"):
-            error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
+            error = (
+                str(result.get("error") or "").strip()
+                if isinstance(result, dict)
+                else ""
+            )
             return BenchReply(error=error or "bench LLM 未返回有效内容")
         text = str(result.get("content") or "").strip()
         if not text:

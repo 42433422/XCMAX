@@ -38,7 +38,12 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
-from modstore_server.models import ScriptWorkflow, ScriptWorkflowRun, ScriptWorkflowVersion, User
+from modstore_server.models import (
+    ScriptWorkflow,
+    ScriptWorkflowRun,
+    ScriptWorkflowVersion,
+    User,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief
@@ -217,7 +222,11 @@ async def start_session(
     except json.JSONDecodeError as e:
         raise HTTPException(400, f"brief_json 解析失败: {e}") from e
     brief = Brief.from_dict(brief_data)
-    if not brief.goal.strip() or not brief.outputs.strip() or not brief.acceptance.strip():
+    if (
+        not brief.goal.strip()
+        or not brief.outputs.strip()
+        or not brief.acceptance.strip()
+    ):
         raise HTTPException(400, "brief 必须包含 goal/outputs/acceptance")
 
     files_data = await _read_uploads(files)
@@ -234,7 +243,8 @@ async def start_session(
             error="",
             started_at=datetime.now(UTC).timestamp(),
             files_meta=[
-                {"filename": f["filename"], "size": len(f["content"] or b"")} for f in files_data
+                {"filename": f["filename"], "size": len(f["content"] or b"")}
+                for f in files_data
             ],
         )
         _gc_sessions()
@@ -299,7 +309,9 @@ async def session_feedback(
     sess["error"] = ""
     llm_cfg = _resolve_llm_for_user(db, user, hint_provider=None, hint_model=None)
     return StreamingResponse(
-        _stream_agent_loop(sid=sid, user_id=user.id, brief=brief, files=[], llm_cfg=llm_cfg),
+        _stream_agent_loop(
+            sid=sid, user_id=user.id, brief=brief, files=[], llm_cfg=llm_cfg
+        ),
         media_type="text/event-stream",
         headers={"X-Script-Session-Id": sid, "Cache-Control": "no-cache"},
     )
@@ -462,13 +474,17 @@ async def delete_workflow(
 ):
     wf = _load_workflow(db, workflow_id, user)
     db.query(ScriptWorkflowRun).filter(ScriptWorkflowRun.workflow_id == wf.id).delete()
-    db.query(ScriptWorkflowVersion).filter(ScriptWorkflowVersion.workflow_id == wf.id).delete()
+    db.query(ScriptWorkflowVersion).filter(
+        ScriptWorkflowVersion.workflow_id == wf.id
+    ).delete()
     db.delete(wf)
     db.commit()
     return {"ok": True}
 
 
-_execution_routes = importlib.import_module("modstore_server.script_workflow_execution_routes")
+_execution_routes = importlib.import_module(
+    "modstore_server.script_workflow_execution_routes"
+)
 manual_sandbox_run = _execution_routes.manual_sandbox_run
 activate_workflow = _execution_routes.activate_workflow
 deactivate_workflow = _execution_routes.deactivate_workflow

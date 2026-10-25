@@ -260,7 +260,9 @@ def register_entity_applier(entity_type: str):
 
 
 _basic_appliers = importlib.import_module("app.domain.shared_services.xcmax_sync_basic_appliers")
-_extended_appliers = importlib.import_module("app.domain.shared_services.xcmax_sync_extended_appliers")
+_extended_appliers = importlib.import_module(
+    "app.domain.shared_services.xcmax_sync_extended_appliers"
+)
 _apply_personnel = _basic_appliers._apply_personnel
 _apply_department = _basic_appliers._apply_department
 _apply_attendance = _basic_appliers._apply_attendance

@@ -27,7 +27,9 @@ from modstore_server.file_retention_support import (
 from modstore_server.file_retention_support import (
     record_retention_runtime as _record_retention_runtime,
 )
-from modstore_server.file_retention_support import resolve_admin_user_id as _resolve_admin_user_id
+from modstore_server.file_retention_support import (
+    resolve_admin_user_id as _resolve_admin_user_id,
+)
 from modstore_server.file_retention_support import write_metric as _write_metric
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -319,7 +321,9 @@ def run_retention_janitor(
     started_at = datetime.now(UTC)
     t0 = time.perf_counter()
     is_dry = is_dry_run() if dry_run is None else bool(dry_run)
-    database_is_dry = is_dry if notification_dry_run is None else bool(notification_dry_run)
+    database_is_dry = (
+        is_dry if notification_dry_run is None else bool(notification_dry_run)
+    )
 
     target_reports: List[TargetReport] = []
     cumulative_released = 0
@@ -476,7 +480,9 @@ def _cli() -> int:
 def cleanup_employee_workspaces() -> Dict[str, Any]:
     """清理过期员工工作区文件（由定时任务或 janitor 主流程调用）。"""
     try:
-        from modstore_server.employee_workspace_manager import cleanup_expired_workspaces
+        from modstore_server.employee_workspace_manager import (
+            cleanup_expired_workspaces,
+        )
 
         result = cleanup_expired_workspaces()
         logger.info("janitor: workspace cleanup completed")

@@ -48,9 +48,13 @@ def admin_or_shared_secret(env_name: str, header_name: str) -> Callable[..., Any
     return _guard
 
 
-def require_admin_or_internal(request: Request, authorization: Optional[str] = Header(None)) -> Any:
+def require_admin_or_internal(
+    request: Request, authorization: Optional[str] = Header(None)
+) -> Any:
     """Read-only bridge: the FHD internal API key or an admin bearer token."""
-    from modstore_server.admin_employee_autonomy_helpers import _has_valid_internal_api_key
+    from modstore_server.admin_employee_autonomy_helpers import (
+        _has_valid_internal_api_key,
+    )
 
     if _has_valid_internal_api_key(request):
         return None
@@ -58,7 +62,9 @@ def require_admin_or_internal(request: Request, authorization: Optional[str] = H
 
 
 require_sync_peer_or_admin = admin_or_shared_secret(SYNC_SECRET_ENV, SYNC_SECRET_HEADER)
-require_ops_line_peer_or_admin = admin_or_shared_secret(OPS_LINE_SECRET_ENV, OPS_LINE_SECRET_HEADER)
+require_ops_line_peer_or_admin = admin_or_shared_secret(
+    OPS_LINE_SECRET_ENV, OPS_LINE_SECRET_HEADER
+)
 
 
 def require_sync_peer(request: Request) -> None:

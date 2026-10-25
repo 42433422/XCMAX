@@ -1,4 +1,5 @@
 """Route capability requests to NeuroBus domains."""
+
 from __future__ import annotations
 
 from typing import Any, Callable

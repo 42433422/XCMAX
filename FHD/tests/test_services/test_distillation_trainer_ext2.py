@@ -228,7 +228,9 @@ class TestDistillationTrainerPrepareDataLowData:
         mock_model = MagicMock()
         with (
             patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.distillation_trainer.DataLoader") as MockDataLoader,
             patch("app.domain.shared_services.distillation_trainer.train_test_split") as mock_split,
         ):

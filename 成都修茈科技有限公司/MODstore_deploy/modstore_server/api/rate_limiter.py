@@ -137,7 +137,9 @@ class RateLimiterMiddleware:
                 bucket._client.ping()
                 return bucket
             except RECOVERABLE_ERRORS:
-                logger.warning("Redis unavailable, falling back to in-memory rate limiter")
+                logger.warning(
+                    "Redis unavailable, falling back to in-memory rate limiter"
+                )
         return _InMemoryBucket()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -155,7 +157,9 @@ class RateLimiterMiddleware:
 
         client_ip = _client_ip(request)
         user_hint = (
-            request.headers.get("x-modstore-user") or request.headers.get("x-user-id") or ""
+            request.headers.get("x-modstore-user")
+            or request.headers.get("x-user-id")
+            or ""
         )[:64]
         route = f"{request.method}:{path}"[:220]
         key = f"rate:{client_ip}:{user_hint}:{route}"

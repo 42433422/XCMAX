@@ -104,7 +104,8 @@ class CircuitBreaker:
             if self._state == "open":
                 if (
                     self._last_failure_time
-                    and (time.time() - self._last_failure_time) >= self._recovery_timeout
+                    and (time.time() - self._last_failure_time)
+                    >= self._recovery_timeout
                 ):
                     self._state = "half_open"
                     logger.info("Circuit [%s] transitioning to half_open", self.name)
@@ -126,7 +127,10 @@ class CircuitBreaker:
             if self._state == "half_open":
                 self._state = "open"
                 logger.warning("Circuit [%s] failure in half_open, opening", self.name)
-            elif self._state == "closed" and self._failure_count >= self._failure_threshold:
+            elif (
+                self._state == "closed"
+                and self._failure_count >= self._failure_threshold
+            ):
                 self._state = "open"
                 logger.warning(
                     "Circuit [%s] open due to %d failures",
@@ -223,7 +227,9 @@ class InMemoryNeuroBus(NeuroBus):
         if _env_flag("MODSTORE_BUS_CIRCUIT", default=True):
             self._circuit = CircuitBreaker("modstore_neurobus")
 
-        self._dlq_callback: Callable[[DomainEvent, Exception, str | None], None] | None = None
+        self._dlq_callback: (
+            Callable[[DomainEvent, Exception, str | None], None] | None
+        ) = None
 
     def set_dlq_callback(
         self, callback: Callable[[DomainEvent, Exception, str | None], None]
@@ -238,7 +244,9 @@ class InMemoryNeuroBus(NeuroBus):
         priority: int = 0,
         filter_fn: Callable[[DomainEvent], bool] | None = None,
     ) -> HandlerSubscription:
-        sub = HandlerSubscription(event_name, handler, priority=priority, filter_fn=filter_fn)
+        sub = HandlerSubscription(
+            event_name, handler, priority=priority, filter_fn=filter_fn
+        )
         with self._lock:
             if event_name == "*":
                 self._global_handlers.append(sub)
@@ -291,9 +299,13 @@ class InMemoryNeuroBus(NeuroBus):
                 )
                 if self._dlq_callback is not None:
                     try:
-                        self._dlq_callback(event, exc, getattr(sub.handler, "__name__", None))
+                        self._dlq_callback(
+                            event, exc, getattr(sub.handler, "__name__", None)
+                        )
                     except RECOVERABLE_ERRORS:
-                        logger.exception("DLQ callback failed for event: %s", event.event_name)
+                        logger.exception(
+                            "DLQ callback failed for event: %s", event.event_name
+                        )
 
         if any_failed and self._dedup is not None:
             self._dedup.remove(event.idempotency_key)
@@ -324,6 +336,8 @@ class InMemoryNeuroBus(NeuroBus):
                 "handlers": sum(len(v) for v in self._handlers.values()),
                 "global_handlers": len(self._global_handlers),
                 "dedup_enabled": self._dedup is not None,
-                "circuit_breaker_state": self._circuit.state if self._circuit else "disabled",
+                "circuit_breaker_state": self._circuit.state
+                if self._circuit
+                else "disabled",
                 "handler_details": handler_stats,
             }

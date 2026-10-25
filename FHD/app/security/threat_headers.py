@@ -1,4 +1,5 @@
 """Baseline security response headers."""
+
 from __future__ import annotations
 
 SECURITY_HEADERS = {

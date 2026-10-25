@@ -54,7 +54,9 @@ def retain_completed_merge_runs(
             reserved_row_count += run_row_count
 
     reserved_row_object_ids = {
-        id(row) for row, _ in eligible if str(row.get("run_id") or "").strip() in reserved_run_ids
+        id(row)
+        for row, _ in eligible
+        if str(row.get("run_id") or "").strip() in reserved_run_ids
     }
     recent_candidates = [
         row
@@ -67,7 +69,9 @@ def retain_completed_merge_runs(
     ]
     remaining_budget = row_limit - reserved_row_count
     recent_row_object_ids = (
-        {id(row) for row in recent_candidates[-remaining_budget:]} if remaining_budget else set()
+        {id(row) for row in recent_candidates[-remaining_budget:]}
+        if remaining_budget
+        else set()
     )
     return [
         row

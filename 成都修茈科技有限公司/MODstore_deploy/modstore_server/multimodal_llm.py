@@ -7,7 +7,9 @@ import os
 from typing import Any, Dict, Iterable, List, Optional
 
 # Rough vision token budget per image when upstream does not return usage.prompt_tokens.
-VISION_IMAGE_TOKEN_ESTIMATE = int(os.environ.get("MODSTORE_VISION_IMAGE_TOKEN_ESTIMATE", "1024"))
+VISION_IMAGE_TOKEN_ESTIMATE = int(
+    os.environ.get("MODSTORE_VISION_IMAGE_TOKEN_ESTIMATE", "1024")
+)
 MULTIMODAL_MAX_TOTAL_BYTES = int(
     os.environ.get("MODSTORE_MULTIMODAL_MAX_TOTAL_BYTES", str(12 * 1024 * 1024))
 )
@@ -121,7 +123,9 @@ def redact_message_content_for_storage(content: Any) -> str:
     return str(content)
 
 
-def first_user_text_preview(messages: Iterable[Dict[str, Any]], *, max_len: int = 80) -> str:
+def first_user_text_preview(
+    messages: Iterable[Dict[str, Any]], *, max_len: int = 80
+) -> str:
     for m in messages:
         if (m.get("role") or "") != "user":
             continue

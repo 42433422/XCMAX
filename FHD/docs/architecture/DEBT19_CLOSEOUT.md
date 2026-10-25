@@ -21,10 +21,10 @@
 | 14 | fastapi_routes 308 | **301** | GONE |
 | 15 | pregel 171.4KB | **0.2KB** facade + mixins | GONE |
 | 16 | XCAGI 514 | **260** | GONE |
-| 18 | run.py×3 | ['FHD/run.py', 'FHD/XCAGI/run.py'] + ENTRYPOINTS SSOT | GONE |
-| 19 | version multi-head | VERSION/MOBILE → PRODUCT_VERSION_SSOT pointers | GONE |
+| 18 | run.py×3 | ['FHD/run.py', 'FHD/XCAGI/run.py'] + ENTRYPOINTS single-source | GONE |
+| 19 | version multi-head | VERSION/MOBILE → PRODUCT_VERSION_POINTER pointers | GONE |
 | 20 | pyproject13/pkg12 | **12/10** | GONE |
-| 21 | six client entries | ENTRYPOINTS SSOT; sunbird/poc marked non-SSOT | GONE |
+| 21 | six client entries | ENTRYPOINTS single-source; sunbird/poc marked non-primary | GONE |
 
 Artifact: `FHD/docs/architecture/DEBT19_MEASUREMENT.json`
 

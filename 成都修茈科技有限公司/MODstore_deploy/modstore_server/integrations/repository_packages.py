@@ -24,20 +24,31 @@ def load_repository_module(name: str) -> ModuleType:
         return importlib.import_module(name)
     except ModuleNotFoundError as exc:
         if exc.name != package:
-            raise ImportError(f"{package} has an unavailable dependency: {exc.name}") from exc
+            raise ImportError(
+                f"{package} has an unavailable dependency: {exc.name}"
+            ) from exc
 
     monorepo = (
-        Path(os.environ.get("XCMAX_MONOREPO_ROOT") or Path(__file__).resolve().parents[4])
+        Path(
+            os.environ.get("XCMAX_MONOREPO_ROOT") or Path(__file__).resolve().parents[4]
+        )
         .expanduser()
         .resolve()
     )
     configured = (
-        os.environ.get("MODSTORE_RETORT_ENGINE_ROOT") if package == "retort_engine" else None
+        os.environ.get("MODSTORE_RETORT_ENGINE_ROOT")
+        if package == "retort_engine"
+        else None
     )
     root = (
-        Path(configured).expanduser().resolve() if configured else monorepo / "packages" / package
+        Path(configured).expanduser().resolve()
+        if configured
+        else monorepo / "packages" / package
     )
-    if not (root / "pyproject.toml").is_file() or not (root / package / "__init__.py").is_file():
+    if (
+        not (root / "pyproject.toml").is_file()
+        or not (root / package / "__init__.py").is_file()
+    ):
         raise ImportError(
             f"{package} is required; install the declared local package in the release"
         )

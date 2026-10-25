@@ -47,7 +47,9 @@ def store(monkeypatch) -> TaskConversationStore:
         isolated_db,
     )
     monkeypatch.setattr("app.domain.shared_services.conversation_service.get_db", isolated_db)
-    monkeypatch.setattr("app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None
+    )
     return TaskConversationStore()
 
 

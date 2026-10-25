@@ -41,13 +41,17 @@ class SqlAnalyticsRepository:
             .count()
         )
         token_sum = (
-            self.db.query(func.coalesce(func.sum(EmployeeExecutionMetric.llm_tokens), 0))
+            self.db.query(
+                func.coalesce(func.sum(EmployeeExecutionMetric.llm_tokens), 0)
+            )
             .filter(EmployeeExecutionMetric.user_id == user_id)
             .scalar()
             or 0
         )
         duration_sum = (
-            self.db.query(func.coalesce(func.sum(EmployeeExecutionMetric.duration_ms), 0.0))
+            self.db.query(
+                func.coalesce(func.sum(EmployeeExecutionMetric.duration_ms), 0.0)
+            )
             .filter(EmployeeExecutionMetric.user_id == user_id)
             .scalar()
             or 0.0
@@ -58,15 +62,25 @@ class SqlAnalyticsRepository:
             .scalar()
             or 0.0
         )
-        purchase_count = self.db.query(Purchase).filter(Purchase.user_id == user_id).count()
-        refund_count = self.db.query(RefundRequest).filter(RefundRequest.user_id == user_id).count()
+        purchase_count = (
+            self.db.query(Purchase).filter(Purchase.user_id == user_id).count()
+        )
+        refund_count = (
+            self.db.query(RefundRequest)
+            .filter(RefundRequest.user_id == user_id)
+            .count()
+        )
         wallet_transaction_count = (
             self.db.query(Transaction).filter(Transaction.user_id == user_id).count()
         )
         total_packages = self.db.query(CatalogItem).count()
-        public_packages = self.db.query(CatalogItem).filter(CatalogItem.is_public.is_(True)).count()
+        public_packages = (
+            self.db.query(CatalogItem).filter(CatalogItem.is_public.is_(True)).count()
+        )
         employee_packs = (
-            self.db.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").count()
+            self.db.query(CatalogItem)
+            .filter(CatalogItem.artifact == "employee_pack")
+            .count()
         )
 
         recent = (

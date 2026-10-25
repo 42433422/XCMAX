@@ -71,7 +71,9 @@ def _default_headers(*, edge: bool = False) -> Dict[str, str]:
     }
 
 
-def filter_results_by_full_query(query: str, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def filter_results_by_full_query(
+    query: str, rows: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     """按完整查询串过滤 SERP（整句命中或查询中连续 3 字出现在结果中）。"""
     if not rows:
         return []
@@ -189,18 +191,24 @@ async def _fetch_bing_html_via_edge(
 
     rn = max(5, min(int(count), 50))
     search_url = _BING_SEARCH_URL.format(query=quote_plus(q), count=rn)
-    channel = (os.environ.get("MODSTORE_BING_EDGE_CHANNEL") or "msedge").strip() or "msedge"
+    channel = (
+        os.environ.get("MODSTORE_BING_EDGE_CHANNEL") or "msedge"
+    ).strip() or "msedge"
 
     async with async_playwright() as playwright:
         try:
-            browser = await playwright.chromium.launch(channel=channel, headless=headless)
+            browser = await playwright.chromium.launch(
+                channel=channel, headless=headless
+            )
         except RECOVERABLE_ERRORS:
             browser = await playwright.chromium.launch(headless=headless)
         try:
             page = await (
                 await browser.new_context(locale="zh-CN", user_agent=_edge_user_agent())
             ).new_page()
-            await page.goto("https://cn.bing.com/", wait_until="domcontentloaded", timeout=25_000)
+            await page.goto(
+                "https://cn.bing.com/", wait_until="domcontentloaded", timeout=25_000
+            )
             try:
                 box = page.locator("#sb_form_q, input[name='q']").first
                 await box.wait_for(state="visible", timeout=8_000)
@@ -211,14 +219,18 @@ async def _fetch_bing_html_via_edge(
                 await page.wait_for_load_state("domcontentloaded", timeout=25_000)
                 await page.wait_for_selector("li.b_algo, #b_results", timeout=15_000)
             except RECOVERABLE_ERRORS:
-                await page.goto(search_url, wait_until="domcontentloaded", timeout=25_000)
+                await page.goto(
+                    search_url, wait_until="domcontentloaded", timeout=25_000
+                )
                 await page.wait_for_selector("li.b_algo, #b_results", timeout=15_000)
             return await page.content()
         finally:
             await browser.close()
 
 
-def _apply_company_relevance(query: str, parsed: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _apply_company_relevance(
+    query: str, parsed: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     q = (query or "").strip()
     if "有限公司" not in q and "有限责任公司" not in q and "股份" not in q:
         return parsed
@@ -252,12 +264,18 @@ async def bing_html_search(
     errors: List[str] = []
 
     async def _edge_crawl() -> List[Dict[str, Any]]:
-        html = await _fetch_bing_html_via_edge(q, headless=edge_headless, count=max(rn, 10))
-        return _finalize_bing_parsed(q, parse_bing_serp_html(html, max_results=rn), max_results=rn)
+        html = await _fetch_bing_html_via_edge(
+            q, headless=edge_headless, count=max(rn, 10)
+        )
+        return _finalize_bing_parsed(
+            q, parse_bing_serp_html(html, max_results=rn), max_results=rn
+        )
 
     async def _http_crawl() -> List[Dict[str, Any]]:
         html = await _fetch_bing_html(q, count=max(rn, 10))
-        return _finalize_bing_parsed(q, parse_bing_serp_html(html, max_results=rn), max_results=rn)
+        return _finalize_bing_parsed(
+            q, parse_bing_serp_html(html, max_results=rn), max_results=rn
+        )
 
     if mode == "edge":
         try:

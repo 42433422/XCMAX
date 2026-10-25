@@ -160,7 +160,10 @@ def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> Non
         patch(
             "app.application.tenant_workspace_prefs.session_workspace_owner_id", return_value="t:7"
         ),
-        patch("app.domain.shared_services.user_preference_service.get_user_preference_service", return_value=svc),
+        patch(
+            "app.domain.shared_services.user_preference_service.get_user_preference_service",
+            return_value=svc,
+        ),
     ):
         for key, value in (("aiMode", "offline"), ("pack", {"a": 1})):
             r = misc_client.post("/preferences", json={"key": key, "value": value})

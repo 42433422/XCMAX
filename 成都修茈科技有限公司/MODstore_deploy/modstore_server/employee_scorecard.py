@@ -88,7 +88,9 @@ def get_employee_scorecard(
                 "note": "时间窗内无执行记录",
             }
 
-        success_count = int(base_q.filter(EmployeeExecutionMetric.status == "success").count() or 0)
+        success_count = int(
+            base_q.filter(EmployeeExecutionMetric.status == "success").count() or 0
+        )
         failure_count = total - success_count
 
         # 失败原因 top N（按 failure_kind 聚合）
@@ -108,7 +110,8 @@ def get_employee_scorecard(
             .all()
         )
         failure_breakdown = [
-            {"failure_kind": _ensure_aware(k) or "unknown", "count": int(c)} for k, c in fail_rows
+            {"failure_kind": _ensure_aware(k) or "unknown", "count": int(c)}
+            for k, c in fail_rows
         ]
 
         # 平均处理时长
@@ -147,7 +150,9 @@ def get_employee_scorecard(
             or 0
         )
 
-        recent_rows = base_q.order_by(EmployeeExecutionMetric.id.desc()).limit(limit_recent).all()
+        recent_rows = (
+            base_q.order_by(EmployeeExecutionMetric.id.desc()).limit(limit_recent).all()
+        )
         recent_tasks = _build_recent_task_list(recent_rows, limit=limit_recent)
 
         last_row = (
@@ -261,10 +266,14 @@ def list_all_employee_scorecards(
                 "success_count": success,
                 "failure_count": agg["failure_count"],
                 "success_rate": round(success / total, 4) if total else 0.0,
-                "avg_duration_ms": round(agg["total_duration_ms"] / total, 1) if total else 0.0,
+                "avg_duration_ms": round(agg["total_duration_ms"] / total, 1)
+                if total
+                else 0.0,
                 "total_llm_tokens": agg["total_llm_tokens"],
                 "top_failure_kind": (
-                    agg["failure_kinds"].most_common(1)[0][0] if agg["failure_kinds"] else ""
+                    agg["failure_kinds"].most_common(1)[0][0]
+                    if agg["failure_kinds"]
+                    else ""
                 ),
                 "last_run_at": agg["last_run_at"],
             }

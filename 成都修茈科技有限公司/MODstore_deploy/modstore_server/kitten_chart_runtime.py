@@ -50,7 +50,10 @@ def is_kitten_chart_viz(brief: str) -> bool:
         return True
     if "chart-" in bl and "employee" in bl:
         return True
-    return any(k in bl for k in ("可视化员", "kitten chart", "kitten_chart", "小猫分析", "echarts"))
+    return any(
+        k in bl
+        for k in ("可视化员", "kitten chart", "kitten_chart", "小猫分析", "echarts")
+    )
 
 
 def build_kitten_chart_rule_spec(brief: str) -> Dict[str, Any]:
@@ -102,7 +105,9 @@ def _load_dataset(src_path: Path) -> Tuple[List[str], List[Dict[str, Any]]]:
         return columns, rows
     if isinstance(data.get("dataset"), dict):
         nested = data["dataset"]
-        columns = [str(c) for c in (nested.get("columns") or nested.get("fieldNames") or [])]
+        columns = [
+            str(c) for c in (nested.get("columns") or nested.get("fieldNames") or [])
+        ]
         rows = [r for r in (nested.get("rows") or []) if isinstance(r, dict)]
         return columns, rows
     raise ValueError("未识别 kitten 数据集结构（需 columns/rows 或 dataset）")
@@ -125,7 +130,9 @@ def _pick_fields(columns: List[str], rows: List[Dict[str, Any]]) -> Tuple[str, s
                     numeric_scores[col] += 1
                 except ValueError:
                     pass
-    y_field = max(numeric_scores, key=lambda k: numeric_scores[k]) if numeric_scores else ""
+    y_field = (
+        max(numeric_scores, key=lambda k: numeric_scores[k]) if numeric_scores else ""
+    )
     if numeric_scores.get(y_field, 0) == 0:
         y_field = ""
     x_field = next((c for c in columns if c != y_field), columns[0])
@@ -154,7 +161,9 @@ def _aggregate_rows(
         else:
             bucket.setdefault(label, []).append(1.0)
     labels = list(bucket.keys())[:24]
-    values = [sum(bucket[lbl]) / len(bucket[lbl]) if bucket[lbl] else 0 for lbl in labels]
+    values = [
+        sum(bucket[lbl]) / len(bucket[lbl]) if bucket[lbl] else 0 for lbl in labels
+    ]
     return labels, values
 
 
@@ -181,7 +190,9 @@ def build_chart_spec(
                 {
                     "type": "pie",
                     "radius": ["36%", "68%"],
-                    "data": [{"name": lbl, "value": v} for lbl, v in zip(labels, values)],
+                    "data": [
+                        {"name": lbl, "value": v} for lbl, v in zip(labels, values)
+                    ],
                 }
             ],
         }
@@ -289,7 +300,8 @@ async def convert_file(
     del template_path, payload
     columns, rows = _load_dataset(src_path)
     chart_type = str(
-        rule_spec.get("chart_type") or resolve_kitten_chart_type(rule_spec.get("brief") or "")
+        rule_spec.get("chart_type")
+        or resolve_kitten_chart_type(rule_spec.get("brief") or "")
     )
     pack_id = str(rule_spec.get("pack_id") or "")
     title_map = {
@@ -304,7 +316,9 @@ async def convert_file(
     out_dir.mkdir(parents=True, exist_ok=True)
     spec_path = out_dir / "chart_spec.json"
     html_path = out_dir / "chart.html"
-    spec_path.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+    spec_path.write_text(
+        json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     html_path.write_text(render_chart_html(spec, title=title), encoding="utf-8")
     return {
         "output_path": str(spec_path),

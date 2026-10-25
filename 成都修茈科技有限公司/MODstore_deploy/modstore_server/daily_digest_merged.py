@@ -21,7 +21,9 @@ def _facade():
 
 def digest_calendar_day() -> str:
     """日更 ``day`` 字段与邮件标题：默认 Asia/Shanghai 日历日（与正文 CST 行一致）。"""
-    tz_name = (_facade().os.environ.get("MODSTORE_DAILY_DIGEST_TZ") or "Asia/Shanghai").strip()
+    tz_name = (
+        _facade().os.environ.get("MODSTORE_DAILY_DIGEST_TZ") or "Asia/Shanghai"
+    ).strip()
     try:
         from zoneinfo import ZoneInfo
 
@@ -77,7 +79,9 @@ def _notify_daily_digest_in_app(subject: str, digest_delivered: bool) -> None:
     """摘要投递成功后，向配置的 ``MODSTORE_DAILY_DIGEST_NOTIFY_USER_IDS`` 发站内通知。"""
     if not digest_delivered:
         return
-    raw = (_facade().os.environ.get("MODSTORE_DAILY_DIGEST_NOTIFY_USER_IDS") or "").strip()
+    raw = (
+        _facade().os.environ.get("MODSTORE_DAILY_DIGEST_NOTIFY_USER_IDS") or ""
+    ).strip()
     if not raw:
         return
     ids: _facade().List[int] = []
@@ -88,7 +92,10 @@ def _notify_daily_digest_in_app(subject: str, digest_delivered: bool) -> None:
     if not ids:
         return
     try:
-        from modstore_server.notification_service import NotificationType, create_notification
+        from modstore_server.notification_service import (
+            NotificationType,
+            create_notification,
+        )
 
         body = f"MODstore 每日摘要邮件已投递：{subject}。也可在邮箱中查看全文。"
         for uid in ids:
@@ -256,7 +263,9 @@ def _persist_daily_digest_record(
                 body_html=body_html,
                 body_text=_facade()._html_to_text_excerpt(body_html),
                 meeting_minutes_html=meeting_minutes_html,
-                recipients_json=_facade().json.dumps(list(recipients), ensure_ascii=False),
+                recipients_json=_facade().json.dumps(
+                    list(recipients), ensure_ascii=False
+                ),
                 delivery_json=_facade().json.dumps(
                     list(delivery_rows), ensure_ascii=False, default=str
                 ),
@@ -285,7 +294,9 @@ def _run_scheduled_digest_vibe_prep(
 ) -> None:
     """08:00 摘要 cron 落库后：自动汇总全员并写入更新/补丁 Markdown。"""
     enabled = (
-        (_facade().os.environ.get("MODSTORE_DAILY_VIBE_PREP_ENABLED", "1") or "").strip().lower()
+        (_facade().os.environ.get("MODSTORE_DAILY_VIBE_PREP_ENABLED", "1") or "")
+        .strip()
+        .lower()
     )
     if enabled in ("0", "false", "no", "off"):
         _facade().logger.info(
@@ -296,7 +307,11 @@ def _run_scheduled_digest_vibe_prep(
         max_emp = max(
             1,
             min(
-                int(_facade().os.environ.get("MODSTORE_DAILY_VIBE_PREP_MAX_EMPLOYEES", "52")),
+                int(
+                    _facade().os.environ.get(
+                        "MODSTORE_DAILY_VIBE_PREP_MAX_EMPLOYEES", "52"
+                    )
+                ),
                 128,
             ),
         )
@@ -332,10 +347,14 @@ def _run_scheduled_digest_vibe_prep(
 
             rt_after = ""
             try:
-                from modstore_server.release_train import release_train_context_for_digest
+                from modstore_server.release_train import (
+                    release_train_context_for_digest,
+                )
 
                 rt_after = str(
-                    (release_train_context_for_digest(record_id) or {}).get("release_train_after")
+                    (release_train_context_for_digest(record_id) or {}).get(
+                        "release_train_after"
+                    )
                     or ""
                 )
             except RECOVERABLE_ERRORS:
@@ -362,7 +381,9 @@ def _run_scheduled_digest_vibe_prep(
                     "collab report (action items) failed record_id=%s", record_id
                 )
             try:
-                from modstore_server.public_action_board import write_public_action_board
+                from modstore_server.public_action_board import (
+                    write_public_action_board,
+                )
 
                 pub = write_public_action_board(day=day)
                 _facade().logger.info(
@@ -379,7 +400,9 @@ def _run_scheduled_digest_vibe_prep(
                 "daily digest: action items store failed record_id=%s", record_id
             )
     if result.get("ok"):
-        from modstore_server.digest_vibe_line_dispatch import dispatch_vibe_prep_to_production_lines
+        from modstore_server.digest_vibe_line_dispatch import (
+            dispatch_vibe_prep_to_production_lines,
+        )
 
         dispatch = dispatch_vibe_prep_to_production_lines(record_id, result)
         if dispatch.get("ok"):
@@ -417,7 +440,9 @@ def _repo_root() -> _facade().Path:
     if env:
         return _facade().Path(env).resolve()
     try:
-        from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
+        from modstore_server.integrations.ops_action_handlers import (
+            repo_root as _ops_rr,
+        )
 
         return _facade().Path(_ops_rr())
     except RECOVERABLE_ERRORS:
@@ -432,11 +457,17 @@ def _repo_root() -> _facade().Path:
 
 def _consistency_check_html(repo_root: _facade().Path) -> str:
     """运行 ``run_full_consistency_check`` 并返回邮件 HTML 段落；失败或非致命异常时不阻断摘要。"""
-    raw = (_facade().os.environ.get("MODSTORE_DAILY_DIGEST_CONSISTENCY") or "1").strip().lower()
+    raw = (
+        (_facade().os.environ.get("MODSTORE_DAILY_DIGEST_CONSISTENCY") or "1")
+        .strip()
+        .lower()
+    )
     if raw in ("0", "false", "no", "off"):
         return ""
     try:
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         result = run_full_consistency_check(repo_root)
     except RECOVERABLE_ERRORS as exc:
@@ -465,7 +496,9 @@ def _consistency_check_html(repo_root: _facade().Path) -> str:
     ok_bg = "#f0fdf4" if total_errors == 0 else "#fffbeb"
     ok_border = "#bbf7d0" if total_errors == 0 else "#fde68a"
     ok_title = (
-        "文档一致性（yuangon）" if total_errors == 0 else "文档一致性（yuangon · 存在 error）"
+        "文档一致性（yuangon）"
+        if total_errors == 0
+        else "文档一致性（yuangon · 存在 error）"
     )
     summary = f'<p style="margin:0 0 8px;font-size:12px;color:#475569">状态 <code>{_facade().html.escape(status)}</code> · error 级 {total_errors} · 共 {total_issues} 条</p>'
     table = ""
@@ -523,7 +556,11 @@ def _git_worktree_root(root: _facade().Path, timeout: float = 5.0) -> bool:
 def _digest_commit_display(raw: str) -> str:
     """环境变量/构建元数据常为全 SHA，摘要里缩短展示。"""
     s = (raw or "").strip()
-    if len(s) >= 12 and len(s) <= 64 and all((c in "0123456789abcdefABCDEF" for c in s)):
+    if (
+        len(s) >= 12
+        and len(s) <= 64
+        and all((c in "0123456789abcdefABCDEF" for c in s))
+    ):
         return s[:7]
     if len(s) > 20:
         return s[:20] + "…"
@@ -605,7 +642,9 @@ def _cursor_error_lines_count(root: _facade().Path) -> int:
     try:
         for f in sorted(root.glob(".cursor_*_log.txt")):
             try:
-                for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+                for line in f.read_text(
+                    encoding="utf-8", errors="replace"
+                ).splitlines():
                     low = line.lower()
                     if any((x in low for x in ("error", "fail", "exception"))):
                         n += 1
@@ -621,7 +660,9 @@ def _audit_digest_hint_html() -> str:
     raw = _facade().os.environ.get("MODSTORE_DIGEST_AUDIT_HINT", "").strip().lower()
     if raw not in ("1", "true", "yes"):
         return ""
-    db_path = (_facade().os.environ.get("MODSTORE_DB_PATH") or "").strip() or "（默认 SQLite 路径）"
+    db_path = (
+        _facade().os.environ.get("MODSTORE_DB_PATH") or ""
+    ).strip() or "（默认 SQLite 路径）"
     sch_running = False
     try:
         from modstore_server.workflow_scheduler import _scheduler as _sch
@@ -630,7 +671,8 @@ def _audit_digest_hint_html() -> str:
     except RECOVERABLE_ERRORS:
         pass
     nginx_p = (
-        _facade().os.environ.get("OPS_NGINX_ERROR_LOG", "").strip() or "/var/log/nginx/error.log"
+        _facade().os.environ.get("OPS_NGINX_ERROR_LOG", "").strip()
+        or "/var/log/nginx/error.log"
     )
     return f"""<div style="margin-top:12px;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc"><p style="margin:0 0 8px;font-size:13px;color:#334155"><strong>计数说明（调试）</strong>：近 24h「运维审计」仅在执行过运维 shell 指令并写入审计表后增加；「事件入库」依赖 APScheduler 定时采集器命中 pytest/nginx/cursor 规则。</p><ul style="margin:0;padding-left:18px;font-size:12px;color:#64748b;line-height:1.5"><li>MODSTORE_DB_PATH：<code>{_facade().html.escape(db_path)}</code></li><li>APScheduler 运行中：{("是" if sch_running else "否")}（未启动则采集任务不跑）</li><li>OPS_NGINX_ERROR_LOG：<code>{_facade().html.escape(nginx_p)}</code>（文件不存在则跳过 nginx 采集）</li></ul></div>"""
 
@@ -671,7 +713,9 @@ def _publish_tls_cert_security_alerts(
                 fingerprint=fp,
             )
         except RECOVERABLE_ERRORS:
-            _facade().logger.exception("tls cert: incident publish failed path=%s", path[:160])
+            _facade().logger.exception(
+                "tls cert: incident publish failed path=%s", path[:160]
+            )
 
 
 def _tls_cert_digest_html(results: _facade().Sequence[_facade().Any]) -> str:
@@ -704,14 +748,17 @@ def _tls_cert_digest_html(results: _facade().Sequence[_facade().Any]) -> str:
     )
     return (
         '<div style="padding:6px 24px 12px">'
-        + _facade()._section_title("TLS 证书到期巡检", icon="&#x1F510;", accent="#d97706")
+        + _facade()._section_title(
+            "TLS 证书到期巡检", icon="&#x1F510;", accent="#d97706"
+        )
         + f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;font-size:13px;color:#92400e"><p style="margin:0 0 8px">以下证书已达到 INFO/WARNING/CRITICAL 阈值（见 CERT_EXPIRY_*）。WARNING/CRITICAL 已写入安全事件 <code>security.alert</code>。</p>{table}</div></div>'
     )
 
 
 def _nginx_tail_hint() -> str:
     log_path = (
-        _facade().os.environ.get("OPS_NGINX_ERROR_LOG", "").strip() or "/var/log/nginx/error.log"
+        _facade().os.environ.get("OPS_NGINX_ERROR_LOG", "").strip()
+        or "/var/log/nginx/error.log"
     )
     p = _facade().Path(log_path)
     if not p.is_file():
@@ -721,9 +768,7 @@ def _nginx_tail_hint() -> str:
         tail = "".join(text.splitlines(True)[-40:])
         low = tail.lower()
         flag = "含 error 关键字" if "error" in low else "未见明显 error 尾部"
-        return (
-            f"{_facade().html.escape(flag)}（末尾约 40 行，路径 {_facade().html.escape(log_path)}）"
-        )
+        return f"{_facade().html.escape(flag)}（末尾约 40 行，路径 {_facade().html.escape(log_path)}）"
     except OSError as e:
         return _facade().html.escape(str(e))
 
@@ -746,7 +791,9 @@ def _run_pytest_summary(repo: _facade().Path) -> str:
             cwd=str(deploy),
             capture_output=True,
             text=True,
-            timeout=int(_facade().os.environ.get("MODSTORE_DAILY_DIGEST_PYTEST_TIMEOUT", "900")),
+            timeout=int(
+                _facade().os.environ.get("MODSTORE_DAILY_DIGEST_PYTEST_TIMEOUT", "900")
+            ),
             shell=False,
             env={**_facade().os.environ, "PYTHONWARNINGS": "ignore"},
         )
@@ -786,7 +833,9 @@ def _digest_product_work_summary_html(
         else ""
     )
     remaining = max(0, pending_ticket_count - len(pending_tickets))
-    tickets_extra = f"<li>另有 {remaining} 张，请在客服工单查看</li>" if remaining else ""
+    tickets_extra = (
+        f"<li>另有 {remaining} 张，请在客服工单查看</li>" if remaining else ""
+    )
     return f"""\n<div style="padding:14px 24px 8px" data-digest="business-update-log">\n  {_facade()._section_title("今天做了什么 · 还要处理什么", icon="&#x1F4CA;", accent="#2563eb")}\n  <div style="background:#f8fafc;border-radius:12px;padding:12px 18px;border:1px solid #e6eaf0">\n    <p style="margin:0 0 10px;font-size:13px;color:#334155;line-height:1.55">这是一份<strong>业务更新日志</strong>：先看今天完成的产品与客户进展，再看还要继续处理的工单和决策。</p>\n    <strong>今天做了什么 · 产品更新</strong><ul>{_items(product_updates, "近 24 小时没有新的产品提交")}</ul>\n    <strong>今天做了什么 · 工单结果</strong><ul>{_items(ticket_outcomes, "没有状态变化记录")}</ul>\n    <strong>还要处理什么 · 待办工单（{pending_ticket_count} 张）</strong><ul>{_items(pending_tickets, "当前没有待处理工单")}{tickets_extra}</ul>\n    <strong>还要处理什么 · 待决策（{pending_decision_count} 项）</strong><ul>{pending}{extra}</ul>\n  </div>\n</div>\n"""
 
 
@@ -962,7 +1011,9 @@ def _meeting_minutes_md_to_html(text: str) -> str:
             )
             continue
         if stripped.startswith(("- ", "* ", "・", "• ")):
-            item = stripped[1:].lstrip() if stripped[0] in "-*" else stripped[1:].lstrip()
+            item = (
+                stripped[1:].lstrip() if stripped[0] in "-*" else stripped[1:].lstrip()
+            )
             if not in_ul:
                 out.append(
                     '<ul style="margin:4px 0 6px 4px;padding-left:20px;font-size:13px;color:#334155;line-height:1.6">'
@@ -1029,7 +1080,9 @@ def _surface_audit_meeting_minutes_html(
     report = surface_audit_report if isinstance(surface_audit_report, dict) else {}
     results = report.get("results") if isinstance(report.get("results"), list) else []
     lane_analysis = (
-        report.get("lane_analysis") if isinstance(report.get("lane_analysis"), dict) else {}
+        report.get("lane_analysis")
+        if isinstance(report.get("lane_analysis"), dict)
+        else {}
     )
     lanes = [("P-W", "网站 P-W"), ("P-S", "软件 P-S"), ("P-App", "移动 P-App")]
 
@@ -1048,7 +1101,9 @@ def _surface_audit_meeting_minutes_html(
     )
     owners_seen: _facade().List[str] = []
     for lane, _label in lanes:
-        la = lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        la = (
+            lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        )
         for owner in la.get("owners") or []:
             if str(owner).strip() and str(owner).strip() not in owners_seen:
                 owners_seen.append(str(owner).strip())
@@ -1058,7 +1113,9 @@ def _surface_audit_meeting_minutes_html(
     try:
         attendance_count = _facade().count_on_duty_employees()
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("daily digest: count on-duty meeting attendance failed")
+        _facade().logger.exception(
+            "daily digest: count on-duty meeting attendance failed"
+        )
         attendance_count = len(owners_seen)
     if attendance_count <= 0:
         attendance_count = len(owners_seen)
@@ -1068,10 +1125,14 @@ def _surface_audit_meeting_minutes_html(
         '<p style="margin:0 0 10px;font-size:13px;color:#0f172a">本次员工大会基于三端页面巡检 manifest、截图与产线分析自动归档；不再在 08:00 邮件链路中实时等待员工 cognition 外部模型调用。</p>'
     ]
     for lane, label in lanes:
-        rows = [r for r in results if isinstance(r, dict) and str(r.get("lane")) == lane]
+        rows = [
+            r for r in results if isinstance(r, dict) and str(r.get("lane")) == lane
+        ]
         if not rows:
             continue
-        la = lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        la = (
+            lane_analysis.get(lane) if isinstance(lane_analysis.get(lane), dict) else {}
+        )
         owners = [str(x) for x in la.get("owners") or [] if str(x).strip()]
         if not owners:
             try:
@@ -1117,7 +1178,9 @@ def build_meeting_minutes_html_sync(
     - ``MODSTORE_DAILY_MEETING_USER_ID``（默认 ``MODSTORE_DAILY_BRIEF_USER_ID`` 或 ``0``）。
     """
     enabled = (
-        (_facade().os.environ.get("MODSTORE_DAILY_MEETING_ENABLED", "1") or "").strip().lower()
+        (_facade().os.environ.get("MODSTORE_DAILY_MEETING_ENABLED", "1") or "")
+        .strip()
+        .lower()
     )
     if enabled in ("0", "false", "no", "off"):
         return ""
@@ -1125,7 +1188,11 @@ def build_meeting_minutes_html_sync(
         max_emp = max(
             1,
             min(
-                int(_facade().os.environ.get("MODSTORE_DAILY_MEETING_MAX_EMPLOYEES", "6")),
+                int(
+                    _facade().os.environ.get(
+                        "MODSTORE_DAILY_MEETING_MAX_EMPLOYEES", "6"
+                    )
+                ),
                 32,
             ),
         )
@@ -1134,7 +1201,11 @@ def build_meeting_minutes_html_sync(
     try:
         timeout_s = max(
             60,
-            int(_facade().os.environ.get("MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS", "240")),
+            int(
+                _facade().os.environ.get(
+                    "MODSTORE_DAILY_MEETING_TIMEOUT_SECONDS", "240"
+                )
+            ),
         )
     except ValueError:
         timeout_s = 240
@@ -1151,9 +1222,12 @@ def build_meeting_minutes_html_sync(
     def _err_card(msg: str) -> str:
         return f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px"><p style="margin:0;font-size:13px;color:#92400e">员工大会未生成摘要：{_facade().html.escape(msg)}</p></div>'
 
-    topic_question, topic_emp_ids = _facade()._surface_meeting_topic(surface_audit_report)
+    topic_question, topic_emp_ids = _facade()._surface_meeting_topic(
+        surface_audit_report
+    )
     use_employee_executor = (
-        _facade().os.environ.get("MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR", "0") or ""
+        _facade().os.environ.get("MODSTORE_DAILY_MEETING_USE_EMPLOYEE_EXECUTOR", "0")
+        or ""
     ).strip().lower() in ("1", "true", "yes", "on")
     if surface_audit_report and (not use_employee_executor):
         return _facade()._surface_audit_meeting_minutes_html(
@@ -1249,7 +1323,9 @@ def _build_meeting_minutes_html_bounded(
 ) -> str:
     timeout_sec = _facade()._daily_meeting_outer_timeout_sec()
     if timeout_sec <= 0:
-        return _facade().build_meeting_minutes_html_sync(surface_audit_report=surface_audit_report)
+        return _facade().build_meeting_minutes_html_sync(
+            surface_audit_report=surface_audit_report
+        )
     from concurrent.futures import ThreadPoolExecutor
     from concurrent.futures import TimeoutError as FuturesTimeoutError
 
@@ -1261,7 +1337,9 @@ def _build_meeting_minutes_html_bounded(
     try:
         return future.result(timeout=timeout_sec)
     except FuturesTimeoutError:
-        _facade().logger.error("daily digest: meeting minutes timed out after %ss", timeout_sec)
+        _facade().logger.error(
+            "daily digest: meeting minutes timed out after %ss", timeout_sec
+        )
         future.cancel()
         return _facade()._daily_meeting_error_card(
             f"生成超时（>{timeout_sec}s）；三端巡检结果已正常写入日报，可稍后单独补跑员工大会。"
@@ -1319,7 +1397,9 @@ def build_digest_html(
             .all()
         )
         event_n, inc_n = summarize_digest_events(event_rows)
-        production_metric_filter = ~_digest.EmployeeExecutionMetric.task.like("[duty-burn-in:%")
+        production_metric_filter = ~_digest.EmployeeExecutionMetric.task.like(
+            "[duty-burn-in:%"
+        )
         met_ok = (
             session.query(_digest.func.count(_digest.EmployeeExecutionMetric.id))
             .filter(
@@ -1368,7 +1448,9 @@ def build_digest_html(
         pending_decisions = [
             f"{title}（{scope or '全局'}）"
             for title, scope in (
-                session.query(_digest.StrategicDecision.title, _digest.StrategicDecision.scope)
+                session.query(
+                    _digest.StrategicDecision.title, _digest.StrategicDecision.scope
+                )
                 .filter(_digest.StrategicDecision.status == "proposed")
                 .order_by(_digest.StrategicDecision.created_at.desc())
                 .limit(5)
@@ -1431,9 +1513,7 @@ def build_digest_html(
 
         cn_now = now_utc.astimezone(ZoneInfo("Asia/Shanghai"))
         weekday_cn = _weekdays[cn_now.weekday()]
-        cn_display = (
-            f"{cn_now.strftime('%Y-%m-%d')} · {weekday_cn} · {cn_now.strftime('%H:%M')} CST"
-        )
+        cn_display = f"{cn_now.strftime('%Y-%m-%d')} · {weekday_cn} · {cn_now.strftime('%H:%M')} CST"
     except RECOVERABLE_ERRORS:
         cn_display = now_utc.strftime("%Y-%m-%d %H:%M UTC")
     hero_html = _digest._hero_overview_html(
@@ -1450,11 +1530,15 @@ def build_digest_html(
         imap_block = f'\n<div style="padding:14px 16px 0">\n  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:12px 15px;font-size:12px;color:#b91c1c">\n    <strong style="font-weight:700">&#x1F4EE; 邮箱告警</strong>&nbsp;&nbsp;{imap_alert_html}\n  </div>\n</div>\n'
     audit_block = ""
     if audit_hint_html:
-        audit_block = f'\n<div style="padding:10px 16px 0">\n  {audit_hint_html}\n</div>\n'
+        audit_block = (
+            f'\n<div style="padding:10px 16px 0">\n  {audit_hint_html}\n</div>\n'
+        )
     autonomy_html = _digest.autonomy_decisions_digest_html()
     autonomy_block = ""
     if autonomy_html:
-        autonomy_block = f'\n<div style="padding:10px 16px 0">\n  {autonomy_html}\n</div>\n'
+        autonomy_block = (
+            f'\n<div style="padding:10px 16px 0">\n  {autonomy_html}\n</div>\n'
+        )
     meeting_block = ""
     if (meeting_minutes_html or "").strip():
         meeting_block = f"""\n<div style="padding:6px 24px 16px">\n  {_digest._section_title("员工大会摘要", icon="&#x1F465;", accent="#0891b2")}\n  {meeting_minutes_html}\n</div>\n"""
@@ -1503,7 +1587,9 @@ def build_digest_approval_bundle(
                 expires_at=expires_at,
             )
         )
-        summ = _facade().html.escape(str(getattr(s, "diff_summary") or "")[:240].replace("\n", " "))
+        summ = _facade().html.escape(
+            str(getattr(s, "diff_summary") or "")[:240].replace("\n", " ")
+        )
         branch_esc = _facade().html.escape(str(getattr(s, "branch") or ""))
         fc = int(getattr(s, "files_changed_count") or 0)
         cards.append(
@@ -1513,7 +1599,9 @@ def build_digest_approval_bundle(
         _facade().OpsApprovalToken(
             token_hash=identity_hash,
             kind="digest_identity",
-            payload_json=_facade().json.dumps({"scope": "daily_digest"}, ensure_ascii=False),
+            payload_json=_facade().json.dumps(
+                {"scope": "daily_digest"}, ensure_ascii=False
+            ),
             authorized_email=auth_email,
             expires_at=expires_at,
         )
@@ -1563,7 +1651,9 @@ def _build_surface_audit_bundle() -> _facade().Dict[str, _facade().Any]:
             message="巡检模块加载失败（见服务器日志）",
         )
 
-    def _ok_bundle(html: str, report: _facade().Any) -> _facade().Dict[str, _facade().Any]:
+    def _ok_bundle(
+        html: str, report: _facade().Any
+    ) -> _facade().Dict[str, _facade().Any]:
         safe_report = report or {}
         try:
             excerpt = surface_audit_excerpt_markdown(safe_report)
@@ -1592,13 +1682,17 @@ def _build_surface_audit_bundle() -> _facade().Dict[str, _facade().Any]:
     from concurrent.futures import ThreadPoolExecutor
     from concurrent.futures import TimeoutError as FuturesTimeoutError
 
-    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="digest-surface-audit")
+    executor = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="digest-surface-audit"
+    )
     future = executor.submit(build_surface_audit_html_sync)
     try:
         html, report = future.result(timeout=timeout_sec)
         return _ok_bundle(html, report)
     except FuturesTimeoutError:
-        _facade().logger.error("daily digest: surface audit timed out after %ss", timeout_sec)
+        _facade().logger.error(
+            "daily digest: surface audit timed out after %ss", timeout_sec
+        )
         future.cancel()
         return _facade()._surface_audit_failed_bundle(
             error_code="surface_audit_timeout",
@@ -1668,7 +1762,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         return {"ok": False, "delivered": False, "reason": "no_valid_recipient_emails"}
     try:
         try:
-            from modstore_server.inbox_poller import poll_fail_streak as _poll_fail_streak
+            from modstore_server.inbox_poller import (
+                poll_fail_streak as _poll_fail_streak,
+            )
 
             _streak = _poll_fail_streak()
         except RECOVERABLE_ERRORS:
@@ -1678,13 +1774,17 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             imap_alert_html = '<p style="color:#b91c1c;font-size:14px"><strong>IMAP 收件轮询已连续失败 ≥3 次，请检查 MODSTORE_IMAP_HOST / MODSTORE_IMAP_USER / 密码（或 SMTP 同源凭证）。</strong></p>'
         auth_email = (
             _facade()
-            .os.environ.get("MODSTORE_APPROVAL_AUTHORIZED_FROM", _facade().DEFAULT_DIGEST_EMAIL)
+            .os.environ.get(
+                "MODSTORE_APPROVAL_AUTHORIZED_FROM", _facade().DEFAULT_DIGEST_EMAIL
+            )
             .strip()
         )
-        ttl_hours = int(_facade().os.environ.get("MODSTORE_APPROVAL_TOKEN_TTL_HOURS", "36"))
-        expires_at = _facade().datetime.now(_facade().timezone.utc) + _facade().timedelta(
-            hours=ttl_hours
+        ttl_hours = int(
+            _facade().os.environ.get("MODSTORE_APPROVAL_TOKEN_TTL_HOURS", "36")
         )
+        expires_at = _facade().datetime.now(
+            _facade().timezone.utc
+        ) + _facade().timedelta(hours=ttl_hours)
         sf = _facade().get_session_factory()
         _prune_zombie_pending_staged_changes()
         with sf() as session:
@@ -1707,13 +1807,17 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 existing_token_hashes=existing_token_hashes,
             )
         employee_briefs_html = ""
-        if _facade().os.environ.get("MODSTORE_DAILY_BRIEF_ENABLED", "0").strip().lower() in (
+        if _facade().os.environ.get(
+            "MODSTORE_DAILY_BRIEF_ENABLED", "0"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",
         ):
             try:
-                from modstore_server.daily_employee_briefs import build_daily_brief_html_sync
+                from modstore_server.daily_employee_briefs import (
+                    build_daily_brief_html_sync,
+                )
 
                 employee_briefs_html = build_daily_brief_html_sync()
             except RECOVERABLE_ERRORS:
@@ -1736,7 +1840,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         surface_ppt_meta: _facade().Dict[str, _facade().Any] = {}
         if surface_audit_bundle.get("ok"):
             try:
-                from modstore_server.daily_digest_surface_ppt import build_surface_audit_pptx
+                from modstore_server.daily_digest_surface_ppt import (
+                    build_surface_audit_pptx,
+                )
 
                 surface_ppt_meta = build_surface_audit_pptx(surface_audit_report)
                 if surface_ppt_meta.get("ok") and (not surface_ppt_meta.get("skipped")):
@@ -1816,7 +1922,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         )
         if record_id and meeting_minutes_html:
             try:
-                from modstore_server.employee_collab_reporter import report_meeting_minutes
+                from modstore_server.employee_collab_reporter import (
+                    report_meeting_minutes,
+                )
 
                 report_meeting_minutes(
                     record_id=int(record_id), day=day, minutes_html=meeting_minutes_html
@@ -1854,12 +1962,18 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                 for nid in ("ASM", "P", "M", "PPTX", "SW", "SS", "SA", "V"):
                     record_node_run(nid, ok=digest_ok, source="daily_digest", meta=meta)
             except RECOVERABLE_ERRORS:
-                _facade().logger.exception("daily digest: time_rail runtime record failed")
+                _facade().logger.exception(
+                    "daily digest: time_rail runtime record failed"
+                )
         identity_tokens = [
-            t for t in token_batch or [] if getattr(t, "kind", None) == "digest_identity"
+            t
+            for t in token_batch or []
+            if getattr(t, "kind", None) == "digest_identity"
         ]
         deploy_tokens = [
-            t for t in token_batch or [] if getattr(t, "kind", None) != "digest_identity"
+            t
+            for t in token_batch or []
+            if getattr(t, "kind", None) != "digest_identity"
         ]
         if identity_tokens:
             with sf() as session:
@@ -1894,14 +2008,18 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         try:
             from modstore_server.time_rail_runtime import record_node_run
 
-            record_node_run("ASM", ok=False, source="daily_digest", meta={"error": "job_failed"})
+            record_node_run(
+                "ASM", ok=False, source="daily_digest", meta={"error": "job_failed"}
+            )
         except RECOVERABLE_ERRORS:
             _facade().logger.exception("daily digest: time_rail failure record failed")
         return {"ok": False, "delivered": False, "reason": "job_failed"}
     finally:
         if stop_ephemeral_after:
             try:
-                from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
+                from modstore_server.surface_audit_deps import (
+                    stop_surface_audit_ephemeral,
+                )
 
                 stopped = stop_surface_audit_ephemeral()
                 _facade().logger.info(
@@ -1909,7 +2027,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
                     stopped.get("stopped"),
                 )
             except RECOVERABLE_ERRORS:
-                _facade().logger.exception("daily digest: stop surface audit ephemeral failed")
+                _facade().logger.exception(
+                    "daily digest: stop surface audit ephemeral failed"
+                )
 
 
 def _prune_zombie_pending_staged_changes() -> int:
@@ -1934,7 +2054,13 @@ def _prune_zombie_pending_staged_changes() -> int:
                     continue
                 try:
                     proc = subprocess.run(
-                        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+                        [
+                            "git",
+                            "rev-parse",
+                            "--verify",
+                            "--quiet",
+                            f"refs/heads/{branch}",
+                        ],
                         cwd=root,
                         capture_output=True,
                         text=True,
@@ -1955,7 +2081,9 @@ def _prune_zombie_pending_staged_changes() -> int:
                 closed,
             )
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("daily digest: prune zombie pending staged changes failed")
+        _facade().logger.exception(
+            "daily digest: prune zombie pending staged changes failed"
+        )
     return closed
 
 
@@ -1964,7 +2092,11 @@ def cron_trigger_for_digest():
     try:
         from zoneinfo import ZoneInfo
 
-        tz_name = _facade().os.environ.get("MODSTORE_DAILY_DIGEST_TZ", "Asia/Shanghai").strip()
+        tz_name = (
+            _facade()
+            .os.environ.get("MODSTORE_DAILY_DIGEST_TZ", "Asia/Shanghai")
+            .strip()
+        )
         tz = ZoneInfo(tz_name)
     except RECOVERABLE_ERRORS:
         tz = None

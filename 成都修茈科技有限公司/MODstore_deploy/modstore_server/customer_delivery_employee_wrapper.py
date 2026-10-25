@@ -65,7 +65,11 @@ def wrap_private_employee(source: Path, destination: Path) -> Path:
     employee_id = str((original.get("employee") or {}).get("id") or "")
     probe = original.get("delivery_verification") or {}
     entry = str((original.get("backend") or {}).get("entry") or "")
-    if not employee_id or probe.get("handler") != "verify_delivery" or not probe.get("case_id"):
+    if (
+        not employee_id
+        or probe.get("handler") != "verify_delivery"
+        or not probe.get("case_id")
+    ):
         raise ValueError("原员工缺少身份或真实业务探针，须在原工单补齐能力")
     if not re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", entry):
         raise ValueError("原员工业务探针入口无效")
@@ -75,17 +79,23 @@ def wrap_private_employee(source: Path, destination: Path) -> Path:
         probe_stem += "/__init__"
         probe_path = source / "backend" / (probe_stem + ".py")
     if not probe_path.is_file() or not _exports(probe_path, "verify_delivery"):
-        raise ValueError("原员工未实现实际业务 verify_delivery，不能以注册或健康状态交付")
+        raise ValueError(
+            "原员工未实现实际业务 verify_delivery，不能以注册或健康状态交付"
+        )
     actions = (original.get("employee_config_v2") or {}).get("actions") or {}
     requested = str((actions.get("direct_python") or {}).get("module") or "")
     workers = [
-        path for path in (source / "backend/employees").glob("*.py") if _exports(path, "run")
+        path
+        for path in (source / "backend/employees").glob("*.py")
+        if _exports(path, "run")
     ]
     worker = next((path for path in workers if path.stem == requested), None)
     if worker is None and len(workers) == 1:
         worker = workers[0]
     if worker is None:
-        raise ValueError("原员工须提供唯一明确的 run(payload, ctx) 入口，不能依赖全局 registry")
+        raise ValueError(
+            "原员工须提供唯一明确的 run(payload, ctx) 入口，不能依赖全局 registry"
+        )
     shutil.copytree(source, destination)
     manifest = dict(original)
     mid = str(manifest["id"])
@@ -110,7 +120,10 @@ def wrap_private_employee(source: Path, destination: Path) -> Path:
                 "source": "frontend/src/delivery-employee.js",
                 "entry": "frontend/runtime/delivery-employee.js",
                 "routes": [
-                    {"path": f"/mod/{mid}/employee", "title": original.get("name", employee_id)}
+                    {
+                        "path": f"/mod/{mid}/employee",
+                        "title": original.get("name", employee_id),
+                    }
                 ],
             }
         },
@@ -127,7 +140,9 @@ def wrap_private_employee(source: Path, destination: Path) -> Path:
     (destination / "source-employee-manifest.json").write_text(
         json.dumps(original, ensure_ascii=False, indent=2)
     )
-    (destination / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+    (destination / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2)
+    )
     (destination / "backend/delivery_employee.py").write_text(
         "from app.mod_sdk.private_employee_runtime import register_private_employee_routes, verify_employee_delivery\n"
         f"MOD_ID = {mid!r}\n"

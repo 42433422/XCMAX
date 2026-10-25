@@ -718,7 +718,9 @@ def test_chat_unified_propagates_explicit_http_status(
 
 
 def test_chat_unified_batch_empty_returns_400(ai_intent_client: TestClient) -> None:
-    with patch("app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]):
+    with patch(
+        "app.domain.app_pure.ai_chat_helpers.normalize_batch_messages_payload", return_value=[]
+    ):
         r = ai_intent_client.post("/api/ai/chat-unified/batch", json={"messages": []})
     assert r.status_code == 400
     assert r.json()["success"] is False

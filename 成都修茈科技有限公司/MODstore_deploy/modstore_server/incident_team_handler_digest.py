@@ -88,7 +88,10 @@ def _row_digest(row: Any) -> Dict[str, Any]:
             out[key] = [_scalar(value) for value in row[key][:50]]
     if isinstance(row.get("dispatch_failures"), list):
         out["dispatch_failures"] = [
-            {key: _scalar(item.get(key)) for key in ("device_id", "error", "status_code")}
+            {
+                key: _scalar(item.get(key))
+                for key in ("device_id", "error", "status_code")
+            }
             for item in row["dispatch_failures"][:50]
             if isinstance(item, dict)
         ]
@@ -156,7 +159,9 @@ def handler_output_digest(result: Any) -> Dict[str, Any]:
             digest["llm_tokens"] = 0
     if result.get("cognition_error"):
         digest["cognition_error"] = redact_text(result.get("cognition_error"))
-    handlers: List[str] = [redact_text(h) for h in nested.get("handlers") or [] if h][:12]
+    handlers: List[str] = [redact_text(h) for h in nested.get("handlers") or [] if h][
+        :12
+    ]
     if handlers:
         digest["handlers"] = handlers
     return digest

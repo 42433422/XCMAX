@@ -41,13 +41,19 @@ def fetch_java_user_overlay(
     try:
         from modstore_server.infrastructure.http_clients import get_java_sync_client
 
-        timeout = min(30.0, float(gw.connect_timeout_seconds) + float(gw.read_timeout_seconds))
-        resp = get_java_sync_client().get(url, headers={"Authorization": raw}, timeout=timeout)
+        timeout = min(
+            30.0, float(gw.connect_timeout_seconds) + float(gw.read_timeout_seconds)
+        )
+        resp = get_java_sync_client().get(
+            url, headers={"Authorization": raw}, timeout=timeout
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.warning("Java /api/auth/me 不可达，经验字段保留 Python 库: %s", exc)
         return None
     if resp.status_code != 200:
-        logger.warning("Java /api/auth/me 非 200(%s)，经验字段保留 Python 库", resp.status_code)
+        logger.warning(
+            "Java /api/auth/me 非 200(%s)，经验字段保留 Python 库", resp.status_code
+        )
         return None
     try:
         data = resp.json()
@@ -57,7 +63,10 @@ def fetch_java_user_overlay(
         return None
     inner = data.get("user")
     if not isinstance(inner, dict):
-        if isinstance(data.get("experience"), (int, float, str)) and data.get("id") is not None:
+        if (
+            isinstance(data.get("experience"), (int, float, str))
+            and data.get("id") is not None
+        ):
             inner = data
         else:
             return None

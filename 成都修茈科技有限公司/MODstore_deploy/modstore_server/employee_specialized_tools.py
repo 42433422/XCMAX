@@ -27,7 +27,9 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
 def _normalized_allowed_hosts(values: Iterable[str]) -> set[str]:
-    return {str(value or "").strip().lower() for value in values if str(value or "").strip()}
+    return {
+        str(value or "").strip().lower() for value in values if str(value or "").strip()
+    }
 
 
 def _safe_base_url(base_url: str, allowed_hosts: Iterable[str]) -> tuple[str, str]:
@@ -99,7 +101,9 @@ def configured_host_probe_allowlist() -> set[str]:
 
     values = {
         item.strip().lower()
-        for item in str(os.environ.get("MODSTORE_AGENT_HTTP_ALLOW_HOSTS") or "").split(",")
+        for item in str(os.environ.get("MODSTORE_AGENT_HTTP_ALLOW_HOSTS") or "").split(
+            ","
+        )
         if item.strip()
     }
     configured_base = str(os.environ.get("FHD_BASE_URL") or "").strip()
@@ -144,7 +148,9 @@ async def probe_mod_host(
                     {
                         "status_code": int(response.status_code),
                         "ok": int(response.status_code) < 500,
-                        "response_time_ms": round((time.perf_counter() - started) * 1000, 3),
+                        "response_time_ms": round(
+                            (time.perf_counter() - started) * 1000, 3
+                        ),
                     }
                 )
                 data: Any = None
@@ -155,20 +161,24 @@ async def probe_mod_host(
                 if kind == "llm_status" and isinstance(data, dict):
                     row["api_key_configured"] = data.get("api_key_configured")
                     row["provider"] = str(data.get("provider") or "")[:80]
-                    row["quota_status"] = str(data.get("quota_status") or data.get("status") or "")[
-                        :80
-                    ]
+                    row["quota_status"] = str(
+                        data.get("quota_status") or data.get("status") or ""
+                    )[:80]
                 elif kind == "version" and isinstance(data, dict):
                     row["server_version"] = str(
                         data.get("version") or data.get("server_version") or ""
                     )[:80]
-                    row["min_mod_sdk_version"] = str(data.get("min_mod_sdk_version") or "")[:80]
+                    row["min_mod_sdk_version"] = str(
+                        data.get("min_mod_sdk_version") or ""
+                    )[:80]
             except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - each endpoint retains evidence
                 row.update(
                     {
                         "ok": False,
                         "status_code": 0,
-                        "response_time_ms": round((time.perf_counter() - started) * 1000, 3),
+                        "response_time_ms": round(
+                            (time.perf_counter() - started) * 1000, 3
+                        ),
                         "error": f"{type(exc).__name__}: {str(exc)[:240]}",
                     }
                 )
@@ -267,7 +277,9 @@ async def validate_xcemp_package(
             start_new_session=True,
         )
         try:
-            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(), timeout=timeout
+            )
         except TimeoutError:
             process.kill()
             await process.communicate()

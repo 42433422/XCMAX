@@ -14,7 +14,9 @@ class TestAIConversationService:
 
     @pytest.fixture
     def service(self):
-        with patch("app.domain.shared_services.ai_conversation_service.init_ai_conversation_service"):
+        with patch(
+            "app.domain.shared_services.ai_conversation_service.init_ai_conversation_service"
+        ):
             return AIConversationService()
 
     def test_service_init(self, service):

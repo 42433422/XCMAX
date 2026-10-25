@@ -76,7 +76,9 @@ def openssl_cert_not_after(cert_path: Path) -> datetime:
     return parse_openssl_not_after(out)
 
 
-def classify_days_remaining(days: int, *, info_d: int, warn_d: int, crit_d: int) -> CertLevel:
+def classify_days_remaining(
+    days: int, *, info_d: int, warn_d: int, crit_d: int
+) -> CertLevel:
     if days > info_d:
         return "OK"
     if days > warn_d:
@@ -167,7 +169,9 @@ def scan_tls_certificates(
 
 def format_cli_line(r: CertInspectionResult) -> str:
     na = r.not_after_utc.strftime("%Y-%m-%d %H:%M:%SZ")
-    return f"level={r.level} days_remaining={r.days_remaining} notAfter={na} path={r.path}"
+    return (
+        f"level={r.level} days_remaining={r.days_remaining} notAfter={na} path={r.path}"
+    )
 
 
 def main(argv: List[str] | None = None) -> int:

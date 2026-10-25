@@ -22,7 +22,12 @@ from sqlalchemy.orm import Session
 from modstore_server.eventing.contracts import WORKFLOW_SANDBOX_COMPLETED
 from modstore_server.eventing.events import new_event
 from modstore_server.eventing.global_bus import neuro_bus
-from modstore_server.models import Workflow, WorkflowEdge, WorkflowNode, get_session_factory
+from modstore_server.models import (
+    Workflow,
+    WorkflowEdge,
+    WorkflowNode,
+    get_session_factory,
+)
 from modstore_server.workflow_variables import eval_condition, resolve_value
 
 logger = logging.getLogger(__name__)
@@ -64,8 +69,12 @@ def _json_safe(value: Any, max_depth: int = 6, max_str: int = 8000) -> Any:
     return str(type(value).__name__) + ":<non-serializable>"
 
 
-from modstore_server.workflow_engine_workflowengine_mixin01 import _WorkflowEnginePart01Mixin
-from modstore_server.workflow_engine_workflowengine_mixin02 import _WorkflowEnginePart02Mixin
+from modstore_server.workflow_engine_workflowengine_mixin01 import (
+    _WorkflowEnginePart01Mixin,
+)
+from modstore_server.workflow_engine_workflowengine_mixin02 import (
+    _WorkflowEnginePart02Mixin,
+)
 
 
 class WorkflowEngine(_WorkflowEnginePart01Mixin, _WorkflowEnginePart02Mixin):
@@ -77,8 +86,16 @@ class WorkflowEngine(_WorkflowEnginePart01Mixin, _WorkflowEnginePart02Mixin):
 def _topology_warnings(session: Session, workflow_id: int) -> List[str]:
     """可达性、孤立节点等（不改变执行语义，仅提示）。"""
     warnings: List[str] = []
-    nodes = session.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).all()
-    edges = session.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).all()
+    nodes = (
+        session.query(WorkflowNode)
+        .filter(WorkflowNode.workflow_id == workflow_id)
+        .all()
+    )
+    edges = (
+        session.query(WorkflowEdge)
+        .filter(WorkflowEdge.workflow_id == workflow_id)
+        .all()
+    )
     if not nodes:
         return ["工作流没有任何节点"]
     node_ids = {int(str(n.id)) for n in nodes}
@@ -167,8 +184,16 @@ class WorkflowValidator:
     @staticmethod
     def validate_workflow(workflow: Workflow, session: Session) -> List[str]:
         errors: List[str] = []
-        nodes = session.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow.id).all()
-        edges = session.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow.id).all()
+        nodes = (
+            session.query(WorkflowNode)
+            .filter(WorkflowNode.workflow_id == workflow.id)
+            .all()
+        )
+        edges = (
+            session.query(WorkflowEdge)
+            .filter(WorkflowEdge.workflow_id == workflow.id)
+            .all()
+        )
         start_nodes = [node for node in nodes if node.node_type == "start"]
         if len(start_nodes) != 1:
             errors.append("工作流必须有且只有一个开始节点")
@@ -201,10 +226,14 @@ class WorkflowValidator:
                     or str(config.get("query_template") or "").strip()
                 )
                 if not has_query:
-                    errors.append(f"知识检索节点 {node.name} 缺少 query 或 query_template 配置")
+                    errors.append(
+                        f"知识检索节点 {node.name} 缺少 query 或 query_template 配置"
+                    )
                 cids = config.get("collection_ids")
                 if cids is not None and not isinstance(cids, list):
-                    errors.append(f"知识检索节点 {node.name} 的 collection_ids 必须是数组")
+                    errors.append(
+                        f"知识检索节点 {node.name} 的 collection_ids 必须是数组"
+                    )
             elif node.node_type == "variable_set":
                 try:
                     config = json.loads(node.config) if node.config else {}
@@ -217,7 +246,9 @@ class WorkflowValidator:
                     config = json.loads(node.config) if node.config else {}
                 except (TypeError, ValueError):
                     config = {}
-                if not str(config.get("skill_id") or config.get("eskill_id") or "").strip():
+                if not str(
+                    config.get("skill_id") or config.get("eskill_id") or ""
+                ).strip():
                     errors.append(f"ESkill 节点 {node.name} 缺少 skill_id 配置")
             elif node.node_type in ("vibe_skill", "vibe_workflow"):
                 try:
@@ -247,7 +278,9 @@ def execute_workflow(
 ) -> Dict[str, Any]:
     return cast(
         Dict[str, Any],
-        workflow_engine.execute_workflow(workflow_id, input_data or {}, user_id=user_id),
+        workflow_engine.execute_workflow(
+            workflow_id, input_data or {}, user_id=user_id
+        ),
     )
 
 

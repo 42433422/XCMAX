@@ -13,7 +13,10 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_failure_classifier import is_quota_or_billing_failure, is_transient_failure
+from modstore_server.llm_failure_classifier import (
+    is_quota_or_billing_failure,
+    is_transient_failure,
+)
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -28,7 +31,9 @@ def chat_failover_max_attempts() -> int:
     return max(1, min(n, 8))
 
 
-def is_wallet_balance_failure(error_text: str, status_code: Optional[int] = None) -> bool:
+def is_wallet_balance_failure(
+    error_text: str, status_code: Optional[int] = None
+) -> bool:
     """本侧钱包预授权/扣费失败（换平台 Key 无效，只有 BYOK 可能得救）。"""
     if status_code == 402:
         return True
@@ -36,7 +41,9 @@ def is_wallet_balance_failure(error_text: str, status_code: Optional[int] = None
     return "余额不足" in text
 
 
-def is_chat_failoverable_failure(error_text: str, status_code: Optional[int] = None) -> bool:
+def is_chat_failoverable_failure(
+    error_text: str, status_code: Optional[int] = None
+) -> bool:
     """上游配额/额度或瞬时限流——换厂商/模型可能恢复。"""
     if is_wallet_balance_failure(error_text, status_code):
         return True
@@ -79,7 +86,9 @@ async def list_chat_failover_candidates(
 
     async def first_model_id(provider: str) -> str:
         try:
-            block = await get_models_for_provider(db, user_id, provider, force_refresh=False)
+            block = await get_models_for_provider(
+                db, user_id, provider, force_refresh=False
+            )
         except RECOVERABLE_ERRORS:
             return ""
         mids = list(block.get("runtime_models") or block.get("models") or [])
@@ -135,7 +144,9 @@ def remaining_candidates_after_failure(
         return []
     if is_wallet_balance_failure(error_text, status_code):
         # 钱包没钱：平台 Key 预授权仍会失败；仅尝试用户 BYOK
-        return [(p, m) for p, m in rest if key_source_by_provider.get(p) == "user_override"]
+        return [
+            (p, m) for p, m in rest if key_source_by_provider.get(p) == "user_override"
+        ]
     return rest
 
 

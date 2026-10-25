@@ -491,4 +491,6 @@ async def close_ai_conversation_service() -> None:
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(AIConversationService, "app.domain.shared_services.ai_conversation_service")
+instrument_service_layer_class(
+    AIConversationService, "app.domain.shared_services.ai_conversation_service"
+)

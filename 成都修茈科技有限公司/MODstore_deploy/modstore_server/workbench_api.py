@@ -87,7 +87,9 @@ from modstore_server.workbench.intent import CANVAS_SKILL_INTENT as CANVAS_SKILL
 from modstore_server.workbench.intent import (
     _canonical_workbench_intent as _canonical_workbench_intent,
 )
-from modstore_server.workbench.intent import _contains_uploaded_docx as _contains_uploaded_docx
+from modstore_server.workbench.intent import (
+    _contains_uploaded_docx as _contains_uploaded_docx,
+)
 from modstore_server.workbench.intent import _default_steps as _default_steps
 from modstore_server.workbench.intent import (
     _employee_asset_publish_catalog_from_env as _employee_asset_publish_catalog_from_env,
@@ -108,28 +110,44 @@ from modstore_server.workbench.planning import _planning_record as _planning_rec
 from modstore_server.workbench.planning import (
     _resolve_default_llm_for_pipeline as _resolve_default_llm_for_pipeline,
 )
-from modstore_server.workbench.planning import _script_workflow_brief as _script_workflow_brief
+from modstore_server.workbench.planning import (
+    _script_workflow_brief as _script_workflow_brief,
+)
 from modstore_server.workbench.planning import _strip_json_fence as _strip_json_fence
 from modstore_server.workbench.schemas import DispatchRequest as DispatchRequest
 from modstore_server.workbench.schemas import EmployeeAiDraftBody as EmployeeAiDraftBody
 from modstore_server.workbench.schemas import (
     EmployeeAiRefinePromptBody as EmployeeAiRefinePromptBody,
 )
-from modstore_server.workbench.schemas import EmployeeBenchRequest as EmployeeBenchRequest
+from modstore_server.workbench.schemas import (
+    EmployeeBenchRequest as EmployeeBenchRequest,
+)
 from modstore_server.workbench.schemas import EmployeeExportBody as EmployeeExportBody
-from modstore_server.workbench.schemas import EmployeePublishRequest as EmployeePublishRequest
+from modstore_server.workbench.schemas import (
+    EmployeePublishRequest as EmployeePublishRequest,
+)
 from modstore_server.workbench.schemas import EmployeeSaveBody as EmployeeSaveBody
-from modstore_server.workbench.schemas import EmployeeSyncTestRequest as EmployeeSyncTestRequest
-from modstore_server.workbench.schemas import WorkbenchEdgeTtsBody as WorkbenchEdgeTtsBody
-from modstore_server.workbench.schemas import WorkbenchResearchBody as WorkbenchResearchBody
+from modstore_server.workbench.schemas import (
+    EmployeeSyncTestRequest as EmployeeSyncTestRequest,
+)
+from modstore_server.workbench.schemas import (
+    WorkbenchEdgeTtsBody as WorkbenchEdgeTtsBody,
+)
+from modstore_server.workbench.schemas import (
+    WorkbenchResearchBody as WorkbenchResearchBody,
+)
 from modstore_server.workbench.schemas import (
     WorkbenchSessionCreateBody as WorkbenchSessionCreateBody,
 )
-from modstore_server.workbench.schemas import WorkbenchUnifiedTtsBody as WorkbenchUnifiedTtsBody
+from modstore_server.workbench.schemas import (
+    WorkbenchUnifiedTtsBody as WorkbenchUnifiedTtsBody,
+)
 from modstore_server.workbench.schemas import (
     WorkbenchVibeCodeSkillBody as WorkbenchVibeCodeSkillBody,
 )
-from modstore_server.workbench.schemas import WorkbenchWebSearchBody as WorkbenchWebSearchBody
+from modstore_server.workbench.schemas import (
+    WorkbenchWebSearchBody as WorkbenchWebSearchBody,
+)
 from modstore_server.workbench.schemas import (
     _parse_workbench_session_create as _parse_workbench_session_create,
 )
@@ -139,8 +157,12 @@ from modstore_server.workbench.script_delivery import (
 from modstore_server.workbench.script_delivery import (
     _embed_script_workflow_in_employee_pack as _embed_script_workflow_in_employee_pack,
 )
-from modstore_server.workbench.speech_api import _edge_tts_rate_str as _edge_tts_rate_str
-from modstore_server.workbench.speech_api import _edge_tts_stream_chunks as _edge_tts_stream_chunks
+from modstore_server.workbench.speech_api import (
+    _edge_tts_rate_str as _edge_tts_rate_str,
+)
+from modstore_server.workbench.speech_api import (
+    _edge_tts_stream_chunks as _edge_tts_stream_chunks,
+)
 from modstore_server.workbench.suite_pipeline import (
     _cleanup_mod_pipeline_resources as _cleanup_mod_pipeline_resources,
 )
@@ -148,7 +170,10 @@ from modstore_server.workbench.uploads import read_workbench_uploads
 from modstore_server.workbench.vibe_readiness import (
     _check_vibe_coding_capability as _check_vibe_coding_capability,
 )
-from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
+from modstore_server.workbench_research import (
+    build_research_context,
+    fetch_web_search_context_pack,
+)
 from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
 from modstore_server.workflow_engine import run_workflow_sandbox
 from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
@@ -219,7 +244,9 @@ def _vibe_ports() -> vibe_api.VibePorts:
     )
 
 
-def _employee_services(db: Session, user: User) -> employee_pipeline.EmployeeBuildServices:
+def _employee_services(
+    db: Session, user: User
+) -> employee_pipeline.EmployeeBuildServices:
     store, progress = (_session_store(), _progress())
     return employee_pipeline.EmployeeBuildServices(
         sessions=store,
@@ -273,7 +300,9 @@ def _employee_services(db: Session, user: User) -> employee_pipeline.EmployeeBui
             craft_step=_dispatch_craft_step,
             quality_extras=_employee_quality_extras,
         ),
-        delivery=employee_delivery.EmployeeDeliveryPorts(sessions=store, progress=progress),
+        delivery=employee_delivery.EmployeeDeliveryPorts(
+            sessions=store, progress=progress
+        ),
     )
 
 
@@ -321,14 +350,16 @@ async def _set_step(
     ).set_step(sid, step_id, status, message)
 
 
-def _record_craft_step_skip_metric(step_id: str, status: str, sess: Optional[dict]) -> None:
+def _record_craft_step_skip_metric(
+    step_id: str, status: str, sess: Optional[dict]
+) -> None:
     return sessions.record_craft_skip(step_id, status, sess)
 
 
 async def _fail_session(sid: str, step_id: str, err: str) -> None:
-    return await sessions.SessionProgress(_session_store(), _record_craft_step_skip_metric).fail(
-        sid, step_id, err
-    )
+    return await sessions.SessionProgress(
+        _session_store(), _record_craft_step_skip_metric
+    ).fail(sid, step_id, err)
 
 
 async def _finalize_session_done(sid: str, artifact: Dict[str, Any]) -> None:
@@ -342,9 +373,9 @@ async def _finalize_session_done(sid: str, artifact: Dict[str, Any]) -> None:
     If the session already ended in ``error`` (e.g. :func:`_fail_session`), this
     function is a no-op so we never overwrite a failure with a false ``done``.
     """
-    return await sessions.SessionProgress(_session_store(), _record_craft_step_skip_metric).finish(
-        sid, artifact
-    )
+    return await sessions.SessionProgress(
+        _session_store(), _record_craft_step_skip_metric
+    ).finish(sid, artifact)
 
 
 async def _build_employee_orchestration_plan(
@@ -392,7 +423,10 @@ async def _run_workbench_script_pipeline(
         mdl,
         db,
         ports=script_pipeline.ScriptPorts(
-            _session_store(), _progress(), run_script_job, _commit_script_workflow_from_result
+            _session_store(),
+            _progress(),
+            run_script_job,
+            _commit_script_workflow_from_result,
         ),
     )
 
@@ -436,7 +470,14 @@ async def _run_workbench_employee_pipeline(
     sid, user_id, payload, intent, brief, prov, mdl, replace, db, user
 ):
     return await employee_pipeline.run_employee_pipeline(
-        sid, user_id, payload, brief, prov, mdl, replace, services=_employee_services(db, user)
+        sid,
+        user_id,
+        payload,
+        brief,
+        prov,
+        mdl,
+        replace,
+        services=_employee_services(db, user),
     )
 
 
@@ -490,11 +531,15 @@ async def workbench_web_search(
     return await research_api.workbench_web_search(
         body,
         user,
-        ports=research_api.ResearchPorts(fetch_web_search_context_pack, build_research_context),
+        ports=research_api.ResearchPorts(
+            fetch_web_search_context_pack, build_research_context
+        ),
     )
 
 
-@router.post("/research-context", summary="联网检索摘要 + GitHub 公开资料（供需求规划）")
+@router.post(
+    "/research-context", summary="联网检索摘要 + GitHub 公开资料（供需求规划）"
+)
 async def workbench_research_context(
     body: WorkbenchResearchBody, user: User = Depends(_get_current_user)
 ):
@@ -506,13 +551,19 @@ async def workbench_research_context(
     return await research_api.workbench_research_context(
         body,
         user,
-        ports=research_api.ResearchPorts(fetch_web_search_context_pack, build_research_context),
+        ports=research_api.ResearchPorts(
+            fetch_web_search_context_pack, build_research_context
+        ),
     )
 
 
 @router.post("/sessions", summary="启动工作台 AI 编排（异步）")
-async def create_workbench_session(request: Request, user: User = Depends(_get_current_user)):
-    return await session_api.create_workbench_session(request, user, ports=_session_api_ports())
+async def create_workbench_session(
+    request: Request, user: User = Depends(_get_current_user)
+):
+    return await session_api.create_workbench_session(
+        request, user, ports=_session_api_ports()
+    )
 
 
 @router.post("/script-sessions", summary="启动 AI + Python 文件处理任务")
@@ -527,8 +578,12 @@ async def create_workbench_script_session(
 
 
 @router.get("/sessions/{session_id}", summary="查询编排会话（轮询）")
-async def get_workbench_session(session_id: str, user: User = Depends(_get_current_user)):
-    return await session_api.get_workbench_session(session_id, user, ports=_session_api_ports())
+async def get_workbench_session(
+    session_id: str, user: User = Depends(_get_current_user)
+):
+    return await session_api.get_workbench_session(
+        session_id, user, ports=_session_api_ports()
+    )
 
 
 @router.get("/sessions/{session_id}/files/{filename}", summary="下载脚本执行结果文件")
@@ -541,8 +596,12 @@ async def download_workbench_session_file(
 
 
 @router.post("/sessions/{session_id}/retry", summary="重试编排会话")
-async def retry_workbench_session(session_id: str, user: User = Depends(_get_current_user)):
-    return await session_api.retry_workbench_session(session_id, user, ports=_session_api_ports())
+async def retry_workbench_session(
+    session_id: str, user: User = Depends(_get_current_user)
+):
+    return await session_api.retry_workbench_session(
+        session_id, user, ports=_session_api_ports()
+    )
 
 
 @router.post("/vibe-code-skill", summary="vibe-coding NL → CodeSkill 全闭环")
@@ -583,9 +642,13 @@ async def workbench_unified_tts(
 
 
 @router.post("/tts/edge", summary="微软在线神经 TTS（edge-tts，返回 MP3）")
-async def workbench_edge_tts(body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user)):
+async def workbench_edge_tts(
+    body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user)
+):
     return await speech_api.workbench_edge_tts(
-        body, _user, ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS))
+        body,
+        _user,
+        ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS)),
     )
 
 
@@ -601,7 +664,9 @@ async def workbench_edge_tts_stream(
 
 
 @router.post("/employee-ai/draft", summary="6 阶段 AI 员工生成（SSE 流式）")
-async def employee_ai_draft(body: EmployeeAiDraftBody, user: User = Depends(_get_current_user)):
+async def employee_ai_draft(
+    body: EmployeeAiDraftBody, user: User = Depends(_get_current_user)
+):
     """SSE 事件序列：stage_start / stage_progress / stage_done / stage_error / pipeline_done。
 
     ``pipeline_done`` 携带完整 manifest；客户端可在收到后离线编辑，再调 ``/api/mods/ai-scaffold``
@@ -615,22 +680,33 @@ async def employee_ai_refine_prompt(
     body: EmployeeAiRefinePromptBody, user: User = Depends(_get_current_user)
 ):
     """用 LLM 重写 employee system prompt，返回优化后文本与一句话 diff 说明。"""
-    return await employee_drafts.employee_ai_refine_prompt(body, user, ports=_draft_ports())
+    return await employee_drafts.employee_ai_refine_prompt(
+        body, user, ports=_draft_ports()
+    )
 
 
-@router.post("/employee-bench-test", summary="员工上架前基准测试（LLM 生成任务 + 执行 + 五维审核）")
-async def employee_bench_test(body: EmployeeBenchRequest, user: User = Depends(_get_current_user)):
+@router.post(
+    "/employee-bench-test",
+    summary="员工上架前基准测试（LLM 生成任务 + 执行 + 五维审核）",
+)
+async def employee_bench_test(
+    body: EmployeeBenchRequest, user: User = Depends(_get_current_user)
+):
     """
     1. LLM 生成 1-5 级（每级 3 条）共 15 项测试任务
     2. 逐条执行并记录 ok / cost_tokens / duration_ms
     3. 量化打分 + 五维审核
     4. 返回完整报告，前端据此决定是否允许上架
     """
-    return await employee_commands.employee_bench_test(body, user, ports=_command_ports())
+    return await employee_commands.employee_bench_test(
+        body, user, ports=_command_ports()
+    )
 
 
 @router.post("/employee-publish", summary="员工包上架到商店目录")
-async def employee_publish(body: EmployeePublishRequest, user: User = Depends(_get_current_user)):
+async def employee_publish(
+    body: EmployeePublishRequest, user: User = Depends(_get_current_user)
+):
     """
     将本地库中的员工包重建 zip 并写入商店目录（catalog_store + catalog_items）。
     调用方应先通过 /employee-bench-test 且 passed=true，再调此接口。
@@ -649,16 +725,24 @@ async def employee_sync_test(
     3. 调用宿主 fhd-sandbox-runtime 的 /api/mod-store/install 安装此员工包
        → 员工出现在宿主「一键托管」面板、「员工工作流管理」页等位置
     """
-    return await employee_commands.employee_sync_test(body, user, ports=_command_ports())
+    return await employee_commands.employee_sync_test(
+        body, user, ports=_command_ports()
+    )
 
 
 async def employee_save_impl(body: EmployeeSaveBody, user: User) -> Dict[str, Any]:
     """employee_save 核心实现；管理员批量对齐 manifest 时可复用（传入登记作者 user）。"""
-    return await employee_packages.employee_save_impl(body, user, ports=_package_ports())
+    return await employee_packages.employee_save_impl(
+        body, user, ports=_package_ports()
+    )
 
 
-@router.post("/employee-save", summary="保存/持久化编辑器当前 manifest 到服务器库并注册 ESkill")
-async def employee_save(body: EmployeeSaveBody, user: User = Depends(_get_current_user)):
+@router.post(
+    "/employee-save", summary="保存/持久化编辑器当前 manifest 到服务器库并注册 ESkill"
+)
+async def employee_save(
+    body: EmployeeSaveBody, user: User = Depends(_get_current_user)
+):
     """把前端编辑器的当前 manifest 保存到 library/<pack_id>，解压运行时文件，
     并通过 vibe-coding 将 cognition.skills 注册为真实可执行 ESkill。
 
@@ -668,8 +752,12 @@ async def employee_save(body: EmployeeSaveBody, user: User = Depends(_get_curren
     return await employee_save_impl(body, user)
 
 
-@router.post("/employee-export", summary="根据当前 manifest 生成完整 .xcemp 并下载（不落盘）")
-async def employee_export(body: EmployeeExportBody, user: User = Depends(_get_current_user)):
+@router.post(
+    "/employee-export", summary="根据当前 manifest 生成完整 .xcemp 并下载（不落盘）"
+)
+async def employee_export(
+    body: EmployeeExportBody, user: User = Depends(_get_current_user)
+):
     """接收前端当前 manifest，用后端模板生成完整 .xcemp（含 blueprints.py + employee.py），直接返回 zip 流。
     ``standalone=true`` 时额外嵌入 zipapp 入口（与 employee_pack_export._build_employee_pack_zip_with_source 一致），
     便于本机 ``python xxx.xcemp validate`` / ``run``；平台装载仍只读 ``<pack_id>/manifest.json`` 与 ``backend/``。
@@ -691,7 +779,9 @@ _ACTIVE_INLINE_SESSIONS: set[str] = set()
 
 
 def _delivery_sessions() -> WorkbenchSessions:
-    return WorkbenchSessions(_session_store(), _run_pipeline, _progress(), _ACTIVE_INLINE_SESSIONS)
+    return WorkbenchSessions(
+        _session_store(), _run_pipeline, _progress(), _ACTIVE_INLINE_SESSIONS
+    )
 
 
 async def start_workbench_session_for_user(
@@ -711,5 +801,7 @@ async def start_workbench_session_for_user(
     )
 
 
-async def get_workbench_session_snapshot(session_id: str, user_id: int) -> dict[str, Any] | None:
+async def get_workbench_session_snapshot(
+    session_id: str, user_id: int
+) -> dict[str, Any] | None:
     return await _delivery_sessions().snapshot(session_id, user_id)

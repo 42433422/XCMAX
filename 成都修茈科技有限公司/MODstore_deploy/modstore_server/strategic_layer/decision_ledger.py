@@ -36,8 +36,13 @@ from sqlalchemy.exc import IntegrityError
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import StrategicDecision as StrategicDecisionModel
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.strategic_layer.autonomy_boundary import AutonomyAction, AutonomyEvaluator
-from modstore_server.strategic_layer.decision_ledger_lifecycle import DecisionLedgerLifecycleMixin
+from modstore_server.strategic_layer.autonomy_boundary import (
+    AutonomyAction,
+    AutonomyEvaluator,
+)
+from modstore_server.strategic_layer.decision_ledger_lifecycle import (
+    DecisionLedgerLifecycleMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +85,15 @@ _ALLOWED_TRANSITIONS: Dict[DecisionStatus, frozenset[DecisionStatus]] = {
             DecisionStatus.WITHDRAWN,
         }
     ),
-    DecisionStatus.AUTO_APPROVED: frozenset({DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}),
-    DecisionStatus.APPROVED: frozenset({DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}),
-    DecisionStatus.EXECUTING: frozenset({DecisionStatus.COMPLETED, DecisionStatus.WITHDRAWN}),
+    DecisionStatus.AUTO_APPROVED: frozenset(
+        {DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}
+    ),
+    DecisionStatus.APPROVED: frozenset(
+        {DecisionStatus.EXECUTING, DecisionStatus.WITHDRAWN}
+    ),
+    DecisionStatus.EXECUTING: frozenset(
+        {DecisionStatus.COMPLETED, DecisionStatus.WITHDRAWN}
+    ),
     DecisionStatus.COMPLETED: frozenset(),  # 终态（review 通过字段标记，不改 status）
     DecisionStatus.REJECTED: frozenset(),
     DecisionStatus.WITHDRAWN: frozenset(),

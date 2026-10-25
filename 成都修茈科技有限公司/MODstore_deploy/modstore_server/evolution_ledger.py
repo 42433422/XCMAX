@@ -42,7 +42,9 @@ def append_event(event: Dict[str, Any]) -> Dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
     }
     record.update(event)
-    record.setdefault("owner_audit", {"audited": False, "audited_at": None, "verdict": None})
+    record.setdefault(
+        "owner_audit", {"audited": False, "audited_at": None, "verdict": None}
+    )
 
     path = _ledger_path()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -116,7 +118,9 @@ def mark_audited(event_id: str, verdict: str) -> bool:
                         "audited_at": datetime.now(UTC).isoformat(),
                         "verdict": verdict,
                     }
-                    lines_out.append(json.dumps(evt, ensure_ascii=False, sort_keys=True))
+                    lines_out.append(
+                        json.dumps(evt, ensure_ascii=False, sort_keys=True)
+                    )
                     found = True
                 else:
                     lines_out.append(line.rstrip("\n"))

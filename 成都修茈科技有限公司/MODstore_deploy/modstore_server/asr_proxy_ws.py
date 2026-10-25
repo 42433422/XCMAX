@@ -91,7 +91,9 @@ async def _connect_funasr_parallel(funasr_urls: list[str], ssl_ctx):
     if len(funasr_urls) == 1:
         return await _try_connect_funasr(funasr_urls[0], ssl_ctx)
 
-    tasks = [asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls]
+    tasks = [
+        asyncio.create_task(_try_connect_funasr(url, ssl_ctx)) for url in funasr_urls
+    ]
     try:
         while tasks:
             done, pending = await asyncio.wait(
@@ -122,7 +124,9 @@ async def _proxy_to_funasr(client_ws: WebSocket, user_id: int) -> None:
     if connect_result is None:
         logger.warning("FunASR 不可达，已尝试: %s", funasr_urls)
         try:
-            await client_ws.send_text(json.dumps({"type": "error", "message": "FunASR 服务未启动"}))
+            await client_ws.send_text(
+                json.dumps({"type": "error", "message": "FunASR 服务未启动"})
+            )
         except RECOVERABLE_ERRORS:
             pass
         return
@@ -270,7 +274,9 @@ async def asr_funasr_ws(
     token = _ws_bearer_token(ws, token)
     if not token:
         try:
-            await ws.send_text(json.dumps({"type": "error", "message": "请先登录后再使用语音识别"}))
+            await ws.send_text(
+                json.dumps({"type": "error", "message": "请先登录后再使用语音识别"})
+            )
         except RECOVERABLE_ERRORS:
             pass
         await ws.close()
@@ -280,7 +286,11 @@ async def asr_funasr_ws(
         from modstore_server.auth_service import decode_access_token, get_user_by_id
 
         payload = decode_access_token(token)
-        if not payload or not payload.get("sub") or not get_user_by_id(int(payload["sub"])):
+        if (
+            not payload
+            or not payload.get("sub")
+            or not get_user_by_id(int(payload["sub"]))
+        ):
             try:
                 await ws.send_text(json.dumps({"type": "error", "message": "认证无效"}))
             except RECOVERABLE_ERRORS:

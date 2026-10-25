@@ -93,8 +93,12 @@ async def payment_backend_proxy_middleware(request: Request, call_next):
     if request.url.query:
         target_url = f"{target_url}?{request.url.query}"
 
-    fwd_headers = {k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
-    request_id = getattr(request.state, "request_id", "") or request_id_from_headers(request)
+    fwd_headers = {
+        k: v for k, v in request.headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS
+    }
+    request_id = getattr(request.state, "request_id", "") or request_id_from_headers(
+        request
+    )
     fwd_headers["X-Request-Id"] = request_id
     body_bytes = await request.body() if method not in ("GET", "HEAD") else b""
     started = time.perf_counter()
@@ -114,14 +118,18 @@ async def payment_backend_proxy_middleware(request: Request, call_next):
             timeout=timeout,
         )
     except httpx.HTTPError as exc:
-        observe_payment_proxy(method, request.url.path, 502, time.perf_counter() - started)
+        observe_payment_proxy(
+            method, request.url.path, 502, time.perf_counter() - started
+        )
         return JSONResponse(
             {"ok": False, "message": java_payment_unreachable_message(exc)},
             headers={"X-Request-Id": request_id},
             status_code=502,
         )
     except RECOVERABLE_ERRORS as exc:
-        observe_payment_proxy(method, request.url.path, 502, time.perf_counter() - started)
+        observe_payment_proxy(
+            method, request.url.path, 502, time.perf_counter() - started
+        )
         return JSONResponse(
             {"ok": False, "message": java_payment_unreachable_message(exc)},
             headers={"X-Request-Id": request_id},
@@ -129,16 +137,22 @@ async def payment_backend_proxy_middleware(request: Request, call_next):
         )
 
     if up is None:
-        observe_payment_proxy(method, request.url.path, 502, time.perf_counter() - started)
+        observe_payment_proxy(
+            method, request.url.path, 502, time.perf_counter() - started
+        )
         return JSONResponse(
             {"ok": False, "message": "Java 支付服务请求未完成"},
             headers={"X-Request-Id": request_id},
             status_code=502,
         )
 
-    observe_payment_proxy(method, request.url.path, up.status_code, time.perf_counter() - started)
+    observe_payment_proxy(
+        method, request.url.path, up.status_code, time.perf_counter() - started
+    )
     out_headers = {
-        k: v for k, v in up.headers.items() if k.lower() not in _PROXY_RESPONSE_DROP_HEADERS
+        k: v
+        for k, v in up.headers.items()
+        if k.lower() not in _PROXY_RESPONSE_DROP_HEADERS
     }
     out_headers["X-Request-Id"] = request_id
     return Response(

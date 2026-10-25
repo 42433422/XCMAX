@@ -230,7 +230,9 @@ class TestIntentDatasetEdgeCases:
 
 class TestTrainIntentModel:
     @patch("app.domain.shared_services.intent_trainer.Trainer")
-    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
     @patch("app.domain.shared_services.intent_trainer.AutoConfig.from_pretrained")
     @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
     @patch("app.domain.shared_services.intent_trainer.load_training_data")
@@ -263,7 +265,9 @@ class TestTrainIntentModel:
 
 
 class TestExportToOnnx:
-    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
     @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
     def test_export_without_onnxruntime(self, mock_tokenizer, mock_model, tmp_path):
         with patch.dict("sys.modules", {"onnxruntime": None}):

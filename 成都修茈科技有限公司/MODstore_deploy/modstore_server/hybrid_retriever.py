@@ -94,9 +94,13 @@ class HybridRetriever:
             return vector_results[:final_top_k]
 
         try:
-            return self._fuse_with_bm25(vector_results, query, corpus, bm25_top_k, final_top_k)
+            return self._fuse_with_bm25(
+                vector_results, query, corpus, bm25_top_k, final_top_k
+            )
         except RECOVERABLE_ERRORS as exc:
-            logger.warning("HybridRetriever: BM25 fusion failed, using vector only: %s", exc)
+            logger.warning(
+                "HybridRetriever: BM25 fusion failed, using vector only: %s", exc
+            )
             return vector_results[:final_top_k]
 
     def _fuse_with_bm25(

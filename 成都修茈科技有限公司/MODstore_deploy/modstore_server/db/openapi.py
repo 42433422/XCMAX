@@ -21,7 +21,9 @@ from modstore_server.db.db_base import Base
 
 class OpenApiConnector(Base):
     __tablename__ = "openapi_connectors"
-    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_openapi_connector_name"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_openapi_connector_name"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -46,11 +48,15 @@ class OpenApiConnector(Base):
 class OpenApiOperation(Base):
     __tablename__ = "openapi_operations"
     __table_args__ = (
-        UniqueConstraint("connector_id", "operation_id", name="uq_openapi_operation_id"),
+        UniqueConstraint(
+            "connector_id", "operation_id", name="uq_openapi_operation_id"
+        ),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    connector_id = Column(Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True)
+    connector_id = Column(
+        Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True
+    )
     operation_id = Column(String(128), nullable=False)
     method = Column(String(16), nullable=False)
     path = Column(String(512), nullable=False)
@@ -76,7 +82,9 @@ class OpenApiCredential(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    connector_id = Column(Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True)
+    connector_id = Column(
+        Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True
+    )
     auth_type = Column(String(32), nullable=False, default="none")
     config_encrypted = Column(Text, nullable=False, default="")
     updated_at = Column(
@@ -91,7 +99,9 @@ class OpenApiCallLog(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    connector_id = Column(Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True)
+    connector_id = Column(
+        Integer, ForeignKey("openapi_connectors.id"), nullable=False, index=True
+    )
     operation_id = Column(String(128), nullable=False, index=True)
     method = Column(String(16), default="")
     path = Column(String(512), default="")

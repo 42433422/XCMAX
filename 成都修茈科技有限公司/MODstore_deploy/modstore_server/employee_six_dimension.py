@@ -16,7 +16,9 @@ from modstore_server.employee_six_dimension_report import dim_entry as _dim_entr
 from modstore_server.employee_six_dimension_report import (
     finalize_dimension_report as _finalize_dimension_report,
 )
-from modstore_server.employee_six_dimension_report import score_to_grade as score_to_grade
+from modstore_server.employee_six_dimension_report import (
+    score_to_grade as score_to_grade,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 
@@ -34,7 +36,9 @@ def build_six_dimension_report_from_llm_dimensions(
             score = _clamp_score(float(ent.get("score", 0)))
         except (TypeError, ValueError):
             score = 0
-        reasons = [str(r)[:200] for r in (ent.get("reasons") or []) if str(r).strip()][:4]
+        reasons = [str(r)[:200] for r in (ent.get("reasons") or []) if str(r).strip()][
+            :4
+        ]
         if baseline_report:
             base_ent = (baseline_report.get("dimensions") or {}).get(k)
             if isinstance(base_ent, dict):
@@ -68,7 +72,10 @@ def _score_requirement_clarity(
     pipeline_label: str,
 ) -> Tuple[int, List[str]]:
     reasons: List[str] = []
-    rb = compact_routing_brief(routing_brief, max_len=500) or (routing_brief or "").strip()
+    rb = (
+        compact_routing_brief(routing_brief, max_len=500)
+        or (routing_brief or "").strip()
+    )
     score = 0.0
     if len(rb) >= 10:
         score += 45
@@ -179,7 +186,8 @@ def _score_executability(
         reasons.append("员工包未登记到 catalog")
     score = sum(parts) if parts else 0.0
     if (
-        pipeline_label in ("word_full_extract", "word_generate", "txt_full_read", "txt_generate")
+        pipeline_label
+        in ("word_full_extract", "word_generate", "txt_full_read", "txt_generate")
         and pack_dir.is_dir()
     ):
         chk_map = {
@@ -303,20 +311,27 @@ def _score_domain_delivery(
                 reasons.append(f"黄金未达标 parity={parity}")
         if isinstance(runtime_generation, dict):
             try:
-                from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
+                from modstore_server.vibecoding_convert_loop import (
+                    is_llm_codegen_source,
+                )
 
                 if is_llm_codegen_source(runtime_generation):
                     reasons.append("convert 为 LLM 生成")
                 else:
                     score = min(score, 30)
-                    reasons.append(f"非 LLM convert：{runtime_generation.get('source')}")
+                    reasons.append(
+                        f"非 LLM convert：{runtime_generation.get('source')}"
+                    )
             except ImportError:
                 pass
         rs = pack_dir / "rule_spec.json"
         if rs.is_file():
             try:
                 rs_data = json.loads(rs.read_text(encoding="utf-8"))
-                if isinstance(rs_data, dict) and rs_data.get("runtime_kind") == pipeline_label:
+                if (
+                    isinstance(rs_data, dict)
+                    and rs_data.get("runtime_kind") == pipeline_label
+                ):
                     score = min(100, score + 10)
                     reasons.append("rule_spec runtime_kind 正确")
             except (OSError, json.JSONDecodeError):
@@ -365,7 +380,9 @@ def compute_six_dimension_report(
     """汇总流水线各步结果，返回六维报告（不重新执行沙箱）。"""
     mod_checks = []
     if isinstance(mod_sandbox, dict):
-        mod_checks = [c for c in (mod_sandbox.get("checks") or []) if isinstance(c, dict)]
+        mod_checks = [
+            c for c in (mod_sandbox.get("checks") or []) if isinstance(c, dict)
+        ]
     mod_ok = bool(mod_sandbox.get("ok")) if isinstance(mod_sandbox, dict) else False
     val_errs = [str(x) for x in (validate_errors or []) if x]
 
@@ -436,4 +453,6 @@ def compute_six_dimension_report(
         ),
     )
 
-    return _finalize_dimension_report(dims, pipeline_label, scoring_source="deterministic")
+    return _finalize_dimension_report(
+        dims, pipeline_label, scoring_source="deterministic"
+    )

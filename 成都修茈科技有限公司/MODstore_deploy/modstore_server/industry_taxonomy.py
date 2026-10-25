@@ -142,7 +142,8 @@ def get_industry_tree() -> List[Dict[str, Any]]:
     tree: List[Dict[str, Any]] = []
     for primary_code, primary_data in INDUSTRY_TAXONOMY.items():
         children = [
-            {"code": code, "name": name} for code, name in primary_data.get("children", {}).items()
+            {"code": code, "name": name}
+            for code, name in primary_data.get("children", {}).items()
         ]
         tree.append(
             {

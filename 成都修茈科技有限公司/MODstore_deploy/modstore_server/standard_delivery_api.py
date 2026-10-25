@@ -64,7 +64,9 @@ def _receipt_payload(
         "reported_at": _iso(receipt.reported_at),
         "error": str(receipt.error or ""),
         "device_scope": (
-            "internal" if _is_internal_installation(installation_id, internal_ids) else "customer"
+            "internal"
+            if _is_internal_installation(installation_id, internal_ids)
+            else "customer"
         ),
     }
 
@@ -74,7 +76,9 @@ def _entitlement_plan_id(row: Entitlement) -> str:
         payload = json.loads(str(row.metadata_json or "{}"))
     except (TypeError, ValueError):
         payload = {}
-    return str(payload.get("plan_id") or "").strip() if isinstance(payload, dict) else ""
+    return (
+        str(payload.get("plan_id") or "").strip() if isinstance(payload, dict) else ""
+    )
 
 
 def _purchased_plan_rows(db: Session, license_type: str) -> list[UserPlan]:
@@ -108,7 +112,9 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
     if not user_ids:
         return []
 
-    users = {int(row.id): row for row in db.query(User).filter(User.id.in_(user_ids)).all()}
+    users = {
+        int(row.id): row for row in db.query(User).filter(User.id.in_(user_ids)).all()
+    }
     entitlements = (
         db.query(Entitlement)
         .filter(
@@ -121,7 +127,9 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
     )
     entitlement_by_key: dict[tuple[int, str], Entitlement] = {}
     for row in entitlements:
-        entitlement_by_key.setdefault((int(row.user_id), _entitlement_plan_id(row)), row)
+        entitlement_by_key.setdefault(
+            (int(row.user_id), _entitlement_plan_id(row)), row
+        )
 
     receipts = (
         db.query(UpdateInstallationReceipt)
@@ -163,7 +171,9 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
         entitlement = entitlement_by_key.get((uid, plan_id))
         order_no = str(getattr(entitlement, "source_order_id", "") or "").strip()
         installed = installed_receipt_by_user.get(uid)
-        latest = latest_customer_receipt_by_user.get(uid) or latest_receipt_by_user.get(uid)
+        latest = latest_customer_receipt_by_user.get(uid) or latest_receipt_by_user.get(
+            uid
+        )
         first_login_at = getattr(user, "first_login_at", None)
         install_ok = installed is not None
         first_login_ok = first_login_at is not None
@@ -186,7 +196,9 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
                 _iso(installed.reported_at),
                 _iso(first_login_at),
             )
-        receipt_payload = _receipt_payload(latest, internal_ids) if latest is not None else None
+        receipt_payload = (
+            _receipt_payload(latest, internal_ids) if latest is not None else None
+        )
         installed_receipt_payload = (
             _receipt_payload(installed, internal_ids) if installed is not None else None
         )
@@ -227,8 +239,12 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
                 "install": {
                     "ok": install_ok,
                     "installed_devices": len(installed_devices_by_user.get(uid, set())),
-                    "customer_installed_devices": len(installed_devices_by_user.get(uid, set())),
-                    "internal_devices_excluded": len(internal_devices_by_user.get(uid, set())),
+                    "customer_installed_devices": len(
+                        installed_devices_by_user.get(uid, set())
+                    ),
+                    "internal_devices_excluded": len(
+                        internal_devices_by_user.get(uid, set())
+                    ),
                     "scope": "customer_external_desktop",
                     "latest_receipt": receipt_payload,
                     "latest_installed_receipt": installed_receipt_payload,
@@ -238,7 +254,9 @@ def _build_delivery_rows(db: Session, license_type: str) -> list[dict[str, Any]]
                 "available_installers": ["macOS", "Windows"],
             }
         )
-    return sorted(result, key=lambda row: (row["status"] == "completed", row["started_at"]))
+    return sorted(
+        result, key=lambda row: (row["status"] == "completed", row["started_at"])
+    )
 
 
 def build_standard_delivery_rows(db: Session) -> list[dict[str, Any]]:
@@ -253,7 +271,9 @@ def build_trial_delivery_rows(db: Session) -> list[dict[str, Any]]:
     return _build_delivery_rows(db, "trial")
 
 
-def _delivery_response(rows: list[dict[str, Any]], limit: int, ssot: str) -> dict[str, Any]:
+def _delivery_response(
+    rows: list[dict[str, Any]], limit: int, ssot: str
+) -> dict[str, Any]:
     rows = rows[:limit]
     internal_ids = configured_internal_installation_ids()
     return {
@@ -261,8 +281,12 @@ def _delivery_response(rows: list[dict[str, Any]], limit: int, ssot: str) -> dic
         "total": len(rows),
         "summary": {
             "purchased_accounts": len(rows),
-            "pending_install": sum(1 for row in rows if row["status"] == "pending_install"),
-            "pending_first_login": sum(1 for row in rows if row["status"] == "pending_first_login"),
+            "pending_install": sum(
+                1 for row in rows if row["status"] == "pending_install"
+            ),
+            "pending_first_login": sum(
+                1 for row in rows if row["status"] == "pending_first_login"
+            ),
             "completed": sum(1 for row in rows if row["status"] == "completed"),
             "customer_installed_devices": sum(
                 int(row["install"]["customer_installed_devices"]) for row in rows
@@ -289,7 +313,9 @@ def list_standard_deliveries(
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ):
-    return _delivery_response(build_standard_delivery_rows(db), limit, "active_permanent_user_plan")
+    return _delivery_response(
+        build_standard_delivery_rows(db), limit, "active_permanent_user_plan"
+    )
 
 
 @router.get("/trial")
@@ -298,7 +324,9 @@ def list_trial_deliveries(
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ):
-    return _delivery_response(build_trial_delivery_rows(db), limit, "active_trial_user_plan")
+    return _delivery_response(
+        build_trial_delivery_rows(db), limit, "active_trial_user_plan"
+    )
 
 
 __all__ = [

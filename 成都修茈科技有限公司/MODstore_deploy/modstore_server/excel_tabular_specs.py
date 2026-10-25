@@ -131,7 +131,8 @@ def excel_read_structured_spec(brief: str) -> Dict[str, Any]:
 def excel_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "数据处理 / Excel 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "JSON 中介 → 写出 output.xlsx",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "JSON 中介 → 写出 output.xlsx",
         "input": "用户上传的 .json 或 run payload 中的结构化数据",
         "output": "outputs/output.xlsx",
         "output_schema": {

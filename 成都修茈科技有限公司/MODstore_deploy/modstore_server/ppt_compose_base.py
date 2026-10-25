@@ -57,7 +57,9 @@ def create_compose_deck(
     title = str(plan.get("title") or "演示文稿")[:120]
     slides_in = plan.get("slides") if isinstance(plan.get("slides"), list) else []
     if not slides_in:
-        slides_in = [{"index": 1, "title": title, "bullets": ["暂无内容"], "images": []}]
+        slides_in = [
+            {"index": 1, "title": title, "bullets": ["暂无内容"], "images": []}
+        ]
 
     prs = Presentation()
     prs.slide_width = Inches(13.333)
@@ -93,19 +95,25 @@ def create_compose_deck(
         bg.solid()
         bg.fore_color.rgb = RGBColor(15, 23, 42)
 
-        badge = slide.shapes.add_textbox(Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3))
+        badge = slide.shapes.add_textbox(
+            Inches(0.75), Inches(0.42), Inches(1.0), Inches(0.3)
+        )
         badge.text_frame.text = f"{idx + 1:02d}"
         badge.text_frame.paragraphs[0].font.size = Pt(11)
         badge.text_frame.paragraphs[0].font.color.rgb = RGBColor(125, 211, 252)
 
-        title_box = slide.shapes.add_textbox(Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72))
+        title_box = slide.shapes.add_textbox(
+            Inches(0.75), Inches(0.82), Inches(11.8), Inches(0.72)
+        )
         title_box.text_frame.text = slide_title
         tp = title_box.text_frame.paragraphs[0]
         tp.font.size = Pt(28)
         tp.font.bold = True
         tp.font.color.rgb = RGBColor(248, 250, 252)
 
-        body = slide.shapes.add_textbox(Inches(1.0), Inches(1.95), Inches(11.1), Inches(3.2))
+        body = slide.shapes.add_textbox(
+            Inches(1.0), Inches(1.95), Inches(11.1), Inches(3.2)
+        )
         tf = body.text_frame
         tf.word_wrap = True
         tf.clear()

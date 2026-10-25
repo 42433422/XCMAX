@@ -44,10 +44,14 @@ class _ReceiptLike(Protocol):
 
 def normalize_platform(raw: str) -> str:
     """Electron process.platform 等取值归一到 win/mac。"""
-    return _PLATFORM_ALIASES.get(str(raw or "").strip().lower(), str(raw or "").strip().lower())
+    return _PLATFORM_ALIASES.get(
+        str(raw or "").strip().lower(), str(raw or "").strip().lower()
+    )
 
 
-def _latest_by_installation(receipts: Iterable[_ReceiptLike]) -> dict[str, _ReceiptLike]:
+def _latest_by_installation(
+    receipts: Iterable[_ReceiptLike],
+) -> dict[str, _ReceiptLike]:
     latest: dict[str, _ReceiptLike] = {}
     for row in receipts:
         key = str(row.installation_id or "").strip()
@@ -75,7 +79,9 @@ def judge_release_acceptance(
     for installation_id, row in latest.items():
         platform = normalize_platform(row.platform) or "unknown"
         status = str(row.status or "").strip()
-        bucket = per_platform.setdefault(platform, {"devices": 0, "installed": 0, "failed": 0})
+        bucket = per_platform.setdefault(
+            platform, {"devices": 0, "installed": 0, "failed": 0}
+        )
         bucket["devices"] += 1
         if status == "installed":
             bucket["installed"] += 1
@@ -92,12 +98,16 @@ def judge_release_acceptance(
 
     if failures:
         verdict = VERDICT_REJECTED
-    elif all(per_platform.get(p, {}).get("installed", 0) >= 1 for p in required_platforms):
+    elif all(
+        per_platform.get(p, {}).get("installed", 0) >= 1 for p in required_platforms
+    ):
         verdict = VERDICT_ACCEPTED
     else:
         verdict = VERDICT_PENDING
 
-    missing = [p for p in required_platforms if per_platform.get(p, {}).get("installed", 0) < 1]
+    missing = [
+        p for p in required_platforms if per_platform.get(p, {}).get("installed", 0) < 1
+    ]
     return {
         "version": str(version or ""),
         "verdict": verdict,

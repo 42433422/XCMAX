@@ -15,7 +15,10 @@ from modstore_server.eventing.contracts import (
 from modstore_server.eventing.events import new_event
 from modstore_server.eventing.global_bus import neuro_bus as default_neuro_bus
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.services.employee import EmployeeRuntimeClient, get_default_employee_client
+from modstore_server.services.employee import (
+    EmployeeRuntimeClient,
+    get_default_employee_client,
+)
 
 
 class EmployeeApplicationService:
@@ -84,7 +87,9 @@ class EmployeeApplicationService:
             )
             raise
 
-    def register_pack(self, *, author_id: int, mod_id: str, pack_id: str, version: str) -> None:
+    def register_pack(
+        self, *, author_id: int, mod_id: str, pack_id: str, version: str
+    ) -> None:
         _ = self._repository
         self._bus.publish(
             new_event(

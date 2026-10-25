@@ -30,7 +30,9 @@ from sqlalchemy import desc, select
 from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import StrategicReport as StrategicReportModel
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.strategic_layer.strategic_report_analysis import StrategicReportAnalysisMixin
+from modstore_server.strategic_layer.strategic_report_analysis import (
+    StrategicReportAnalysisMixin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +77,9 @@ def _week_period(d: Optional[date] = None) -> WeeklyReportPeriod:
     # 周一 = d - weekday() 天（date.weekday() 周一=0）
     monday = d - timedelta(days=d.weekday())
     sunday = monday + timedelta(days=6)
-    return WeeklyReportPeriod(year=iso_year, week=iso_week, start_date=monday, end_date=sunday)
+    return WeeklyReportPeriod(
+        year=iso_year, week=iso_week, start_date=monday, end_date=sunday
+    )
 
 
 def _month_range(year: int, month: int) -> Tuple[date, date]:
@@ -121,9 +125,15 @@ class StrategicReportService(StrategicReportAnalysisMixin):
         digest_ids, digest_metrics = self._collect_digest_metrics(
             period.start_date, period.end_date
         )
-        decision_metrics = self._collect_decision_metrics(period.start_date, period.end_date)
-        action_item_metrics = self._collect_action_item_metrics(period.start_date, period.end_date)
-        incident_metrics = self._collect_incident_metrics(period.start_date, period.end_date)
+        decision_metrics = self._collect_decision_metrics(
+            period.start_date, period.end_date
+        )
+        action_item_metrics = self._collect_action_item_metrics(
+            period.start_date, period.end_date
+        )
+        incident_metrics = self._collect_incident_metrics(
+            period.start_date, period.end_date
+        )
 
         metrics: Dict[str, Any] = {
             "period": period.to_dict(),
@@ -225,7 +235,9 @@ class StrategicReportService(StrategicReportAnalysisMixin):
         session = self._session_factory()()
         try:
             row = session.execute(
-                select(StrategicReportModel).where(StrategicReportModel.report_key == report_key)
+                select(StrategicReportModel).where(
+                    StrategicReportModel.report_key == report_key
+                )
             ).scalar_one_or_none()
             return _report_row_to_dict(row) if row else None
         finally:
@@ -270,7 +282,9 @@ class StrategicReportService(StrategicReportAnalysisMixin):
         session = self._session_factory()()
         try:
             row = session.execute(
-                select(StrategicReportModel).where(StrategicReportModel.report_key == report_key)
+                select(StrategicReportModel).where(
+                    StrategicReportModel.report_key == report_key
+                )
             ).scalar_one_or_none()
             now = datetime.now(UTC)
             if row is None:
@@ -282,7 +296,9 @@ class StrategicReportService(StrategicReportAnalysisMixin):
                     content_md=content_md,
                     metrics_json=json.dumps(metrics, ensure_ascii=False, default=str),
                     risks_json=json.dumps(risks, ensure_ascii=False),
-                    recommendations_json=json.dumps(recommendations, ensure_ascii=False),
+                    recommendations_json=json.dumps(
+                        recommendations, ensure_ascii=False
+                    ),
                     source_digest_ids_json=json.dumps(source_digest_ids),
                     status="generated",
                     reviewed_by="",
@@ -297,7 +313,9 @@ class StrategicReportService(StrategicReportAnalysisMixin):
                 row.content_md = content_md
                 row.metrics_json = json.dumps(metrics, ensure_ascii=False, default=str)
                 row.risks_json = json.dumps(risks, ensure_ascii=False)
-                row.recommendations_json = json.dumps(recommendations, ensure_ascii=False)
+                row.recommendations_json = json.dumps(
+                    recommendations, ensure_ascii=False
+                )
                 row.source_digest_ids_json = json.dumps(source_digest_ids)
                 row.generated_by = actor
                 row.updated_at = now

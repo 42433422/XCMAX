@@ -28,7 +28,11 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from modstore_server.eventing import new_event
-from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
+from modstore_server.eventing.contracts import (
+    canonical_event_name,
+    event_version,
+    validate_payload,
+)
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -223,9 +227,9 @@ def dispatch_event(event: dict[str, Any]) -> dict[str, Any]:
         _store_event(event, result)
         return result
 
-    body = json.dumps(event, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    body = json.dumps(
+        event, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     timestamp = str(int(time.time()))
     secret = _webhook_secret()
     headers = {
@@ -289,9 +293,9 @@ def _deliver_event_to_subscription(
 
     event_id = str(event.get("id") or "")
     event_type = str(event.get("type") or "")
-    body = json.dumps(event, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode(
-        "utf-8"
-    )
+    body = json.dumps(
+        event, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+    ).encode("utf-8")
     timestamp = str(int(time.time()))
     secret_plain = ""
     try:
@@ -333,7 +337,9 @@ def _deliver_event_to_subscription(
         delivery.attempts = attempt
         try:
             with httpx.Client(timeout=_timeout_seconds()) as client:
-                response = client.post(subscription.target_url, content=body, headers=headers)
+                response = client.post(
+                    subscription.target_url, content=body, headers=headers
+                )
             last_status_code = response.status_code
             last_response_body = (response.text or "")[:1000]
             if 200 <= response.status_code < 300:

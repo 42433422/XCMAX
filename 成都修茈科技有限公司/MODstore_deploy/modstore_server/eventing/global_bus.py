@@ -48,7 +48,9 @@ def _build_primary_bus() -> NeuroBus:
             )
             return bus
         except BOUNDARY_ERRORS:  # noqa: BLE001
-            logger.exception("MODSTORE_BUS=%s but rabbitmq bus init failed; using memory", raw)
+            logger.exception(
+                "MODSTORE_BUS=%s but rabbitmq bus init failed; using memory", raw
+            )
     logger.info("NeuroBus primary backend: InMemoryNeuroBus (MODSTORE_BUS=%s)", raw)
     return InMemoryNeuroBus()
 
@@ -72,7 +74,9 @@ class _ShadowNeuroBus(NeuroBus):
             event_name, handler, priority=priority, filter_fn=filter_fn
         )
         try:
-            self._secondary.subscribe(event_name, handler, priority=priority, filter_fn=filter_fn)
+            self._secondary.subscribe(
+                event_name, handler, priority=priority, filter_fn=filter_fn
+            )
         except BOUNDARY_ERRORS:  # noqa: BLE001
             logger.debug("shadow subscribe failed on secondary", exc_info=True)
         return subscription
@@ -129,7 +133,9 @@ def _alert_dead_letters() -> None:
                 count,
             )
     except RECOVERABLE_ERRORS:
-        logger.debug("dead-letter check skipped (db not ready or table missing)", exc_info=True)
+        logger.debug(
+            "dead-letter check skipped (db not ready or table missing)", exc_info=True
+        )
 
 
 _alert_dead_letters()

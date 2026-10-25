@@ -1165,7 +1165,9 @@ class TestSyncModstoreLibraryToLocal:
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.domain.shared_services.modstore_library_sync.normalize_package_zip_path") as mock_norm,
+            patch(
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path"
+            ) as mock_norm,
         ):
             # normalize returns the same temp path so cleanup is a no-op
             mock_norm.side_effect = lambda p: p

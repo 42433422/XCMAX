@@ -44,7 +44,9 @@ def run_steps_on_fhd(
             url = f"/api/business/{path}"
             body = step.get("body")
             try:
-                r = client.request(method, url, json=body if isinstance(body, dict) else None)
+                r = client.request(
+                    method, url, json=body if isinstance(body, dict) else None
+                )
                 results.append(
                     {
                         "step": i,

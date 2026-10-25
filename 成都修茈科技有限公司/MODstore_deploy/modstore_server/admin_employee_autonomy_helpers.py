@@ -85,11 +85,17 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
     invalid_handler_ids: list[str] = []
     for employee_id in sorted(planned):
         contract = (
-            contracts.get(employee_id) if isinstance(contracts.get(employee_id), dict) else {}
+            contracts.get(employee_id)
+            if isinstance(contracts.get(employee_id), dict)
+            else {}
         )
-        trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        trigger = (
+            contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        )
         acceptance = (
-            contract.get("acceptance") if isinstance(contract.get("acceptance"), list) else []
+            contract.get("acceptance")
+            if isinstance(contract.get("acceptance"), list)
+            else []
         )
         assigned = all(
             (
@@ -106,11 +112,15 @@ def _workforce_assignment_snapshot(planned: set[str]) -> Dict[str, Any]:
         try:
             manifest = load_reviewed_duty_manifest(employee_id)
             config = parse_employee_config_v2(manifest)
-            actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
+            actions = (
+                config.get("actions") if isinstance(config.get("actions"), dict) else {}
+            )
             if isinstance(actions.get("actions"), dict):
                 actions = actions["actions"]
             handlers = {
-                str(item).strip() for item in actions.get("handlers") or [] if str(item).strip()
+                str(item).strip()
+                for item in actions.get("handlers") or []
+                if str(item).strip()
             }
         except BOUNDARY_ERRORS:  # noqa: BLE001 - missing/invalid reviewed runtime is a shell
             handlers = set()

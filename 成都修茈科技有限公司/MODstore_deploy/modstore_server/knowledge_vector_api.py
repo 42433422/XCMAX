@@ -14,7 +14,10 @@ from modstore_server.embedding_service import (
     embed_texts,
     embedding_config_snapshot,
 )
-from modstore_server.knowledge_ingest import SUPPORTED_EXTENSIONS, parse_and_chunk_with_metadata
+from modstore_server.knowledge_ingest import (
+    SUPPORTED_EXTENSIONS,
+    parse_and_chunk_with_metadata,
+)
 from modstore_server.knowledge_vector_store import (
     KnowledgeVectorError,
     delete_document,
@@ -106,7 +109,9 @@ async def api_upload_document(
 
 
 @router.post("/extract-text")
-async def api_extract_text(file: UploadFile = File(...), user: User = Depends(_get_current_user)):
+async def api_extract_text(
+    file: UploadFile = File(...), user: User = Depends(_get_current_user)
+):
     """Parse an uploaded file and return extracted text without requiring the embedding service.
 
     Used as a fallback when the vector store / embedding service is unavailable so the
@@ -141,7 +146,9 @@ def api_delete_document(doc_id: str, user: User = Depends(_get_current_user)):
 
 
 @router.post("/search")
-async def api_search_knowledge(body: KnowledgeSearchBody, user: User = Depends(_get_current_user)):
+async def api_search_knowledge(
+    body: KnowledgeSearchBody, user: User = Depends(_get_current_user)
+):
     try:
         sf = get_session_factory()
         with sf() as session:

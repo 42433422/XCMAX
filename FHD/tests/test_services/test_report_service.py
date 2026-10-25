@@ -801,7 +801,10 @@ class TestExportToExcel:
 
     def test_export_error(self, service):
         """导出异常时返回失败"""
-        with patch("app.domain.shared_services.report_service.pd.DataFrame", side_effect=ValueError("bad data")):
+        with patch(
+            "app.domain.shared_services.report_service.pd.DataFrame",
+            side_effect=ValueError("bad data"),
+        ):
             result = service.export_to_excel("sales", None, "error_report")
         assert result["success"] is False
         assert "message" in result

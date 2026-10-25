@@ -314,4 +314,6 @@ class ProductImportService(NeuroEventPublisherMixin):
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(ProductImportService, "app.domain.shared_services.product_import_service")
+instrument_service_layer_class(
+    ProductImportService, "app.domain.shared_services.product_import_service"
+)

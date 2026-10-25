@@ -336,7 +336,8 @@ def test_llm_assist_active_software_llm(monkeypatch):
         ),
         patch("app.infrastructure.llm.providers.registry.get_active_provider", return_value=None),
         patch(
-            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service", return_value=None
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
+            return_value=None,
         ),
     ):
         assert llm_assist._active_software_llm() == (False, None, None)
@@ -645,7 +646,8 @@ def test_session_provider_chat_completion_success(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", FakeClient)
     monkeypatch.setattr(
-        "app.domain.shared_services.conversation.modstore_adapter.ModstorePlatformAdapter", FakeAdapter
+        "app.domain.shared_services.conversation.modstore_adapter.ModstorePlatformAdapter",
+        FakeAdapter,
     )
     prov = SessionMarketProvider(1, "tok", timeout_seconds=4.0)
     out = asyncio.run(

@@ -25,7 +25,10 @@ from typing import Any, Dict
 
 from sqlalchemy.orm import Session
 
-from modstore_server.account_license_plans import account_license_plan, is_account_license_plan_id
+from modstore_server.account_license_plans import (
+    account_license_plan,
+    is_account_license_plan_id,
+)
 from modstore_server.models import (
     AuthorEarning,
     CatalogItem,
@@ -165,11 +168,15 @@ class ItemFulfilStrategy(FulfilStrategy):
         if ent_type == "employee":
             q = (
                 session.query(Quota)
-                .filter(Quota.user_id == ctx.user_id, Quota.quota_type == "employee_count")
+                .filter(
+                    Quota.user_id == ctx.user_id, Quota.quota_type == "employee_count"
+                )
                 .first()
             )
             if not q:
-                q = Quota(user_id=ctx.user_id, quota_type="employee_count", total=1, used=0)
+                q = Quota(
+                    user_id=ctx.user_id, quota_type="employee_count", total=1, used=0
+                )
             else:
                 q.total = int(q.total or 0) + 1
             session.add(q)
@@ -231,7 +238,9 @@ class PlanFulfilStrategy(FulfilStrategy):
         description: str,
         txn_type: str,
     ) -> None:
-        plan = session.query(PlanTemplate).filter(PlanTemplate.id == ctx.plan_id).first()
+        plan = (
+            session.query(PlanTemplate).filter(PlanTemplate.id == ctx.plan_id).first()
+        )
         if not plan:
             return
 
@@ -288,7 +297,9 @@ class PlanFulfilStrategy(FulfilStrategy):
                 .first()
             )
             if not row:
-                row = Quota(user_id=ctx.user_id, quota_type=quota_type, total=total, used=0)
+                row = Quota(
+                    user_id=ctx.user_id, quota_type=quota_type, total=total, used=0
+                )
             else:
                 row.total = total
                 row.used = 0
@@ -301,7 +312,9 @@ class PlanFulfilStrategy(FulfilStrategy):
                 int(license_meta.get("quota_cents") or 0) // 100
                 if is_license
                 else int(
-                    Decimal(str(ctx.total_amount)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+                    Decimal(str(ctx.total_amount)).quantize(
+                        Decimal("1"), rounding=ROUND_HALF_UP
+                    )
                 )
             )
         except BOUNDARY_ERRORS:  # noqa: BLE001
@@ -323,7 +336,11 @@ class PlanFulfilStrategy(FulfilStrategy):
                 Transaction(
                     user_id=ctx.user_id,
                     amount=float(grant_yuan),
-                    txn_type=("account_license_quota" if is_license else "plan_membership_tokens"),
+                    txn_type=(
+                        "account_license_quota"
+                        if is_license
+                        else "plan_membership_tokens"
+                    ),
                     status="completed",
                     description=(
                         f"账号授权随单 AI 额度(元) ({ctx.out_trade_no})"
@@ -371,7 +388,10 @@ class WalletFulfilStrategy(FulfilStrategy):
         from decimal import Decimal
 
         wallet = (
-            session.query(Wallet).filter(Wallet.user_id == ctx.user_id).with_for_update().first()
+            session.query(Wallet)
+            .filter(Wallet.user_id == ctx.user_id)
+            .with_for_update()
+            .first()
         )
         if not wallet:
             wallet = Wallet(user_id=ctx.user_id, balance=Decimal("0"))

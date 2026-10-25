@@ -70,7 +70,9 @@ async def get_action_items_stats(
 
 
 @router.post("/{item_id}/status", summary="行动条目状态流转")
-async def post_action_item_status(item_id: int, body: StatusDTO, _: User = Depends(_require_admin)):
+async def post_action_item_status(
+    item_id: int, body: StatusDTO, _: User = Depends(_require_admin)
+):
     from modstore_server.digest_action_items import set_status
 
     out = set_status(item_id, body.status)
@@ -81,5 +83,7 @@ async def post_action_item_status(item_id: int, body: StatusDTO, _: User = Depen
 
         write_public_action_board()
     except RECOVERABLE_ERRORS:
-        logger.exception("public action board after status update failed item_id=%s", item_id)
+        logger.exception(
+            "public action board after status update failed item_id=%s", item_id
+        )
     return {"ok": True, "data": out}

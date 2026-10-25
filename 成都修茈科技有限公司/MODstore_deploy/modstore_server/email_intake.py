@@ -131,9 +131,9 @@ def _emit_email_event(
 
     source_ref = (
         message_id
-        or hashlib.sha256(f"{from_addr}|{subject}|{date_hdr}|{body[:500]}".encode()).hexdigest()[
-            :24
-        ]
+        or hashlib.sha256(
+            f"{from_addr}|{subject}|{date_hdr}|{body[:500]}".encode()
+        ).hexdigest()[:24]
     )
     payload = {
         "subject_id": source_ref[:128],
@@ -162,7 +162,9 @@ def poll_email_intake_once() -> Dict[str, Any]:
     global _poll_fail_streak
     _load_modstore_env()
 
-    raw_en = (os.environ.get("MODSTORE_EMAIL_INTAKE_ENABLED", "1") or "").strip().lower()
+    raw_en = (
+        (os.environ.get("MODSTORE_EMAIL_INTAKE_ENABLED", "1") or "").strip().lower()
+    )
     if raw_en in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True, "processed": 0, "published": 0}
 
@@ -179,9 +181,13 @@ def poll_email_intake_once() -> Dict[str, Any]:
         )
     except ValueError:
         port = 993
-    search_query = (os.environ.get("MODSTORE_EMAIL_INTAKE_SEARCH") or "UNSEEN").strip() or "UNSEEN"
+    search_query = (
+        os.environ.get("MODSTORE_EMAIL_INTAKE_SEARCH") or "UNSEEN"
+    ).strip() or "UNSEEN"
     try:
-        max_messages = max(1, min(int(os.environ.get("MODSTORE_EMAIL_INTAKE_MAX", "20")), 200))
+        max_messages = max(
+            1, min(int(os.environ.get("MODSTORE_EMAIL_INTAKE_MAX", "20")), 200)
+        )
     except ValueError:
         max_messages = 20
     mark_seen = (
@@ -225,7 +231,11 @@ def poll_email_intake_once() -> Dict[str, Any]:
                 if typ2 != "OK" or not msg_data or not msg_data[0]:
                     continue
                 raw_msg = msg_data[0]
-                blob = raw_msg[1] if isinstance(raw_msg, tuple) and len(raw_msg) >= 2 else raw_msg
+                blob = (
+                    raw_msg[1]
+                    if isinstance(raw_msg, tuple) and len(raw_msg) >= 2
+                    else raw_msg
+                )
                 if not isinstance(blob, bytes):
                     continue
                 processed += 1
@@ -240,7 +250,9 @@ def poll_email_intake_once() -> Dict[str, Any]:
                 try:
                     body = _message_body_text(msg)
                 except RECOVERABLE_ERRORS:
-                    logger.exception("email intake: decode body failed mid=%s", message_id)
+                    logger.exception(
+                        "email intake: decode body failed mid=%s", message_id
+                    )
                     body = ""
 
                 if skip_approval_reply and _looks_like_approval_reply(from_addr, body):
@@ -255,7 +267,9 @@ def poll_email_intake_once() -> Dict[str, Any]:
                             date_hdr=date_hdr,
                         )
                     except RECOVERABLE_ERRORS:
-                        logger.exception("email intake: emit event failed mid=%s", message_id)
+                        logger.exception(
+                            "email intake: emit event failed mid=%s", message_id
+                        )
                         ok = False
                     if ok:
                         published += 1

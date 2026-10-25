@@ -8,7 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
+from modstore_server import (
+    self_maintenance_retort_change_evidence as retort_change_evidence,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, store
@@ -52,11 +54,13 @@ def _evaluate_retort_clarification_before_review(
         base_branch=base_branch,
         memory=memory,
         workspace_root=config._runtime_dir() / config.DEFAULT_MERGE_WORKSPACE_ROOT,
-        changed_files_for_branch=lambda workspace: workspace_domain._changed_files_for_branch(
-            repo_url=repo_url,
-            base_branch=base_branch,
-            branch=target,
-            workspace=workspace,
+        changed_files_for_branch=lambda workspace: (
+            workspace_domain._changed_files_for_branch(
+                repo_url=repo_url,
+                base_branch=base_branch,
+                branch=target,
+                workspace=workspace,
+            )
         ),
         cleanup_workspace=workspace_domain._cleanup_merge_workspace,
     )
@@ -102,7 +106,9 @@ def _evaluate_retort_clarification_before_review(
         reason = (
             "retort_clarification_pending"
             if pending
-            else "retort_clarification_expired" if expired else "retort_clarification_cancelled"
+            else "retort_clarification_expired"
+            if expired
+            else "retort_clarification_cancelled"
         )
         return {
             "blocked": True,
@@ -155,7 +161,11 @@ def _early_kb_validation_for_branch(*, run_id: str, branch: str) -> Dict[str, An
             "workspace": "",
             "clone_error": None,
         }
-    workspace = config._runtime_dir() / config.DEFAULT_MERGE_WORKSPACE_ROOT / f"{run_id}-kb-early"
+    workspace = (
+        config._runtime_dir()
+        / config.DEFAULT_MERGE_WORKSPACE_ROOT
+        / f"{run_id}-kb-early"
+    )
     try:
         return _early_kb_validation_in_workspace(
             base_branch=base_branch,
@@ -253,9 +263,13 @@ def _find_pr_number_for_branch(branch: str) -> Optional[int]:
     if repo:
         cmd.extend(["--repo", repo])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
     except RECOVERABLE_ERRORS as exc:
-        config.logger.warning("kb_schema_retry: gh pr list failed for branch=%s: %s", branch, exc)
+        config.logger.warning(
+            "kb_schema_retry: gh pr list failed for branch=%s: %s", branch, exc
+        )
         return None
     if proc.returncode != 0:
         config.logger.warning(
@@ -281,9 +295,13 @@ def _gh_pr_comment(pr_number: int, body: str) -> bool:
     if repo:
         cmd.extend(["--repo", repo])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
     except RECOVERABLE_ERRORS as exc:
-        config.logger.warning("kb_schema_retry: gh pr comment failed pr=%s: %s", pr_number, exc)
+        config.logger.warning(
+            "kb_schema_retry: gh pr comment failed pr=%s: %s", pr_number, exc
+        )
         return False
     if proc.returncode != 0:
         config.logger.warning(
@@ -310,7 +328,9 @@ def _gh_pr_add_label(pr_number: int, label: str) -> bool:
     if repo:
         cmd.extend(["--repo", repo])
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=60, check=False
+        )
     except RECOVERABLE_ERRORS as exc:
         config.logger.warning(
             "kb_schema_retry: gh pr edit --add-label %s failed pr=%s: %s",
@@ -361,7 +381,9 @@ def _existing_kb_schema_retry_item(
             return item
         if para_task_id and item_task_id == para_task_id:
             return item
-        created_dt = config._parse_iso(item.get("created_at") or item.get("last_attempted_at"))
+        created_dt = config._parse_iso(
+            item.get("created_at") or item.get("last_attempted_at")
+        )
         if created_dt and (now - created_dt).total_seconds() <= 24 * 3600:
             if fallback_within_24h is None:
                 fallback_within_24h = item
@@ -396,20 +418,28 @@ def _reject_and_retry_kb_schema_failure(
     """
     errors = kb_validation.get("errors") if isinstance(kb_validation, dict) else None
     if not isinstance(errors, list) or not errors:
-        errors = [{"error": "unknown kb schema validation failure", "file": "", "kind": ""}]
+        errors = [
+            {"error": "unknown kb schema validation failure", "file": "", "kind": ""}
+        ]
     error_bullets = "\n".join(
         (
             f"- file: `{e.get('file') or '?'}` kind: `{e.get('kind') or '?'}` error: {(e.get('error') or '')[:300]}"
             for e in errors[:8]
         )
     )
-    checked_files = kb_validation.get("checked") if isinstance(kb_validation, dict) else []
-    checked_str = ", ".join((str(f) for f in checked_files)) if checked_files else "(none)"
+    checked_files = (
+        kb_validation.get("checked") if isinstance(kb_validation, dict) else []
+    )
+    checked_str = (
+        ", ".join((str(f) for f in checked_files)) if checked_files else "(none)"
+    )
     memory = store._load_loop_memory()
     open_items = memory.get("open_items")
     if not isinstance(open_items, list):
         open_items = []
-    existing = _existing_kb_schema_retry_item(open_items, branch=branch, para_task_id=para_task_id)
+    existing = _existing_kb_schema_retry_item(
+        open_items, branch=branch, para_task_id=para_task_id
+    )
     if existing is not None:
         retry_count = int(existing.get("retry_count") or 0) + 1
     else:
@@ -475,7 +505,9 @@ def _reject_and_retry_kb_schema_failure(
     except RECOVERABLE_ERRORS:
         config.logger.exception("kb_schema_retry: failed to write governance audit")
     final_status = (
-        "completed_waiting_human_strategy" if escalated else config.KB_SCHEMA_FAILED_STATUS
+        "completed_waiting_human_strategy"
+        if escalated
+        else config.KB_SCHEMA_FAILED_STATUS
     )
     policy_decision = {
         "action": "hold_for_automated_remediation",

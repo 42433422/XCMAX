@@ -6,7 +6,14 @@ import logging
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from modstore_server.workbench.intent import CANVAS_SKILL_INTENT
 
@@ -65,7 +72,8 @@ class WorkbenchSessionCreateBody(BaseModel):
         True, description="为 mod intent 时是否生成 Mod + 员工 + 工作流绑定的一体化套件"
     )
     generate_frontend: bool = Field(
-        True, description="为 mod intent 时是否生成定制 Vue 前端页面；false 时仅保留最小前端占位"
+        True,
+        description="为 mod intent 时是否生成定制 Vue 前端页面；false 时仅保留最小前端占位",
     )
     planning_messages: List[Dict[str, Any]] = Field(default_factory=list)
     execution_checklist: List[str] = Field(default_factory=list)
@@ -148,7 +156,9 @@ def _parse_workbench_session_create(meta: Dict[str, Any]) -> WorkbenchSessionCre
             elif msg:
                 parts.append(msg)
         detail = "；".join(parts)[:1800] if parts else str(e)
-        raise HTTPException(status_code=422, detail=f"工作台请求参数无效：{detail}") from e
+        raise HTTPException(
+            status_code=422, detail=f"工作台请求参数无效：{detail}"
+        ) from e
 
 
 class WorkbenchEdgeTtsBody(BaseModel):
@@ -156,14 +166,18 @@ class WorkbenchEdgeTtsBody(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=5000)
     voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
-    rate: float = Field(1.0, ge=0.6, le=1.6, description="相对语速，约映射到 Edge 的 rate 百分比")
+    rate: float = Field(
+        1.0, ge=0.6, le=1.6, description="相对语速，约映射到 Edge 的 rate 百分比"
+    )
 
 
 class WorkbenchUnifiedTtsBody(BaseModel):
     """统一 TTS：优先 MiMo，失败回退 Edge 神经音。"""
 
     text: str = Field(..., min_length=1, max_length=5000)
-    voice: str = Field("", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认")
+    voice: str = Field(
+        "", max_length=120, description="MiMo 音色（如 冰糖）；空则用默认"
+    )
     edge_voice: str = Field("zh-CN-XiaoxiaoNeural", max_length=120)
     rate: float = Field(1.0, ge=0.6, le=1.6)
 
@@ -208,7 +222,8 @@ class EmployeePublishRequest(BaseModel):
 class EmployeeSyncTestRequest(BaseModel):
     employee_id: str = Field(..., description="员工包 ID（同 pack_id）")
     fhd_base_url: Optional[str] = Field(
-        None, description="宿主 fhd-sandbox-runtime 的 base URL，如 http://localhost:9999"
+        None,
+        description="宿主 fhd-sandbox-runtime 的 base URL，如 http://localhost:9999",
     )
     provider: Optional[str] = Field(None)
     model: Optional[str] = Field(None)
@@ -225,7 +240,9 @@ class EmployeeSaveBody(BaseModel):
         ..., description="员工完整 manifest（employee_config_v2 结构）"
     )
     employee_id: Optional[str] = Field(
-        None, max_length=128, description="已有员工ID；为空时从 manifest.identity.id 读取"
+        None,
+        max_length=128,
+        description="已有员工ID；为空时从 manifest.identity.id 读取",
     )
     provider: Optional[str] = Field(
         None,

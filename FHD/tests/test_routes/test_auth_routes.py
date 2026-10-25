@@ -128,7 +128,8 @@ class TestFindLocalUsersByEmail:
 class TestSyncLocalPasswordForEmail:
     def test_no_users(self, auth_mod):
         with patch(
-            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email", return_value=[]
+            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
+            return_value=[],
         ):
             result = auth_mod._sync_local_password_for_email("a@b.com", "newpass")
             assert result == 0

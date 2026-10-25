@@ -26,7 +26,10 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from modstore_server.digest_identity import normalize_digest_identity_code, verify_digest_identity
+from modstore_server.digest_identity import (
+    normalize_digest_identity_code,
+    verify_digest_identity,
+)
 from modstore_server.models import get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -47,7 +50,11 @@ def inbound_enabled() -> bool:
 
 
 def upstream_base_url() -> str:
-    return (os.environ.get("MODSTORE_DIGEST_IDENTITY_UPSTREAM_URL") or "").strip().rstrip("/")
+    return (
+        (os.environ.get("MODSTORE_DIGEST_IDENTITY_UPSTREAM_URL") or "")
+        .strip()
+        .rstrip("/")
+    )
 
 
 def _bearer_token(request: Request) -> str:

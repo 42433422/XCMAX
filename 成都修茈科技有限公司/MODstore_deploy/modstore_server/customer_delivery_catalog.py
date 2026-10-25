@@ -13,7 +13,9 @@ from typing import Any
 from modstore_server.catalog_publication_policy import stable_version
 from modstore_server.customer_delivery_package import verify_delivery_package
 from modstore_server.customer_delivery_receipts import canonical_sha256
-from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_commerce_blockers,
+)
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import get_session_factory, get_user_mod_ids
 from modstore_server.models_cs import CustomerServiceTicket
@@ -38,7 +40,9 @@ def private_release_rows(owner_id: int, library: Path) -> dict[str, dict[str, An
     # Accepted signed deliveries are discoverable before first installation.
     # Every candidate still passes the owner/ticket/generation/commerce checks
     # below; discovery does not itself grant runtime or source-sync privileges.
-    allowed.update(path.name for path in root.iterdir() if path.is_dir() and not path.is_symlink())
+    allowed.update(
+        path.name for path in root.iterdir() if path.is_dir() and not path.is_symlink()
+    )
     rows: dict[str, dict[str, Any]] = {}
     with get_session_factory()() as db:
         for mod_id in sorted(allowed):
@@ -60,7 +64,9 @@ def private_release_rows(owner_id: int, library: Path) -> dict[str, dict[str, An
                         continue
                     ticket = (
                         db.query(CustomerServiceTicket)
-                        .filter_by(id=ticket_id, user_id=owner_id, intent="custom_delivery")
+                        .filter_by(
+                            id=ticket_id, user_id=owner_id, intent="custom_delivery"
+                        )
                         .first()
                     )
                     if ticket is None:
@@ -80,9 +86,9 @@ def private_release_rows(owner_id: int, library: Path) -> dict[str, dict[str, An
                     ):
                         continue
                     version = str(manifest.get("version") or "")
-                    if mod_id in rows and stable_version(rows[mod_id]["version"]) >= stable_version(
-                        version
-                    ):
+                    if mod_id in rows and stable_version(
+                        rows[mod_id]["version"]
+                    ) >= stable_version(version):
                         continue
                     stable_version(version)
                     rows[mod_id] = {
@@ -163,7 +169,8 @@ def _verified_ticket_artifacts(
         key = kind, artifact_id
         previous = expected.get(key)
         if previous and any(
-            previous.get(field) != row.get(field) for field in ("version", "package_sha256")
+            previous.get(field) != row.get(field)
+            for field in ("version", "package_sha256")
         ):
             raise ValueError("正式交付清单版本或摘要不一致")
         expected[key] = {**row, **(previous or {})}
@@ -189,7 +196,9 @@ def _verified_ticket_artifacts(
             record, owner_id=int(ticket.user_id), ticket_id=int(ticket.id)
         )
         manifest = signed["manifest"]
-        actual_kind = "employee" if manifest.get("artifact") == "employee_pack" else "module"
+        actual_kind = (
+            "employee" if manifest.get("artifact") == "employee_pack" else "module"
+        )
         if actual_kind != kind:
             raise ValueError("正式交付清单产物类型不一致")
         artifacts.append(record)
@@ -232,7 +241,9 @@ def issue_release_download(record: dict[str, Any], raw: bytes) -> dict[str, str]
             row["kind"] == "module"
             and row["id"] == manifest.get("id") == record["id"]
             and row["version"] == manifest.get("version") == record["version"]
-            and row["package_sha256"] == signed["package_sha256"] == record["package_sha256"]
+            and row["package_sha256"]
+            == signed["package_sha256"]
+            == record["package_sha256"]
             for row in artifacts
         ):
             raise ValueError("下载产物不在当前工单正式交付清单中")
@@ -255,7 +266,9 @@ def issue_release_download(record: dict[str, Any], raw: bytes) -> dict[str, str]
             }
         )
         evidence["download_grants"] = grants[-20:]
-        from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+        from modstore_server.customer_delivery_entitlements import (
+            grant_verified_delivery_access,
+        )
 
         grant_verified_delivery_access(
             db, ticket, evidence, manifest, owner_id=record["owner_user_id"]

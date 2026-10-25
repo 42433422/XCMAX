@@ -10,7 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from modstore_server.api.service_auth import require_admin_or_internal, require_admin_user
+from modstore_server.api.service_auth import (
+    require_admin_or_internal,
+    require_admin_user,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.xcmax_admin_api")
@@ -22,7 +25,9 @@ def _facade():
     return importlib.import_module("modstore_server.xcmax_admin_api")
 
 
-def _daily_digest_record_to_dict(row: Any, *, include_body: bool = False) -> dict[str, Any]:
+def _daily_digest_record_to_dict(
+    row: Any, *, include_body: bool = False
+) -> dict[str, Any]:
     data: dict[str, Any] = {
         "id": row.id,
         "day": row.day,
@@ -67,7 +72,8 @@ async def xcmax_daily_digest_records(
             return {
                 "success": True,
                 "data": [
-                    _facade()._daily_digest_record_to_dict(r, include_body=False) for r in rows
+                    _facade()._daily_digest_record_to_dict(r, include_body=False)
+                    for r in rows
                 ],
                 "total": total,
             }
@@ -214,7 +220,9 @@ async def xcmax_surface_audit_lane(
             if isinstance(row, dict):
                 la = row
         pages: list[dict[str, Any]] = []
-        for row in (report.get("results") if isinstance(report.get("results"), list) else []):
+        for row in (
+            report.get("results") if isinstance(report.get("results"), list) else []
+        ):
             if row.get("lane") != lane:
                 continue
             thumb_b64 = ""
@@ -240,7 +248,9 @@ async def xcmax_surface_audit_lane(
             )
         return {
             "lane": lane,
-            "lane_label": {"P-W": "网站", "P-S": "软件", "P-App": "App"}.get(lane, lane),
+            "lane_label": {"P-W": "网站", "P-S": "软件", "P-App": "App"}.get(
+                lane, lane
+            ),
             "workflow_node": workflow_nodes.get(lane, ""),
             "day": day,
             "base_url": _base_url(),

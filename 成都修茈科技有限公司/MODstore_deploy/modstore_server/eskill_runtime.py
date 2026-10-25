@@ -83,7 +83,11 @@ class ESkillRuntime:
         try:
             output = self._execute_logic(logic, input_data, user_id=user_id)
             quality_ok = self._passes_quality_gate(output, quality_gate)
-            if quality_ok and not force_dynamic and not bool(trigger_policy.get("force_dynamic")):
+            if (
+                quality_ok
+                and not force_dynamic
+                and not bool(trigger_policy.get("force_dynamic"))
+            ):
                 return self._finish_run(db, run, output, t0, "static")
             if not bool(trigger_policy.get("on_quality_below_threshold", True)):
                 return self._finish_run(db, run, output, t0, "static_quality_failed")
@@ -184,7 +188,9 @@ class ESkillRuntime:
             )
 
         patch["quality_report"] = quality
-        result = self._finish_run(db, run, output, t0, "dynamic", patch=patch, commit=False)
+        result = self._finish_run(
+            db, run, output, t0, "dynamic", patch=patch, commit=False
+        )
         if solidify:
             db.add(run)
             db.flush()
@@ -260,7 +266,9 @@ class ESkillRuntime:
         if logic_type == "template_transform":
             output_var = str(logic.get("output_var") or "eskill_result")
             return {
-                output_var: _render_template(str(logic.get("template") or ""), input_data),
+                output_var: _render_template(
+                    str(logic.get("template") or ""), input_data
+                ),
                 "eskill_logic_type": logic_type,
             }
 
@@ -279,7 +287,9 @@ class ESkillRuntime:
                 user_id=user_id,
             )
             output_mapping = logic.get("output_mapping") or {}
-            mapped = resolve_value(output_mapping, {"result": result, "global": input_data})
+            mapped = resolve_value(
+                output_mapping, {"result": result, "global": input_data}
+            )
             base = {"employee_result": result, "eskill_logic_type": logic_type}
             if isinstance(mapped, dict):
                 base.update(mapped)
@@ -289,7 +299,9 @@ class ESkillRuntime:
             return self._execute_pipeline(logic, input_data, user_id=user_id)
 
         if logic_type in ("vibe_code", "vibe_workflow"):
-            from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_kind
+            from modstore_server.integrations.vibe_eskill_adapter import (
+                execute_vibe_kind,
+            )
 
             return execute_vibe_kind(logic, input_data, user_id=user_id)
 
@@ -330,7 +342,11 @@ class ESkillRuntime:
                     context,
                     user_id=user_id,
                 )
-                value = vibe_out.get("vibe_run") or vibe_out.get("vibe_workflow_run") or vibe_out
+                value = (
+                    vibe_out.get("vibe_run")
+                    or vibe_out.get("vibe_workflow_run")
+                    or vibe_out
+                )
             else:
                 raise ValueError(f"不支持的 pipeline step 类型: {step_type}")
             outputs[output_var] = value
@@ -347,10 +363,14 @@ class ESkillRuntime:
             return sorted(context.keys())
         raise ValueError(f"工具未在 ESkill allowlist 中: {tool}")
 
-    def _passes_quality_gate(self, output: Dict[str, Any], gate: Dict[str, Any]) -> bool:
+    def _passes_quality_gate(
+        self, output: Dict[str, Any], gate: Dict[str, Any]
+    ) -> bool:
         return bool(self._quality_report(output, gate)["passed"])
 
-    def _quality_report(self, output: Dict[str, Any], gate: Dict[str, Any]) -> Dict[str, Any]:
+    def _quality_report(
+        self, output: Dict[str, Any], gate: Dict[str, Any]
+    ) -> Dict[str, Any]:
         issues: list[str] = []
         score = 1.0
         required_keys = [str(x) for x in (gate.get("required_keys") or [])]
@@ -401,7 +421,9 @@ class ESkillRuntime:
         passed = not issues and score >= min_score
         return {"passed": passed, "score": round(score, 4), "issues": issues}
 
-    def _apply_patch(self, logic: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def _apply_patch(
+        self, logic: Dict[str, Any], patch: Dict[str, Any]
+    ) -> Dict[str, Any]:
         patched = deepcopy(logic)
         changes = patch.get("changes") if isinstance(patch, dict) else {}
         if not isinstance(changes, dict):
@@ -428,7 +450,9 @@ class ESkillRuntime:
         if isinstance(keywords, str):
             keywords = [x.strip() for x in re.split(r"[,，\s]+", keywords) if x.strip()]
         if not keywords:
-            keywords = [x for x in re.split(r"[,，\s]+", skill.domain or "") if len(x) >= 2]
+            keywords = [
+                x for x in re.split(r"[,，\s]+", skill.domain or "") if len(x) >= 2
+            ]
         if not keywords:
             return True
         text = json.dumps(input_data, ensure_ascii=False).lower()
@@ -459,7 +483,11 @@ class ESkillRuntime:
             patch = _loads(row.patch_json, {})
             prior_input = _loads(row.input_json, {})
             prior_text = json.dumps(prior_input, ensure_ascii=False).lower()
-            if not text or not prior_text or set(text.split()) & set(prior_text.split()):
+            if (
+                not text
+                or not prior_text
+                or set(text.split()) & set(prior_text.split())
+            ):
                 matches.append(patch)
             if len(matches) >= limit:
                 break
@@ -482,7 +510,9 @@ class ESkillRuntime:
         db.add(skill)
         return True
 
-    def _merge_overrides(self, logic: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, Any]:
+    def _merge_overrides(
+        self, logic: Dict[str, Any], overrides: Dict[str, Any]
+    ) -> Dict[str, Any]:
         merged = deepcopy(logic)
         for key, value in overrides.items():
             if value not in (None, ""):

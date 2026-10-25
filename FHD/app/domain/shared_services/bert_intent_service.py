@@ -474,5 +474,7 @@ def reset_bert_intent_service():
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(BertIntentClassifier, "app.domain.shared_services.bert_intent_service")
+instrument_service_layer_class(
+    BertIntentClassifier, "app.domain.shared_services.bert_intent_service"
+)
 instrument_service_layer_class(BertIntentService, "app.domain.shared_services.bert_intent_service")

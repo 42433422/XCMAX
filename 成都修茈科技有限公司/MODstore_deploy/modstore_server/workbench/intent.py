@@ -36,7 +36,9 @@ def _employee_asset_publish_catalog_from_env() -> bool:
 
     部署可设 ``MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG=1``，生成即登记，避免 ``/manifest`` 404。
     """
-    return (os.environ.get("MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG") or "").strip().lower() in (
+    return (
+        os.environ.get("MODSTORE_EMPLOYEE_ASSET_PUBLISH_CATALOG") or ""
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -52,7 +54,9 @@ def _enrich_artifact_skill_aliases(artifact: dict[str, Any]) -> dict[str, Any]: 
 def _enrich_artifact_skill_aliases(artifact: None) -> None: ...
 
 
-def _enrich_artifact_skill_aliases(artifact: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _enrich_artifact_skill_aliases(
+    artifact: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
     if not artifact or not isinstance(artifact, dict):
         return artifact
     out = dict(artifact)
@@ -72,19 +76,59 @@ def _default_steps(
     if execution_mode == "script":
         return [
             {"id": "spec", "label": "理解任务", "status": "pending", "message": None},
-            {"id": "generate", "label": "生成处理脚本", "status": "pending", "message": None},
-            {"id": "validate", "label": "安全检查", "status": "pending", "message": None},
-            {"id": "run", "label": "运行并生成文件", "status": "pending", "message": None},
+            {
+                "id": "generate",
+                "label": "生成处理脚本",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "validate",
+                "label": "安全检查",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "run",
+                "label": "运行并生成文件",
+                "status": "pending",
+                "message": None,
+            },
             {"id": "complete", "label": "完成", "status": "pending", "message": None},
         ]
     if intent == "mod":
         return [
             {"id": "spec", "label": "理解需求", "status": "pending", "message": None},
-            {"id": "manifest", "label": "生成蓝图与 JSON", "status": "pending", "message": None},
-            {"id": "repo", "label": "新建 Mod 仓库", "status": "pending", "message": None},
-            {"id": "industry", "label": "生成行业卡片", "status": "pending", "message": None},
-            {"id": "employees", "label": "创建员工骨架", "status": "pending", "message": None},
-            {"id": "employee_impls", "label": "生成员工脚本", "status": "pending", "message": None},
+            {
+                "id": "manifest",
+                "label": "生成蓝图与 JSON",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "repo",
+                "label": "新建 Mod 仓库",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "industry",
+                "label": "生成行业卡片",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "employees",
+                "label": "创建员工骨架",
+                "status": "pending",
+                "message": None,
+            },
+            {
+                "id": "employee_impls",
+                "label": "生成员工脚本",
+                "status": "pending",
+                "message": None,
+            },
             {
                 "id": "workflows",
                 "label": "生成员工 Skill 组（画布编排）",
@@ -97,14 +141,24 @@ def _default_steps(
                 "status": "pending",
                 "message": None,
             },
-            {"id": "api", "label": "生成/绑定 API 节点", "status": "pending", "message": None},
+            {
+                "id": "api",
+                "label": "生成/绑定 API 节点",
+                "status": "pending",
+                "message": None,
+            },
             {
                 "id": "workflow_sandbox",
                 "label": "工作流沙箱测试",
                 "status": "pending",
                 "message": None,
             },
-            {"id": "mod_sandbox", "label": "Mod 沙箱测试", "status": "pending", "message": None},
+            {
+                "id": "mod_sandbox",
+                "label": "Mod 沙箱测试",
+                "status": "pending",
+                "message": None,
+            },
             {"id": "complete", "label": "完成", "status": "pending", "message": None},
         ]
     base = [
@@ -130,7 +184,12 @@ def _default_steps(
                     "status": "pending",
                     "message": None,
                 },
-                {"id": "embed_script", "label": "绑定到员工", "status": "pending", "message": None},
+                {
+                    "id": "embed_script",
+                    "label": "绑定到员工",
+                    "status": "pending",
+                    "message": None,
+                },
             ]
         )
         if (employee_target or "").strip().lower() == "pack_plus_workflow":
@@ -227,7 +286,9 @@ def _default_steps(
                     },
                 ]
             )
-    base.append({"id": "complete", "label": "完成", "status": "pending", "message": None})
+    base.append(
+        {"id": "complete", "label": "完成", "status": "pending", "message": None}
+    )
     if intent == CANVAS_SKILL_INTENT:
         base[1]["label"] = "创建 Skill 组"
     return base

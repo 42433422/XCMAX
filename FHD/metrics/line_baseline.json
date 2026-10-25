@@ -1,5 +1,5 @@
 {
-  "lines": 2303178,
+  "lines": 2337309,
   "updated": "2026-10-25",
-  "note": "debt19 CI修红：恢复routes、shared_services/app_pure迁移与白名单、治理基线、langgraph _types"
+  "note": "debt19 #2631：mods_ssot NO_XCAGI_EXPORT + employee-roster/product-lines 生成物对齐后微调基线"
 }

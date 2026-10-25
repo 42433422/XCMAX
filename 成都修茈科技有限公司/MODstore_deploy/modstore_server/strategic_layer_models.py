@@ -20,15 +20,25 @@ class ProposeDecisionRequest(BaseModel):
         description="提议人 ID（ai-strategist/user/<employee_id>）",
     )
     payload: Dict[str, Any] = Field(default_factory=dict, description="决策附加上下文")
-    decision_type: str = Field("operational", description="strategic/tactical/operational")
-    scope: str = Field("global", description="global/release_train/module/employee/incident")
-    scope_ref: str = Field("", max_length=256, description="关联 ID（模块名/版本号/员工 ID 等）")
-    execution_plan: Dict[str, Any] = Field(default_factory=dict, description="执行计划 JSON")
+    decision_type: str = Field(
+        "operational", description="strategic/tactical/operational"
+    )
+    scope: str = Field(
+        "global", description="global/release_train/module/employee/incident"
+    )
+    scope_ref: str = Field(
+        "", max_length=256, description="关联 ID（模块名/版本号/员工 ID 等）"
+    )
+    execution_plan: Dict[str, Any] = Field(
+        default_factory=dict, description="执行计划 JSON"
+    )
 
 
 class DecisionReviewRequest(BaseModel):
     decided_by: str = Field("user", description="决策者标识：user/council-vote")
-    review_notes: str = Field("", max_length=4000, description="决策备注（reject 必填）")
+    review_notes: str = Field(
+        "", max_length=4000, description="决策备注（reject 必填）"
+    )
 
 
 class WithdrawRequest(BaseModel):
@@ -37,17 +47,25 @@ class WithdrawRequest(BaseModel):
 
 
 class StartExecutionRequest(BaseModel):
-    execution_plan: Dict[str, Any] = Field(default_factory=dict, description="执行计划更新")
+    execution_plan: Dict[str, Any] = Field(
+        default_factory=dict, description="执行计划更新"
+    )
 
 
 class CompleteExecutionRequest(BaseModel):
-    execution_result: Dict[str, Any] = Field(default_factory=dict, description="执行结果 JSON")
-    review_at: Optional[str] = Field(None, description="复盘截止时间 ISO 字符串（默认 +7d）")
+    execution_result: Dict[str, Any] = Field(
+        default_factory=dict, description="执行结果 JSON"
+    )
+    review_at: Optional[str] = Field(
+        None, description="复盘截止时间 ISO 字符串（默认 +7d）"
+    )
 
 
 class ReviewDecisionRequest(BaseModel):
     reviewer: str = Field(..., min_length=1, max_length=128, description="复盘人 ID")
-    review_notes: str = Field(..., min_length=1, max_length=4000, description="复盘结论")
+    review_notes: str = Field(
+        ..., min_length=1, max_length=4000, description="复盘结论"
+    )
 
 
 class ScheduleMeetingRequest(BaseModel):
@@ -58,14 +76,22 @@ class ScheduleMeetingRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     scheduled_at: str = Field(..., description="开始时间 ISO 字符串")
     chair: str = Field("", max_length=128, description="主持人 ID")
-    required_participants: List[str] = Field(default_factory=list, description="必需参会人 ID 列表")
-    optional_participants: List[str] = Field(default_factory=list, description="可选参会人 ID 列表")
-    agenda: str = Field(..., min_length=1, max_length=4000, description="议程（Markdown 文本）")
+    required_participants: List[str] = Field(
+        default_factory=list, description="必需参会人 ID 列表"
+    )
+    optional_participants: List[str] = Field(
+        default_factory=list, description="可选参会人 ID 列表"
+    )
+    agenda: str = Field(
+        ..., min_length=1, max_length=4000, description="议程（Markdown 文本）"
+    )
     context: Dict[str, Any] = Field(default_factory=dict, description="会议上下文")
 
 
 class ConcludeMeetingRequest(BaseModel):
-    minutes_md: str = Field(..., min_length=1, max_length=20000, description="会议纪要 Markdown")
+    minutes_md: str = Field(
+        ..., min_length=1, max_length=20000, description="会议纪要 Markdown"
+    )
     actor: str = Field("ai-strategist", max_length=128, description="结束人 ID")
     decisions: List[Dict[str, Any]] = Field(
         default_factory=list,
@@ -91,12 +117,16 @@ class UpdateActionItemRequest(BaseModel):
 
 
 class GenerateWeeklyReportRequest(BaseModel):
-    target_date: Optional[str] = Field(None, description="目标日期 ISO 字符串（默认今天）")
+    target_date: Optional[str] = Field(
+        None, description="目标日期 ISO 字符串（默认今天）"
+    )
     actor: str = Field("ai-strategist", max_length=128, description="生成人 ID")
 
 
 class GenerateMonthlyReportRequest(BaseModel):
-    year: Optional[int] = Field(None, ge=2020, le=2100, description="年份（默认上个月所在年）")
+    year: Optional[int] = Field(
+        None, ge=2020, le=2100, description="年份（默认上个月所在年）"
+    )
     month: Optional[int] = Field(None, ge=1, le=12, description="月份（默认上个月）")
     actor: str = Field("ai-strategist", max_length=128, description="生成人 ID")
 

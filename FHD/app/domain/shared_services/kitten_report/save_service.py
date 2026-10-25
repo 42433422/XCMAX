@@ -320,4 +320,6 @@ analysis_save_service = AnalysisSaveService()
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(AnalysisSaveService, "app.domain.shared_services.kitten_report.save_service")
+instrument_service_layer_class(
+    AnalysisSaveService, "app.domain.shared_services.kitten_report.save_service"
+)

@@ -31,7 +31,9 @@ _EMPTY_CONTENT_HINT = "未输出正文"
 
 
 class LlmClient(Protocol):
-    async def chat(self, messages: List[Dict[str, str]], *, max_tokens: int = 1024) -> str: ...
+    async def chat(
+        self, messages: List[Dict[str, str]], *, max_tokens: int = 1024
+    ) -> str: ...
 
 
 class RealLlmClient:
@@ -242,7 +244,9 @@ def _extract_code_block_core(text: str, *, lang: str = "python") -> str:
         return max(merged_candidates, key=len)
 
     for label, body in fenced_candidates:
-        if (not label or label in {"text", "plain"}) and _looks_like_python_source(body):
+        if (not label or label in {"text", "plain"}) and _looks_like_python_source(
+            body
+        ):
             return body
     for _label, body in fenced_candidates:
         if _looks_like_python_source(body):
@@ -262,7 +266,9 @@ def _extract_code_block_core(text: str, *, lang: str = "python") -> str:
 
     # 没有 fenced block 时，优先剥离前置说明文字，避免 line 1 invalid syntax。
     lines = normalized.splitlines()
-    first_code_line = next((i for i, ln in enumerate(lines) if _looks_like_python_line(ln)), None)
+    first_code_line = next(
+        (i for i, ln in enumerate(lines) if _looks_like_python_line(ln)), None
+    )
     if first_code_line is not None and first_code_line > 0:
         head_non_empty = next((ln.strip() for ln in lines if ln.strip()), "")
         if head_non_empty and not _looks_like_python_line(head_non_empty):

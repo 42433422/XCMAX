@@ -101,7 +101,9 @@ def _classify_asset(filename: str) -> str:
 
 
 def _runtime_module_name(pack_id: str) -> str:
-    raw = _facade().re.sub("[^a-z0-9_]+", "_", (pack_id or "employee").lower()).strip("_")
+    raw = (
+        _facade().re.sub("[^a-z0-9_]+", "_", (pack_id or "employee").lower()).strip("_")
+    )
     if not raw:
         raw = "employee"
     if raw[0].isdigit():
@@ -150,7 +152,9 @@ def _infer_accepted_extensions(
             suffixes - _facade().EXCEL_SUFFIXES
         )
     if suffixes & _facade().DOC_SUFFIXES:
-        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(suffixes - _facade().DOC_SUFFIXES)
+        return sorted(suffixes & _facade().DOC_SUFFIXES) + sorted(
+            suffixes - _facade().DOC_SUFFIXES
+        )
     return sorted(suffixes)
 
 
@@ -228,7 +232,9 @@ def _infer_asset_runtime_kind(
         if any((k in text for k in _contract_keywords)):
             return "contract_doc_review"
         return "doc_template_transform"
-    if has_excel and (has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))):
+    if has_excel and (
+        has_rules or any((k in text for k in ("规则", "模板", "转换", "考勤")))
+    ):
         return "excel_rules_transform"
     if has_excel:
         return "generic_excel_transform"
@@ -304,11 +310,15 @@ def prepare_employee_assets(
     raw_files: _facade().List[_facade().Dict[str, _facade().Any]],
     repo_root: _facade().Optional[_facade().Path] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    root = draft_asset_directory(user_id=user_id, session_id=session_id, repo_root=repo_root)
+    root = draft_asset_directory(
+        user_id=user_id, session_id=session_id, repo_root=repo_root
+    )
     reset_draft_directory(root)
     assets: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for idx, item in enumerate(raw_files or []):
-        filename = _facade()._safe_basename(str(item.get("filename") or f"asset-{idx}.bin"))
+        filename = _facade()._safe_basename(
+            str(item.get("filename") or f"asset-{idx}.bin")
+        )
         content = item.get("content") or b""
         if not isinstance(content, (bytes, bytearray)):
             continue
@@ -389,7 +399,9 @@ def build_rule_spec(
     *,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.employee_pipeline_routing import confident_word_full_extract_routing
+    from modstore_server.employee_pipeline_routing import (
+        confident_word_full_extract_routing,
+    )
 
     if confident_word_full_extract_routing(brief):
         return _facade().build_word_extract_rule_spec(brief)
@@ -459,7 +471,9 @@ def build_rule_spec(
         "default_action": "review" if _is_doc_kind else "convert",
         "default_output_relpath": output_relpath,
         "default_template_relpath": (
-            template_relpath.removeprefix("backend/templates/") if template_relpath else ""
+            template_relpath.removeprefix("backend/templates/")
+            if template_relpath
+            else ""
         ),
         "template_relpath": template_relpath,
         "template_asset_id": template_asset.get("id") if template_asset else "",
@@ -481,13 +495,18 @@ def build_rule_spec(
                 for a in templates[:3]
             ],
             "example_inputs": [
-                a.get("filename") for a in (asset_manifest.get("example_inputs") or [])[:5]
+                a.get("filename")
+                for a in (asset_manifest.get("example_inputs") or [])[:5]
             ],
             "expected_outputs": [
-                a.get("filename") for a in (asset_manifest.get("expected_outputs") or [])[:5]
+                a.get("filename")
+                for a in (asset_manifest.get("expected_outputs") or [])[:5]
             ],
             "rules": [
-                {"filename": a.get("filename"), "preview": str(a.get("preview") or "")[:1000]}
+                {
+                    "filename": a.get("filename"),
+                    "preview": str(a.get("preview") or "")[:1000],
+                }
                 for a in (asset_manifest.get("rules") or [])[:5]
             ],
         },
@@ -564,7 +583,9 @@ def _slug_from_brief(brief: str) -> str:
 def _employee_name_from_brief(brief: str, fallback: str = "文件处理员工") -> str:
     text = (brief or "").strip()
     explicit = _facade().re.search(
-        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})", text, _facade().re.I
+        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})",
+        text,
+        _facade().re.I,
     )
     if explicit:
         return explicit.group(1).strip()
@@ -608,7 +629,9 @@ def _employee_name_from_brief(brief: str, fallback: str = "文件处理员工") 
 def _template_storage_relpath(filename: str, brief: str = "") -> str:
     safe = _facade()._safe_basename(filename, "template.xlsx")
     return (
-        f"backend/templates/424/{safe}" if "考勤" in (brief or "") else f"backend/templates/{safe}"
+        f"backend/templates/424/{safe}"
+        if "考勤" in (brief or "")
+        else f"backend/templates/{safe}"
     )
 
 
@@ -635,7 +658,9 @@ def _normalize_manifest(
     pack_id_hint = str(rule_spec.get("pack_id") or "").strip()
     pid = (
         pack_id_hint
-        or _facade().normalize_mod_id(str(explicit_pid or out.get("id") or fallback["id"]))
+        or _facade().normalize_mod_id(
+            str(explicit_pid or out.get("id") or fallback["id"])
+        )
         or fallback["id"]
     )
     out["id"] = pid
@@ -643,7 +668,9 @@ def _normalize_manifest(
     out.setdefault("version", "1.0.0")
     out.setdefault("name", fallback["name"])
     emp = out.get("employee") if isinstance(out.get("employee"), dict) else {}
-    fallback_emp = fallback["employee"] if isinstance(fallback.get("employee"), dict) else {}
+    fallback_emp = (
+        fallback["employee"] if isinstance(fallback.get("employee"), dict) else {}
+    )
     emp = {**fallback_emp, **emp, "id": pid}
     emp.setdefault("label", out.get("name") or pid)
     out["employee"] = emp
@@ -661,7 +688,9 @@ def _normalize_manifest(
             r.setdefault("api_base_path", f"employees/{r['id']}")
             r.setdefault("entry_action", "run")
             normalized_rows.append(r)
-        out["workflow_employees"] = normalized_rows or fallback.get("workflow_employees") or []
+        out["workflow_employees"] = (
+            normalized_rows or fallback.get("workflow_employees") or []
+        )
     out["backend"] = {"entry": "blueprints", "init": "mod_init"}
     v2 = (
         manifest.get("employee_config_v2")
@@ -670,7 +699,9 @@ def _normalize_manifest(
     )
     merged_v2 = dict(fallback["employee_config_v2"])
     merged_v2.update(v2)
-    actions = dict(merged_v2.get("actions") if isinstance(merged_v2.get("actions"), dict) else {})
+    actions = dict(
+        merged_v2.get("actions") if isinstance(merged_v2.get("actions"), dict) else {}
+    )
     runtime_kind = rule_spec.get("runtime_kind") or "generic_excel_transform"
     _is_doc_review = runtime_kind in ("contract_doc_review", "doc_template_transform")
     if _is_doc_review:
@@ -678,12 +709,16 @@ def _normalize_manifest(
         actions.pop("direct_python", None)
     else:
         direct = dict(
-            actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+            actions.get("direct_python")
+            if isinstance(actions.get("direct_python"), dict)
+            else {}
         )
         direct["module"] = _facade().sanitize_employee_stem(pack_id_hint or pid)
         direct.setdefault("action", "convert")
         if rule_spec.get("default_output_relpath"):
-            direct.setdefault("default_output_relpath", rule_spec["default_output_relpath"])
+            direct.setdefault(
+                "default_output_relpath", rule_spec["default_output_relpath"]
+            )
         if rule_spec.get("template_relpath"):
             direct.setdefault("default_template_relpath", rule_spec["template_relpath"])
         actions["handlers"] = ["direct_python"]
@@ -691,11 +726,15 @@ def _normalize_manifest(
     merged_v2["actions"] = actions
     if rule_spec.get("accepted_extensions"):
         perception = (
-            merged_v2.get("perception") if isinstance(merged_v2.get("perception"), dict) else {}
+            merged_v2.get("perception")
+            if isinstance(merged_v2.get("perception"), dict)
+            else {}
         )
         perception["accepted_extensions"] = rule_spec["accepted_extensions"]
         merged_v2["perception"] = perception
-    ident = dict(merged_v2.get("identity") if isinstance(merged_v2.get("identity"), dict) else {})
+    ident = dict(
+        merged_v2.get("identity") if isinstance(merged_v2.get("identity"), dict) else {}
+    )
     ident.update(
         {
             "id": pid,
@@ -718,13 +757,17 @@ def _normalize_manifest(
         out["description"] = (
             f"{out.get('name') or pid}。{_facade()._clean_brief_for_description(_facade().re.sub('^(你是[一]?(名|位|个)|角色[：:])', '', top_desc), 200)}"
         )
-    cog = merged_v2.get("cognition") if isinstance(merged_v2.get("cognition"), dict) else {}
+    cog = (
+        merged_v2.get("cognition")
+        if isinstance(merged_v2.get("cognition"), dict)
+        else {}
+    )
     agent_cfg = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
     sp = str(agent_cfg.get("system_prompt") or "")
     if "llm_md" in sp or "echo" in sp or "调用 LLM" in sp:
-        agent_cfg["system_prompt"] = fallback["employee_config_v2"]["cognition"]["agent"][
-            "system_prompt"
-        ]
+        agent_cfg["system_prompt"] = fallback["employee_config_v2"]["cognition"][
+            "agent"
+        ]["system_prompt"]
         cog["agent"] = agent_cfg
         merged_v2["cognition"] = cog
     fb_few = (
@@ -958,7 +1001,9 @@ def _fallback_manifest(
     if _is_csv_read:
         panel_summary = "上传 .csv，解析为 JSON 中介 outputs/data.json。"
     elif _is_csv_gen:
-        panel_summary = "上传 JSON/纯文本描述，按 columns/rows 写出 outputs/output.csv。"
+        panel_summary = (
+            "上传 JSON/纯文本描述，按 columns/rows 写出 outputs/output.csv。"
+        )
     elif _is_excel_read:
         panel_summary = "上传 .xlsx，全量读取 sheet/表头/单元格并输出 workbook.json。"
     elif _is_excel_gen:
@@ -974,13 +1019,15 @@ def _fallback_manifest(
     elif _is_ppt_read:
         panel_summary = "上传 .pptx，全量解析并生成演讲备注；图片 VLM 识图。"
     elif _is_ppt_gen:
-        panel_summary = "文字/JSON 从零生成或基于 template.pptx 增强，输出 output.pptx（含动画）。"
-    elif _is_json_report:
         panel_summary = (
-            "上传 document_full.json（或 execute_result），生成 outputs/quantitative_report.html。"
+            "文字/JSON 从零生成或基于 template.pptx 增强，输出 output.pptx（含动画）。"
         )
+    elif _is_json_report:
+        panel_summary = "上传 document_full.json（或 execute_result），生成 outputs/quantitative_report.html。"
     elif _is_word_gen:
-        panel_summary = "上传 JSON（document_full.json），可选模板 docx，生成 Word 文档。"
+        panel_summary = (
+            "上传 JSON（document_full.json），可选模板 docx，生成 Word 文档。"
+        )
     elif _is_word_extract:
         panel_summary = "上传 Word，全量提取正文/表格/图片/样式/元数据并交付 JSON。"
     elif _is_doc_review:
@@ -1108,7 +1155,9 @@ def _fallback_manifest(
                 "action": "convert",
                 "default_output_relpath": rule_spec.get("default_output_relpath")
                 or "outputs/document_parsed.json",
-                "default_text_output_relpath": rule_spec.get("default_text_output_relpath")
+                "default_text_output_relpath": rule_spec.get(
+                    "default_text_output_relpath"
+                )
                 or "outputs/generated_document.txt",
             },
         }
@@ -1125,7 +1174,9 @@ def _fallback_manifest(
                 "action": "convert",
                 "default_output_relpath": rule_spec.get("default_output_relpath")
                 or "outputs/document_parsed.json",
-                "default_pdf_output_relpath": rule_spec.get("default_pdf_output_relpath")
+                "default_pdf_output_relpath": rule_spec.get(
+                    "default_pdf_output_relpath"
+                )
                 or "outputs/generated_document.pdf",
             },
         }
@@ -1403,14 +1454,20 @@ async def enrich_manifest_productivity_fields(
     base_manifest: _facade().Dict[str, _facade().Any],
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
-) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
+) -> _facade().Tuple[
+    _facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]
+]:
     """轻量 LLM：仅补 description / panel_summary / behavior_rules，与模板落盘并行，不阻塞 convert。"""
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if not is_direct_python_template_runtime(runtime_kind):
         return (base_manifest, {"source": "skipped", "reason": "not_template_runtime"})
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return (base_manifest, {"source": "fallback", "warning": err})
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -1488,8 +1545,12 @@ async def design_asset_employee_manifest(
     rule_spec: _facade().Dict[str, _facade().Any],
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
-) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+) -> _facade().Tuple[
+    _facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]
+]:
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if is_direct_python_template_runtime(runtime_kind):
@@ -1497,7 +1558,9 @@ async def design_asset_employee_manifest(
             _facade()._fallback_manifest(brief, rule_spec),
             {"provider": "", "model": "", "source": "template_manifest"},
         )
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err and runtime_kind not in (
         "word_full_extract",
         "word_generate",
@@ -1553,9 +1616,9 @@ async def design_asset_employee_manifest(
         system = '你是 employee_pack manifest 设计器。只输出 JSON，不输出 Markdown。这个员工必须是 direct_python 文件处理员工，actions.handlers 必须只有 ["direct_python"]。不要声明 echo、llm_md。不要编造已经执行。'
         if runtime_kind == "word_full_extract":
             system += " rule_spec.runtime_kind 为 word_full_extract：perception.accepted_extensions 必须含 .docx；默认输出为 outputs/document_full.json（读取/提取，不是生成 docx）；capabilities 须含 doc.full_extract；禁止写成 Word 生成或仅接受 .json 的员工。"
-    user_msg = _facade().json.dumps({"brief": brief, "rule_spec": rule_spec}, ensure_ascii=False)[
-        :12000
-    ]
+    user_msg = _facade().json.dumps(
+        {"brief": brief, "rule_spec": rule_spec}, ensure_ascii=False
+    )[:12000]
     result = await _facade().chat_dispatch(
         prov,
         api_key=api_key,
@@ -1572,7 +1635,9 @@ async def design_asset_employee_manifest(
             _facade()._fallback_manifest(brief, rule_spec),
             {"provider": prov, "model": mdl, "warning": str(result.get("error") or "")},
         )
-    parsed, perr = _facade().parse_employee_pack_llm_json(str(result.get("content") or ""))
+    parsed, perr = _facade().parse_employee_pack_llm_json(
+        str(result.get("content") or "")
+    )
     if perr or not parsed:
         return (
             _facade()._fallback_manifest(brief, rule_spec),
@@ -1587,7 +1652,11 @@ async def design_asset_employee_manifest(
 def _rule_spec_python_literal(rule_spec: _facade().Dict[str, _facade().Any]) -> str:
     """Embed rule_spec as valid Python dict literal (json.dumps uses true/false/null)."""
     raw = _facade().json.dumps(rule_spec, ensure_ascii=False, indent=2)
-    return raw.replace(": true", ": True").replace(": false", ": False").replace(": null", ": None")
+    return (
+        raw.replace(": true", ": True")
+        .replace(": false", ": False")
+        .replace(": null", ": None")
+    )
 
 
 def render_direct_python_asset_worker(
@@ -1615,9 +1684,13 @@ def render_runtime_modules(
         convert_py = _facade().render_csv_read_convert_module()
     elif runtime_kind == "csv_generate" and (not (generated_convert_py or "").strip()):
         convert_py = _facade().render_csv_generate_convert_module()
-    elif runtime_kind == "excel_full_read" and (not (generated_convert_py or "").strip()):
+    elif runtime_kind == "excel_full_read" and (
+        not (generated_convert_py or "").strip()
+    ):
         convert_py = _facade().render_excel_read_convert_module()
-    elif runtime_kind == "excel_generate" and (not (generated_convert_py or "").strip()):
+    elif runtime_kind == "excel_generate" and (
+        not (generated_convert_py or "").strip()
+    ):
         convert_py = _facade().render_excel_generate_convert_module()
     elif runtime_kind == "txt_full_read" and (not (generated_convert_py or "").strip()):
         convert_py = _facade().render_txt_read_convert_module()
@@ -1631,14 +1704,20 @@ def render_runtime_modules(
         convert_py = _facade().render_ppt_read_convert_module()
     elif runtime_kind == "ppt_generate" and (not (generated_convert_py or "").strip()):
         convert_py = _facade().render_ppt_generate_convert_module()
-    elif runtime_kind == "json_quant_report" and (not (generated_convert_py or "").strip()):
+    elif runtime_kind == "json_quant_report" and (
+        not (generated_convert_py or "").strip()
+    ):
         convert_py = _facade().render_json_report_convert_module()
-    elif runtime_kind == "word_full_extract" and (not (generated_convert_py or "").strip()):
+    elif runtime_kind == "word_full_extract" and (
+        not (generated_convert_py or "").strip()
+    ):
         convert_py = _facade().render_word_fallback_convert_module()
     elif runtime_kind == "word_generate" and (not (generated_convert_py or "").strip()):
         convert_py = _facade().render_word_generate_convert_module()
     else:
-        convert_py = (generated_convert_py or "").strip() or _facade()._fallback_convert_module()
+        convert_py = (
+            generated_convert_py or ""
+        ).strip() or _facade()._fallback_convert_module()
     modules: _facade().Dict[str, str] = {
         "__init__.py": '"""Generated runtime modules for asset-driven employee."""\n',
         "convert.py": convert_py,
@@ -1687,7 +1766,9 @@ def _extract_python_code(text: str) -> str:
     lines = raw.splitlines()
     for i, line in enumerate(lines):
         stripped = line.strip()
-        if stripped.startswith(("from ", "import ", "def ", "class ", "@")) or stripped in {
+        if stripped.startswith(
+            ("from ", "import ", "def ", "class ", "@")
+        ) or stripped in {
             "# -*- coding: utf-8 -*-",
             "from __future__ import annotations",
         }:
@@ -1701,9 +1782,13 @@ def _validate_generated_convert_py(src: str) -> _facade().Tuple[bool, str]:
         return (False, "empty generated convert.py")
     if _facade().re.search("\\b(eval|exec|compile|__import__)\\s*\\(", code):
         return (False, "generated convert.py uses forbidden dynamic execution")
-    if _facade().re.search("\\b(subprocess|os\\.system|ctypes|multiprocessing)\\b", code):
+    if _facade().re.search(
+        "\\b(subprocess|os\\.system|ctypes|multiprocessing)\\b", code
+    ):
         return (False, "generated convert.py uses forbidden process/system API")
-    if _facade().re.search("\\b(globals|locals|getattr|setattr|delattr|breakpoint)\\s*\\(", code):
+    if _facade().re.search(
+        "\\b(globals|locals|getattr|setattr|delattr|breakpoint)\\s*\\(", code
+    ):
         return (False, "generated convert.py uses forbidden reflection/builtin")
     try:
         tree = _facade().ast.parse(code)
@@ -1746,8 +1831,12 @@ def _auto_fix_generated_convert_py(
     skip_patterns = [
         _facade().re.compile("\\b(eval|exec|compile|__import__)\\s*\\("),
         _facade().re.compile("\\bimport\\s+(subprocess|ctypes|multiprocessing)\\b"),
-        _facade().re.compile("\\bfrom\\s+(subprocess|ctypes|multiprocessing)\\s+import\\b"),
-        _facade().re.compile("\\b(globals|locals|getattr|setattr|delattr|breakpoint)\\s*\\("),
+        _facade().re.compile(
+            "\\bfrom\\s+(subprocess|ctypes|multiprocessing)\\s+import\\b"
+        ),
+        _facade().re.compile(
+            "\\b(globals|locals|getattr|setattr|delattr|breakpoint)\\s*\\("
+        ),
     ]
     for line in lines:
         stripped = line.strip()
@@ -1845,7 +1934,9 @@ async def generate_runtime_convert_module(
             _facade().render_word_generate_convert_module(),
             {"provider": "", "model": "", "source": "word_generate_builtin"},
         )
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return (None, {"provider": "", "model": "", "warning": err})
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -1957,7 +2048,9 @@ async def repair_runtime_convert_module(
     round_no: int,
     allow_auto_fix: bool = False,
 ) -> _facade().Tuple[_facade().Optional[str], _facade().Dict[str, _facade().Any]]:
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return (None, {"provider": "", "model": "", "warning": err, "round": round_no})
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -2013,7 +2106,9 @@ async def repair_runtime_convert_module(
     if not ok:
         if allow_auto_fix:
             fixed_code, fixes = _facade()._auto_fix_generated_convert_py(code)
-            fixed_ok, _fixed_error = _facade()._validate_generated_convert_py(fixed_code)
+            fixed_ok, _fixed_error = _facade()._validate_generated_convert_py(
+                fixed_code
+            )
             if fixed_ok:
                 return (
                     fixed_code.rstrip() + "\n",
@@ -2045,7 +2140,11 @@ def manifest_actions_handlers(
     mf: _facade().Dict[str, _facade().Any],
 ) -> _facade().List[str]:
     """Read handlers from employee_config_v2.actions or canvas-root actions."""
-    v2 = mf.get("employee_config_v2") if isinstance(mf.get("employee_config_v2"), dict) else {}
+    v2 = (
+        mf.get("employee_config_v2")
+        if isinstance(mf.get("employee_config_v2"), dict)
+        else {}
+    )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     if not actions and isinstance(mf.get("actions"), dict):
         actions = mf["actions"]
@@ -2057,7 +2156,9 @@ def manifest_expects_word_runtime(
     mf: _facade().Dict[str, _facade().Any], *, brief: str = ""
 ) -> bool:
     """True when manifest/brief indicates Word 全量提取 direct_python delivery."""
-    rs_path_inline = mf.get("rule_spec") if isinstance(mf.get("rule_spec"), dict) else {}
+    rs_path_inline = (
+        mf.get("rule_spec") if isinstance(mf.get("rule_spec"), dict) else {}
+    )
     if rs_path_inline.get("runtime_kind") == "word_full_extract":
         return True
     from modstore_server.employee_brief_utils import extract_routing_brief
@@ -2070,8 +2171,14 @@ def manifest_expects_word_runtime(
         return True
     perception = mf.get("perception")
     if not isinstance(perception, dict):
-        v2 = mf.get("employee_config_v2") if isinstance(mf.get("employee_config_v2"), dict) else {}
-        perception = v2.get("perception") if isinstance(v2.get("perception"), dict) else {}
+        v2 = (
+            mf.get("employee_config_v2")
+            if isinstance(mf.get("employee_config_v2"), dict)
+            else {}
+        )
+        perception = (
+            v2.get("perception") if isinstance(v2.get("perception"), dict) else {}
+        )
     exts = (
         perception.get("accepted_extensions")
         if isinstance(perception.get("accepted_extensions"), list)
@@ -2256,7 +2363,9 @@ def _copy_template_assets(
             filename = str(asset.get("filename") or src.name)
             rel = str(
                 rule_spec.get("template_relpath")
-                or _facade()._template_storage_relpath(filename, str(rule_spec.get("brief") or ""))
+                or _facade()._template_storage_relpath(
+                    filename, str(rule_spec.get("brief") or "")
+                )
             )
             dest = pack_dir / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -2275,7 +2384,10 @@ def materialize_asset_employee_pack(
         raise ValueError("manifest.id 缺失")
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
     employee_id = pack_id
-    label = str(emp.get("label") or manifest.get("name") or employee_id).strip() or employee_id
+    label = (
+        str(emp.get("label") or manifest.get("name") or employee_id).strip()
+        or employee_id
+    )
     stem = _facade().sanitize_employee_stem(employee_id)
     runtime_mod = _facade()._runtime_package_name(pack_id, employee_id)
     runtime_kind = rule_spec.get("runtime_kind") or "generic_excel_transform"
@@ -2310,11 +2422,15 @@ def materialize_asset_employee_pack(
         )
 
         (pack_dir / "backend" / "employees" / f"{stem}.py").write_text(
-            render_employee_pack_employee_py(employee_id=employee_id, stem=stem, label=label),
+            render_employee_pack_employee_py(
+                employee_id=employee_id, stem=stem, label=label
+            ),
             encoding="utf-8",
         )
     else:
-        (pack_dir / "backend" / "vendor" / runtime_mod).mkdir(parents=True, exist_ok=True)
+        (pack_dir / "backend" / "vendor" / runtime_mod).mkdir(
+            parents=True, exist_ok=True
+        )
         (pack_dir / "backend" / "employees" / f"{stem}.py").write_text(
             _facade().render_direct_python_asset_worker(
                 employee_id=employee_id,
@@ -2326,10 +2442,14 @@ def materialize_asset_employee_pack(
         )
         for name, src in (
             _facade()
-            .render_runtime_modules(rule_spec, generated_convert_py=generated_convert_py)
+            .render_runtime_modules(
+                rule_spec, generated_convert_py=generated_convert_py
+            )
             .items()
         ):
-            (pack_dir / "backend" / "vendor" / runtime_mod / name).write_text(src, encoding="utf-8")
+            (pack_dir / "backend" / "vendor" / runtime_mod / name).write_text(
+                src, encoding="utf-8"
+            )
     _facade()._copy_template_assets(pack_dir, asset_manifest, rule_spec)
     (pack_dir / "asset_manifest.json").write_text(
         _facade().json.dumps(asset_manifest, ensure_ascii=False, indent=2) + "\n",
@@ -2353,11 +2473,17 @@ def validate_asset_employee_pack(
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    top_actions = manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
-    top_handlers = (
-        top_actions.get("handlers") if isinstance(top_actions.get("handlers"), list) else []
+    top_actions = (
+        manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
     )
-    v2_handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    top_handlers = (
+        top_actions.get("handlers")
+        if isinstance(top_actions.get("handlers"), list)
+        else []
+    )
+    v2_handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     _is_agent_handler = "agent" in v2_handlers
     if not _is_agent_handler and actions.get("handlers") != ["direct_python"]:
         warnings.append("actions.handlers 必须为 ['direct_python'] 或 ['agent']")
@@ -2367,11 +2493,17 @@ def validate_asset_employee_pack(
         )
     emp_dir = pack_dir / "backend" / "employees"
     py_files = (
-        [p for p in emp_dir.glob("*.py") if p.name != "__init__.py"] if emp_dir.is_dir() else []
+        [p for p in emp_dir.glob("*.py") if p.name != "__init__.py"]
+        if emp_dir.is_dir()
+        else []
     )
     if not py_files:
         warnings.append("缺少 backend/employees 入口脚本")
-    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    direct = (
+        actions.get("direct_python")
+        if isinstance(actions.get("direct_python"), dict)
+        else {}
+    )
     module_name = str(direct.get("module") or "").strip()
     if module_name:
         expected_file = emp_dir / f"{module_name}.py"
@@ -2401,7 +2533,10 @@ def validate_asset_employee_pack(
     if tpl:
         template_dir = pack_dir / "backend" / "templates"
         has_any_template = template_dir.is_dir() and any(
-            (p.suffix.lower() in _facade().EXCEL_SUFFIXES for p in template_dir.rglob("*"))
+            (
+                p.suffix.lower() in _facade().EXCEL_SUFFIXES
+                for p in template_dir.rglob("*")
+            )
         )
         if not (
             (pack_dir / tpl).is_file()
@@ -2431,12 +2566,16 @@ async def run_asset_employee_scaffold_async(
     force_llm_codegen: bool = False,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.artifact_generator_blueprint import artifact_generator_preflight
+    from modstore_server.artifact_generator_blueprint import (
+        artifact_generator_preflight,
+    )
     from modstore_server.craft_failure_signals import (
         _employee_trigger_limits,
         emit_craft_step_failure,
     )
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
     from modstore_server.vibecoding_convert_loop import (
         is_llm_codegen_source,
         run_vibecoding_codegen_loop,
@@ -2467,8 +2606,10 @@ async def run_asset_employee_scaffold_async(
             "warnings": [],
             "missing_fields": bp_preflight.get("missing_fields") or [],
         }
-    _paths_ok, _path_errors, _paths_checked = _facade()._preflight_scaffold_write_access(
-        session_id=session_id, user_id=int(user.id)
+    _paths_ok, _path_errors, _paths_checked = (
+        _facade()._preflight_scaffold_write_access(
+            session_id=session_id, user_id=int(user.id)
+        )
     )
     if not _paths_ok:
         _perm_msg = "；".join(_path_errors[:5])
@@ -2505,7 +2646,9 @@ async def run_asset_employee_scaffold_async(
     repair_history: _facade().List[_facade().Dict[str, _facade().Any]] = []
     domain_smoke: _facade().Dict[str, _facade().Any] = {}
     golden_comparison: _facade().Dict[str, _facade().Any] = {}
-    use_vibecoding_loop = is_direct_python_template_runtime(runtime_kind) or bool(force_llm_codegen)
+    use_vibecoding_loop = is_direct_python_template_runtime(runtime_kind) or bool(
+        force_llm_codegen
+    )
     base_manifest = _facade()._normalize_manifest(
         _facade()._fallback_manifest(_brief, rule_spec), _brief, rule_spec
     )
@@ -2568,7 +2711,9 @@ async def run_asset_employee_scaffold_async(
     warnings = _facade().validate_asset_employee_pack(pack_dir, manifest)
     if use_vibecoding_loop:
         if not generated_convert_py:
-            warnings.append(str(runtime_meta.get("error") or "vibecoding 未产出合格 convert"))
+            warnings.append(
+                str(runtime_meta.get("error") or "vibecoding 未产出合格 convert")
+            )
         elif domain_smoke.get("ok") is False and (not domain_smoke.get("skipped")):
             warnings.append(f"领域冒烟失败：{domain_smoke.get('error') or ''}"[:200])
         elif golden_comparison and (not golden_comparison.get("passed")):
@@ -2608,7 +2753,11 @@ async def run_asset_employee_scaffold_async(
         warnings = _facade().validate_asset_employee_pack(pack_dir, manifest)
         generated_convert_py = repaired
         runtime_meta = {**runtime_meta, "repaired_after_validate": True}
-    if warnings and len(repair_history) >= _max_repair_rounds and (not use_vibecoding_loop):
+    if (
+        warnings
+        and len(repair_history) >= _max_repair_rounds
+        and (not use_vibecoding_loop)
+    ):
         _budget_msg = f"动态修复预算已用尽（max_patch_steps={_max_repair_rounds}，max_patch_budget_tokens={_limits.get('max_patch_budget_tokens')}）"
         emit_craft_step_failure(
             step_id="generate",
@@ -2636,7 +2785,9 @@ async def run_asset_employee_scaffold_async(
         tmp_path.unlink(missing_ok=True)
     saved_package: _facade().Dict[str, _facade().Any] = {}
     if publish_to_catalog:
-        with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
+        with _facade().tempfile.NamedTemporaryFile(
+            suffix=".xcemp", delete=False
+        ) as tmp:
             tmp.write(raw_zip)
             pkg_tmp_path = _facade().Path(tmp.name)
         try:
@@ -2655,7 +2806,9 @@ async def run_asset_employee_scaffold_async(
             }
             saved_package = append_package(rec, pkg_tmp_path)
             row = (
-                db.query(_facade().CatalogItem).filter(_facade().CatalogItem.pkg_id == pid).first()
+                db.query(_facade().CatalogItem)
+                .filter(_facade().CatalogItem.pkg_id == pid)
+                .first()
             )
             if not row:
                 row = _facade().CatalogItem(pkg_id=pid, author_id=user.id)
@@ -2705,7 +2858,9 @@ async def run_word_extract_employee_scaffold_async(
     *,
     session_id: str,
     brief: str,
-    raw_files: _facade().Optional[_facade().List[_facade().Dict[str, _facade().Any]]] = None,
+    raw_files: _facade().Optional[
+        _facade().List[_facade().Dict[str, _facade().Any]]
+    ] = None,
     replace: bool = True,
     provider: _facade().Optional[str] = None,
     model: _facade().Optional[str] = None,

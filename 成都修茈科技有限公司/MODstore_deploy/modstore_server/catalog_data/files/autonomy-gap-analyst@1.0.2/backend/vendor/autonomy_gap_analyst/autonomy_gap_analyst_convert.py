@@ -9,7 +9,9 @@ _FAILED_STATUSES = {"fail", "failed", "missing", "blocked", "not_met", "unmet"}
 
 
 def _load_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
-    raw = payload.get("scorecard", payload.get("founder_autonomy_scorecard_json", payload))
+    raw = payload.get(
+        "scorecard", payload.get("founder_autonomy_scorecard_json", payload)
+    )
     if isinstance(raw, str):
         try:
             raw = json.loads(raw)
@@ -72,7 +74,9 @@ def _number(value: Any) -> float | None:
         return None
 
 
-def _collect_projection_dimensions(scorecard: Dict[str, Any], out: List[Dict[str, Any]]) -> None:
+def _collect_projection_dimensions(
+    scorecard: Dict[str, Any], out: List[Dict[str, Any]]
+) -> None:
     """Recognize the public projection contract, whose dimensions are not `failed` nodes."""
 
     dimensions = scorecard.get("dimensions")
@@ -118,7 +122,11 @@ def analyze_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
         if key not in seen:
             seen.add(key)
             unique.append(row)
-    warnings = [] if unique else ["No failed evidence gate was found in the supplied scorecard."]
+    warnings = (
+        []
+        if unique
+        else ["No failed evidence gate was found in the supplied scorecard."]
+    )
     summary = (
         f"Found {len(unique)} failed evidence gate(s); highest priority: {unique[0]['gate']}"
         if unique

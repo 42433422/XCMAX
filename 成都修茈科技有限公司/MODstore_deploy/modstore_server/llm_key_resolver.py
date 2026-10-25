@@ -168,7 +168,11 @@ def platform_api_key(provider: str) -> Optional[str]:
         k = _env("MOONSHOT_API_KEY")
         return k or None
     if provider == "xiaomi":
-        k = _env("XIAOMI_API_KEY") or _env("MIMO_API_KEY") or _env("XIAOMI_MIMO_API_KEY")
+        k = (
+            _env("XIAOMI_API_KEY")
+            or _env("MIMO_API_KEY")
+            or _env("XIAOMI_MIMO_API_KEY")
+        )
         return k or None
     if provider == "minimax":
         k = (
@@ -181,7 +185,11 @@ def platform_api_key(provider: str) -> Optional[str]:
         k = _env("DOUBAO_API_KEY") or _env("ARK_API_KEY")
         return k or None
     if provider == "wenxin":
-        k = _env("WENXIN_API_KEY") or _env("QIANFAN_API_KEY") or _env("BAIDU_QIANFAN_API_KEY")
+        k = (
+            _env("WENXIN_API_KEY")
+            or _env("QIANFAN_API_KEY")
+            or _env("BAIDU_QIANFAN_API_KEY")
+        )
         return k or None
     if provider == "hunyuan":
         k = _env("HUNYUAN_API_KEY") or _env("TENCENT_HUNYUAN_API_KEY")
@@ -233,7 +241,11 @@ def platform_base_url(provider: str) -> Optional[str]:
         u = _env("MOONSHOT_BASE_URL")
         return (u or openai_compat_default_root("moonshot")).rstrip("/")
     if provider == "xiaomi":
-        u = _env("XIAOMI_BASE_URL") or _env("MIMO_BASE_URL") or _env("XIAOMI_MIMO_BASE_URL")
+        u = (
+            _env("XIAOMI_BASE_URL")
+            or _env("MIMO_BASE_URL")
+            or _env("XIAOMI_MIMO_BASE_URL")
+        )
         return (u or openai_compat_default_root("xiaomi")).rstrip("/")
     if provider == "minimax":
         u = _env("MINIMAX_BASE_URL")
@@ -268,15 +280,21 @@ def platform_base_url(provider: str) -> Optional[str]:
     return None
 
 
-def _load_user_row(session: Session, user_id: int, provider: str) -> Optional[UserLlmCredential]:
+def _load_user_row(
+    session: Session, user_id: int, provider: str
+) -> Optional[UserLlmCredential]:
     return (
         session.query(UserLlmCredential)
-        .filter(UserLlmCredential.user_id == user_id, UserLlmCredential.provider == provider)
+        .filter(
+            UserLlmCredential.user_id == user_id, UserLlmCredential.provider == provider
+        )
         .first()
     )
 
 
-def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:
+def resolve_api_key(
+    session: Session, user_id: int, provider: str
+) -> Tuple[Optional[str], str]:
     """返回 (api_key, source) source 为 user_override | platform | none"""
     row = _load_user_row(session, user_id, provider)
     if row and row.api_key_encrypted and fernet_configured():

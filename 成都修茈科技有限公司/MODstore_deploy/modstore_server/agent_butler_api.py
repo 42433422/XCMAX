@@ -30,7 +30,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Session
-from modstore_server.all_hands_report import MAX_ALL_HANDS_EMPLOYEES, clamp_all_hands_max_employees
+from modstore_server.all_hands_report import (
+    MAX_ALL_HANDS_EMPLOYEES,
+    clamp_all_hands_max_employees,
+)
 from modstore_server.admin_employee_autonomy_helpers import _require_admin_or_internal
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
@@ -79,7 +82,10 @@ BUTLER_TOOLS = [
                         "type": "string",
                         "description": "路由名称或路径，如 plans/ai-store/wallet/recharge/account/workbench-shell",
                     },
-                    "query": {"type": "object", "description": "URL query 参数（可选）"},
+                    "query": {
+                        "type": "object",
+                        "description": "URL query 参数（可选）",
+                    },
                 },
                 "required": ["route"],
             },
@@ -108,7 +114,10 @@ BUTLER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "label": {"type": "string", "description": "输入框的 label 或 placeholder"},
+                    "label": {
+                        "type": "string",
+                        "description": "输入框的 label 或 placeholder",
+                    },
                     "value": {"type": "string", "description": "要填入的值"},
                 },
                 "required": ["label", "value"],
@@ -123,7 +132,10 @@ BUTLER_TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "direction": {"type": "string", "enum": ["up", "down", "top", "bottom"]},
+                    "direction": {
+                        "type": "string",
+                        "enum": ["up", "down", "top", "bottom"],
+                    },
                     "px": {"type": "integer", "description": "滚动像素（可选）"},
                 },
                 "required": ["direction"],
@@ -194,7 +206,10 @@ ADMIN_READONLY_TOOLS: List[Dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "最近流水条数，默认 5，最大 20"}
+                    "limit": {
+                        "type": "integer",
+                        "description": "最近流水条数，默认 5，最大 20",
+                    }
                 },
             },
         },
@@ -233,7 +248,10 @@ ADMIN_READONLY_TOOLS: List[Dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "limit": {"type": "integer", "description": "日更条数，默认 3，最大 5"}
+                    "limit": {
+                        "type": "integer",
+                        "description": "日更条数，默认 3，最大 5",
+                    }
                 },
             },
         },
@@ -249,10 +267,21 @@ _INTAKE_USER_ROLES = frozenset(
 _INTAKE_PRIMARY_GOALS = frozenset(
     {"重复录入太累", "经常出错", "太慢跟不上", "系统各干各的", "想先小试点"}
 )
-_INTAKE_DIRECTIONS = frozenset({"少做表格单据", "流程更顺", "上AI助手", "和现有系统打通"})
+_INTAKE_DIRECTIONS = frozenset(
+    {"少做表格单据", "流程更顺", "上AI助手", "和现有系统打通"}
+)
 _INTAKE_TIMELINES = frozenset({"2 周内", "1 个月内", "1–3 个月", "季度内", "先评估"})
 _INTAKE_BUDGETS = frozenset(
-    {"1–5 万", "5–10 万", "10–50 万", "50–100 万", "5 万以内", "5–20 万", "20–50 万", "50 万以上"}
+    {
+        "1–5 万",
+        "5–10 万",
+        "10–50 万",
+        "50–100 万",
+        "5 万以内",
+        "5–20 万",
+        "20–50 万",
+        "50 万以上",
+    }
 )
 _INTAKE_NEED_INTEGRATION = frozenset({"yes", "no"})
 _INTAKE_TEXT_LIMITS: Dict[str, int] = {
@@ -269,7 +298,9 @@ _INTAKE_TEXT_LIMITS: Dict[str, int] = {
     "extraNote": 2000,
 }
 CORP_INTAKE_FILL_SYSTEM_PROMPT = '你是成都修茈科技官网联系页「需求小问卷」填表助手。\n\n根据用户自然语言描述，输出 JSON（不要 markdown 代码块），格式严格为：\n{"reply": "给用户的中文说明（80字内）", "draft": { ... }}\n\ndraft 字段名与含义（不确定则省略，禁止编造手机/邮箱/姓名）：\n- userRole: 单选，必须从以下取值之一：企业负责人、业务或销售、运营或行政、财务、IT或技术、其他\n- industry, roleSummary: 文本\n- primaryGoal: 单选：重复录入太累、经常出错、太慢跟不上、系统各干各的、想先小试点\n- directions: 字符串数组，每项只能是：少做表格单据、流程更顺、上AI助手、和现有系统打通\n- manualSteps, painGoals, sampleDesc: 文本\n- name, phone, email, company: 仅当用户明确提供时才填写\n- timeline: 2 周内、1 个月内、1–3 个月、季度内、先评估\n- budget: 1–5 万、5–10 万、10–50 万、50–100 万\n- needIntegration: yes 或 no\n- integrationNote, extraNote: 文本\n\n若用户仅提供「公司名称 + 系统/业务类型」，请结合该行业与系统的典型场景推断岗位、流程、痛点与改善方向，尽量填满可推断字段；company 使用用户给出的公司名。禁止编造手机、邮箱、姓名。\n\n禁止输出分析、推理过程或 markdown；回复必须是单个 JSON 对象，首字符为 {，末字符为 }。'
-from modstore_server.agent_butler_orchestrate import ButlerOrchestrateBody as _ButlerOrchestrateBody
+from modstore_server.agent_butler_orchestrate import (
+    ButlerOrchestrateBody as _ButlerOrchestrateBody,
+)
 from modstore_server.agent_butler_orchestrate import (
     _butler_orchestrate_steps,
     _run_butler_orchestrate_pipeline,

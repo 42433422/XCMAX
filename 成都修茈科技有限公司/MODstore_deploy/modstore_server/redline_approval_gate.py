@@ -162,7 +162,9 @@ def create_redline_request(
                 policy=f"redline_approval.{domain}",
                 risk_level="high",
                 actor_class="ai_employee",
-                run_id=change_details.get("run_id") if isinstance(change_details, dict) else "",
+                run_id=change_details.get("run_id")
+                if isinstance(change_details, dict)
+                else "",
                 source="redline_approval_gate",
                 event_id=f"redline:{cr_id}:requested",
                 session=session,
@@ -203,7 +205,9 @@ def approve_redline_request(
 ) -> Dict[str, Any]:
     """审批通过红线请求 → 落盘变更。"""
     try:
-        from modstore_server.employee_change_request_service import apply_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            apply_employee_change_request,
+        )
 
         result = apply_employee_change_request(cr_id, admin_user_id)
 
@@ -238,7 +242,9 @@ def reject_redline_request(
 ) -> Dict[str, Any]:
     """审批拒绝红线请求 → 回滚变更。"""
     try:
-        from modstore_server.employee_change_request_service import reject_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            reject_employee_change_request,
+        )
 
         result = reject_employee_change_request(
             cr_id,
@@ -299,7 +305,9 @@ def get_pending_redline_requests() -> List[Dict[str, Any]]:
                             "description": data.get("description", ""),
                             "risk_assessment": data.get("risk_assessment", "high"),
                             "affected_paths": data.get("affected_paths", []),
-                            "created_at": str(cr.created_at) if hasattr(cr, "created_at") else "",
+                            "created_at": str(cr.created_at)
+                            if hasattr(cr, "created_at")
+                            else "",
                         }
                     )
             return results

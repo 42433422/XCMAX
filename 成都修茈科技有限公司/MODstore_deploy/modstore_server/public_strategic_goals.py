@@ -92,7 +92,9 @@ def verified_strategic_goal_items(*, limit: int = 100) -> list[dict[str, Any]]:
         output.append(
             {
                 "title": str(goal.title or goal_id).strip()[:180],
-                "priority": "P1" if str(goal.decision_type or "") == "strategic" else "P2",
+                "priority": "P1"
+                if str(goal.decision_type or "") == "strategic"
+                else "P2",
                 "status": public_status,
                 "status_label": _STATUS_LABEL[public_status],
                 "line": "P-S",

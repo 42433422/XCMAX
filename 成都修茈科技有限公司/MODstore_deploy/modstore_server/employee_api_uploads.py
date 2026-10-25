@@ -33,7 +33,9 @@ _READ_EMPLOYEE_SUFFIX: Dict[str, frozenset] = {
     "csv-full-read-employee": frozenset({".csv"}),
     "pdf-full-read-employee": frozenset({".pdf"}),
     "ppt-full-read-employee": frozenset({".pptx", ".ppt"}),
-    "word-full-read-employee": frozenset({".docx", ".doc", ".docm", ".dotx", ".dotm", ".rtf"}),
+    "word-full-read-employee": frozenset(
+        {".docx", ".doc", ".docm", ".dotx", ".dotm", ".rtf"}
+    ),
     "json-report-employee": frozenset({".json"}),
 }
 

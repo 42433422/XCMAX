@@ -41,7 +41,10 @@ from modstore_server.strategic_layer.council_meeting_models import (
     meeting_row_to_dict as _meeting_row_to_dict,
 )
 from modstore_server.strategic_layer.council_meeting_models import parse_json as _loads
-from modstore_server.strategic_layer.decision_ledger import DecidedBy, StrategicDecisionLedger
+from modstore_server.strategic_layer.decision_ledger import (
+    DecidedBy,
+    StrategicDecisionLedger,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +107,9 @@ class CouncilMeetingService:
                 decisions_json="[]",
                 action_items_json="[]",
                 source_digest_record_id=source_digest_record_id,
-                source_context_json=json.dumps(source_context or {}, ensure_ascii=False),
+                source_context_json=json.dumps(
+                    source_context or {}, ensure_ascii=False
+                ),
                 created_at=now,
                 updated_at=now,
             )
@@ -133,7 +138,9 @@ class CouncilMeetingService:
             if row is None:
                 raise ValueError(f"meeting not found: {meeting_id}")
             if row.status != MeetingStatus.SCHEDULED.value:
-                raise ValueError(f"cannot start meeting in status {row.status}; must be scheduled")
+                raise ValueError(
+                    f"cannot start meeting in status {row.status}; must be scheduled"
+                )
             row.status = MeetingStatus.IN_PROGRESS.value
             row.started_at = datetime.now(UTC)
             row.updated_at = datetime.now(UTC)
@@ -298,7 +305,9 @@ class CouncilMeetingService:
                 MeetingStatus.CONCLUDED.value,
                 MeetingStatus.CANCELLED.value,
             ):
-                raise ValueError(f"cannot cancel meeting in terminal status {row.status}")
+                raise ValueError(
+                    f"cannot cancel meeting in terminal status {row.status}"
+                )
             row.status = MeetingStatus.CANCELLED.value
             row.updated_at = datetime.now(UTC)
             row.minutes_md = f"[CANCELLED] {reason.strip()}\n\n{row.minutes_md or ''}"
@@ -337,7 +346,9 @@ class CouncilMeetingService:
             if status is not None:
                 stmt = stmt.where(CouncilMeetingModel.status == status.value)
             if meeting_type is not None:
-                stmt = stmt.where(CouncilMeetingModel.meeting_type == meeting_type.value)
+                stmt = stmt.where(
+                    CouncilMeetingModel.meeting_type == meeting_type.value
+                )
             rows = session.execute(stmt).scalars().all()
             return [_meeting_row_to_dict(r) for r in rows]
         finally:
@@ -375,7 +386,9 @@ class CouncilMeetingService:
                     "assigned_to": r.assigned_to,
                     "status": r.status,
                     "due_at": r.due_at.isoformat() if r.due_at else None,
-                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                    "completed_at": r.completed_at.isoformat()
+                    if r.completed_at
+                    else None,
                     "block_reason": r.block_reason,
                     "result": _loads(r.result_json, {}),
                 }
@@ -400,7 +413,9 @@ class CouncilMeetingService:
         session = self._session_factory()()
         try:
             row = session.execute(
-                select(StrategicActionItem).where(StrategicActionItem.action_id == action_id)
+                select(StrategicActionItem).where(
+                    StrategicActionItem.action_id == action_id
+                )
             ).scalar_one_or_none()
             if row is None:
                 raise ValueError(f"action item not found: {action_id}")
@@ -420,7 +435,9 @@ class CouncilMeetingService:
             return {
                 "action_id": row.action_id,
                 "status": row.status,
-                "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+                "completed_at": row.completed_at.isoformat()
+                if row.completed_at
+                else None,
             }
         except RECOVERABLE_ERRORS:
             session.rollback()
@@ -430,9 +447,13 @@ class CouncilMeetingService:
 
     # ---------------- 内部 ----------------
 
-    def _get_meeting(self, session: Any, meeting_id: str) -> Optional[CouncilMeetingModel]:
+    def _get_meeting(
+        self, session: Any, meeting_id: str
+    ) -> Optional[CouncilMeetingModel]:
         return session.execute(
-            select(CouncilMeetingModel).where(CouncilMeetingModel.meeting_id == meeting_id)
+            select(CouncilMeetingModel).where(
+                CouncilMeetingModel.meeting_id == meeting_id
+            )
         ).scalar_one_or_none()
 
 

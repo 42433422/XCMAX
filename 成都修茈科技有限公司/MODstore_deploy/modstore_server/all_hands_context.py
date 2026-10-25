@@ -20,7 +20,9 @@ def _snapshot_employee_cron_overview(limit: int = 24) -> List[Dict[str, Any]]:
 
         jobs = list_employee_cron_jobs() or []
     except RECOVERABLE_ERRORS as exc:
-        logger.debug("all_hands: cron overview failed error_type=%s", type(exc).__name__)
+        logger.debug(
+            "all_hands: cron overview failed error_type=%s", type(exc).__name__
+        )
         return []
     out: List[Dict[str, Any]] = []
     for row in jobs[: max(1, min(limit, 40))]:
@@ -62,7 +64,9 @@ class AllHandsContext:
 
             data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
         except RECOVERABLE_ERRORS as exc:
-            logger.debug("all_hands: employee.yaml read failed error_type=%s", type(exc).__name__)
+            logger.debug(
+                "all_hands: employee.yaml read failed error_type=%s", type(exc).__name__
+            )
             return {"area": area}
         if not isinstance(data, dict):
             return {"area": area}
@@ -79,15 +83,17 @@ class AllHandsContext:
             meta["triggers"] = trig
         deps = data.get("depends_on")
         if isinstance(deps, list):
-            meta["depends_on_yaml"] = [str(x).strip() for x in deps if str(x).strip()][:8]
+            meta["depends_on_yaml"] = [str(x).strip() for x in deps if str(x).strip()][
+                :8
+            ]
         bc = data.get("business_context")
         if isinstance(bc, dict) and bc:
             meta["business_context"] = bc
         ci_paths = data.get("ci_coverage_artifacts")
         if isinstance(ci_paths, list) and ci_paths:
-            meta["ci_coverage_artifacts"] = [str(x).strip() for x in ci_paths if str(x).strip()][
-                :12
-            ]
+            meta["ci_coverage_artifacts"] = [
+                str(x).strip() for x in ci_paths if str(x).strip()
+            ][:12]
         return meta
 
     def manifest_signals(self, pkg_id: str) -> Dict[str, Any]:
@@ -128,24 +134,34 @@ class AllHandsContext:
             collab = v2.get("collaboration") or {}
             wf = collab.get("workflow") or {}
             out["name"] = str(ident.get("name") or man.get("name") or pkg_id)
-            out["description"] = str(ident.get("description") or man.get("description") or "")[:280]
-            out["persona"] = str(role.get("persona") or agent.get("system_prompt") or "")[:400]
+            out["description"] = str(
+                ident.get("description") or man.get("description") or ""
+            )[:280]
+            out["persona"] = str(
+                role.get("persona") or agent.get("system_prompt") or ""
+            )[:400]
             sp = str(agent.get("system_prompt") or "").strip()
             out["system_prompt_present"] = bool(sp)
             out["system_prompt_chars"] = len(sp)
             if sp and (not out["persona"]):
                 out["persona"] = sp[:400]
             if isinstance(role.get("expertise"), list):
-                out["expertise"] = [str(x) for x in role["expertise"] if str(x).strip()][:8]
+                out["expertise"] = [
+                    str(x) for x in role["expertise"] if str(x).strip()
+                ][:8]
             if isinstance(actions.get("handlers"), list):
-                out["handlers"] = [str(x) for x in actions["handlers"] if str(x).strip()][:12]
+                out["handlers"] = [
+                    str(x) for x in actions["handlers"] if str(x).strip()
+                ][:12]
             if isinstance(cog.get("skills"), list):
                 for s in cog["skills"][:6]:
                     if isinstance(s, dict) and s.get("name"):
                         out["skills"].append(
                             {
                                 "name": str(s.get("name"))[:48],
-                                "brief": str(s.get("brief") or s.get("description") or "")[:160],
+                                "brief": str(
+                                    s.get("brief") or s.get("description") or ""
+                                )[:160],
                                 "kind": str(s.get("kind") or "")[:32],
                             }
                         )
@@ -157,8 +173,12 @@ class AllHandsContext:
                     if isinstance(rule, str):
                         text = rule.strip()
                     elif isinstance(rule, dict):
-                        name = str(rule.get("name") or rule.get("rule_id") or "").strip()
-                        desc = str(rule.get("description") or rule.get("text") or "").strip()
+                        name = str(
+                            rule.get("name") or rule.get("rule_id") or ""
+                        ).strip()
+                        desc = str(
+                            rule.get("description") or rule.get("text") or ""
+                        ).strip()
                         if name and desc:
                             text = f"{name}: {desc}"
                         else:
@@ -189,10 +209,12 @@ class AllHandsContext:
                 "artifact": str(ident_block.get("artifact") or "employee_pack"),
                 "handlers": list(out["handlers"]),
                 "depends_on": list(out["depends_on"]),
-                "workspace_scope_globs": [str(x) for x in scope_globs if str(x).strip()][:6],
-                "workspace_forbidden_globs": [str(x) for x in forbidden_globs if str(x).strip()][
-                    :4
-                ],
+                "workspace_scope_globs": [
+                    str(x) for x in scope_globs if str(x).strip()
+                ][:6],
+                "workspace_forbidden_globs": [
+                    str(x) for x in forbidden_globs if str(x).strip()
+                ][:4],
                 "skills_count": len(out["skills"]),
                 "behavior_rules_count": len(out["behavior_rules"]),
             }
@@ -204,17 +226,19 @@ class AllHandsContext:
             sig_block = raw_signals if isinstance(raw_signals, dict) else {}
             ci_art = sig_block.get("ci_coverage_artifacts")
             if isinstance(ci_art, list) and ci_art:
-                out["ci_coverage_artifacts"] = [str(x).strip() for x in ci_art if str(x).strip()][
-                    :12
-                ]
+                out["ci_coverage_artifacts"] = [
+                    str(x).strip() for x in ci_art if str(x).strip()
+                ][:12]
         except RECOVERABLE_ERRORS as exc:
-            logger.debug("all_hands: manifest read failed error_type=%s", type(exc).__name__)
+            logger.debug(
+                "all_hands: manifest read failed error_type=%s", type(exc).__name__
+            )
         if "ci_coverage_artifacts" not in out:
             yg_ci = yuangon_meta.get("ci_coverage_artifacts")
             if isinstance(yg_ci, list) and yg_ci:
-                out["ci_coverage_artifacts"] = [str(x).strip() for x in yg_ci if str(x).strip()][
-                    :12
-                ]
+                out["ci_coverage_artifacts"] = [
+                    str(x).strip() for x in yg_ci if str(x).strip()
+                ][:12]
         bc = yuangon_meta.get("business_context")
         if isinstance(bc, dict) and bc:
             out["business_context"] = bc

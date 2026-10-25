@@ -69,7 +69,10 @@ class EmployeeReporter:
                 if rc.get("ok"):
                     research_pack = str(rc.get("context_pack") or "")
                     research_sources = [
-                        {"title": str(s.get("title") or ""), "url": str(s.get("url") or "")}
+                        {
+                            "title": str(s.get("title") or ""),
+                            "url": str(s.get("url") or ""),
+                        }
                         for s in rc.get("sources") or []
                         if isinstance(s, dict)
                     ][:8]
@@ -78,7 +81,9 @@ class EmployeeReporter:
                 for w in rc.get("warnings") or []:
                     warns.append(str(w))
             except RECOVERABLE_ERRORS as exc:
-                logger.warning("all_hands research failed pkg_id=%s err=%s", pkg_id, exc)
+                logger.warning(
+                    "all_hands research failed pkg_id=%s err=%s", pkg_id, exc
+                )
                 warns.append(f"research 失败：{exc}")
         excerpt, yg_warns = self.pack_excerpt(pkg_id)
         warns.extend(yg_warns)
@@ -87,7 +92,9 @@ class EmployeeReporter:
         signals = self.manifest(pkg_id)
         user_q = (user_question or "").strip()
         if user_q:
-            task_text = self.qa_template.format(employee_id=pkg_id, user_question=user_q)
+            task_text = self.qa_template.format(
+                employee_id=pkg_id, user_question=user_q
+            )
         else:
             task_text = self.report_template.format(employee_id=pkg_id)
         inp: Dict[str, Any] = {
@@ -129,7 +136,12 @@ class EmployeeReporter:
             )
             if text:
                 text = self.coerce_excerpt(
-                    text, {"employee_id": pkg_id, "name": display_name, "area": signals.get("area")}
+                    text,
+                    {
+                        "employee_id": pkg_id,
+                        "name": display_name,
+                        "area": signals.get("area"),
+                    },
                 )
             completed = datetime.now(timezone.utc).isoformat()
             return {
@@ -152,7 +164,11 @@ class EmployeeReporter:
 
         def _run() -> Dict[str, Any]:
             return self.execute(
-                pkg_id, task_text, inp, user_id, bench_llm_override=(bench_provider, bench_model)
+                pkg_id,
+                task_text,
+                inp,
+                user_id,
+                bench_llm_override=(bench_provider, bench_model),
             )
 
         out: Dict[str, Any] = {}
@@ -196,7 +212,11 @@ class EmployeeReporter:
         if inp.get("all_hands_standby"):
             text = self.coerce_excerpt(
                 text,
-                {"employee_id": pkg_id, "name": display_name, "area": self.area_for(pkg_id) or ""},
+                {
+                    "employee_id": pkg_id,
+                    "name": display_name,
+                    "area": self.area_for(pkg_id) or "",
+                },
             )
         cog_err = (out.get("cognition_error") or "").strip()
         return {

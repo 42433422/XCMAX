@@ -29,7 +29,8 @@ class ButlerAction(_facade().Base):
     risk = _facade().Column(_facade().String(16), default="low")
     status = _facade().Column(_facade().String(16), default="success", index=True)
     created_at = _facade().Column(
-        _facade().DateTime, default=lambda: _facade().datetime.now(_facade().timezone.utc)
+        _facade().DateTime,
+        default=lambda: _facade().datetime.now(_facade().timezone.utc),
     )
 
 
@@ -112,7 +113,10 @@ async def butler_daily_digest_records(
     total = db.query(_facade().DailyDigestRecord.id).count()
     return {
         "success": True,
-        "data": [_facade()._daily_digest_record_to_dict(row, include_body=False) for row in rows],
+        "data": [
+            _facade()._daily_digest_record_to_dict(row, include_body=False)
+            for row in rows
+        ],
         "total": total,
     }
 
@@ -129,7 +133,10 @@ async def butler_daily_digest_record_detail(
     row = db.get(_facade().DailyDigestRecord, record_id)
     if row is None:
         raise _facade().HTTPException(404, "每日摘要记录不存在")
-    return {"success": True, "data": _facade()._daily_digest_record_to_dict(row, include_body=True)}
+    return {
+        "success": True,
+        "data": _facade()._daily_digest_record_to_dict(row, include_body=True),
+    }
 
 
 def _dd_repo_root():
@@ -137,7 +144,9 @@ def _dd_repo_root():
     from pathlib import Path as _Path
 
     mono = (
-        _os.environ.get("XCMAX_MONOREPO_ROOT") or _os.environ.get("MODSTORE_REPO_ROOT") or ""
+        _os.environ.get("XCMAX_MONOREPO_ROOT")
+        or _os.environ.get("MODSTORE_REPO_ROOT")
+        or ""
     ).strip()
     if mono:
         return _Path(mono).expanduser().resolve()
@@ -210,7 +219,9 @@ async def butler_daily_digest_artifacts(
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        stages.append({"node": "SW/SS/SA", "label": "三端截图巡检", "error": str(exc)[:200]})
+        stages.append(
+            {"node": "SW/SS/SA", "label": "三端截图巡检", "error": str(exc)[:200]}
+        )
     try:
         from modstore_server.daily_digest_surface_ppt import _save_dir as _pp_save_dir
 
@@ -227,7 +238,9 @@ async def butler_daily_digest_artifacts(
             }
         )
     except RECOVERABLE_ERRORS as exc:
-        stages.append({"node": "PPTX", "label": "三端→PPT 附件", "error": str(exc)[:200]})
+        stages.append(
+            {"node": "PPTX", "label": "三端→PPT 附件", "error": str(exc)[:200]}
+        )
     stages.append(
         {
             "node": "M",
@@ -268,7 +281,10 @@ async def butler_daily_digest_artifacts(
         }
     )
     try:
-        from modstore_server.release_train import list_release_train_history, snapshot_public
+        from modstore_server.release_train import (
+            list_release_train_history,
+            snapshot_public,
+        )
 
         stages.append(
             {
@@ -284,7 +300,11 @@ async def butler_daily_digest_artifacts(
         )
     except RECOVERABLE_ERRORS as exc:
         stages.append(
-            {"node": "RT", "label": "release_train 四段 + 历史快照", "error": str(exc)[:200]}
+            {
+                "node": "RT",
+                "label": "release_train 四段 + 历史快照",
+                "error": str(exc)[:200],
+            }
         )
     try:
         from modstore_server.daily_backup_job import list_backups
@@ -301,7 +321,10 @@ async def butler_daily_digest_artifacts(
         )
     except RECOVERABLE_ERRORS as exc:
         stages.append({"node": "DR", "label": "容灾备份", "error": str(exc)[:200]})
-    return {"success": True, "data": {"record_id": record_id, "day": day, "stages": stages}}
+    return {
+        "success": True,
+        "data": {"record_id": record_id, "day": day, "stages": stages},
+    }
 
 
 "Implementation extracted from the public facade module."
@@ -346,7 +369,10 @@ def _execute_admin_readonly_tool(
 
     try:
         if tool == "get_my_account_snapshot":
-            from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+            from modstore_server.xiaoc_cs_ssot import (
+                format_visitor_block,
+                resolve_user_identity,
+            )
 
             ident = resolve_user_identity(user, db=db, source="butler")
             lines = [
@@ -362,7 +388,9 @@ def _execute_admin_readonly_tool(
             lim = _limit(5, 20)
             wallet = db.query(Wallet).filter(Wallet.user_id == user.id).first()
             balance = float(wallet.balance) if wallet else 0.0
-            updated = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+            updated = (
+                wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+            )
             rows = (
                 db.query(Transaction)
                 .filter(Transaction.user_id == user.id)
@@ -409,7 +437,10 @@ def _execute_admin_readonly_tool(
             rows = (
                 db.query(CustomerServiceTicket)
                 .filter(CustomerServiceTicket.user_id == user.id)
-                .order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+                .order_by(
+                    CustomerServiceTicket.updated_at.desc(),
+                    CustomerServiceTicket.id.desc(),
+                )
                 .limit(lim)
                 .all()
             )
@@ -473,7 +504,9 @@ def _partition_butler_tool_calls(
             args = (tc or {}).get("args")
             if not isinstance(args, dict):
                 args = {}
-            briefs.append(_facade()._execute_admin_readonly_tool(name, args, user=user, db=db))
+            briefs.append(
+                _facade()._execute_admin_readonly_tool(name, args, user=user, db=db)
+            )
         else:
             page_calls.append(tc)
     brief = ""
@@ -626,7 +659,9 @@ def _corp_chat_rate_allow(client_key: str) -> None:
     bucket = _facade()._CORP_CHAT_TIMES[client_key]
     bucket[:] = [t for t in bucket if t > cutoff]
     if len(bucket) >= _facade()._CORP_CHAT_LIMIT:
-        raise _facade().HTTPException(status_code=429, detail="咨询过于频繁，请稍后再试")
+        raise _facade().HTTPException(
+            status_code=429, detail="咨询过于频繁，请稍后再试"
+        )
     bucket.append(now)
 
 
@@ -662,9 +697,16 @@ def _resolve_corp_credentials(db: _facade().Session):
         if route_provider and route_model:
             route_key = platform_api_key(route_provider)
             if route_key:
-                return (route_provider, route_model, route_key, platform_base_url(route_provider))
+                return (
+                    route_provider,
+                    route_model,
+                    route_key,
+                    platform_base_url(route_provider),
+                )
     except RECOVERABLE_ERRORS:
-        _facade().logger.debug("corp-chat: platform runtime route unavailable", exc_info=True)
+        _facade().logger.debug(
+            "corp-chat: platform runtime route unavailable", exc_info=True
+        )
     if not api_key and user_id_raw.isdigit():
         uid = int(user_id_raw)
         if not provider:
@@ -681,7 +723,11 @@ def _resolve_corp_credentials(db: _facade().Session):
         for p in _facade().KNOWN_PROVIDERS:
             if _facade().os.environ.get(f"BUTLER_CORP_API_KEY_{p.upper()}"):
                 provider = p
-                api_key = _facade().os.environ.get(f"BUTLER_CORP_API_KEY_{p.upper()}", "").strip()
+                api_key = (
+                    _facade()
+                    .os.environ.get(f"BUTLER_CORP_API_KEY_{p.upper()}", "")
+                    .strip()
+                )
                 break
         if not provider:
             provider = "openai"
@@ -691,20 +737,28 @@ def _resolve_corp_credentials(db: _facade().Session):
             api_key = qq_key
             if not (_facade().os.environ.get("BUTLER_CORP_PROVIDER") or "").strip():
                 provider = (
-                    _facade().os.environ.get("BUTLER_QQ_LLM_PROVIDER") or provider or "openai"
+                    _facade().os.environ.get("BUTLER_QQ_LLM_PROVIDER")
+                    or provider
+                    or "openai"
                 ).strip()
             if not model:
-                qq_model = (_facade().os.environ.get("BUTLER_QQ_LLM_MODEL") or "").strip()
+                qq_model = (
+                    _facade().os.environ.get("BUTLER_QQ_LLM_MODEL") or ""
+                ).strip()
                 if qq_model:
                     model = qq_model
             if base_url is None:
-                qq_base = (_facade().os.environ.get("BUTLER_QQ_LLM_BASE_URL") or "").strip()
+                qq_base = (
+                    _facade().os.environ.get("BUTLER_QQ_LLM_BASE_URL") or ""
+                ).strip()
                 if qq_base:
                     base_url = qq_base
     if not model:
         model = "gpt-4o-mini"
     if not api_key:
-        raise _facade().HTTPException(503, "官网咨询助手暂不可用，请通过联系我们页留言或稍后再试。")
+        raise _facade().HTTPException(
+            503, "官网咨询助手暂不可用，请通过联系我们页留言或稍后再试。"
+        )
     if base_url is None and provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
         from modstore_server.llm_key_resolver import platform_base_url
 
@@ -715,7 +769,10 @@ def _resolve_corp_credentials(db: _facade().Session):
 
 
 def _build_corp_messages(
-    body: CorpChatDTO, *, user: _facade().User | None = None, db: _facade().Session | None = None
+    body: CorpChatDTO,
+    *,
+    user: _facade().User | None = None,
+    db: _facade().Session | None = None,
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     """官网公开咨询：统一小C 人设 + 对话对象 + 管理端 persy 知识库。"""
     from modstore_server.xiaoc_cs_ssot import (
@@ -734,7 +791,9 @@ def _build_corp_messages(
         )
     else:
         identity = identity_from_guest(
-            visitor_id=body.visitor_id or "", visitor_label=body.visitor_label or "", source="corp"
+            visitor_id=body.visitor_id or "",
+            visitor_label=body.visitor_label or "",
+            source="corp",
         )
     vb = format_visitor_block(identity)
     if vb:
@@ -744,9 +803,7 @@ def _build_corp_messages(
     if kb:
         system_content += f"\n\n{kb}"
     if body.page_context:
-        system_content += (
-            f"\n\n当前页面（{body.page_id or 'unknown'}）上下文：\n{body.page_context[:3500]}"
-        )
+        system_content += f"\n\n当前页面（{body.page_id or 'unknown'}）上下文：\n{body.page_context[:3500]}"
     msgs: _facade().List[_facade().Dict[str, _facade().Any]] = [
         {"role": "system", "content": system_content}
     ]
@@ -758,7 +815,11 @@ def _build_corp_messages(
 
 
 def _get_or_create_conversation(
-    db: _facade().Session, user_id: int, conversation_id: int | None, provider: str, model: str
+    db: _facade().Session,
+    user_id: int,
+    conversation_id: int | None,
+    provider: str,
+    model: str,
 ) -> _facade().ChatConversation:
     if conversation_id:
         conv = (
@@ -794,15 +855,23 @@ async def butler_cs_ssot_policy(mode: str = "admin"):
         key = "external"
     if key not in XIAOC_PERMISSIONS:
         key = "admin"
-    return {"ok": True, "policy": permission_policy(mode=key), "modes": list(XIAOC_PERMISSIONS)}
+    return {
+        "ok": True,
+        "policy": permission_policy(mode=key),
+        "modes": list(XIAOC_PERMISSIONS),
+    }
 
 
 @_facade().router.post("/cs-ssot/retrieve")
 async def butler_cs_ssot_retrieve(
-    body: CsSsotRetrieveDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: CsSsotRetrieveDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """已登录市场/管理端：按身份检索公开库（管理员另含内部库）。"""
-    from modstore_server.xiaoc_cs_ssot import PUBLIC_DATASET_ID, retrieve_knowledge_for_mode
+    from modstore_server.xiaoc_cs_ssot import (
+        PUBLIC_DATASET_ID,
+        retrieve_knowledge_for_mode,
+    )
 
     mode = "admin" if bool(getattr(user, "is_admin", False)) else "market_cs"
     chunks = retrieve_knowledge_for_mode(body.query, mode=mode, top_k=body.top_k)
@@ -850,11 +919,11 @@ async def butler_corp_chat(
         text = (raw_response.get("content") or "").strip()
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-chat LLM failed: %s", exc)
-        raise _facade().HTTPException(503, "暂时无法回答，请通过联系我们页留言。") from exc
+        raise _facade().HTTPException(
+            503, "暂时无法回答，请通过联系我们页留言。"
+        ) from exc
     if not text:
-        text = (
-            "抱歉，我暂时无法回答这个问题。您可浏览产品中心 /services.html 或留言 /contact.html。"
-        )
+        text = "抱歉，我暂时无法回答这个问题。您可浏览产品中心 /services.html 或留言 /contact.html。"
     return {"success": True, "content": text, "message": text}
 
 
@@ -884,7 +953,12 @@ async def butler_corp_translate(
     ]
     try:
         raw_response = await _facade().chat_dispatch(
-            provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=180
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=msgs,
+            max_tokens=180,
         )
         if not raw_response.get("ok"):
             raise RuntimeError(raw_response.get("error") or "translate failed")
@@ -1049,7 +1123,9 @@ async def butler_corp_intake_fill(
     draft_hint = ""
     if body.current_draft:
         try:
-            draft_hint = _facade().json.dumps(body.current_draft, ensure_ascii=False)[:1500]
+            draft_hint = _facade().json.dumps(body.current_draft, ensure_ascii=False)[
+                :1500
+            ]
         except RECOVERABLE_ERRORS:
             draft_hint = ""
     user_content = body.message.strip()
@@ -1077,7 +1153,9 @@ async def butler_corp_intake_fill(
         text = (raw_response.get("content") or "").strip()
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.warning("corp-intake-fill LLM failed: %s", exc)
-        raise _facade().HTTPException(503, "智能预填暂不可用，请直接在左侧表单填写。") from exc
+        raise _facade().HTTPException(
+            503, "智能预填暂不可用，请直接在左侧表单填写。"
+        ) from exc
     parsed = _facade()._parse_intake_llm_json(text)
     reply = (
         _facade()._clip_text(parsed.get("reply"), 500)
@@ -1103,7 +1181,9 @@ async def butler_chat(
 ):
     """非流式 Butler 对话。"""
     _api = _facade()
-    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(
+        db, user.id
+    )
     is_byok = key_source == "user_override"
     msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     if not msgs:
@@ -1116,11 +1196,15 @@ async def butler_chat(
             hold_no=f"byok-{request_id}", amount=_api.Decimal("0"), enabled=False
         )
     else:
-        preauth = _api.estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
+        preauth = _api.estimate_preauthorization(
+            db, provider, model, msgs, body.max_tokens
+        )
         hold = await wallet.preauthorize(
             _api.authorization_header(request), preauth, provider, model, request_id
         )
-    conv = _api._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
+    conv = _api._get_or_create_conversation(
+        db, user.id, body.conversation_id, provider, model
+    )
     try:
         from modstore_server.infrastructure.http_clients import get_external_client
         from modstore_server.llm_chat_proxy import _normalize_openai_base
@@ -1162,7 +1246,9 @@ async def butler_chat(
                 {
                     "id": tc.get("id", ""),
                     "name": tc.get("function", {}).get("name", ""),
-                    "args": _api._safe_json(tc.get("function", {}).get("arguments", "{}")),
+                    "args": _api._safe_json(
+                        tc.get("function", {}).get("arguments", "{}")
+                    ),
                 }
                 for tc in tool_calls_raw
             ]
@@ -1188,7 +1274,9 @@ async def butler_chat(
         if readonly_brief:
             text = ((text or "").strip() + "\n\n" + readonly_brief).strip()
     except RECOVERABLE_ERRORS as exc:
-        await wallet.release(_api.authorization_header(request), hold, str(exc), request_id)
+        await wallet.release(
+            _api.authorization_header(request), hold, str(exc), request_id
+        )
         _api.save_failure_log(
             db,
             user_id=user.id,
@@ -1202,7 +1290,9 @@ async def butler_chat(
     charge = _api.Decimal("0")
     if not is_byok:
         charge = _api.calculate_charge(db, provider, model, usage_obj)
-        await wallet.settle(_api.authorization_header(request), hold, charge, request_id)
+        await wallet.settle(
+            _api.authorization_header(request), hold, charge, request_id
+        )
     _api.save_success_log(
         db,
         user_id=user.id,
@@ -1242,8 +1332,12 @@ async def butler_chat_stream(
                 yield f"data: {_api.json.dumps({'text': text, 'done': False}, ensure_ascii=False)}\n\n"
             yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': result.get('conversation_id'), 'charge_amount': result.get('charge_amount'), 'tool_calls': result.get('tool_calls') or []}, ensure_ascii=False)}\n\n"
 
-        return _api.StreamingResponse(admin_event_stream(), media_type="text/event-stream")
-    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(db, user.id)
+        return _api.StreamingResponse(
+            admin_event_stream(), media_type="text/event-stream"
+        )
+    provider, model, api_key, key_source, base_url = _api._resolve_butler_credentials(
+        db, user.id
+    )
     msgs = _api._build_messages(body, body.page_context, user=user, db=db)
     is_byok = key_source == "user_override"
     if not msgs:
@@ -1256,11 +1350,15 @@ async def butler_chat_stream(
             hold_no=f"byok-{request_id}", amount=_api.Decimal("0"), enabled=False
         )
     else:
-        preauth = _api.estimate_preauthorization(db, provider, model, msgs, body.max_tokens)
+        preauth = _api.estimate_preauthorization(
+            db, provider, model, msgs, body.max_tokens
+        )
         hold = await wallet.preauthorize(
             _api.authorization_header(request), preauth, provider, model, request_id
         )
-    conv = _api._get_or_create_conversation(db, user.id, body.conversation_id, provider, model)
+    conv = _api._get_or_create_conversation(
+        db, user.id, body.conversation_id, provider, model
+    )
 
     async def event_stream():
         collected = []
@@ -1288,7 +1386,9 @@ async def butler_chat_stream(
             charge = _api.Decimal("0")
             if not is_byok:
                 charge = _api.calculate_charge(db, provider, model, usage_obj)
-                await wallet.settle(_api.authorization_header(request), hold, charge, request_id)
+                await wallet.settle(
+                    _api.authorization_header(request), hold, charge, request_id
+                )
             _api.save_success_log(
                 db,
                 user_id=user.id,
@@ -1303,7 +1403,9 @@ async def butler_chat_stream(
             )
             yield f"data: {_api.json.dumps({'text': '', 'done': True, 'conversation_id': conv.id, 'charge_amount': float(charge)}, ensure_ascii=False)}\n\n"
         except RECOVERABLE_ERRORS as exc:
-            await wallet.release(_api.authorization_header(request), hold, str(exc), request_id)
+            await wallet.release(
+                _api.authorization_header(request), hold, str(exc), request_id
+            )
             _api.save_failure_log(
                 db,
                 user_id=user.id,
@@ -1474,7 +1576,9 @@ class AllHandsReportDTO(_facade().BaseModel):
     with_research: bool = True
     max_employees: int = _facade().Field(8, ge=1, le=_facade().MAX_ALL_HANDS_EMPLOYEES)
     concurrency: int = _facade().Field(2, ge=1, le=4)
-    user_question: _facade().Optional[str] = _facade().Field(default=None, max_length=600)
+    user_question: _facade().Optional[str] = _facade().Field(
+        default=None, max_length=600
+    )
     synthesize: bool = True
 
 
@@ -1488,15 +1592,34 @@ def _all_hands_session_steps(
     一一对应。
     """
     steps: _facade().List[_facade().Dict[str, _facade().Any]] = [
-        {"id": "prepare", "label": "准备员工清单", "status": "pending", "message": None},
-        {"id": "collect", "label": "收集全员汇报", "status": "pending", "message": None},
+        {
+            "id": "prepare",
+            "label": "准备员工清单",
+            "status": "pending",
+            "message": None,
+        },
+        {
+            "id": "collect",
+            "label": "收集全员汇报",
+            "status": "pending",
+            "message": None,
+        },
     ]
     if with_synthesize:
         steps.append(
-            {"id": "synthesize", "label": "数字管家综合答复", "status": "pending", "message": None}
+            {
+                "id": "synthesize",
+                "label": "数字管家综合答复",
+                "status": "pending",
+                "message": None,
+            }
         )
-    steps.append({"id": "minutes", "label": "生成会议摘要", "status": "pending", "message": None})
-    steps.append({"id": "complete", "label": "完成", "status": "pending", "message": None})
+    steps.append(
+        {"id": "minutes", "label": "生成会议摘要", "status": "pending", "message": None}
+    )
+    steps.append(
+        {"id": "complete", "label": "完成", "status": "pending", "message": None}
+    )
     return steps
 
 
@@ -1504,7 +1627,10 @@ async def _run_all_hands_report_session(
     sid: str, user_id: int, payload: _facade().Dict[str, _facade().Any]
 ) -> None:
     """后台执行全员汇报，并把结果写入 workbench session。"""
-    from modstore_server.all_hands_report import build_all_hands_report, synthesize_meeting_minutes
+    from modstore_server.all_hands_report import (
+        build_all_hands_report,
+        synthesize_meeting_minutes,
+    )
     from modstore_server.daily_digest import (
         DEFAULT_DIGEST_EMAIL,
         parse_daily_digest_recipient_emails,
@@ -1521,7 +1647,9 @@ async def _run_all_hands_report_session(
 
     employee_ids_raw = payload.get("employee_ids")
     employee_ids = employee_ids_raw if isinstance(employee_ids_raw, list) else None
-    max_employees = _facade().clamp_all_hands_max_employees(payload.get("max_employees"))
+    max_employees = _facade().clamp_all_hands_max_employees(
+        payload.get("max_employees")
+    )
     with_research = bool(payload.get("with_research", True))
     concurrency = int(payload.get("concurrency") or 2)
     user_question_raw = payload.get("user_question")
@@ -1529,7 +1657,10 @@ async def _run_all_hands_report_session(
     synthesize_flag = bool(payload.get("synthesize", True)) and bool(user_question)
     await _set_step(sid, "prepare", "running", "正在整理可汇报员工清单…")
     await _set_step(
-        sid, "prepare", "done", f"并发 {max(1, min(concurrency, 4))}；最多 {max_employees} 人"
+        sid,
+        "prepare",
+        "done",
+        f"并发 {max(1, min(concurrency, 4))}；最多 {max_employees} 人",
     )
     await _set_step(
         sid,
@@ -1617,7 +1748,9 @@ async def _run_all_hands_report_session(
             synthesize=synthesize_flag,
         )
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.exception("all-hands-report session failed sid=%s user=%s", sid, user_id)
+        _facade().logger.exception(
+            "all-hands-report session failed sid=%s user=%s", sid, user_id
+        )
         await _fail_session(sid, "collect", f"全员汇报失败：{exc}")
         return
     if not bool(report.get("ok", True)):
@@ -1640,7 +1773,9 @@ async def _run_all_hands_report_session(
         if isinstance(synth, dict) and (synth.get("markdown") or "").strip():
             cited = synth.get("cited_employees") or []
             cite_count = len(cited) if isinstance(cited, list) else 0
-            await _set_step(sid, "synthesize", "done", f"综合答复已生成，引用员工 {cite_count} 名")
+            await _set_step(
+                sid, "synthesize", "done", f"综合答复已生成，引用员工 {cite_count} 名"
+            )
         else:
             err = ""
             if isinstance(synth, dict):
@@ -1668,7 +1803,9 @@ async def _run_all_hands_report_session(
     day = _facade().datetime.now(_facade().timezone.utc).strftime("%Y-%m-%d")
     subject = f"MODstore 员工大会会议摘要 · {day}"
     recipients = parse_daily_digest_recipient_emails(
-        _facade().os.environ.get("MODSTORE_DAILY_DIGEST_EMAIL", DEFAULT_DIGEST_EMAIL).strip()
+        _facade()
+        .os.environ.get("MODSTORE_DAILY_DIGEST_EMAIL", DEFAULT_DIGEST_EMAIL)
+        .strip()
     )
     meeting_minutes_email: _facade().Dict[str, _facade().Any] = {
         "recipients_count": len(recipients),
@@ -1676,7 +1813,9 @@ async def _run_all_hands_report_session(
         "per_to": [],
     }
     if not recipients:
-        meeting_minutes_email["skipped_reason"] = "无有效收件人（MODSTORE_DAILY_DIGEST_EMAIL）"
+        meeting_minutes_email["skipped_reason"] = (
+            "无有效收件人（MODSTORE_DAILY_DIGEST_EMAIL）"
+        )
     elif not body_text:
         meeting_minutes_email["skipped_reason"] = "会议摘要正文为空，已跳过发信"
     else:
@@ -1688,7 +1827,11 @@ async def _run_all_hands_report_session(
             if deliv:
                 any_delivered = True
             meeting_minutes_email["per_to"].append(
-                {"to": to_email, "delivered": deliv, "mode": str(result.get("mode") or "")}
+                {
+                    "to": to_email,
+                    "delivered": deliv,
+                    "mode": str(result.get("mode") or ""),
+                }
             )
         meeting_minutes_email["any_delivered"] = any_delivered
         _facade().logger.info(
@@ -1720,14 +1863,16 @@ async def _run_all_hands_report_session(
             ),
             "meeting_minutes": meeting_minutes,
             "meeting_minutes_email": meeting_minutes_email,
-            "completed_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
+            "completed_at": _facade().datetime.now(_facade().timezone.utc).isoformat()
+            + "Z",
         },
     )
 
 
 @_facade().router.post("/all-hands-report/sessions")
 async def butler_all_hands_report_session_start(
-    body: AllHandsReportDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: AllHandsReportDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """启动全员汇报后台任务（秒回 session_id，前端轮询 `/api/workbench/sessions/{id}`）。"""
     if not getattr(user, "is_admin", False):
@@ -1744,7 +1889,9 @@ async def butler_all_hands_report_session_start(
     req_ids = payload.get("employee_ids")
     req_count = len(req_ids) if isinstance(req_ids, list) else 0
     user_question_raw = payload.get("user_question")
-    user_question_str = str(user_question_raw or "").strip() if user_question_raw else ""
+    user_question_str = (
+        str(user_question_raw or "").strip() if user_question_raw else ""
+    )
     synth_flag = bool(payload.get("synthesize", True)) and bool(user_question_str)
     async with _SESSION_LOCK:
         WORKBENCH_SESSIONS[sid] = {
@@ -1772,7 +1919,10 @@ async def butler_all_hands_report_session_start(
                     "current_employee_id": "",
                     "current_employee_name": "",
                     "current_employee_status": "",
-                    "updated_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
+                    "updated_at": _facade()
+                    .datetime.now(_facade().timezone.utc)
+                    .isoformat()
+                    + "Z",
                 },
             },
             "artifact": None,
@@ -1783,7 +1933,9 @@ async def butler_all_hands_report_session_start(
         }
         _persist_workbench_session_unlocked(sid)
     task = _facade().asyncio.create_task(
-        _facade()._run_all_hands_report_session(sid=sid, user_id=int(user.id), payload=payload)
+        _facade()._run_all_hands_report_session(
+            sid=sid, user_id=int(user.id), payload=payload
+        )
     )
     task.add_done_callback(_pipeline_task_failsafe(sid))
     return {"session_id": sid, "status": "running"}
@@ -1794,7 +1946,8 @@ async def butler_all_hands_report_session_start(
 
 @_facade().router.post("/all-hands-report")
 async def butler_all_hands_report(
-    body: AllHandsReportDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: AllHandsReportDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """让数字管家召集全员汇报（**仅管理员**）。
 
@@ -1827,7 +1980,9 @@ async def butler_all_hands_report(
 class DigestVibePrepDTO(_facade().BaseModel):
     """``POST .../daily-digests/{id}/vibe-prep/sessions`` 入参。"""
 
-    mode: str = _facade().Field("auto", description="auto=轻量快照+合成；manual=逐员工汇报后合成")
+    mode: str = _facade().Field(
+        "auto", description="auto=轻量快照+合成；manual=逐员工汇报后合成"
+    )
     employee_ids: _facade().Optional[_facade().List[str]] = None
     max_employees: int = _facade().Field(52, ge=1, le=_facade().MAX_ALL_HANDS_EMPLOYEES)
     concurrency: int = _facade().Field(2, ge=1, le=4)
@@ -1835,8 +1990,18 @@ class DigestVibePrepDTO(_facade().BaseModel):
 
 def _vibe_prep_session_steps() -> _facade().List[_facade().Dict[str, _facade().Any]]:
     return [
-        {"id": "prepare", "label": "准备员工清单", "status": "pending", "message": None},
-        {"id": "collect", "label": "收集员工快照", "status": "pending", "message": None},
+        {
+            "id": "prepare",
+            "label": "准备员工清单",
+            "status": "pending",
+            "message": None,
+        },
+        {
+            "id": "collect",
+            "label": "收集员工快照",
+            "status": "pending",
+            "message": None,
+        },
         {
             "id": "synthesize",
             "label": "生成更新/补丁 Markdown",
@@ -1872,7 +2037,9 @@ async def _run_digest_vibe_prep_session(
         payload.get("max_employees"), default=52
     )
     concurrency = int(payload.get("concurrency") or 2)
-    await _set_step(sid, "prepare", "running", f"模式：{('手动' if mode == 'manual' else '自动')}…")
+    await _set_step(
+        sid, "prepare", "running", f"模式：{('手动' if mode == 'manual' else '自动')}…"
+    )
     await _set_step(
         sid,
         "prepare",
@@ -1895,7 +2062,8 @@ async def _run_digest_vibe_prep_session(
             "current_employee_id": str(evt.get("employee_id") or ""),
             "current_employee_name": str(evt.get("employee_name") or ""),
             "current_employee_status": str(evt.get("employee_status") or ""),
-            "updated_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
+            "updated_at": _facade().datetime.now(_facade().timezone.utc).isoformat()
+            + "Z",
         }
         async with _SESSION_LOCK:
             sess = WORKBENCH_SESSIONS.get(sid)
@@ -1909,7 +2077,10 @@ async def _run_digest_vibe_prep_session(
             _persist_workbench_session_unlocked(sid)
         if stage == "collect":
             await _set_step(
-                sid, "collect", "running", f"已收集 {completed}/{max(total, completed)} 名员工"
+                sid,
+                "collect",
+                "running",
+                f"已收集 {completed}/{max(total, completed)} 名员工",
             )
 
     try:
@@ -1938,7 +2109,10 @@ async def _run_digest_vibe_prep_session(
     await _set_step(sid, "collect", "done", f"已汇总 {n} 名员工")
     await _set_step(sid, "synthesize", "running", "正在生成更新清单与补丁清单…")
     await _set_step(
-        sid, "synthesize", "done", f"已生成双 Markdown（模型 {result.get('model') or '—'}）"
+        sid,
+        "synthesize",
+        "done",
+        f"已生成双 Markdown（模型 {result.get('model') or '—'}）",
     )
     await _set_step(sid, "complete", "running", "正在整理输出…")
     artifact = {
@@ -1949,9 +2123,12 @@ async def _run_digest_vibe_prep_session(
         "vibe_prep": result,
         "updates_markdown": result.get("updates_markdown") or "",
         "patches_markdown": result.get("patches_markdown") or "",
-        "completed_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
+        "completed_at": _facade().datetime.now(_facade().timezone.utc).isoformat()
+        + "Z",
     }
-    from modstore_server.digest_vibe_line_dispatch import dispatch_vibe_prep_to_production_lines
+    from modstore_server.digest_vibe_line_dispatch import (
+        dispatch_vibe_prep_to_production_lines,
+    )
     from modstore_server.digest_vibe_prep import persist_vibe_prep_on_digest_record
 
     persist_vibe_prep_on_digest_record(int(digest_row.id), result)
@@ -1963,7 +2140,8 @@ class DigestLineExecuteDTO(_facade().BaseModel):
     """``POST .../daily-digests/{id}/line-execute`` 入参（Phase A 或单产线）。"""
 
     dispatch_line: str = _facade().Field(
-        "PHASE-A", description="PHASE-A（默认，P-S+P-App 补丁）| P-W | P-S | P-App | S-R"
+        "PHASE-A",
+        description="PHASE-A（默认，P-S+P-App 补丁）| P-W | P-S | P-App | S-R",
     )
     force: bool = _facade().Field(False, description="忽略同 base_version 幂等跳过")
     list_kinds: _facade().Optional[_facade().List[str]] = _facade().Field(
@@ -1996,10 +2174,14 @@ async def butler_digest_line_execute(
     if line in ("PHASE-A", "PHASEA", "ALL", "*", ""):
         from modstore_server.digest_daily_line_chain import execute_phase_a_line_chain
 
-        out = await asyncio.to_thread(execute_phase_a_line_chain, int(record_id), force=force)
+        out = await asyncio.to_thread(
+            execute_phase_a_line_chain, int(record_id), force=force
+        )
         return {"success": bool(out.get("ok")), "data": out}
     if line not in ("P-W", "P-S", "P-APP", "S-R"):
-        raise _facade().HTTPException(400, "dispatch_line 须为 PHASE-A / P-W / P-S / P-App / S-R")
+        raise _facade().HTTPException(
+            400, "dispatch_line 须为 PHASE-A / P-W / P-S / P-App / S-R"
+        )
     if line == "P-APP":
         line = "P-App"
     from modstore_server.digest_line_executor import execute_digest_line_work_units
@@ -2064,7 +2246,10 @@ async def butler_digest_vibe_prep_session_start(
                     "current_employee_id": "",
                     "current_employee_name": "",
                     "current_employee_status": "",
-                    "updated_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
+                    "updated_at": _facade()
+                    .datetime.now(_facade().timezone.utc)
+                    .isoformat()
+                    + "Z",
                 },
             },
             "artifact": None,

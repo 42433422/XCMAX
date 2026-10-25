@@ -59,7 +59,12 @@ def _default_capabilities(
     if preset_caps:
         return preset_caps[:8]
     text = " ".join([pid, name, description, employee_id, label]).lower()
-    if any((k in text for k in ("seo", "sitemap", "站点地图", "robots", "百度", "baidu", "push"))):
+    if any(
+        (
+            k in text
+            for k in ("seo", "sitemap", "站点地图", "robots", "百度", "baidu", "push")
+        )
+    ):
         return ["seo.sitemap", "seo.robots", "seo.baidu_push", "seo.verification_files"]
     if any((k in text for k in ("退款", "refund", "售后"))):
         return ["refund.review", "order.check", "customer.reply"]
@@ -84,7 +89,9 @@ def _default_skill_entries(
     for cap in caps[:6]:
         entry: _facade().Dict[str, _facade().Any] = {
             "name": cap,
-            "brief": _facade()._default_skill_brief(cap, label=label, description=description),
+            "brief": _facade()._default_skill_brief(
+                cap, label=label, description=description
+            ),
         }
         if cap.startswith("seo."):
             entry.update(_facade()._seo_skill_structure(cap))
@@ -345,7 +352,9 @@ def _ensure_seo_runtime_details(
     model.setdefault("max_tokens", 4000)
     agent["model"] = model
     actions = out.get("actions") if isinstance(out.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     can_write = any(
         (
             h in handlers
@@ -361,11 +370,15 @@ def _ensure_seo_runtime_details(
         )
     )
     focus_paths = _facade()._seo_focus_paths()
-    vibe_edit = actions.get("vibe_edit") if isinstance(actions.get("vibe_edit"), dict) else {}
+    vibe_edit = (
+        actions.get("vibe_edit") if isinstance(actions.get("vibe_edit"), dict) else {}
+    )
     if "vibe_edit" in handlers:
         vibe_edit.setdefault("root", ".")
         existing_focus = (
-            vibe_edit.get("focus_paths") if isinstance(vibe_edit.get("focus_paths"), list) else []
+            vibe_edit.get("focus_paths")
+            if isinstance(vibe_edit.get("focus_paths"), list)
+            else []
         )
         merged_focus = [str(x).strip() for x in existing_focus if str(x).strip()]
         for path in focus_paths:
@@ -503,18 +516,25 @@ def parse_employee_pack_llm_json(
     }
     v2_in = data.get("employee_config_v2")
     if isinstance(v2_in, dict):
-        manifest["employee_config_v2"] = _facade()._normalize_employee_config_v2_for_canvas(
-            v2_in,
+        manifest["employee_config_v2"] = (
+            _facade()._normalize_employee_config_v2_for_canvas(
+                v2_in,
+                pid=pid,
+                name=name,
+                description=desc,
+                employee_id=eid,
+                label=label,
+                capabilities=caps,
+            )
+        )
+    else:
+        manifest["employee_config_v2"] = _facade()._default_employee_config_v2(
             pid=pid,
             name=name,
             description=desc,
             employee_id=eid,
             label=label,
             capabilities=caps,
-        )
-    else:
-        manifest["employee_config_v2"] = _facade()._default_employee_config_v2(
-            pid=pid, name=name, description=desc, employee_id=eid, label=label, capabilities=caps
         )
     hp_raw = data.get("xcagi_host_profile")
     hp_norm, hp_errs = _facade().normalize_xcagi_host_profile(hp_raw)
@@ -553,27 +573,39 @@ def _normalize_employee_config_v2_for_canvas(
     frontend recovery heuristics.
     """
     out = dict(v2 or {})
-    identity = dict(out.get("identity") if isinstance(out.get("identity"), dict) else {})
+    identity = dict(
+        out.get("identity") if isinstance(out.get("identity"), dict) else {}
+    )
     identity.update(
         {
             "id": pid,
             "version": str(identity.get("version") or "1.0.0").strip() or "1.0.0",
-            "artifact": str(identity.get("artifact") or "employee_pack").strip() or "employee_pack",
-            "name": str(identity.get("name") or name or label or employee_id).strip() or pid,
+            "artifact": str(identity.get("artifact") or "employee_pack").strip()
+            or "employee_pack",
+            "name": str(identity.get("name") or name or label or employee_id).strip()
+            or pid,
             "description": str(identity.get("description") or description).strip(),
         }
     )
     out["identity"] = identity
-    cognition = dict(out.get("cognition") if isinstance(out.get("cognition"), dict) else {})
-    agent = dict(cognition.get("agent") if isinstance(cognition.get("agent"), dict) else {})
+    cognition = dict(
+        out.get("cognition") if isinstance(out.get("cognition"), dict) else {}
+    )
+    agent = dict(
+        cognition.get("agent") if isinstance(cognition.get("agent"), dict) else {}
+    )
     role = dict(agent.get("role") if isinstance(agent.get("role"), dict) else {})
     role.update(
         {
             "name": str(role.get("name") or label or name).strip() or pid,
-            "persona": str(role.get("persona") or description or "专业、高效、亲切").strip(),
+            "persona": str(
+                role.get("persona") or description or "专业、高效、亲切"
+            ).strip(),
             "tone": str(role.get("tone") or "professional").strip() or "professional",
             "expertise": (
-                role.get("expertise") if isinstance(role.get("expertise"), list) else capabilities
+                role.get("expertise")
+                if isinstance(role.get("expertise"), list)
+                else capabilities
             ),
         }
     )
@@ -600,7 +632,9 @@ def _normalize_employee_config_v2_for_canvas(
             ),
             "role": role,
             "behavior_rules": _facade()._normalize_behavior_rules(
-                agent.get("behavior_rules"), label=label or name, description=description
+                agent.get("behavior_rules"),
+                label=label or name,
+                description=description,
             ),
             "few_shot_examples": (
                 agent.get("few_shot_examples")
@@ -632,7 +666,9 @@ def _normalize_employee_config_v2_for_canvas(
         out.get("collaboration") if isinstance(out.get("collaboration"), dict) else {}
     )
     workflow = dict(
-        collaboration.get("workflow") if isinstance(collaboration.get("workflow"), dict) else {}
+        collaboration.get("workflow")
+        if isinstance(collaboration.get("workflow"), dict)
+        else {}
     )
     workflow.setdefault("workflow_id", 0)
     workflow["name"] = str(workflow.get("name") or label or name or pid).strip() or pid
@@ -642,14 +678,18 @@ def _normalize_employee_config_v2_for_canvas(
     raw_handlers = actions.get("handlers")
     actions["handlers"] = _facade()._normalize_action_handlers(raw_handlers)
     out["actions"] = actions
-    out.setdefault("metadata", {"framework_version": "2.0.0", "created_by": "employee_ai_scaffold"})
+    out.setdefault(
+        "metadata", {"framework_version": "2.0.0", "created_by": "employee_ai_scaffold"}
+    )
     _facade()._ensure_seo_runtime_details(
         out, pid=pid, name=name, description=description, label=label or name
     )
     return out
 
 
-def _normalize_employee_system_prompt(prompt: str, *, label: str, description: str) -> str:
+def _normalize_employee_system_prompt(
+    prompt: str, *, label: str, description: str
+) -> str:
     text = str(prompt or "").strip()
     banned_template = ("## 用途", "## 输入", "## 输出", "## 示例")
     if not text or all((marker in text for marker in banned_template)):
@@ -692,9 +732,14 @@ def _default_employee_config_v2(
     label: str,
     capabilities: _facade().List[str],
 ) -> _facade().Dict[str, _facade().Any]:
-    text = " ".join([pid, name, description, employee_id, label, " ".join(capabilities)]).lower()
+    text = " ".join(
+        [pid, name, description, employee_id, label, " ".join(capabilities)]
+    ).lower()
     wants_rankings = any(
-        (k in text for k in ("排行", "rank", "leaderboard", "模型", "model", "上网", "联网"))
+        (
+            k in text
+            for k in ("排行", "rank", "leaderboard", "模型", "model", "上网", "联网")
+        )
     )
     perception: _facade().Dict[str, _facade().Any] = {
         "type": "web_rankings" if wants_rankings else "text"
@@ -752,12 +797,17 @@ def _default_employee_config_v2(
                 "default_use_personnel_roster": True,
             },
         },
-        "metadata": {"framework_version": "2.0.0", "created_by": "employee_ai_scaffold"},
+        "metadata": {
+            "framework_version": "2.0.0",
+            "created_by": "employee_ai_scaffold",
+        },
     }
 
 
 def append_employee_stub_files_to_zip(
-    zf: _facade().zipfile.ZipFile, pack_id: str, manifest: _facade().Dict[str, _facade().Any]
+    zf: _facade().zipfile.ZipFile,
+    pack_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
 ) -> None:
     """写入 ``backend/employee_stubs`` 占位模块（与 workflow 脚手架一致，供安装包浏览 / XCAGI 对齐）。"""
     emp_id = pack_id
@@ -772,7 +822,10 @@ def append_employee_stub_files_to_zip(
 
 
 def build_employee_pack_zip(
-    pack_id: str, manifest: _facade().Dict[str, _facade().Any], *, include_runtime: bool = True
+    pack_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
+    *,
+    include_runtime: bool = True,
 ) -> bytes:
     """manifest.zip：含 manifest.json；可选 ``backend/blueprints.py`` + ``backend/employees`` 运行时（与 FHD 挂载契约对齐）。"""
     import copy
@@ -825,7 +878,9 @@ def normalize_editor_manifest_for_registry(
     out = copy.deepcopy(mf)
     ident = out.get("identity") if isinstance(out.get("identity"), dict) else {}
     if not isinstance(out.get("artifact"), str) or not out["artifact"].strip():
-        out["artifact"] = str(ident.get("artifact") or "employee_pack").strip() or "employee_pack"
+        out["artifact"] = (
+            str(ident.get("artifact") or "employee_pack").strip() or "employee_pack"
+        )
     out["id"] = pack_id
     if isinstance(ident, dict):
         ident["id"] = pack_id
@@ -841,7 +896,9 @@ def normalize_editor_manifest_for_registry(
     if not isinstance(out.get("employee"), dict):
         eid = pack_id
         label = str(ident.get("name") or out.get("name") or eid).strip() or eid
-        cognition = out.get("cognition") if isinstance(out.get("cognition"), dict) else {}
+        cognition = (
+            out.get("cognition") if isinstance(out.get("cognition"), dict) else {}
+        )
         caps: _facade().List[str] = []
         for sk in cognition.get("skills") or []:
             if isinstance(sk, dict):
@@ -862,7 +919,9 @@ def normalize_editor_manifest_for_registry(
         emp_obj["id"] = pack_id
         emp_obj.setdefault("label", str(out.get("name") or pack_id))
         emp_caps = (
-            emp_obj.get("capabilities") if isinstance(emp_obj.get("capabilities"), list) else []
+            emp_obj.get("capabilities")
+            if isinstance(emp_obj.get("capabilities"), list)
+            else []
         )
         emp_obj["capabilities"] = _facade()._default_capabilities(
             pid=str(out.get("id") or pack_id),
@@ -887,14 +946,16 @@ def normalize_editor_manifest_for_registry(
             if isinstance(out.get(slice_key), dict):
                 v2[slice_key] = copy.deepcopy(out[slice_key])
         if v2:
-            out["employee_config_v2"] = _facade()._normalize_employee_config_v2_for_canvas(
-                v2,
-                pid=out["id"],
-                name=out["name"],
-                description=out.get("description") or "",
-                employee_id=pack_id,
-                label=str((out.get("employee") or {}).get("label") or out["name"]),
-                capabilities=(out.get("employee") or {}).get("capabilities") or [],
+            out["employee_config_v2"] = (
+                _facade()._normalize_employee_config_v2_for_canvas(
+                    v2,
+                    pid=out["id"],
+                    name=out["name"],
+                    description=out.get("description") or "",
+                    employee_id=pack_id,
+                    label=str((out.get("employee") or {}).get("label") or out["name"]),
+                    capabilities=(out.get("employee") or {}).get("capabilities") or [],
+                )
             )
     elif isinstance(out.get("employee_config_v2"), dict):
         emp_obj = out.get("employee") if isinstance(out.get("employee"), dict) else {}
@@ -906,7 +967,9 @@ def normalize_editor_manifest_for_registry(
             employee_id=pack_id,
             label=str(emp_obj.get("label") or out.get("name") or pack_id),
             capabilities=(
-                emp_obj.get("capabilities") if isinstance(emp_obj.get("capabilities"), list) else []
+                emp_obj.get("capabilities")
+                if isinstance(emp_obj.get("capabilities"), list)
+                else []
             ),
         )
     if not out.get("workflow_employees"):

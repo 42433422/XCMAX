@@ -39,7 +39,9 @@ class ConnectorOperationResult:
 
 class OpenApiConnectorClient(ABC):
     @abstractmethod
-    def call_operation(self, call: ConnectorOperationCall) -> ConnectorOperationResult: ...
+    def call_operation(
+        self, call: ConnectorOperationCall
+    ) -> ConnectorOperationResult: ...
 
 
 class InProcessOpenApiConnectorClient(OpenApiConnectorClient):

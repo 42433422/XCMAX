@@ -83,7 +83,9 @@ async def sandbox_run_workflow(
             "sandbox_run_id": int(row.id),
             "graph_fingerprint": row.graph_fingerprint,
             "sandbox_status": status,
-            "sandbox_passed_for_current_graph": status["sandbox_passed_for_current_graph"],
+            "sandbox_passed_for_current_graph": status[
+                "sandbox_passed_for_current_graph"
+            ],
         }
     if not report.get("ok") and not body.validate_only:
         raise HTTPException(

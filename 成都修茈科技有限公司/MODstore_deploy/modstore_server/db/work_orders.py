@@ -28,7 +28,9 @@ class WorkOrderEvent(Base):
     ref = Column(Text, default="{}", nullable=False)  # JSON
     note = Column(String(500), default="", nullable=False)
     at = Column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
-    ts_unix = Column(Float, default=lambda: datetime.now(UTC).timestamp(), nullable=False)
+    ts_unix = Column(
+        Float, default=lambda: datetime.now(UTC).timestamp(), nullable=False
+    )
 
     __table_args__ = (
         Index("ix_work_order_events_wo_id", "wo_id"),

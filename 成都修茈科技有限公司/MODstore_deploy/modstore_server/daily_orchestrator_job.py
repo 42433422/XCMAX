@@ -16,8 +16,12 @@ logger = logging.getLogger(__name__)
 
 def _slo_halt_blocks_auto_merge() -> bool:
     """When MODSTORE_RELEASE_SLO_HALT or MODSTORE_SLO_HALT_AUTO_MERGE=1, failed smoke blocks orchestrator."""
-    raw_release = (os.environ.get("MODSTORE_RELEASE_SLO_HALT", "0") or "").strip().lower()
-    raw_legacy = (os.environ.get("MODSTORE_SLO_HALT_AUTO_MERGE", "0") or "").strip().lower()
+    raw_release = (
+        (os.environ.get("MODSTORE_RELEASE_SLO_HALT", "0") or "").strip().lower()
+    )
+    raw_legacy = (
+        (os.environ.get("MODSTORE_SLO_HALT_AUTO_MERGE", "0") or "").strip().lower()
+    )
     if raw_release not in ("1", "true", "yes", "on") and raw_legacy not in (
         "1",
         "true",
@@ -37,7 +41,9 @@ def _slo_halt_blocks_auto_merge() -> bool:
         return True
 
 
-def _run_git(root: str, args: list[str], *, timeout: float = 120.0) -> subprocess.CompletedProcess:
+def _run_git(
+    root: str, args: list[str], *, timeout: float = 120.0
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", *args],
         cwd=root,
@@ -66,7 +72,10 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         return {"ok": True, "skipped": True, "reason": "slo_halt_auto_merge"}
 
     digest_mode = (
-        (os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow")
+        (
+            os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow")
+            or "shadow"
+        )
         .strip()
         .lower()
     )
@@ -83,7 +92,10 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         }
 
     from modstore_server.employee_orchestrator import plan_and_dispatch
-    from modstore_server.integrations.ops_action_handlers import dispatch_ops_handler, repo_root
+    from modstore_server.integrations.ops_action_handlers import (
+        dispatch_ops_handler,
+        repo_root,
+    )
     from modstore_server.models import OpsStagedChange, get_session_factory
 
     root = str(repo_root())
@@ -121,7 +133,10 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         ).stdout.strip()
         if head_ref:
             base_ref = head_ref.rsplit("/", 1)[-1]  # origin/main → main
-    if not base_ref or _run_git(root, ["rev-parse", "--verify", base_ref]).returncode != 0:
+    if (
+        not base_ref
+        or _run_git(root, ["rev-parse", "--verify", base_ref]).returncode != 0
+    ):
         if _run_git(root, ["rev-parse", "--verify", "main"]).returncode == 0:
             base_ref = "main"
         elif _run_git(root, ["rev-parse", "--verify", "master"]).returncode == 0:
@@ -145,13 +160,17 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
             ],
         )
         if st.returncode != 0:
-            logger.warning("daily orchestrator: stash failed: %s, trying clean", st.stderr)
+            logger.warning(
+                "daily orchestrator: stash failed: %s, trying clean", st.stderr
+            )
             _run_git(root, ["checkout", "--", "."])
             _run_git(root, ["clean", "-fdq"])
 
     chk = _run_git(root, ["checkout", base_ref], timeout=90)
     if chk.returncode != 0:
-        logger.warning("daily orchestrator: checkout %s failed: %s", base_ref, chk.stderr)
+        logger.warning(
+            "daily orchestrator: checkout %s failed: %s", base_ref, chk.stderr
+        )
         return {"ok": False, "error": "checkout base failed", "stderr": chk.stderr}
 
     _run_git(root, ["fetch", "origin"], timeout=240)  # best-effort
@@ -284,13 +303,17 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                     "reason": "slo_halt_auto_merge",
                 }
             else:
-                from modstore_server.ops_staged_auto_approve import try_auto_deploy_staged_change
+                from modstore_server.ops_staged_auto_approve import (
+                    try_auto_deploy_staged_change,
+                )
 
                 auto = try_auto_deploy_staged_change(int(staged_id))
                 if auto is not None:
                     result["auto_deploy"] = auto
         except RECOVERABLE_ERRORS:
-            logger.exception("daily orchestrator auto-deploy skipped staged_id=%s", staged_id)
+            logger.exception(
+                "daily orchestrator auto-deploy skipped staged_id=%s", staged_id
+            )
 
     # 自动创建 GitHub PR（若启用）
     auto_pr = os.environ.get("MODSTORE_AUTO_PR_ENABLED", "1").strip().lower() in (
@@ -325,12 +348,16 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                 pr_url=str((result.get("pr") or {}).get("pr_url") or ""),
             )
         except RECOVERABLE_ERRORS:
-            logger.exception("collab report (staged change) failed staged_id=%s", staged_id)
+            logger.exception(
+                "collab report (staged change) failed staged_id=%s", staged_id
+            )
 
     return result
 
 
-def _maybe_create_pr(branch: str, diff_summary: str, files_n: int, staged_id: int) -> dict:
+def _maybe_create_pr(
+    branch: str, diff_summary: str, files_n: int, staged_id: int
+) -> dict:
     """尝试通过 ``gh pr create`` 创建 GitHub PR。"""
     import subprocess
 
@@ -392,7 +419,9 @@ def cron_trigger_for_orchestrator():
 
         from apscheduler.triggers.cron import CronTrigger
 
-        tz = ZoneInfo(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_TZ", "Asia/Shanghai").strip())
+        tz = ZoneInfo(
+            os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_TZ", "Asia/Shanghai").strip()
+        )
         hour = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_HOUR", "7"))
         minute = int(os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_MINUTE", "0"))
         return CronTrigger(hour=hour, minute=minute, timezone=tz)

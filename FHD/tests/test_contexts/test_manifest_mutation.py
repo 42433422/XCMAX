@@ -82,7 +82,10 @@ def test_inventory_context_exact_fields():
     inventory = by_id["inventory"]
     assert inventory.context_id == "inventory"
     assert inventory.event_prefixes == ("inventory.",)
-    assert inventory.aggregate_paths == ("app.domain.inventory", "app.domain.shared_services.inventory_service")
+    assert inventory.aggregate_paths == (
+        "app.domain.inventory",
+        "app.domain.shared_services.inventory_service",
+    )
     assert inventory.handler_module == "app.neuro_bus.domains.inventory_domain_handlers"
 
 

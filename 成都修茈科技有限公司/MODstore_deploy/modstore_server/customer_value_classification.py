@@ -114,7 +114,9 @@ def classify_payment_order(
     ):
         return False, "missing_provider_proof"
     environment = text(
-        order.get("payment_environment") or order.get("environment") or order.get("deploy_tier"),
+        order.get("payment_environment")
+        or order.get("environment")
+        or order.get("deploy_tier"),
         32,
     ).lower()
     if environment not in PRODUCTION_ENVIRONMENTS:

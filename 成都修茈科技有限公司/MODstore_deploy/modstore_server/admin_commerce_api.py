@@ -85,7 +85,9 @@ def _record_action(
     db.commit()
 
 
-async def _forward_java(request: Request, path: str, *, method: str, body: dict | None = None):
+async def _forward_java(
+    request: Request, path: str, *, method: str, body: dict | None = None
+):
     gw = PaymentGatewayService()
     if gw.backend != "java":
         return None
@@ -158,19 +160,31 @@ async def list_admin_commerce_orders(
         limit=limit,
         offset=offset,
     )
-    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
-    return {"items": rows, "total": total, "summary": _summary(all_rows), "source": "python_json"}
+    all_rows, _ = payment_orders.list_orders(
+        user_id=0, status=None, limit=100000, offset=0
+    )
+    return {
+        "items": rows,
+        "total": total,
+        "summary": _summary(all_rows),
+        "source": "python_json",
+    }
 
 
 def _close_provider_order(order: dict[str, Any]) -> None:
     pay_type = str(order.get("pay_type") or "").lower()
     if "wechat" in pay_type:
-        raise HTTPException(409, "微信待支付单需先在微信支付后台关单，本次未修改本地状态")
+        raise HTTPException(
+            409, "微信待支付单需先在微信支付后台关单，本次未修改本地状态"
+        )
     if pay_type or order.get("qr_code"):
-        closed = alipay_service.close_order(out_trade_no=str(order.get("out_trade_no") or ""))
+        closed = alipay_service.close_order(
+            out_trade_no=str(order.get("out_trade_no") or "")
+        )
         if not closed.get("ok"):
             raise HTTPException(
-                409, f"支付平台关单失败，未修改本地订单：{closed.get('message') or '未知错误'}"
+                409,
+                f"支付平台关单失败，未修改本地订单：{closed.get('message') or '未知错误'}",
             )
 
 
@@ -314,7 +328,10 @@ async def reprice_admin_order(
             replacement_no, status="failed", provider_error=pay.get("message")
         )
         payment_orders.merge_fields(
-            order_no, status="closed", replacement_failed=True, replaced_by=replacement_no
+            order_no,
+            status="closed",
+            replacement_failed=True,
+            replaced_by=replacement_no,
         )
         after = {
             "ok": False,
@@ -403,7 +420,9 @@ async def create_admin_refund_request(
         raise HTTPException(404, "订单不存在")
     if str(order.get("status") or "") != "paid":
         raise HTTPException(409, "只有已支付订单可发起退款审核")
-    existing = db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
+    existing = (
+        db.query(RefundRequest).filter(RefundRequest.order_no == order_no).first()
+    )
     if existing:
         result = {
             "ok": True,

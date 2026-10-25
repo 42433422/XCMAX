@@ -35,7 +35,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+from modstore_server.script_agent.sandbox_host import (
+    SandboxHostContext,
+    SandboxRpcServer,
+)
 from modstore_server.script_agent.sandbox_preamble import PREAMBLE_SOURCE
 from modstore_server.script_agent.sandbox_runner import (
     DEFAULT_TIMEOUT_SECONDS,
@@ -103,7 +106,9 @@ async def run_in_docker(
     for item in files or []:
         name = _safe_name(str(item.get("filename") or "upload.bin"))
         input_root_text = os.path.realpath(os.path.abspath(str(input_dir)))
-        input_path_text = os.path.realpath(os.path.abspath(os.path.join(input_root_text, name)))
+        input_path_text = os.path.realpath(
+            os.path.abspath(os.path.join(input_root_text, name))
+        )
         input_root_prefix = input_root_text.rstrip(os.sep) + os.sep
         if not input_path_text.startswith(input_root_prefix):
             raise ValueError("sandbox input path escapes run directory")
@@ -115,7 +120,9 @@ async def run_in_docker(
     # RPC 绑到 0.0.0.0 让 docker bridge 上的容器能访问到宿主网关
     allow_t: Optional[tuple[str, ...]] = None
     if employee_run_allowlist:
-        allow_t = tuple(str(x).strip() for x in employee_run_allowlist if str(x).strip())
+        allow_t = tuple(
+            str(x).strip() for x in employee_run_allowlist if str(x).strip()
+        )
     ctx = SandboxHostContext(
         user_id=int(user_id),
         provider=provider,
@@ -177,7 +184,9 @@ async def run_in_docker(
             cmd.extend(["-e", f"{k}={v}"])
         cmd.extend([image, "python", "/work/script.py"])
 
-        logger.info("[docker] starting container session=%s image=%s", session_id, image)
+        logger.info(
+            "[docker] starting container session=%s image=%s", session_id, image
+        )
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,

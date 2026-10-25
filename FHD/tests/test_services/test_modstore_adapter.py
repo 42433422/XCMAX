@@ -486,7 +486,9 @@ def chat_discovery_http(monkeypatch):
     import httpx
 
     monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
-    monkeypatch.setattr("app.domain.shared_services.conversation.modstore_adapter._CATALOG_CACHE", {})
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation.modstore_adapter._CATALOG_CACHE", {}
+    )
     calls = []
     real_client = httpx.Client
 

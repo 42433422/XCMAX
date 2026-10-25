@@ -17,7 +17,11 @@ from modstore_server.account_lifecycle import (
     lifecycle_for_user_id,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.auth_service import create_access_token, create_refresh_token, register_user
+from modstore_server.auth_service import (
+    create_access_token,
+    create_refresh_token,
+    register_user,
+)
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status
@@ -63,7 +67,9 @@ def api_market_open_register(body: OpenRegisterDTO):
         user = register_user(body.username.strip(), body.password, email)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
-    access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
+    access_token = create_access_token(
+        user.id, user.username, is_admin=bool(user.is_admin)
+    )
     refresh_token = create_refresh_token(user.id, user.username)
     lifecycle = lifecycle_for_user_id(int(user.id)).to_dict()
     return {
@@ -103,7 +109,9 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
         default_llm = _load_default_llm(getattr(db_user, "default_llm_json", ""))
         lifecycle = lifecycle_for_user(session, db_user).to_dict()
         membership_row = active_membership_plan(session, int(user.id))
-        membership = _membership_meta(membership_row.plan_id if membership_row else None)
+        membership = _membership_meta(
+            membership_row.plan_id if membership_row else None
+        )
         level_profile: Dict[str, Any] = account_level_service.build_level_profile(
             int(getattr(db_user, "experience", 0) or 0)
         ).to_dict()
@@ -120,7 +128,9 @@ def api_account_bootstrap(user: User = Depends(_get_current_user)):
             },
             "wallet": {
                 "balance": balance,
-                "updated_at": wallet.updated_at.isoformat() if wallet and wallet.updated_at else "",
+                "updated_at": wallet.updated_at.isoformat()
+                if wallet and wallet.updated_at
+                else "",
                 "recent_transactions": [
                     {
                         "id": r.id,

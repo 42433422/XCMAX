@@ -35,7 +35,9 @@ OFFICE_AUX_PACK_1_PKG_IDS: Tuple[str, ...] = (
     "chart-dashboard-employee",
 )
 
-PUBLIC_OFFICE_EMPLOYEE_PKG_IDS: Tuple[str, ...] = PUBLIC_TABULAR_PKG_IDS + OFFICE_AUX_PACK_1_PKG_IDS
+PUBLIC_OFFICE_EMPLOYEE_PKG_IDS: Tuple[str, ...] = (
+    PUBLIC_TABULAR_PKG_IDS + OFFICE_AUX_PACK_1_PKG_IDS
+)
 
 STANDARD_DISPLAY_NAMES: Dict[str, str] = {
     "excel-generate-employee": "Excel 生成员",
@@ -55,7 +57,9 @@ STANDARD_DISPLAY_NAMES: Dict[str, str] = {
     "chart-dashboard-employee": "综合看板可视化员",
 }
 
-VALID_COMPLIANCE_STATUSES = frozenset({"approved", "under_review", "restricted", "delisted"})
+VALID_COMPLIANCE_STATUSES = frozenset(
+    {"approved", "under_review", "restricted", "delisted"}
+)
 QUALITY_CACHE_MAX_AGE_DAYS = 7
 PROCESS_CACHE_TTL_SECONDS = 600
 
@@ -115,7 +119,9 @@ def pipeline_label_from_pack(pack_dir: Path, brief: str = "") -> str:
     return "asset_direct_python"
 
 
-def canonical_display_name(pkg_id: str, manifest: Optional[Dict[str, Any]] = None) -> str:
+def canonical_display_name(
+    pkg_id: str, manifest: Optional[Dict[str, Any]] = None
+) -> str:
     pid = str(pkg_id or "").strip()
     if pid in STANDARD_DISPLAY_NAMES:
         return STANDARD_DISPLAY_NAMES[pid]
@@ -216,7 +222,9 @@ async def build_employee_quality_report(
 ) -> Dict[str, Any]:
     """对单个员工包目录执行 validate + 六维汇总；use_llm 时调用 hex-quality-assessor。"""
     from modstore_server.employee_six_dimension import compute_six_dimension_report
-    from modstore_server.employee_six_dimension_llm import enrich_six_dimension_report_with_llm
+    from modstore_server.employee_six_dimension_llm import (
+        enrich_six_dimension_report_with_llm,
+    )
 
     pipeline_label = pipeline_label_from_pack(pack_dir, brief)
     val = await run_pack_validate(pack_dir=pack_dir, brief=brief)
@@ -292,7 +300,9 @@ def get_process_cached_quality(pkg_id: str, sha256: str) -> Optional[Dict[str, A
     return cache.get_json(process_cache_key(pkg_id, sha256))
 
 
-def set_process_cached_quality(pkg_id: str, sha256: str, payload: Dict[str, Any]) -> None:
+def set_process_cached_quality(
+    pkg_id: str, sha256: str, payload: Dict[str, Any]
+) -> None:
     from modstore_server import cache
 
     cache.set_json(

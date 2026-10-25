@@ -13,18 +13,19 @@ from fastapi.responses import StreamingResponse
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.workbench.schemas import WorkbenchEdgeTtsBody, WorkbenchUnifiedTtsBody
+from modstore_server.workbench.schemas import (
+    WorkbenchEdgeTtsBody,
+    WorkbenchUnifiedTtsBody,
+)
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
 
 
 class EdgeCommunication(Protocol):
-
     def stream(self) -> AsyncIterator[dict[str, Any]]: ...
 
 
 class EdgeBackend(Protocol):
-
     def Communicate(self, text: str, voice: str, *, rate: str) -> EdgeCommunication: ...
 
 
@@ -47,7 +48,10 @@ async def _edge_tts_stream_chunks(text: str, voice: str, rate_str: str):
 
 
 async def workbench_unified_tts(
-    body: WorkbenchUnifiedTtsBody, _user: User = Depends(_get_current_user), *, ports: SpeechPorts
+    body: WorkbenchUnifiedTtsBody,
+    _user: User = Depends(_get_current_user),
+    *,
+    ports: SpeechPorts,
 ):
     """优先小米 MiMo-V2.5 TTS，失败回退 edge-tts；不提供浏览器系统 TTS。"""
     from fastapi.responses import Response
@@ -76,7 +80,8 @@ async def workbench_unified_tts(
         pass
     if ports.edge is None:
         raise HTTPException(
-            503, "MiMo 与 edge-tts 均不可用。请配置 MIMO_API_KEY 或 pip install edge-tts"
+            503,
+            "MiMo 与 edge-tts 均不可用。请配置 MIMO_API_KEY 或 pip install edge-tts",
         )
     edge_voice = (body.edge_voice or "zh-CN-XiaoxiaoNeural").strip()
     rate_str = _edge_tts_rate_str(body.rate)
@@ -104,7 +109,10 @@ async def workbench_unified_tts(
 
 
 async def workbench_edge_tts(
-    body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user), *, ports: SpeechPorts
+    body: WorkbenchEdgeTtsBody,
+    _user: User = Depends(_get_current_user),
+    *,
+    ports: SpeechPorts,
 ):
     if ports.edge is None:
         raise HTTPException(
@@ -129,7 +137,10 @@ async def workbench_edge_tts(
 
 
 async def workbench_edge_tts_stream(
-    body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user), *, ports: SpeechPorts
+    body: WorkbenchEdgeTtsBody,
+    _user: User = Depends(_get_current_user),
+    *,
+    ports: SpeechPorts,
 ):
     if ports.edge is None:
         raise HTTPException(

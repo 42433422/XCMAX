@@ -61,7 +61,9 @@ def live_persy_evidence(strategy_intent: str) -> dict[str, Any]:
     }
 
 
-def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> dict[str, Any]:
+def live_para_evidence(
+    *, goal_id: str, loop_run_id: str, para_task_id: str
+) -> dict[str, Any]:
     """Verify Goal and Para linkage against the strategic DB and Loop ledger."""
     council = _council_module()
     goal_status = ""
@@ -92,7 +94,8 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
     linked_rows = [
         row
         for row in loop_rows
-        if council._text(row.get("para_task_id") or row.get("task_id"), 128) == para_task_id
+        if council._text(row.get("para_task_id") or row.get("task_id"), 128)
+        == para_task_id
     ]
     latest = loop_rows[-1] if loop_rows else {}
     return {
@@ -103,7 +106,9 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
         "para_task_id": para_task_id,
         "goal_status": goal_status,
         "loop_status": council._text(latest.get("status") or latest.get("phase"), 64),
-        "task_status": council._text(linked_rows[-1].get("status"), 64) if linked_rows else "",
+        "task_status": council._text(linked_rows[-1].get("status"), 64)
+        if linked_rows
+        else "",
         "source": "strategic_decisions+self_maintenance_loop_ledger",
         "loop_evidence_sha256": council._digest(linked_rows),
     }
@@ -113,7 +118,9 @@ def live_veto_state(*, run_id: str, loop_run_id: str) -> dict[str, Any]:
     """Read the existing redline channel and immutable autonomy audit."""
     council = _council_module()
     try:
-        from modstore_server.autonomy_decision_audit import build_autonomy_decision_evidence
+        from modstore_server.autonomy_decision_audit import (
+            build_autonomy_decision_evidence,
+        )
         from modstore_server.redline_approval_gate import get_pending_redline_requests
 
         pending = get_pending_redline_requests()
@@ -202,7 +209,9 @@ def strategic_council_status(*, limit: int = 20) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as file_obj:
         rows = council._read_rows_unlocked(file_obj)
     integrity_ok, _ = council._verify_rows(rows)
-    verified = [row for row in rows if row.get("verified") is True] if integrity_ok else []
+    verified = (
+        [row for row in rows if row.get("verified") is True] if integrity_ok else []
+    )
     latest = verified[-1] if verified else {}
     roles = latest.get("roles") if isinstance(latest.get("roles"), dict) else {}
     bounded = max(1, min(int(limit or 20), 100))

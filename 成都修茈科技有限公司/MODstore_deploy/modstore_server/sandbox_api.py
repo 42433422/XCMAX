@@ -90,7 +90,9 @@ def _trusted_sandbox_url(raw: str) -> str:
         trusted = _validated_base(candidate)
         if trusted is not None and requested == trusted:
             return trusted
-    raise HTTPException(403, "Sandbox destination is not configured by an administrator")
+    raise HTTPException(
+        403, "Sandbox destination is not configured by an administrator"
+    )
 
 
 @router.post("/connect")
@@ -154,7 +156,9 @@ def api_sandbox_push_and_test(body: PushAndTestRequest, _user=Depends(require_us
                     zf.write(full, arcname)
 
         try:
-            with httpx.Client(timeout=(_CONNECT_TIMEOUT, 30.0), follow_redirects=False) as client:
+            with httpx.Client(
+                timeout=(_CONNECT_TIMEOUT, 30.0), follow_redirects=False
+            ) as client:
                 with open(zip_path, "rb") as f:
                     resp = client.post(
                         f"{url}/api/mod-store/install",

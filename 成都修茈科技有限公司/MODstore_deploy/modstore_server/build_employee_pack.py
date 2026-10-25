@@ -23,7 +23,9 @@ except ImportError:  # pragma: no cover - Task 10 未实现时
     evaluate_employee_pack = None
 
 VALID_DEPARTMENTS = {"engineering", "quality", "ops", "growth", "support", "security"}
-PACK_FILES_PREFIX = "成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/"
+PACK_FILES_PREFIX = (
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/catalog_data/files/"
+)
 _PACK_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$")
 _PACK_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$")
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40,64}$")
@@ -109,7 +111,9 @@ def validate_pack_schema(manifest: Dict[str, Any]) -> None:
         raise PackSchemaError(
             f"department must be one of {VALID_DEPARTMENTS}, got {manifest['department']}"
         )
-    if not isinstance(manifest["skills"], list) or not isinstance(manifest["tools"], list):
+    if not isinstance(manifest["skills"], list) or not isinstance(
+        manifest["tools"], list
+    ):
         raise PackSchemaError("skills and tools must be lists")
     if not isinstance(manifest["acceptance_criteria"], list):
         raise PackSchemaError("acceptance_criteria must be list")
@@ -124,7 +128,9 @@ def build_xcemp_archive(manifest: Dict[str, Any], *, files_dir: Path) -> Path:
     if not files_dir.is_dir():
         raise PackSchemaError(f"pack source directory not found: {files_dir}")
     source_files = sorted(
-        path for path in files_dir.rglob("*") if path.is_file() and not path.is_symlink()
+        path
+        for path in files_dir.rglob("*")
+        if path.is_file() and not path.is_symlink()
     )
     if not source_files:
         raise PackSchemaError("pack source directory is empty")
@@ -167,7 +173,10 @@ def register_in_packages_json(
         for row in data.get("packages", [])
         if not (
             str(row.get("id") or "") == pack_key
-            or (str(row.get("id") or "") == package_id and str(row.get("version") or "") == version)
+            or (
+                str(row.get("id") or "") == package_id
+                and str(row.get("version") or "") == version
+            )
         )
     ]
     if archive_path is None:
@@ -205,7 +214,9 @@ def register_in_packages_json(
     packages.append(package_record)
     data["packages"] = packages
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
-    catalog_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    catalog_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return pack_key
 
 

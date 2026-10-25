@@ -46,7 +46,9 @@ class DecisionLedgerLifecycleMixin:
                 )
             ).scalar_one_or_none()
             if row is None:
-                raise ledger.DecisionLifecycleError(f"decision not found: {decision_id}")
+                raise ledger.DecisionLifecycleError(
+                    f"decision not found: {decision_id}"
+                )
             if row.status != ledger.DecisionStatus.COMPLETED.value:
                 raise ledger.DecisionLifecycleError(
                     f"cannot review decision in status {row.status}; must be completed"
@@ -94,7 +96,9 @@ class DecisionLedgerLifecycleMixin:
                 .limit(max(1, min(limit, 500)))
             )
             if status is not None:
-                statement = statement.where(StrategicDecisionModel.status == status.value)
+                statement = statement.where(
+                    StrategicDecisionModel.status == status.value
+                )
             if decision_type is not None:
                 statement = statement.where(
                     StrategicDecisionModel.decision_type == decision_type.value
@@ -127,7 +131,9 @@ class DecisionLedgerLifecycleMixin:
                     "assigned_to": row.assigned_to,
                     "status": row.status,
                     "due_at": row.due_at.isoformat() if row.due_at else None,
-                    "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+                    "completed_at": row.completed_at.isoformat()
+                    if row.completed_at
+                    else None,
                     "block_reason": row.block_reason,
                 }
                 for row in rows
@@ -156,7 +162,9 @@ class DecisionLedgerLifecycleMixin:
                 )
             ).scalar_one_or_none()
             if row is None:
-                raise ledger.DecisionLifecycleError(f"decision not found: {decision_id}")
+                raise ledger.DecisionLifecycleError(
+                    f"decision not found: {decision_id}"
+                )
             current = ledger.DecisionStatus(row.status)
             if current == target_status:
                 return ledger._model_to_record(row)
@@ -189,7 +197,9 @@ class DecisionLedgerLifecycleMixin:
             if execution_plan is not None:
                 row.execution_plan_json = json.dumps(execution_plan, ensure_ascii=False)
             if execution_result is not None:
-                row.execution_result_json = json.dumps(execution_result, ensure_ascii=False)
+                row.execution_result_json = json.dumps(
+                    execution_result, ensure_ascii=False
+                )
             if review_at is not None:
                 row.review_at = review_at
             session.commit()

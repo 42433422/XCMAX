@@ -303,7 +303,9 @@ def prepend_changelog(project_root: str, entry: str) -> bool:
     else:
         first_h2 = content.find("\n## ")
         if first_h2 > 0:
-            new_content = content[:first_h2] + "\n" + entry + "\n---\n" + content[first_h2:]
+            new_content = (
+                content[:first_h2] + "\n" + entry + "\n---\n" + content[first_h2:]
+            )
         else:
             new_content = content + "\n" + entry
 
@@ -339,7 +341,9 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
     bump_type = determine_bump_type(project_root)
     new_version = bump_version(current, bump_type)
 
-    logger.info("auto_version_bump: %s → %s (bump_type=%s)", current, new_version, bump_type)
+    logger.info(
+        "auto_version_bump: %s → %s (bump_type=%s)", current, new_version, bump_type
+    )
 
     sync_results = sync_version_anchors(project_root, new_version)
     updated_count = sum(1 for r in sync_results if r.get("status") == "updated")
@@ -369,11 +373,15 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
         logger.warning("failed to write release/VERSION")
 
     try:
-        from modstore_server.employee_change_request_service import defer_write_as_change_request
+        from modstore_server.employee_change_request_service import (
+            defer_write_as_change_request,
+        )
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = str(repo_root())
-        changed_files = [r["path"] for r in sync_results if r.get("status") == "updated"]
+        changed_files = [
+            r["path"] for r in sync_results if r.get("status") == "updated"
+        ]
         if changelog_ok:
             changed_files.append("CHANGELOG.md")
         changed_files.append("VERSION.md")

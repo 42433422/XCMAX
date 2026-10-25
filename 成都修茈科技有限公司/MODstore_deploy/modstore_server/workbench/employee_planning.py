@@ -24,7 +24,9 @@ class EmployeePlanningPorts:
     build_plan: Callable[..., Awaitable[dict[str, Any]]]
 
 
-async def plan_employee(state: EmployeeBuildState, *, ports: EmployeePlanningPorts) -> bool:
+async def plan_employee(
+    state: EmployeeBuildState, *, ports: EmployeePlanningPorts
+) -> bool:
     state.workflow_business_ok = None
     state.standalone_smoke_ok = True
     if state.should_skip("employee_plan"):
@@ -33,7 +35,10 @@ async def plan_employee(state: EmployeeBuildState, *, ports: EmployeePlanningPor
         )
     else:
         await ports.progress.set_step(
-            state.session_id, "employee_plan", "running", "正在拆分员工、脚本工作流与 Skill 组职责"
+            state.session_id,
+            "employee_plan",
+            "running",
+            "正在拆分员工、脚本工作流与 Skill 组职责",
         )
     _ep_result = await ports.craft_step(
         "employee_plan",
@@ -72,7 +77,9 @@ async def plan_employee(state: EmployeeBuildState, *, ports: EmployeePlanningPor
         )
     else:
         _pipeline_label_display = "LLM 通用脚手架"
-    _plan_display_name = str(state.employee_plan.get("employee_name") or "员工").strip() or "员工"
+    _plan_display_name = (
+        str(state.employee_plan.get("employee_name") or "员工").strip() or "员工"
+    )
     await ports.progress.set_step(
         state.session_id,
         "employee_plan",
@@ -81,21 +88,28 @@ async def plan_employee(state: EmployeeBuildState, *, ports: EmployeePlanningPor
     )
     if state.use_word_extract:
         state.employee_brief = (
-            compact_routing_brief(state.routing_brief, max_len=500) or state.routing_brief
+            compact_routing_brief(state.routing_brief, max_len=500)
+            or state.routing_brief
         )
     else:
         state.employee_brief = (
             str(
-                state.employee_plan.get("employee_brief") or state.routing_brief or state.brief
+                state.employee_plan.get("employee_brief")
+                or state.routing_brief
+                or state.brief
             ).strip()
             or state.brief
         )
     state.script_brief = (
-        str(state.employee_plan.get("script_brief") or state.brief).strip() or state.brief
+        str(state.employee_plan.get("script_brief") or state.brief).strip()
+        or state.brief
     )
-    state.script_hint = str(state.employee_plan.get("script_runtime_notes") or "").strip()
+    state.script_hint = str(
+        state.employee_plan.get("script_runtime_notes") or ""
+    ).strip()
     state.workflow_brief = (
-        str(state.employee_plan.get("workflow_brief") or state.brief).strip() or state.brief
+        str(state.employee_plan.get("workflow_brief") or state.brief).strip()
+        or state.brief
     )
     state.planned_workflow_name = (
         str(state.employee_plan.get("workflow_name") or "").strip() or None

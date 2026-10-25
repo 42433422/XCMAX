@@ -44,7 +44,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["market"])
 
 
-def _enrich_payload_with_manifest(payload: Dict[str, Any], pkg_id: str, session) -> None:
+def _enrich_payload_with_manifest(
+    payload: Dict[str, Any], pkg_id: str, session
+) -> None:
     try:
         from modstore_server.employee_runtime import load_employee_pack
 
@@ -77,13 +79,17 @@ def _enrich_payload_with_manifest(payload: Dict[str, Any], pkg_id: str, session)
                         {
                             "title": str(ex["title"]),
                             "description": str(ex.get("description") or ""),
-                            "input": ex.get("input") if isinstance(ex.get("input"), dict) else {},
+                            "input": ex.get("input")
+                            if isinstance(ex.get("input"), dict)
+                            else {},
                         }
                     )
             if ex_list:
                 payload["examples"] = ex_list
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        logger.debug("catalog detail manifest enrichment skipped for %s: %s", pkg_id, exc)
+        logger.debug(
+            "catalog detail manifest enrichment skipped for %s: %s", pkg_id, exc
+        )
 
 
 def _market_catalog_visibility_filters():
@@ -173,7 +179,9 @@ def __getattr__(name: str):
 async def api_market_catalog_quality(
     item_id: int,
     refresh: bool = Query(False, description="忽略缓存并重新检测"),
-    llm: bool = Query(False, description="调用六维质检员工（hex-quality-assessor）做 LLM 深度评估"),
+    llm: bool = Query(
+        False, description="调用六维质检员工（hex-quality-assessor）做 LLM 深度评估"
+    ),
     user: Optional[User] = Depends(_optional_current_user),
 ):
     """员工包六维质量报告（懒加载；优先 graph_snapshot / 进程缓存；llm=1 走真实 LLM）。"""
@@ -340,7 +348,9 @@ def api_submit_catalog_complaint(
             status="pending",
         )
         session.add(row)
-        item.rank_score = max(0.0, float(getattr(item, "rank_score", 100.0) or 100.0) - 5.0)
+        item.rank_score = max(
+            0.0, float(getattr(item, "rank_score", 100.0) or 100.0) - 5.0
+        )
         if (getattr(item, "compliance_status", "") or "approved") == "approved":
             item.compliance_status = "under_review"
         session.commit()
@@ -371,7 +381,12 @@ def api_admin_list_catalog_complaints(
         if status:
             query = query.filter(CatalogComplaint.status == status)
         total = query.count()
-        rows = query.order_by(CatalogComplaint.created_at.desc()).offset(offset).limit(limit).all()
+        rows = (
+            query.order_by(CatalogComplaint.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         return {
             "items": [
                 {
@@ -408,11 +423,17 @@ def api_admin_review_catalog_complaint(
     sf = get_session_factory()
     with sf() as session:
         complaint = (
-            session.query(CatalogComplaint).filter(CatalogComplaint.id == complaint_id).first()
+            session.query(CatalogComplaint)
+            .filter(CatalogComplaint.id == complaint_id)
+            .first()
         )
         if not complaint:
             raise HTTPException(404, "投诉/申诉不存在")
-        item = session.query(CatalogItem).filter(CatalogItem.id == complaint.catalog_id).first()
+        item = (
+            session.query(CatalogItem)
+            .filter(CatalogItem.id == complaint.catalog_id)
+            .first()
+        )
         if not item:
             raise HTTPException(404, "商品不存在")
 
@@ -435,7 +456,9 @@ def api_admin_review_catalog_complaint(
             complaint.status = "resolved"
             item.is_public = False
             item.compliance_status = "delisted"
-            item.delist_reason = (body.delist_reason or body.admin_note or "投诉处理下架").strip()
+            item.delist_reason = (
+                body.delist_reason or body.admin_note or "投诉处理下架"
+            ).strip()
             item.rank_score = 0.0
         elif action == "downrank":
             complaint.status = "resolved"

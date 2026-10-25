@@ -274,4 +274,6 @@ chart_service = ChartDataService()
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(ChartDataService, "app.domain.shared_services.kitten_report.chart_data_service")
+instrument_service_layer_class(
+    ChartDataService, "app.domain.shared_services.kitten_report.chart_data_service"
+)

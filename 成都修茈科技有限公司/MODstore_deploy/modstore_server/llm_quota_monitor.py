@@ -64,7 +64,9 @@ def _quota_state(remaining_percent: Optional[int]) -> str:
         return "unknown"
     if remaining_percent <= 0:
         return "exhausted"
-    warning_percent = max(1, min(_env_int("MODSTORE_LLM_QUOTA_WARNING_PERCENT", 15), 99))
+    warning_percent = max(
+        1, min(_env_int("MODSTORE_LLM_QUOTA_WARNING_PERCENT", 15), 99)
+    )
     return "warning" if remaining_percent <= warning_percent else "healthy"
 
 
@@ -113,7 +115,9 @@ def parse_minimax_token_plan_remains(payload: Any) -> dict[str, Any]:
     base_resp = (
         envelope.get("base_resp")
         if isinstance(envelope.get("base_resp"), dict)
-        else data.get("base_resp") if isinstance(data.get("base_resp"), dict) else {}
+        else data.get("base_resp")
+        if isinstance(data.get("base_resp"), dict)
+        else {}
     )
     status_code = _safe_int(base_resp.get("status_code"))
     if status_code:
@@ -121,7 +125,9 @@ def parse_minimax_token_plan_remains(payload: Any) -> dict[str, Any]:
             "state": "error",
             "visibility": "exact",
             "error_code": status_code,
-            "error": scrub_llm_error(base_resp.get("status_msg") or "quota api error")[:300],
+            "error": scrub_llm_error(base_resp.get("status_msg") or "quota api error")[
+                :300
+            ],
             "resources": [],
             "remaining_percent": None,
         }
@@ -134,13 +140,17 @@ def parse_minimax_token_plan_remains(payload: Any) -> dict[str, Any]:
         interval_total = _safe_int(row.get("current_interval_total_count"))
         weekly_usage = _safe_int(row.get("current_weekly_usage_count"))
         weekly_total = _safe_int(row.get("current_weekly_total_count"))
-        interval_percent = _bounded_percent(row.get("current_interval_remaining_percent"))
+        interval_percent = _bounded_percent(
+            row.get("current_interval_remaining_percent")
+        )
         weekly_percent = _bounded_percent(row.get("current_weekly_remaining_percent"))
         if interval_percent is None:
             interval_percent = _remaining_from_counts(interval_usage, interval_total)
         if weekly_percent is None:
             weekly_percent = _remaining_from_counts(weekly_usage, weekly_total)
-        percents = [value for value in (interval_percent, weekly_percent) if value is not None]
+        percents = [
+            value for value in (interval_percent, weekly_percent) if value is not None
+        ]
         remaining_percent = min(percents) if percents else None
         if _status_is_exhausted(row.get("current_interval_status")) or (
             _status_is_exhausted(row.get("current_weekly_status"))
@@ -223,7 +233,8 @@ def classify_probe_result(result: dict[str, Any]) -> str:
     if status in (402, 403) and any(x in error for x in ("balance", "credit", "quota")):
         return "exhausted"
     if status == 429 and any(
-        x in error for x in ("quota exhausted", "usage limit", "insufficient", "limit exceeded")
+        x in error
+        for x in ("quota exhausted", "usage limit", "insufficient", "limit exceeded")
     ):
         return "exhausted"
     if status == 429:
@@ -268,14 +279,19 @@ async def platform_quota_snapshot(
 ) -> dict[str, Any]:
     """Return exact provider quota when available, otherwise explicit inference."""
 
-    from modstore_server.llm_runtime_route import platform_model_catalog, probe_runtime_route
+    from modstore_server.llm_runtime_route import (
+        platform_model_catalog,
+        probe_runtime_route,
+    )
     from modstore_server.services.llm import _BENCH_DEFAULT_MODELS
 
     model_catalog = catalog or await platform_model_catalog(refresh=False)
     try:
         local_usage = _local_usage_by_provider(24)
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
-        local_usage = {"_error": {"error": scrub_llm_error(f"{type(exc).__name__}: {exc}")[:200]}}
+        local_usage = {
+            "_error": {"error": scrub_llm_error(f"{type(exc).__name__}: {exc}")[:200]}
+        }
 
     providers: list[dict[str, Any]] = []
     for block in model_catalog.get("providers") or []:

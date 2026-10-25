@@ -464,7 +464,9 @@ class TestModstorePlatformAdapterChatCompletion:
         import httpx
 
         monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
-        monkeypatch.setattr("app.domain.shared_services.conversation.modstore_adapter._CATALOG_CACHE", {})
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation.modstore_adapter._CATALOG_CACHE", {}
+        )
         calls = []
         client_type = httpx.Client
 
@@ -2489,7 +2491,9 @@ class TestScanPipelines:
         mock_module._pipeline_roots = mock_pipeline_roots
         mock_module._STAGE_ORDER = mock_stage_order
 
-        with patch.dict("sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, missing_crm, missing_erp, by_stage = _scan_pipelines()
         assert total == 1
         assert missing_crm == 1
@@ -2507,7 +2511,9 @@ class TestScanPipelines:
         mock_module._pipeline_roots = MagicMock(return_value=[pipeline_dir])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, missing_crm, missing_erp, by_stage = _scan_pipelines()
         assert total == 0
 
@@ -2522,7 +2528,9 @@ class TestScanPipelines:
         mock_module._pipeline_roots = MagicMock(return_value=[pipeline_dir])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, _, _, _ = _scan_pipelines()
         assert total == 0
 
@@ -2533,7 +2541,9 @@ class TestScanPipelines:
         mock_module._pipeline_roots = MagicMock(return_value=[Path("/nonexistent/path")])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, _, _, _ = _scan_pipelines()
         assert total == 0
 

@@ -1,4 +1,5 @@
 """Dispatch work items to registered agents via NeuroBus."""
+
 from __future__ import annotations
 
 from typing import Any

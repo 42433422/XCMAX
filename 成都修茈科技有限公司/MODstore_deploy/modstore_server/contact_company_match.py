@@ -51,7 +51,9 @@ def _iter_company_match_db_paths() -> list[Path]:
             p = Path(part.strip()).expanduser()
             if str(p):
                 paths.append(p)
-    repo = Path(os.environ.get("MODSTORE_REPO_ROOT", "/root/成都修茈科技有限公司")).expanduser()
+    repo = Path(
+        os.environ.get("MODSTORE_REPO_ROOT", "/root/成都修茈科技有限公司")
+    ).expanduser()
     paths.extend(
         [
             repo / "data" / "mod_dbs" / "taiyangniao_pro.db",
@@ -132,10 +134,13 @@ async def build_company_match_payload(query: str, limit: int, web: bool) -> dict
     sf = get_session_factory()
     try:
         with sf() as session:
-            for name, cnt, last_at in _submission_company_rows(session, query, limit=40):
+            for name, cnt, last_at in _submission_company_rows(
+                session, query, limit=40
+            ):
                 by_name[name] = {
                     "name": name,
-                    "exact": _normalize_company_key(name) == _normalize_company_key(query),
+                    "exact": _normalize_company_key(name)
+                    == _normalize_company_key(query),
                     "has_history": True,
                     "submission_count": cnt,
                     "in_crm": False,
@@ -144,7 +149,9 @@ async def build_company_match_payload(query: str, limit: int, web: bool) -> dict
                     "_score": _company_match_score(query, name),
                 }
     except (ProgrammingError, SQLAlchemyError) as exc:
-        logger.warning("company match: landing_contact_submissions query skipped: %s", exc)
+        logger.warning(
+            "company match: landing_contact_submissions query skipped: %s", exc
+        )
 
     for name in _erp_company_names(query, limit=20):
         score = _company_match_score(query, name)
@@ -193,9 +200,12 @@ async def build_company_match_payload(query: str, limit: int, web: bool) -> dict
                 existing = by_name.get(name)
                 by_name[name] = {
                     "name": name,
-                    "exact": _normalize_company_key(name) == _normalize_company_key(query),
+                    "exact": _normalize_company_key(name)
+                    == _normalize_company_key(query),
                     "has_history": bool(existing and existing.get("has_history")),
-                    "submission_count": int((existing or {}).get("submission_count") or 0),
+                    "submission_count": int(
+                        (existing or {}).get("submission_count") or 0
+                    ),
                     "in_crm": bool(existing and existing.get("in_crm")),
                     "in_web": True,
                     "source": "web",

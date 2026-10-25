@@ -95,7 +95,9 @@ _LOG_RE = re.compile(
     r'"(?P<method>[A-Z]+)\s+(?P<target>\S+)\s+HTTP/[^\"]+"\s+'
     r"(?P<status>\d{3})\s+\S+"
 )
-_STAMP_DATE_RE = re.compile(r"^(?P<day>\d{2})/(?P<month>[A-Z][a-z]{2})/(?P<year>\d{4}):")
+_STAMP_DATE_RE = re.compile(
+    r"^(?P<day>\d{2})/(?P<month>[A-Z][a-z]{2})/(?P<year>\d{4}):"
+)
 _DOWNLOAD_PREFIXES = ("/xcagi-v", "/releases/stable/", "/downloads/kellai/")
 _DOWNLOAD_PLATFORM_BY_SUFFIX = {
     ".exe": "windows",

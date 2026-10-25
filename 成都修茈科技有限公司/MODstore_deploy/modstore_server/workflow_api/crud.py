@@ -85,7 +85,9 @@ async def get_workflow(
 
     nodes = db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).all()
     if not nodes and _repair_empty_employee_workflow_graph(db, workflow):
-        nodes = db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).all()
+        nodes = (
+            db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).all()
+        )
 
     edges = db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).all()
 
@@ -177,8 +179,12 @@ async def delete_workflow(
 
     db.query(WorkflowEdge).filter(WorkflowEdge.workflow_id == workflow_id).delete()
     db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow_id).delete()
-    db.query(WorkflowExecution).filter(WorkflowExecution.workflow_id == workflow_id).delete()
-    db.query(WorkflowSandboxRun).filter(WorkflowSandboxRun.workflow_id == workflow_id).delete()
+    db.query(WorkflowExecution).filter(
+        WorkflowExecution.workflow_id == workflow_id
+    ).delete()
+    db.query(WorkflowSandboxRun).filter(
+        WorkflowSandboxRun.workflow_id == workflow_id
+    ).delete()
     db.delete(workflow)
     db.commit()
     return {"message": "工作流已删除"}

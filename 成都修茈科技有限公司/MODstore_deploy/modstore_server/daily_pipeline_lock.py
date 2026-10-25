@@ -25,7 +25,9 @@ DEFAULT_HEARTBEAT_NAME = "scheduler_heartbeat.json"
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR).expanduser()
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR") or DEFAULT_RUNTIME_DIR
+    ).expanduser()
 
 
 def daily_pipeline_lock_path() -> Path:
@@ -103,7 +105,9 @@ def scheduler_heartbeat_status(*, max_age_seconds: int = 600) -> Dict[str, Any]:
         "heartbeat": payload,
         "ok": age_seconds <= max(1, int(max_age_seconds)),
         "path": str(path),
-        "reason": "ok" if age_seconds <= max(1, int(max_age_seconds)) else "heartbeat_stale",
+        "reason": "ok"
+        if age_seconds <= max(1, int(max_age_seconds))
+        else "heartbeat_stale",
     }
 
 

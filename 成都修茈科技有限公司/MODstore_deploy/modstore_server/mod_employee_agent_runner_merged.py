@@ -73,7 +73,9 @@ async def tool_read_workspace_file(
     rr = ctx.get("ops_readonly_repo_root")
     if rr:
         try:
-            from modstore_server.integrations.ops_action_handlers import ops_path_allowed
+            from modstore_server.integrations.ops_action_handlers import (
+                ops_path_allowed,
+            )
 
             root = _facade().Path(str(rr)).resolve()
             norm = path.replace("\\", "/").lstrip("./")
@@ -110,7 +112,9 @@ async def tool_read_workspace_file(
         return {"ok": False, "error": f"文件不存在：{path!r}"}
     try:
         with _workspace_fd(workspace_root, path) as fd:
-            with os.fdopen(os.dup(fd), "r", encoding="utf-8", errors="replace") as stream:
+            with os.fdopen(
+                os.dup(fd), "r", encoding="utf-8", errors="replace"
+            ) as stream:
                 content = stream.read()
         truncated = len(content) > 8000
         return {
@@ -138,7 +142,11 @@ async def tool_write_workspace_file(
         return {"ok": False, "error": f"路径越界：{path!r}"}
     sg = [str(x).strip() for x in ctx.get("scope_globs") or [] if str(x).strip()]
     fg = [str(x).strip() for x in ctx.get("forbidden_globs") or [] if str(x).strip()]
-    ag = [str(x).strip() for x in ctx.get("approval_required_globs") or [] if str(x).strip()]
+    ag = [
+        str(x).strip()
+        for x in ctx.get("approval_required_globs") or []
+        if str(x).strip()
+    ]
     if sg or fg:
         from modstore_server.employee_scope_policy import (
             relative_path_under_repo,
@@ -154,7 +162,9 @@ async def tool_write_workspace_file(
         ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
         if not ok_sc:
             try:
-                from modstore_server.employee_autonomy_service import create_employee_suggestion
+                from modstore_server.employee_autonomy_service import (
+                    create_employee_suggestion,
+                )
 
                 create_employee_suggestion(
                     source_employee_id=str(ctx.get("employee_id") or "unknown"),
@@ -290,7 +300,9 @@ async def tool_scan_project_tree(
     truncated = False
     try:
         with _workspace_fd(workspace_root, path, directory=True) as fd:
-            for cur, dirs, files, current_fd in os.fwalk(".", dir_fd=fd, follow_symlinks=False):
+            for cur, dirs, files, current_fd in os.fwalk(
+                ".", dir_fd=fd, follow_symlinks=False
+            ):
                 dirs[:] = sorted(
                     d
                     for d in dirs
@@ -358,7 +370,9 @@ async def tool_analyze_project_summary(
         "README.txt",
         "readme.md",
     ):
-        result = await tool_read_workspace_file(workspace_root, os.path.join(path, name))
+        result = await tool_read_workspace_file(
+            workspace_root, os.path.join(path, name)
+        )
         if result.get("ok"):
             if name.lower().startswith("readme"):
                 if not readme_snippet:
@@ -402,7 +416,9 @@ def _try_parse_json(
     t = (text or "").strip()
     t = (
         _facade()
-        .re.sub("<think\\b[^>]*>.*?</think>", "", t, flags=_facade().re.I | _facade().re.S)
+        .re.sub(
+            "<think\\b[^>]*>.*?</think>", "", t, flags=_facade().re.I | _facade().re.S
+        )
         .strip()
     )
     if t.startswith("```"):
@@ -424,7 +440,15 @@ def _try_parse_json(
             continue
         if not isinstance(data, dict):
             continue
-        score = 4 if "tool" in data else 4 if "answer" in data else 2 if "status" in data else 1
+        score = (
+            4
+            if "tool" in data
+            else 4
+            if "answer" in data
+            else 2
+            if "status" in data
+            else 1
+        )
         candidates.append((score, index, data))
     if candidates:
         return max(candidates, key=lambda item: (item[0], item[1]))[2]
@@ -438,4 +462,6 @@ def build_agent_runner(
 ) -> EmployeeAgentRunner:
     """Convenience factory; used by generated blueprints.py."""
     workspace_root = str(ctx.get("workspace_root") or ".")
-    return _facade().EmployeeAgentRunner(ctx, max_rounds=max_rounds, workspace_root=workspace_root)
+    return _facade().EmployeeAgentRunner(
+        ctx, max_rounds=max_rounds, workspace_root=workspace_root
+    )

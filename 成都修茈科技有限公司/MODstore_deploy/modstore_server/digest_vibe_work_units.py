@@ -12,7 +12,9 @@ DISPATCH_PS = "P-S"
 DISPATCH_APP = "P-App"
 DISPATCH_SR = "S-R"
 
-_SECTION_RE = re.compile(r"(?ms)^## \[(?P<eid>[^\]]+)\][^\n]*\n(?P<body>.*?)(?=^## \[|\Z)")
+_SECTION_RE = re.compile(
+    r"(?ms)^## \[(?P<eid>[^\]]+)\][^\n]*\n(?P<body>.*?)(?=^## \[|\Z)"
+)
 _LIST_KIND_HEADER_RE = re.compile(
     r"(?m)^#\s+Vibe\s+预备\s+·\s+.*?\s+·\s+(?P<kind>更新清单|补丁清单)\s*$"
 )
@@ -160,7 +162,9 @@ def parse_line_markdown_to_work_units(
     dispatch_line_filter: Optional[str] = None,
 ) -> List[VibeWorkUnit]:
     """解析单条产线 Markdown（如 ``vibe_prep_ps_md``）为 WorkUnit 列表。"""
-    allowed_kinds = {k.strip().lower() for k in (list_kinds or ("updates", "patches")) if k}
+    allowed_kinds = {
+        k.strip().lower() for k in (list_kinds or ("updates", "patches")) if k
+    }
     allowed_priorities = {p.strip().upper() for p in priorities} if priorities else None
     line = (dispatch_line_filter or dispatch_line or DISPATCH_PS).strip()
 
@@ -181,7 +185,9 @@ def parse_line_markdown_to_work_units(
                     if _is_low_signal_work_unit(brief):
                         continue
                     unit = VibeWorkUnit(
-                        employee_id=resolve_work_unit_employee(eid, _extract_path_hints(brief)),
+                        employee_id=resolve_work_unit_employee(
+                            eid, _extract_path_hints(brief)
+                        ),
                         dispatch_line=line,
                         list_kind=list_kind,
                         priority=pri,
@@ -211,7 +217,9 @@ def parse_line_markdown_to_work_units(
                 if allowed_priorities and pri not in allowed_priorities:
                     continue
                 unit = VibeWorkUnit(
-                    employee_id=resolve_work_unit_employee(eid, _extract_path_hints(brief)),
+                    employee_id=resolve_work_unit_employee(
+                        eid, _extract_path_hints(brief)
+                    ),
                     dispatch_line=line,
                     list_kind=list_kind,
                     priority=pri,

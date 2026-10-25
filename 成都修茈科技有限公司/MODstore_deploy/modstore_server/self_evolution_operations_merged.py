@@ -307,7 +307,9 @@ def record_evolution_metrics(
         "week": week or _facade()._utc_now().strftime("%G-W%V"),
     }
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(_facade().json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(
+            _facade().json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n"
+        )
     return payload
 
 
@@ -330,7 +332,9 @@ def _metric_delta(
     prev_debt = _facade()._metric_float(prev, "type_debt")
     cur_debt = _facade()._metric_float(cur, "type_debt")
     coverage_delta = None if prev_cov is None or cur_cov is None else cur_cov - prev_cov
-    passed_delta = None if prev_passed is None or cur_passed is None else cur_passed - prev_passed
+    passed_delta = (
+        None if prev_passed is None or cur_passed is None else cur_passed - prev_passed
+    )
     debt_delta = None if prev_debt is None or cur_debt is None else cur_debt - prev_debt
     misses: _facade().List[str] = []
     if coverage_delta is not None and coverage_delta < 0.5:
@@ -388,7 +392,9 @@ def evolution_metrics_gate() -> _facade().Dict[str, _facade().Any]:
         "history_count": len(history),
         "raw_history_count": len(raw_history),
         "verified_history_count": len(history),
-        "metrics_path": str(_facade().kb_root() / "metrics" / "evolution_metrics.jsonl"),
+        "metrics_path": str(
+            _facade().kb_root() / "metrics" / "evolution_metrics.jsonl"
+        ),
     }
 
 
@@ -405,12 +411,16 @@ def _knowledge_query(
         ),
         "open_items": (
             (memory.get("open_items") if isinstance(memory, dict) else [])[-8:]
-            if isinstance(memory.get("open_items") if isinstance(memory, dict) else [], list)
+            if isinstance(
+                memory.get("open_items") if isinstance(memory, dict) else [], list
+            )
             else []
         ),
         "recent_runs": (
             (memory.get("recent_runs") if isinstance(memory, dict) else [])[-5:]
-            if isinstance(memory.get("recent_runs") if isinstance(memory, dict) else [], list)
+            if isinstance(
+                memory.get("recent_runs") if isinstance(memory, dict) else [], list
+            )
             else []
         ),
     }
@@ -512,7 +522,10 @@ def record_loop_evolution_knowledge(
     final: _facade().Dict[str, _facade().Any], gate: _facade().Dict[str, _facade().Any]
 ) -> _facade().Optional[_facade().Dict[str, _facade().Any]]:
     decision = final.get("policy_decision")
-    if not isinstance(decision, dict) or decision.get("action") != "auto_merged_low_risk":
+    if (
+        not isinstance(decision, dict)
+        or decision.get("action") != "auto_merged_low_risk"
+    ):
         return None
     merge_result = decision.get("merge_result")
     if not isinstance(merge_result, dict):
@@ -522,9 +535,15 @@ def record_loop_evolution_knowledge(
         return None
     reports = _facade()._step_report_text(final)
     gaps = gate.get("gaps") if isinstance(gate, dict) else None
-    symptom = "; ".join((str(item) for item in gaps)) if isinstance(gaps, list) and gaps else ""
+    symptom = (
+        "; ".join((str(item) for item in gaps))
+        if isinstance(gaps, list) and gaps
+        else ""
+    )
     if not symptom:
-        symptom = str(decision.get("reason") or final.get("status") or "self-maintenance gap")
+        symptom = str(
+            decision.get("reason") or final.get("status") or "self-maintenance gap"
+        )
     root_cause = reports or _facade().json.dumps(
         decision, ensure_ascii=False, sort_keys=True, default=_facade()._json_default
     )
@@ -612,12 +631,17 @@ def _salvage_kb_files(
                 if isinstance(payload.get("executable_template"), dict)
                 else {}
             )
-            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            metadata = (
+                payload.get("metadata")
+                if isinstance(payload.get("metadata"), dict)
+                else {}
+            )
             _facade().record_fix_knowledge(
                 symptom=symptom,
                 root_cause=root_cause,
                 fix_diff=str(payload.get("fix_diff") or ""),
-                applicability_check=str(template.get("applicability_check") or "") or None,
+                applicability_check=str(template.get("applicability_check") or "")
+                or None,
                 patch_strategy=str(template.get("patch_strategy") or "") or None,
                 required_tests=template.get("required_tests"),
                 rollback_plan=str(template.get("rollback_plan") or "") or None,
@@ -640,7 +664,11 @@ def _salvage_kb_files(
             ):
                 skipped += 1
                 continue
-            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            metadata = (
+                payload.get("metadata")
+                if isinstance(payload.get("metadata"), dict)
+                else {}
+            )
             _facade().record_code_pattern(
                 pattern=pattern,
                 before=str(payload.get("before") or ""),

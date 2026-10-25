@@ -10,7 +10,11 @@ from typing import Any, Dict, List, Optional, Protocol, cast
 
 from sqlalchemy.orm import Session
 
-from modstore_server.models import ScriptWorkflow, ScriptWorkflowRun, ScriptWorkflowVersion
+from modstore_server.models import (
+    ScriptWorkflow,
+    ScriptWorkflowRun,
+    ScriptWorkflowVersion,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workbench.planning import _script_workflow_brief
 
@@ -23,7 +27,11 @@ _LOG = logging.getLogger("modstore_server.workbench_api")
 
 
 def _embed_script_workflow_in_employee_pack(
-    pack_dir: Path, *, script_workflow: Dict[str, Any], brief: str, db: Optional[Session] = None
+    pack_dir: Path,
+    *,
+    script_workflow: Dict[str, Any],
+    brief: str,
+    db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """Write ScriptWorkflow linkage into an employee pack manifest in-place.
 
@@ -37,7 +45,9 @@ def _embed_script_workflow_in_employee_pack(
     try:
         raw = json.loads(mf.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
-        raise ValueError(f"embed_script: manifest.json 解析失败（{mf}）：{exc}") from exc
+        raise ValueError(
+            f"embed_script: manifest.json 解析失败（{mf}）：{exc}"
+        ) from exc
     v2 = (
         cast(dict[str, Any], raw.get("employee_config_v2"))
         if isinstance(raw.get("employee_config_v2"), dict)
@@ -97,7 +107,9 @@ def _embed_script_workflow_in_employee_pack(
     for _wf_row in raw.get("workflow_employees") or []:
         if isinstance(_wf_row, dict):
             _wf_row["id"] = _pack_id
-    mf.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mf.write_text(
+        json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     return cast(dict[str, Any], raw["script_workflow_attachment"])
 
 
@@ -158,7 +170,9 @@ def _commit_script_workflow_from_result(
         stdout=str(result.get("stdout") or ""),
         stderr=str(result.get("stderr") or ""),
         outputs_meta_json=json.dumps(result.get("outputs") or [], ensure_ascii=False),
-        runtime_sdk_calls_json=json.dumps(result.get("sdk_calls") or [], ensure_ascii=False),
+        runtime_sdk_calls_json=json.dumps(
+            result.get("sdk_calls") or [], ensure_ascii=False
+        ),
         error_message="",
         completed_at=datetime.now(timezone.utc),
     )

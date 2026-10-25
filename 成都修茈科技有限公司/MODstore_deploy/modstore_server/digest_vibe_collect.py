@@ -83,7 +83,9 @@ def _merge_event_backlog_into_patches(
     patches_markdown: str,
 ) -> tuple[str, Dict[str, Any]]:
     """事件轨 M2：合并 ``six_line_digest_backlog.jsonl`` 进补丁清单。"""
-    if (os.environ.get("MODSTORE_EVENT_BACKLOG_MERGE_ENABLED", "1") or "").strip().lower() in (
+    if (
+        os.environ.get("MODSTORE_EVENT_BACKLOG_MERGE_ENABLED", "1") or ""
+    ).strip().lower() in (
         "0",
         "false",
         "no",
@@ -91,7 +93,9 @@ def _merge_event_backlog_into_patches(
     ):
         return (patches_markdown, {"merged_count": 0, "skipped": True})
     try:
-        from modstore_server.six_line_event_router import merge_event_backlog_into_vibe_patches
+        from modstore_server.six_line_event_router import (
+            merge_event_backlog_into_vibe_patches,
+        )
 
         return merge_event_backlog_into_vibe_patches(patches_markdown, consume=True)
     except RECOVERABLE_ERRORS:
@@ -114,7 +118,9 @@ def _lightweight_employee_snapshot(pkg_id: str, display_name: str) -> Dict[str, 
     failures = _facade()._recent_failures(pkg_id, limit=4)
     meta = _facade()._load_yuangon_employee_meta(pkg_id)
     scope = []
-    outline = signals.get("employee_config_v2_outline") if isinstance(signals, dict) else {}
+    outline = (
+        signals.get("employee_config_v2_outline") if isinstance(signals, dict) else {}
+    )
     if isinstance(outline, dict):
         scope = list(outline.get("workspace_scope_globs") or [])[:8]
     return {
@@ -123,7 +129,9 @@ def _lightweight_employee_snapshot(pkg_id: str, display_name: str) -> Dict[str, 
         "pack_version": _facade()._employee_pack_version(pkg_id),
         "area": _facade().yuangon_area_for_pkg(pkg_id) or signals.get("area") or "",
         "domain": str(meta.get("domain") or signals.get("domain") or "")[:400],
-        "depends_on": list(signals.get("depends_on") or meta.get("depends_on_yaml") or [])[:6],
+        "depends_on": list(
+            signals.get("depends_on") or meta.get("depends_on_yaml") or []
+        )[:6],
         "scope_globs": scope,
         "recent_failures": failures,
         "handlers": list(signals.get("handlers") or [])[:6],
@@ -241,7 +249,9 @@ def persist_vibe_prep_on_digest_record(record_id: int, result: Dict[str, Any]) -
             row.vibe_prep_meta_json = json.dumps(meta, ensure_ascii=False)
             session.commit()
     except RECOVERABLE_ERRORS:
-        _facade().logger.exception("persist_vibe_prep_on_digest_record failed id=%s", record_id)
+        _facade().logger.exception(
+            "persist_vibe_prep_on_digest_record failed id=%s", record_id
+        )
 
 
 def run_digest_vibe_prep_sync(

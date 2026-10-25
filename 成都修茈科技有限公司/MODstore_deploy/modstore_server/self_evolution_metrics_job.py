@@ -150,7 +150,9 @@ def _type_debt_snapshot(root: Path) -> Dict[str, Any]:
         "counts": counts,
         "duration_ms": round((time.monotonic() - started) * 1000),
         "script_sha256": _sha256(script),
-        "output_sha256": hashlib.sha256((result.stdout or "").encode("utf-8")).hexdigest(),
+        "output_sha256": hashlib.sha256(
+            (result.stdout or "").encode("utf-8")
+        ).hexdigest(),
     }
 
 
@@ -163,7 +165,10 @@ def _junit_counts(path: Path) -> Dict[str, int]:
             key: str(sum(int(suite.attrib.get(key) or 0) for suite in suites))
             for key in ("tests", "failures", "errors", "skipped")
         }
-    counts = {key: int(attrs.get(key) or 0) for key in ("tests", "failures", "errors", "skipped")}
+    counts = {
+        key: int(attrs.get(key) or 0)
+        for key in ("tests", "failures", "errors", "skipped")
+    }
     counts["passed"] = max(
         0,
         counts["tests"] - counts["failures"] - counts["errors"] - counts["skipped"],
@@ -199,7 +204,9 @@ def _qa_child_env(project: Path, temp_dir: Path) -> Dict[str, str]:
 
 def _qa_snapshot(root: Path) -> Dict[str, Any]:
     project = _project_root(root)
-    missing = [relative for relative in DEFAULT_QA_TESTS if not (project / relative).exists()]
+    missing = [
+        relative for relative in DEFAULT_QA_TESTS if not (project / relative).exists()
+    ]
     if missing:
         raise RuntimeError("fixed_qa_suite_unavailable")
     runtime_python = project / ".venv" / "bin" / "python"
@@ -274,7 +281,9 @@ def run_self_evolution_metrics_snapshot(
     *,
     root: Optional[Path] = None,
     now: Optional[datetime] = None,
-    _coverage_collector: Callable[[Path, datetime], Dict[str, Any]] = _coverage_snapshot,
+    _coverage_collector: Callable[
+        [Path, datetime], Dict[str, Any]
+    ] = _coverage_snapshot,
     _type_debt_collector: Callable[[Path], Dict[str, Any]] = _type_debt_snapshot,
     _qa_collector: Callable[[Path], Dict[str, Any]] = _qa_snapshot,
 ) -> Dict[str, Any]:
@@ -291,7 +300,9 @@ def run_self_evolution_metrics_snapshot(
         observed_at = (now or _utc_now()).astimezone(UTC)
         week = observed_at.strftime("%G-W%V")
         for item in load_evolution_metrics():
-            metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            metadata = (
+                item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+            )
             if (
                 item.get("week") == week
                 and metadata.get("evidence_verified") is True

@@ -88,7 +88,10 @@ def _on_payment_paid(event: DomainEvent) -> None:
     if not user_id:
         return
     try:
-        from modstore_server.notification_service import NotificationType, create_notification
+        from modstore_server.notification_service import (
+            NotificationType,
+            create_notification,
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("notification subscriber failed to import service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
@@ -160,7 +163,9 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
     try:
         with sf() as session:
             if strategy.is_already_fulfilled(session, ctx):
-                logger.debug("entitlement already fulfilled for %s, skipping", out_trade_no)
+                logger.debug(
+                    "entitlement already fulfilled for %s, skipping", out_trade_no
+                )
                 return
             from datetime import datetime
 
@@ -176,9 +181,13 @@ def _on_payment_paid_entitlement(event: DomainEvent) -> None:
                 payment_orders.merge_fields(out_trade_no, fulfilled=True)
             session.commit()
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "entitlement_granted").inc()
-        logger.info("Entitlement granted via NeuroBus subscriber for order %s", out_trade_no)
+        logger.info(
+            "Entitlement granted via NeuroBus subscriber for order %s", out_trade_no
+        )
     except RECOVERABLE_ERRORS:
-        logger.exception("payment.paid entitlement subscriber failed for %s", out_trade_no)
+        logger.exception(
+            "payment.paid entitlement subscriber failed for %s", out_trade_no
+        )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
 
 
@@ -237,7 +246,9 @@ def _on_payment_paid_asset_install(event: DomainEvent) -> None:
             event_id=f"payment.paid:{str(payload.get('out_trade_no') or event.subject_id or '').strip()}",
         )
         outcome = (
-            "asset_install_queued" if int(result.get("queued") or 0) else "asset_install_duplicate"
+            "asset_install_queued"
+            if int(result.get("queued") or 0)
+            else "asset_install_duplicate"
         )
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, outcome).inc()
     except RECOVERABLE_ERRORS:
@@ -302,7 +313,10 @@ def _on_refund_outcome(event: DomainEvent) -> None:
     if not user_id:
         return
     try:
-        from modstore_server.notification_service import NotificationType, create_notification
+        from modstore_server.notification_service import (
+            NotificationType,
+            create_notification,
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("refund subscriber failed to import notification service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()

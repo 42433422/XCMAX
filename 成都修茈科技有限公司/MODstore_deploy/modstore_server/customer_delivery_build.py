@@ -25,7 +25,9 @@ def versioned_sunbird_probe_runtime_identity(
     from modstore_server import deploy_context, runtime_provenance
 
     manifest_path, manifest = runtime_provenance._runtime_manifest()
-    expected_sha = str(os.environ.get("MODSTORE_EXPECTED_GIT_SHA") or "").strip().lower()
+    expected_sha = (
+        str(os.environ.get("MODSTORE_EXPECTED_GIT_SHA") or "").strip().lower()
+    )
     configured_sha = str(os.environ.get("MODSTORE_GIT_SHA") or "").strip().lower()
     running_sha = str(deploy_context.resolve_git_sha() or "").strip().lower()
     host_sha = str(manifest.get("git_sha") or "").strip().lower()
@@ -48,7 +50,8 @@ def versioned_sunbird_probe_runtime_identity(
         or not release_id
         or not re.fullmatch(r"[0-9a-f]{64}", artifact_sha)
         or os.environ.get("XCMAX_PRODUCT_VERSION", "").strip() != product_version
-        or os.environ.get("MODSTORE_RELEASE_ARTIFACT_SHA256", "").strip().lower() != artifact_sha
+        or os.environ.get("MODSTORE_RELEASE_ARTIFACT_SHA256", "").strip().lower()
+        != artifact_sha
     ):
         raise ValueError("隔离探针缺少当前 MODstore 发行版本或制品摘要")
     root = Path(__file__).resolve().parents[3]
@@ -78,7 +81,8 @@ def run_versioned_sunbird_probe(
     if (
         record.get("source_mode") != "versioned_main"
         or record.get("id") != "sunbird-attendance-custom"
-        or manifest.get("delivery_verification", {}).get("case_id") != "sunbird-owner-conversion-v1"
+        or manifest.get("delivery_verification", {}).get("case_id")
+        != "sunbird-owner-conversion-v1"
     ):
         raise ValueError("仅支持已绑定主线太阳鸟业务探针的正式签名包")
     package_sha = hashlib.sha256(raw).hexdigest()
@@ -170,7 +174,9 @@ def run_versioned_sunbird_probe(
     }
     if any(report.get(key) != value for key, value in expected.items()):
         raise ValueError("签名包隔离业务探针报告身份绑定不匹配")
-    if report.get("passed") is not True or not isinstance(report.get("observations"), dict):
+    if report.get("passed") is not True or not isinstance(
+        report.get("observations"), dict
+    ):
         raise ValueError("签名包隔离业务探针未通过")
     report["report_sha256"] = canonical_sha256(report)
     return report
@@ -184,7 +190,9 @@ def read_verified_artifact(
     root = public_library().parent / "customer-delivery-artifacts" / str(owner_id)
     path = Path(str(record.get("signed_package_path") or ""))
     if not path.is_relative_to(root):
-        path = _relocated_artifact_path(record, owner_id=owner_id, ticket_id=ticket_id, root=root)
+        path = _relocated_artifact_path(
+            record, owner_id=owner_id, ticket_id=ticket_id, root=root
+        )
     for member in (path, *path.parents):
         if member.is_symlink():
             raise ValueError("私有产物路径不接受符号链接")
@@ -198,7 +206,9 @@ def read_verified_artifact(
     ):
         raise ValueError("没有绑定本账号和本工单的正式签名产物")
     raw = path.read_bytes()
-    return raw, _verify_artifact_record(raw, record, owner_id=owner_id, ticket_id=ticket_id)
+    return raw, _verify_artifact_record(
+        raw, record, owner_id=owner_id, ticket_id=ticket_id
+    )
 
 
 def _relocated_artifact_path(
@@ -327,7 +337,9 @@ def prepare_private_artifact(
         snapshot, owner_id, str(evidence.get("delivery_generation") or ""), ticket_id
     ).resolve()
     source = find_mod_dir_by_manifest_id(library, target).resolve()
-    if not source.is_relative_to(library) or any(path.is_symlink() for path in source.rglob("*")):
+    if not source.is_relative_to(library) or any(
+        path.is_symlink() for path in source.rglob("*")
+    ):
         raise ValueError("生产包路径或符号链接不允许发布")
     if evidence.get("source_mode") == "versioned_main":
         from modstore_server.customer_delivery_versioned import MOD_ID, source_sha256
@@ -339,11 +351,17 @@ def prepare_private_artifact(
         ):
             raise ValueError("主线私有 Mod 在签包前身份或源码摘要不匹配")
     if artifact_kind == "employee":
-        from modstore_server.customer_delivery_employee_wrapper import wrap_private_employee
+        from modstore_server.customer_delivery_employee_wrapper import (
+            wrap_private_employee,
+        )
 
-        with tempfile.TemporaryDirectory(prefix="private-employee-wrapper-") as temporary:
+        with tempfile.TemporaryDirectory(
+            prefix="private-employee-wrapper-"
+        ) as temporary:
             wrapped = wrap_private_employee(source, Path(temporary) / target)
-            record = _build_private_source(ticket_id, owner_id, evidence, wrapped, target)
+            record = _build_private_source(
+                ticket_id, owner_id, evidence, wrapped, target
+            )
             record["source_employee_pack_id"] = target
             record["source_artifact_kind"] = "employee"
             return record
@@ -376,7 +394,11 @@ def _build_private_source(
         raise ValueError("返工产物必须提升已安装版本，不得覆盖同版")
     runtime = (manifest.get("frontend") or {}).get("runtime") or {}
     probe = manifest.get("delivery_verification") or {}
-    if runtime.get("sdk_version") != 1 or not runtime.get("source") or not runtime.get("entry"):
+    if (
+        runtime.get("sdk_version") != 1
+        or not runtime.get("source")
+        or not runtime.get("entry")
+    ):
         raise ValueError("生产包缺少 SDK v1 runtime frontend，须在同单返工")
     if probe.get("handler") != "verify_delivery" or not probe.get("case_id"):
         raise ValueError("生产包缺少固定真实业务探针，须在同单返工")
@@ -398,7 +420,10 @@ def _build_private_source(
         )
         or (
             isinstance(node, ast.ImportFrom)
-            and any((alias.asname or alias.name) == "verify_delivery" for alias in node.names)
+            and any(
+                (alias.asname or alias.name) == "verify_delivery"
+                for alias in node.names
+            )
         )
         for node in tree.body
     ):
@@ -433,7 +458,9 @@ def _build_private_source(
         scope="account",
         owner_user_id=int(owner_id),
         entitlement_mod_id=(
-            LEGACY_ID if versioned_main else str(evidence.get("target_mod_id") or target)
+            LEGACY_ID
+            if versioned_main
+            else str(evidence.get("target_mod_id") or target)
         ),
         delivery_owner_user_id=int(owner_id),
         delivery_ticket_id=int(ticket_id),
@@ -443,14 +470,17 @@ def _build_private_source(
         ),
     )
     source_fields = {
-        key: str(evidence.get("source_" + key) or "") for key in ("git_sha", "git_tree", "sha256")
+        key: str(evidence.get("source_" + key) or "")
+        for key in ("git_sha", "git_tree", "sha256")
     }
     if versioned_main and not all(source_fields.values()):
         raise ValueError("主线源码溯源字段不完整")
     if any(source_fields.values()):
         if not versioned_main or not all(source_fields.values()):
             raise ValueError("主线源码溯源字段不完整")
-        manifest.update({"delivery_source_" + key: value for key, value in source_fields.items()})
+        manifest.update(
+            {"delivery_source_" + key: value for key, value in source_fields.items()}
+        )
     (source / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -478,7 +508,9 @@ def _build_private_source(
             raise ValueError("签包器未返回唯一 Mod 产物")
         raw = packages[0].read_bytes()
         signed = verify_delivery_package(raw)
-        destination = library.parent / "customer-delivery-artifacts" / str(owner_id) / target
+        destination = (
+            library.parent / "customer-delivery-artifacts" / str(owner_id) / target
+        )
         destination.mkdir(parents=True, exist_ok=True)
         path = destination / f"{target}-{version}{suffix}"
         if path.exists() and path.read_bytes() != raw:

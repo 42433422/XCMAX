@@ -11,10 +11,14 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-from modstore_server.infrastructure.private_asset_storage import require_private_directory
+from modstore_server.infrastructure.private_asset_storage import (
+    require_private_directory,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.surface_audit_paths import fhd_root as _fhd_root
-from modstore_server.surface_audit_paths import runtime_state_root as _runtime_state_root
+from modstore_server.surface_audit_paths import (
+    runtime_state_root as _runtime_state_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +62,9 @@ def _http_ok(url: str, *, timeout: float = 2.0) -> bool:
 def _fhd_api_health_ok(url: str, *, timeout: float = 2.0) -> bool:
     """FHD /api/health 须 200 且 JSON 含 healthy/xcagi；避免 macOS AirPlay 占 :5000 误判。"""
     try:
-        req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+        req = urllib.request.Request(
+            url, method="GET", headers={"Accept": "application/json"}
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if int(getattr(resp, "status", 200) or 200) != 200:
                 return False
@@ -101,6 +107,8 @@ def surface_audit_stop_after_enabled() -> bool:
         "yes",
     ):
         return True
-    if (os.environ.get("MODSTORE_AUTOMATION_PRIMARY") or "").strip().lower() == "local_mac":
+    if (
+        os.environ.get("MODSTORE_AUTOMATION_PRIMARY") or ""
+    ).strip().lower() == "local_mac":
         return True
     return False

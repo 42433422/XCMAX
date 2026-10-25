@@ -72,7 +72,9 @@ async def list_workflows_by_employee(
         except json.JSONDecodeError:
             errors.append(f"workflow_node[{n.id}] config 不是合法 JSON")
             continue
-        hit = _employee_id_matches(str((cfg or {}).get("employee_id") or "").strip(), eid)
+        hit = _employee_id_matches(
+            str((cfg or {}).get("employee_id") or "").strip(), eid
+        )
         if not hit:
             continue
         wid = int(n.workflow_id)
@@ -109,7 +111,9 @@ async def list_workflows_by_employee(
             for row in wf_rows:
                 if not _employee_matches_manifest_entry(row, eid):
                     continue
-                wid = _parse_positive_int(row.get("workflow_id") or row.get("workflowId"))
+                wid = _parse_positive_int(
+                    row.get("workflow_id") or row.get("workflowId")
+                )
                 if wid <= 0 or wid in node_hit_ids or wid in manifest_hit_ids:
                     continue
                 w = workflow_by_id.get(wid)

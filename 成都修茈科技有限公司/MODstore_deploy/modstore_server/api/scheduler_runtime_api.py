@@ -6,7 +6,10 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from modstore_server.employee_cron_registration_ledger import DEFERRED_STATUS, REGISTRATION_PREFIX
+from modstore_server.employee_cron_registration_ledger import (
+    DEFERRED_STATUS,
+    REGISTRATION_PREFIX,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.scheduler_runtime import get_runtime_status
 
@@ -67,12 +70,14 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
     policy_held_failed_execution_ids = {
         job_id
         for job_id in policy_held_execution_ids
-        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "failing"
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "")
+        == "failing"
     }
     policy_held_stale_execution_ids = {
         job_id
         for job_id in policy_held_execution_ids
-        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "") == "stale"
+        if str(observed[job_id.removeprefix(_EXECUTION_PREFIX)].get("state") or "")
+        == "stale"
     }
 
     # Keep the raw scheduler ledger summary intact: historical executions are
@@ -111,7 +116,9 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         "approval_required_observed_execution_count": len(deferred_observed),
         "policy_held_observed_failure_count": len(policy_held_failed_execution_ids),
         "policy_held_observed_stale_count": len(policy_held_stale_execution_ids),
-        "unregistered_observed_count": len(set(observed) - registered_ids - approval_required),
+        "unregistered_observed_count": len(
+            set(observed) - registered_ids - approval_required
+        ),
     }
     runtime["employee_duty_details"] = {
         "registered_employee_ids": sorted(registered_ids),
@@ -127,10 +134,14 @@ def scheduler_runtime(stale_after_seconds: int | None = None) -> dict:
         ),
     }
     try:
-        from modstore_server.storage_pressure_self_heal import get_storage_pressure_status
+        from modstore_server.storage_pressure_self_heal import (
+            get_storage_pressure_status,
+        )
 
         runtime["storage_pressure"] = get_storage_pressure_status(limit=20)
-    except RECOVERABLE_ERRORS as exc:  # pragma: no cover - observability must remain failure-safe.
+    except (
+        RECOVERABLE_ERRORS
+    ) as exc:  # pragma: no cover - observability must remain failure-safe.
         runtime["storage_pressure"] = {
             "ok": False,
             "reason": "storage_pressure_status_unavailable",

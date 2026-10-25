@@ -92,7 +92,11 @@ def _can_admin(coll: KnowledgeCollection, user: User) -> bool:
 
 
 def _ensure_collection(session, coll_id: int) -> KnowledgeCollection:
-    coll = session.query(KnowledgeCollection).filter(KnowledgeCollection.id == int(coll_id)).first()
+    coll = (
+        session.query(KnowledgeCollection)
+        .filter(KnowledgeCollection.id == int(coll_id))
+        .first()
+    )
     if coll is None:
         raise HTTPException(404, "集合不存在")
     return cast(KnowledgeCollection, coll)
@@ -195,7 +199,9 @@ def api_create_collection(
             name=body.name.strip(),
             description=(body.description or "").strip(),
             visibility=visibility,
-            embedding_model=(body.embedding_model or emb_cfg.get("model") or "").strip(),
+            embedding_model=(
+                body.embedding_model or emb_cfg.get("model") or ""
+            ).strip(),
             embedding_dim=int(body.embedding_dim or emb_cfg.get("dim") or 1536),
             chunk_count=0,
         )
@@ -223,7 +229,9 @@ def api_update_collection(
         if body.visibility is not None:
             v = body.visibility.lower()
             if v not in _VALID_VISIBILITIES:
-                raise HTTPException(400, f"visibility 必须为 {sorted(_VALID_VISIBILITIES)}")
+                raise HTTPException(
+                    400, f"visibility 必须为 {sorted(_VALID_VISIBILITIES)}"
+                )
             coll.visibility = v
         session.commit()
         session.refresh(coll)
@@ -247,7 +255,9 @@ def api_delete_collection(
             )
         except VectorEngineError:
             pass
-        session.query(KnowledgeDocument).filter(KnowledgeDocument.collection_id == coll.id).delete()
+        session.query(KnowledgeDocument).filter(
+            KnowledgeDocument.collection_id == coll.id
+        ).delete()
         session.query(KnowledgeMembership).filter(
             KnowledgeMembership.collection_id == coll.id
         ).delete()
@@ -349,7 +359,9 @@ def api_delete_document(
         except VectorEngineError:
             pass
         session.delete(doc_row)
-        coll.chunk_count = max(0, int(coll.chunk_count or 0) - int(doc_row.chunk_count or 0))
+        coll.chunk_count = max(
+            0, int(coll.chunk_count or 0) - int(doc_row.chunk_count or 0)
+        )
         session.commit()
         return {"ok": True, "doc_id": doc_id}
 

@@ -9,9 +9,12 @@ from typing import Any
 def stable_version(value: Any) -> tuple[int, ...]:
     text = str(value or "").strip()
     if not re.fullmatch(
-        r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))?", text
+        r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))?",
+        text,
     ):
-        raise ValueError("自动发布须使用三段或四段数字稳定版本；源码变更须提升 manifest.version")
+        raise ValueError(
+            "自动发布须使用三段或四段数字稳定版本；源码变更须提升 manifest.version"
+        )
     parts = tuple(int(part) for part in text.split("."))
     return parts + (0,) * (4 - len(parts))
 
@@ -19,7 +22,8 @@ def stable_version(value: Any) -> tuple[int, ...]:
 def is_private_package(record: dict[str, Any]) -> bool:
     return (
         record.get("artifact") == "customer_delivery_seed"
-        or str(record.get("visibility") or "").lower() in {"private", "customer", "internal"}
+        or str(record.get("visibility") or "").lower()
+        in {"private", "customer", "internal"}
         or record.get("public_listing") is False
         or any(
             record.get(key)

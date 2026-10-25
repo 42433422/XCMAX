@@ -11,7 +11,10 @@ from xml.etree import ElementTree as ET
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_edit_plan import validate_ooxml_fragment
-from modstore_server.ppt_homework_marquee import TIMING_XML, enhance_pptx_homework_marquee
+from modstore_server.ppt_homework_marquee import (
+    TIMING_XML,
+    enhance_pptx_homework_marquee,
+)
 
 NS = {
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main",
@@ -72,15 +75,24 @@ def apply_edit_plan(
     has_timing = False
     ops = plan.get("ops") if isinstance(plan.get("ops"), list) else []
 
-    timing_ops = [o for o in ops if isinstance(o, dict) and o.get("op") == "inject_timing"]
-    other_ops = [o for o in ops if isinstance(o, dict) and o.get("op") != "inject_timing"]
+    timing_ops = [
+        o for o in ops if isinstance(o, dict) and o.get("op") == "inject_timing"
+    ]
+    other_ops = [
+        o for o in ops if isinstance(o, dict) and o.get("op") != "inject_timing"
+    ]
     if other_ops:
-        warnings.append(f"跳过 {len(other_ops)} 条尚未实现的结构 op（已写入 compose 骨架）")
+        warnings.append(
+            f"跳过 {len(other_ops)} 条尚未实现的结构 op（已写入 compose 骨架）"
+        )
 
     if not timing_ops:
         with zipfile.ZipFile(pptx_path, "r") as z:
             for name in z.namelist():
-                if name.startswith("ppt/slides/slide") and z.read(name).find(b"timing>") >= 0:
+                if (
+                    name.startswith("ppt/slides/slide")
+                    and z.read(name).find(b"timing>") >= 0
+                ):
                     has_timing = True
         return {
             "applied_ops": applied,

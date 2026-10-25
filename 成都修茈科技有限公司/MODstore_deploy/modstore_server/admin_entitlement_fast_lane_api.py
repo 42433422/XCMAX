@@ -20,7 +20,9 @@ from modstore_server.entitlement_fast_lane import (
 )
 from modstore_server.models import User
 
-router = APIRouter(prefix="/api/admin/entitlement-fast-lane", tags=["admin-entitlements"])
+router = APIRouter(
+    prefix="/api/admin/entitlement-fast-lane", tags=["admin-entitlements"]
+)
 
 
 class FastLaneActionBody(BaseModel):

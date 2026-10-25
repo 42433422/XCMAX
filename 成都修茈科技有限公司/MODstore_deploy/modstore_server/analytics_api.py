@@ -16,7 +16,9 @@ router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 @router.get("/dashboard")
-async def dashboard(db: Session = Depends(get_db), user: User = Depends(_get_current_user)):
+async def dashboard(
+    db: Session = Depends(get_db), user: User = Depends(_get_current_user)
+):
     return (
         AnalyticsApplicationService(SqlAnalyticsRepository(db))
         .dashboard_for_user(user.id)

@@ -16,7 +16,10 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
-from modstore_server.workbench.schemas import EmployeeAiDraftBody, EmployeeAiRefinePromptBody
+from modstore_server.workbench.schemas import (
+    EmployeeAiDraftBody,
+    EmployeeAiRefinePromptBody,
+)
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
 
@@ -29,7 +32,10 @@ class DraftPorts:
 
 
 async def employee_ai_draft(
-    body: EmployeeAiDraftBody, user: User = Depends(_get_current_user), *, ports: DraftPorts
+    body: EmployeeAiDraftBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: DraftPorts,
 ):
     """SSE 事件序列：stage_start / stage_progress / stage_done / stage_error / pipeline_done。
 
@@ -48,7 +54,9 @@ async def employee_ai_draft(
 
     async def _stream() -> AsyncIterator[bytes]:
         with sf() as db:
-            prov, mdl, err = await ports.resolve_model(db, user, body.provider, body.model)
+            prov, mdl, err = await ports.resolve_model(
+                db, user, body.provider, body.model
+            )
             if err or not prov or not mdl:
                 err_ev = {"event": "pipeline_error", "stage": "init", "error": err}
                 yield f"data: {json.dumps(err_ev, ensure_ascii=False)}\n\n".encode()
@@ -68,14 +76,19 @@ async def employee_ai_draft(
                 else None
             )
             llm = RealLlmClient(
-                prov, api_key=api_key, model=mdl, base_url=base_url, forbid_reasoning_fallback=True
+                prov,
+                api_key=api_key,
+                model=mdl,
+                base_url=base_url,
+                forbid_reasoning_fallback=True,
             )
             from modstore_server.models import Workflow as WorkflowModel
 
             wf_rows = (
                 db.query(WorkflowModel)
                 .filter(
-                    WorkflowModel.user_id == cast(int, user.id), WorkflowModel.is_active.is_(True)
+                    WorkflowModel.user_id == cast(int, user.id),
+                    WorkflowModel.is_active.is_(True),
                 )
                 .order_by(WorkflowModel.updated_at.desc())
                 .limit(20)
@@ -86,14 +99,18 @@ async def employee_ai_draft(
                     "id": w.id,
                     "name": w.name or "",
                     "description": w.description or "",
-                    "sandbox_passed": bool(getattr(w, "sandbox_passed_for_current_graph", False)),
+                    "sandbox_passed": bool(
+                        getattr(w, "sandbox_passed_for_current_graph", False)
+                    ),
                 }
                 for w in wf_rows
             ]
 
             async def _gen_wf_fallback() -> Dict[str, Any]:
                 _pack_id = (body.suggested_id or "").strip() or None
-                _pack_label = (body.brief[:40] if body.brief else "").strip() or _pack_id
+                _pack_label = (
+                    body.brief[:40] if body.brief else ""
+                ).strip() or _pack_id
                 with sf() as db2:
                     return await ports.generate_workflow(
                         db2,
@@ -146,7 +163,10 @@ async def employee_ai_draft(
 
 
 async def employee_ai_refine_prompt(
-    body: EmployeeAiRefinePromptBody, user: User = Depends(_get_current_user), *, ports: DraftPorts
+    body: EmployeeAiRefinePromptBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: DraftPorts,
 ):
     """用 LLM 重写 employee system prompt，返回优化后文本与一句话 diff 说明。"""
     from modstore_server.employee_ai_pipeline import refine_system_prompt
@@ -171,7 +191,11 @@ async def employee_ai_refine_prompt(
             else None
         )
     llm = RealLlmClient(
-        prov, api_key=api_key, model=mdl, base_url=base_url, forbid_reasoning_fallback=True
+        prov,
+        api_key=api_key,
+        model=mdl,
+        base_url=base_url,
+        forbid_reasoning_fallback=True,
     )
     result, err = await refine_system_prompt(
         current_prompt=body.current_prompt,

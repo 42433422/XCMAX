@@ -55,7 +55,12 @@ def list_employee_execution_metrics(
             total_cq = total_cq.filter(EmployeeExecutionMetric.user_id == int(user_id))
         total = int(total_cq.scalar() or 0)
 
-        rows = q.order_by(EmployeeExecutionMetric.id.desc()).offset(offset).limit(limit).all()
+        rows = (
+            q.order_by(EmployeeExecutionMetric.id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
 
         items = [
             {

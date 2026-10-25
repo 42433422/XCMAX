@@ -41,7 +41,9 @@ def _self_maintenance_actor_user_id() -> int:
         try:
             return int(env_uid)
         except ValueError:
-            config.logger.warning("MODSTORE_SELF_MAINTENANCE_USER_ID not an int: %s", env_uid)
+            config.logger.warning(
+                "MODSTORE_SELF_MAINTENANCE_USER_ID not an int: %s", env_uid
+            )
     return 0
 
 
@@ -149,7 +151,9 @@ def evaluate_self_maintenance_need() -> Dict[str, Any]:
     if config._env_bool("MODSTORE_SELF_MAINTENANCE_REQUIRE_CLEAN_RUNTIME", True) and (
         not runtime_provenance_result.get("ok")
     ):
-        reasons = ",".join(str(item) for item in runtime_provenance_result.get("reasons") or [])
+        reasons = ",".join(
+            str(item) for item in runtime_provenance_result.get("reasons") or []
+        )
         gaps.append(f"runtime provenance blocked: {reasons or 'unknown'}")
     repo_path = config._file_url_to_path(repo_url)
     if repo_path is not None and (not repo_path.exists()):
@@ -222,7 +226,9 @@ def reconcile_stale_self_maintenance_runs(
     for run_id, start in started.items():
         if run_id in terminal:
             continue
-        started_at = config._parse_iso(start.get("started_at") or start.get("created_at"))
+        started_at = config._parse_iso(
+            start.get("started_at") or start.get("created_at")
+        )
         if started_at is None:
             continue
         if not exclusive_lease_reacquired and started_at > cutoff:
@@ -230,7 +236,9 @@ def reconcile_stale_self_maintenance_runs(
         interrupted = bool(exclusive_lease_reacquired)
         terminal_status = "abandoned_interrupted" if interrupted else "abandoned_stale"
         terminal_reason = (
-            "interrupted_run_after_lease_reacquired" if interrupted else "stale_interrupted_run"
+            "interrupted_run_after_lease_reacquired"
+            if interrupted
+            else "stale_interrupted_run"
         )
         terminal_error = (
             "previous process lost the exclusive loop lease before writing a terminal record"
@@ -319,7 +327,9 @@ def should_run_self_maintenance_loop(
     )
     recovery_kind = str((pending_recovery or {}).get("kind") or "")
     recovery_detail = (pending_recovery or {}).get("detail")
-    interrupted_recovery = recovery_detail if recovery_kind == "interrupted_recovery" else None
+    interrupted_recovery = (
+        recovery_detail if recovery_kind == "interrupted_recovery" else None
+    )
     transient_failure_recovery = (
         recovery_detail if recovery_kind == "transient_failure_recovery" else None
     )
@@ -340,7 +350,11 @@ def should_run_self_maintenance_loop(
                 "threshold": threshold,
                 "triggered_by": triggered_by,
             }
-    if not force and pending_recovery is None and (int(evaluation["signal_count"]) < threshold):
+    if (
+        not force
+        and pending_recovery is None
+        and (int(evaluation["signal_count"]) < threshold)
+    ):
         return {
             **evaluation,
             "cooldown_minutes": cooldown_minutes,
@@ -387,7 +401,9 @@ def record_self_maintenance_heartbeat(
     cooldown or governance.  A separate heartbeat proves the scheduler is
     still evaluating that gate without pretending code work was performed.
     """
-    evaluation = should_run_self_maintenance_loop(force=False, triggered_by=triggered_by)
+    evaluation = should_run_self_maintenance_loop(
+        force=False, triggered_by=triggered_by
+    )
     provenance_value = evaluation.get("runtime_provenance")
     provenance = provenance_value if isinstance(provenance_value, dict) else {}
     metrics_value = evaluation.get("evolution_metrics_gate")
@@ -396,7 +412,9 @@ def record_self_maintenance_heartbeat(
         "created_at": config._iso(config._utc_now()),
         "phase": "heartbeat",
         "run_id": f"heartbeat-{uuid.uuid4().hex[:16]}",
-        "status": "heartbeat_ready" if evaluation.get("should_run") is True else "heartbeat_idle",
+        "status": "heartbeat_ready"
+        if evaluation.get("should_run") is True
+        else "heartbeat_idle",
         "triggered_by": str(triggered_by or "scheduler_heartbeat")[:80],
         "gate": {
             "should_run": evaluation.get("should_run") is True,

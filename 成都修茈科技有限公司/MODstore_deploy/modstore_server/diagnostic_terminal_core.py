@@ -139,7 +139,9 @@ def item(
         "detail": safe_text(detail),
         "source": safe_text(source, limit=120),
         "reference": safe_text(reference, limit=200),
-        "timestamp": iso(timestamp) if isinstance(timestamp, datetime) else str(timestamp or ""),
+        "timestamp": iso(timestamp)
+        if isinstance(timestamp, datetime)
+        else str(timestamp or ""),
     }
     if data is not None:
         result["data"] = data
@@ -161,9 +163,13 @@ def parse_command(command_line: str) -> ParsedCommand:
     requested = tokens.pop(0).casefold()
     name = _ALIAS_TO_COMMAND.get(requested)
     if name is None:
-        suggestions = get_close_matches(requested, sorted(_ALIAS_TO_COMMAND), n=3, cutoff=0.45)
+        suggestions = get_close_matches(
+            requested, sorted(_ALIAS_TO_COMMAND), n=3, cutoff=0.45
+        )
         hint = (
-            f"；你可能想输入：{', '.join(suggestions)}" if suggestions else "；输入 help 查看命令"
+            f"；你可能想输入：{', '.join(suggestions)}"
+            if suggestions
+            else "；输入 help 查看命令"
         )
         raise DiagnosticTerminalError(f"未知命令：{requested}{hint}")
 

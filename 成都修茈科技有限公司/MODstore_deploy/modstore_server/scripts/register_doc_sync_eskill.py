@@ -87,7 +87,12 @@ def main() -> int:
 
     sf = get_session_factory()
     with sf() as session:
-        admin = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        admin = (
+            session.query(User)
+            .filter(User.is_admin.is_(True))
+            .order_by(User.id.asc())
+            .first()
+        )
         if not admin:
             print("No admin user found in DB.", file=sys.stderr)
             return 3
@@ -109,7 +114,9 @@ def main() -> int:
         if existing and args.force:
             session.delete(existing)
             session.flush()
-            print(f"[DELETE] Removed existing ESkill 'skill-doc-sync' (id={existing.id})")
+            print(
+                f"[DELETE] Removed existing ESkill 'skill-doc-sync' (id={existing.id})"
+            )
 
         skill = ESkill(
             user_id=admin_id,
@@ -125,11 +132,15 @@ def main() -> int:
         version = ESkillVersion(
             eskill_id=skill_id,
             version=1,
-            static_logic_json=json.dumps(SKILL_DOC_SYNC_STATIC_LOGIC, ensure_ascii=False, indent=2),
+            static_logic_json=json.dumps(
+                SKILL_DOC_SYNC_STATIC_LOGIC, ensure_ascii=False, indent=2
+            ),
             trigger_policy_json=json.dumps(
                 SKILL_DOC_SYNC_TRIGGER_POLICY, ensure_ascii=False, indent=2
             ),
-            quality_gate_json=json.dumps(SKILL_DOC_SYNC_QUALITY_GATE, ensure_ascii=False, indent=2),
+            quality_gate_json=json.dumps(
+                SKILL_DOC_SYNC_QUALITY_GATE, ensure_ascii=False, indent=2
+            ),
             note="Initial version from register_doc_sync_eskill script",
         )
         session.add(version)

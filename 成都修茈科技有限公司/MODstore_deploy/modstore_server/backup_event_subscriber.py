@@ -92,7 +92,9 @@ def _handle_completed(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     if not is_ondemand:
         # 定时备份完成 → 提前启动归档（解耦 BK→R 硬边）
-        out["handlers"].append({"name": "retention_janitor_kick", **_kick_retention_janitor()})
+        out["handlers"].append(
+            {"name": "retention_janitor_kick", **_kick_retention_janitor()}
+        )
         out["handlers"].append({"name": "digest_prewarm", **_publish_digest_prewarm()})
     else:
         # 按需快照完成（交叉升级/回滚触发）→ 记录审计点
@@ -195,7 +197,9 @@ def emit_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str, Any
             )
         )
     except BOUNDARY_ERRORS:  # noqa: BLE001
-        logger.exception("emit_backup_event: incident publish failed event_type=%s", event_type)
+        logger.exception(
+            "emit_backup_event: incident publish failed event_type=%s", event_type
+        )
     return {"dispatch": dispatch_result, "published": published}
 
 
@@ -218,7 +222,10 @@ def dispatch_backup_event(event_type: str, payload: Dict[str, Any]) -> Dict[str,
         }
 
     # 桥接事件去重：backup.ondemand_completed 已处理过的 payload 不再走 backup.completed
-    if event_type == "backup.completed" and str(payload.get("trigger") or "") != "scheduled":
+    if (
+        event_type == "backup.completed"
+        and str(payload.get("trigger") or "") != "scheduled"
+    ):
         return {
             "ok": True,
             "skipped": True,

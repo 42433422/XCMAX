@@ -54,7 +54,9 @@ def audit_path() -> Path:
 def workforce_gap_path() -> Path:
     raw = str(os.environ.get("MODSTORE_DUTY_WORKFORCE_GAP_PATH") or "").strip()
     return (
-        Path(raw).expanduser() if raw else kb_root() / "gaps" / "duty_workforce_burnin_gaps.jsonl"
+        Path(raw).expanduser()
+        if raw
+        else kb_root() / "gaps" / "duty_workforce_burnin_gaps.jsonl"
     )
 
 
@@ -69,8 +71,12 @@ def _valid_hash(value: Any) -> str:
 
 
 def _reason_codes(row: Dict[str, Any]) -> list[str]:
-    acceptance = row.get("acceptance") if isinstance(row.get("acceptance"), dict) else {}
-    values = acceptance.get("reasons") if isinstance(acceptance.get("reasons"), list) else []
+    acceptance = (
+        row.get("acceptance") if isinstance(row.get("acceptance"), dict) else {}
+    )
+    values = (
+        acceptance.get("reasons") if isinstance(acceptance.get("reasons"), list) else []
+    )
     reasons = []
     for item in values:
         code = str(item).strip()

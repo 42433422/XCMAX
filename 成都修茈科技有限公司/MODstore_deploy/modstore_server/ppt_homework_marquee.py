@@ -127,9 +127,13 @@ def _set_play_button_layout(play_xml: str) -> str:
 def _build_marquee_group(flower_embeds: List[str]) -> str:
     pics: List[str] = []
     for i, embed in enumerate(flower_embeds[:5]):
-        pics.append(_pic_xml(3 + i, f"MarqueeImg{i + 1}", embed, MARQUEE_X[i], MARQUEE_Y))
+        pics.append(
+            _pic_xml(3 + i, f"MarqueeImg{i + 1}", embed, MARQUEE_X[i], MARQUEE_Y)
+        )
     for i, embed in enumerate(flower_embeds[:5]):
-        pics.append(_pic_xml(9 + i, f"MarqueeImg{i + 1}_LoopCopy", embed, LOOP_X[i], MARQUEE_Y))
+        pics.append(
+            _pic_xml(9 + i, f"MarqueeImg{i + 1}_LoopCopy", embed, LOOP_X[i], MARQUEE_Y)
+        )
     inner = "".join(pics)
     return (
         '<p:grpSp><p:nvGrpSpPr><p:cNvPr id="14" name="MarqueeStrip_ClickPlay"/>'

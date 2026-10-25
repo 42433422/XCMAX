@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from .ports import JsonObject
+from .port_contracts import JsonObject
 
 
 @dataclass(frozen=True)

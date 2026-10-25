@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import get_current_user, get_db
 from modstore_server.customer_service_api import _visible_ticket_or_404
 from modstore_server.customer_service_delivery_api import _start_custom_delivery_run
-from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+from modstore_server.customer_service_delivery_completion import (
+    complete_delivery_if_ready,
+)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryPaymentCheckoutBody,
     custom_delivery_commerce_blockers,
@@ -34,7 +36,9 @@ _get_current_user = get_current_user
 _custom_delivery_evidence = custom_delivery_evidence
 
 
-async def reconcile_custom_delivery_payment(db: Session, ticket: CustomerServiceTicket) -> bool:
+async def reconcile_custom_delivery_payment(
+    db: Session, ticket: CustomerServiceTicket
+) -> bool:
     """Turn a paid dedicated order into commerce proof and start production."""
     evidence = _custom_delivery_evidence(ticket)
     if custom_delivery_pricing_mode(evidence) != "post_delivery_addon":
@@ -55,11 +59,16 @@ async def reconcile_custom_delivery_payment(db: Session, ticket: CustomerService
     order = None
     order_no = ""
     for candidate in order_nos:
-        matched = find_matching_paid_order(int(ticket.user_id), expected_out_trade_no=candidate)
+        matched = find_matching_paid_order(
+            int(ticket.user_id), expected_out_trade_no=candidate
+        )
         if isinstance(matched, dict):
             order, order_no = matched, candidate
             break
-    if not isinstance(order, dict) or str(order.get("order_kind") or "") != "custom_delivery":
+    if (
+        not isinstance(order, dict)
+        or str(order.get("order_kind") or "") != "custom_delivery"
+    ):
         return False
     try:
         paid_amount = float(order.get("total_amount") or 0)
@@ -159,7 +168,9 @@ async def create_custom_delivery_checkout(
         "created_at": now,
         "updated_at": now,
     }
-    attempts = [row for row in evidence.get("payment_attempts", []) if isinstance(row, dict)]
+    attempts = [
+        row for row in evidence.get("payment_attempts", []) if isinstance(row, dict)
+    ]
     attempts.append(
         {
             "order_no": order_no,

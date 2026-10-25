@@ -105,7 +105,14 @@ def apply_triage_intervention(
             body["allow_code_fix"] = bool(decided.get("allow_code_fix"))
         body["triage_intervention"] = {
             k: decided[k]
-            for k in ("intent", "tool_name", "device_id", "allow_code_fix", "note", "by")
+            for k in (
+                "intent",
+                "tool_name",
+                "device_id",
+                "allow_code_fix",
+                "note",
+                "by",
+            )
             if k in decided
         }
     snap = build_triage_snapshot(body, intervention=decided)
@@ -158,7 +165,9 @@ def apply_para_triage(
         if isinstance(hop, dict) and str(hop.get("tool_name") or "") in ULTIMATE_TOOLS:
             fallback = str(hop["tool_name"])
             break
-    new_tool, reason = guard_code_fix_tool(raw_tool, allow=allow, fallback_ultimate=fallback)
+    new_tool, reason = guard_code_fix_tool(
+        raw_tool, allow=allow, fallback_ultimate=fallback
+    )
     if reason:
         body["tool_name"] = new_tool
         body["dev_tool"] = new_tool
@@ -172,7 +181,9 @@ def apply_para_triage(
     return body
 
 
-def para_triage_hook(input_data: dict[str, Any], *, employee_id: str = "") -> dict[str, Any]:
+def para_triage_hook(
+    input_data: dict[str, Any], *, employee_id: str = ""
+) -> dict[str, Any]:
     """Para ``_build_request`` 入口：仅客服工单走分诊；分诊异常时保持原派发。"""
     is_ticket = str(input_data.get("event_type") or "") == "ops.intake.customer_ticket"
     source = str(input_data.get("source") or "").lower()

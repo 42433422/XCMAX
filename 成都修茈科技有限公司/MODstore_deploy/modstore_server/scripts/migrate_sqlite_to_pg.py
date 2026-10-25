@@ -121,7 +121,9 @@ def _json_order_row(doc: dict[str, Any]) -> tuple[Any, ...]:
         doc.get("subject") or "XC AGI 订单",
         _money(doc.get("total_amount")),
         doc.get("order_kind")
-        or ("item" if doc.get("item_id") else "plan" if doc.get("plan_id") else "wallet"),
+        or (
+            "item" if doc.get("item_id") else "plan" if doc.get("plan_id") else "wallet"
+        ),
         int(doc.get("item_id") or 0) or None,
         doc.get("plan_id") or None,
         doc.get("status") or "pending",

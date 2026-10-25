@@ -51,7 +51,9 @@ _LINE_LABEL = {
     DISPATCH_SR: "S-R 归档线",
 }
 
-_SECTION_RE = re.compile(r"(?ms)^## \[(?P<eid>[^\]]+)\][^\n]*\n(?P<body>.*?)(?=^## \[|\Z)")
+_SECTION_RE = re.compile(
+    r"(?ms)^## \[(?P<eid>[^\]]+)\][^\n]*\n(?P<body>.*?)(?=^## \[|\Z)"
+)
 
 
 def _six_line_map_path() -> Path:
@@ -189,7 +191,9 @@ def _line_list_header(
     version_ctx: Optional[Dict[str, Any]],
 ) -> str:
     list_label = "更新清单" if list_kind == "updates" else "补丁清单"
-    title = f"# Vibe 预备 · {_LINE_LABEL.get(dispatch_line, dispatch_line)} · {list_label}"
+    title = (
+        f"# Vibe 预备 · {_LINE_LABEL.get(dispatch_line, dispatch_line)} · {list_label}"
+    )
     ctx = version_ctx or {}
     base = str(ctx.get("base_version") or "")
     ver_suffix = f"{base}-{dispatch_line.lower()}-{list_kind}" if base else ""
@@ -274,7 +278,9 @@ def split_vibe_prep_to_production_lines(
     }
 
 
-def persist_line_dispatch_on_digest_record(record_id: int, dispatch: Dict[str, Any]) -> None:
+def persist_line_dispatch_on_digest_record(
+    record_id: int, dispatch: Dict[str, Any]
+) -> None:
     if record_id <= 0 or not isinstance(dispatch, dict):
         return
     try:
@@ -303,7 +309,9 @@ def persist_line_dispatch_on_digest_record(record_id: int, dispatch: Dict[str, A
             )
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.exception("persist_line_dispatch_on_digest_record failed id=%s", record_id)
+        logger.exception(
+            "persist_line_dispatch_on_digest_record failed id=%s", record_id
+        )
 
 
 def dispatch_vibe_prep_to_production_lines(
@@ -312,7 +320,12 @@ def dispatch_vibe_prep_to_production_lines(
 ) -> Dict[str, Any]:
     """在 Vibe 预备落库后，拆分并写入三产线清单。"""
     enabled = (
-        (__import__("os").environ.get("MODSTORE_DAILY_VIBE_LINE_DISPATCH_ENABLED", "1") or "")
+        (
+            __import__("os").environ.get(
+                "MODSTORE_DAILY_VIBE_LINE_DISPATCH_ENABLED", "1"
+            )
+            or ""
+        )
         .strip()
         .lower()
     )

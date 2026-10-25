@@ -9,7 +9,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 MAX_ALL_HANDS_EMPLOYEES = 128
 
 
-def clamp_all_hands_max_employees(raw: int | float | str | None, *, default: int = 8) -> int:
+def clamp_all_hands_max_employees(
+    raw: int | float | str | None, *, default: int = 8
+) -> int:
     try:
         n = int(raw if raw is not None else default)
     except (TypeError, ValueError):

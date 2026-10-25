@@ -1,5 +1,8 @@
 """LLM-driven Word/Excel generation for 小猫分析."""
 
-from app.domain.shared_services.kitten_ai_document.generate import draft_document_spec, generate_office_file
+from app.domain.shared_services.kitten_ai_document.generate import (
+    draft_document_spec,
+    generate_office_file,
+)
 
 __all__ = ["draft_document_spec", "generate_office_file"]

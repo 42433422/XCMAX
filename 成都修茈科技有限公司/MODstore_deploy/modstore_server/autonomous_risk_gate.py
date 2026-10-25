@@ -55,9 +55,14 @@ def _file_risk(file_name: str) -> int:
     lower = str(file_name or "").lower()
     if any(token in lower for token in (".env", "secret", "credential", "token")):
         return 100
-    if any(token in lower for token in ("payment", "billing", "auth", "permission", "security")):
+    if any(
+        token in lower
+        for token in ("payment", "billing", "auth", "permission", "security")
+    ):
         return 35
-    if any(token in lower for token in ("migration", "alembic", "models.py", "/models/")):
+    if any(
+        token in lower for token in ("migration", "alembic", "models.py", "/models/")
+    ):
         return 32
     if any(
         token in lower
@@ -69,7 +74,10 @@ def _file_risk(file_name: str) -> int:
         )
     ):
         return 28
-    if any(token in lower for token in ("/api/", "route", "scheduler", "workflow", "employee")):
+    if any(
+        token in lower
+        for token in ("/api/", "route", "scheduler", "workflow", "employee")
+    ):
         return 22
     if lower.endswith((".py", ".ts", ".tsx", ".js", ".jsx")):
         return 16
@@ -125,7 +133,9 @@ def _historical_rollback_rate(memory: Optional[Dict[str, Any]]) -> Optional[floa
             for record in rollback_records:
                 if not isinstance(record, dict):
                     continue
-                status = str(record.get("status") or record.get("outcome") or "").lower()
+                status = str(
+                    record.get("status") or record.get("outcome") or ""
+                ).lower()
                 if record.get("executed") is True or status in {
                     "completed",
                     "executed",
@@ -189,7 +199,9 @@ def _security_scan(diff_excerpt: str, files: Sequence[str]) -> Dict[str, Any]:
         "destructive_shell": r"(?i)(rm\s+-rf|DROP\s+TABLE|DELETE\s+FROM)",
         "unsafe_subprocess": r"(?i)(shell\s*=\s*True|os\.system\()",
     }
-    high_hits = [name for name, pattern in high_patterns.items() if re.search(pattern, text)]
+    high_hits = [
+        name for name, pattern in high_patterns.items() if re.search(pattern, text)
+    ]
     path_hits = [
         token
         for token in ("secret", "credential", ".env", ".pem", ".key", "token")
@@ -211,7 +223,9 @@ def _security_scan(diff_excerpt: str, files: Sequence[str]) -> Dict[str, Any]:
         "hard_block": bool(high_hits or path_hits),
         "high_hits": sorted(set(high_hits + path_hits)),
         "medium_hits": sorted(set(medium_hits)),
-        "penalty": min(80, len(high_hits) * 35 + len(path_hits) * 30 + len(medium_hits) * 4),
+        "penalty": min(
+            80, len(high_hits) * 35 + len(path_hits) * 30 + len(medium_hits) * 4
+        ),
         "source": "phase_d_security_scan",
     }
 
@@ -224,7 +238,9 @@ def _semantic_penalty_from_v2(
     semantic = safety_score_v2.get("semantic_llm_analysis")
     if not isinstance(semantic, dict):
         return 14, {"available": False, "reason": "missing_structured_llm_analysis"}
-    reports = semantic.get("reports") if isinstance(semantic.get("reports"), dict) else {}
+    reports = (
+        semantic.get("reports") if isinstance(semantic.get("reports"), dict) else {}
+    )
     if not reports:
         return 18, {"available": False, "reason": "empty_structured_llm_reports"}
     penalty = int(semantic.get("penalty") or 0)
@@ -256,18 +272,26 @@ def assess_any_code_auto_merge_v3(
     """
 
     del risk_score_v1, steps
-    normalized_files = [str(item or "").strip() for item in files if str(item or "").strip()]
+    normalized_files = [
+        str(item or "").strip() for item in files if str(item or "").strip()
+    ]
     line_changes = _line_changes(diff_stats or {})
-    file_scores = [{"file": item, "score": _file_risk(item)} for item in normalized_files]
+    file_scores = [
+        {"file": item, "score": _file_risk(item)} for item in normalized_files
+    ]
     max_file_risk = max([int(item["score"]) for item in file_scores] or [0])
     file_penalty = min(28, max_file_risk // 3)
     line_penalty = min(28, line_changes // 35)
     semantic_penalty, semantic = _semantic_penalty_from_v2(safety_score_v2)
     security = _security_scan(diff_excerpt, normalized_files)
     rollback_rate = _historical_rollback_rate(memory)
-    rollback_penalty = 8 if rollback_rate is None else min(30, int(round(rollback_rate * 70)))
+    rollback_penalty = (
+        8 if rollback_rate is None else min(30, int(round(rollback_rate * 70)))
+    )
     ci_pass_rate = _historical_ci_pass_rate(memory)
-    ci_penalty = 8 if ci_pass_rate is None else min(30, int(round((1.0 - ci_pass_rate) * 80)))
+    ci_penalty = (
+        8 if ci_pass_rate is None else min(30, int(round((1.0 - ci_pass_rate) * 80)))
+    )
     kb_penalty = 0
     hard_blockers: List[str] = []
     if isinstance(kb_validation, dict) and not kb_validation.get("ok", True):
@@ -321,7 +345,9 @@ def assess_any_code_auto_merge_v3(
         "missing_signals": missing_signals,
         "ok": ok,
         "reason": (
-            "risk_score_v3_policy_passed" if ok else "risk_score_v3_below_threshold_or_blocked"
+            "risk_score_v3_policy_passed"
+            if ok
+            else "risk_score_v3_below_threshold_or_blocked"
         ),
         "schema_version": 3,
         "score": score,

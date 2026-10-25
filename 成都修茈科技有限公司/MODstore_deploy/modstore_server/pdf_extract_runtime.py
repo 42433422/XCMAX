@@ -147,7 +147,8 @@ def pdf_read_structured_spec(brief: str) -> Dict[str, Any]:
 def pdf_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / PDF 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "上传 PDF，JSON 中介后生成输出 PDF",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "上传 PDF，JSON 中介后生成输出 PDF",
         "input": "用户上传的 .pdf 文件",
         "output": "outputs/document_parsed.json + outputs/generated_document.pdf",
         "output_schema": {
@@ -188,7 +189,9 @@ def build_pdf_read_rule_spec(brief: str) -> Dict[str, Any]:
 
 def build_pdf_generate_rule_spec(brief: str) -> Dict[str, Any]:
     bl = _brief_lower(brief)
-    wants_polish = any(k in bl for k in ("润色", "改写", "生成正文", "polish", "rewrite"))
+    wants_polish = any(
+        k in bl for k in ("润色", "改写", "生成正文", "polish", "rewrite")
+    )
     return {
         "brief": brief,
         "mode": "direct_python_file_transform",
@@ -252,7 +255,9 @@ def _validate_pdf_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -319,7 +324,8 @@ def pdf_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "只能读 inputs/、写 outputs/；VLM 通过 ctx.call_llm vision 消息。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": f"{merged or clean}\n\nSkill：上传 pdf → 原生文字 + 图片分类 + VLM 描述。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -329,7 +335,9 @@ def pdf_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
     }
 
 
-def pdf_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def pdf_generate_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     checklist = payload.get("execution_checklist")
@@ -355,7 +363,8 @@ def pdf_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": "direct_python 读写在先；agent 仅用于可选润色。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": f"{merged or clean}\n\nSkill：上传 → 读取 → JSON 中介 → 写 generated pdf → 可选润色。",
         "acceptance": [
             "输出 document_parsed.json 含 pages/blocks/stats",
@@ -365,7 +374,9 @@ def pdf_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
     }
 
 
-def resolve_pdf_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def resolve_pdf_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     if is_pdf_generate(brief):
         return pdf_generate_orchestration_plan(brief, payload)
     return pdf_read_orchestration_plan(brief, payload)

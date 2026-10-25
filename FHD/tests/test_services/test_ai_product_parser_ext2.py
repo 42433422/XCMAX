@@ -489,7 +489,9 @@ class TestCallAiApiExtended:
                 "app.infrastructure.llm.invoke.chat_completion_openai_format",
                 new=AsyncMock(return_value=api_response),
             ),
-            patch("app.domain.shared_services.deepseek_intent_service.cn_to_number", return_value=3),
+            patch(
+                "app.domain.shared_services.deepseek_intent_service.cn_to_number", return_value=3
+            ),
         ):
             result = parser._call_ai_api("text")
         assert result is not None

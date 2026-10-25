@@ -12,8 +12,12 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.customer_issue_intake import _persist_incident
-from modstore_server.employee_executor import execute_employee_task as execute_employee_task
-from modstore_server.incident_dispatch import _dispatch_incident_body as _dispatch_incident_body
+from modstore_server.employee_executor import (
+    execute_employee_task as execute_employee_task,
+)
+from modstore_server.incident_dispatch import (
+    _dispatch_incident_body as _dispatch_incident_body,
+)
 from modstore_server.incident_dispatch import (
     _dispatch_intake_routing_plan as _dispatch_intake_routing_plan,
 )
@@ -98,7 +102,9 @@ def _publish_stream_shadow(
 ) -> None:
     """Best-effort dual-write into Redis Streams (for real-time subscribers)."""
     try:
-        from modstore_server.eventing.redis_stream_bus import publish_event as publish_stream_event
+        from modstore_server.eventing.redis_stream_bus import (
+            publish_event as publish_stream_event,
+        )
 
         out = publish_stream_event(
             event_type=event_type,
@@ -148,10 +154,14 @@ def publish(
         payload = {**(payload or {}), "_unregistered_event_type": raw_event_type}
         event_type = "incident.unknown"
     fp = fingerprint or _fingerprint(payload, source)
-    eid, created = _persist_incident(event_type, payload, source, fp, dedupe_minutes, inbox_key)
+    eid, created = _persist_incident(
+        event_type, payload, source, fp, dedupe_minutes, inbox_key
+    )
     if not created:
         if inbox_key:
-            _schedule_incident(eid)  # Recover a crash between SQL commit and initial scheduling.
+            _schedule_incident(
+                eid
+            )  # Recover a crash between SQL commit and initial scheduling.
         return False
     _publish_stream_shadow(
         event_type,
@@ -162,7 +172,9 @@ def publish(
     )
     if event_type == "employee.suggestion.created":
         try:
-            from modstore_server.employee_autonomy_service import ingest_suggestion_event_payload
+            from modstore_server.employee_autonomy_service import (
+                ingest_suggestion_event_payload,
+            )
 
             ingest_suggestion_event_payload(
                 source_employee_id=source,
@@ -178,7 +190,11 @@ def publish(
                     trigger_doc_autofix_from_report,
                 )
 
-                report = payload.get("report") if isinstance(payload.get("report"), dict) else None
+                report = (
+                    payload.get("report")
+                    if isinstance(payload.get("report"), dict)
+                    else None
+                )
                 if not isinstance(report, dict):
                     report = payload if isinstance(payload, dict) else {}
                 trigger_doc_autofix_from_report(
@@ -207,7 +223,9 @@ def _schedule_incident(event_id: int) -> None:
     }:
         run()
     else:
-        threading.Thread(target=run, daemon=True, name=f"incident-dispatch-{event_id}").start()
+        threading.Thread(
+            target=run, daemon=True, name=f"incident-dispatch-{event_id}"
+        ).start()
 
 
 def publish_unified_incident(
@@ -251,7 +269,10 @@ def _admin_user_id() -> int:
     sf = get_session_factory()
     with sf() as session:
         u = (
-            session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+            session.query(User)
+            .filter(User.is_admin.is_(True))
+            .order_by(User.id.asc())
+            .first()
         )  # noqa: E712
         if u:
             return int(u.id)
@@ -260,7 +281,11 @@ def _admin_user_id() -> int:
 
 
 def _catalog_employee_ids(session) -> set[str]:
-    rows = session.query(CatalogItem.pkg_id).filter(CatalogItem.artifact == "employee_pack").all()
+    rows = (
+        session.query(CatalogItem.pkg_id)
+        .filter(CatalogItem.artifact == "employee_pack")
+        .all()
+    )
     return {str(r[0]) for r in rows if r[0]}
 
 
@@ -318,14 +343,14 @@ def _dispatch_incident(event_id: int) -> None:
                 }
                 if str(row.dispatch_state) in {"dispatching", "unknown"}:
                     row.dispatch_state = "unknown"
-                    row.last_error = (
-                        "interrupted dispatch; reconcile original execution before any replay"
-                    )
+                    row.last_error = "interrupted dispatch; reconcile original execution before any replay"
                 elif not reconcile:
                     row.dispatch_state = "dispatching"
                 session.commit()
             if reconcile:
-                from modstore_server.incident_team_completion import reconcile_pending_teams
+                from modstore_server.incident_team_completion import (
+                    reconcile_pending_teams,
+                )
 
                 reconcile_pending_teams(event_id=int(event_id))
                 return
@@ -334,7 +359,9 @@ def _dispatch_incident(event_id: int) -> None:
             except BOUNDARY_ERRORS:  # noqa: BLE001
                 with get_session_factory()() as session:
                     assert_incident_claim(event_id, session=session)
-                    row = session.get(IncidentClaim, int(event_id), populate_existing=True)
+                    row = session.get(
+                        IncidentClaim, int(event_id), populate_existing=True
+                    )
                     if row is None:
                         raise IncidentClaimLost("claim row unavailable")
                     row.dispatch_state, row.last_error = (
@@ -351,7 +378,9 @@ def _dispatch_incident(event_id: int) -> None:
                 row.dispatch_state, row.last_error = "completed", ""
                 session.commit()
     except IncidentClaimLost:
-        logger.info("incident_bus: no live claim event_id=%s; dispatch stopped", event_id)
+        logger.info(
+            "incident_bus: no live claim event_id=%s; dispatch stopped", event_id
+        )
 
 
 def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:
@@ -371,7 +400,9 @@ def _extract_routing_plan(exec_result: Any) -> List[Dict[str, Any]]:
             if not isinstance(item, dict):
                 continue
             nested = item.get("output")
-            if isinstance(nested, dict) and isinstance(nested.get("routing_plan"), list):
+            if isinstance(nested, dict) and isinstance(
+                nested.get("routing_plan"), list
+            ):
                 return [row for row in nested["routing_plan"] if isinstance(row, dict)]
     return []
 

@@ -40,7 +40,9 @@ class DutyGraphRun(Base):
     __tablename__ = "duty_graph_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_by_user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
     target_employee_id = Column(String(128), nullable=False, index=True)
     task = Column(Text, default="")
     input_data_json = Column(Text, default="{}")
@@ -60,10 +62,14 @@ class DutyGraphRun(Base):
 
 class DutyGraphRunNode(Base):
     __tablename__ = "duty_graph_run_nodes"
-    __table_args__ = (UniqueConstraint("run_id", "employee_id", name="uq_duty_graph_run_employee"),)
+    __table_args__ = (
+        UniqueConstraint("run_id", "employee_id", name="uq_duty_graph_run_employee"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    run_id = Column(Integer, ForeignKey("duty_graph_runs.id"), nullable=False, index=True)
+    run_id = Column(
+        Integer, ForeignKey("duty_graph_runs.id"), nullable=False, index=True
+    )
     employee_id = Column(String(128), nullable=False, index=True)
     order_index = Column(Integer, default=0, nullable=False)
     depends_on_json = Column(Text, default="[]")
@@ -323,10 +329,14 @@ class EmployeeSuggestion(Base):
     payload_json = Column(Text, default="{}")
     risk_level = Column(String(16), default="medium", index=True)
     status = Column(String(32), default="pending", index=True)
-    thread_id = Column(Integer, ForeignKey("employee_collab_threads.id"), nullable=True, index=True)
+    thread_id = Column(
+        Integer, ForeignKey("employee_collab_threads.id"), nullable=True, index=True
+    )
     created_change_request_ids_json = Column(Text, default="[]")
     created_task_ids_json = Column(Text, default="[]")
-    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    approved_by_user_id = Column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True
+    )
     approved_at = Column(DateTime, nullable=True)
     rejected_reason = Column(Text, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(UTC), index=True)
@@ -354,7 +364,9 @@ class PendingHumanQuestion(Base):
     task = Column(String(256), default="")
     question = Column(Text, nullable=False)
     context_json = Column(Text, default="{}")
-    status = Column(String(16), default="pending", index=True)  # pending|answered|expired
+    status = Column(
+        String(16), default="pending", index=True
+    )  # pending|answered|expired
     answer = Column(Text, default="")
     answered_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     answered_at = Column(DateTime, nullable=True)

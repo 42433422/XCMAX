@@ -32,7 +32,9 @@ _TITLE_PREFIX = "[员工交流圈]"
 
 
 def _enabled() -> bool:
-    raw = (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
+    )
     return raw not in ("0", "false", "no", "off")
 
 
@@ -213,7 +215,9 @@ def _post_report(
 # ── 6 类 loop 产出的汇报入口 ─────────────────────────────────────────────────
 
 
-def report_meeting_minutes(*, record_id: int, day: str, minutes_html: str) -> Dict[str, Any]:
+def report_meeting_minutes(
+    *, record_id: int, day: str, minutes_html: str
+) -> Dict[str, Any]:
     """员工大会纪要 → company 线程，sender=meeting-chair。"""
     try:
         from modstore_server.daily_digest import _html_to_text_excerpt
@@ -268,7 +272,9 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
             txt = _excerpt(str(it.get("text") or ""), 200)
             lines.append(f"- **{pri}** [{kind}] {txt}")
         label = labels.get(eid, eid)
-        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(lines)
+        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(
+            lines
+        )
         res = _post_report(
             dept_key=_dept_for_employee(eid),
             sender_employee_id=eid,
@@ -379,9 +385,7 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
         logger.error("collab reporter: load evolution failed")
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
-    md = (
-        f"🧬 **员工进化** · 近 {hours}h 失败 {fails} 次（{status}）\n\n{diff or '（无 diff 说明）'}"
-    )
+    md = f"🧬 **员工进化** · 近 {hours}h 失败 {fails} 次（{status}）\n\n{diff or '（无 diff 说明）'}"
     return _post_report(
         dept_key=_dept_for_employee(emp),
         sender_employee_id=emp,

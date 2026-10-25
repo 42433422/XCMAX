@@ -1619,7 +1619,9 @@ class TestLedgerItemFromInvoice:
 
 class TestItemsFromPipeline:
     def test_empty_pipeline(self):
-        with patch("app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=[]):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=[]
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert items == []
 
@@ -1628,7 +1630,9 @@ class TestItemsFromPipeline:
             {"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 100}},
             {"market_user_id": 2, "invoice": {"id": 2, "amount_cents": 200}},
         ]
-        with patch("app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(1, limit=10)
         assert len(items) == 1
         assert items[0]["source_id"] == 1
@@ -1646,7 +1650,9 @@ class TestItemsFromPipeline:
                 "erp_customer_name": "Acme",
             }
         ]
-        with patch("app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert len(items) == 1
         assert items[0]["source_type"] == "pipeline_payment"
@@ -1655,7 +1661,9 @@ class TestItemsFromPipeline:
 
     def test_limit_enforced(self):
         docs = [{"market_user_id": i, "invoice": {"id": i, "amount_cents": 100}} for i in range(10)]
-        with patch("app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=3)
         assert len(items) == 3
 
@@ -1666,7 +1674,9 @@ class TestItemsFromPipeline:
                 "payment": {"contract_amount_cents": 500},  # no confirmed_at
             }
         ]
-        with patch("app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert items == []
 
@@ -1770,7 +1780,9 @@ class TestListLedger:
 
 class TestSummarizeLedger:
     def test_empty_ledger(self):
-        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=[]):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=[]
+        ):
             result = fin_archive.summarize_ledger()
         assert result == {}
 
@@ -1780,7 +1792,9 @@ class TestSummarizeLedger:
             {"track": "contract", "amount_cents": 200},
             {"track": "manual", "amount_cents": 50},
         ]
-        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items
+        ):
             result = fin_archive.summarize_ledger()
         assert result["contract"]["count"] == 2
         assert result["contract"]["amount_cents"] == 300
@@ -1788,7 +1802,9 @@ class TestSummarizeLedger:
 
     def test_missing_track_defaults_to_manual(self):
         items = [{"amount_cents": 100}]
-        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items
+        ):
             result = fin_archive.summarize_ledger()
         assert "manual" in result
 
@@ -1840,7 +1856,9 @@ class TestRebuildLedgerArchive:
                 "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 return_value={"items": items},
             ),
-            patch("app.domain.shared_services.finance_unified_archive.archive_from_crm_invoice") as mock_archive,
+            patch(
+                "app.domain.shared_services.finance_unified_archive.archive_from_crm_invoice"
+            ) as mock_archive,
         ):
             mock_archive.return_value = {"archived": True}
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)

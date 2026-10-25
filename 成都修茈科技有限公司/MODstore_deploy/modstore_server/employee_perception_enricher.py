@@ -66,7 +66,8 @@ def _scan_scope_files(
                     continue
                 # 跳过常见噪音目录
                 if any(
-                    seg in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"}
+                    seg
+                    in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"}
                     for seg in p.parts
                 ):
                     continue
@@ -79,7 +80,9 @@ def _scan_scope_files(
                         {
                             "path": rel,
                             "size_bytes": int(st.st_size),
-                            "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
+                            "mtime_iso": datetime.fromtimestamp(
+                                st.st_mtime, tz=UTC
+                            ).isoformat(),
                             "mtime_age_hours": round(
                                 (datetime.now(UTC).timestamp() - st.st_mtime) / 3600.0,
                                 1,
@@ -200,10 +203,14 @@ def enrich_perception(
     if not isinstance(wp, dict):
         wp = {}
     scope_globs = [str(x) for x in (wp.get("scope_globs") or []) if str(x).strip()]
-    forbidden_globs = [str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
+    forbidden_globs = [
+        str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()
+    ]
     if not scope_globs and not forbidden_globs and manifest:
         try:
-            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+            from modstore_server.employee_scope_policy import (
+                workspace_policy_from_manifest,
+            )
 
             _sg, _fg, _ag = workspace_policy_from_manifest(manifest)
             scope_globs = _sg or []
@@ -220,7 +227,9 @@ def enrich_perception(
     # 扫描自己负责的代码文件
     if scope_globs and project_root:
         try:
-            files = _scan_scope_files(Path(project_root), scope_globs, limit=_MAX_FILES_SIGNAL)
+            files = _scan_scope_files(
+                Path(project_root), scope_globs, limit=_MAX_FILES_SIGNAL
+            )
             ni["_workspace_signals"] = {
                 "files_recent_modified": files,
                 "scope_root": str(project_root),
@@ -229,7 +238,9 @@ def enrich_perception(
         except BOUNDARY_ERRORS:  # noqa: BLE001
             ni["_workspace_signals"] = {"error": "workspace_scan_failed"}
     else:
-        ni["_workspace_signals"] = {"note": "未配置 scope_globs 或 project_root，无法扫描代码文件"}
+        ni["_workspace_signals"] = {
+            "note": "未配置 scope_globs 或 project_root，无法扫描代码文件"
+        }
 
     # 最近执行摘要（成功/失败都要）
     try:
@@ -243,7 +254,9 @@ def enrich_perception(
 
     # 最近失败（重点看失败原因）
     try:
-        failures = _recent_failures_from_db(session, employee_id, limit=_MAX_RECENT_FAILURES)
+        failures = _recent_failures_from_db(
+            session, employee_id, limit=_MAX_RECENT_FAILURES
+        )
         ni["_recent_failures"] = {
             "failures": failures,
             "note": f"你最近 {len(failures)} 次失败任务的失败原因（如果有的话）",

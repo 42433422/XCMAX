@@ -9,7 +9,11 @@ from typing import Any, Callable, Dict, List
 import httpx
 
 from modman.blueprint_scan import scan_fastapi_router_routes
-from modman.manifest_util import folder_name_must_match_id, read_manifest, validate_manifest_dict
+from modman.manifest_util import (
+    folder_name_must_match_id,
+    read_manifest,
+    validate_manifest_dict,
+)
 from modman.surface_bundle import load_bundled_extension_surface
 from modstore_server.authoring import slim_openapi_paths
 from modstore_server.infrastructure import library_paths
@@ -92,8 +96,12 @@ def authoring_summary(
     return {
         "ok": True,
         "id": mod_id,
-        "manifest_backend": data.get("backend") if isinstance(data.get("backend"), dict) else {},
-        "manifest_frontend": data.get("frontend") if isinstance(data.get("frontend"), dict) else {},
+        "manifest_backend": data.get("backend")
+        if isinstance(data.get("backend"), dict)
+        else {},
+        "manifest_frontend": data.get("frontend")
+        if isinstance(data.get("frontend"), dict)
+        else {},
         "validation_ok": len(warnings) == 0,
         "warnings": warnings,
         "blueprint_file": blueprint_file,

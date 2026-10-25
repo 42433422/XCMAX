@@ -8,7 +8,10 @@ from typing import Any, Dict, Set
 
 from modstore_server.catalog_publication_policy import is_private_package
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
-from modstore_server.duty_roster import all_planned_employee_ids, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    all_planned_employee_ids,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -49,7 +52,9 @@ def package_row_eligible_for_public_index(
     if is_private_package(row):
         return False
 
-    if pid in all_planned_employee_ids() or is_planned_duty_employee_pack(pid, artifact):
+    if pid in all_planned_employee_ids() or is_planned_duty_employee_pack(
+        pid, artifact
+    ):
         return False
 
     channel = str(row.get("release_channel") or "stable").strip().lower()
@@ -74,7 +79,9 @@ def project_index_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "artifact": row.get("artifact") or "mod",
         "sha256": row.get("sha256"),
         "download_url": row.get("download_url")
-        or (f"/v1/packages/{pid}/{ver}/download" if row.get("stored_filename") else None),
+        or (
+            f"/v1/packages/{pid}/{ver}/download" if row.get("stored_filename") else None
+        ),
         "commerce": row.get("commerce"),
         "license": row.get("license"),
         "store_collection": row.get("store_collection"),

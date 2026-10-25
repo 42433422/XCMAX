@@ -22,7 +22,10 @@ from pydantic import BaseModel
 
 from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
-from modstore_server.eventing.contracts import SUBSCRIPTION_RENEWAL_FAILED, SUBSCRIPTION_RENEWED
+from modstore_server.eventing.contracts import (
+    SUBSCRIPTION_RENEWAL_FAILED,
+    SUBSCRIPTION_RENEWED,
+)
 from modstore_server.models import (
     Entitlement,
     PlanTemplate,
@@ -122,7 +125,9 @@ def renew_expiring_plans() -> dict:
 
 def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
     """对单个 UserPlan 执行续费，含余额校验、扣款、写 Transaction 和 payment_orders。"""
-    plan_tmpl = session.query(PlanTemplate).filter(PlanTemplate.id == user_plan.plan_id).first()
+    plan_tmpl = (
+        session.query(PlanTemplate).filter(PlanTemplate.id == user_plan.plan_id).first()
+    )
     if not plan_tmpl or not plan_tmpl.is_active:
         logger.info("套餐模板不存在或已下架，跳过续费 plan_id=%s", user_plan.plan_id)
         user_plan.auto_renew = False
@@ -136,14 +141,19 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
         return
 
     wallet = (
-        session.query(Wallet).filter(Wallet.user_id == user_plan.user_id).with_for_update().first()
+        session.query(Wallet)
+        .filter(Wallet.user_id == user_plan.user_id)
+        .with_for_update()
+        .first()
     )
     balance = float(wallet.balance if wallet else 0)
 
     if balance < price:
         # 余额不足：关闭自动续费并发通知
         user_plan.auto_renew = False
-        user_plan.renewal_fail_reason = f"余额不足（余额 {balance:.2f}，需 {price:.2f}）"
+        user_plan.renewal_fail_reason = (
+            f"余额不足（余额 {balance:.2f}，需 {price:.2f}）"
+        )
         logger.info(
             "余额不足，关闭自动续费 user_id=%s plan_id=%s balance=%.2f price=%.2f",
             user_plan.user_id,
@@ -188,7 +198,9 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
         wallet.balance = round(balance - price, 6)
         wallet.updated_at = now
 
-    out_trade_no = f"renew_{user_plan.user_id}_{user_plan.plan_id}_{uuid.uuid4().hex[:8]}"
+    out_trade_no = (
+        f"renew_{user_plan.user_id}_{user_plan.plan_id}_{uuid.uuid4().hex[:8]}"
+    )
     session.add(
         Transaction(
             user_id=user_plan.user_id,
@@ -200,7 +212,11 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
     )
 
     # 延长有效期
-    base = user_plan.expires_at if user_plan.expires_at and user_plan.expires_at > now else now
+    base = (
+        user_plan.expires_at
+        if user_plan.expires_at and user_plan.expires_at > now
+        else now
+    )
     user_plan.expires_at = base + timedelta(days=30)
     user_plan.renewal_fail_reason = ""
 
@@ -254,7 +270,9 @@ def _renew_one(session, user_plan: UserPlan, now: datetime) -> None:
                 "plan_id": user_plan.plan_id,
                 "out_trade_no": out_trade_no,
                 "amount": price,
-                "expires_at": user_plan.expires_at.isoformat() if user_plan.expires_at else None,
+                "expires_at": user_plan.expires_at.isoformat()
+                if user_plan.expires_at
+                else None,
                 "plan_name": plan_tmpl.name,
             },
         )

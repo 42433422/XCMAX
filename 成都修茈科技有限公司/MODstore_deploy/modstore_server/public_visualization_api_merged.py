@@ -42,7 +42,9 @@ def _trend_days() -> int:
 
 
 def _release_manifest_path() -> _facade().Path:
-    configured = (_facade().os.environ.get("XIUCI_VISUALIZATION_RELEASE_MANIFEST") or "").strip()
+    configured = (
+        _facade().os.environ.get("XIUCI_VISUALIZATION_RELEASE_MANIFEST") or ""
+    ).strip()
     if configured:
         return _facade().Path(configured).expanduser()
     site_root = _facade().Path(__file__).resolve().parents[2]
@@ -65,7 +67,9 @@ def _release_manifest_path() -> _facade().Path:
 
 
 def _access_log_paths() -> list[_facade().Path]:
-    pattern = (_facade().os.environ.get("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB") or "").strip()
+    pattern = (
+        _facade().os.environ.get("XIUCI_VISUALIZATION_ACCESS_LOG_GLOB") or ""
+    ).strip()
     matches = _facade().glob.glob(pattern or _facade()._DEFAULT_LOG_GLOB)
     return sorted(
         (_facade().Path(match) for match in matches if _facade().Path(match).is_file()),
@@ -100,7 +104,9 @@ def _iso_date(value: _facade().date | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def _empty_traffic_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facade().Any]]:
+def _empty_traffic_metrics() -> tuple[
+    dict[str, _facade().Any], dict[str, _facade().Any]
+]:
     return (
         {
             "chat_requests": None,
@@ -126,7 +132,9 @@ def _empty_traffic_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facad
 
 def _read_traffic_metrics(
     paths: list[_facade().Path],
-) -> tuple[dict[str, _facade().Any], dict[str, _facade().Any], dict[str, _facade().Any]]:
+) -> tuple[
+    dict[str, _facade().Any], dict[str, _facade().Any], dict[str, _facade().Any]
+]:
     ai_total = 0
     ai_success = 0
     api_requests = 0
@@ -159,7 +167,9 @@ def _read_traffic_metrics(
                         else min(retained_start, request_date)
                     )
                     retained_end = (
-                        request_date if retained_end is None else max(retained_end, request_date)
+                        request_date
+                        if retained_end is None
+                        else max(retained_end, request_date)
                     )
                     method = match.group("method")
                     status = int(match.group("status"))
@@ -194,7 +204,11 @@ def _read_traffic_metrics(
                         continue
                     downloads_total += 1
                     download_platforms[platform] += 1
-                    product = "kellai" if target_lower.startswith("/downloads/kellai/") else "xcagi"
+                    product = (
+                        "kellai"
+                        if target_lower.startswith("/downloads/kellai/")
+                        else "xcagi"
+                    )
                     download_products[product] += 1
                     download_daily[request_date] += 1
         except (OSError, EOFError):
@@ -285,7 +299,8 @@ def _read_traffic_metrics(
 
 def _prometheus_base_url() -> str:
     return (
-        _facade().os.environ.get("XIUCI_VISUALIZATION_PROMETHEUS_URL") or "http://127.0.0.1:9090"
+        _facade().os.environ.get("XIUCI_VISUALIZATION_PROMETHEUS_URL")
+        or "http://127.0.0.1:9090"
     ).rstrip("/")
 
 
@@ -296,11 +311,15 @@ def _prometheus_job() -> str:
 
 
 def _prom_instant(expr: str) -> float | None:
-    url = f"{_facade()._prometheus_base_url()}/api/v1/query?query={_facade().quote(expr)}"
+    url = (
+        f"{_facade()._prometheus_base_url()}/api/v1/query?query={_facade().quote(expr)}"
+    )
     request = _facade().Request(url, headers={"Accept": "application/json"})
     try:
         with _facade().urlopen(request, timeout=0.8) as response:
-            payload = _facade().json.loads(response.read().decode("utf-8", errors="replace"))
+            payload = _facade().json.loads(
+                response.read().decode("utf-8", errors="replace")
+            )
     except (
         _facade().HTTPError,
         _facade().URLError,
@@ -313,7 +332,9 @@ def _prom_instant(expr: str) -> float | None:
     if not isinstance(payload, dict) or payload.get("status") != "success":
         return None
     result = (
-        (payload.get("data") or {}).get("result") if isinstance(payload.get("data"), dict) else None
+        (payload.get("data") or {}).get("result")
+        if isinstance(payload.get("data"), dict)
+        else None
     )
     if not isinstance(result, list) or not result:
         return None
@@ -338,7 +359,10 @@ def _metrics_base_url() -> str:
 def _parse_metric_labels(raw: str | None) -> dict[str, str]:
     if not raw:
         return {}
-    return {m.group(1): m.group(2).replace('\\"', '"') for m in _facade()._LABEL_RE.finditer(raw)}
+    return {
+        m.group(1): m.group(2).replace('\\"', '"')
+        for m in _facade()._LABEL_RE.finditer(raw)
+    }
 
 
 def _scrape_app_metrics() -> dict[str, _facade().Any]:
@@ -381,7 +405,10 @@ def _scrape_app_metrics() -> dict[str, _facade().Any]:
             if "/api/llm/" in path or "/chat/stream" in path:
                 ai_hist_buckets.append((le, value))
             if any(
-                (token in path for token in ("/api/mods", "/market/", "/v1/packages", "/mod-store"))
+                (
+                    token in path
+                    for token in ("/api/mods", "/market/", "/v1/packages", "/mod-store")
+                )
             ):
                 mod_hist_buckets.append((le, value))
         elif labels:
@@ -391,7 +418,9 @@ def _scrape_app_metrics() -> dict[str, _facade().Any]:
             gauges[name] = value
             counters[name] = counters.get(name, 0.0) + value
 
-    def histogram_quantile(buckets: list[tuple[float, float]], q: float = 0.95) -> float | None:
+    def histogram_quantile(
+        buckets: list[tuple[float, float]], q: float = 0.95
+    ) -> float | None:
         if not buckets:
             return None
         by_le: dict[float, float] = {}
@@ -415,13 +444,18 @@ def _scrape_app_metrics() -> dict[str, _facade().Any]:
         return prev_le
 
     total_req = sum(
-        (v for (name, labels, v) in labeled_counters if name == "modstore_http_requests_total")
+        (
+            v
+            for (name, labels, v) in labeled_counters
+            if name == "modstore_http_requests_total"
+        )
     )
     err_req = sum(
         (
             v
             for (name, labels, v) in labeled_counters
-            if name == "modstore_http_requests_total" and labels.get("outcome") == "server_error"
+            if name == "modstore_http_requests_total"
+            and labels.get("outcome") == "server_error"
         )
     )
     bus_metric_names = (
@@ -465,7 +499,9 @@ def _scrape_app_metrics() -> dict[str, _facade().Any]:
     if published is not None:
         denom = max(float(published), 1.0)
         delivery = max(0.0, 100.0 * (1.0 - (float(lost) + float(dlq)) / denom))
-    p95 = histogram_quantile(hist_buckets.get("modstore_http_request_duration_seconds") or [])
+    p95 = histogram_quantile(
+        hist_buckets.get("modstore_http_request_duration_seconds") or []
+    )
     mod_p95 = histogram_quantile(mod_hist_buckets) or p95
     ai_p95 = histogram_quantile(ai_hist_buckets) or p95
     active = gauges.get("active_requests")
@@ -612,7 +648,9 @@ def _build_monitor_payload(
     mod_p95 = _facade()._prom_instant(
         f'histogram_quantile(0.95, sum by (le) (rate(api_request_duration_seconds_bucket{{job="{job}",endpoint=~"/api/(mod-store|mods).*"}}[5m]))) * 1000'
     )
-    bus_publish = _facade()._prom_instant("sum(rate(neurobus_events_published_total[1m]))")
+    bus_publish = _facade()._prom_instant(
+        "sum(rate(neurobus_events_published_total[1m]))"
+    )
     bus_loss = _facade()._prom_instant(
         "sum(increase(neurobus_events_lost_total[5m])) + sum(increase(neurobus_events_dead_lettered_total[5m]))"
     )
@@ -641,12 +679,16 @@ def _build_monitor_payload(
         bus_loss, app_metrics.get("bus_loss"), bus_runtime.get("bus_loss")
     )
     breaker = _facade()._coalesce(
-        (1.0 if breaker is not None and breaker >= 2 else 0.0) if breaker is not None else None,
+        (1.0 if breaker is not None and breaker >= 2 else 0.0)
+        if breaker is not None
+        else None,
         app_metrics.get("breaker_open"),
         bus_runtime.get("breaker_open"),
     )
     ai_p95 = _facade()._coalesce(ai_p95, app_metrics.get("ai_p95_ms"))
-    use_host_infra = not any((v is not None for v in (pod_cpu, pod_mem, disk, restarts)))
+    use_host_infra = not any(
+        (v is not None for v in (pod_cpu, pod_mem, disk, restarts))
+    )
     if use_host_infra:
         pod_cpu = host.get("cpu_pct")
         pod_mem_gib = host.get("mem_gib")
@@ -685,10 +727,14 @@ def _build_monitor_payload(
     window_days = int(traffic_source.get("window_days") or 0) or None
     log_err_rate = round(api_5xx / api_requests * 100, 2) if api_requests else None
     log_rps = (
-        round(api_requests / (window_days * 86400), 4) if api_requests and window_days else None
+        round(api_requests / (window_days * 86400), 4)
+        if api_requests and window_days
+        else None
     )
     log_mod_qps = (
-        round(mod_requests / (window_days * 86400), 4) if mod_requests and window_days else None
+        round(mod_requests / (window_days * 86400), 4)
+        if mod_requests and window_days
+        else None
     )
     if rps is not None:
         api_mode = "live"
@@ -712,7 +758,9 @@ def _build_monitor_payload(
         else (
             "metrics"
             if any((v is not None for v in (sqlite_ready, neuro_delivery, mod_p95)))
-            else "logs" if mod_requests else "offline"
+            else "logs"
+            if mod_requests
+            else "offline"
         )
     )
     bus_mode = (
@@ -720,7 +768,9 @@ def _build_monitor_payload(
         if bus_publish_rate is not None
         else (
             "metrics"
-            if any((v is not None for v in (bus_publish_total, bus_loss, breaker, ai_p95)))
+            if any(
+                (v is not None for v in (bus_publish_total, bus_loss, breaker, ai_p95))
+            )
             else "offline"
         )
     )
@@ -736,7 +786,9 @@ def _build_monitor_payload(
             "prometheus": (
                 "live"
                 if rps is not None or bus_publish_rate is not None
-                else "metrics" if metrics_live else "unavailable"
+                else "metrics"
+                if metrics_live
+                else "unavailable"
             ),
             "loki": "provisioned",
             "alertmanager": "provisioned",
@@ -751,7 +803,9 @@ def _build_monitor_payload(
                 "desc": "xcagi-api-overview · RED 指标 · modstore_http_* / 网关日志",
                 "status": api_mode,
                 "panels": [
-                    _facade()._panel("API 延迟 P95", _facade()._fmt_num(p95), "ms", cls="c"),
+                    _facade()._panel(
+                        "API 延迟 P95", _facade()._fmt_num(p95), "ms", cls="c"
+                    ),
                     _facade()._panel(
                         "请求量 / 秒",
                         (
@@ -772,7 +826,9 @@ def _build_monitor_payload(
                         "%",
                         cls="g",
                     ),
-                    _facade()._panel("活跃请求", _facade()._fmt_num(active), "个", cls="o"),
+                    _facade()._panel(
+                        "活跃请求", _facade()._fmt_num(active), "个", cls="o"
+                    ),
                 ],
             },
             {
@@ -797,7 +853,9 @@ def _build_monitor_payload(
                         "GiB",
                         cls="b",
                     ),
-                    _facade()._panel("磁盘 /（根分区）", _facade()._fmt_num(disk), "%", cls="y"),
+                    _facade()._panel(
+                        "磁盘 /（根分区）", _facade()._fmt_num(disk), "%", cls="y"
+                    ),
                     _facade()._panel(
                         "服务重启计数" if use_host_infra else "Pod 重启（1 小时）",
                         _facade()._fmt_num(restarts),
@@ -831,7 +889,9 @@ def _build_monitor_payload(
                         "%",
                         cls="g",
                     ),
-                    _facade()._panel("Mod API P95", _facade()._fmt_num(mod_p95), "ms", cls="p"),
+                    _facade()._panel(
+                        "Mod API P95", _facade()._fmt_num(mod_p95), "ms", cls="p"
+                    ),
                 ],
             },
             {
@@ -846,16 +906,24 @@ def _build_monitor_payload(
                         bus_volume_unit,
                         cls="c",
                     ),
-                    _facade()._panel(bus_loss_title, _facade()._fmt_num(bus_loss), "条", cls="g"),
-                    _facade()._panel("断路器 OPEN", _facade()._fmt_num(breaker), "路", cls="g"),
-                    _facade()._panel("AI 请求 P95", _facade()._fmt_num(ai_p95), "ms", cls="p"),
+                    _facade()._panel(
+                        bus_loss_title, _facade()._fmt_num(bus_loss), "条", cls="g"
+                    ),
+                    _facade()._panel(
+                        "断路器 OPEN", _facade()._fmt_num(breaker), "路", cls="g"
+                    ),
+                    _facade()._panel(
+                        "AI 请求 P95", _facade()._fmt_num(ai_p95), "ms", cls="p"
+                    ),
                 ],
             },
         ],
         "issues": [],
     }
     source = {
-        "status": "live" if prom_hits or api_requests or metrics_live else "unavailable",
+        "status": "live"
+        if prom_hits or api_requests or metrics_live
+        else "unavailable",
         "prometheus": monitor["stack"]["prometheus"],
         "app_metrics": "live" if metrics_live else "unavailable",
         "host_metrics": "live" if use_host_infra else "unused",
@@ -886,7 +954,11 @@ def _read_product_metrics(
             "delivery_platforms": len(platforms),
             "release_ready": release_ready,
             "release_status": (
-                "READY" if release_ready is True else "PENDING" if release_ready is False else None
+                "READY"
+                if release_ready is True
+                else "PENDING"
+                if release_ready is False
+                else None
             ),
         }
         source_updated_at = (
@@ -931,14 +1003,18 @@ def _as_shanghai_datetime(value: _facade().Any) -> _facade().datetime | None:
 
 
 def _platform_made_snapshot_candidates() -> list[_facade().Path]:
-    configured = (_facade().os.environ.get("XIUCI_PLATFORM_MADE_TOKENS_PATH") or "").strip()
+    configured = (
+        _facade().os.environ.get("XIUCI_PLATFORM_MADE_TOKENS_PATH") or ""
+    ).strip()
     if configured:
         return [_facade().Path(configured).expanduser()]
     site_root = _facade().Path(__file__).resolve().parents[2]
     return [
         site_root / "data" / "platform_made_tokens.json",
         _facade().Path("/root/成都修茈科技有限公司/data/platform_made_tokens.json"),
-        _facade().Path("/opt/xcmax/current/成都修茈科技有限公司/data/platform_made_tokens.json"),
+        _facade().Path(
+            "/opt/xcmax/current/成都修茈科技有限公司/data/platform_made_tokens.json"
+        ),
         _facade().Path(
             "/opt/xcmax/releases/current/成都修茈科技有限公司/data/platform_made_tokens.json"
         ),
@@ -967,7 +1043,9 @@ def _empty_made_token_metrics() -> dict[str, _facade().Any]:
 """Implementation extracted from the public facade module."""
 
 
-def _read_platform_made_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facade().Any]]:
+def _read_platform_made_metrics() -> tuple[
+    dict[str, _facade().Any], dict[str, _facade().Any]
+]:
     """读取管理端同源的「平台制作 Token」公开快照。"""
     last_path = _facade()._platform_made_snapshot_path()
     for path in _facade()._platform_made_snapshot_candidates():
@@ -996,7 +1074,9 @@ def _read_platform_made_metrics() -> tuple[dict[str, _facade().Any], dict[str, _
                     )
             metrics = {
                 "platform_made_tokens": made,
-                "platform_made_prompt_tokens": int(raw.get("platform_made_prompt_tokens") or 0),
+                "platform_made_prompt_tokens": int(
+                    raw.get("platform_made_prompt_tokens") or 0
+                ),
                 "platform_made_completion_tokens": int(
                     raw.get("platform_made_completion_tokens") or 0
                 ),
@@ -1114,7 +1194,9 @@ def _read_token_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facade()
             "provider": str(row["provider"] or "unknown"),
             "calls": int(row["calls"] or 0),
             "tokens": int(row["tokens"] or 0),
-            "share": round(int(row["tokens"] or 0) / chat_tokens * 100, 2) if chat_tokens else 0.0,
+            "share": round(int(row["tokens"] or 0) / chat_tokens * 100, 2)
+            if chat_tokens
+            else 0.0,
         }
         for row in model_rows
     ]
@@ -1139,13 +1221,17 @@ def _read_token_metrics() -> tuple[dict[str, _facade().Any], dict[str, _facade()
         "token_window_start_short": (
             _facade()._short_date(window_start.date()) if window_start else None
         ),
-        "token_window_end_short": _facade()._short_date(window_end.date()) if window_end else None,
+        "token_window_end_short": _facade()._short_date(window_end.date())
+        if window_end
+        else None,
     }
     return (
         metrics,
         {
             "status": "live",
-            "source_updated_at": window_end.isoformat(timespec="seconds") if window_end else None,
+            "source_updated_at": window_end.isoformat(timespec="seconds")
+            if window_end
+            else None,
             "chat_records": int(chat["records"] or 0),
             "employee_records": int(employee["records"] or 0),
             "model_coverage": "chat_ledger_only",
@@ -1160,15 +1246,21 @@ def _build_public_visualization_data() -> dict[str, _facade().Any]:
     made_metrics, made_source = _facade()._read_platform_made_metrics()
     ai.update(token_metrics)
     ai.update(made_metrics)
-    product, release_source = _facade()._read_product_metrics(_facade()._release_manifest_path())
+    product, release_source = _facade()._read_product_metrics(
+        _facade()._release_manifest_path()
+    )
     monitor, monitor_source = _facade()._build_monitor_payload(traffic_source)
     source_statuses = (
         traffic_source["status"],
         token_source["status"],
         release_source["status"],
     )
-    data_status = "live" if all((status == "live" for status in source_statuses)) else "degraded"
-    generated_at = _facade().datetime.now(tz=_facade()._SHANGHAI).isoformat(timespec="seconds")
+    data_status = (
+        "live" if all((status == "live" for status in source_statuses)) else "degraded"
+    )
+    generated_at = (
+        _facade().datetime.now(tz=_facade()._SHANGHAI).isoformat(timespec="seconds")
+    )
     source_updates = [
         value
         for value in (
@@ -1232,7 +1324,10 @@ def get_public_visualization_data() -> dict[str, _facade().Any]:
     now = _facade().time.monotonic()
     ttl = _facade()._cache_ttl_seconds()
     with _facade()._CACHE_LOCK:
-        if _facade()._CACHE_VALUE is not None and now - _facade()._CACHE_CREATED_MONOTONIC < ttl:
+        if (
+            _facade()._CACHE_VALUE is not None
+            and now - _facade()._CACHE_CREATED_MONOTONIC < ttl
+        ):
             return _facade().copy.deepcopy(_facade()._CACHE_VALUE)
         value = _facade()._build_public_visualization_data()
         _facade()._CACHE_VALUE = value

@@ -52,12 +52,16 @@ def build_source_files(proposal: Dict[str, Any]) -> Dict[str, str]:
 
     validate_proposal(proposal)
     if proposal.get("triggered_by") != "catalog_capability_gap":
-        raise ProposalScaffoldError("only allowlisted catalog gap proposals are materializable")
+        raise ProposalScaffoldError(
+            "only allowlisted catalog gap proposals are materializable"
+        )
     # This scaffold implements one reviewed capability only. The proposal's nested
     # employee-pack object can contain LLM-authored/private prose, so no value from
     # it is copied into source. Proposal generation already pins this identity; the
     # second check here makes direct callers fail closed as well.
-    proposed_package_id = _bounded_text(proposal.get("employee_pack", {}).get("name"), limit=128)
+    proposed_package_id = _bounded_text(
+        proposal.get("employee_pack", {}).get("name"), limit=128
+    )
     if proposed_package_id != _ALLOWLISTED_PACKAGE_ID:
         raise ProposalScaffoldError("proposal package is not allowlisted")
     package_id = _ALLOWLISTED_PACKAGE_ID
@@ -264,7 +268,9 @@ def analyze_scorecard(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def materialize_proposal(proposal: Dict[str, Any], *, repo_root: Path) -> Dict[str, Any]:
+def materialize_proposal(
+    proposal: Dict[str, Any], *, repo_root: Path
+) -> Dict[str, Any]:
     """Create a new source directory, refusing overwrite or path escape."""
 
     files = build_source_files(proposal)

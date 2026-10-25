@@ -11,7 +11,11 @@ from fastapi import Depends, Query
 from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.strategic_layer import MeetingDecisionRef, MeetingParticipants, MeetingStatus
+from modstore_server.strategic_layer import (
+    MeetingDecisionRef,
+    MeetingParticipants,
+    MeetingStatus,
+)
 from modstore_server.strategic_layer_models import (
     CancelMeetingRequest,
     ConcludeMeetingRequest,
@@ -39,7 +43,9 @@ def schedule_meeting(
     try:
         meeting_type = _facade().MeetingType(body.meeting_type)
     except ValueError as exc:
-        raise _facade().HTTPException(422, f"invalid meeting_type: {body.meeting_type}") from exc
+        raise _facade().HTTPException(
+            422, f"invalid meeting_type: {body.meeting_type}"
+        ) from exc
     scheduled_at = _facade()._parse_dt(body.scheduled_at)
     if scheduled_at is None:
         raise _facade().HTTPException(422, "scheduled_at required")
@@ -122,7 +128,9 @@ def conclude_meeting(
                 )
             )
         except RECOVERABLE_ERRORS as exc:
-            raise _facade().HTTPException(422, f"invalid decision ref {d}: {exc}") from exc
+            raise _facade().HTTPException(
+                422, f"invalid decision ref {d}: {exc}"
+            ) from exc
     try:
         meeting = (
             _facade()
@@ -170,7 +178,9 @@ def list_action_items(
     items = (
         _facade()
         ._meeting_service()
-        .list_action_items(meeting_id=meeting_id, assigned_to=assignee, status=status, limit=limit)
+        .list_action_items(
+            meeting_id=meeting_id, assigned_to=assignee, status=status, limit=limit
+        )
     )
     return {"ok": True, "count": len(items), "items": items}
 
@@ -254,7 +264,9 @@ def list_reports(
     _: User = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """列出已生成的报告。"""
-    reports = _facade()._report_service().list_reports(report_type=report_type, limit=limit)
+    reports = (
+        _facade()._report_service().list_reports(report_type=report_type, limit=limit)
+    )
     return {"ok": True, "count": len(reports), "items": reports}
 
 

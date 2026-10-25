@@ -379,7 +379,9 @@ def test_desktop_package_includes_and_probes_dynamic_xcmax_sync_appliers() -> No
         "app.domain.shared_services.xcmax_sync_extended_appliers",
     ):
         assert f'"{module_name}"' in spec
-    assert "from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
+    assert (
+        "from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS" in entrypoint
+    )
     assert '"account_entitlements"' in entrypoint
     assert "missing_sync_appliers" in entrypoint
 

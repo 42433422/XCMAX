@@ -22,7 +22,9 @@ from typing import Any, Dict, List, Optional
 from modstore_server.digest_action_status import (
     find_matching_item_ids,
 )
-from modstore_server.digest_action_status import normalize_match_text as _normalize_match_text
+from modstore_server.digest_action_status import (
+    normalize_match_text as _normalize_match_text,
+)
 from modstore_server.digest_action_status import (
     set_status,
     set_status_if_advanced,
@@ -109,7 +111,9 @@ def _normalize_action_text(text: str) -> str:
 
 
 def _is_low_signal_action_item(text: str) -> bool:
-    if (os.environ.get("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL") or "").strip().lower() in (
+    if (
+        os.environ.get("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL") or ""
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -121,7 +125,9 @@ def _is_low_signal_action_item(text: str) -> bool:
     if "修复近期失败" in core:
         if "status': 'skipped'" in raw or '"status": "skipped"' in raw:
             return True
-        if "blocked_by_risk_gate" in raw and ("error': ''" in raw or '"error": ""' in raw):
+        if "blocked_by_risk_gate" in raw and (
+            "error': ''" in raw or '"error": ""' in raw
+        ):
             return True
         if ("status': 'warning'" in raw or '"status": "warning"' in raw) and (
             "error': ''" in raw or '"error": ""' in raw
@@ -221,7 +227,12 @@ def _parse_markdown(markdown: str, *, kind: str) -> List[Dict[str, Any]]:
             pr = _infer_priority(
                 item_text, kind=kind, section_priority=section_priority, indent=indent
             )
-            if indent < 2 and _PRIORITY_RE.search(item_text) or indent < 2 and not section_priority:
+            if (
+                indent < 2
+                and _PRIORITY_RE.search(item_text)
+                or indent < 2
+                and not section_priority
+            ):
                 section_priority = pr
             ip = _PATH_RE.search(item_text)
             out.append(
@@ -326,7 +337,9 @@ def parse_and_store_action_items(
                 )
                 inserted[r["kind"]] = inserted.get(r["kind"], 0) + 1
             except RECOVERABLE_ERRORS:
-                logger.exception("action_items: insert failed key=%s", r.get("dedupe_key"))
+                logger.exception(
+                    "action_items: insert failed key=%s", r.get("dedupe_key")
+                )
         try:
             compacted = _compact_open_backlog(conn)
         except RECOVERABLE_ERRORS:

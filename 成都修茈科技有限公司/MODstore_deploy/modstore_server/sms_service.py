@@ -36,7 +36,9 @@ def generate_sms_code() -> str:
 def send_sms_code(phone: str, code: str, purpose: str) -> dict:
     provider = (os.environ.get("COSER_SMS_PROVIDER") or "debug").strip().lower()
     if provider == "debug":
-        logger.warning("SMS debug code phone=%s purpose=%s code=%s", phone, purpose, code)
+        logger.warning(
+            "SMS debug code phone=%s purpose=%s code=%s", phone, purpose, code
+        )
         return {"provider": "debug", "debug_code": code}
     # Provider adapters intentionally share this boundary.
     raise RuntimeError(f"短信 provider 尚未配置或未实现: {provider}")

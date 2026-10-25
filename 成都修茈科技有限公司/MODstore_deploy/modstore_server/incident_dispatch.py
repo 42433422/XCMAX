@@ -26,7 +26,9 @@ def _has_reviewed_duty_binding(event_id: int) -> bool:
             .all()
         )
         for binding in bindings:
-            base, source_filter = facade._parse_binding_event_key(str(binding.event_type or ""))
+            base, source_filter = facade._parse_binding_event_key(
+                str(binding.event_type or "")
+            )
             if base != str(event.event_type or ""):
                 continue
             if source_filter and source_filter != str(event.source or ""):
@@ -76,9 +78,9 @@ def _dispatch_intake_routing_plan(
                 source=source,
                 incident=incident_payload,
             )
-            owner_brief = (f"{brief} | route={owner} request_id={row.get('request_id') or ''}")[
-                :500
-            ]
+            owner_brief = (
+                f"{brief} | route={owner} request_id={row.get('request_id') or ''}"
+            )[:500]
             execute_employee_task(
                 owner,
                 owner_brief,
@@ -149,11 +151,15 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.unified_autonomy_orchestrator import orchestrate_incident
+            from modstore_server.unified_autonomy_orchestrator import (
+                orchestrate_incident,
+            )
 
             orchestration = orchestrate_incident(event_id)
             if not orchestration.get("should_dispatch", True):
-                logger.info("incident_bus: unified orchestrator parked event_id=%s", event_id)
+                logger.info(
+                    "incident_bus: unified orchestrator parked event_id=%s", event_id
+                )
                 return
         except RECOVERABLE_ERRORS:
             logger.warning(
@@ -170,7 +176,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.incident_team_orchestrator import dispatch_incident_team
+            from modstore_server.incident_team_orchestrator import (
+                dispatch_incident_team,
+            )
 
             team = dispatch_incident_team(event_id)
             if team.get("requires_reconciliation") or team.get("outcome") == "unknown":
@@ -193,7 +201,10 @@ def _dispatch_incident_body(event_id: int) -> None:
                 }:
                     return
                 # 客服订阅只能跟进原团队；终止或缺少持久计划的事件不再分派。
-                if event_type_pre == "ops.intake.customer_ticket" or reviewed_duty_binding:
+                if (
+                    event_type_pre == "ops.intake.customer_ticket"
+                    or reviewed_duty_binding
+                ):
                     binding_only = True
                     reviewed_bindings_only = reviewed_duty_binding
                 else:
@@ -219,7 +230,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         "on",
     }:
         try:
-            from modstore_server.employee_task_market import dispatch_incident_via_market
+            from modstore_server.employee_task_market import (
+                dispatch_incident_via_market,
+            )
 
             market = dispatch_incident_via_market(event_id)
             if market.get("ok") and market.get("claimed"):
@@ -249,7 +262,9 @@ def _dispatch_incident_body(event_id: int) -> None:
     sf = get_session_factory()
     admin_id = _admin_user_id()
     if admin_id <= 0:
-        logger.warning("incident_bus: no user in DB, skip dispatch event_id=%s", event_id)
+        logger.warning(
+            "incident_bus: no user in DB, skip dispatch event_id=%s", event_id
+        )
         return
 
     binding_ids: List[str] = []
@@ -268,7 +283,9 @@ def _dispatch_incident_body(event_id: int) -> None:
         for b in (
             session.query(EmployeeTriggerBinding)
             .filter(EmployeeTriggerBinding.is_active.is_(True))
-            .order_by(EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc())
+            .order_by(
+                EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc()
+            )
             .all()
         ):
             eid_sub = str(b.employee_id or "").strip()
@@ -280,7 +297,9 @@ def _dispatch_incident_body(event_id: int) -> None:
             if filt and filt != str(ev.source or ""):
                 continue
             if reviewed_bindings_only:
-                from modstore_server.duty_workforce_contracts import matching_duty_event_contract
+                from modstore_server.duty_workforce_contracts import (
+                    matching_duty_event_contract,
+                )
 
                 if not matching_duty_event_contract(
                     eid_sub,
@@ -299,11 +318,14 @@ def _dispatch_incident_body(event_id: int) -> None:
 
     dispatched = 0
     team_members = (
-        _claimed_team_members(payload) if event_type == "ops.intake.customer_ticket" else set()
+        _claimed_team_members(payload)
+        if event_type == "ops.intake.customer_ticket"
+        else set()
     )
     if event_type == "ops.intake.customer_ticket" and team_claimed and not team_members:
         logger.warning(
-            "incident claimed without persisted team event_id=%s; stop fallback", event_id
+            "incident claimed without persisted team event_id=%s; stop fallback",
+            event_id,
         )
         return
     already_ran: set[str] = set(team_members)
@@ -343,7 +365,11 @@ def _dispatch_incident_body(event_id: int) -> None:
             exec_result = execute_employee_task(
                 eid_emp,
                 brief
-                + ("；沿用原团队，只跟进客户进度与阻塞，不另建修复计划。" if team_members else ""),
+                + (
+                    "；沿用原团队，只跟进客户进度与阻塞，不另建修复计划。"
+                    if team_members
+                    else ""
+                ),
                 employee_input,
                 user_id=0 if duty_input else admin_id,
             )

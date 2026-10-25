@@ -32,7 +32,8 @@ def _fhd_cs_bridge_base() -> str:
 
 def _cs_bridge_mod_id() -> str:
     return (
-        _facade().os.environ.get("XCAGI_CS_BRIDGE_MOD_ID") or "xcagi-customer-service-bridge"
+        _facade().os.environ.get("XCAGI_CS_BRIDGE_MOD_ID")
+        or "xcagi-customer-service-bridge"
     ).strip()
 
 
@@ -42,12 +43,16 @@ def _default_cs_intake_webhook_url() -> str:
         return explicit
     base = _facade()._fhd_cs_bridge_base()
     return (
-        f"{base}/api/mod/{_facade()._cs_bridge_mod_id()}/user-cs/demand-form/sync" if base else ""
+        f"{base}/api/mod/{_facade()._cs_bridge_mod_id()}/user-cs/demand-form/sync"
+        if base
+        else ""
     )
 
 
 def _default_landing_funnel_webhook_url() -> str:
-    explicit = (_facade().os.environ.get("XCAGI_LANDING_FUNNEL_WEBHOOK_URL") or "").strip()
+    explicit = (
+        _facade().os.environ.get("XCAGI_LANDING_FUNNEL_WEBHOOK_URL") or ""
+    ).strip()
     if explicit:
         return explicit
     base = _facade()._fhd_cs_bridge_base()
@@ -115,13 +120,19 @@ def _require_internal_api_key(request: _facade().Request) -> None:
         or ""
     ).strip()
     if not expected:
-        raise _facade().HTTPException(status_code=503, detail="internal api not configured")
+        raise _facade().HTTPException(
+            status_code=503, detail="internal api not configured"
+        )
     got = (request.headers.get("x-internal-api-key") or "").strip()
     if not got or not _facade().secrets.compare_digest(got, expected):
-        raise _facade().HTTPException(status_code=403, detail="invalid internal api key")
+        raise _facade().HTTPException(
+            status_code=403, detail="invalid internal api key"
+        )
 
 
-@_facade().router.post("/public/contact", summary="落地页联系表单（匿名，入库）", tags=["market"])
+@_facade().router.post(
+    "/public/contact", summary="落地页联系表单（匿名，入库）", tags=["market"]
+)
 def api_public_contact_submit(
     body: _facade().PublicContactDTO,
     request: _facade().Request,
@@ -133,10 +144,14 @@ def api_public_contact_submit(
     if not _CONTACT_EMAIL_RE.match(email):
         raise _facade().HTTPException(status_code=400, detail="邮箱格式不正确")
     if not body.privacy_agreed:
-        raise _facade().HTTPException(status_code=400, detail="请先阅读并同意用户协议与隐私政策")
+        raise _facade().HTTPException(
+            status_code=400, detail="请先阅读并同意用户协议与隐私政策"
+        )
     _facade()._public_contact_rate_allow(_facade()._public_contact_client_key(request))
     submitted_at = _facade().datetime.now(_facade().timezone.utc).isoformat()
-    privacy_version = (body.privacy_version or _facade().CONTACT_PRIVACY_VERSION).strip()[:32]
+    privacy_version = (
+        body.privacy_version or _facade().CONTACT_PRIVACY_VERSION
+    ).strip()[:32]
     privacy_url = (body.privacy_url or _facade().CONTACT_PRIVACY_URL).strip()[:256]
     meta = {
         "user_agent": (request.headers.get("user-agent") or "")[:512],
@@ -151,14 +166,21 @@ def api_public_contact_submit(
         meta["desktop_os"] = desktop_os
     meta["need_mobile"] = bool(body.need_mobile)
     source = (body.source or "home").strip()[:64] or "home"
-    tracking = _facade().normalize_contact_tracking_fields(body.campaign, body.medium, body.content)
+    tracking = _facade().normalize_contact_tracking_fields(
+        body.campaign, body.medium, body.content
+    )
     meta.update({k: v for (k, v) in tracking.items() if v})
     market_user_id: int | None = None
     try:
         from modstore_server.cs_intake_link import verify_cs_intake_token as _verify_cs
     except ModuleNotFoundError:
         _verify_cs = None
-    if body.cs_uid and body.cs_t and _verify_cs and _verify_cs(int(body.cs_uid), body.cs_t):
+    if (
+        body.cs_uid
+        and body.cs_t
+        and _verify_cs
+        and _verify_cs(int(body.cs_uid), body.cs_t)
+    ):
         market_user_id = int(body.cs_uid)
         source = "cs_intake"
         meta["market_user_id"] = market_user_id
@@ -195,7 +217,9 @@ def api_public_contact_submit(
                         row2.meta_json = _facade().json.dumps(meta, ensure_ascii=False)
                         session.commit()
             except _facade().SQLAlchemyError:
-                _facade().logger.debug("bind market_user_id to landing meta failed", exc_info=True)
+                _facade().logger.debug(
+                    "bind market_user_id to landing meta failed", exc_info=True
+                )
     webhook_payload = {
         "market_user_id": market_user_id,
         "landing_contact_id": new_id,
@@ -228,7 +252,9 @@ async def api_public_contact_company_match(
     request: _facade().Request,
     q: str = _facade().Query("", max_length=80),
     limit: int = _facade().Query(8, ge=1, le=20),
-    web: bool = _facade().Query(True, description="无自有库命中时用爬虫+Tavily 检索公司名"),
+    web: bool = _facade().Query(
+        True, description="无自有库命中时用爬虫+Tavily 检索公司名"
+    ),
 ):
     query = (q or "").strip()
     if len(query) < 2:
@@ -254,8 +280,12 @@ async def api_workbench_company_match(
     request: _facade().Request,
     q: str = _facade().Query("", max_length=80),
     limit: int = _facade().Query(8, ge=1, le=20),
-    web: bool = _facade().Query(True, description="无自有库命中时用爬虫+Tavily 检索公司名"),
-    user: _facade().Optional[_facade().User] = _facade().Depends(_facade()._optional_current_user),
+    web: bool = _facade().Query(
+        True, description="无自有库命中时用爬虫+Tavily 检索公司名"
+    ),
+    user: _facade().Optional[_facade().User] = _facade().Depends(
+        _facade()._optional_current_user
+    ),
 ):
     query = (q or "").strip()
     if len(query) < 2:
@@ -266,7 +296,11 @@ async def api_workbench_company_match(
             "suggestions": [],
             "found": False,
         }
-    rate_key = f"user:{int(user.id)}" if user else _facade()._public_contact_client_key(request)
+    rate_key = (
+        f"user:{int(user.id)}"
+        if user
+        else _facade()._public_contact_client_key(request)
+    )
     _facade()._workbench_company_match_rate_allow(rate_key)
     return await _facade().build_company_match_payload(query, limit, web)
 
@@ -348,7 +382,9 @@ def api_internal_contact_by_audit_code(
     with sf() as session:
         row = session.get(_facade().LandingContactSubmission, sid)
         if not row:
-            raise _facade().HTTPException(status_code=404, detail="未找到该审核码对应的需求单")
+            raise _facade().HTTPException(
+                status_code=404, detail="未找到该审核码对应的需求单"
+            )
         try:
             meta = _facade().json.loads(row.meta_json or "{}")
         except _facade().json.JSONDecodeError:
@@ -362,7 +398,9 @@ def api_internal_contact_by_audit_code(
                 )
             if bind and (not bound):
                 meta["market_user_id"] = uid
-                meta["redeemed_at"] = _facade().datetime.now(_facade().timezone.utc).isoformat()
+                meta["redeemed_at"] = (
+                    _facade().datetime.now(_facade().timezone.utc).isoformat()
+                )
                 row.meta_json = _facade().json.dumps(meta, ensure_ascii=False)
                 session.commit()
         return {"ok": True, "submission": _facade()._landing_submission_payload(row)}
@@ -386,7 +424,9 @@ def api_internal_cs_intake_ensure_enterprise_profile(
     _facade()._require_internal_api_key(request)
     uid = int(body.market_user_id)
     try:
-        requested_mod_ids = _facade().normalize_enterprise_entitlement_mod_ids(body.mod_ids)
+        requested_mod_ids = _facade().normalize_enterprise_entitlement_mod_ids(
+            body.mod_ids
+        )
     except ValueError as exc:
         raise _facade().HTTPException(status_code=400, detail=str(exc)) from exc
     sf = _facade().get_session_factory()
@@ -523,9 +563,13 @@ def api_internal_contact_link_crm(request: _facade().Request, body: LinkCrmDTO):
     _facade()._require_internal_api_key(request)
     sf = _facade().get_session_factory()
     with sf() as session:
-        row = session.get(_facade().LandingContactSubmission, int(body.landing_contact_id))
+        row = session.get(
+            _facade().LandingContactSubmission, int(body.landing_contact_id)
+        )
         if not row:
-            raise _facade().HTTPException(status_code=404, detail="未找到该联系表单记录")
+            raise _facade().HTTPException(
+                status_code=404, detail="未找到该联系表单记录"
+            )
         try:
             meta = _facade().json.loads(row.meta_json or "{}")
         except _facade().json.JSONDecodeError:
@@ -534,10 +578,14 @@ def api_internal_contact_link_crm(request: _facade().Request, body: LinkCrmDTO):
             bound = int(meta.get("market_user_id") or 0)
             uid = int(body.market_user_id)
             if bound and bound != uid:
-                raise _facade().HTTPException(status_code=409, detail="market_user_id 与记录不一致")
+                raise _facade().HTTPException(
+                    status_code=409, detail="market_user_id 与记录不一致"
+                )
             meta["market_user_id"] = uid
         meta["crm_opportunity_id"] = int(body.crm_opportunity_id)
-        meta["crm_linked_at"] = _facade().datetime.now(_facade().timezone.utc).isoformat()
+        meta["crm_linked_at"] = (
+            _facade().datetime.now(_facade().timezone.utc).isoformat()
+        )
         row.meta_json = _facade().json.dumps(meta, ensure_ascii=False)
         session.commit()
     return {
@@ -550,8 +598,12 @@ def api_internal_contact_link_crm(request: _facade().Request, body: LinkCrmDTO):
 class RegisterDTO(_facade().BaseModel):
     username: str = _facade().Field(..., min_length=2, max_length=64)
     password: str = _facade().Field(..., min_length=6)
-    email: str = _facade().Field(default="", max_length=128, description="选填；填写时必须验证")
-    verification_code: str = _facade().Field(default="", max_length=16, description="邮箱验证码")
+    email: str = _facade().Field(
+        default="", max_length=128, description="选填；填写时必须验证"
+    )
+    verification_code: str = _facade().Field(
+        default="", max_length=16, description="邮箱验证码"
+    )
 
 
 class LoginDTO(_facade().BaseModel):
@@ -617,7 +669,9 @@ def _background_send_verification_email(email: str, code: str, purpose: str) -> 
         try:
             _facade()._delete_unused_verification_code(email, code)
         except RECOVERABLE_ERRORS:
-            _facade().logging.exception("Failed to remove verification code after email failure")
+            _facade().logging.exception(
+                "Failed to remove verification code after email failure"
+            )
 
 
 def _verify_and_consume_verification_code(email: str, code: str) -> None:
@@ -656,7 +710,9 @@ class InternalSsoIssueTokenDTO(_facade().BaseModel):
 
 
 @_facade().router.post("/auth/internal/sso-issue-token", include_in_schema=False)
-def api_internal_sso_issue_token(body: InternalSsoIssueTokenDTO, request: _facade().Request):
+def api_internal_sso_issue_token(
+    body: InternalSsoIssueTokenDTO, request: _facade().Request
+):
     """FHD OIDC 回调后签发 MODstore JWT（Header: X-Internal-Api-Key）。"""
     _facade()._require_internal_api_key(request)
     from modstore_server.auth_service import issue_market_tokens_for_sso_identity
@@ -714,9 +770,9 @@ def api_delete_avatar(
 @_facade().router.get("/auth/avatar/file", summary="读取当前用户头像（需登录）")
 def api_avatar_file(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
-    v: _facade()
-    .Optional[int] = _facade()
-    .Query(None, description="与 avatar_url 中 v 一致，仅用于缓存校验"),
+    v: _facade().Optional[int] = _facade().Query(
+        None, description="与 avatar_url 中 v 一致，仅用于缓存校验"
+    ),
 ):
     rel = _facade().avatar_path_column(user)
     if not rel:

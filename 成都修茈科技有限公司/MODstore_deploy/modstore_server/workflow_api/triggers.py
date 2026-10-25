@@ -24,11 +24,17 @@ async def list_workflow_triggers(
     user: User = Depends(_get_current_user),
 ):
     workflow = (
-        db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
+        db.query(Workflow)
+        .filter(Workflow.id == workflow_id, Workflow.user_id == user.id)
+        .first()
     )
     if not workflow:
         raise HTTPException(404, "工作流不存在")
-    rows = db.query(WorkflowTrigger).filter(WorkflowTrigger.workflow_id == workflow_id).all()
+    rows = (
+        db.query(WorkflowTrigger)
+        .filter(WorkflowTrigger.workflow_id == workflow_id)
+        .all()
+    )
     return [
         {
             "id": r.id,
@@ -49,7 +55,9 @@ async def create_workflow_trigger(
     user: User = Depends(_get_current_user),
 ):
     workflow = (
-        db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
+        db.query(Workflow)
+        .filter(Workflow.id == workflow_id, Workflow.user_id == user.id)
+        .first()
     )
     if not workflow:
         raise HTTPException(404, "工作流不存在")
@@ -79,7 +87,9 @@ async def delete_workflow_trigger(
     user: User = Depends(_get_current_user),
 ):
     workflow = (
-        db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
+        db.query(Workflow)
+        .filter(Workflow.id == workflow_id, Workflow.user_id == user.id)
+        .first()
     )
     if not workflow:
         raise HTTPException(404, "工作流不存在")
@@ -112,7 +122,9 @@ async def webhook_run_workflow(
     user: User = Depends(_get_current_user),
 ):
     workflow = (
-        db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user.id).first()
+        db.query(Workflow)
+        .filter(Workflow.id == workflow_id, Workflow.user_id == user.id)
+        .first()
     )
     if not workflow:
         raise HTTPException(404, "工作流不存在")

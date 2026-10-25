@@ -17,8 +17,12 @@ from modstore_server.all_hands_employee import EmployeeReporter
 from modstore_server.all_hands_policy import (
     CRAFT_WORKSHOP_STANDBY_IDS as CRAFT_WORKSHOP_STANDBY_IDS,
 )
-from modstore_server.all_hands_policy import MAX_ALL_HANDS_EMPLOYEES as MAX_ALL_HANDS_EMPLOYEES
-from modstore_server.all_hands_policy import _craft_workshop_pkg_ids as _craft_workshop_pkg_ids
+from modstore_server.all_hands_policy import (
+    MAX_ALL_HANDS_EMPLOYEES as MAX_ALL_HANDS_EMPLOYEES,
+)
+from modstore_server.all_hands_policy import (
+    _craft_workshop_pkg_ids as _craft_workshop_pkg_ids,
+)
 from modstore_server.all_hands_policy import (
     _should_standby_manifest_report as _should_standby_manifest_report,
 )
@@ -57,7 +61,9 @@ from modstore_server.all_hands_templates import (
 from modstore_server.all_hands_templates import (
     ALL_HANDS_QA_TASK_TEMPLATE as ALL_HANDS_QA_TASK_TEMPLATE,
 )
-from modstore_server.all_hands_templates import ALL_HANDS_TASK_TEMPLATE as ALL_HANDS_TASK_TEMPLATE
+from modstore_server.all_hands_templates import (
+    ALL_HANDS_TASK_TEMPLATE as ALL_HANDS_TASK_TEMPLATE,
+)
 from modstore_server.daily_employee_briefs import (
     collect_yuangon_pack_excerpt,
     resolve_daily_brief_research_brief,
@@ -247,7 +253,9 @@ async def synthesize_all_hands_answer(
     )
 
 
-async def synthesize_meeting_minutes(*, report: Dict[str, Any], user_id: int) -> Dict[str, Any]:
+async def synthesize_meeting_minutes(
+    *, report: Dict[str, Any], user_id: int
+) -> Dict[str, Any]:
     """将已成功生成的 ``build_all_hands_report`` 结果压缩为五段式「会议摘要」正文。
 
     返回 ``{ text, generated_at, model, error }``；失败时 ``text`` 可为空且 ``error`` 非空。

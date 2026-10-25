@@ -19,7 +19,9 @@ def completed_receipt(
 ) -> Dict[str, Any] | None:
     """Match the exact callback first, then a redeploy of the same loop."""
 
-    normalized = [dict(raw) if isinstance(raw, Mapping) else {} for raw in reversed(list(rows))]
+    normalized = [
+        dict(raw) if isinstance(raw, Mapping) else {} for raw in reversed(list(rows))
+    ]
 
     def _matches_scope(row: Mapping[str, Any]) -> bool:
         return (
@@ -34,7 +36,8 @@ def completed_receipt(
         (
             row
             for row in normalized
-            if _matches_scope(row) and str(row.get("workflow_run_id") or "") == workflow_run_id
+            if _matches_scope(row)
+            and str(row.get("workflow_run_id") or "") == workflow_run_id
         ),
         None,
     )
@@ -48,7 +51,8 @@ def completed_receipt(
         (
             row
             for row in normalized
-            if _matches_scope(row) and str(row.get("run_id") or "").strip() == requested_run_id
+            if _matches_scope(row)
+            and str(row.get("run_id") or "").strip() == requested_run_id
         ),
         None,
     )

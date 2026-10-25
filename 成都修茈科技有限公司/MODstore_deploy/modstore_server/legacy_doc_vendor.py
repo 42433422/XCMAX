@@ -116,7 +116,9 @@ def _convert_textutil(src: Path, dest: Path) -> bool:
     return dest.is_file() and is_zip_docx(dest)
 
 
-def ensure_docx_for_extract(src_path: Path, work_dir: Path) -> Tuple[Path, Dict[str, Any]]:
+def ensure_docx_for_extract(
+    src_path: Path, work_dir: Path
+) -> Tuple[Path, Dict[str, Any]]:
     """返回可用于 OOXML 解析的 .docx 路径及转换元数据。"""
     src_path = Path(src_path).resolve()
     work_dir = Path(work_dir).resolve()
@@ -134,7 +136,9 @@ def ensure_docx_for_extract(src_path: Path, work_dir: Path) -> Tuple[Path, Dict[
 
     if not needs_legacy_conversion(src_path):
         if src_path.suffix.lower() == ".docx":
-            raise ValueError("文件扩展名为 .docx 但不是有效的 OOXML 包（可能是误命名的旧版 .doc）")
+            raise ValueError(
+                "文件扩展名为 .docx 但不是有效的 OOXML 包（可能是误命名的旧版 .doc）"
+            )
         raise ValueError(f"不支持的文件类型：{src_path.suffix or '(无后缀)'}")
 
     dest = work_dir / f"{src_path.stem}_legacy.docx"

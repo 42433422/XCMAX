@@ -129,7 +129,9 @@ def _merge_scope_verdict(
             return {"ok": False, "reason": "github_pr_absolute_forbidden_scope"}
         if not allow_generated_contract and file_matches_any_glob(filename, forbidden):
             return {"ok": False, "reason": "github_pr_forbidden_scope"}
-        if not allow_generated_contract and not file_matches_any_glob(filename, allowed_scope):
+        if not allow_generated_contract and not file_matches_any_glob(
+            filename, allowed_scope
+        ):
             return {"ok": False, "reason": "github_pr_outside_low_risk_scope"}
         try:
             additions = int(item.get("additions"))
@@ -146,7 +148,9 @@ def _merge_scope_verdict(
         json.dumps(
             {
                 "contract": (
-                    "generated_para_merge" if allow_generated_contract else "legacy_low_risk_scope"
+                    "generated_para_merge"
+                    if allow_generated_contract
+                    else "legacy_low_risk_scope"
                 ),
                 "files": sorted(normalized_files),
                 "line_changes": line_changes,
@@ -161,7 +165,9 @@ def _merge_scope_verdict(
         "file_count": len(normalized_files),
         "line_changes": line_changes,
         "scope_mode": (
-            "generated_para_merge" if allow_generated_contract else "legacy_low_risk_scope"
+            "generated_para_merge"
+            if allow_generated_contract
+            else "legacy_low_risk_scope"
         ),
         "scope_digest": scope_digest,
     }
@@ -304,7 +310,8 @@ def verify_github_self_maintenance_merge(
         if (
             not isinstance(check, dict)
             or str(check.get("status") or "").lower() != "completed"
-            or str(check.get("conclusion") or "").lower() not in _SUCCESSFUL_CHECK_CONCLUSIONS
+            or str(check.get("conclusion") or "").lower()
+            not in _SUCCESSFUL_CHECK_CONCLUSIONS
         ):
             return {"ok": False, "reason": "github_check_run_not_successful"}
 
@@ -397,7 +404,10 @@ def verify_github_self_maintenance_veto(
                 continue
             head = pull.get("head") if isinstance(pull.get("head"), dict) else {}
             base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
-            if str(head.get("ref") or "") == safe_head and str(base.get("ref") or "") == safe_base:
+            if (
+                str(head.get("ref") or "") == safe_head
+                and str(base.get("ref") or "") == safe_base
+            ):
                 candidates.append(pull)
     if len(candidates) != 1:
         return {"ok": False, "reason": "github_pull_not_unique"}
@@ -416,7 +426,9 @@ def verify_github_self_maintenance_veto(
     base = pull.get("base") if isinstance(pull.get("base"), dict) else {}
     labels = pull.get("labels") if isinstance(pull.get("labels"), list) else []
     label_names = {
-        str(label.get("name") or "").strip().lower() for label in labels if isinstance(label, dict)
+        str(label.get("name") or "").strip().lower()
+        for label in labels
+        if isinstance(label, dict)
     }
     if (
         detail_number != pull_number

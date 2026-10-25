@@ -1,4 +1,5 @@
 """In-process rate limit policy (token bucket)."""
+
 from __future__ import annotations
 
 import time

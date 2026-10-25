@@ -15,7 +15,10 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from .models_base import Base
 from .models_catalog import UserMod
 from .models_cs import CustomerServiceStandard
-from .models_db_defaults import DEFAULT_CUSTOMER_SERVICE_STANDARDS, DEFAULT_PLAN_TEMPLATES
+from .models_db_defaults import (
+    DEFAULT_CUSTOMER_SERVICE_STANDARDS,
+    DEFAULT_PLAN_TEMPLATES,
+)
 from .models_order import PlanTemplate, UserPlan
 from .models_user import User
 
@@ -82,7 +85,9 @@ def dispose_engine() -> None:
     _SessionFactory = None
 
 
-def _sqlite_add_column_if_missing(engine, table: str, column: str, ddl_type: str) -> None:
+def _sqlite_add_column_if_missing(
+    engine, table: str, column: str, ddl_type: str
+) -> None:
     """SQLite 表结构演进：缺列时 ALTER ADD（幂等）。"""
     with engine.begin() as conn:
         rows = conn.execute(text(f"PRAGMA table_info({table})")).fetchall()
@@ -135,11 +140,17 @@ def _maybe_bootstrap_first_admin() -> None:
         if session.query(User).count() > 0:
             return
 
-    username = (os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_USERNAME") or "admin").strip() or "admin"
-    password = (os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PASSWORD") or "admin123").strip()
+    username = (
+        os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_USERNAME") or "admin"
+    ).strip() or "admin"
+    password = (
+        os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PASSWORD") or "admin123"
+    ).strip()
     if not password:
         return
-    email_raw = (os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_EMAIL") or "admin@localhost").strip()
+    email_raw = (
+        os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_EMAIL") or "admin@localhost"
+    ).strip()
     email = (email_raw or "admin@localhost").lower()
 
     try:
@@ -147,9 +158,14 @@ def _maybe_bootstrap_first_admin() -> None:
     except ValueError:
         return
 
-    plan_id = (os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PLAN") or "plan_pro").strip() or "plan_pro"
+    plan_id = (
+        os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PLAN") or "plan_pro"
+    ).strip() or "plan_pro"
     try:
-        days = int((os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PLAN_DAYS") or "365").strip() or "365")
+        days = int(
+            (os.environ.get("MODSTORE_BOOTSTRAP_ADMIN_PLAN_DAYS") or "365").strip()
+            or "365"
+        )
     except ValueError:
         days = 365
 
@@ -230,7 +246,9 @@ def init_db(db_path: Optional[Path] = None):
             ("staged_commit_sha", "VARCHAR(64) DEFAULT ''"),
         ):
             try:
-                _add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
+                _add_column_if_missing(
+                    engine, "employee_change_requests", column, ddl_type
+                )
             except RECOVERABLE_ERRORS:
                 pass
         try:
@@ -265,11 +283,15 @@ def init_db(db_path: Optional[Path] = None):
         _maybe_bootstrap_first_admin()
         return
     try:
-        _sqlite_add_column_if_missing(engine, "catalog_items", "industry", "TEXT DEFAULT '通用'")
+        _sqlite_add_column_if_missing(
+            engine, "catalog_items", "industry", "TEXT DEFAULT '通用'"
+        )
     except RECOVERABLE_ERRORS:
         pass
     try:
-        _sqlite_add_column_if_missing(engine, "users", "default_llm_json", "TEXT DEFAULT ''")
+        _sqlite_add_column_if_missing(
+            engine, "users", "default_llm_json", "TEXT DEFAULT ''"
+        )
     except RECOVERABLE_ERRORS:
         pass
     try:
@@ -283,7 +305,9 @@ def init_db(db_path: Optional[Path] = None):
     except RECOVERABLE_ERRORS:
         pass
     try:
-        _sqlite_add_column_if_missing(engine, "catalog_items", "industry_code", "TEXT DEFAULT ''")
+        _sqlite_add_column_if_missing(
+            engine, "catalog_items", "industry_code", "TEXT DEFAULT ''"
+        )
     except RECOVERABLE_ERRORS:
         pass
     try:
@@ -317,7 +341,9 @@ def init_db(db_path: Optional[Path] = None):
     except RECOVERABLE_ERRORS:
         pass
     try:
-        _sqlite_add_column_if_missing(engine, "catalog_items", "graph_snapshot", "TEXT DEFAULT ''")
+        _sqlite_add_column_if_missing(
+            engine, "catalog_items", "graph_snapshot", "TEXT DEFAULT ''"
+        )
     except RECOVERABLE_ERRORS:
         pass
     for column, ddl_type in (
@@ -334,7 +360,9 @@ def init_db(db_path: Optional[Path] = None):
         except RECOVERABLE_ERRORS:
             pass
     try:
-        _sqlite_add_column_if_missing(engine, "users", "experience", "INTEGER DEFAULT 0 NOT NULL")
+        _sqlite_add_column_if_missing(
+            engine, "users", "experience", "INTEGER DEFAULT 0 NOT NULL"
+        )
     except RECOVERABLE_ERRORS:
         pass
     try:
@@ -348,7 +376,9 @@ def init_db(db_path: Optional[Path] = None):
     except RECOVERABLE_ERRORS:
         pass
     try:
-        _sqlite_add_column_if_missing(engine, "workflows", "migration_status", "TEXT DEFAULT ''")
+        _sqlite_add_column_if_missing(
+            engine, "workflows", "migration_status", "TEXT DEFAULT ''"
+        )
     except RECOVERABLE_ERRORS:
         pass
     try:
@@ -365,7 +395,9 @@ def init_db(db_path: Optional[Path] = None):
         ("staged_commit_sha", "TEXT DEFAULT ''"),
     ):
         try:
-            _sqlite_add_column_if_missing(engine, "employee_change_requests", column, ddl_type)
+            _sqlite_add_column_if_missing(
+                engine, "employee_change_requests", column, ddl_type
+            )
         except RECOVERABLE_ERRORS:
             pass
     try:
@@ -395,7 +427,9 @@ def init_default_plan_templates() -> None:
     sf = get_session_factory()
     with sf() as session:
         for row in defaults:
-            exists = session.query(PlanTemplate).filter(PlanTemplate.id == row["id"]).first()
+            exists = (
+                session.query(PlanTemplate).filter(PlanTemplate.id == row["id"]).first()
+            )
             if exists:
                 exists.name = row["name"]
                 exists.description = row["description"]

@@ -618,8 +618,12 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
@@ -646,8 +650,12 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
@@ -674,8 +682,12 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+            ) as mock_gen,
+            patch(
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+            ) as mock_store,
         ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok789"

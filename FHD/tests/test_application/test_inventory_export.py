@@ -378,7 +378,9 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     client, _factory, _engine = inventory_http
     params = {"keyword": "不存在"} if kind == "empty" else {}
     if kind == "limit":
-        monkeypatch.setattr("app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+        monkeypatch.setattr(
+            "app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2
+        )
     if kind == "failure":
         service = MagicMock()
         service.export_inventory.side_effect = RuntimeError("private detail")

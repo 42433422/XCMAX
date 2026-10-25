@@ -92,7 +92,12 @@ def consume_llm_credit(
         amount_yuan = min_charge
     if (os.environ.get("PAYMENT_BACKEND") or "").strip().lower() == "java":
         return "java_wallet"
-    wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
+    wallet = (
+        session.query(Wallet)
+        .filter(Wallet.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
     if not wallet or _money(wallet.balance) < amount_yuan:
         raise HTTPException(
             402,

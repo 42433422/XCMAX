@@ -72,7 +72,11 @@ def usage_from_response(
     )
     total = int(usage.get("total_tokens") or usage.get("totalTokenCount") or 0)
     if prompt or completion or total:
-        return UsageMeter(prompt, completion, total or prompt + completion, estimated=False)
-    prompt = sum(estimate_tokens_from_message_content(row.get("content")) for row in messages)
+        return UsageMeter(
+            prompt, completion, total or prompt + completion, estimated=False
+        )
+    prompt = sum(
+        estimate_tokens_from_message_content(row.get("content")) for row in messages
+    )
     completion = estimate_tokens_from_text(content)
     return UsageMeter(prompt, completion, prompt + completion, estimated=True)

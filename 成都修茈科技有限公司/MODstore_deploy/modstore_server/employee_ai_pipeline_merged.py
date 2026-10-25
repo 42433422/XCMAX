@@ -87,7 +87,9 @@ async def stage_parse_intent(
     if not isinstance(data, dict):
         return (None, "LLM 须返回 JSON 对象")
     raw_id = (
-        _facade().re.sub("[^a-z0-9\\-_]", "-", str(data.get("id") or "").lower().strip()).strip("-")
+        _facade()
+        .re.sub("[^a-z0-9\\-_]", "-", str(data.get("id") or "").lower().strip())
+        .strip("-")
     )
     safe_id = raw_id[:32] or "my-employee"
     return (
@@ -112,7 +114,9 @@ async def stage_resolve_workflow(
         _facade().Callable[[], _facade().Awaitable[_facade().Dict[str, _facade().Any]]]
     ] = None,
     score_threshold: float = 0.55,
-    on_progress: _facade().Optional[_facade().Callable[[str], _facade().Awaitable[None]]] = None,
+    on_progress: _facade().Optional[
+        _facade().Callable[[str], _facade().Awaitable[None]]
+    ] = None,
 ) -> _facade().Tuple[_facade().Optional[WorkflowChoice], str]:
     """LLM-rank eligible workflows; fall back to generation if score is below threshold."""
     if not eligible_workflows:
@@ -138,7 +142,11 @@ async def stage_resolve_workflow(
             "",
         )
     cands = [
-        {"index": i, "name": w.get("name", ""), "description": str(w.get("description", ""))[:120]}
+        {
+            "index": i,
+            "name": w.get("name", ""),
+            "description": str(w.get("description", ""))[:120],
+        }
         for i, w in enumerate(eligible_workflows)
     ]
     msg = f"员工意图：{intent.role}（{intent.scenario}）\n候选工作流：{_facade().json.dumps(cands, ensure_ascii=False)}"
@@ -245,12 +253,15 @@ async def stage_design_v2(
         and ("direct_python" not in actions.get("handlers", []))
     ):
         actions["handlers"] = list(actions.get("handlers") or []) + ["echo"]
-    if _facade()._is_project_analysis_intent(intent) and "agent" not in actions.get("handlers", []):
+    if _facade()._is_project_analysis_intent(intent) and "agent" not in actions.get(
+        "handlers", []
+    ):
         actions["handlers"] = ["agent"]
         if not isinstance(actions.get("agent"), dict):
             actions["agent"] = {}
         actions["agent"].setdefault(
-            "workspace", {"mode": "user_project", "requires_project_root": True, "read_only": True}
+            "workspace",
+            {"mode": "user_project", "requires_project_root": True, "read_only": True},
         )
     declared_handlers = list(actions.get("handlers") or [])
     is_agent = "agent" in declared_handlers
@@ -292,7 +303,10 @@ async def stage_design_v2(
         }
     elif is_agent:
         existing = agent_raw["model"]
-        if isinstance(existing, dict) and int(existing.get("max_tokens") or 4000) > 4096:
+        if (
+            isinstance(existing, dict)
+            and int(existing.get("max_tokens") or 4000) > 4096
+        ):
             existing["max_tokens"] = 2048
     cog_raw["agent"] = agent_raw
     return (
@@ -334,7 +348,8 @@ def _build_employee_runtime_prompt(
         else "当前未绑定专属工作流；需要执行复杂任务时先拆解步骤，并明确哪些步骤需要后续配置工作流或工具。"
     )
     skill_line = (
-        "可用候选技能包括：" + "、".join((f"{s.name}（{s.brief}）" for s in suggested_skills[:6]))
+        "可用候选技能包括："
+        + "、".join((f"{s.name}（{s.brief}）" for s in suggested_skills[:6]))
         if suggested_skills
         else "暂无已验证技能；不要声称已经调用外部工具或系统。"
     )
@@ -378,7 +393,9 @@ def _quality_gate_system_prompt(
             and (workflow_choice.workflow_name not in text)
         ):
             return fallback
-        if suggested_skills and (not any((s.name in text for s in suggested_skills[:3]))):
+        if suggested_skills and (
+            not any((s.name in text for s in suggested_skills[:3]))
+        ):
             return fallback
     return text
 
@@ -452,7 +469,9 @@ def stage_assemble(
     v2: EmployeeConfigV2,
     skills: _facade().List[SuggestedSkill],
     pricing: _facade().Optional[PricingHint],
-) -> _facade().Tuple[_facade().Optional[_facade().Dict[str, _facade().Any]], _facade().List[str]]:
+) -> _facade().Tuple[
+    _facade().Optional[_facade().Dict[str, _facade().Any]], _facade().List[str]
+]:
     from modman.manifest_util import validate_manifest_dict
     from modstore_server.xcagi_host_profile import (
         merge_workflow_employee_for_manifest,
@@ -462,7 +481,10 @@ def stage_assemble(
     eid = intent.id
     hp_norm, _ = normalize_xcagi_host_profile({"panel_kind": "mod_http"})
     wf_row = merge_workflow_employee_for_manifest(
-        employee_id=eid, label=intent.name, panel_summary=intent.scenario, host_profile=hp_norm
+        employee_id=eid,
+        label=intent.name,
+        panel_summary=intent.scenario,
+        host_profile=hp_norm,
     )
     if workflow_choice and workflow_choice.workflow_id:
         wf_row["workflow_id"] = workflow_choice.workflow_id
@@ -474,7 +496,11 @@ def stage_assemble(
         metadata["suggested_skills"] = [_facade().asdict(s) for s in skills]
     if pricing:
         metadata["suggested_pricing"] = _facade().asdict(pricing)
-    if workflow_choice and workflow_choice.workflow_id and (not workflow_choice.sandbox_passed):
+    if (
+        workflow_choice
+        and workflow_choice.workflow_id
+        and (not workflow_choice.sandbox_passed)
+    ):
         metadata["workflow_needs_sandbox"] = True
     v2_dict = _facade().asdict(v2)
     v2_dict.setdefault(
@@ -487,7 +513,9 @@ def stage_assemble(
             "description": intent.scenario,
         },
     )
-    cognition = v2_dict.get("cognition") if isinstance(v2_dict.get("cognition"), dict) else {}
+    cognition = (
+        v2_dict.get("cognition") if isinstance(v2_dict.get("cognition"), dict) else {}
+    )
     caps = _facade()._default_capabilities(
         pid=intent.id,
         name=intent.name,
@@ -503,10 +531,18 @@ def stage_assemble(
             caps, label=intent.name, description=intent.scenario
         )
     v2_dict["cognition"] = cognition
-    collab = v2_dict.get("collaboration") if isinstance(v2_dict.get("collaboration"), dict) else {}
-    workflow = collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
+    collab = (
+        v2_dict.get("collaboration")
+        if isinstance(v2_dict.get("collaboration"), dict)
+        else {}
+    )
+    workflow = (
+        collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
+    )
     workflow["workflow_id"] = (
-        workflow_choice.workflow_id if workflow_choice and workflow_choice.workflow_id else 0
+        workflow_choice.workflow_id
+        if workflow_choice and workflow_choice.workflow_id
+        else 0
     )
     workflow["name"] = (
         workflow_choice.workflow_name
@@ -525,7 +561,11 @@ def stage_assemble(
                 actions_in_v2["agent"] = {}
             actions_in_v2["agent"].setdefault(
                 "workspace",
-                {"mode": "user_project", "requires_project_root": True, "read_only": True},
+                {
+                    "mode": "user_project",
+                    "requires_project_root": True,
+                    "read_only": True,
+                },
             )
         v2_dict["actions"] = actions_in_v2
     manifest: _facade().Dict[str, _facade().Any] = {
@@ -608,8 +648,12 @@ def _build_vibe_coding_prompt(
 class GeneratedCode:
     employee_py: str = ""
     vendor_modules: _facade().Dict[str, str] = _facade().field(default_factory=dict)
-    rule_spec: _facade().Dict[str, _facade().Any] = _facade().field(default_factory=dict)
-    asset_manifest: _facade().Dict[str, _facade().Any] = _facade().field(default_factory=dict)
+    rule_spec: _facade().Dict[str, _facade().Any] = _facade().field(
+        default_factory=dict
+    )
+    asset_manifest: _facade().Dict[str, _facade().Any] = _facade().field(
+        default_factory=dict
+    )
     runtime_kind: str = ""
     code_source: str = ""
     warnings: _facade().List[str] = _facade().field(default_factory=list)
@@ -656,10 +700,14 @@ async def stage_generate_code(
         _strip_code_fence,
         sanitize_employee_stem,
     )
-    from modstore_server.script_agent.llm_output_sanitize import finalize_extracted_python
+    from modstore_server.script_agent.llm_output_sanitize import (
+        finalize_extracted_python,
+    )
 
     result = _facade().GeneratedCode()
-    handlers = list(manifest.get("employee_config_v2", {}).get("actions", {}).get("handlers", []))
+    handlers = list(
+        manifest.get("employee_config_v2", {}).get("actions", {}).get("handlers", [])
+    )
     pack_id = manifest.get("id", "unknown")
     employee_id = pack_id
     emp = manifest.get("employee", {}) or {}
@@ -684,7 +732,9 @@ async def stage_generate_code(
         if any((fn(brief) for fn in _dp_triggers)):
             handlers = ["direct_python"]
             v2 = manifest.get("employee_config_v2", {})
-            actions = v2.get("actions", {}) if isinstance(v2.get("actions"), dict) else {}
+            actions = (
+                v2.get("actions", {}) if isinstance(v2.get("actions"), dict) else {}
+            )
             actions["handlers"] = handlers
             actions.pop("agent", None)
             actions["direct_python"] = {"module": stem, "action": "convert"}
@@ -727,17 +777,27 @@ async def stage_generate_code(
         from modstore_server.word_generate_runtime import build_word_generate_rule_spec
 
         _brief_lower = (brief or "").lower()
-        _has_word_signal = any((k in _brief_lower for k in ("word", "docx", ".doc", "文档")))
-        _has_excel_signal = any((k in _brief_lower for k in ("excel", "xlsx", ".xls", "电子表格")))
+        _has_word_signal = any(
+            (k in _brief_lower for k in ("word", "docx", ".doc", "文档"))
+        )
+        _has_excel_signal = any(
+            (k in _brief_lower for k in ("excel", "xlsx", ".xls", "电子表格"))
+        )
         _has_pdf_signal = any((k in _brief_lower for k in ("pdf", ".pdf")))
         _has_ppt_signal = any((k in _brief_lower for k in ("ppt", "pptx", "演示")))
         _has_txt_signal = any((k in _brief_lower for k in ("txt", ".txt", "纯文本")))
         _has_csv_signal = any((k in _brief_lower for k in ("csv", ".csv", "逗号分隔")))
         _has_read_signal = any(
-            (k in _brief_lower for k in ("读取", "提取", "解析", "read", "extract", "全量"))
+            (
+                k in _brief_lower
+                for k in ("读取", "提取", "解析", "read", "extract", "全量")
+            )
         )
         _has_write_signal = any(
-            (k in _brief_lower for k in ("生成", "写入", "write", "generate", "重建", "render"))
+            (
+                k in _brief_lower
+                for k in ("生成", "写入", "write", "generate", "重建", "render")
+            )
         )
         if _has_word_signal:
             if _has_write_signal and (not _has_read_signal):
@@ -799,12 +859,18 @@ async def stage_generate_code(
         runtime_kind = rule_spec.get("runtime_kind", "")
         result.runtime_kind = runtime_kind
         result.employee_py = render_direct_python_asset_worker(
-            employee_id=employee_id, label=label, runtime_module=runtime_mod, rule_spec=rule_spec
+            employee_id=employee_id,
+            label=label,
+            runtime_module=runtime_mod,
+            rule_spec=rule_spec,
         )
         result.code_source = "asset_pipeline_llm"
         try:
             from modstore_server.llm_chat_proxy import chat_dispatch
-            from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+            from modstore_server.llm_key_resolver import (
+                platform_api_key,
+                platform_base_url,
+            )
 
             prov = "xiaomi"
             api_key = platform_api_key(prov)
@@ -849,7 +915,9 @@ async def stage_generate_code(
                             forbid_reasoning_fallback=True,
                         )
                         if repair_res.get("ok"):
-                            code = _strip_code_fence(str(repair_res.get("content") or ""))
+                            code = _strip_code_fence(
+                                str(repair_res.get("content") or "")
+                            )
                             code = finalize_extracted_python(code)[0]
                     if _compile_check(code) is None:
                         sec_err = _security_check(code)
@@ -868,7 +936,9 @@ async def stage_generate_code(
                             }
                             result.code_source = "vibe_coding_validated"
                     else:
-                        result.warnings.append("LLM 生成的 convert.py 编译失败，降级到内置模板")
+                        result.warnings.append(
+                            "LLM 生成的 convert.py 编译失败，降级到内置模板"
+                        )
                 else:
                     result.warnings.append(
                         f"LLM 调用失败: {res.get('error', '')[:100]}，降级到内置模板"
@@ -878,7 +948,9 @@ async def stage_generate_code(
         except _facade().RECOVERABLE_ERRORS as e:
             import traceback
 
-            result.warnings.append(f"LLM 代码生成异常: {type(e).__name__}: {e}，降级到内置模板")
+            result.warnings.append(
+                f"LLM 代码生成异常: {type(e).__name__}: {e}，降级到内置模板"
+            )
             result.warnings.append(traceback.format_exc()[-500:])
         if result.code_source != "vibe_coding_validated":
             runtime_modules = render_runtime_modules(rule_spec)
@@ -888,7 +960,10 @@ async def stage_generate_code(
         result.code_source = "agent_llm_impl"
         try:
             from modstore_server.llm_chat_proxy import chat_dispatch
-            from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+            from modstore_server.llm_key_resolver import (
+                platform_api_key,
+                platform_base_url,
+            )
 
             prov = "xiaomi"
             api_key = platform_api_key(prov)
@@ -931,7 +1006,9 @@ async def stage_generate_code(
                             forbid_reasoning_fallback=True,
                         )
                         if repair_res.get("ok"):
-                            code = _strip_code_fence(str(repair_res.get("content") or ""))
+                            code = _strip_code_fence(
+                                str(repair_res.get("content") or "")
+                            )
                             code = finalize_extracted_python(code)[0]
                     if _compile_check(code) is None:
                         sec_err = _security_check(code)
@@ -948,7 +1025,9 @@ async def stage_generate_code(
                                 "LLM 生成的 agent 实现未通过安全/行为校验，使用兜底实现"
                             )
                     else:
-                        result.warnings.append("LLM 生成的 agent 实现编译失败，使用兜底实现")
+                        result.warnings.append(
+                            "LLM 生成的 agent 实现编译失败，使用兜底实现"
+                        )
         except _facade().RECOVERABLE_ERRORS as e:
             result.warnings.append(f"Agent 代码生成降级: {e}")
         if not result.employee_py:
@@ -997,7 +1076,9 @@ async def run_pipeline(
     brief: str,
     *,
     llm: _facade().LlmClient,
-    on_event: _facade().Callable[[_facade().Dict[str, _facade().Any]], _facade().Awaitable[None]],
+    on_event: _facade().Callable[
+        [_facade().Dict[str, _facade().Any]], _facade().Awaitable[None]
+    ],
     eligible_workflows: _facade().Optional[
         _facade().List[_facade().Dict[str, _facade().Any]]
     ] = None,
@@ -1018,7 +1099,9 @@ async def run_pipeline(
     await _emit("stage_start", "parse_intent")
     intent, err = await _facade().stage_parse_intent(brief, llm)
     if err or intent is None:
-        await _emit("stage_error", "parse_intent", error=err or "意图解析失败", retryable=True)
+        await _emit(
+            "stage_error", "parse_intent", error=err or "意图解析失败", retryable=True
+        )
         return None
     await _emit("stage_done", "parse_intent", data=_facade().asdict(intent))
     await _emit("stage_start", "resolve_workflow")
@@ -1037,18 +1120,26 @@ async def run_pipeline(
         await _emit("stage_error", "resolve_workflow", error=err, retryable=True)
         return None
     await _emit(
-        "stage_done", "resolve_workflow", data=_facade().asdict(wf_choice) if wf_choice else None
+        "stage_done",
+        "resolve_workflow",
+        data=_facade().asdict(wf_choice) if wf_choice else None,
     )
     await _emit("stage_start", "suggest_skills")
     skills, err = await _facade().stage_suggest_skills(intent, llm)
     if err:
         await _emit("stage_error", "suggest_skills", error=err, retryable=False)
         skills = []
-    await _emit("stage_done", "suggest_skills", data=[_facade().asdict(s) for s in skills])
+    await _emit(
+        "stage_done", "suggest_skills", data=[_facade().asdict(s) for s in skills]
+    )
     await _emit("stage_start", "design_v2")
-    v2, err = await _facade().stage_design_v2(intent, wf_choice, llm, suggested_skills=skills)
+    v2, err = await _facade().stage_design_v2(
+        intent, wf_choice, llm, suggested_skills=skills
+    )
     if err or v2 is None:
-        await _emit("stage_error", "design_v2", error=err or "配置设计失败", retryable=True)
+        await _emit(
+            "stage_error", "design_v2", error=err or "配置设计失败", retryable=True
+        )
         return None
     await _emit("stage_done", "design_v2", data=_facade().asdict(v2))
     await _emit("stage_start", "suggest_pricing")
@@ -1057,7 +1148,9 @@ async def run_pipeline(
         await _emit("stage_error", "suggest_pricing", error=err, retryable=False)
         pricing = None
     await _emit(
-        "stage_done", "suggest_pricing", data=_facade().asdict(pricing) if pricing else None
+        "stage_done",
+        "suggest_pricing",
+        data=_facade().asdict(pricing) if pricing else None,
     )
     await _emit("stage_start", "assemble")
     manifest, errs = _facade().stage_assemble(intent, wf_choice, v2, skills, pricing)
@@ -1099,6 +1192,9 @@ async def run_pipeline(
             },
         )
     await _emit(
-        "pipeline_done", "pipeline", manifest=manifest, generated_code=_facade().asdict(generated)
+        "pipeline_done",
+        "pipeline",
+        manifest=manifest,
+        generated_code=_facade().asdict(generated),
     )
     return manifest

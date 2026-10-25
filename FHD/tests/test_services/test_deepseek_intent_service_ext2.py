@@ -303,7 +303,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -328,7 +331,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -358,7 +364,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -378,7 +387,10 @@ class TestHybridRecognizeExtended:
         h.use_distilled = True
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -392,7 +404,10 @@ class TestHybridRecognizeExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "goodbye", "is_goodbye": True, "tool_key": "goodbye"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -406,7 +421,10 @@ class TestHybridRecognizeExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "help", "is_help": True, "tool_key": "help"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -520,7 +538,10 @@ class TestRecognizeSyncExtended:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,

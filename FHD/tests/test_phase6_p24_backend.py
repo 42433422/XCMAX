@@ -264,7 +264,10 @@ class TestSessionServiceSingleton:
         mock_registry = MagicMock()
         mock_registry.session_service = MagicMock()
 
-        with patch("app.domain.shared_services.session_service.get_service_registry", return_value=mock_registry):
+        with patch(
+            "app.domain.shared_services.session_service.get_service_registry",
+            return_value=mock_registry,
+        ):
             result = session_service_mod.get_session_service()
 
         assert result is mock_registry.session_service

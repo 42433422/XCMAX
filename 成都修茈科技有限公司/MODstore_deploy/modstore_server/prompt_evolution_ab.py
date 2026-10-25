@@ -27,7 +27,9 @@ def _override_filename(employee_id: str) -> str:
 
 
 def _ab_enabled() -> bool:
-    return os.environ.get("MODSTORE_PROMPT_EVOLUTION_AB_ENABLED", "1").strip().lower() in (
+    return os.environ.get(
+        "MODSTORE_PROMPT_EVOLUTION_AB_ENABLED", "1"
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -36,7 +38,9 @@ def _ab_enabled() -> bool:
 
 
 def _auto_apply_enabled() -> bool:
-    return os.environ.get("MODSTORE_PROMPT_EVOLUTION_AUTO_APPLY", "1").strip().lower() in (
+    return os.environ.get(
+        "MODSTORE_PROMPT_EVOLUTION_AUTO_APPLY", "1"
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -144,7 +148,9 @@ def get_effective_system_prompt(employee_id: str, manifest_prompt: str) -> str:
     return ov if ov else manifest_prompt
 
 
-def _fetch_failed_tasks(employee_id: str, *, lookback_hours: int, limit: int = 3) -> List[str]:
+def _fetch_failed_tasks(
+    employee_id: str, *, lookback_hours: int, limit: int = 3
+) -> List[str]:
     cutoff = datetime.now(UTC) - timedelta(hours=lookback_hours)
     try:
         from sqlalchemy import or_
@@ -265,7 +271,9 @@ def run_prompt_shadow_ab(
     improved_wins = wins_after >= min_wins and wins_after > wins_before
     return {
         "ok": True,
-        "verdict": "after" if improved_wins else ("before" if wins_before > wins_after else "tie"),
+        "verdict": "after"
+        if improved_wins
+        else ("before" if wins_before > wins_after else "tie"),
         "wins_after": wins_after,
         "wins_before": wins_before,
         "replay_count": len(tasks),

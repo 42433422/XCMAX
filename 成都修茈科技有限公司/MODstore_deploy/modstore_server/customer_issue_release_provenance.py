@@ -87,7 +87,9 @@ def _signed_release(text: str, host_sha: str, source_url: str) -> dict[str, Any]
             return None
         if not str(item.get("url") or "") or int(item.get("size") or 0) <= 0:
             return None
-        artifacts.append({"file": item["url"], "sha512": digest, "size": int(item["size"])})
+        artifacts.append(
+            {"file": item["url"], "sha512": digest, "size": int(item["size"])}
+        )
     return {
         "git_sha": host_sha,
         "source_ref": "main",

@@ -73,7 +73,11 @@ def _safe_identifier(
     raw = str(value or "").strip()
     if not raw:
         return default
-    if len(raw) <= max_length and _SAFE_TOKEN.fullmatch(raw) and not _SENSITIVE_VALUE.search(raw):
+    if (
+        len(raw) <= max_length
+        and _SAFE_TOKEN.fullmatch(raw)
+        and not _SENSITIVE_VALUE.search(raw)
+    ):
         return raw
     digest = hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
     return f"{prefix}:sha256:{digest[:40]}"
@@ -196,7 +200,9 @@ def append_autonomy_decision(
 
     normalized_decision = str(decision or "").strip().lower()
     if normalized_decision not in DECISIONS:
-        raise ValueError(f"unsupported autonomy decision: {normalized_decision or '<empty>'}")
+        raise ValueError(
+            f"unsupported autonomy decision: {normalized_decision or '<empty>'}"
+        )
     risk = str(risk_level or "blocked").strip().lower()
     if risk not in RISK_LEVELS:
         raise ValueError(f"unsupported autonomy risk level: {risk}")
@@ -210,7 +216,9 @@ def append_autonomy_decision(
         "event_id": _event_id(event_id),
         "record_type": "decision",
         "action_id": safe_action_id,
-        "action": _safe_identifier(action, default="unknown", prefix="action-name", max_length=128),
+        "action": _safe_identifier(
+            action, default="unknown", prefix="action-name", max_length=128
+        ),
         "decision": normalized_decision,
         "policy": _safe_identifier(policy, prefix="policy", max_length=128),
         "risk_level": risk,

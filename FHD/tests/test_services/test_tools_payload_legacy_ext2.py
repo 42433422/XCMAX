@@ -264,7 +264,8 @@ class TestCustomersToolCreate:
         with (
             patch("app.application.get_customer_app_service", return_value=mock_svc),
             patch(
-                "app.domain.shared_services.unified_query_service.find_purchase_unit", return_value=mock_exists
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
+                return_value=mock_exists,
             ),
         ):
             result = _unwrap(

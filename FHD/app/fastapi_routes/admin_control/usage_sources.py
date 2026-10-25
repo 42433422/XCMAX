@@ -7,7 +7,7 @@ import os
 from collections.abc import Callable
 from typing import Any
 
-from .ports import ErrorPolicy
+from .port_contracts import ErrorPolicy
 
 
 class UsageSources:

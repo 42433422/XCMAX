@@ -22,7 +22,9 @@ def _reviewed_candidate(
     )
 
     contracts = workforce_contract_map()
-    candidates = sorted(employee_id for employee_id in contracts if employee_id not in exclude)
+    candidates = sorted(
+        employee_id for employee_id in contracts if employee_id not in exclude
+    )
     if not candidates:
         raise RuntimeError("reviewed duty workforce is empty")
     employee_id = candidates[now.date().toordinal() % len(candidates)]
@@ -37,7 +39,9 @@ def interview_input(now: datetime) -> tuple[dict[str, Any], tuple[str, ...], int
     )
     config = manifest.get("employee_config_v2") or {}
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
-    handlers = [str(item) for item in actions.get("handlers") or [] if str(item).strip()]
+    handlers = [
+        str(item) for item in actions.get("handlers") or [] if str(item).strip()
+    ]
     capabilities = list(handlers)
     direct = actions.get("direct_python")
     if isinstance(direct, dict) and str(direct.get("action") or "").strip():
@@ -81,7 +85,9 @@ def quality_validator_input(
     except ValueError as exc:
         raise RuntimeError("reviewed employee pack escaped employee root") from exc
     all_files = sorted(
-        path.relative_to(pack_root).as_posix() for path in pack_root.rglob("*") if path.is_file()
+        path.relative_to(pack_root).as_posix()
+        for path in pack_root.rglob("*")
+        if path.is_file()
     )
     files = all_files[:_MAX_PACK_FILES]
     return (
@@ -113,7 +119,11 @@ def _module_layer(path: Path, package_root: Path) -> str:
 
 def _import_candidates(node: ast.AST) -> list[str]:
     if isinstance(node, ast.Import):
-        return [alias.name for alias in node.names if alias.name.startswith("modstore_server")]
+        return [
+            alias.name
+            for alias in node.names
+            if alias.name.startswith("modstore_server")
+        ]
     if isinstance(node, ast.ImportFrom) and node.level == 0:
         module = str(node.module or "")
         if module == "modstore_server":
@@ -185,7 +195,10 @@ def architecture_input(
         },
         ("modstore_server_python_source_tree", "architecture_dependency_policy_v1"),
         len(modules) + len(dependencies),
-        (len(all_files) > _MAX_ARCHITECTURE_FILES or len(ordered_edges) > _MAX_ARCHITECTURE_EDGES),
+        (
+            len(all_files) > _MAX_ARCHITECTURE_FILES
+            or len(ordered_edges) > _MAX_ARCHITECTURE_EDGES
+        ),
     )
 
 

@@ -54,7 +54,9 @@ class LlmChatClient(ABC):
     @abstractmethod
     async def chat(self, request: LlmChatRequest) -> LlmChatResponse: ...
 
-    async def chat_stream(self, request: LlmChatRequest) -> AsyncIterator[dict[str, Any]]:
+    async def chat_stream(
+        self, request: LlmChatRequest
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream tokens / usage events; default falls back to non-streaming :meth:`chat`."""
 
         res = await self.chat(request)
@@ -82,7 +84,9 @@ class InProcessLlmChatClient(LlmChatClient):
         )
         return LlmChatResponse.from_dict(result)
 
-    async def chat_stream(self, request: LlmChatRequest) -> AsyncIterator[dict[str, Any]]:
+    async def chat_stream(
+        self, request: LlmChatRequest
+    ) -> AsyncIterator[dict[str, Any]]:
         from modstore_server.llm_chat_proxy import chat_dispatch_stream
 
         async for ev in chat_dispatch_stream(
@@ -132,7 +136,9 @@ async def chat_dispatch_via_session(
                 ),
                 "status": "platform_llm_unconfigured",
             }
-        return await chat_dispatch_via_platform_only(p_prov, p_mdl, messages, max_tokens=max_tokens)
+        return await chat_dispatch_via_platform_only(
+            p_prov, p_mdl, messages, max_tokens=max_tokens
+        )
 
     from modstore_server.llm_chat_proxy import chat_dispatch
     from modstore_server.llm_key_resolver import (
@@ -166,7 +172,10 @@ async def chat_dispatch_via_session(
     if uid > 0 and result.get("ok"):
         # 统一计费：按 token 算出 ¥ 金额从钱包扣（计次配额已退役）。
         try:
-            from modstore_server.llm_billing import calculate_charge, usage_from_response
+            from modstore_server.llm_billing import (
+                calculate_charge,
+                usage_from_response,
+            )
             from modstore_server.quota_middleware import consume_llm_credit
 
             usage = usage_from_response(
@@ -237,7 +246,11 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     if runtime:
         runtime_prov = str(runtime.get("provider") or "").strip()
         runtime_model = str(runtime.get("model") or "").strip()
-        if runtime_prov in KNOWN_PROVIDERS and runtime_model and platform_api_key(runtime_prov):
+        if (
+            runtime_prov in KNOWN_PROVIDERS
+            and runtime_model
+            and platform_api_key(runtime_prov)
+        ):
             return runtime_prov, runtime_model
 
     env_prov = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_PROVIDER") or "").strip()
@@ -249,7 +262,9 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     for prov in KNOWN_PROVIDERS:
         if not platform_api_key(prov):
             continue
-        mdl = (env_mdl if env_prov == prov else "") or _BENCH_DEFAULT_MODELS.get(prov, "")
+        mdl = (env_mdl if env_prov == prov else "") or _BENCH_DEFAULT_MODELS.get(
+            prov, ""
+        )
         if mdl:
             return prov, mdl
 
@@ -291,7 +306,9 @@ async def chat_dispatch_via_platform_only(
         "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_ENABLED", "1"
     ).strip().lower() not in {"0", "false", "no", "off"}
     fallback_provider = (
-        os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_PROVIDER", "minimax").strip()
+        os.environ.get(
+            "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_PROVIDER", "minimax"
+        ).strip()
         or "minimax"
     )
     fallback_model = os.environ.get(
@@ -305,7 +322,9 @@ async def chat_dispatch_via_platform_only(
     if fallback_key:
         try:
             fallback_timeout = float(
-                os.environ.get("MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "20")
+                os.environ.get(
+                    "MODSTORE_EMPLOYEE_PLATFORM_FALLBACK_TIMEOUT_SECONDS", "20"
+                )
             )
         except ValueError:
             fallback_timeout = 20.0

@@ -168,7 +168,9 @@ async def run_vibecoding_codegen_loop(
             generated_convert_py=convert_py,
         )
         pid = str(manifest.get("id") or pack_dir.name)
-        last_smoke = await run_pack_domain_smoke(pack_dir, pack_id=pid, runtime_kind=runtime_kind)
+        last_smoke = await run_pack_domain_smoke(
+            pack_dir, pack_id=pid, runtime_kind=runtime_kind
+        )
         last_golden = compare_with_golden(
             pack_dir,
             golden_pack_id=golden_id,

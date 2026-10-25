@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.public_company_hall_config import DEPARTMENT_ORDER
-from modstore_server.public_company_hall_config import WORKING_STATUSES as _WORKING_STATUSES
+from modstore_server.public_company_hall_config import (
+    WORKING_STATUSES as _WORKING_STATUSES,
+)
 from modstore_server.public_company_hall_text import _clean, _iso
 
 logger = logging.getLogger(__name__)
@@ -31,7 +33,9 @@ def _dept_members() -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = {}
     for dept_id in DEPARTMENT_ORDER:
         block = SIX_LINE_DEPARTMENTS.get(dept_id) or {}
-        subzones = block.get("subzones") if isinstance(block.get("subzones"), dict) else {}
+        subzones = (
+            block.get("subzones") if isinstance(block.get("subzones"), dict) else {}
+        )
         ids: List[str] = []
         seen: set[str] = set()
         for sz in subzones.values():
@@ -84,7 +88,11 @@ def _action_signals(day: Optional[str]) -> Dict[str, Dict[str, Any]]:
     from modstore_server.digest_action_items import latest_day, list_action_items
 
     use_day = day or latest_day() or None
-    items = list_action_items(day=use_day, limit=2000) if use_day else list_action_items(limit=2000)
+    items = (
+        list_action_items(day=use_day, limit=2000)
+        if use_day
+        else list_action_items(limit=2000)
+    )
     by: Dict[str, Dict[str, Any]] = {}
     for it in items:
         eid = str(it.get("employee_id") or "").strip()
@@ -251,5 +259,7 @@ def _load_published_action_board() -> Optional[Dict[str, Any]]:
             ):
                 return data
         except RECOVERABLE_ERRORS:
-            logger.exception("company_hall: read published action board failed %s", path)
+            logger.exception(
+                "company_hall: read published action board failed %s", path
+            )
     return None

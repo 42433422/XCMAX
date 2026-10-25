@@ -62,8 +62,12 @@ def _include_router_without_method_conflicts(
     filtered = _facade().APIRouter()
     for route in router.routes:
         full_path = f"{prefix}{getattr(route, 'path', '')}"
-        methods = {str(method).upper() for method in getattr(route, "methods", None) or set()}
-        conflicts = sorted((method for method in methods if (full_path, method) in existing))
+        methods = {
+            str(method).upper() for method in getattr(route, "methods", None) or set()
+        }
+        conflicts = sorted(
+            (method for method in methods if (full_path, method) in existing)
+        )
         if conflicts:
             _facade().logger.info(
                 "skip duplicate legacy route %s methods=%s endpoint=%s",
@@ -83,7 +87,9 @@ def _init_database() -> None:
         try:
             import modstore_server.models_project_context
         except _facade().RECOVERABLE_ERRORS:
-            _facade().logger.debug("models_project_context not registered", exc_info=True)
+            _facade().logger.debug(
+                "models_project_context not registered", exc_info=True
+            )
         init_db()
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.exception("startup: init_db failed")
@@ -91,11 +97,15 @@ def _init_database() -> None:
         from modstore_server.sync_employee_triggers import sync_all_employee_triggers
 
         n = sync_all_employee_triggers()
-        _facade().logger.info("startup: synced %d employee trigger bindings (manifest)", n)
+        _facade().logger.info(
+            "startup: synced %d employee trigger bindings (manifest)", n
+        )
     except _facade().RECOVERABLE_ERRORS:
         _facade().logger.exception("startup: sync_employee_triggers failed")
     try:
-        from modstore_server.incident_bus import sync_employee_trigger_bindings_from_yuangon
+        from modstore_server.incident_bus import (
+            sync_employee_trigger_bindings_from_yuangon,
+        )
 
         _deploy_root = _facade().Path(__file__).resolve().parents[2]
         _repo_root = (
@@ -106,9 +116,13 @@ def _init_database() -> None:
         _yuangon = _repo_root / "yuangon"
         if _yuangon.is_dir():
             n_y = sync_employee_trigger_bindings_from_yuangon(_yuangon)
-            _facade().logger.info("startup: synced %d employee trigger bindings (yuangon)", n_y)
+            _facade().logger.info(
+                "startup: synced %d employee trigger bindings (yuangon)", n_y
+            )
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.exception("startup: sync_employee_trigger_bindings_from_yuangon failed")
+        _facade().logger.exception(
+            "startup: sync_employee_trigger_bindings_from_yuangon failed"
+        )
     try:
         from modstore_server.six_line_event_router import install_orchestrator_hooks
 
@@ -133,7 +147,10 @@ def _init_background_jobs() -> None:
         )
         print("[bg-jobs] SKIPPED: MODSTORE_RUN_BACKGROUND_JOBS != 1", flush=True)
         return
-    print("[bg-jobs] MODSTORE_RUN_BACKGROUND_JOBS=1, starting background jobs...", flush=True)
+    print(
+        "[bg-jobs] MODSTORE_RUN_BACKGROUND_JOBS=1, starting background jobs...",
+        flush=True,
+    )
     try:
         from modstore_server.eventing.db_outbox import start_default_worker
 
@@ -151,7 +168,9 @@ def _init_background_jobs() -> None:
         _facade().logger.exception("subscription auto-renew scheduler failed to start")
         print("[bg-jobs] subscription scheduler FAILED", flush=True)
     try:
-        from modstore_server.backup_event_subscriber import register_backup_event_subscribers
+        from modstore_server.backup_event_subscriber import (
+            register_backup_event_subscribers,
+        )
 
         register_backup_event_subscribers()
         print("[bg-jobs] backup event subscribers registered OK", flush=True)
@@ -159,7 +178,9 @@ def _init_background_jobs() -> None:
         _facade().logger.exception("backup event subscribers registration failed")
         print("[bg-jobs] backup event subscribers FAILED", flush=True)
     try:
-        from modstore_server.workflow_scheduler import start_scheduler as start_workflow_scheduler
+        from modstore_server.workflow_scheduler import (
+            start_scheduler as start_workflow_scheduler,
+        )
 
         start_workflow_scheduler()
         print("[bg-jobs] workflow scheduler started OK", flush=True)
@@ -203,13 +224,17 @@ def _register_core_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) -> N
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.exception("app_config_api 加载失败，跳过")
         try:
-            from modstore_server.digest_identity_peer_api import router as digest_peer_router
+            from modstore_server.digest_identity_peer_api import (
+                router as digest_peer_router,
+            )
 
             app.include_router(digest_peer_router, prefix="/api")
         except _facade().RECOVERABLE_ERRORS:
             _facade().logger.exception("digest_identity_peer_api 加载失败，跳过")
         try:
-            from modstore_server.market_catalog_api import router as market_catalog_router
+            from modstore_server.market_catalog_api import (
+                router as market_catalog_router,
+            )
 
             app.include_router(market_catalog_router, prefix="/api")
         except _facade().RECOVERABLE_ERRORS:
@@ -226,8 +251,12 @@ def _register_core_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) -> N
         app.include_router(authoring.router)
         app.include_router(sync.router)
         app.include_router(debug.router)
-        from modstore_server.api.catalog_public_routes import router as catalog_public_router
-        from modstore_server.mod_sync_catalog_api import router as mod_sync_catalog_router
+        from modstore_server.api.catalog_public_routes import (
+            router as catalog_public_router,
+        )
+        from modstore_server.mod_sync_catalog_api import (
+            router as mod_sync_catalog_router,
+        )
 
         app.include_router(catalog_public_router)
         app.include_router(mod_sync_catalog_router)
@@ -252,7 +281,9 @@ def _register_optional_routes(app: _facade().FastAPI, cfg: _facade().AppConfig) 
 
         start_botpy_background(app)
     except _facade().RECOVERABLE_ERRORS:
-        _facade().logger.exception("butler_qq_botpy start_botpy_background failed, skipping")
+        _facade().logger.exception(
+            "butler_qq_botpy start_botpy_background failed, skipping"
+        )
     try:
         from modstore_server.workflow_api import workflow_hooks_router
 
@@ -297,7 +328,9 @@ def create_app(config: _facade().AppConfig | None = None) -> _facade().FastAPI:
 
                 await close_all()
             except _facade().RECOVERABLE_ERRORS:
-                _facade().logger.exception("error closing shared http clients on shutdown")
+                _facade().logger.exception(
+                    "error closing shared http clients on shutdown"
+                )
             if _facade().os.environ.get("MODSTORE_RUN_BACKGROUND_JOBS", "0") == "1":
                 try:
                     from modstore_server.workflow_scheduler import stop_scheduler

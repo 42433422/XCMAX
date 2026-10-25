@@ -20,7 +20,9 @@ def assert_enterprise_assignable_mod_id(mod_id: str) -> str:
         raise ValueError("mod_id 无效")
     allowed = enterprise_assignable_mod_ids()
     if mid not in allowed:
-        raise ValueError(f"mod_id 不在可分配客户 Mod 列表内（允许: {', '.join(sorted(allowed))}）")
+        raise ValueError(
+            f"mod_id 不在可分配客户 Mod 列表内（允许: {', '.join(sorted(allowed))}）"
+        )
     return mid
 
 

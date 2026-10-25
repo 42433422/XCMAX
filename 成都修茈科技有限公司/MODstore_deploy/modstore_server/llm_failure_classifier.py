@@ -13,8 +13,12 @@ import re
 from typing import Optional
 
 # 失败大类（写入 EmployeeExecutionMetric.failure_kind）
-FAILURE_KIND_QUOTA = "quota"  # 配额/额度/计费/欠费/402/403 —— 改 prompt 无效，必须排除出重写候选
-FAILURE_KIND_TRANSIENT = "transient"  # 限流/超时/网关抖动 —— 重试可恢复，亦非 prompt 问题
+FAILURE_KIND_QUOTA = (
+    "quota"  # 配额/额度/计费/欠费/402/403 —— 改 prompt 无效，必须排除出重写候选
+)
+FAILURE_KIND_TRANSIENT = (
+    "transient"  # 限流/超时/网关抖动 —— 重试可恢复，亦非 prompt 问题
+)
 FAILURE_KIND_PROMPT = "prompt"  # 其它（可能由 prompt/逻辑导致，进化引擎可据此重写）
 FAILURE_KIND_NONE = ""  # 无错误
 # 事故小组外层超时（incident_team_role_timeout:…）：任务可能仍在跑，不能当 transient 重派
@@ -123,7 +127,9 @@ def _leading_status_code(text: str) -> Optional[int]:
         return None
 
 
-def is_quota_or_billing_failure(error_text: str, status_code: Optional[int] = None) -> bool:
+def is_quota_or_billing_failure(
+    error_text: str, status_code: Optional[int] = None
+) -> bool:
     """该失败是否由配额/额度/计费/欠费导致（改 prompt 无法修复）。"""
     text = error_text or ""
     code = status_code if status_code is not None else _leading_status_code(text)

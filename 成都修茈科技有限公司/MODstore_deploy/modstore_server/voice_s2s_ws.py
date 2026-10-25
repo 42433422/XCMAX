@@ -119,7 +119,9 @@ async def _run_billed_s2s_turn(
 
     api_key, key_source = resolve_api_key(db, user.id, provider)
     if not api_key:
-        await _send_json(ws, {"type": "error", "message": f"供应商「{provider}」未配置 API Key"})
+        await _send_json(
+            ws, {"type": "error", "message": f"供应商「{provider}」未配置 API Key"}
+        )
         return
 
     is_byok = key_source == "user_override"
@@ -139,10 +141,16 @@ async def _run_billed_s2s_turn(
 
     wallet = JavaWalletClient()
     if is_byok:
-        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
+        hold = WalletHold(
+            hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
+        )
     else:
-        preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
-        hold = await wallet.preauthorize(auth_header, preauth_amount, provider, model, request_id)
+        preauth_amount = estimate_preauthorization(
+            db, provider, model, messages, max_tokens
+        )
+        hold = await wallet.preauthorize(
+            auth_header, preauth_amount, provider, model, request_id
+        )
 
     parts: list[str] = []
     upstream_usage: dict[str, Any] = {}
@@ -218,7 +226,9 @@ async def _run_billed_s2s_turn(
                     continue
                 parts.append(delta)
                 so_far = "".join(parts)
-                await _send_json(ws, {"type": "text_delta", "delta": delta, "so_far": so_far})
+                await _send_json(
+                    ws, {"type": "text_delta", "delta": delta, "so_far": so_far}
+                )
                 for sentence in splitter.feed(so_far):
                     sentence_seq += 1
                     await audio_queue.put((f"s{sentence_seq}", sentence))
@@ -364,7 +374,11 @@ async def voice_s2s_ws(
                 cancel = asyncio.Event()
             db = get_session_factory()()
             try:
-                user = db.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).first()
+                user = (
+                    db.query(User)
+                    .filter(User.id == user_id, User.deleted_at.is_(None))
+                    .first()
+                )
                 if not user:
                     await _send_json(ws, {"type": "error", "message": "用户不存在"})
                     await ws.close(code=1008)
@@ -411,7 +425,11 @@ async def voice_s2s_ws(
                     continue
                 pending = pending_finalize.get(tid, "")
                 pending_finalize[tid] = final_text
-                if pending and pending != final_text and len(final_text) - len(pending) > 3:
+                if (
+                    pending
+                    and pending != final_text
+                    and len(final_text) - len(pending) > 3
+                ):
                     cancel.set()
                     cancel = asyncio.Event()
                     await run_utterance_turn(
@@ -422,7 +440,9 @@ async def voice_s2s_ws(
             if mtype not in ("utterance", "utterance_start"):
                 continue
 
-            turn_id = str(msg.get("turn_id") or "").strip() or f"t{int(time.time() * 1000)}"
+            turn_id = (
+                str(msg.get("turn_id") or "").strip() or f"t{int(time.time() * 1000)}"
+            )
             if mtype == "utterance_start":
                 pending_finalize[turn_id] = str(msg.get("text") or "").strip()
 

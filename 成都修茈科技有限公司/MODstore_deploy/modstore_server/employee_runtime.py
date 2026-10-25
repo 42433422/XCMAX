@@ -12,7 +12,10 @@ from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
 from modstore_server.duty_employee_registry import get_duty_employee_record
-from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.employee_config_v2_adapter import (
     needs_executor_translation,
     translate_v2_to_executor_config,
@@ -55,7 +58,9 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     clean_handlers = [str(h).strip() for h in handlers if str(h).strip()]
     issues: list[str] = []
     if not clean_handlers:
@@ -76,7 +81,11 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
         return issues
 
     pack_id = str(manifest.get("id") or pack.get("pack_id") or "").strip()
-    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    direct = (
+        actions.get("direct_python")
+        if isinstance(actions.get("direct_python"), dict)
+        else {}
+    )
     module = str(direct.get("module") or "").strip()
     if not module:
         module = re.sub(r"[^a-z0-9_]+", "_", pack_id.lower()).strip("_")
@@ -99,7 +108,9 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
                 if "_DISPATCH" in source and not (
                     "'direct_python':" in source or '"direct_python":' in source
                 ):
-                    issues.append("direct_python 入口使用了不支持该 handler 的通用分发模板")
+                    issues.append(
+                        "direct_python 入口使用了不支持该 handler 的通用分发模板"
+                    )
             if (
                 str(direct.get("implementation") or "").strip() != "employee_module"
                 and vendor_entry not in names
@@ -133,8 +144,12 @@ def reviewed_duty_runtime_issues(employee_id: str) -> list[str]:
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
-    clean_handlers = [str(handler).strip() for handler in handlers if str(handler).strip()]
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
+    clean_handlers = [
+        str(handler).strip() for handler in handlers if str(handler).strip()
+    ]
     issues: list[str] = []
     if not clean_handlers:
         return ["受审岗位未声明 actions.handlers"]
@@ -144,7 +159,11 @@ def reviewed_duty_runtime_issues(employee_id: str) -> list[str]:
     if "direct_python" not in clean_handlers:
         return issues
 
-    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    direct = (
+        actions.get("direct_python")
+        if isinstance(actions.get("direct_python"), dict)
+        else {}
+    )
     pack_id = str(manifest.get("id") or employee_id).strip()
     module = str(direct.get("module") or "").strip()
     if not module:
@@ -186,7 +205,9 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
     requested_id = str(pack_id or "").strip()
     row = (
         session.query(CatalogItem)
-        .filter(CatalogItem.pkg_id == requested_id, CatalogItem.artifact == "employee_pack")
+        .filter(
+            CatalogItem.pkg_id == requested_id, CatalogItem.artifact == "employee_pack"
+        )
         .first()
     )
     if row:
@@ -201,7 +222,9 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
             else None
         )
         if duty_rec:
-            pkg_id = str(duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id).strip()
+            pkg_id = str(
+                duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id
+            ).strip()
             name = str(duty_rec.get("name") or pkg_id)
             version = str(duty_rec.get("version") or "")
             stored_filename = str(duty_rec.get("stored_filename") or "")
@@ -225,7 +248,9 @@ def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
                     preferred = f"{pack_id}/manifest.json"
                     inner = preferred if preferred in names else ""
                     if not inner:
-                        candidates = sorted(n for n in names if n.endswith("/manifest.json"))
+                        candidates = sorted(
+                            n for n in names if n.endswith("/manifest.json")
+                        )
                         inner = candidates[0] if candidates else ""
                     if inner:
                         manifest = json.loads(zf.read(inner).decode("utf-8"))
@@ -260,7 +285,11 @@ def library_manifest_fallback_enabled() -> bool:
     默认开启（``1``），便于「做员工」流水线 ``publish_to_catalog=False`` 后仍能打开工作台。
     多租户部署若共享同一库目录且需禁止按 id 探测草稿包，可设 ``MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK=0``。
     """
-    raw = (os.environ.get("MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK") or "1").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK") or "1")
+        .strip()
+        .lower()
+    )
     return raw not in ("0", "false", "no", "off")
 
 
@@ -289,11 +318,15 @@ def load_employee_pack_resolved(session, pack_id: str) -> Dict[str, Any]:
         pack = try_load_employee_pack_from_library(candidate)
         if pack:
             return pack
-    cand_txt = ", ".join(repr(c) for c in _candidate_employee_pack_ids(pack_id)) or "(无)"
+    cand_txt = (
+        ", ".join(repr(c) for c in _candidate_employee_pack_ids(pack_id)) or "(无)"
+    )
     if library_manifest_fallback_enabled():
         lib_hint = "已在 Mod 库目录按上述 id 查找，未找到有效 manifest.json。"
     else:
-        lib_hint = "已跳过 Mod 库查找（MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK=0）。"
+        lib_hint = (
+            "已跳过 Mod 库查找（MODSTORE_EMPLOYEE_MANIFEST_LIBRARY_FALLBACK=0）。"
+        )
     raise ValueError(
         f"员工包不存在: 原始请求 id={pack_id!r}；已尝试: {cand_txt}。"
         f"未在 catalog_items / packages.json 登记。{lib_hint}"
@@ -359,7 +392,9 @@ def parse_employee_config_v2(manifest: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_employee_context(employee_id: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+def build_employee_context(
+    employee_id: str, input_data: Dict[str, Any]
+) -> Dict[str, Any]:
     return {
         "employee_id": employee_id,
         "input_data": input_data or {},

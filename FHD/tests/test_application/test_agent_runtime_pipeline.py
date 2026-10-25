@@ -87,7 +87,10 @@ class TestHooksGatePipelineContracts:
     def test_remember_primitive_does_not_self_gate(self, monkeypatch):
         monkeypatch.delenv("XCAGI_AGENT_RUNTIME_HOOKS", raising=False)
         with (
-            patch("app.domain.shared_services.conversation_service.ConversationService", lambda: MagicMock()),
+            patch(
+                "app.domain.shared_services.conversation_service.ConversationService",
+                lambda: MagicMock(),
+            ),
             patch(
                 "app.application.user_memory_vector_app_service."
                 "get_user_memory_vector_ingest_app_service",
@@ -206,7 +209,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = lambda *a, **k: saved.append(a)
-        monkeypatch.setattr("app.domain.shared_services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
 
         from app.application.user_memory_vector_app_service import UserMemoryVectorChunk
 
@@ -243,7 +248,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = RuntimeError("db down")
-        monkeypatch.setattr("app.domain.shared_services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
         monkeypatch.setattr(
             "app.application.user_memory_vector_app_service."
             "get_user_memory_vector_ingest_app_service",

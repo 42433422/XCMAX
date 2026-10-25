@@ -17,7 +17,9 @@ def _facade():
     return importlib.import_module("modstore_server.employee_executor")
 
 
-def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, hook: str) -> None:
+def _emp_im_notify_boss(
+    employee_id: str, manifest: _facade().Any, body: str, hook: str
+) -> None:
     """员工执行管道 hook 公共入口：从 manifest 抽 display_name + mod_id，调 notify_boss。
 
     best-effort：任何异常只 log debug，不抛错。body 为空也跳过。
@@ -34,12 +36,20 @@ def _emp_im_notify_boss(employee_id: str, manifest: _facade().Any, body: str, ho
         try:
             if isinstance(manifest, dict):
                 _ident = (
-                    manifest.get("identity") if isinstance(manifest.get("identity"), dict) else {}
+                    manifest.get("identity")
+                    if isinstance(manifest.get("identity"), dict)
+                    else {}
                 )
-                _emp_display = str(_ident.get("name") or manifest.get("name") or "").strip()
-                _emp_mod_id = str(manifest.get("mod_id") or manifest.get("id") or "").strip()
+                _emp_display = str(
+                    _ident.get("name") or manifest.get("name") or ""
+                ).strip()
+                _emp_mod_id = str(
+                    manifest.get("mod_id") or manifest.get("id") or ""
+                ).strip()
         except RECOVERABLE_ERRORS:
-            _facade().logger.debug("emp_im_notify manifest parse skipped", exc_info=True)
+            _facade().logger.debug(
+                "emp_im_notify manifest parse skipped", exc_info=True
+            )
         _notify_boss_im(
             employee_id,
             body=body_text[:600],
@@ -113,7 +123,12 @@ def _resolve_metric_user_id(session: _facade().Any, user_id: object) -> int:
         row = session.query(_facade().User.id).filter(_facade().User.id == uid).first()
         if row is not None:
             return int(row[0])
-    row = session.query(_facade().User.id).order_by(_facade().User.id.asc()).limit(1).first()
+    row = (
+        session.query(_facade().User.id)
+        .order_by(_facade().User.id.asc())
+        .limit(1)
+        .first()
+    )
     if row is None:
         raise RuntimeError("employee_execution_metrics: 库中无 users 行，无法写入指标")
     return int(row[0])
@@ -147,7 +162,9 @@ def _get_executor_semaphore() -> _facade().threading.Semaphore | None:
 
 
 def _executor_extra_cognition_retries() -> int:
-    raw = (_facade().os.environ.get("MODSTORE_COGNITION_TRANSIENT_RETRIES") or "1").strip()
+    raw = (
+        _facade().os.environ.get("MODSTORE_COGNITION_TRANSIENT_RETRIES") or "1"
+    ).strip()
     try:
         x = int(raw)
     except ValueError:
@@ -156,7 +173,9 @@ def _executor_extra_cognition_retries() -> int:
 
 
 def _executor_detail_log_enabled() -> bool:
-    return (_facade().os.environ.get("MODSTORE_EXECUTOR_LOG_DETAIL") or "").strip().lower() in (
+    return (
+        _facade().os.environ.get("MODSTORE_EXECUTOR_LOG_DETAIL") or ""
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -202,7 +221,9 @@ def _run_cognition_with_transient_retries(
     employee_id: str,
     task: str,
     bench_llm_override: _facade().Optional[_facade().Tuple[str, str]] = None,
-) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
+) -> _facade().Tuple[
+    _facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]
+]:
     """Return ``(reasoning, recovery_meta)``. ``recovery_meta`` is set when retries fixed cognition."""
     max_extra = _facade()._executor_extra_cognition_retries()
     first_err = ""
@@ -314,7 +335,9 @@ def _extract_vision_data_urls(payload: _facade().Any) -> _facade().List[str]:
                     if isinstance(u, str) and u.strip():
                         s = u.strip()
                         out.append(
-                            s if s.startswith(("data:", "http")) else f"data:image/png;base64,{s}"
+                            s
+                            if s.startswith(("data:", "http"))
+                            else f"data:image/png;base64,{s}"
                         )
         if not out:
             for key in ("image_url", "url", "base64", "content"):
@@ -343,7 +366,9 @@ def _perception_image(
     vision_urls = _facade()._extract_vision_data_urls(input_data)
     raw = input_data
     if isinstance(input_data, dict):
-        raw = input_data.get("base64", input_data.get("url", input_data.get("content", "")))
+        raw = input_data.get(
+            "base64", input_data.get("url", input_data.get("content", ""))
+        )
     if isinstance(raw, str) and raw.startswith("data:"):
         raw = raw.split(",", 1)[-1]
     if not raw:
@@ -354,7 +379,9 @@ def _perception_image(
             "vision_data_urls": vision_urls,
         }
     image_content = (
-        raw if isinstance(raw, str) and raw.startswith("data:") else f"data:image/png;base64,{raw}"
+        raw
+        if isinstance(raw, str) and raw.startswith("data:")
+        else f"data:image/png;base64,{raw}"
     )
 
     async def _call():
@@ -386,7 +413,8 @@ def _perception_image(
                 "type": "image",
                 "parse_ok": True,
                 "method": "vision",
-                "vision_data_urls": vision_urls or ([image_content] if image_content else []),
+                "vision_data_urls": vision_urls
+                or ([image_content] if image_content else []),
             }
     except RECOVERABLE_ERRORS as e:
         return {
@@ -467,7 +495,9 @@ def _perception_real(
         if isinstance(payload, dict):
             return {"normalized_input": payload, "type": "json"}
         try:
-            parsed = _facade().json.loads(payload) if isinstance(payload, str) else payload
+            parsed = (
+                _facade().json.loads(payload) if isinstance(payload, str) else payload
+            )
             return {"normalized_input": parsed, "type": "json"}
         except RECOVERABLE_ERRORS as e:
             return {"normalized_input": payload, "type": "json", "parse_error": str(e)}
@@ -661,7 +691,9 @@ async def _cognition_real(
         try:
             from modstore_server.prompt_evolution_ab import get_effective_system_prompt
 
-            system_prompt = get_effective_system_prompt(str(employee_id), str(system_prompt))
+            system_prompt = get_effective_system_prompt(
+                str(employee_id), str(system_prompt)
+            )
         except RECOVERABLE_ERRORS:
             pass
     if str(task or "").strip() and (
@@ -669,16 +701,16 @@ async def _cognition_real(
             perceived.get("normalized_input") if isinstance(perceived, dict) else {}
         )
     ):
-        system_prompt = f"{system_prompt.rstrip()}\n\n{_facade()._PHASE_D_PROTOCOL_APPEND}"
+        system_prompt = (
+            f"{system_prompt.rstrip()}\n\n{_facade()._PHASE_D_PROTOCOL_APPEND}"
+        )
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     normalized_inp = perceived.get("normalized_input", {})
     if not isinstance(normalized_inp, dict):
         normalized_inp = {}
     all_hands_cognition = _facade()._is_all_hands_cognition_context(normalized_inp)
     if all_hands_cognition and str(task or "").strip():
-        system_prompt = (
-            f"{system_prompt.rstrip()}\n\n{_facade()._ALL_HANDS_COGNITION_SYSTEM_APPEND}"
-        )
+        system_prompt = f"{system_prompt.rstrip()}\n\n{_facade()._ALL_HANDS_COGNITION_SYSTEM_APPEND}"
     use_platform_dispatch = bool(bench_llm_override)
     if not bench_llm_override:
         try:
@@ -716,7 +748,9 @@ async def _cognition_real(
         model_name = str(model_cfg.get("model_name") or "auto").strip()
         wants_auto = provider.lower() == "auto" or model_name.lower() == "auto"
         if wants_auto:
-            from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+            from modstore_server.mod_scaffold_runner import (
+                resolve_llm_provider_model_auto,
+            )
 
             uid = int(user_id or 0)
             if uid <= 0:
@@ -736,7 +770,11 @@ async def _cognition_real(
                 provider, model_name = (rp, rm)
                 use_platform_dispatch = True
             else:
-                urow = session.query(_facade().User).filter(_facade().User.id == uid).first()
+                urow = (
+                    session.query(_facade().User)
+                    .filter(_facade().User.id == uid)
+                    .first()
+                )
                 if not urow:
                     return {
                         "reasoning": "",
@@ -747,7 +785,9 @@ async def _cognition_real(
                         "provider": "auto",
                         "model": "auto",
                     }
-                rp, rm, perr = await resolve_llm_provider_model_auto(session, urow, None, None)
+                rp, rm, perr = await resolve_llm_provider_model_auto(
+                    session, urow, None, None
+                )
                 if perr or not rp or (not rm):
                     err_msg = perr or "无法解析可用 LLM"
                     return {
@@ -770,7 +810,8 @@ async def _cognition_real(
             role=str(normalized_inp.get("role") or ""),
         )
         max_tokens = min(
-            max_tokens, int(role_route.get("budget", {}).get("output_tokens") or max_tokens)
+            max_tokens,
+            int(role_route.get("budget", {}).get("output_tokens") or max_tokens),
         )
     messages = [{"role": "system", "content": system_prompt}]
     p_cfg = _facade()._get_section(config, "perception")
@@ -797,7 +838,9 @@ async def _cognition_real(
     if isinstance(perceived, dict):
         vu = perceived.get("vision_data_urls")
         if isinstance(vu, list):
-            v_urls = [str(u).strip() for u in vu if isinstance(u, str) and str(u).strip()]
+            v_urls = [
+                str(u).strip() for u in vu if isinstance(u, str) and str(u).strip()
+            ]
     if vision_enabled and v_urls:
         parts: _facade().List[_facade().Dict[str, _facade().Any]] = [
             {"type": "text", "text": user_input}
@@ -807,7 +850,9 @@ async def _cognition_real(
         messages.append({"role": "user", "content": parts})
     else:
         messages.append({"role": "user", "content": user_input})
-    knowledge_cfg = cog_cfg.get("knowledge") if isinstance(cog_cfg.get("knowledge"), dict) else {}
+    knowledge_cfg = (
+        cog_cfg.get("knowledge") if isinstance(cog_cfg.get("knowledge"), dict) else {}
+    )
     rag_meta: _facade().Dict[str, _facade().Any] = {
         "enabled": False,
         "items": [],
@@ -825,7 +870,9 @@ async def _cognition_real(
                 user_id=int(user_id or 0),
                 query=query_text,
                 employee_id=str(employee_id or "") or None,
-                extra_collection_ids=collection_ids if isinstance(collection_ids, list) else None,
+                extra_collection_ids=collection_ids
+                if isinstance(collection_ids, list)
+                else None,
                 top_k=top_k,
                 min_score=min_score,
             )
@@ -1079,9 +1126,14 @@ def _action_fhd_business(
         tb = _facade()._tpl_obj(raw_body, reasoning, task)
         body = tb if isinstance(tb, dict) else {}
     headers_in = biz.get("headers") if isinstance(biz.get("headers"), dict) else {}
-    hdrs = {str(k): _facade()._tpl_str(str(v), reasoning, task) for (k, v) in headers_in.items()}
+    hdrs = {
+        str(k): _facade()._tpl_str(str(v), reasoning, task)
+        for (k, v) in headers_in.items()
+    }
     key = str(
-        biz.get("business_key") or _facade().os.environ.get("FHD_BUSINESS_API_KEY") or ""
+        biz.get("business_key")
+        or _facade().os.environ.get("FHD_BUSINESS_API_KEY")
+        or ""
     ).strip()
     if key:
         hdrs.setdefault("X-FHD-Business-Key", key)
@@ -1202,7 +1254,8 @@ def _trusted_system_duty_contract_execution(
     provided = payload.get("work_contract")
     if (
         not isinstance(provided, dict)
-        or str(provided.get("schema") or "").strip() != "xcagi.duty_employee_work_contracts/v1"
+        or str(provided.get("schema") or "").strip()
+        != "xcagi.duty_employee_work_contracts/v1"
     ):
         return ({}, {})
     try:
@@ -1218,7 +1271,9 @@ def _trusted_system_duty_contract_execution(
         contract_trigger = (
             contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
         )
-        if trigger == "schedule" and (not str(contract_trigger.get("cron") or "").strip()):
+        if trigger == "schedule" and (
+            not str(contract_trigger.get("cron") or "").strip()
+        ):
             return ({}, {})
         if trigger == "event":
             event_type = str(payload.get("event_type") or "").strip()
@@ -1234,7 +1289,8 @@ def _trusted_system_duty_contract_execution(
         expected_acceptance = [str(item) for item in contract.get("acceptance") or []]
         provided_acceptance = [str(item) for item in provided.get("acceptance") or []]
         if (
-            str(provided.get("mode") or "").strip() != str(contract.get("mode") or "").strip()
+            str(provided.get("mode") or "").strip()
+            != str(contract.get("mode") or "").strip()
             or str(provided.get("risk_level") or "").strip().lower() != risk
             or provided_acceptance != expected_acceptance
         ):
@@ -1274,10 +1330,20 @@ def _action_agent_runner(
             "ok": False,
             "error": f"EmployeeAgentRunner 未导入: {exc}",
         }
-    agent_cfg = actions_cfg.get("agent") if isinstance(actions_cfg.get("agent"), dict) else {}
-    ws_cfg = agent_cfg.get("workspace") if isinstance(agent_cfg.get("workspace"), dict) else {}
-    cog_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
-    read_only = bool(ws_cfg.get("read_only", True)) or bool(cog_input.get("burn_in_read_only"))
+    agent_cfg = (
+        actions_cfg.get("agent") if isinstance(actions_cfg.get("agent"), dict) else {}
+    )
+    ws_cfg = (
+        agent_cfg.get("workspace")
+        if isinstance(agent_cfg.get("workspace"), dict)
+        else {}
+    )
+    cog_input = (
+        reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    )
+    read_only = bool(ws_cfg.get("read_only", True)) or bool(
+        cog_input.get("burn_in_read_only")
+    )
     requires_root = bool(ws_cfg.get("requires_project_root", False))
     project_root_raw = (
         cog_input.get("project_root")
@@ -1306,10 +1372,14 @@ def _action_agent_runner(
                 read_only=read_only,
             )
             if not resolved:
-                from modstore_server.integrations.vibe_adapter import ensure_within_workspace
+                from modstore_server.integrations.vibe_adapter import (
+                    ensure_within_workspace,
+                )
 
                 resolved = str(
-                    ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
+                    ensure_within_workspace(
+                        str(project_root_raw), user_id=int(user_id or 0)
+                    )
                 )
             workspace_root = resolved
         except RECOVERABLE_ERRORS as exc:
@@ -1337,12 +1407,20 @@ def _action_agent_runner(
         ):
             uid_ai = int(user_id or 0)
             if uid_ai > 0:
-                from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+                from modstore_server.mod_scaffold_runner import (
+                    resolve_llm_provider_model_auto,
+                )
 
                 with sf() as sess:
-                    urow = sess.query(_facade().User).filter(_facade().User.id == uid_ai).first()
+                    urow = (
+                        sess.query(_facade().User)
+                        .filter(_facade().User.id == uid_ai)
+                        .first()
+                    )
                     if urow:
-                        rp, rm, perr = await resolve_llm_provider_model_auto(sess, urow, None, None)
+                        rp, rm, perr = await resolve_llm_provider_model_auto(
+                            sess, urow, None, None
+                        )
                         if rp and rm and (not perr):
                             provider, model = (rp, rm)
             else:
@@ -1354,7 +1432,9 @@ def _action_agent_runner(
         if reasoning.get("_bench_platform_only"):
             from modstore_server.services.llm import chat_dispatch_via_platform_only
 
-            return await chat_dispatch_via_platform_only(provider, model, messages, max_tokens=mt)
+            return await chat_dispatch_via_platform_only(
+                provider, model, messages, max_tokens=mt
+            )
         with sf() as sess:
             return await _facade().chat_dispatch_via_session(
                 sess, user_id, provider, model, messages, max_tokens=mt
@@ -1366,7 +1446,9 @@ def _action_agent_runner(
             return set()
         return {x.strip().lower() for x in raw.split(",") if x.strip()}
 
-    async def _allowlist_http_get(url: str, **kwargs) -> _facade().Dict[str, _facade().Any]:
+    async def _allowlist_http_get(
+        url: str, **kwargs
+    ) -> _facade().Dict[str, _facade().Any]:
         hosts = _agent_http_allow_hosts()
         if not hosts:
             return {"ok": False, "error": "未配置 MODSTORE_AGENT_HTTP_ALLOW_HOSTS"}
@@ -1378,7 +1460,9 @@ def _action_agent_runner(
         if not host or host not in hosts:
             return {"ok": False, "error": f"host 不在白名单: {host or '?'}"}
         timeout = float(kwargs.get("timeout") or 30)
-        headers = kwargs.get("headers") if isinstance(kwargs.get("headers"), dict) else {}
+        headers = (
+            kwargs.get("headers") if isinstance(kwargs.get("headers"), dict) else {}
+        )
         try:
             async with _facade().httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.get(url, headers=headers)
@@ -1398,7 +1482,9 @@ def _action_agent_runner(
     async def _noop_http_post(url: str, **kwargs) -> _facade().Dict[str, _facade().Any]:
         return {"ok": False, "error": "agent 模式下 HTTP 工具未启用"}
 
-    _http_get_impl = _allowlist_http_get if _agent_http_allow_hosts() else _noop_http_get
+    _http_get_impl = (
+        _allowlist_http_get if _agent_http_allow_hosts() else _noop_http_get
+    )
     ctx: _facade().Dict[str, _facade().Any] = {
         "call_llm": _agent_call_llm,
         "http_get": _http_get_impl,
@@ -1406,15 +1492,23 @@ def _action_agent_runner(
         "workspace_root": workspace_root,
         "employee_id": employee_id,
         "cli_fallback_enabled": employee_id == "llm-ops-engineer"
-        and _facade().os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1").strip().lower()
+        and _facade()
+        .os.environ.get("MODSTORE_LLM_CLI_FALLBACK_ENABLED", "1")
+        .strip()
+        .lower()
         not in ("0", "false", "off", "disabled"),
         "read_only": read_only,
         "employee_input": dict(cog_input),
         "employee_capabilities": [
-            str(item).strip() for item in agent_cfg.get("capabilities") or [] if str(item).strip()
+            str(item).strip()
+            for item in agent_cfg.get("capabilities") or []
+            if str(item).strip()
         ],
         "research_tools_enabled": not read_only
-        and _facade().os.environ.get("MODSTORE_AGENT_RESEARCH_TOOLS_ENABLED", "").strip().lower()
+        and _facade()
+        .os.environ.get("MODSTORE_AGENT_RESEARCH_TOOLS_ENABLED", "")
+        .strip()
+        .lower()
         in ("1", "true", "yes"),
     }
     try:
@@ -1422,7 +1516,9 @@ def _action_agent_runner(
 
         with sf() as _sess:
             _pack = _facade().load_employee_pack_resolved(_sess, employee_id)
-            _manifest = _pack.get("manifest") if isinstance(_pack.get("manifest"), dict) else {}
+            _manifest = (
+                _pack.get("manifest") if isinstance(_pack.get("manifest"), dict) else {}
+            )
             _sg, _fg, _ag = workspace_policy_from_manifest(_manifest)
             ctx["scope_globs"] = _sg
             ctx["forbidden_globs"] = _fg
@@ -1433,7 +1529,9 @@ def _action_agent_runner(
         ctx["approval_required_globs"] = []
     try:
         from modstore_server.integrations.ops_action_handlers import OPS_EMPLOYEE_IDS
-        from modstore_server.integrations.ops_action_handlers import repo_root as _ops_repo_root
+        from modstore_server.integrations.ops_action_handlers import (
+            repo_root as _ops_repo_root,
+        )
 
         if employee_id in OPS_EMPLOYEE_IDS:
             ctx["ops_readonly_repo_root"] = str(_ops_repo_root())
@@ -1454,7 +1552,9 @@ def _action_agent_runner(
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("agent runner raised employee=%s", employee_id)
         return {"handler": "agent", "ok": False, "error": f"agent 执行异常: {exc}"}
-    tool_calls = result.get("tool_calls") if isinstance(result.get("tool_calls"), list) else []
+    tool_calls = (
+        result.get("tool_calls") if isinstance(result.get("tool_calls"), list) else []
+    )
     cr_ids: set[int] = set()
     files_changed: _facade().List[_facade().Dict[str, _facade().Any]] = []
     for tc in tool_calls:
@@ -1470,7 +1570,9 @@ def _action_agent_runner(
         if cid > 0:
             cr_ids.add(cid)
         cids_raw = (
-            tr.get("change_request_ids") if isinstance(tr.get("change_request_ids"), list) else []
+            tr.get("change_request_ids")
+            if isinstance(tr.get("change_request_ids"), list)
+            else []
         )
         for one in cids_raw:
             try:
@@ -1535,7 +1637,9 @@ def _employee_pack_extract_root(
     """Extract the employee pack to a runtime directory so package-local Python files can run."""
     runtime_root = (
         _facade()
-        .Path(_facade().os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime")
+        .Path(
+            _facade().os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
+        )
         .expanduser()
     )
     pack_id = str(manifest.get("id") or employee_id).strip() or employee_id
@@ -1614,7 +1718,9 @@ def _action_direct_python(
             direct_input.get("_trusted_duty_contract_execution")
         )
         if reviewed_burn_in or reviewed_duty_execution:
-            from modstore_server.duty_workforce_contracts import resolve_reviewed_duty_employee_root
+            from modstore_server.duty_workforce_contracts import (
+                resolve_reviewed_duty_employee_root,
+            )
 
             root = resolve_reviewed_duty_employee_root(employee_id)
         else:
@@ -1671,7 +1777,9 @@ def _action_direct_python(
             direct_cfg.get("default_use_personnel_roster") is not None
             and "use_personnel_roster" not in payload
         ):
-            payload["use_personnel_roster"] = bool(direct_cfg.get("default_use_personnel_roster"))
+            payload["use_personnel_roster"] = bool(
+                direct_cfg.get("default_use_personnel_roster")
+            )
 
         async def _direct_call_llm(
             messages: _facade().List[_facade().Dict[str, _facade().Any]], **kwargs
@@ -1681,12 +1789,20 @@ def _action_direct_python(
             model = str(kwargs.get("model") or "auto")
             uid = int(user_id or 0)
             if uid > 0 and (provider.lower() == "auto" or model.lower() == "auto"):
-                from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+                from modstore_server.mod_scaffold_runner import (
+                    resolve_llm_provider_model_auto,
+                )
 
                 with sf() as sess:
-                    urow = sess.query(_facade().User).filter(_facade().User.id == uid).first()
+                    urow = (
+                        sess.query(_facade().User)
+                        .filter(_facade().User.id == uid)
+                        .first()
+                    )
                     if urow:
-                        rp, rm, perr = await resolve_llm_provider_model_auto(sess, urow, None, None)
+                        rp, rm, perr = await resolve_llm_provider_model_auto(
+                            sess, urow, None, None
+                        )
                         if rp and rm and (not perr):
                             provider, model = (rp, rm)
             with sf() as sess:
@@ -1698,7 +1814,9 @@ def _action_direct_python(
             "employee_id": employee_id,
             "user_id": user_id,
             "workspace_root": payload.get("workspace_root") or "",
-            "logger": _facade().logging.getLogger(f"employee.direct_python.{employee_id}"),
+            "logger": _facade().logging.getLogger(
+                f"employee.direct_python.{employee_id}"
+            ),
             "call_llm": _direct_call_llm,
         }
         out = run_fn(payload, ctx)
@@ -1709,14 +1827,19 @@ def _action_direct_python(
             detail = {"handler": "direct_python", "ok": ok, "output": out}
             if not ok:
                 err = str(
-                    out.get("error") or out.get("error_code") or out.get("summary") or ""
+                    out.get("error")
+                    or out.get("error_code")
+                    or out.get("summary")
+                    or ""
                 ).strip()
                 if err:
                     detail["error"] = err[:1000]
             return detail
         return {"handler": "direct_python", "ok": True, "output": out}
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.exception("direct_python handler failed employee_id=%s", employee_id)
+        _facade().logger.exception(
+            "direct_python handler failed employee_id=%s", employee_id
+        )
         return {"handler": "direct_python", "ok": False, "error": str(exc)[:1000]}
 
 
@@ -1782,7 +1905,9 @@ def _filter_handlers_vibe_coding_maintainer(
         selected: _facade().List[str] = []
         if "cursor_delegate" in handlers:
             selected.append("cursor_delegate")
-        elif _facade().os.environ.get("MODSTORE_CURSOR_DELEGATE_ENABLED", "1").strip().lower() in (
+        elif _facade().os.environ.get(
+            "MODSTORE_CURSOR_DELEGATE_ENABLED", "1"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",
@@ -1793,7 +1918,9 @@ def _filter_handlers_vibe_coding_maintainer(
             selected.append("direct_python")
         if "llm_md" in handlers:
             selected.append("llm_md")
-        return _facade()._prefer_para_with_local_fallback(selected or list(handlers), handlers)
+        return _facade()._prefer_para_with_local_fallback(
+            selected or list(handlers), handlers
+        )
     if multi_step and "agent" in handlers:
         selected = ["agent"]
         if "llm_md" in handlers:
@@ -1841,7 +1968,9 @@ def _actions_real(
         and requested_handler == "direct_python"
         and ("direct_python" in handlers)
     )
-    direct_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    direct_input = (
+        reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+    )
     reviewed_direct_burn_in = _facade().is_reviewed_direct_burn_in(
         actions_cfg,
         direct_input,
@@ -1861,9 +1990,13 @@ def _actions_real(
         "change-request-auditor",
         "test-qa-runner",
     ) and (not (deterministic_council_review or reviewed_direct_burn_in)):
-        handlers = _facade()._prefer_para_with_local_fallback(list(handlers), list(handlers))
+        handlers = _facade()._prefer_para_with_local_fallback(
+            list(handlers), list(handlers)
+        )
     if employee_id == "vibe-coding-maintainer" and not para_only:
-        handlers = _facade()._filter_handlers_vibe_coding_maintainer(handlers, reasoning, task)
+        handlers = _facade()._filter_handlers_vibe_coding_maintainer(
+            handlers, reasoning, task
+        )
     outputs: _facade().List[_facade().Dict[str, _facade().Any]] = []
     skip_local_after_para_ok = False
     _LOCAL_FALLBACK_HANDLERS = {
@@ -1877,19 +2010,25 @@ def _actions_real(
     # 跳过规划 LLM 后 llm_md/echo 只会回显空文本，且台账把 llm_md 视为本地回退，不再产出。
     skip_echo = reasoning.get("skipped_cognition_reason") == "para_first"
     for handler in handlers:
-        if (skip_local_after_para_ok or para_only) and str(handler) in _LOCAL_FALLBACK_HANDLERS:
+        if (skip_local_after_para_ok or para_only) and str(
+            handler
+        ) in _LOCAL_FALLBACK_HANDLERS:
             continue
         if skip_echo and str(handler) in ("llm_md", "echo"):
             continue
         if handler == "echo":
-            outputs.append({"handler": "echo", "output": reasoning.get("reasoning", "")})
+            outputs.append(
+                {"handler": "echo", "output": reasoning.get("reasoning", "")}
+            )
         elif handler == "http_request":
             http_cfg = actions_cfg.get("http_request") or {}
             url = str(http_cfg.get("url") or "").strip()
             method = str(http_cfg.get("method") or "POST").strip().upper()
             headers = http_cfg.get("headers") or {}
             body_tpl = str(http_cfg.get("body") or "")
-            body = body_tpl.replace("{{reasoning}}", str(reasoning.get("reasoning") or ""))
+            body = body_tpl.replace(
+                "{{reasoning}}", str(reasoning.get("reasoning") or "")
+            )
             body = body.replace("{{task}}", task)
             if not url:
                 outputs.append({"handler": "http_request", "error": "missing url"})
@@ -1935,13 +2074,19 @@ def _actions_real(
             outputs.append({"handler": "data_sync", "target": target, "status": "ok"})
         elif handler == "direct_python":
             outputs.append(
-                _facade()._action_direct_python(actions_cfg, reasoning, task, employee_id, user_id)
+                _facade()._action_direct_python(
+                    actions_cfg, reasoning, task, employee_id, user_id
+                )
             )
         elif handler == "wechat_notify":
-            outputs.append(_facade()._action_wechat_notify(actions_cfg, reasoning, task))
+            outputs.append(
+                _facade()._action_wechat_notify(actions_cfg, reasoning, task)
+            )
         elif handler == "openapi_tool":
             outputs.append(
-                _facade()._action_openapi_tool(actions_cfg, reasoning, task, employee_id, user_id)
+                _facade()._action_openapi_tool(
+                    actions_cfg, reasoning, task, employee_id, user_id
+                )
             )
         elif handler == "fhd_business":
             outputs.append(_facade()._action_fhd_business(actions_cfg, reasoning, task))
@@ -1964,25 +2109,41 @@ def _actions_real(
             )
         elif handler == "agent":
             outputs.append(
-                _facade()._action_agent_runner(actions_cfg, reasoning, task, employee_id, user_id)
+                _facade()._action_agent_runner(
+                    actions_cfg, reasoning, task, employee_id, user_id
+                )
             )
         elif handler == "para_delegate":
             from modstore_server.para_delegate_handler import dispatch_para_delegate
 
-            cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
-            para_out = dispatch_para_delegate(task=task, input_data=cog_in, employee_id=employee_id)
+            cog_in = (
+                reasoning.get("input")
+                if isinstance(reasoning.get("input"), dict)
+                else {}
+            )
+            para_out = dispatch_para_delegate(
+                task=task, input_data=cog_in, employee_id=employee_id
+            )
             outputs.append(para_out)
             if isinstance(para_out, dict) and para_out.get("ok") is True:
                 skip_local_after_para_ok = True
         elif handler == "cursor_delegate":
             from modstore_server.cursor_delegate_handler import dispatch_cursor_delegate
 
-            cog_in = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+            cog_in = (
+                reasoning.get("input")
+                if isinstance(reasoning.get("input"), dict)
+                else {}
+            )
             outputs.append(
-                dispatch_cursor_delegate(task=task, input_data=cog_in, employee_id=employee_id)
+                dispatch_cursor_delegate(
+                    task=task, input_data=cog_in, employee_id=employee_id
+                )
             )
         elif handler == "llm_md":
-            outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
+            outputs.append(
+                {"handler": "llm_md", "output": reasoning.get("reasoning", "")}
+            )
         elif handler == "specialized":
             outputs.append(
                 {
@@ -1994,41 +2155,59 @@ def _actions_real(
             )
         elif handler in ("vibe_edit", "vibe_heal", "vibe_code"):
             try:
-                from modstore_server.integrations.vibe_action_handlers import dispatch_vibe_handler
+                from modstore_server.integrations.vibe_action_handlers import (
+                    dispatch_vibe_handler,
+                )
 
                 vibe_out = dispatch_vibe_handler(
                     str(handler), actions_cfg, reasoning, task, employee_id, user_id
                 )
             except RECOVERABLE_ERRORS as exc:
-                _facade().logger.exception("vibe handler dispatch failed handler=%s", handler)
+                _facade().logger.exception(
+                    "vibe handler dispatch failed handler=%s", handler
+                )
                 vibe_out = {
                     "handler": str(handler),
                     "ok": False,
                     "error": f"dispatch error: {exc}",
                 }
-            outputs.append(vibe_out or {"handler": str(handler), "ok": False, "error": "no output"})
+            outputs.append(
+                vibe_out or {"handler": str(handler), "ok": False, "error": "no output"}
+            )
         elif handler == "doc_sync":
-            from modstore_server.integrations.doc_sync_handler import dispatch_doc_sync_handler
+            from modstore_server.integrations.doc_sync_handler import (
+                dispatch_doc_sync_handler,
+            )
 
             outputs.append(
-                dispatch_doc_sync_handler(actions_cfg, reasoning, task, employee_id, user_id)
+                dispatch_doc_sync_handler(
+                    actions_cfg, reasoning, task, employee_id, user_id
+                )
             )
         elif handler in ("shell_exec", "ssh_exec"):
-            from modstore_server.integrations.ops_action_handlers import dispatch_ops_handler
+            from modstore_server.integrations.ops_action_handlers import (
+                dispatch_ops_handler,
+            )
 
             outputs.append(
-                dispatch_ops_handler(handler, actions_cfg, reasoning, task, employee_id, user_id)
+                dispatch_ops_handler(
+                    handler, actions_cfg, reasoning, task, employee_id, user_id
+                )
             )
         else:
             outputs.append({"handler": str(handler), "error": "unknown handler"})
     try:
-        _rep_input = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+        _rep_input = (
+            reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
+        )
         _rep_body = ""
         if not _rep_input.get("im_reply_managed"):
             for _o in outputs:
                 if not isinstance(_o, dict):
                     continue
-                _cand = str(_o.get("answer") or _o.get("summary") or _o.get("output") or "").strip()
+                _cand = str(
+                    _o.get("answer") or _o.get("summary") or _o.get("output") or ""
+                ).strip()
                 if not _cand:
                     continue
                 if _cand[:1] == "{" and '"answer"' in _cand:
@@ -2092,13 +2271,17 @@ def _auto_wrap_execution_result_to_change_requests(
     existing_ids: set[int] = set()
     file_candidates: _facade().List[_facade().Dict[str, str]] = []
     top_level_proposed = (
-        result.get("proposed_changes") if isinstance(result.get("proposed_changes"), list) else []
+        result.get("proposed_changes")
+        if isinstance(result.get("proposed_changes"), list)
+        else []
     )
     if top_level_proposed:
         synthetic_out = {
             "files_changed": list(top_level_proposed),
             "workspace_root": str(
-                input_payload.get("project_root") or input_payload.get("workspace_root") or ""
+                input_payload.get("project_root")
+                or input_payload.get("workspace_root")
+                or ""
             ),
         }
         outputs = list(outputs) + [synthetic_out]
@@ -2113,7 +2296,9 @@ def _auto_wrap_execution_result_to_change_requests(
         if cid > 0:
             existing_ids.add(cid)
         cid_list = (
-            out.get("change_request_ids") if isinstance(out.get("change_request_ids"), list) else []
+            out.get("change_request_ids")
+            if isinstance(out.get("change_request_ids"), list)
+            else []
         )
         for one in cid_list:
             try:
@@ -2123,10 +2308,14 @@ def _auto_wrap_execution_result_to_change_requests(
             if _cid > 0:
                 existing_ids.add(_cid)
         files_changed = (
-            out.get("files_changed") if isinstance(out.get("files_changed"), list) else []
+            out.get("files_changed")
+            if isinstance(out.get("files_changed"), list)
+            else []
         )
         proposed = (
-            out.get("proposed_changes") if isinstance(out.get("proposed_changes"), list) else []
+            out.get("proposed_changes")
+            if isinstance(out.get("proposed_changes"), list)
+            else []
         )
         if proposed:
             files_changed = list(files_changed) + list(proposed)
@@ -2144,7 +2333,9 @@ def _auto_wrap_execution_result_to_change_requests(
                     or ""
                 ).strip()
                 if path:
-                    file_candidates.append({"path": path, "content": content, "workspace_root": ws})
+                    file_candidates.append(
+                        {"path": path, "content": content, "workspace_root": ws}
+                    )
             elif isinstance(f, str) and f.strip():
                 ws = str(
                     out.get("workspace_root")
@@ -2152,7 +2343,9 @@ def _auto_wrap_execution_result_to_change_requests(
                     or input_payload.get("workspace_root")
                     or ""
                 ).strip()
-                file_candidates.append({"path": f.strip(), "content": "", "workspace_root": ws})
+                file_candidates.append(
+                    {"path": f.strip(), "content": "", "workspace_root": ws}
+                )
     created_ids: _facade().List[int] = []
     skipped: _facade().List[_facade().Dict[str, str]] = []
     if file_candidates:
@@ -2160,7 +2353,9 @@ def _auto_wrap_execution_result_to_change_requests(
             from modstore_server.employee_change_request_service import (
                 defer_write_as_change_request,
             )
-            from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+            from modstore_server.employee_scope_policy import (
+                workspace_policy_from_manifest,
+            )
 
             sf = _facade().get_session_factory()
             with sf() as session:
@@ -2168,9 +2363,11 @@ def _auto_wrap_execution_result_to_change_requests(
                     pack = _facade().load_employee_pack_resolved(session, employee_id)
                 except RECOVERABLE_ERRORS:
                     pack = {}
-            manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
-            scope_globs, forbidden_globs, approval_required_globs = workspace_policy_from_manifest(
-                manifest
+            manifest = (
+                pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+            )
+            scope_globs, forbidden_globs, approval_required_globs = (
+                workspace_policy_from_manifest(manifest)
             )
         except RECOVERABLE_ERRORS as exc:
             return {
@@ -2264,7 +2461,11 @@ def _handler_failure_detail(result: _facade().Dict[str, _facade().Any]) -> str:
                 if value:
                     parts.append(f"{key}={value[:240]}")
                     break
-        return "handler failed: " + " ".join(parts) if parts else "handler returned ok=False"
+        return (
+            "handler failed: " + " ".join(parts)
+            if parts
+            else "handler returned ok=False"
+        )
     return "one or more handlers returned ok=False"
 
 
@@ -2279,7 +2480,9 @@ def _evaluate_employee_risk_gate(
 
         return gate_action_or_block(employee_id, manifest, handler_list, payload)
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.exception("risk middleware unavailable; blocking employee execution")
+        _facade().logger.exception(
+            "risk middleware unavailable; blocking employee execution"
+        )
         return {
             "ok": False,
             "blocked": True,
@@ -2296,10 +2499,14 @@ def _evaluate_employee_risk_gate(
 
 
 def _execute_employee_phase_01(state):
-    state["pack"] = _facade().load_employee_pack_resolved(state["session"], state["employee_id"])
+    state["pack"] = _facade().load_employee_pack_resolved(
+        state["session"], state["employee_id"]
+    )
     state["manifest"], burn_in_eligibility = (state["pack"].get("manifest") or {}, {})
-    reviewed_contract, reviewed_manifest = _facade()._trusted_system_duty_contract_execution(
-        state["employee_id"], state["payload"], user_id=state["user_id"]
+    reviewed_contract, reviewed_manifest = (
+        _facade()._trusted_system_duty_contract_execution(
+            state["employee_id"], state["payload"], user_id=state["user_id"]
+        )
     )
     if reviewed_contract and reviewed_manifest:
         state["manifest"] = reviewed_manifest
@@ -2312,9 +2519,9 @@ def _execute_employee_phase_01(state):
             "risk_level": str(reviewed_contract.get("risk_level") or ""),
             "acceptance": list(reviewed_contract.get("acceptance") or []),
         }
-    elif _facade()._flag_enabled(state["payload"].get("burn_in")) and _facade()._flag_enabled(
-        state["payload"].get("burn_in_read_only")
-    ):
+    elif _facade()._flag_enabled(
+        state["payload"].get("burn_in")
+    ) and _facade()._flag_enabled(state["payload"].get("burn_in_read_only")):
         from modstore_server.duty_workforce_burnin import assess_burn_in_eligibility
         from modstore_server.duty_workforce_contracts import (
             load_reviewed_duty_manifest,
@@ -2353,7 +2560,9 @@ def _execute_employee_phase_01(state):
             exc_info=True,
         )
         state["runtime_policy"] = {}
-    state["config"] = _facade().bind_reviewed_burn_in_handlers(state["config"], burn_in_eligibility)
+    state["config"] = _facade().bind_reviewed_burn_in_handlers(
+        state["config"], burn_in_eligibility
+    )
     actions_section = state["config"].get("actions") or {}
     actions_inner = (
         actions_section.get("actions")
@@ -2365,10 +2574,14 @@ def _execute_employee_phase_01(state):
         state["employee_id"], state["manifest"], state["handler_list"], state["payload"]
     )
     if not gate.get("ok"):
-        state["duration_ms"] = round((_facade().time.perf_counter() - state["t0"]) * 1000, 3)
+        state["duration_ms"] = round(
+            (_facade().time.perf_counter() - state["t0"]) * 1000, 3
+        )
         state["session"].add(
             _facade().EmployeeExecutionMetric(
-                user_id=_facade()._resolve_metric_user_id(state["session"], state["user_id"]),
+                user_id=_facade()._resolve_metric_user_id(
+                    state["session"], state["user_id"]
+                ),
                 employee_id=state["employee_id"],
                 task=_facade()._metric_task_preview(state["task"]),
                 status="blocked_by_risk_gate",
@@ -2387,7 +2600,10 @@ def _execute_employee_phase_01(state):
             True,
             {
                 "employee_id": state["employee_id"],
-                "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+                "pack": {
+                    "id": state["pack"]["pack_id"],
+                    "version": state["pack"]["version"],
+                },
                 "duration_ms": state["duration_ms"],
                 "result": {
                     "task": state["task"],
@@ -2396,7 +2612,9 @@ def _execute_employee_phase_01(state):
                     "summary": "blocked by risk middleware",
                     "risk_gate": gate,
                 },
-                "executed_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
+                "executed_at": _facade()
+                .datetime.now(_facade().timezone.utc)
+                .isoformat(),
                 "llm_tokens": 0,
                 "blocked_by_risk_gate": True,
                 "runtime_policy": state["runtime_policy"] or None,
@@ -2405,7 +2623,10 @@ def _execute_employee_phase_01(state):
         )
     ctx = _facade().build_employee_context(state["employee_id"], state["payload"])
     state["perceived"] = _facade()._perception_real(
-        state["config"].get("perception", {}), state["payload"], state["session"], state["user_id"]
+        state["config"].get("perception", {}),
+        state["payload"],
+        state["session"],
+        state["user_id"],
     )
     try:
         from modstore_server.employee_perception_enricher import enrich_perception
@@ -2417,31 +2638,45 @@ def _execute_employee_phase_01(state):
         ) or _facade().os.environ.get("MODSTORE_REPO_ROOT", "")
         enrich_perception(
             employee_id=state["employee_id"],
-            perceived=state["perceived"] if isinstance(state["perceived"], dict) else {},
+            perceived=state["perceived"]
+            if isinstance(state["perceived"], dict)
+            else {},
             config=state["config"],
             session=state["session"],
-            project_root=_facade().Path(state["_project_root"]) if state["_project_root"] else None,
+            project_root=_facade().Path(state["_project_root"])
+            if state["_project_root"]
+            else None,
             manifest=state["manifest"] if isinstance(state["manifest"], dict) else None,
         )
     except RECOVERABLE_ERRORS as _pe_exc:
         _facade().logger.debug(
-            "perception_enricher failed employee_id=%s err=%s", state["employee_id"], _pe_exc
+            "perception_enricher failed employee_id=%s err=%s",
+            state["employee_id"],
+            _pe_exc,
         )
     try:
-        from modstore_server.employee_task_classifier import enrich_perception_with_classification
+        from modstore_server.employee_task_classifier import (
+            enrich_perception_with_classification,
+        )
 
         enrich_perception_with_classification(
             employee_id=state["employee_id"],
             task=str(state["task"] or ""),
-            perceived=state["perceived"] if isinstance(state["perceived"], dict) else {},
+            perceived=state["perceived"]
+            if isinstance(state["perceived"], dict)
+            else {},
         )
     except RECOVERABLE_ERRORS as _tc_exc:
         _facade().logger.debug(
-            "task_classifier failed employee_id=%s err=%s", state["employee_id"], _tc_exc
+            "task_classifier failed employee_id=%s err=%s",
+            state["employee_id"],
+            _tc_exc,
         )
     file_path_fast = (
         isinstance(state["payload"], dict)
-        and str(state["payload"].get("file_path") or state["payload"].get("path") or "").strip()
+        and str(
+            state["payload"].get("file_path") or state["payload"].get("path") or ""
+        ).strip()
     )
     state["direct_only"] = state["handler_list"] == ["direct_python"] and bool(
         file_path_fast
@@ -2457,7 +2692,9 @@ def _execute_employee_phase_01(state):
     if state["direct_only"]:
         state["memory"]: _facade().Dict[str, _facade().Any] = {}
         state["reasoning"] = {
-            "input": dict(state["payload"]) if isinstance(state["payload"], dict) else {},
+            "input": dict(state["payload"])
+            if isinstance(state["payload"], dict)
+            else {},
             "reasoning": "",
             "skipped_cognition": True,
         }
@@ -2469,7 +2706,9 @@ def _execute_employee_phase_01(state):
     ):
         state["memory"] = {}
         state["reasoning"] = {
-            "input": dict(state["payload"]) if isinstance(state["payload"], dict) else {},
+            "input": dict(state["payload"])
+            if isinstance(state["payload"], dict)
+            else {},
             "reasoning": "",
             "skipped_cognition": True,
             "skipped_cognition_reason": "para_first",
@@ -2510,10 +2749,15 @@ def _execute_employee_phase_04(state):
         ).strip().lower() in {"1", "true", "yes", "on"}
         if not state["suppress_lifecycle_events"]:
             try:
-                from modstore_server.notification_service import notify_employee_execution_done
+                from modstore_server.notification_service import (
+                    notify_employee_execution_done,
+                )
 
                 notify_employee_execution_done(
-                    state["user_id"], state["employee_id"], state["task"], state["exec_status"]
+                    state["user_id"],
+                    state["employee_id"],
+                    state["task"],
+                    state["exec_status"],
                 )
             except RECOVERABLE_ERRORS:
                 pass
@@ -2521,10 +2765,15 @@ def _execute_employee_phase_04(state):
             True,
             {
                 "employee_id": state["employee_id"],
-                "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+                "pack": {
+                    "id": state["pack"]["pack_id"],
+                    "version": state["pack"]["version"],
+                },
                 "duration_ms": state["duration_ms"],
                 "result": state["result"],
-                "executed_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
+                "executed_at": _facade()
+                .datetime.now(_facade().timezone.utc)
+                .isoformat(),
                 "llm_tokens": state["llm_tokens"],
                 "handler_failed": True,
                 "runtime_policy": state["runtime_policy"] or None,
@@ -2532,7 +2781,9 @@ def _execute_employee_phase_04(state):
         )
     if state["recovery_meta"].get("recovered"):
         try:
-            from modstore_server.services.change_signal import emit_execution_recovery_event
+            from modstore_server.services.change_signal import (
+                emit_execution_recovery_event,
+            )
 
             emit_execution_recovery_event(
                 state["employee_id"],
@@ -2545,7 +2796,9 @@ def _execute_employee_phase_04(state):
                 attempts=int(state["recovery_meta"].get("attempts") or 0),
             )
         except RECOVERABLE_ERRORS:
-            _facade().logger.debug("emit_execution_recovery_event failed", exc_info=True)
+            _facade().logger.debug(
+                "emit_execution_recovery_event failed", exc_info=True
+            )
     if _facade()._flag_enabled(state["payload"].get("suppress_change_requests")):
         cr_bridge = {
             "ok": True,
@@ -2579,7 +2832,9 @@ def _execute_employee_phase_04(state):
             state["result"]["change_request_ids"] = normalized_cids
     if not _facade()._flag_enabled(state["payload"].get("suppress_lifecycle_events")):
         try:
-            from modstore_server.notification_service import notify_employee_execution_done
+            from modstore_server.notification_service import (
+                notify_employee_execution_done,
+            )
 
             notify_employee_execution_done(
                 state["user_id"], state["employee_id"], state["task"], "success"
@@ -2655,7 +2910,10 @@ def _execute_employee_phase_04(state):
         True,
         {
             "employee_id": state["employee_id"],
-            "pack": {"id": state["pack"]["pack_id"], "version": state["pack"]["version"]},
+            "pack": {
+                "id": state["pack"]["pack_id"],
+                "version": state["pack"]["version"],
+            },
             "duration_ms": state["duration_ms"],
             "result": state["result"],
             "executed_at": _facade().datetime.now(_facade().timezone.utc).isoformat(),
@@ -2684,9 +2942,13 @@ def _execute_employee_phase_04(state):
 
 
 def _execute_employee_phase_03(state):
-    state["duration_ms"] = round((_facade().time.perf_counter() - state["t0"]) * 1000, 3)
+    state["duration_ms"] = round(
+        (_facade().time.perf_counter() - state["t0"]) * 1000, 3
+    )
     state["llm_tokens"] = (
-        0 if state["direct_only"] else _facade()._extract_token_count(state["reasoning"])
+        0
+        if state["direct_only"]
+        else _facade()._extract_token_count(state["reasoning"])
     )
     state["handler_ok"] = _facade()._handlers_execution_ok(
         state["result"] if isinstance(state["result"], dict) else {}
@@ -2694,17 +2956,28 @@ def _execute_employee_phase_03(state):
     burn_in_acceptance: _facade().Dict[str, _facade().Any] = {}
     if _facade()._flag_enabled(state["payload"].get("burn_in")):
         try:
-            burn_in_deadline = float(state["payload"].get("burn_in_deadline_epoch") or 0)
+            burn_in_deadline = float(
+                state["payload"].get("burn_in_deadline_epoch") or 0
+            )
         except (TypeError, ValueError):
             burn_in_deadline = 0.0
         if burn_in_deadline > 0 and _facade().time.time() > burn_in_deadline:
-            burn_in_acceptance = {"passed": False, "reasons": ["orchestration_deadline_exceeded"]}
+            burn_in_acceptance = {
+                "passed": False,
+                "reasons": ["orchestration_deadline_exceeded"],
+            }
         else:
             try:
-                from modstore_server.duty_workforce_burnin import validate_burn_in_execution_result
+                from modstore_server.duty_workforce_burnin import (
+                    validate_burn_in_execution_result,
+                )
 
                 burn_in_acceptance = validate_burn_in_execution_result(
-                    {"result": state["result"] if isinstance(state["result"], dict) else {}}
+                    {
+                        "result": state["result"]
+                        if isinstance(state["result"], dict)
+                        else {}
+                    }
                 )
             except RECOVERABLE_ERRORS as exc:
                 burn_in_acceptance = {
@@ -2718,7 +2991,9 @@ def _execute_employee_phase_03(state):
     state["exec_status"] = (
         "success"
         if state["handler_ok"]
-        else "burnin_rejected" if burn_in_acceptance else "handler_failed"
+        else "burnin_rejected"
+        if burn_in_acceptance
+        else "handler_failed"
     )
     if state["handler_ok"]:
         metric_error = ""
@@ -2731,7 +3006,9 @@ def _execute_employee_phase_03(state):
             state["result"] if isinstance(state["result"], dict) else {}
         )
     metric_failure_kind = ""
-    _pg = state["result"].get("path_guard") if isinstance(state["result"], dict) else None
+    _pg = (
+        state["result"].get("path_guard") if isinstance(state["result"], dict) else None
+    )
     if isinstance(_pg, dict) and _pg.get("checked") and (not _pg.get("ok")):
         state["exec_status"] = "blocked_by_path_guard"
         violations = _pg.get("violations") or []
@@ -2751,12 +3028,16 @@ def _execute_employee_phase_03(state):
         _human_report = build_human_report(
             employee_id=state["employee_id"],
             task=state["task"],
-            reasoning=state["reasoning"] if isinstance(state["reasoning"], dict) else {},
+            reasoning=state["reasoning"]
+            if isinstance(state["reasoning"], dict)
+            else {},
             result=state["result"] if isinstance(state["result"], dict) else {},
             duration_ms=state["duration_ms"],
             llm_tokens=state["llm_tokens"],
             exec_status=state["exec_status"],
-            perceived=state["perceived"] if isinstance(state["perceived"], dict) else None,
+            perceived=state["perceived"]
+            if isinstance(state["perceived"], dict)
+            else None,
             memory=state["memory"] if isinstance(state["memory"], dict) else None,
             cognition_error=(
                 str(state["reasoning"].get("error") or "")
@@ -2768,7 +3049,9 @@ def _execute_employee_phase_03(state):
             state["result"]["human_report"] = _human_report
     except RECOVERABLE_ERRORS as _hr_exc:
         _facade().logger.debug(
-            "build_human_report failed employee_id=%s err=%s", state["employee_id"], _hr_exc
+            "build_human_report failed employee_id=%s err=%s",
+            state["employee_id"],
+            _hr_exc,
         )
     if not state["handler_ok"]:
         state["cog_err"] = (
@@ -2777,7 +3060,9 @@ def _execute_employee_phase_03(state):
             else ""
         )
         cog_status = (
-            state["reasoning"].get("status") if isinstance(state["reasoning"], dict) else None
+            state["reasoning"].get("status")
+            if isinstance(state["reasoning"], dict)
+            else None
         )
         metric_failure_kind = _facade().classify_failure_kind(
             state["cog_err"] or metric_error, cog_status
@@ -2786,7 +3071,9 @@ def _execute_employee_phase_03(state):
             metric_error = f"{metric_error}; cognition_error={state['cog_err'][:500]}"
     state["session"].add(
         _facade().EmployeeExecutionMetric(
-            user_id=_facade()._resolve_metric_user_id(state["session"], state["user_id"]),
+            user_id=_facade()._resolve_metric_user_id(
+                state["session"], state["user_id"]
+            ),
             employee_id=state["employee_id"],
             task=_facade()._metric_task_preview(state["task"]),
             status=state["exec_status"],
@@ -2816,7 +3103,9 @@ def _execute_employee_phase_02(state):
             if not isinstance(_parsed_llm, dict):
                 import re as _re
 
-                _m = _re.search("```(?:json)?\\s*(\\{.*\\})\\s*```", _llm_out_raw, _re.DOTALL)
+                _m = _re.search(
+                    "```(?:json)?\\s*(\\{.*\\})\\s*```", _llm_out_raw, _re.DOTALL
+                )
                 if _m:
                     try:
                         _parsed_llm = _facade().json.loads(_m.group(1)) or {}
@@ -2834,7 +3123,9 @@ def _execute_employee_phase_02(state):
             if not isinstance(_parsed_llm, dict):
                 import re as _re
 
-                _m2 = _re.search('\\{[^{}]*\\"requires_human\\"[^{}]*\\}', _llm_out_raw, _re.DOTALL)
+                _m2 = _re.search(
+                    '\\{[^{}]*\\"requires_human\\"[^{}]*\\}', _llm_out_raw, _re.DOTALL
+                )
                 if _m2:
                     try:
                         _parsed_llm = _facade().json.loads(_m2.group(0)) or {}
@@ -2843,35 +3134,45 @@ def _execute_employee_phase_02(state):
         _ask_human = None
         _human_question_text = ""
         if isinstance(_parsed_llm, dict):
-            _ask_human = _parsed_llm.get("requires_human") or _parsed_llm.get("ask_human")
+            _ask_human = _parsed_llm.get("requires_human") or _parsed_llm.get(
+                "ask_human"
+            )
             _human_question_text = str(
                 _parsed_llm.get("human_question") or _parsed_llm.get("question") or ""
             )
         if _ask_human is None:
-            _ask_human = state["reasoning"].get("requires_human") or state["reasoning"].get(
-                "ask_human"
-            )
+            _ask_human = state["reasoning"].get("requires_human") or state[
+                "reasoning"
+            ].get("ask_human")
         if not _human_question_text:
             _human_question_text = str(
-                state["reasoning"].get("human_question") or state["reasoning"].get("question") or ""
+                state["reasoning"].get("human_question")
+                or state["reasoning"].get("question")
+                or ""
             )
         _exhausted_flag = None
         _handoff_intended = None
         if isinstance(_parsed_llm, dict):
             _exhausted_flag = _parsed_llm.get("exhausted")
-            _handoff_intended = _parsed_llm.get("handoff_to") or _parsed_llm.get("delegate_to")
+            _handoff_intended = _parsed_llm.get("handoff_to") or _parsed_llm.get(
+                "delegate_to"
+            )
         if _exhausted_flag is None and isinstance(state["reasoning"], dict):
             _exhausted_flag = state["reasoning"].get("exhausted")
         if _handoff_intended is None and isinstance(state["reasoning"], dict):
-            _handoff_intended = state["reasoning"].get("handoff_to") or state["reasoning"].get(
-                "delegate_to"
-            )
+            _handoff_intended = state["reasoning"].get("handoff_to") or state[
+                "reasoning"
+            ].get("delegate_to")
         if _exhausted_flag is True or (
             isinstance(_exhausted_flag, str) and _exhausted_flag.strip()
         ):
             state["reasoning"]["_exhausted"] = {
                 "failure_summary": str(
-                    (_parsed_llm.get("failure_summary") if isinstance(_parsed_llm, dict) else "")
+                    (
+                        _parsed_llm.get("failure_summary")
+                        if isinstance(_parsed_llm, dict)
+                        else ""
+                    )
                     or state["reasoning"].get("failure_summary", "")
                 )[:500],
                 "skipped_ask_human": True,
@@ -2905,17 +3206,24 @@ def _execute_employee_phase_02(state):
 
                 _resp = ask_human_blocking(
                     employee_id=state["employee_id"],
-                    user_id=_facade()._resolve_metric_user_id(state["session"], state["user_id"]),
+                    user_id=_facade()._resolve_metric_user_id(
+                        state["session"], state["user_id"]
+                    ),
                     question=_question_text,
                     task=state["task"],
                     context={
                         "perceived": state["perceived"],
                         "reasoning_summary": str(
-                            _parsed_llm.get("summary") or state["reasoning"].get("summary", "")
+                            _parsed_llm.get("summary")
+                            or state["reasoning"].get("summary", "")
                         )[:500],
-                        "llm_parsed": _parsed_llm if isinstance(_parsed_llm, dict) else {},
+                        "llm_parsed": _parsed_llm
+                        if isinstance(_parsed_llm, dict)
+                        else {},
                     },
-                    wait_for_answer=not bool(state["payload"].get("non_blocking_human_questions")),
+                    wait_for_answer=not bool(
+                        state["payload"].get("non_blocking_human_questions")
+                    ),
                 )
                 state["reasoning"]["_human_answer"] = _resp
                 state["reasoning"]["_phase_d_triggered"] = True
@@ -2930,30 +3238,41 @@ def _execute_employee_phase_02(state):
             _im_q = str(state["reasoning"].get("_phase_d_question") or "").strip()
             if _im_q:
                 _im_body = f"🤔 我有个问题想问你：{_im_q}\n\n（已通过任务中心发起，等你在那里回复）"
-        if _im_body and (not _facade()._flag_enabled(state["payload"].get("suppress_employee_im"))):
+        if _im_body and (
+            not _facade()._flag_enabled(state["payload"].get("suppress_employee_im"))
+        ):
             _facade()._emp_im_notify_boss(
                 state["employee_id"], state["manifest"], _im_body, "cognition"
             )
     except RECOVERABLE_ERRORS:
         _facade().logger.debug("cognition im hook skipped", exc_info=True)
     try:
-        from modstore_server.employee_handoff import _resolve_target_employee_id, perform_handoff
+        from modstore_server.employee_handoff import (
+            _resolve_target_employee_id,
+            perform_handoff,
+        )
 
         _handoff_to_raw = None
         _handoff_reason = ""
         _handoff_context = ""
         if isinstance(_parsed_llm, dict):
-            _handoff_to_raw = _parsed_llm.get("handoff_to") or _parsed_llm.get("delegate_to")
-            _handoff_reason = str(
-                _parsed_llm.get("handoff_reason") or _parsed_llm.get("delegate_reason") or ""
-            )
-            _handoff_context = str(
-                _parsed_llm.get("handoff_context") or _parsed_llm.get("delegate_context") or ""
-            )
-        if _handoff_to_raw is None and isinstance(state["reasoning"], dict):
-            _handoff_to_raw = state["reasoning"].get("handoff_to") or state["reasoning"].get(
+            _handoff_to_raw = _parsed_llm.get("handoff_to") or _parsed_llm.get(
                 "delegate_to"
             )
+            _handoff_reason = str(
+                _parsed_llm.get("handoff_reason")
+                or _parsed_llm.get("delegate_reason")
+                or ""
+            )
+            _handoff_context = str(
+                _parsed_llm.get("handoff_context")
+                or _parsed_llm.get("delegate_context")
+                or ""
+            )
+        if _handoff_to_raw is None and isinstance(state["reasoning"], dict):
+            _handoff_to_raw = state["reasoning"].get("handoff_to") or state[
+                "reasoning"
+            ].get("delegate_to")
             if not _handoff_reason:
                 _handoff_reason = str(
                     state["reasoning"].get("handoff_reason")
@@ -2966,8 +3285,12 @@ def _execute_employee_phase_02(state):
                     or state["reasoning"].get("delegate_context")
                     or ""
                 )
-        _handoff_target = _resolve_target_employee_id(_handoff_to_raw) if _handoff_to_raw else ""
-        if _handoff_target and _facade()._flag_enabled(state["payload"].get("suppress_handoff")):
+        _handoff_target = (
+            _resolve_target_employee_id(_handoff_to_raw) if _handoff_to_raw else ""
+        )
+        if _handoff_target and _facade()._flag_enabled(
+            state["payload"].get("suppress_handoff")
+        ):
             state["reasoning"]["_handoff_suppressed"] = {
                 "target": _handoff_target,
                 "reason": "read_only_burn_in",
@@ -2997,7 +3320,9 @@ def _execute_employee_phase_02(state):
                 state["reasoning"]["_handoff"] = _handoff_out
     except RECOVERABLE_ERRORS as _ho_exc:
         _facade().logger.debug(
-            "handoff perform failed employee_id=%s err=%s", state["employee_id"], _ho_exc
+            "handoff perform failed employee_id=%s err=%s",
+            state["employee_id"],
+            _ho_exc,
         )
     try:
         if _handoff_target and (
@@ -3031,7 +3356,9 @@ def _execute_employee_phase_02(state):
             state["result"]["path_guard"] = _path_guard
     except RECOVERABLE_ERRORS as _pg_exc:
         _facade().logger.debug(
-            "path_guard check failed employee_id=%s err=%s", state["employee_id"], _pg_exc
+            "path_guard check failed employee_id=%s err=%s",
+            state["employee_id"],
+            _pg_exc,
         )
     try:
         from modstore_server.employee_verification import run_verification
@@ -3039,10 +3366,14 @@ def _execute_employee_phase_02(state):
         _verif = run_verification(
             employee_id=state["employee_id"],
             task=state["task"],
-            reasoning=state["reasoning"] if isinstance(state["reasoning"], dict) else {},
+            reasoning=state["reasoning"]
+            if isinstance(state["reasoning"], dict)
+            else {},
             result=state["result"] if isinstance(state["result"], dict) else {},
             config=state["config"],
-            project_root=_facade().Path(state["_project_root"]) if state["_project_root"] else None,
+            project_root=_facade().Path(state["_project_root"])
+            if state["_project_root"]
+            else None,
         )
         if isinstance(state["result"], dict):
             state["result"]["verification"] = _verif
@@ -3052,15 +3383,21 @@ def _execute_employee_phase_02(state):
         )
     try:
         _verif_dict = _verif if isinstance(_verif, dict) else {}
-        _v_status = str(_verif_dict.get("status") or _verif_dict.get("ok") or "").strip()
-        _v_summary = str(_verif_dict.get("summary") or _verif_dict.get("message") or "").strip()
+        _v_status = str(
+            _verif_dict.get("status") or _verif_dict.get("ok") or ""
+        ).strip()
+        _v_summary = str(
+            _verif_dict.get("summary") or _verif_dict.get("message") or ""
+        ).strip()
         if (_v_status or _v_summary) and (
             not _facade()._flag_enabled(state["payload"].get("suppress_employee_im"))
         ):
             _icon = (
                 "✅"
                 if _v_status.lower() in ("ok", "passed", "pass", "success", "true")
-                else "❌" if _v_status.lower() in ("fail", "failed", "error", "false") else "🔍"
+                else "❌"
+                if _v_status.lower() in ("fail", "failed", "error", "false")
+                else "🔍"
             )
             _verif_body = f"{_icon} 验证：{_v_summary or _v_status}"[:300]
             _facade()._emp_im_notify_boss(
@@ -3071,14 +3408,22 @@ def _execute_employee_phase_02(state):
     try:
         from modstore_server.employee_self_evolution import check_evolution_signal
 
-        _evo = check_evolution_signal(employee_id=state["employee_id"], session=state["session"])
+        _evo = check_evolution_signal(
+            employee_id=state["employee_id"], session=state["session"]
+        )
         if isinstance(state["result"], dict):
             state["result"]["evolution_signal"] = _evo
     except RECOVERABLE_ERRORS as _evo_exc:
         _facade().logger.debug(
-            "evolution_signal check failed employee_id=%s err=%s", state["employee_id"], _evo_exc
+            "evolution_signal check failed employee_id=%s err=%s",
+            state["employee_id"],
+            _evo_exc,
         )
-    _ho = state["reasoning"].get("_handoff") if isinstance(state["reasoning"], dict) else None
+    _ho = (
+        state["reasoning"].get("_handoff")
+        if isinstance(state["reasoning"], dict)
+        else None
+    )
     if isinstance(_ho, dict) and isinstance(state["result"], dict):
         state["result"]["handoff"] = _ho
     return (False, None)
@@ -3178,7 +3523,9 @@ def execute_employee_task(
                         state["duration_ms"],
                         err_text[:400],
                     )
-                if not _facade()._flag_enabled(state["payload"].get("suppress_lifecycle_events")):
+                if not _facade()._flag_enabled(
+                    state["payload"].get("suppress_lifecycle_events")
+                ):
                     try:
                         from modstore_server.notification_service import (
                             notify_employee_execution_done,
@@ -3186,31 +3533,45 @@ def execute_employee_task(
 
                         if state["user_id"]:
                             notify_employee_execution_done(
-                                state["user_id"], state["employee_id"], state["task"], "failed"
+                                state["user_id"],
+                                state["employee_id"],
+                                state["task"],
+                                "failed",
                             )
                     except RECOVERABLE_ERRORS:
                         pass
                 try:
-                    from modstore_server.models_project_context import record_execution_outcome
+                    from modstore_server.models_project_context import (
+                        record_execution_outcome,
+                    )
 
                     record_execution_outcome(
                         employee_id=state["employee_id"],
                         task=state["task"],
-                        input_data=state["payload"] if isinstance(state["payload"], dict) else {},
+                        input_data=state["payload"]
+                        if isinstance(state["payload"], dict)
+                        else {},
                         outcome={"error": str(e)},
                         status="failed",
                     )
                 except RECOVERABLE_ERRORS:
                     pass
-                state["suppress_lifecycle_events"] = isinstance(state["payload"], dict) and str(
+                state["suppress_lifecycle_events"] = isinstance(
+                    state["payload"], dict
+                ) and str(
                     state["payload"].get("suppress_lifecycle_events") or ""
                 ).strip().lower() in {"1", "true", "yes", "on"}
                 if not state["suppress_lifecycle_events"]:
                     try:
-                        from modstore_server.services.change_signal import emit_task_lifecycle_event
+                        from modstore_server.services.change_signal import (
+                            emit_task_lifecycle_event,
+                        )
 
                         emit_task_lifecycle_event(
-                            state["employee_id"], state["task"], status="failed", error=str(e)
+                            state["employee_id"],
+                            state["task"],
+                            status="failed",
+                            error=str(e),
                         )
                     except RECOVERABLE_ERRORS:
                         pass
@@ -3262,7 +3623,11 @@ def list_employees() -> _facade().List[_facade().Dict[str, _facade().Any]]:
     merged_by_norm: _facade().Dict[str, _facade().Dict[str, _facade().Any]] = {}
     sf = _facade().get_session_factory()
     with sf() as session:
-        employees = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
+        employees = (
+            session.query(CatalogItem)
+            .filter(CatalogItem.artifact == "employee_pack")
+            .all()
+        )
         for e in employees:
             nid = catalog_store.norm_pkg_id(e.pkg_id)
             if not nid:

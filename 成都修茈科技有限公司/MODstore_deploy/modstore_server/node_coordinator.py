@@ -27,7 +27,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 NODES_KEY = "xcmax:cluster:nodes"
 DEFAULT_STALE_SECONDS = 300
-_CURRENT_CLAIM: ContextVar[dict[str, Any] | None] = ContextVar("incident_claim", default=None)
+_CURRENT_CLAIM: ContextVar[dict[str, Any] | None] = ContextVar(
+    "incident_claim", default=None
+)
 
 
 class IncidentClaimLost(RuntimeError):
@@ -35,7 +37,10 @@ class IncidentClaimLost(RuntimeError):
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR")
+        or Path.home() / ".xcmax" / "modstore-daily"
+    )
 
 
 def _node_id() -> str:
@@ -104,7 +109,9 @@ def write_node_heartbeat(*, job_count: Optional[int] = None) -> Dict[str, Any]:
     r = _redis_client()
     if r is not None:
         try:
-            r.hset(NODES_KEY, payload["node_id"], json.dumps(payload, ensure_ascii=False))
+            r.hset(
+                NODES_KEY, payload["node_id"], json.dumps(payload, ensure_ascii=False)
+            )
             r.expire(NODES_KEY, max(DEFAULT_STALE_SECONDS * 3, 900))
             return {
                 **payload,
@@ -284,11 +291,15 @@ def assert_incident_claim(event_id: int, *, session=None) -> dict[str, Any]:
                 IncidentClaim.generation == claim["generation"],
                 IncidentClaim.lease_until > now,
             )
-            .update({"lease_until": IncidentClaim.lease_until}, synchronize_session=False)
+            .update(
+                {"lease_until": IncidentClaim.lease_until}, synchronize_session=False
+            )
         )
         if not won:
             claim["lost"] = True
-            raise IncidentClaimLost(f"incident {event_id}: ownership expired or superseded")
+            raise IncidentClaimLost(
+                f"incident {event_id}: ownership expired or superseded"
+            )
 
     try:
         if session is not None:
@@ -301,11 +312,15 @@ def assert_incident_claim(event_id: int, *, session=None) -> dict[str, Any]:
         raise
     except RECOVERABLE_ERRORS as exc:
         claim["lost"] = True
-        raise IncidentClaimLost(f"incident {event_id}: ownership store unavailable") from exc
+        raise IncidentClaimLost(
+            f"incident {event_id}: ownership store unavailable"
+        ) from exc
     return claim
 
 
-def renew_incident_claim(event_id: int, owner_token: str, *, ttl_seconds: int = 900) -> bool:
+def renew_incident_claim(
+    event_id: int, owner_token: str, *, ttl_seconds: int = 900
+) -> bool:
     try:
         with get_session_factory()() as db:
             now = _database_time(db)
@@ -364,7 +379,9 @@ def incident_claim_scope(event_id: int, *, ttl_seconds: int = 900):
         return
     claim = claim_incident_for_node(event_id, ttl_seconds=ttl_seconds)
     if not claim.get("claimed"):
-        raise IncidentClaimLost(f"incident {event_id}: already owned or SQL unavailable")
+        raise IncidentClaimLost(
+            f"incident {event_id}: already owned or SQL unavailable"
+        )
     marker = _CURRENT_CLAIM.set(claim)
     stop = threading.Event()
 
@@ -376,7 +393,9 @@ def incident_claim_scope(event_id: int, *, ttl_seconds: int = 900):
                 claim["lost"] = True
                 return
 
-    renewal = threading.Thread(target=keep_alive, name=f"incident-lease-{event_id}", daemon=True)
+    renewal = threading.Thread(
+        target=keep_alive, name=f"incident-lease-{event_id}", daemon=True
+    )
     renewal.start()
     try:
         yield claim

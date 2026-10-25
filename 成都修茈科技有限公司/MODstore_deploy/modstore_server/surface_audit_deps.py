@@ -12,16 +12,24 @@ import time as time
 from pathlib import Path
 from typing import Any
 
-from modstore_server.surface_audit_paths import auto_start_enabled as _auto_start_enabled
+from modstore_server.surface_audit_paths import (
+    auto_start_enabled as _auto_start_enabled,
+)
 from modstore_server.surface_audit_paths import fhd_root as _fhd_root
 from modstore_server.surface_audit_paths import is_local_url as _is_local_url
-from modstore_server.surface_audit_paths import modstore_deploy_root as _modstore_deploy_root
+from modstore_server.surface_audit_paths import (
+    modstore_deploy_root as _modstore_deploy_root,
+)
 from modstore_server.surface_audit_paths import repo_root as _repo_root
 from modstore_server.surface_audit_processes import SurfaceProcessLauncher
 from modstore_server.surface_audit_processes import _kill_pid_file as _kill_pid_file
-from modstore_server.surface_audit_processes import stop_surface_audit_ephemeral as _stop_ephemeral
+from modstore_server.surface_audit_processes import (
+    stop_surface_audit_ephemeral as _stop_ephemeral,
+)
 from modstore_server.surface_audit_readiness import SurfaceDependencyChecks
-from modstore_server.surface_audit_runtime import _fhd_api_health_ok as _fhd_api_health_ok
+from modstore_server.surface_audit_runtime import (
+    _fhd_api_health_ok as _fhd_api_health_ok,
+)
 from modstore_server.surface_audit_runtime import _http_ok as _http_ok
 from modstore_server.surface_audit_runtime import _logs_dir as _logs_dir
 from modstore_server.surface_audit_runtime import _parse_port as _parse_port
@@ -39,7 +47,9 @@ from modstore_server.surface_audit_services import SurfaceServices, wait_for_hea
 def _spawn(
     name: str, cmd: list[str], *, cwd: Path, env: dict[str, str] | None = None
 ) -> dict[str, Any]:
-    return SurfaceProcessLauncher(_pids_dir(), _logs_dir()).spawn(name, cmd, cwd=cwd, env=env)
+    return SurfaceProcessLauncher(_pids_dir(), _logs_dir()).spawn(
+        name, cmd, cwd=cwd, env=env
+    )
 
 
 def _wait_http(url: str, *, label: str, tries: int = 45) -> bool:
@@ -104,5 +114,7 @@ def ensure_surface_audit_deps() -> dict[str, Any]:
 
 def stop_surface_audit_ephemeral() -> dict[str, Any]:
     return _stop_ephemeral(
-        pids_directory=_pids_dir(), fhd_directory=_fhd_root(), stop_process=_kill_pid_file
+        pids_directory=_pids_dir(),
+        fhd_directory=_fhd_root(),
+        stop_process=_kill_pid_file,
     )

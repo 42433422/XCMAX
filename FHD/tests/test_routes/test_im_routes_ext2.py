@@ -156,7 +156,10 @@ class TestNotifyOfflineImMembers:
     async def test_push_error_does_not_crash(self):
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.domain.shared_services.mobile_push.notify_user", side_effect=RuntimeError("push fail")),
+            patch(
+                "app.domain.shared_services.mobile_push.notify_user",
+                side_effect=RuntimeError("push fail"),
+            ),
         ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, "hello")
@@ -166,7 +169,10 @@ class TestNotifyOfflineImMembers:
     async def test_import_error_skips_push(self):
         with (
             patch("app.fastapi_routes.im_routes.im_ws_hub") as mock_hub,
-            patch("app.domain.shared_services.mobile_push.notify_user", side_effect=ImportError("no module")),
+            patch(
+                "app.domain.shared_services.mobile_push.notify_user",
+                side_effect=ImportError("no module"),
+            ),
         ):
             mock_hub.connected_user_ids.return_value = [1]
             await _notify_offline_im_members([1, 2], 1, "hello")

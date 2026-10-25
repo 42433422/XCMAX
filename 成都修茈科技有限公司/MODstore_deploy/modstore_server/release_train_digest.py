@@ -24,7 +24,9 @@ def attach_release_train_to_digest(record_id: int, bump_result: Dict[str, Any]) 
             row.release_kind = str(bump_result.get("kind") or "daily")
             session.commit()
     except RECOVERABLE_ERRORS:
-        logger.exception("release_train: attach to digest record_id=%s failed", record_id)
+        logger.exception(
+            "release_train: attach to digest record_id=%s failed", record_id
+        )
 
 
 def release_train_context_for_digest(
@@ -58,7 +60,9 @@ def release_train_context_for_digest(
                 "release_kind": kind or "daily",
             }
     except RECOVERABLE_ERRORS:
-        logger.exception("release_train: context for digest record_id=%s failed", record_id)
+        logger.exception(
+            "release_train: context for digest record_id=%s failed", record_id
+        )
         snapshot = snapshot_public()
         return {
             "release_train": snapshot.get("current"),

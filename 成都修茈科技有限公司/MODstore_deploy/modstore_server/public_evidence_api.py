@@ -50,7 +50,10 @@ ALLOWED_KEY_PREFIXES = (
 _NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]{0,254}$")
 _SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 _DEFAULT_INDEX = (
-    Path(__file__).resolve().parents[2] / "data" / "capabilities" / "evidence-index.json"
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "capabilities"
+    / "evidence-index.json"
 )
 _OK_CACHE_SECONDS = 600
 _FAIL_CACHE_SECONDS = 60
@@ -80,7 +83,9 @@ def cos_config() -> CosConfig | None:
     if not re.fullmatch(r"[a-z0-9][a-z0-9\-]{1,61}-\d{5,}", bucket) or not re.fullmatch(
         r"[a-z]{2}-[a-z\-]+", region
     ):
-        logger.warning("evidence COS bucket/region malformed; falling back to local copies")
+        logger.warning(
+            "evidence COS bucket/region malformed; falling back to local copies"
+        )
         return None
     try:
         ttl = int(os.environ.get("XCMAX_EVIDENCE_URL_TTL_SECONDS", "1800"))
@@ -120,9 +125,15 @@ def cos_authorization(
             "",
         ]
     )
-    string_to_sign = f"sha1\n{key_time}\n{hashlib.sha1(http_string.encode('utf-8')).hexdigest()}\n"
-    sign_key = hmac.new(secret_key.encode(), key_time.encode(), hashlib.sha1).hexdigest()
-    signature = hmac.new(sign_key.encode(), string_to_sign.encode(), hashlib.sha1).hexdigest()
+    string_to_sign = (
+        f"sha1\n{key_time}\n{hashlib.sha1(http_string.encode('utf-8')).hexdigest()}\n"
+    )
+    sign_key = hmac.new(
+        secret_key.encode(), key_time.encode(), hashlib.sha1
+    ).hexdigest()
+    signature = hmac.new(
+        sign_key.encode(), string_to_sign.encode(), hashlib.sha1
+    ).hexdigest()
     return (
         f"q-sign-algorithm=sha1&q-ak={secret_id}&q-sign-time={key_time}&q-key-time={key_time}"
         f"&q-header-list={';'.join(k for k, _ in signed)}&q-url-param-list=&q-signature={signature}"
@@ -177,7 +188,9 @@ class _IndexCache:
                     raw_assets = {}
                 raw_assets = raw_assets if isinstance(raw_assets, dict) else {}
                 self._assets = {
-                    name: entry for name, entry in raw_assets.items() if _valid_entry(name, entry)
+                    name: entry
+                    for name, entry in raw_assets.items()
+                    if _valid_entry(name, entry)
                 }
                 self._path, self._mtime = path, mtime
             return self._assets
@@ -233,7 +246,9 @@ async def head_object(cfg: CosConfig, key: str) -> httpx.Response:
         return await client.head(object_url(cfg, key), headers={"Authorization": auth})
 
 
-async def verify_object(name: str, entry: dict[str, Any], cfg: CosConfig | None) -> dict[str, Any]:
+async def verify_object(
+    name: str, entry: dict[str, Any], cfg: CosConfig | None
+) -> dict[str, Any]:
     result: dict[str, Any] = {
         "name": name,
         "key": entry["key"],
@@ -333,7 +348,9 @@ async def get_evidence(name: str) -> RedirectResponse:
         return _local(name)
     result = await verify_object(name, entry, cfg)
     if not result["match"]:
-        logger.warning("evidence %s served from local copy: %s", name, result.get("reason"))
+        logger.warning(
+            "evidence %s served from local copy: %s", name, result.get("reason")
+        )
         return _local(name)
     return RedirectResponse(
         presigned_get_url(cfg, entry["key"]), status_code=302, headers=dict(_NO_STORE)

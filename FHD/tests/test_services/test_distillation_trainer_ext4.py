@@ -63,7 +63,9 @@ class TestDistillationTrainerPrepareData:
 
         trainer = DistillationTrainer(device="cpu")
         with (
-            patch("app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained"
+            ) as mock_tok,
             patch(
                 "app.domain.shared_services.distillation_trainer.BertForSequenceClassification.from_pretrained"
             ) as mock_model_cls,
@@ -91,7 +93,9 @@ class TestDistillationTrainerPrepareData:
 
         trainer = DistillationTrainer(device="cpu")
         with (
-            patch("app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained"
+            ) as mock_tok,
             patch(
                 "app.domain.shared_services.distillation_trainer.BertForSequenceClassification.from_pretrained"
             ) as mock_model_cls,
@@ -183,7 +187,9 @@ class TestDistillationTrainerEvaluate:
         trainer.model.return_value = mock_output
         trainer.val_loader = [batch]
 
-        with patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0):
+        with patch(
+            "app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0
+        ):
             result = trainer.evaluate()
         assert "val_loss" in result
         assert "val_accuracy" in result
@@ -271,8 +277,13 @@ class TestDistillationTrainerTrainFullFlow:
             ) as mock_scheduler,
             patch.object(trainer, "prepare_data") as mock_prepare,
             patch.object(trainer, "save_checkpoint") as mock_save,
-            patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0),
-            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch(
+                "app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0
+            ),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="report",
+            ),
         ):
             mock_prepare.return_value = None
             # Re-set the loaders since prepare_data is mocked
@@ -366,7 +377,9 @@ class TestMainCLIWithOutput:
                 "1",
             ],
         ):
-            with patch("app.domain.shared_services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
+            with patch(
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer"
+            ) as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 
@@ -402,7 +415,9 @@ class TestMainCLIWithOutput:
                 "128",
             ],
         ):
-            with patch("app.domain.shared_services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
+            with patch(
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer"
+            ) as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 

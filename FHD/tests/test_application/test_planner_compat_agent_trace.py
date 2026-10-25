@@ -68,7 +68,9 @@ def durable_compat_history(tmp_path, monkeypatch):
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
     monkeypatch.setattr("app.domain.shared_services.conversation_service.get_db", db)
-    monkeypatch.setattr("app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None
+    )
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda req: SimpleNamespace(id=2),

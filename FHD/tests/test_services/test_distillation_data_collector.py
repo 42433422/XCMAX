@@ -172,7 +172,9 @@ class TestGenerateSamplesFromQueries:
 
     def test_generate_samples_empty_queries(self):
         with patch("app.domain.shared_services.distillation_data_collector.ENGINE", MagicMock()):
-            with patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample"):
+            with patch(
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
+            ):
                 count = generate_samples_from_queries({})
         assert count == 0
 
@@ -312,7 +314,9 @@ class TestExportTrainingData:
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
-            with patch("app.domain.shared_services.distillation_data_collector.DISTILL_DIR", str(tmp_path)):
+            with patch(
+                "app.domain.shared_services.distillation_data_collector.DISTILL_DIR", str(tmp_path)
+            ):
                 result = export_training_data(format="jsonl")
         assert result.endswith("training_data.jsonl")
 

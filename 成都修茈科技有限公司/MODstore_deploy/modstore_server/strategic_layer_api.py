@@ -43,11 +43,15 @@ from modstore_server.strategic_layer import (
     StrategicReportService,
     seed_default_boundaries,
 )
-from modstore_server.strategic_layer_models import CancelMeetingRequest as CancelMeetingRequest
+from modstore_server.strategic_layer_models import (
+    CancelMeetingRequest as CancelMeetingRequest,
+)
 from modstore_server.strategic_layer_models import (
     CompleteExecutionRequest,
 )
-from modstore_server.strategic_layer_models import ConcludeMeetingRequest as ConcludeMeetingRequest
+from modstore_server.strategic_layer_models import (
+    ConcludeMeetingRequest as ConcludeMeetingRequest,
+)
 from modstore_server.strategic_layer_models import (
     DecisionReviewRequest,
 )
@@ -61,7 +65,9 @@ from modstore_server.strategic_layer_models import (
     ProposeDecisionRequest,
     ReviewDecisionRequest,
 )
-from modstore_server.strategic_layer_models import ScheduleMeetingRequest as ScheduleMeetingRequest
+from modstore_server.strategic_layer_models import (
+    ScheduleMeetingRequest as ScheduleMeetingRequest,
+)
 from modstore_server.strategic_layer_models import (
     StartExecutionRequest,
     StrategicCouncilReviewRequest,
@@ -83,15 +89,25 @@ from modstore_server.strategic_layer_api_merged import _ledger as _ledger
 from modstore_server.strategic_layer_api_merged import (
     _lifecycle_error_to_http as _lifecycle_error_to_http,
 )
-from modstore_server.strategic_layer_api_merged import _meeting_service as _meeting_service
+from modstore_server.strategic_layer_api_merged import (
+    _meeting_service as _meeting_service,
+)
 from modstore_server.strategic_layer_api_merged import _parse_dt as _parse_dt
-from modstore_server.strategic_layer_api_merged import _report_service as _report_service
-from modstore_server.strategic_layer_api_merged import _to_public_dict as _to_public_dict
+from modstore_server.strategic_layer_api_merged import (
+    _report_service as _report_service,
+)
+from modstore_server.strategic_layer_api_merged import (
+    _to_public_dict as _to_public_dict,
+)
 from modstore_server.strategic_layer_api_merged import (
     answer_retort_clarification as answer_retort_clarification,
 )
-from modstore_server.strategic_layer_api_merged import approve_decision as approve_decision
-from modstore_server.strategic_layer_api_merged import complete_decision as complete_decision
+from modstore_server.strategic_layer_api_merged import (
+    approve_decision as approve_decision,
+)
+from modstore_server.strategic_layer_api_merged import (
+    complete_decision as complete_decision,
+)
 from modstore_server.strategic_layer_api_merged import get_decision as get_decision
 from modstore_server.strategic_layer_api_merged import (
     get_retort_clarification as get_retort_clarification,
@@ -99,18 +115,28 @@ from modstore_server.strategic_layer_api_merged import (
 from modstore_server.strategic_layer_api_merged import (
     get_strategic_council_status as get_strategic_council_status,
 )
-from modstore_server.strategic_layer_api_merged import list_autonomy_rules as list_autonomy_rules
+from modstore_server.strategic_layer_api_merged import (
+    list_autonomy_rules as list_autonomy_rules,
+)
 from modstore_server.strategic_layer_api_merged import list_decisions as list_decisions
 from modstore_server.strategic_layer_api_merged import (
     list_retort_clarifications as list_retort_clarifications,
 )
-from modstore_server.strategic_layer_api_merged import propose_decision as propose_decision
-from modstore_server.strategic_layer_api_merged import reject_decision as reject_decision
-from modstore_server.strategic_layer_api_merged import review_decision as review_decision
+from modstore_server.strategic_layer_api_merged import (
+    propose_decision as propose_decision,
+)
+from modstore_server.strategic_layer_api_merged import (
+    reject_decision as reject_decision,
+)
+from modstore_server.strategic_layer_api_merged import (
+    review_decision as review_decision,
+)
 from modstore_server.strategic_layer_api_merged import (
     run_strategic_council_review as run_strategic_council_review,
 )
-from modstore_server.strategic_layer_api_merged import seed_autonomy_rules as seed_autonomy_rules
+from modstore_server.strategic_layer_api_merged import (
+    seed_autonomy_rules as seed_autonomy_rules,
+)
 from modstore_server.strategic_layer_api_merged import start_decision as start_decision
 from modstore_server.strategic_layer_api_merged import (
     strategic_layer_health as strategic_layer_health,
@@ -118,9 +144,13 @@ from modstore_server.strategic_layer_api_merged import (
 from modstore_server.strategic_layer_api_merged import (
     sweep_retort_clarifications as sweep_retort_clarifications,
 )
-from modstore_server.strategic_layer_api_merged import withdraw_decision as withdraw_decision
+from modstore_server.strategic_layer_api_merged import (
+    withdraw_decision as withdraw_decision,
+)
 
-_routes_module = importlib.import_module("modstore_server.strategic_layer_meeting_routes")
+_routes_module = importlib.import_module(
+    "modstore_server.strategic_layer_meeting_routes"
+)
 schedule_meeting = _routes_module.schedule_meeting
 list_meetings = _routes_module.list_meetings
 get_meeting = _routes_module.get_meeting

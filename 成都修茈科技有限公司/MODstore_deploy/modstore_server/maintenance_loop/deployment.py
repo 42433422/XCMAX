@@ -39,11 +39,15 @@ def _auto_dispatch_deploy_envs() -> List[str]:
     return [env for env in ("staging", "production") if env in requested]
 
 
-def _dispatch_fhd_deploy_action(*, environment: str, action: str, action_id: str) -> Dict[str, Any]:
+def _dispatch_fhd_deploy_action(
+    *, environment: str, action: str, action_id: str
+) -> Dict[str, Any]:
     """Dispatch ``fhd-deploy.yml`` via ``gh workflow run`` (or dry-run skip)."""
     gh_command = f"gh workflow run fhd-deploy.yml -f environment={environment} -f action={action} -f action_id={action_id}"
     deploy_cwd = os.environ.get("MODSTORE_GIT_REPO_ROOT") or None
-    if config._env_flag_enabled("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"):
+    if config._env_flag_enabled(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_DRY_RUN"
+    ):
         return {
             "ok": True,
             "reason": "dry_run_skipped",
@@ -184,7 +188,9 @@ def _emit_deploy_callback(
 ) -> None:
     """Fail-open 调用 FHD autonomy deploy_callback（或等价 ingest HTTP）。"""
     try:
-        autonomy_scripts = Path(__file__).resolve().parents[4] / "FHD" / "scripts" / "autonomy"
+        autonomy_scripts = (
+            Path(__file__).resolve().parents[4] / "FHD" / "scripts" / "autonomy"
+        )
         candidates = [
             autonomy_scripts,
             Path(os.environ.get("XCAGI_FHD_RUNTIME_ROOT", "")) / "scripts" / "autonomy",
@@ -196,7 +202,9 @@ def _emit_deploy_callback(
                     sys.path.insert(0, str(candidate))
                 callback_module = importlib.import_module("autonomy_callback")
                 deploy_callback = getattr(callback_module, "deploy_callback")
-                deploy_callback(phase, payload, source="self_maintenance", action_id=action_id)
+                deploy_callback(
+                    phase, payload, source="self_maintenance", action_id=action_id
+                )
                 return
     except RECOVERABLE_ERRORS:
         config.logger.debug("deploy_callback import path failed", exc_info=True)
@@ -246,7 +254,11 @@ def _record_verified_deploy_employee_metric(
     run_id = str(record.get("run_id") or "").strip()
     merge_sha = str(record.get("merge_sha") or "").strip().lower()
     workflow_run_id = str(record.get("workflow_run_id") or "").strip()
-    if not run_id or not re.fullmatch("[0-9a-f]{40,64}", merge_sha) or (not workflow_run_id):
+    if (
+        not run_id
+        or not re.fullmatch("[0-9a-f]{40,64}", merge_sha)
+        or (not workflow_run_id)
+    ):
         return False
     marker = f"[deploy-receipt:{run_id}:{merge_sha[:12]}:{workflow_run_id}]"[:128]
     try:
@@ -255,7 +267,8 @@ def _record_verified_deploy_employee_metric(
             exists = (
                 session.query(models.EmployeeExecutionMetric.id)
                 .filter(
-                    models.EmployeeExecutionMetric.employee_id == "deploy-release-officer",
+                    models.EmployeeExecutionMetric.employee_id
+                    == "deploy-release-officer",
                     models.EmployeeExecutionMetric.task == marker,
                     models.EmployeeExecutionMetric.status == "success",
                 )
@@ -288,7 +301,9 @@ def _record_verified_deploy_employee_metric(
             session.commit()
         return True
     except RECOVERABLE_ERRORS:
-        config.logger.exception("failed to record verified deploy release employee metric")
+        config.logger.exception(
+            "failed to record verified deploy release employee metric"
+        )
         return False
 
 

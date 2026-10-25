@@ -16,7 +16,11 @@ from urllib.parse import urlparse
 
 import httpx
 
-from modman.artifact_constants import ARTIFACT_EMPLOYEE_PACK, ARTIFACT_MOD, normalize_artifact
+from modman.artifact_constants import (
+    ARTIFACT_EMPLOYEE_PACK,
+    ARTIFACT_MOD,
+    normalize_artifact,
+)
 from modman.manifest_util import validate_manifest_dict
 from modstore_server.employee_config_v2 import validate_v2_config
 from modstore_server.operational_errors import BOUNDARY_ERRORS
@@ -222,7 +226,9 @@ def _dim_api_static(root: Path, manifest: Dict[str, Any]) -> Tuple[int, List[str
             else:
                 miss.append(f"找到 {verb} 但与路径前缀 {base!r} 邻近关系不明确")
     if not miss:
-        return 100, [f"在 backend Python 中匹配到 {base!r} 与 status/start/stop 相关片段"]
+        return 100, [
+            f"在 backend Python 中匹配到 {base!r} 与 status/start/stop 相关片段"
+        ]
     return _clamp_score(100 - 28 * len(miss)), miss
 
 
@@ -240,7 +246,9 @@ def _dim_security_size(raw: bytes, root: Path) -> Tuple[int, List[str]]:
     score -= min(40, len(zissues) * 20)
     score -= min(50, len(sec) * 12)
     score -= 30 if total > MAX_ZIP_BYTES else 0
-    return _clamp_score(score), reasons if reasons else ["体积与敏感信息扫描未发现严重问题"]
+    return _clamp_score(score), reasons if reasons else [
+        "体积与敏感信息扫描未发现严重问题"
+    ]
 
 
 def _dim_metadata(manifest: Dict[str, Any]) -> Tuple[int, List[str]]:
@@ -251,7 +259,9 @@ def _dim_metadata(manifest: Dict[str, Any]) -> Tuple[int, List[str]]:
         reasons.append("name 过短或缺失")
     if len(desc) < 8:
         reasons.append("description 过短或缺失（建议至少一句完整说明）")
-    ind = str(manifest.get("industry") or manifest.get("library_industry") or "").strip()
+    ind = str(
+        manifest.get("industry") or manifest.get("library_industry") or ""
+    ).strip()
     if not ind:
         reasons.append("未填写 industry / library_industry（可选但建议填写）")
     score = 100 - len(reasons) * 22
@@ -281,7 +291,11 @@ def _functional_checks(
     if base:
         blob = _collect_py_text(root)
         for verb in ("status", "start", "stop"):
-            ok = bool(re.search(re.escape(base) + r"[^\w]{0,12}" + re.escape(verb), blob, re.I))
+            ok = bool(
+                re.search(
+                    re.escape(base) + r"[^\w]{0,12}" + re.escape(verb), blob, re.I
+                )
+            )
             out.append(
                 {
                     "name": f"静态路由片段 {base}/{verb}",
@@ -301,7 +315,9 @@ def _functional_checks(
 
 
 def _parse_allow_hosts() -> List[str]:
-    raw = (os.environ.get("MODSTORE_SANDBOX_PROBE_HOST_ALLOWLIST") or "127.0.0.1,localhost").strip()
+    raw = (
+        os.environ.get("MODSTORE_SANDBOX_PROBE_HOST_ALLOWLIST") or "127.0.0.1,localhost"
+    ).strip()
     return [h.strip().lower() for h in raw.split(",") if h.strip()]
 
 
@@ -380,7 +396,9 @@ async def run_package_audit_async(
     expected_artifact = str(meta.get("artifact") or "").strip().lower() or None
     probe_mod_id = str(meta.get("probe_mod_id") or "").strip() or None
     metadata_v2 = (
-        meta.get("employee_config_v2") if isinstance(meta.get("employee_config_v2"), dict) else None
+        meta.get("employee_config_v2")
+        if isinstance(meta.get("employee_config_v2"), dict)
+        else None
     )
 
     if len(zip_bytes) > MAX_ZIP_BYTES:
@@ -464,12 +482,18 @@ async def run_package_audit_async(
             if normalize_artifact(manifest) == ARTIFACT_MOD
             else ""
         )
-        http_res = await _http_probe_phone_status(mod_id=eff_mod_id, phone_base_path=phone)
+        http_res = await _http_probe_phone_status(
+            mod_id=eff_mod_id, phone_base_path=phone
+        )
         ftests.append(http_res)
 
         scores = [v["score"] for v in dims.values()]
         avg = round(sum(scores) / len(scores), 1) if scores else 0.0
-        passed = avg >= 60 and dims["manifest_compliance"]["score"] >= 40 and not manifest_err
+        passed = (
+            avg >= 60
+            and dims["manifest_compliance"]["score"] >= 40
+            and not manifest_err
+        )
 
         return {
             "ok": True,

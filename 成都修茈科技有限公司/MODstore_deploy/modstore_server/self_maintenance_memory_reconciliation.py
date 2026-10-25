@@ -107,9 +107,9 @@ def reconcile_completed_loop_memory_from_ledger() -> dict[str, Any]:
         }
 
     memory["recent_runs"] = recent_runs[-20:]
-    memory["completed_merge_reconciliations"] = (reconciliation_history + sorted(newly_reconciled))[
-        -200:
-    ]
+    memory["completed_merge_reconciliations"] = (
+        reconciliation_history + sorted(newly_reconciled)
+    )[-200:]
     _maintenance_store._write_loop_memory(memory)
     return {
         "closed_count": closed_count,

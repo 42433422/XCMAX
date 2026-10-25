@@ -107,7 +107,9 @@ def _find_delivery_validation(obj: Any, depth: int = 0) -> Optional[Dict[str, An
     _collect_delivery_validation_candidates(obj, depth=depth, out=candidates)
     if not candidates:
         return None
-    best = max(candidates, key=lambda item: (item[0][0], item[0][1], item[0][2], -item[0][3]))
+    best = max(
+        candidates, key=lambda item: (item[0][0], item[0][1], item[0][2], -item[0][3])
+    )
     return best[1]
 
 
@@ -148,7 +150,9 @@ def _collect_delivery_validation_candidates(
             )
         return rank
     for item in obj[:12]:
-        rank = _collect_delivery_validation_candidates(item, depth=depth + 1, out=out, rank=rank)
+        rank = _collect_delivery_validation_candidates(
+            item, depth=depth + 1, out=out, rank=rank
+        )
     return rank
 
 
@@ -197,7 +201,9 @@ def _extract_failure_reason(
                 )
             )
             path_guard_failure = (
-                f"path_guard_violation: {vstr}"[:300] if vstr else "path_guard_violation"
+                f"path_guard_violation: {vstr}"[:300]
+                if vstr
+                else "path_guard_violation"
             )
     if result.get("handler_failed"):
         msg = result.get("handler_failed_message") or result.get("error")
@@ -287,7 +293,9 @@ def _extract_para_meta(
         "error": output.get("error") if isinstance(output, dict) else None,
         "para_status": para_result.get("status"),
         "subtask_id": first_subtask.get("id") or response.get("subtaskId"),
-        "task_id": para_result.get("task_id") or para_result.get("id") or response.get("taskId"),
+        "task_id": para_result.get("task_id")
+        or para_result.get("id")
+        or response.get("taskId"),
     }
 
 

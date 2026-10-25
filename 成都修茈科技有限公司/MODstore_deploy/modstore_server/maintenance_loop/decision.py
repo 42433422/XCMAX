@@ -34,7 +34,9 @@ def _decide_post_loop_policy(
     try:
         evolution_gate = self_evolution_knowledge.evolution_metrics_gate()
     except RECOVERABLE_ERRORS as exc:
-        config.logger.exception("failed to evaluate evolution metrics gate for policy active gates")
+        config.logger.exception(
+            "failed to evaluate evolution metrics gate for policy active gates"
+        )
         evolution_gate = {
             "pause": False,
             "reason": "metrics_gate_error",
@@ -120,7 +122,9 @@ def _decide_post_loop_policy(
         )
         return {
             "action": (
-                "auto_merge_requested_low_risk" if merge_requested else "auto_merged_low_risk"
+                "auto_merge_requested_low_risk"
+                if merge_requested
+                else "auto_merged_low_risk"
             ),
             "active_gates": active_gates,
             "deployment_receipt": deployment_receipt,
@@ -128,7 +132,9 @@ def _decide_post_loop_policy(
             "gate": gate,
             "governance_gate": governance_gate,
             "merge_result": merge_result,
-            "reason": "low_risk_merge_requested" if merge_requested else "low_risk_policy_passed",
+            "reason": "low_risk_merge_requested"
+            if merge_requested
+            else "low_risk_policy_passed",
             "roster_gate": roster_gate,
         }
     return _hold_for_remediation(

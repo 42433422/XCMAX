@@ -17,7 +17,12 @@ def _candidate_paths() -> Iterable[Path]:
         yield Path(configured).expanduser()
     monorepo = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
     if monorepo:
-        yield (Path(monorepo).expanduser() / "FHD" / "config" / "duty_employee_work_contracts.json")
+        yield (
+            Path(monorepo).expanduser()
+            / "FHD"
+            / "config"
+            / "duty_employee_work_contracts.json"
+        )
     # Source checkout contains an extra company-site directory while the local
     # autonomy runtime mounts MODstore_deploy directly under its runtime root.
     # Search ancestors instead of baking in either layout.
@@ -64,7 +69,12 @@ def load_workforce_contracts(path: Optional[Path] = None) -> Dict[str, Any]:
             raise RuntimeError(f"duty work contract has no trigger: {employee_id}")
         acceptance = list(dict.fromkeys([*defaults, *(raw.get("acceptance") or [])]))
         normalized.append(
-            {**raw, "employee_id": employee_id, "trigger": trigger, "acceptance": acceptance}
+            {
+                **raw,
+                "employee_id": employee_id,
+                "trigger": trigger,
+                "acceptance": acceptance,
+            }
         )
     return {**payload, "path": str(target), "contracts": normalized}
 
@@ -75,7 +85,9 @@ def workforce_contract_map(path: Optional[Path] = None) -> Dict[str, Dict[str, A
 
 
 def _duty_manifest_roots() -> Iterable[Path]:
-    configured = str(os.environ.get("MODSTORE_DUTY_EMPLOYEE_MANIFEST_ROOT") or "").strip()
+    configured = str(
+        os.environ.get("MODSTORE_DUTY_EMPLOYEE_MANIFEST_ROOT") or ""
+    ).strip()
     if configured:
         yield Path(configured).expanduser()
     monorepo = str(os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
@@ -126,7 +138,9 @@ def load_reviewed_duty_manifest(employee_id: str) -> Dict[str, Any]:
 def contract_schedule(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Translate a cron work contract to the existing employee scheduler shape."""
 
-    trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+    trigger = (
+        contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+    )
     cron_expr = str(trigger.get("cron") or "").strip()
     if not cron_expr:
         return None
@@ -134,7 +148,9 @@ def contract_schedule(contract: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     mode = str(contract.get("mode") or "execute").strip()
     risk = str(contract.get("risk_level") or "medium").strip()
     acceptance = [
-        str(item).strip() for item in contract.get("acceptance") or [] if str(item).strip()
+        str(item).strip()
+        for item in contract.get("acceptance") or []
+        if str(item).strip()
     ]
     task_brief = (
         f"岗位任务：{mission}\n"
@@ -157,7 +173,9 @@ def workforce_event_bindings(path: Optional[Path] = None) -> list[Dict[str, Any]
 
     out: list[Dict[str, Any]] = []
     for employee_id, contract in workforce_contract_map(path).items():
-        trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        trigger = (
+            contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+        )
         for raw in trigger.get("events") or []:
             event_type = str(raw or "").strip()
             if not event_type:
@@ -193,11 +211,15 @@ def matching_duty_event_contract(
     contract = workforce_contract_map(path).get(str(employee_id or "").strip()) or {}
     if str(contract.get("risk_level") or "").strip().lower() not in {"low", "medium"}:
         return {}
-    trigger = contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+    trigger = (
+        contract.get("trigger") if isinstance(contract.get("trigger"), dict) else {}
+    )
     declared = {str(item or "").strip() for item in trigger.get("events") or []}
     event_key = str(event_type or "").strip()
     source_key = str(source or "").strip()
-    if event_key in declared or (source_key and f"{event_key}:{source_key}" in declared):
+    if event_key in declared or (
+        source_key and f"{event_key}:{source_key}" in declared
+    ):
         return dict(contract)
     return {}
 
@@ -236,7 +258,10 @@ def _enrich_customer_ticket_duty_input(
 
     eid = str(employee_id or "").strip()
     ticket_no = str(
-        incident.get("ticket_no") or incident.get("subject_id") or incident.get("ticket_id") or ""
+        incident.get("ticket_no")
+        or incident.get("subject_id")
+        or incident.get("ticket_id")
+        or ""
     ).strip()
     summary = str(incident.get("summary") or incident.get("title") or "").strip()
     raw = incident.get("raw") if isinstance(incident.get("raw"), dict) else {}
@@ -253,7 +278,9 @@ def _enrich_customer_ticket_duty_input(
                 "route_hint": "user-customer-service-officer",
             }
         ]
-    if eid == "user-customer-service-officer" and not isinstance(payload.get("ticket"), dict):
+    if eid == "user-customer-service-officer" and not isinstance(
+        payload.get("ticket"), dict
+    ):
         payload["ticket"] = {
             "id": ticket_no or "CS-unknown",
             "issue": summary or f"客服工单 {ticket_no or '?'}",
@@ -263,7 +290,8 @@ def _enrich_customer_ticket_duty_input(
                     "text": (summary or ticket_no or "customer_ticket")[:500],
                 }
             ],
-            "severity": str(incident.get("severity") or "normal").strip().lower() or "normal",
+            "severity": str(incident.get("severity") or "normal").strip().lower()
+            or "normal",
         }
     # surface common fields for modules that read top-level keys
     if ticket_no and not payload.get("ticket_no"):
@@ -295,7 +323,9 @@ def _enrich_operational_event_duty_input(
         or event
     ).strip()
     if eid == "daily-orchestrator" and event == "schedule.tick":
-        observed_at = str(incident.get("at") or incident.get("observed_at") or "").strip()
+        observed_at = str(
+            incident.get("at") or incident.get("observed_at") or ""
+        ).strip()
         kind = str(incident.get("kind") or "schedule-tick").strip()
         item_id = f"{kind}:{observed_at or source or 'production'}"[:160]
         payload["work_items"] = [
@@ -311,11 +341,13 @@ def _enrich_operational_event_duty_input(
         payload["events"] = [
             {
                 "service": str(incident.get("service") or source or "platform")[:160],
-                "error_type": str(incident.get("error_type") or incident.get("type") or event)[
-                    :160
-                ],
+                "error_type": str(
+                    incident.get("error_type") or incident.get("type") or event
+                )[:160],
                 "message": summary[:1000],
-                "observed_at": str(incident.get("observed_at") or incident.get("at") or "")[:64],
+                "observed_at": str(
+                    incident.get("observed_at") or incident.get("at") or ""
+                )[:64],
             }
         ]
     elif eid == "push-update-context-officer" and event == "git.push":
@@ -324,7 +356,9 @@ def _enrich_operational_event_duty_input(
             payload["update_context"] = dict(context)
 
 
-def _reviewed_direct_event_input_ready(employee_id: str, payload: Dict[str, Any]) -> bool:
+def _reviewed_direct_event_input_ready(
+    employee_id: str, payload: Dict[str, Any]
+) -> bool:
     """Fail closed when a deterministic handler's declared real input is absent."""
 
     manifest = load_reviewed_duty_manifest(employee_id)
@@ -333,16 +367,30 @@ def _reviewed_direct_event_input_ready(employee_id: str, payload: Dict[str, Any]
     actions = config.get("actions") if isinstance(config.get("actions"), dict) else {}
     raw_handlers = actions.get("handlers")
     handlers = (
-        [str(item).strip() for item in raw_handlers] if isinstance(raw_handlers, list) else []
+        [str(item).strip() for item in raw_handlers]
+        if isinstance(raw_handlers, list)
+        else []
     )
     if "direct_python" not in handlers:
         return True
-    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    direct = (
+        actions.get("direct_python")
+        if isinstance(actions.get("direct_python"), dict)
+        else {}
+    )
     if str(direct.get("implementation") or "").strip() != "employee_module":
         return True
-    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
-    return all(str(field).strip() and str(field).strip() in payload for field in required)
+    schema = (
+        direct.get("input_schema")
+        if isinstance(direct.get("input_schema"), dict)
+        else {}
+    )
+    required = (
+        schema.get("required") if isinstance(schema.get("required"), list) else []
+    )
+    return all(
+        str(field).strip() and str(field).strip() in payload for field in required
+    )
 
 
 def duty_event_execution_input(
@@ -358,7 +406,9 @@ def duty_event_execution_input(
     if not contract:
         return {}
     project_root = str(
-        os.environ.get("MODSTORE_DUTY_PROJECT_ROOT") or os.environ.get("XCMAX_MONOREPO_ROOT") or ""
+        os.environ.get("MODSTORE_DUTY_PROJECT_ROOT")
+        or os.environ.get("XCMAX_MONOREPO_ROOT")
+        or ""
     ).strip()
     incident_body = dict(incident or {})
     payload: Dict[str, Any] = {
@@ -396,7 +446,9 @@ def duty_event_execution_input(
         incident_body,
         payload,
     )
-    payload["_duty_input_ready"] = _reviewed_direct_event_input_ready(employee_id, payload)
+    payload["_duty_input_ready"] = _reviewed_direct_event_input_ready(
+        employee_id, payload
+    )
     return payload
 
 

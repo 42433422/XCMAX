@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 def require_successful_storage_self_heal(result: Dict[str, Any]) -> Dict[str, Any]:
     """Make unresolved pressure visible as a failed scheduler job."""
     if result.get("ok") is not True:
-        raise RuntimeError(f"storage_self_heal_unresolved:{result.get('status') or 'unknown'}")
+        raise RuntimeError(
+            f"storage_self_heal_unresolved:{result.get('status') or 'unknown'}"
+        )
     return result
 
 

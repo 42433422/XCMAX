@@ -36,7 +36,9 @@ async def evaluate_employee_quality(
         )
         _asset_n = 0
         if isinstance(state.result.get("asset_manifest"), dict):
-            _asset_n = len((state.result.get("asset_manifest") or {}).get("assets") or [])
+            _asset_n = len(
+                (state.result.get("asset_manifest") or {}).get("assets") or []
+            )
         async with ports.sessions.lock:
             _sess_sd = ports.sessions.data.get(state.session_id) or {}
             _spec_warn_sd = (
@@ -96,7 +98,9 @@ async def evaluate_employee_quality(
         if _sd_result and _sd_result.get("six_dimension_report"):
             state.six_dimension_report = _sd_result["six_dimension_report"]
         else:
-            from modstore_server.employee_six_dimension import compute_six_dimension_report
+            from modstore_server.employee_six_dimension import (
+                compute_six_dimension_report,
+            )
 
             state.six_dimension_report = compute_six_dimension_report(
                 pack_dir=state.pack_dir,
@@ -143,10 +147,13 @@ async def evaluate_employee_quality(
         if _sd_pass:
             _sd_msg += "；6/6 维达标，可在完成步查看雷达图"
         else:
-            from modstore_server.employee_six_dimension_report import DIMENSION_LABELS_ZH
+            from modstore_server.employee_six_dimension_report import (
+                DIMENSION_LABELS_ZH,
+            )
 
             _sd_msg += (
-                "；未通过：" + "、".join((DIMENSION_LABELS_ZH.get(k, k) for k in _sd_failed[:4]))
+                "；未通过："
+                + "、".join((DIMENSION_LABELS_ZH.get(k, k) for k in _sd_failed[:4]))
                 if _sd_failed
                 else "综合分未达标"
             )
@@ -208,7 +215,9 @@ async def evaluate_employee_quality(
     state.quality_items.append(
         {
             "check": "宿主连通性",
-            "ok": state.host_probe.get("ok") if not state.host_probe.get("skipped") else None,
+            "ok": state.host_probe.get("ok")
+            if not state.host_probe.get("skipped")
+            else None,
             "note": _host_note if state.host_probe.get("skipped") else "",
         }
     )
@@ -245,7 +254,9 @@ async def evaluate_employee_quality(
     )
     state.quality_items.extend(_extra_items)
     state.failed_critical = [
-        q["check"] for q in state.quality_items if q.get("ok") is False and q.get("critical")
+        q["check"]
+        for q in state.quality_items
+        if q.get("ok") is False and q.get("critical")
     ]
     if state.failed_critical:
         state.critical_failed = True

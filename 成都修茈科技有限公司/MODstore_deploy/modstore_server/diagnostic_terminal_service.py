@@ -36,7 +36,11 @@ from modstore_server.entitlement_fast_lane import (
     account_fast_lane_status,
     resolve_account,
 )
-from modstore_server.models import IncidentEvent, OutboxDeadLetter, UpdateInstallationReceipt
+from modstore_server.models import (
+    IncidentEvent,
+    OutboxDeadLetter,
+    UpdateInstallationReceipt,
+)
 
 
 def _doctor(
@@ -96,7 +100,9 @@ def _doctor(
         raw_scheduler_summary if isinstance(raw_scheduler_summary, dict) else {}
     )
     status = status_for(items)
-    attention = delivery_summary["pending_install"] + delivery_summary["pending_first_login"]
+    attention = (
+        delivery_summary["pending_install"] + delivery_summary["pending_first_login"]
+    )
     if status == "healthy" and attention:
         status = "attention"
     metrics = {
@@ -107,10 +113,14 @@ def _doctor(
         "scheduler_status": runtime.get("status")
         or ("healthy" if runtime.get("ok") else "degraded"),
         "scheduler_failing": int(
-            scheduler_summary.get("actionable_failing") or scheduler_summary.get("failing") or 0
+            scheduler_summary.get("actionable_failing")
+            or scheduler_summary.get("failing")
+            or 0
         ),
         "scheduler_stale": int(
-            scheduler_summary.get("actionable_stale") or scheduler_summary.get("stale") or 0
+            scheduler_summary.get("actionable_stale")
+            or scheduler_summary.get("stale")
+            or 0
         ),
         "scheduler_deferred": int(scheduler_summary.get("deferred") or 0),
         "unresolved_dlq": dlq_count,
@@ -119,7 +129,9 @@ def _doctor(
     }
     return envelope(
         parsed,
-        summary=("发现需要处理的运行问题" if status == "degraded" else "运行面已完成快速体检"),
+        summary=(
+            "发现需要处理的运行问题" if status == "degraded" else "运行面已完成快速体检"
+        ),
         status=status,
         metrics=metrics,
         items=items[: parsed.limit],
@@ -206,14 +218,18 @@ def _dispatch_query_command(
         runtime = scheduler_snapshot(runtime_provider)
         items = scheduler_items(runtime, parsed.query, parsed.limit)
         raw_metrics = runtime.get("summary")
-        scheduler_metrics: dict[str, Any] = raw_metrics if isinstance(raw_metrics, dict) else {}
+        scheduler_metrics: dict[str, Any] = (
+            raw_metrics if isinstance(raw_metrics, dict) else {}
+        )
         return envelope(
             parsed,
             summary=f"匹配调度任务 {len(items)} 个",
             status=status_for(items, empty="info"),
             metrics=scheduler_metrics,
             items=items,
-            hints=["deferred 表示策略等待人工批准，不等同于执行失败；请优先处理 failing/stale。"],
+            hints=[
+                "deferred 表示策略等待人工批准，不等同于执行失败；请优先处理 failing/stale。"
+            ],
         )
     if parsed.name == "incidents":
         items = incident_items(db, parsed.query, parsed.limit)
@@ -233,14 +249,18 @@ def _dispatch_query_command(
             summary=f"匹配安全日志证据 {len(items)} 条",
             status=status_for(items, empty="info"),
             items=items,
-            hints=["只读取配置允许的错误日志和事件账本；密钥、令牌与密码形态会自动脱敏。"],
+            hints=[
+                "只读取配置允许的错误日志和事件账本；密钥、令牌与密码形态会自动脱敏。"
+            ],
         )
     if parsed.name == "routes":
         items = route_items(route_catalog, parsed.query, parsed.limit)
         hints = (
             []
             if route_catalog
-            else ["当前未提供运行时路由表；请用 --openapi-url 指向本机 OpenAPI 后重试。"]
+            else [
+                "当前未提供运行时路由表；请用 --openapi-url 指向本机 OpenAPI 后重试。"
+            ]
         )
         return envelope(
             parsed,
@@ -259,7 +279,9 @@ def _problems(
     runtime_provider: Callable[[], dict[str, Any]] | None,
 ) -> dict[str, Any]:
     doctor = _doctor(db, ParsedCommand("doctor", limit=MAX_LIMIT), runtime_provider)
-    items = [entry for entry in doctor["items"] if matches(parsed.query, *entry.values())]
+    items = [
+        entry for entry in doctor["items"] if matches(parsed.query, *entry.values())
+    ]
     items = items[: parsed.limit]
     return envelope(
         parsed,

@@ -19,7 +19,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from modstore_server.infrastructure.private_asset_storage import require_private_directory
+from modstore_server.infrastructure.private_asset_storage import (
+    require_private_directory,
+)
 
 from .events import DomainEvent
 
@@ -32,7 +34,9 @@ def _resolve_outbox_path(path: Path | None) -> Path:
         else:
             configured = (os.environ.get("MODSTORE_RUNTIME_DIR") or "").strip()
             runtime = (
-                Path(configured) if configured else Path(tempfile.gettempdir()) / "modstore_runtime"
+                Path(configured)
+                if configured
+                else Path(tempfile.gettempdir()) / "modstore_runtime"
             )
             path = runtime / "event_outbox.jsonl"
     resolved = path.expanduser().resolve()

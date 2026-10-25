@@ -24,7 +24,9 @@ CRAFT_STEP_EMPLOYEE_MAP: Dict[str, str] = {
     "six_dim_gate": "hex-quality-assessor",
 }
 
-EMPLOYEE_TO_CRAFT_STEP: Dict[str, str] = {v: k for k, v in CRAFT_STEP_EMPLOYEE_MAP.items()}
+EMPLOYEE_TO_CRAFT_STEP: Dict[str, str] = {
+    v: k for k, v in CRAFT_STEP_EMPLOYEE_MAP.items()
+}
 
 CRAFT_PIPELINE_ORDER: list[str] = [
     "intent-analyst",
@@ -45,7 +47,9 @@ CRAFT_PIPELINE_ORDER: list[str] = [
 _step_registry: Dict[str, Callable[..., Coroutine[Any, Any, Any]]] = {}
 
 
-def register_craft_step(step_id: str, fn: Callable[..., Coroutine[Any, Any, Any]]) -> None:
+def register_craft_step(
+    step_id: str, fn: Callable[..., Coroutine[Any, Any, Any]]
+) -> None:
     _step_registry[step_id] = fn
 
 
@@ -66,7 +70,11 @@ def craft_pipeline_order() -> list[str]:
 
 
 def craft_employee_depends_on(employee_id: str) -> Optional[str]:
-    idx = CRAFT_PIPELINE_ORDER.index(employee_id) if employee_id in CRAFT_PIPELINE_ORDER else -1
+    idx = (
+        CRAFT_PIPELINE_ORDER.index(employee_id)
+        if employee_id in CRAFT_PIPELINE_ORDER
+        else -1
+    )
     if idx > 0:
         return CRAFT_PIPELINE_ORDER[idx - 1]
     return None
@@ -76,7 +84,10 @@ async def dispatch_craft_step(
     step_id: str,
     **kwargs: Any,
 ) -> Any:
-    from modstore_server.craft_failure_signals import emit_craft_step_failure, resolve_craft_step_id
+    from modstore_server.craft_failure_signals import (
+        emit_craft_step_failure,
+        resolve_craft_step_id,
+    )
 
     resolved_step, employee_id = resolve_craft_step_id(step_id)
     fn = _step_registry.get(resolved_step)

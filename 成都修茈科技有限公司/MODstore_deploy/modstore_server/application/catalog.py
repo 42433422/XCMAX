@@ -14,7 +14,9 @@ from modman.manifest_util import read_manifest
 from modman.store import iter_mod_dirs
 from modstore_server import catalog_store
 from modstore_server.domain.ports import CatalogRepository
-from modstore_server.domain.catalog.catalog_types import CatalogItem as CatalogDomainItem
+from modstore_server.domain.catalog.catalog_types import (
+    CatalogItem as CatalogDomainItem,
+)
 from modstore_server.domain.catalog.catalog_types import ModShellUiRow
 from modstore_server.eventing.bus import NeuroBus
 from modstore_server.eventing.contracts import CATALOG_PACKAGE_PUBLISHED
@@ -29,7 +31,11 @@ class CatalogShellService:
     @staticmethod
     def read_mod_json_file(mod_dir: Path, rel_path: str) -> Dict[str, Any]:
         rel = str(rel_path or "").replace("\\", "/").strip().lstrip("/")
-        if not rel or rel.startswith("/") or any(part == ".." for part in rel.split("/")):
+        if (
+            not rel
+            or rel.startswith("/")
+            or any(part == ".." for part in rel.split("/"))
+        ):
             return {}
         p = mod_dir / rel
         if not p.is_file():
@@ -41,13 +47,23 @@ class CatalogShellService:
         return data if isinstance(data, dict) else {}
 
     @classmethod
-    def mod_shell_ui_row(cls, mod_dir: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    def mod_shell_ui_row(
+        cls, mod_dir: Path, manifest: Dict[str, Any]
+    ) -> Dict[str, Any]:
         return cls.mod_shell_ui_row_vo(mod_dir, manifest).to_api_dict()
 
     @classmethod
-    def mod_shell_ui_row_vo(cls, mod_dir: Path, manifest: Dict[str, Any]) -> ModShellUiRow:
-        frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-        config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+    def mod_shell_ui_row_vo(
+        cls, mod_dir: Path, manifest: Dict[str, Any]
+    ) -> ModShellUiRow:
+        frontend = (
+            manifest.get("frontend")
+            if isinstance(manifest.get("frontend"), dict)
+            else {}
+        )
+        config = (
+            manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+        )
         shell_from_manifest = (
             frontend.get("shell") if isinstance(frontend.get("shell"), dict) else {}
         )
@@ -59,7 +75,11 @@ class CatalogShellService:
         industry_card = cls.read_mod_json_file(
             mod_dir, str(config.get("industry_card") or "config/industry_card.json")
         )
-        industry = manifest.get("industry") if isinstance(manifest.get("industry"), dict) else {}
+        industry = (
+            manifest.get("industry")
+            if isinstance(manifest.get("industry"), dict)
+            else {}
+        )
         industry_name = (
             str(
                 industry_card.get("name")
@@ -69,7 +89,11 @@ class CatalogShellService:
             ).strip()
             or "通用"
         )
-        settings = ui_shell.get("settings") if isinstance(ui_shell.get("settings"), dict) else {}
+        settings = (
+            ui_shell.get("settings")
+            if isinstance(ui_shell.get("settings"), dict)
+            else {}
+        )
         raw_options_value = settings.get("industry_options")
         raw_options: List[Any] = (
             list(raw_options_value) if isinstance(raw_options_value, list) else []
@@ -80,7 +104,9 @@ class CatalogShellService:
             if text and text not in industry_options:
                 industry_options.append(text)
         sidebar = (
-            ui_shell.get("sidebar_menu") if isinstance(ui_shell.get("sidebar_menu"), list) else []
+            ui_shell.get("sidebar_menu")
+            if isinstance(ui_shell.get("sidebar_menu"), list)
+            else []
         )
         menu_overrides = (
             ui_shell.get("menu_overrides")
@@ -103,7 +129,8 @@ class CatalogShellService:
             menu_overrides=menu_overrides,
             industry_options=industry_options or ["通用"],
             config_paths={
-                "industry_card": config.get("industry_card") or "config/industry_card.json",
+                "industry_card": config.get("industry_card")
+                or "config/industry_card.json",
                 "ui_shell": config.get("ui_shell") or "config/ui_shell.json",
             },
         )
@@ -115,13 +142,21 @@ class CatalogShellService:
         mod_id = str(manifest.get("id") or mod_dir.name).strip() or mod_dir.name
         mod_name = str(manifest.get("name") or mod_id).strip() or mod_id
         desc = str(manifest.get("description") or "").strip()
-        frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-        config = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+        frontend = (
+            manifest.get("frontend")
+            if isinstance(manifest.get("frontend"), dict)
+            else {}
+        )
+        config = (
+            manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+        )
         blueprint = cls.read_mod_json_file(
             mod_dir, str(config.get("ai_blueprint") or "config/ai_blueprint.json")
         )
         spec = (
-            blueprint.get("frontend_app") if isinstance(blueprint.get("frontend_app"), dict) else {}
+            blueprint.get("frontend_app")
+            if isinstance(blueprint.get("frontend_app"), dict)
+            else {}
         )
         spec = dict(spec) if isinstance(spec, dict) else {}
         menu = frontend.get("menu") if isinstance(frontend.get("menu"), list) else []
@@ -139,7 +174,9 @@ class CatalogShellService:
             spec["sections"] = [
                 {
                     "title": str(row.get("label") or row.get("id") or "AI 员工"),
-                    "description": str(row.get("panel_summary") or row.get("summary") or desc),
+                    "description": str(
+                        row.get("panel_summary") or row.get("summary") or desc
+                    ),
                     "items": [str(row.get("panel_title") or "自动化业务处理")],
                 }
                 for row in employees[:4]
@@ -160,15 +197,21 @@ class CatalogShellService:
                 },
                 {"label": "前端入口", "value": "1", "hint": entry_path},
             ]
-        if not isinstance(spec.get("hero_actions"), list) or not spec.get("hero_actions"):
+        if not isinstance(spec.get("hero_actions"), list) or not spec.get(
+            "hero_actions"
+        ):
             spec["hero_actions"] = [
                 {"label": "打开专业对话", "kind": "primary", "target": "chat"},
                 {"label": "查看工作流", "kind": "secondary", "target": "workflow"},
             ]
         manifest_industry = (
-            manifest.get("industry") if isinstance(manifest.get("industry"), dict) else {}
+            manifest.get("industry")
+            if isinstance(manifest.get("industry"), dict)
+            else {}
         )
-        industry_name = str(spec.get("industry") or manifest_industry.get("name") or "通用")
+        industry_name = str(
+            spec.get("industry") or manifest_industry.get("name") or "通用"
+        )
         spec.update(
             {
                 "schema_version": 1,
@@ -179,7 +222,9 @@ class CatalogShellService:
                 "subtitle": subtitle or desc or f"{mod_name} 专业版前端",
                 "theme": str(spec.get("theme") or "aurora"),
                 "industry": industry_name,
-                "workflow_entry_label": str(spec.get("workflow_entry_label") or "查看工作流"),
+                "workflow_entry_label": str(
+                    spec.get("workflow_entry_label") or "查看工作流"
+                ),
                 "chat_entry_label": str(spec.get("chat_entry_label") or "打开专业对话"),
             }
         )
@@ -214,9 +259,13 @@ class CatalogShellService:
             "industry_options": industry_options or ["通用"],
             "sidebar_menu": selected.get("sidebar_menu") if selected else [],
             "menu_overrides": selected.get("menu_overrides") if selected else [],
-            "settings": (selected.get("ui_shell") or {}).get("settings", {}) if selected else {},
+            "settings": (selected.get("ui_shell") or {}).get("settings", {})
+            if selected
+            else {},
             "make_scene": (
-                (selected.get("ui_shell") or {}).get("make_scene", {}) if selected else {}
+                (selected.get("ui_shell") or {}).get("make_scene", {})
+                if selected
+                else {}
             ),
         }
 
@@ -255,7 +304,9 @@ class CatalogApplicationService:
     ) -> dict[str, Any]:
         """Audit 通过后：落盘 JSON 包、在同一 DB 事务内 upsert ``catalog_items``、发 ``catalog.package_published``。"""
 
-        from modstore_server.infrastructure.catalog_repository import SqlCatalogRepository
+        from modstore_server.infrastructure.catalog_repository import (
+            SqlCatalogRepository,
+        )
 
         saved = self._storage.append_package(package_record, package_file)
         domain_item = CatalogDomainItem(
@@ -263,11 +314,17 @@ class CatalogApplicationService:
             author_id=author_id,
             version=str(saved.get("version") or package_record.get("version") or ""),
             artifact=str(
-                saved.get("artifact") or package_record.get("artifact") or "employee_pack"
+                saved.get("artifact")
+                or package_record.get("artifact")
+                or "employee_pack"
             ),
             name=str(saved.get("name") or package_record.get("name") or pack_id),
-            description=str(saved.get("description") or package_record.get("description") or ""),
-            industry=str(saved.get("industry") or package_record.get("industry") or "通用"),
+            description=str(
+                saved.get("description") or package_record.get("description") or ""
+            ),
+            industry=str(
+                saved.get("industry") or package_record.get("industry") or "通用"
+            ),
             sha256=str(saved.get("sha256") or ""),
             stored_filename=str(saved.get("stored_filename") or ""),
         )

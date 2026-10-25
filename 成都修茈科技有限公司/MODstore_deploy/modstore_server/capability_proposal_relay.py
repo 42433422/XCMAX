@@ -47,7 +47,9 @@ def _proposal_dirs() -> list[Path]:
     configured = str(os.environ.get("MODSTORE_CAPABILITY_PROPOSAL_DIRS") or "").strip()
     candidates: list[Path] = []
     if configured:
-        candidates.extend(Path(item).expanduser() for item in configured.split(os.pathsep) if item)
+        candidates.extend(
+            Path(item).expanduser() for item in configured.split(os.pathsep) if item
+        )
     root = _repo_root()
     if root:
         candidates.append(root / "FHD" / "test_reports")
@@ -69,9 +71,13 @@ def _script_path() -> Path | None:
     candidates = []
     fhd_root = str(os.environ.get("XCAGI_FHD_ROOT") or "").strip()
     if fhd_root:
-        candidates.append(Path(fhd_root) / "scripts" / "dev" / "capability_proposal_to_issue.py")
+        candidates.append(
+            Path(fhd_root) / "scripts" / "dev" / "capability_proposal_to_issue.py"
+        )
     if root:
-        candidates.append(root / "FHD" / "scripts" / "dev" / "capability_proposal_to_issue.py")
+        candidates.append(
+            root / "FHD" / "scripts" / "dev" / "capability_proposal_to_issue.py"
+        )
     return next((path.resolve() for path in candidates if path.is_file()), None)
 
 
@@ -174,7 +180,9 @@ def _acquire_lease(directory: Path) -> Path | None:
         try:
             fd = os.open(lease, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps({"pid": os.getpid(), "created_at": time.time()}))
+                handle.write(
+                    json.dumps({"pid": os.getpid(), "created_at": time.time()})
+                )
             return lease
         except FileExistsError:
             try:
@@ -235,7 +243,9 @@ def _configuration_block_has_recent_audit(errors: list[str]) -> bool:
 def _record_configuration_block(result: dict[str, Any]) -> None:
     """Persist a bounded, secret-free audit event for an actionable blocker."""
 
-    errors = [str(item) for item in (result.get("configuration_errors") or []) if str(item)]
+    errors = [
+        str(item) for item in (result.get("configuration_errors") or []) if str(item)
+    ]
     try:
         if _configuration_block_has_recent_audit(errors):
             result["audit_event_written"] = False
@@ -244,7 +254,9 @@ def _record_configuration_block(result: dict[str, Any]) -> None:
     except RECOVERABLE_ERRORS:
         # Failure to query the audit ledger must not conceal the original
         # configuration blocker from scheduler health.
-        logger.warning("capability proposal relay audit dedupe unavailable", exc_info=True)
+        logger.warning(
+            "capability proposal relay audit dedupe unavailable", exc_info=True
+        )
 
     try:
         _append_evolution_event(result)
@@ -263,7 +275,9 @@ def run_capability_proposal_relay() -> dict[str, Any]:
     if not _env_bool("MODSTORE_CAPABILITY_PROPOSAL_RELAY_ENABLED", True):
         return {"ok": True, "status": "disabled", "skipped": True}
     directories = [
-        path for path in _proposal_dirs() if (path / "capability_proposal.jsonl").is_file()
+        path
+        for path in _proposal_dirs()
+        if (path / "capability_proposal.jsonl").is_file()
     ]
     if not directories:
         return {"ok": True, "status": "no_candidates", "scanned_dirs": 0}
@@ -340,19 +354,29 @@ def run_capability_proposal_relay() -> dict[str, Any]:
             except (OSError, subprocess.TimeoutExpired) as exc:
                 result["ok"] = False
                 result["status"] = "relay_failed"
-                result["results"].append({"directory": str(directory), "error": str(exc)[:300]})
+                result["results"].append(
+                    {"directory": str(directory), "error": str(exc)[:300]}
+                )
                 continue
             after = _read_receipts(marker)
             new = [row for key, row in after.items() if key not in before]
             created = [row for row in new if row.get("disposition") == "issue_created"]
-            reconciled = [row for row in new if row.get("disposition") == "issue_reconciled"]
-            ignored = [row for row in new if row.get("disposition") == "ignored_non_skill_proposal"]
+            reconciled = [
+                row for row in new if row.get("disposition") == "issue_reconciled"
+            ]
+            ignored = [
+                row
+                for row in new
+                if row.get("disposition") == "ignored_non_skill_proposal"
+            ]
             result["created_count"] += len(created)
             result.setdefault("reconciled_count", 0)
             result["reconciled_count"] += len(reconciled)
             result["ignored_count"] += len(ignored)
             result["issue_urls"].extend(
-                str(row.get("issue_url")) for row in [*created, *reconciled] if row.get("issue_url")
+                str(row.get("issue_url"))
+                for row in [*created, *reconciled]
+                if row.get("issue_url")
             )
             result["pending_after"] += _pending_count(directory)
             result["results"].append(
@@ -366,7 +390,8 @@ def run_capability_proposal_relay() -> dict[str, Any]:
                 result["ok"] = False
                 result["status"] = "relay_failed"
         result["postcondition"] = {
-            "processed_receipts_written": result["created_count"] + result["ignored_count"],
+            "processed_receipts_written": result["created_count"]
+            + result["ignored_count"],
             "reconciled_receipts_written": result.get("reconciled_count", 0),
             "pending_recounted": True,
         }
@@ -399,7 +424,9 @@ def register_capability_proposal_relay_job(
             def _run() -> dict[str, Any]:
                 result = run_capability_proposal_relay()
                 if result.get("ok") is not True:
-                    raise RuntimeError(f"capability_proposal_relay_failed:{result.get('status')}")
+                    raise RuntimeError(
+                        f"capability_proposal_relay_failed:{result.get('status')}"
+                    )
                 return result
 
             result = track_job("capability_proposal_relay", _run)

@@ -6,7 +6,10 @@ framework, ORM or HTTP imports — those belong in :mod:`application` and
 that rule.
 """
 
-from modstore_server.domain.notification.port_contracts import NotificationRepository, RealtimePusher
+from modstore_server.domain.notification.port_contracts import (
+    NotificationRepository,
+    RealtimePusher,
+)
 from .notification_types import Notification, NotificationType, OutboundNotification
 
 __all__ = [

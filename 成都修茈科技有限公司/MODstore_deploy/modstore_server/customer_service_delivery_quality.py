@@ -26,7 +26,9 @@ def _versioned_probe_matches(
         generated = datetime.fromisoformat(
             str(report.get("generated_at") or "").replace("Z", "+00:00")
         )
-        expires = datetime.fromisoformat(str(report.get("expires_at") or "").replace("Z", "+00:00"))
+        expires = datetime.fromisoformat(
+            str(report.get("expires_at") or "").replace("Z", "+00:00")
+        )
     except ValueError:
         return False
     now = datetime.now(UTC)
@@ -102,7 +104,9 @@ def custom_delivery_gate(
                     or snapshot.get("delivery_source_mode") != "versioned_main"
                 ):
                     return False, "主线交付缺少当前账号、原工单或生产轮次上下文"
-                from modstore_server.customer_delivery_sources import verified_snapshot_library
+                from modstore_server.customer_delivery_sources import (
+                    verified_snapshot_library,
+                )
 
                 verified_snapshot_library(snapshot, owner_id, generation, ticket_id)
             _, signed = read_verified_artifact(
@@ -111,11 +115,13 @@ def custom_delivery_gate(
                 ticket_id=int(row.get("ticket_id") or 0),
             )
             probe = signed["manifest"].get("delivery_verification") or {}
-            if probe.get("handler") != "verify_delivery" or probe.get("case_id") != row.get(
-                "verification_case_id"
-            ):
+            if probe.get("handler") != "verify_delivery" or probe.get(
+                "case_id"
+            ) != row.get("verification_case_id"):
                 return False, "签名产物缺少绑定业务探针"
-            if row.get("source_mode") == "versioned_main" and not _versioned_probe_matches(
+            if row.get(
+                "source_mode"
+            ) == "versioned_main" and not _versioned_probe_matches(
                 row, signed, snapshot.get("delivery_runtime_identity") or {}
             ):
                 return False, "主线太阳鸟正式签名包缺少匹配的隔离业务探针回执"
@@ -131,12 +137,16 @@ def custom_delivery_gate(
     intent = str(snapshot.get("intent") or "")
     if intent == "mod":
         raw_validation = artifact.get("validation_summary")
-        validation: dict[str, Any] = raw_validation if isinstance(raw_validation, dict) else {}
+        validation: dict[str, Any] = (
+            raw_validation if isinstance(raw_validation, dict) else {}
+        )
         if not artifact.get("mod_id"):
             return False, "Mod 生产完成但缺少产物 ID"
         if validation.get("ok") is not True:
             return False, "Mod 沙箱或员工可用性门未通过"
-        if any(row.get("source_mode") == "versioned_main" for row in verified) and not any(
+        if any(
+            row.get("source_mode") == "versioned_main" for row in verified
+        ) and not any(
             row.get("sandbox_probe", {}).get("report_sha256")
             == validation.get("signed_probe_sha256")
             for row in verified

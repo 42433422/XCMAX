@@ -42,7 +42,9 @@ def _as_utc_aware(dt: datetime | None) -> datetime | None:
     return dt.astimezone(UTC)
 
 
-def verify_digest_identity(session: Session, raw_code: str, *, now: datetime | None = None) -> str:
+def verify_digest_identity(
+    session: Session, raw_code: str, *, now: datetime | None = None
+) -> str:
     """与 ``market_auth_api.api_verify_admin_digest_code`` 相同逻辑：有效则返回 UTC ISO 过期时间，否则返回空串。
 
     ``raw_code`` 应为已规范化或待规范化的用户输入；内部会再次 ``normalize_digest_identity_code``。
@@ -69,7 +71,12 @@ def verify_digest_identity(session: Session, raw_code: str, *, now: datetime | N
         exp = _as_utc_aware(tok.expires_at)
         return exp.isoformat() if exp else ""
 
-    rows = session.query(DailyDigestRecord).order_by(DailyDigestRecord.id.desc()).limit(20).all()
+    rows = (
+        session.query(DailyDigestRecord)
+        .order_by(DailyDigestRecord.id.desc())
+        .limit(20)
+        .all()
+    )
     for row in rows:
         plain = extract_digest_identity_plain_from_html(row.body_html or "")
         if plain != code:
@@ -87,7 +94,12 @@ def verify_digest_identity(session: Session, raw_code: str, *, now: datetime | N
 
 def resolve_digest_identity_for_xcmax(session: Session) -> dict[str, Any]:
     """供 XCmax ``GET /api/xcmax/admin/digest-identity``：返回当前宜展示的码及是否与解锁校验一致。"""
-    rows = session.query(DailyDigestRecord).order_by(DailyDigestRecord.id.desc()).limit(12).all()
+    rows = (
+        session.query(DailyDigestRecord)
+        .order_by(DailyDigestRecord.id.desc())
+        .limit(12)
+        .all()
+    )
     for row in rows:
         plain = extract_digest_identity_plain_from_html(row.body_html or "")
         if not plain:
@@ -102,7 +114,11 @@ def resolve_digest_identity_for_xcmax(session: Session) -> dict[str, Any]:
             }
 
     latest = rows[0] if rows else None
-    plain_latest = extract_digest_identity_plain_from_html(latest.body_html or "") if latest else ""
+    plain_latest = (
+        extract_digest_identity_plain_from_html(latest.body_html or "")
+        if latest
+        else ""
+    )
     return {
         "code": plain_latest or "",
         "expires_at": "",

@@ -46,7 +46,9 @@ def _assess_branch_auto_merge_policy(
     normalized_files = [
         workspace._normalize_repo_path(file_name) for file_name in files if file_name
     ]
-    risk_score = risk._auto_merge_risk_score_v1(normalized_files, diff_stats, memory=memory)
+    risk_score = risk._auto_merge_risk_score_v1(
+        normalized_files, diff_stats, memory=memory
+    )
     safety_score_v2 = risk._auto_merge_safety_score_v2(
         normalized_files,
         diff_stats,
@@ -90,7 +92,9 @@ def _assess_branch_auto_merge_policy(
             para_merge_review_max_diff_chars,
         )
 
-        executable_block = assess_loop_memory_executable_change_block(memory, normalized_files)
+        executable_block = assess_loop_memory_executable_change_block(
+            memory, normalized_files
+        )
         if executable_block is not None:
             decision_payload: Dict[str, Any] = {
                 "changed_files": normalized_files,
@@ -104,7 +108,9 @@ def _assess_branch_auto_merge_policy(
             memory, normalized_files, diff_stats, diff_excerpt=diff_excerpt
         )
         if retort_block is not None:
-            return _decision({"changed_files": normalized_files, "ok": False, **retort_block})
+            return _decision(
+                {"changed_files": normalized_files, "ok": False, **retort_block}
+            )
     except RECOVERABLE_ERRORS as exc:
         return _decision(
             {
@@ -129,7 +135,9 @@ def _assess_branch_auto_merge_policy(
                 "reason": "diff_too_large_for_para_merge_review",
             }
         )
-    consistency = workspace._diff_stats_changed_files_consistency(normalized_files, diff_stats)
+    consistency = workspace._diff_stats_changed_files_consistency(
+        normalized_files, diff_stats
+    )
     if not consistency.get("ok"):
         return _decision(
             {
@@ -155,7 +163,9 @@ def _assess_branch_auto_merge_policy(
                 "reason": "changed_files_match_absolute_forbidden_globs",
             }
         )
-    binary_files = diff_stats.get("binary_files") if isinstance(diff_stats, dict) else []
+    binary_files = (
+        diff_stats.get("binary_files") if isinstance(diff_stats, dict) else []
+    )
     if binary_files:
         return _decision(
             {
@@ -165,9 +175,9 @@ def _assess_branch_auto_merge_policy(
                 "reason": "binary_files_not_auto_mergeable",
             }
         )
-    if config._env_bool("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", True) and safety_score_v3.get(
-        "ok"
-    ):
+    if config._env_bool(
+        "MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V3", True
+    ) and safety_score_v3.get("ok"):
         return _decision(
             {
                 "changed_files": normalized_files,
@@ -216,7 +226,9 @@ def _assess_branch_auto_merge_policy(
             }
         )
     if config._env_bool("MODSTORE_SELF_MAINTENANCE_SCORING_GATE_V2", True):
-        if int(safety_score_v2.get("score") or 0) < int(safety_score_v2.get("min_allowed") or 90):
+        if int(safety_score_v2.get("score") or 0) < int(
+            safety_score_v2.get("min_allowed") or 90
+        ):
             return _decision(
                 {
                     "changed_files": normalized_files,
@@ -252,7 +264,9 @@ def _assess_branch_auto_merge_policy(
                 "reason": "legacy_low_risk_glob_policy_passed",
             }
         )
-    if not config._env_bool("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_DYNAMIC_LOW_RISK", True):
+    if not config._env_bool(
+        "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_DYNAMIC_LOW_RISK", True
+    ):
         return _decision(
             {
                 "allowed_globs": allowed,

@@ -31,7 +31,11 @@ def record_dispatch_failure(payload: dict[str, Any], error: str) -> None:
     if not ticket_id or not owner_id:
         return
     with get_session_factory()() as db:
-        ticket = db.query(CustomerServiceTicket).filter_by(id=ticket_id, user_id=owner_id).first()
+        ticket = (
+            db.query(CustomerServiceTicket)
+            .filter_by(id=ticket_id, user_id=owner_id)
+            .first()
+        )
         if ticket is None or ticket.status in {"resolved", "closed", "expired"}:
             return
         evidence = json_loads(ticket.evidence_json, {})
@@ -64,14 +68,17 @@ def enqueue_issue(
     ticket.evidence_json = json_dumps(evidence)
     revision = (
         revision
-        or hashlib.sha256(str(ticket.summary or ticket.title or "").encode()).hexdigest()[:24]
+        or hashlib.sha256(
+            str(ticket.summary or ticket.title or "").encode()
+        ).hexdigest()[:24]
     )
     key = f"{ticket.ticket_no}:{revision}"
     domain = str(evidence.get("issue_domain") or "")
     text = f"{ticket.title} {ticket.summary}".lower()
     scope = "modstore" if resolution["route"] == "private_mod" else "fhd"
     if domain in {"website", "官网"} or any(
-        word in text for word in ("website", "官网", "首页", "landing", "xiu-ci", "xiuci")
+        word in text
+        for word in ("website", "官网", "首页", "landing", "xiu-ci", "xiuci")
     ):
         scope = "website"
     elif domain in {"desktop", "android", "fhd", "modstore"}:
@@ -126,7 +133,9 @@ def enqueue_issue(
 
 def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
     """Consume original lineage; intact incidents and private runs stay idempotent."""
-    from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
+    from modstore_server.duty_workforce_contracts import (
+        enrich_customer_ticket_publish_payload,
+    )
     from modstore_server.incident_bus import publish
 
     raw_payload = event.get("data")
@@ -148,7 +157,9 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
         if active_shared_repair(db, ticket):
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
     if payload.get("intake_source") == "private_mod_rework":
-        from modstore_server.customer_issue_private_factory import dispatch_private_rework
+        from modstore_server.customer_issue_private_factory import (
+            dispatch_private_rework,
+        )
 
         return dispatch_private_rework(event_id, payload)
     fingerprint = hashlib.sha256(event_id.encode()).hexdigest()
@@ -187,7 +198,9 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
             )
         ):
             continue
-        token = db_outbox.claim_record(record.id) if record.status != "dispatched" else ""
+        token = (
+            db_outbox.claim_record(record.id) if record.status != "dispatched" else ""
+        )
         if record.status != "dispatched" and not token:
             continue
         try:
@@ -195,7 +208,9 @@ def dispatch_pending_issue_events(ticket_id: int) -> None:
         except BOUNDARY_ERRORS as exc:
             if record.status == "dispatched":
                 raise
-            db_outbox.mark_failed(record.id, str(exc)[:500], terminal=False, claim_token=token)
+            db_outbox.mark_failed(
+                record.id, str(exc)[:500], terminal=False, claim_token=token
+            )
         else:
             if record.status == "dispatched":
                 continue
@@ -280,7 +295,9 @@ def _persist_incident(event_type, payload, source, fp, dedupe_minutes, inbox_key
                     session.add(ev)
                     session.flush()
                 if key:
-                    session.add(IncidentInbox(inbox_key=key, incident_event_id=int(ev.id)))
+                    session.add(
+                        IncidentInbox(inbox_key=key, incident_event_id=int(ev.id))
+                    )
                     session.flush()
             eid = int(ev.id)
             session.commit()

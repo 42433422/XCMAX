@@ -15,7 +15,9 @@ _BURN_IN_TASK_PREFIX = "[duty-burn-in:"
 _SUCCESS_STATUSES = ("success", "completed")
 
 
-def _roster_receipts(rows: list[tuple[Any, Any]], planned: set[str]) -> list[dict[str, str]]:
+def _roster_receipts(
+    rows: list[tuple[Any, Any]], planned: set[str]
+) -> list[dict[str, str]]:
     receipts = [
         {"employee_id": str(employee_id), "latest_success_at": created_at.isoformat()}
         for employee_id, created_at in rows
@@ -123,7 +125,9 @@ def build_execution_coverage(
             if planned_count
             else 0.0
         ),
-        "proof_ratio": round(len(receipts) / planned_count, 4) if planned_count else 0.0,
+        "proof_ratio": round(len(receipts) / planned_count, 4)
+        if planned_count
+        else 0.0,
         "burn_in_proof_ratio": (
             round(len(burn_in_receipts) / planned_count, 4) if planned_count else 0.0
         ),
@@ -145,7 +149,9 @@ def build_execution_coverage(
         "receipts": receipts,
         "burn_in_employee_ids": [item["employee_id"] for item in burn_in_receipts],
         "burn_in_receipts": burn_in_receipts,
-        "production_employee_ids": [item["employee_id"] for item in production_receipts],
+        "production_employee_ids": [
+            item["employee_id"] for item in production_receipts
+        ],
         "production_receipts": production_receipts,
         "platform_llm": {
             "configured": bool(bench_provider and bench_model),

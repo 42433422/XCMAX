@@ -12,7 +12,9 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
+from modstore_server.llm_billed_once import (
+    run_billed_llm_chat_once as _run_billed_llm_chat_once,
+)
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,
@@ -178,7 +180,10 @@ async def stream_billed_llm_chat(
         if k:
             key_source_by_provider[p] = src
 
-    if primary_provider not in key_source_by_provider and primary_provider in KNOWN_PROVIDERS:
+    if (
+        primary_provider not in key_source_by_provider
+        and primary_provider in KNOWN_PROVIDERS
+    ):
         raise HTTPException(
             400,
             f"供应商「{primary_provider}」未配置可用 API Key（平台环境变量或 BYOK）。",
@@ -200,7 +205,9 @@ async def stream_billed_llm_chat(
                 messages_use_openai_multipart_content(msgs)
                 and prov not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
             ):
-                last_error = "多模态消息仅支持 OpenAI 兼容供应商；请更换 provider 或改发纯文本。"
+                last_error = (
+                    "多模态消息仅支持 OpenAI 兼容供应商；请更换 provider 或改发纯文本。"
+                )
                 rest = remaining_candidates_after_failure(
                     queue,
                     idx,
@@ -250,7 +257,9 @@ async def stream_billed_llm_chat(
                         hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
                     )
                 else:
-                    preauth_amount = estimate_preauthorization(db, prov, mdl, msgs, max_tokens)
+                    preauth_amount = estimate_preauthorization(
+                        db, prov, mdl, msgs, max_tokens
+                    )
                     hold = await wallet.preauthorize(
                         authorization_header(request),
                         preauth_amount,
@@ -386,7 +395,9 @@ async def stream_billed_llm_chat(
                         charge = Decimal("0")
                     else:
                         charge = calculate_charge(db, prov, mdl, usage)
-                        await wallet.settle(authorization_header(request), hold, charge, request_id)
+                        await wallet.settle(
+                            authorization_header(request), hold, charge, request_id
+                        )
                     saved_conversation_id = save_success_log(
                         db,
                         user_id=user.id,
@@ -428,7 +439,9 @@ async def stream_billed_llm_chat(
                         error=str(exc),
                         hold_no=hold.hold_no,
                     )
-                    await wallet.release(authorization_header(request), hold, str(exc), request_id)
+                    await wallet.release(
+                        authorization_header(request), hold, str(exc), request_id
+                    )
                 except RECOVERABLE_ERRORS:
                     logger.exception(
                         "failed to release LLM wallet hold after unexpected stream error"

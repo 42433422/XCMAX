@@ -29,7 +29,9 @@ _DEFAULT_REPORTER_DISPLAY_NAME = "数字管家"
 
 
 def report_enabled() -> bool:
-    return (os.environ.get("MODSTORE_BOSS_IM_REPORT_ENABLED") or "1").strip().lower() not in (
+    return (
+        os.environ.get("MODSTORE_BOSS_IM_REPORT_ENABLED") or "1"
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -46,7 +48,8 @@ def report_hour_utc() -> int:
 
 def _reporter_identity() -> Tuple[str, str]:
     eid = (
-        os.environ.get("MODSTORE_BOSS_IM_REPORT_EMPLOYEE_ID") or _DEFAULT_REPORTER_EMPLOYEE_ID
+        os.environ.get("MODSTORE_BOSS_IM_REPORT_EMPLOYEE_ID")
+        or _DEFAULT_REPORTER_EMPLOYEE_ID
     ).strip()
     return eid or _DEFAULT_REPORTER_EMPLOYEE_ID, _DEFAULT_REPORTER_DISPLAY_NAME
 
@@ -86,7 +89,9 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                     func.count(EmployeeExecutionMetric.id),
                 )
                 .filter(EmployeeExecutionMetric.created_at >= since)
-                .group_by(EmployeeExecutionMetric.employee_id, EmployeeExecutionMetric.status)
+                .group_by(
+                    EmployeeExecutionMetric.employee_id, EmployeeExecutionMetric.status
+                )
                 .all()
             )
             per_emp: Dict[str, int] = {}
@@ -97,7 +102,9 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 per_emp[str(emp)] = per_emp.get(str(emp), 0) + int(cnt)
             stats["top_employees"] = sorted(per_emp.items(), key=lambda kv: -kv[1])[:3]
         except RECOVERABLE_ERRORS:
-            logger.debug("boss daily report: execution metrics query failed", exc_info=True)
+            logger.debug(
+                "boss daily report: execution metrics query failed", exc_info=True
+            )
 
         try:
             trows = (
@@ -144,7 +151,9 @@ def _collect_stats(hours: int = 24) -> Dict[str, Any]:
                 or 0
             )
         except RECOVERABLE_ERRORS:
-            logger.debug("boss daily report: pending question query failed", exc_info=True)
+            logger.debug(
+                "boss daily report: pending question query failed", exc_info=True
+            )
     return stats
 
 
@@ -177,7 +186,9 @@ def build_boss_daily_im_report(*, hours: int = 24) -> str:
         lines.append(f"· 员工建议已自动执行 {s['suggestions_dispatched']} 条")
 
     if s["questions_pending"]:
-        lines.append(f"⚠️ 有 {s['questions_pending']} 个问题在等你回复（直接回对应员工的聊天即可）")
+        lines.append(
+            f"⚠️ 有 {s['questions_pending']} 个问题在等你回复（直接回对应员工的聊天即可）"
+        )
     else:
         lines.append("· 没有等你拍板的问题")
 

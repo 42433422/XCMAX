@@ -81,7 +81,9 @@ def _extract_changed_files_from_output(out: Any) -> List[str]:
                             if isinstance(item, str):
                                 paths.append(item)
                             elif isinstance(item, dict):
-                                p = str(item.get("path") or item.get("file") or "").strip()
+                                p = str(
+                                    item.get("path") or item.get("file") or ""
+                                ).strip()
                                 if p:
                                     paths.append(p)
                 for key in ("file_path", "path", "output_path", "file"):
@@ -143,7 +145,9 @@ def check_path_guard(
     if not isinstance(wp, dict):
         wp = {}
     scope_globs = [str(x) for x in (wp.get("scope_globs") or []) if str(x).strip()]
-    forbidden_globs = [str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()]
+    forbidden_globs = [
+        str(x) for x in (wp.get("forbidden_globs") or []) if str(x).strip()
+    ]
 
     # 没配边界 → 不检查（避免误伤没配 scope 的员工）
     if not scope_globs and not forbidden_globs:
@@ -183,7 +187,9 @@ def check_path_guard(
             if not g:
                 continue
             pattern = (
-                g.replace("**/", "*").replace("/**", "/*").replace("**", "*") if "**" in g else g
+                g.replace("**/", "*").replace("/**", "/*").replace("**", "*")
+                if "**" in g
+                else g
             )
             if fnmatch.fnmatch(norm, pattern):
                 violations.append(

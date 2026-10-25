@@ -42,10 +42,14 @@ def _focused_test_command() -> str:
     does not install pytest.  Prefer the MODstore venv used for repository tests
     and expose explicit overrides for production or isolated runners.
     """
-    command_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", "").strip()
+    command_override = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_FOCUSED_TEST_COMMAND", ""
+    ).strip()
     if command_override:
         return command_override
-    test_python_override = os.environ.get("MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", "").strip()
+    test_python_override = os.environ.get(
+        "MODSTORE_SELF_MAINTENANCE_TEST_PYTHON", ""
+    ).strip()
     deploy_root = Path(
         os.environ.get("MODSTORE_DEPLOY_ROOT") or Path(__file__).resolve().parents[2]
     )
@@ -54,7 +58,11 @@ def _focused_test_command() -> str:
         Path(test_python_override).expanduser() if test_python_override else None,
         deploy_root / ".venv" / "bin" / "python",
         (
-            Path(runtime_root).expanduser() / "MODstore_deploy" / ".venv" / "bin" / "python"
+            Path(runtime_root).expanduser()
+            / "MODstore_deploy"
+            / ".venv"
+            / "bin"
+            / "python"
             if runtime_root
             else None
         ),
@@ -74,9 +82,7 @@ def _focused_test_command() -> str:
             Path(sys.executable),
         )
         _FOCUSED_TEST_PYTHON_CACHE = (candidates, monotonic() + 60, test_python)
-    test_path = (
-        "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
-    )
+    test_path = "成都修茈科技有限公司/MODstore_deploy/tests/test_self_maintenance_loop_runner_policy.py"
     return f"{shlex.quote(str(test_python))} -m pytest {shlex.quote(test_path)} -q"
 
 
@@ -113,7 +119,10 @@ def _validate_structured_review_protocol(
     severity = str(obj.get("max_severity") or "").strip().lower()
     if severity not in config._REVIEW_SEVERITIES:
         return (False, "invalid_max_severity")
-    if str(obj.get("risk_class") or "").strip().lower() not in config._REVIEW_RISK_CLASSES:
+    if (
+        str(obj.get("risk_class") or "").strip().lower()
+        not in config._REVIEW_RISK_CLASSES
+    ):
         return (False, "invalid_risk_class")
     if not isinstance(obj.get("blocking_findings"), list):
         return (False, "blocking_findings_not_list")
@@ -167,7 +176,9 @@ def _validate_structured_qa_protocol(
     return (True, "")
 
 
-def _structured_report_from_step(step: Dict[str, Any], marker: str) -> Optional[Dict[str, Any]]:
+def _structured_report_from_step(
+    step: Dict[str, Any], marker: str
+) -> Optional[Dict[str, Any]]:
     report = str(step.get("report_excerpt") or "")
     parsed = _json_after_marker(report, marker)
     candidates: List[Dict[str, Any]] = []
@@ -255,7 +266,10 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
         failed_dims = []
         for key in config._REVIEW_DIMENSION_KEYS:
             dimension = dimensions.get(key)
-            if isinstance(dimension, dict) and str(dimension.get("status") or "").lower() == "fail":
+            if (
+                isinstance(dimension, dict)
+                and str(dimension.get("status") or "").lower() == "fail"
+            ):
                 failed_dims.append(key)
         if severity not in {"none", "low", "medium"}:
             return {
@@ -280,7 +294,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
     else:
         review_json = None
     if qa_steps:
-        qa_json = _structured_report_from_step(qa_steps[-1], config.STRUCTURED_QA_MARKER)
+        qa_json = _structured_report_from_step(
+            qa_steps[-1], config.STRUCTURED_QA_MARKER
+        )
         qa_ok, qa_reason = _validate_structured_qa_protocol(qa_json)
         if not qa_ok or not isinstance(qa_json, dict):
             return {
@@ -299,7 +315,9 @@ def _structured_report_gate(steps: List[Dict[str, Any]], branch=None) -> Dict[st
         if verdict != "PASS":
             return {
                 "ok": False,
-                "reason": self_maintenance_quality_gate.qa_verdict_failure_reason(qa_json),
+                "reason": self_maintenance_quality_gate.qa_verdict_failure_reason(
+                    qa_json
+                ),
                 "qa": qa_json,
             }
         blocking = qa_json.get("blocking_findings")

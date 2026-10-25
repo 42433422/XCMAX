@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 
 from .models_base import Base
 
@@ -58,7 +67,9 @@ class UserPlan(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    plan_id = Column(String(64), ForeignKey("plan_templates.id"), nullable=False, index=True)
+    plan_id = Column(
+        String(64), ForeignKey("plan_templates.id"), nullable=False, index=True
+    )
     started_at = Column(DateTime, default=lambda: datetime.now(UTC))
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, index=True)

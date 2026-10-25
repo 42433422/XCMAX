@@ -2558,7 +2558,10 @@ class TestImportProductsPreviewOrExecute:
     def test_confirm_mode_success(self) -> None:
         df = pd.DataFrame({"产品名称": ["A"], "型号": ["M1"], "单价": [10]})
         with (
-            patch("app.domain.shared_services.unified_query_service.find_purchase_unit", return_value=None),
+            patch(
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
+                return_value=None,
+            ),
             patch("app.bootstrap.get_customer_app_service") as mock_cust,
             patch("app.bootstrap.get_products_service") as mock_prod,
         ):

@@ -54,11 +54,18 @@ def _serialize_token(row: DeveloperToken) -> Dict[str, Any]:
         "name": row.name or "",
         "prefix": row.token_prefix,
         "scopes": scopes,
-        "created_at": as_utc_aware(row.created_at).isoformat() if row.created_at else None,
-        "last_used_at": as_utc_aware(row.last_used_at).isoformat() if row.last_used_at else None,
+        "created_at": as_utc_aware(row.created_at).isoformat()
+        if row.created_at
+        else None,
+        "last_used_at": as_utc_aware(row.last_used_at).isoformat()
+        if row.last_used_at
+        else None,
         "expires_at": expires_at.isoformat() if expires_at else None,
-        "revoked_at": as_utc_aware(row.revoked_at).isoformat() if row.revoked_at else None,
-        "is_active": row.revoked_at is None and (expires_at is None or expires_at > now),
+        "revoked_at": as_utc_aware(row.revoked_at).isoformat()
+        if row.revoked_at
+        else None,
+        "is_active": row.revoked_at is None
+        and (expires_at is None or expires_at > now),
     }
 
 
@@ -74,7 +81,9 @@ async def create_developer_token(
         raise HTTPException(400, str(e)) from e
     raw, prefix, digest = generate_pat()
     expires_at = (
-        datetime.now(UTC) + timedelta(days=int(body.expires_days)) if body.expires_days else None
+        datetime.now(UTC) + timedelta(days=int(body.expires_days))
+        if body.expires_days
+        else None
     )
     row = DeveloperToken(
         user_id=user.id,

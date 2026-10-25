@@ -28,7 +28,9 @@ from modstore_server.work_order_core import (
 )
 
 router = APIRouter(prefix="/api/work-orders", tags=["work-orders"])
-_CUSTOMER_ROUTABLE_STATES = "routed in_dev merged released verifying closed reopened".split()
+_CUSTOMER_ROUTABLE_STATES = (
+    "routed in_dev merged released verifying closed reopened".split()
+)
 
 
 class CandidateBody(BaseModel):
@@ -137,7 +139,12 @@ def create_candidate(
 def _create_candidate(db: Session, body: CandidateBody) -> dict[str, Any]:
     key = str(body.dedup_key or "").strip()
     if not key:
-        return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
+        return {
+            "wo_id": "",
+            "created": False,
+            "status": "",
+            "reason": "empty_dedup_key",
+        }
     source = str(body.source or "").strip() or "unknown"
     wo_id = derive_wo_id(key)
     existing = _view(db, wo_id)
@@ -201,7 +208,12 @@ def transition(
     current = str(view.get("status") or "")
     invalid = validate_transition(current, target)
     if invalid == "already_in_state":
-        return {"ok": True, "reason": "already_in_state", "wo_id": wo_id, "status": current}
+        return {
+            "ok": True,
+            "reason": "already_in_state",
+            "wo_id": wo_id,
+            "status": current,
+        }
     if invalid:
         return {"ok": False, "reason": invalid, "wo_id": wo_id, "status": current}
 
@@ -209,7 +221,12 @@ def transition(
     if target == "routed":
         track = str(ref.get("track") or "").strip()
         if track and track not in WO_TRACKS:
-            return {"ok": False, "reason": "unknown_track", "wo_id": wo_id, "track": track}
+            return {
+                "ok": False,
+                "reason": "unknown_track",
+                "wo_id": wo_id,
+                "track": track,
+            }
         if not track:
             reason, source, context = _created_facts(db, wo_id)
             track = classify_track(source=source, reason=reason, context=context)
@@ -355,14 +372,23 @@ def route_customer_issue(
         if event.get("event") == "gate" and event.get("ref", {}).get("gate")
     }
     for gate, gate_status, evidence in (
-        ("intake", "ROUTED", {"customer_ticket_id": ticket_id, "customer_ticket_no": ticket_no}),
+        (
+            "intake",
+            "ROUTED",
+            {"customer_ticket_id": ticket_id, "customer_ticket_no": ticket_no},
+        ),
         ("evidence", "COLLECTED", {"support_bundle_sha256": support_bundle_sha256}),
     ):
         previous = receipts.get(gate, {})
-        if previous.get("gate_status") == gate_status and previous.get("evidence") == evidence:
+        if (
+            previous.get("gate_status") == gate_status
+            and previous.get("evidence") == evidence
+        ):
             continue
         record_gate_receipt(
-            GateReceiptBody(wo_id=wo_id, gate=gate, gate_status=gate_status, evidence=evidence),
+            GateReceiptBody(
+                wo_id=wo_id, gate=gate, gate_status=gate_status, evidence=evidence
+            ),
             db=db,
             _user=user,
         )
@@ -379,7 +405,9 @@ def record_gate_receipt(
     wo_id = str(body.wo_id or "").strip()
     if not is_valid_wo_id(wo_id) or _view(db, wo_id) is None:
         return {"ok": False, "reason": "unknown_work_order", "wo_id": wo_id}
-    evidence_json = json.dumps(body.evidence or {}, ensure_ascii=False, separators=(",", ":"))
+    evidence_json = json.dumps(
+        body.evidence or {}, ensure_ascii=False, separators=(",", ":")
+    )
     if len(evidence_json.encode("utf-8")) > 16_384:
         return {"ok": False, "reason": "evidence_too_large", "wo_id": wo_id}
     _append_event(
@@ -455,7 +483,9 @@ def acceptance(
 
 def _find_by_issue(db: Session, issue_number: int) -> dict[str, Any] | None:
     """按 issue 反查：找携带该 issue_number 的 transition 事件所属工单再折叠。"""
-    for rec in db.query(WorkOrderEvent).filter(WorkOrderEvent.event == "transition").all():
+    for rec in (
+        db.query(WorkOrderEvent).filter(WorkOrderEvent.event == "transition").all()
+    ):
         ref = _loads(rec.ref)
         if int(ref.get("issue_number") or 0) == int(issue_number):
             return _view(db, str(rec.wo_id))
@@ -479,7 +509,9 @@ def list_orders(
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ) -> dict[str, Any]:
-    views = fold(db.query(WorkOrderEvent).order_by(WorkOrderEvent.id.asc()).all()).values()
+    views = fold(
+        db.query(WorkOrderEvent).order_by(WorkOrderEvent.id.asc()).all()
+    ).values()
     items = [view for view in views if not status or view["status"] == status]
     items.sort(key=lambda view: str(view.get("updated_at") or ""), reverse=True)
     return {"items": items[:limit], "count": len(items)}

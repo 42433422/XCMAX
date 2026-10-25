@@ -65,7 +65,9 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
                 }
 
             total_runs_7d = len(recent_metrics)
-            success_runs_7d = sum(1 for m in recent_metrics if (m.status or "") == "success")
+            success_runs_7d = sum(
+                1 for m in recent_metrics if (m.status or "") == "success"
+            )
 
             # pending ChangeRequest 数量
             pending_cr_count = (
@@ -89,7 +91,11 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
                     "health": (
                         "healthy"
                         if total_runs_7d == 0
-                        else ("healthy" if success_runs_7d / total_runs_7d >= 0.8 else "degraded")
+                        else (
+                            "healthy"
+                            if success_runs_7d / total_runs_7d >= 0.8
+                            else "degraded"
+                        )
                     ),
                 }
             )

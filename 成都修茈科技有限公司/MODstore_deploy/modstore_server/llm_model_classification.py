@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-Category = Literal["llm", "vlm", "image", "video", "audio", "embedding", "rerank", "other"]
+Category = Literal[
+    "llm", "vlm", "image", "video", "audio", "embedding", "rerank", "other"
+]
 
 
 def classify_model(provider: str, model_id: str) -> Category:

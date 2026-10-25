@@ -68,7 +68,9 @@ def is_ambiguous_employee_brief(routing_brief: str) -> bool:
         return True
     bl = rb.lower()
     signals = 0
-    if any(k in bl for k in ("word", "docx", "excel", "xlsx", "pdf", "txt", "csv", "ppt")):
+    if any(
+        k in bl for k in ("word", "docx", "excel", "xlsx", "pdf", "txt", "csv", "ppt")
+    ):
         signals += 1
     if any(
         k in bl
@@ -92,7 +94,9 @@ def is_ambiguous_employee_brief(routing_brief: str) -> bool:
     return True
 
 
-def skip_employee_plan_llm(payload: Optional[Dict[str, Any]], routing_brief: str) -> bool:
+def skip_employee_plan_llm(
+    payload: Optional[Dict[str, Any]], routing_brief: str
+) -> bool:
     """brief 已含 pack id + runtime_kind，或确定性管线且非模糊 → 跳过规划 LLM。"""
     rb = (routing_brief or "").strip()
     if not rb:
@@ -244,7 +248,9 @@ def classify_employee_pipeline(
         if isinstance(f, dict)
     )
     uploaded_excel = any(
-        str(f.get("filename") or f.get("name") or "").lower().endswith((".xlsx", ".xls", ".csv"))
+        str(f.get("filename") or f.get("name") or "")
+        .lower()
+        .endswith((".xlsx", ".xls", ".csv"))
         for f in files
         if isinstance(f, dict)
     )
@@ -270,7 +276,9 @@ def classify_employee_pipeline(
             and uploaded_excel
             and brief_wants_asset
             and not (needs_llm_reasoning and uploaded_docx)
-            and not any(k in bl for k in ("word", "docx", "txt", "文本提取", "文档提取"))
+            and not any(
+                k in bl for k in ("word", "docx", "txt", "文本提取", "文档提取")
+            )
         )
         or (needs_llm_reasoning and uploaded_docx)
     )

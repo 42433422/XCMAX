@@ -988,7 +988,9 @@ class TestReportServiceUncoveredBranches:
         record.amount = Decimal("100")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="customer", source="shipment")
 
         assert result["success"] is True
@@ -1001,7 +1003,9 @@ class TestReportServiceUncoveredBranches:
         record.amount = Decimal("50")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="date", source="shipment")
 
         assert result["data"][0]["date"] == "2026-01-01"
@@ -1010,7 +1014,9 @@ class TestReportServiceUncoveredBranches:
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = []
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_sales_report(group_by="unknown", source="shipment")
 
         assert result == {"success": True, "data": [], "summary": {}}
@@ -1033,7 +1039,9 @@ class TestReportServiceUncoveredBranches:
         start = datetime(2026, 1, 1)
         end = datetime(2026, 1, 31)
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             svc.get_sales_report(start_date=start, end_date=end, customer_id=5, source="shipment")
 
         assert mock_query.filter.call_count == 3
@@ -1046,7 +1054,9 @@ class TestReportServiceUncoveredBranches:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_inventory_report(warehouse_id=2, category="c1")
 
         assert result["success"] is True
@@ -1061,7 +1071,9 @@ class TestReportServiceUncoveredBranches:
         order.supplier_id = 1
         mock_db.query.return_value.all.return_value = [order]
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_purchase_report(group_by="status")
 
         assert result["data"][0]["status"] == "draft"
@@ -1075,7 +1087,9 @@ class TestReportServiceUncoveredBranches:
         order.supplier.name = "s1"
         mock_db.query.return_value.all.return_value = [order]
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_purchase_report(group_by="date")
 
         assert result["data"][0]["date"] == "2026-02-01"
@@ -1089,7 +1103,9 @@ class TestReportServiceUncoveredBranches:
         mock_query.all.return_value = []
         mock_db.query.return_value = mock_query
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_inventory_transaction_report(transaction_type="in", product_id=3)
 
         assert result["count"] == 0
@@ -1138,7 +1154,9 @@ class TestReportServiceUncoveredBranches:
 
         mock_db.query = MagicMock(side_effect=side_effect_query)
 
-        with patch("app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
+        with patch(
+            "app.domain.shared_services.report_service.get_db", return_value=_mock_db_ctx(mock_db)
+        ):
             result = svc.get_dashboard_summary()
 
         assert result["success"] is True

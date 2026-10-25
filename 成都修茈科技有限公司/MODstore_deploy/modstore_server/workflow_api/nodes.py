@@ -115,7 +115,8 @@ async def delete_workflow_node(
         raise HTTPException(404, "节点不存在")
 
     db.query(WorkflowEdge).filter(
-        (WorkflowEdge.source_node_id == node_id) | (WorkflowEdge.target_node_id == node_id)
+        (WorkflowEdge.source_node_id == node_id)
+        | (WorkflowEdge.target_node_id == node_id)
     ).delete()
     db.delete(node)
     db.commit()

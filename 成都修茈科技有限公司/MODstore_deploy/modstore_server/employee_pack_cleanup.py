@@ -7,7 +7,10 @@ import re
 import shutil
 from typing import Any, Dict, Optional
 
-from modstore_server.catalog_quality import OFFICE_AUX_PACK_1_PKG_IDS, PUBLIC_TABULAR_PKG_IDS
+from modstore_server.catalog_quality import (
+    OFFICE_AUX_PACK_1_PKG_IDS,
+    PUBLIC_TABULAR_PKG_IDS,
+)
 from modstore_server.employee_golden_compare import PROTECTED_GOLDEN_IDS
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
@@ -20,7 +23,9 @@ _EXPERIMENTAL_SUFFIXES = (
 _EXPERIMENTAL_PATTERN = re.compile(r"-llm-lab(-\d+)?$")
 
 
-def is_experimental_pack_id(pack_id: str, metadata: Optional[Dict[str, Any]] = None) -> bool:
+def is_experimental_pack_id(
+    pack_id: str, metadata: Optional[Dict[str, Any]] = None
+) -> bool:
     pid = str(pack_id or "").strip()
     if not pid:
         return False

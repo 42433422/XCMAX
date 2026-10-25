@@ -114,7 +114,8 @@ def csv_read_structured_spec(brief: str) -> Dict[str, Any]:
 def csv_generate_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "数据处理 / CSV 生成",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "JSON 中介 → 写出 output.csv",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "JSON 中介 → 写出 output.csv",
         "input": "用户上传的 .json 或 run payload 中的结构化数据",
         "output": "outputs/output.csv",
         "output_schema": {
@@ -348,7 +349,9 @@ def _validate_csv_backend(
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -359,7 +362,11 @@ def _validate_csv_backend(
         errors.append(f"{runtime_kind} 员工 handlers 必须包含 direct_python")
     if not has_convert:
         errors.append("backend/vendor 中缺少 convert_file 实现")
-    if "csv" not in py_blob and "dictreader" not in py_blob and "dictwriter" not in py_blob:
+    if (
+        "csv" not in py_blob
+        and "dictreader" not in py_blob
+        and "dictwriter" not in py_blob
+    ):
         warnings.append("未发现 csv 模块相关代码")
     for tok in required_tokens:
         if tok.lower() not in py_blob:
@@ -391,7 +398,9 @@ def minimal_csv_table_json() -> Dict[str, Any]:
 
 
 def minimal_json_fixture_bytes() -> bytes:
-    return json.dumps(minimal_csv_table_json(), ensure_ascii=False, indent=2).encode("utf-8")
+    return json.dumps(minimal_csv_table_json(), ensure_ascii=False, indent=2).encode(
+        "utf-8"
+    )
 
 
 def csv_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -408,7 +417,8 @@ def csv_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": f"{clean}\n\n读取 inputs/*.csv，写出 outputs/data.json。",
         "script_runtime_notes": "只能读 inputs/、写 outputs/；使用 csv 标准库。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": f"{clean}\n\nSkill：上传 csv → DictReader → data.json。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -417,7 +427,9 @@ def csv_read_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str
     }
 
 
-def csv_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def csv_generate_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     clean = compact_routing_brief(brief, max_len=400) or (brief or "").strip()
@@ -431,7 +443,8 @@ def csv_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": f"{clean}\n\n读取 inputs/*.json，写出 outputs/output.csv。",
         "script_runtime_notes": "JSON 为中介；使用 csv.DictWriter。",
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": f"{clean}\n\nSkill：JSON → CSV 落盘。",
         "acceptance": [
             "handlers 为 direct_python",
@@ -440,7 +453,9 @@ def csv_generate_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
     }
 
 
-def resolve_csv_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def resolve_csv_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     if is_csv_generate(brief):
         return csv_generate_orchestration_plan(brief, payload)
     return csv_read_orchestration_plan(brief, payload)

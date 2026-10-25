@@ -112,7 +112,10 @@ def _opaque(match: "re.Match[str]") -> str:
 
 
 def redact_ticket_text(
-    text: Any, sensitive_values: Iterable[str] = (), keep: Iterable[str] = (), ip: bool = True
+    text: Any,
+    sensitive_values: Iterable[str] = (),
+    keep: Iterable[str] = (),
+    ip: bool = True,
 ) -> str:
     """遮蔽手机号、邮箱、姓名、地址、身份证、银行卡、令牌/密钥/密码、内部 ID 等。
 
@@ -183,12 +186,17 @@ def is_customer_ticket(req: Dict[str, Any]) -> bool:
 def triage_result(req: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
     """分诊结果：优先 ``customer_ticket_triage`` 贴的快照（含终极员工介入），否则按 intent 推。"""
 
-    from modstore_server.customer_ticket_triage import allow_code_fix, resolve_dispatch_lane
+    from modstore_server.customer_ticket_triage import (
+        allow_code_fix,
+        resolve_dispatch_lane,
+    )
 
     raw = _raw(req)
     nested = raw.get("triage")
     snapshot: Dict[str, Any] = nested if isinstance(nested, dict) else {}
-    intent = str(snapshot.get("intent") or raw.get("intent") or fields.get("intent") or "")
+    intent = str(
+        snapshot.get("intent") or raw.get("intent") or fields.get("intent") or ""
+    )
     intent = intent.strip().lower()
     if "allow_code_fix" in raw:
         allow = bool(raw.get("allow_code_fix"))
@@ -206,7 +214,8 @@ def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
 
     triage = triage_result(req, fields)
     text = " ".join(
-        str(fields.get(key) or "") for key in ("title", "summary", "intent", "issue_domain")
+        str(fields.get(key) or "")
+        for key in ("title", "summary", "intent", "issue_domain")
     )
     if (
         bool(req.get("report_only"))
@@ -219,13 +228,22 @@ def ticket_mode(req: Dict[str, Any], fields: Dict[str, Any]) -> str:
 
 
 def control_marker(fields: Dict[str, Any], req: Dict[str, Any]) -> str:
-    anchor = str(fields.get("ticket_no") or fields.get("ticket_id") or req.get("request_id") or "")
+    anchor = str(
+        fields.get("ticket_no")
+        or fields.get("ticket_id")
+        or req.get("request_id")
+        or ""
+    )
     task_part = hashlib.sha256(f"modstore-ticket:{anchor}".encode()).hexdigest()[:32]
     return f"[xcmax:{task_part}:{uuid.uuid4().hex}]"
 
 
 def _sensitive_values(fields: Dict[str, Any]) -> List[str]:
-    return [str(fields[key]) for key in _SENSITIVE_VALUE_KEYS if fields.get(key) not in ("", None)]
+    return [
+        str(fields[key])
+        for key in _SENSITIVE_VALUE_KEYS
+        if fields.get(key) not in ("", None)
+    ]
 
 
 class DoltIncidentContractError(ValueError):
@@ -245,7 +263,10 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
     if selector is None and raw.get("_trusted_incident_team_execution") is not True:
         return None
     try:
-        if not isinstance(selector, dict) or selector.get("schema") != "incident-team-runtime/v1":
+        if (
+            not isinstance(selector, dict)
+            or selector.get("schema") != "incident-team-runtime/v1"
+        ):
             raise DoltIncidentContractError("missing_trusted_incident_handoff")
         event_id = int(selector["event_id"])
         role = str(selector["role"])
@@ -264,10 +285,15 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
             if blocked:
                 raise DoltIncidentContractError(blocked)
             owner = source.get("tenant_id") or source.get("user_id")
-            if raw.get("user_id") != source.get("user_id") or raw.get("tenant_id") != owner:
+            if (
+                raw.get("user_id") != source.get("user_id")
+                or raw.get("tenant_id") != owner
+            ):
                 raise DoltIncidentContractError("incident_owner_mismatch")
             claim = source.get("_team_claim") or {}
-            rows = {r["role"]: r for r in claim.get("team") or [] if isinstance(r, dict)}
+            rows = {
+                r["role"]: r for r in claim.get("team") or [] if isinstance(r, dict)
+            }
             actions = {}
             if role == "escalation_review":
                 receipt = (claim.get("escalations") or {}).get(attempt) or {}
@@ -282,7 +308,8 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                 if roles[0] != "scout" and "scout" in rows:
                     roles.append("scout")
                 actions = {
-                    key: receipt.get(key) for key in ("category", "reason", "attempted_actions")
+                    key: receipt.get(key)
+                    for key in ("category", "reason", "attempted_actions")
                 }
             else:
                 current = rows.get(role) or {}
@@ -293,13 +320,20 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                     or current.get("employee_id") != req.get("employee_id")
                 ):
                     raise DoltIncidentContractError("incident_attempt_not_current")
-                roles = [] if role == "scout" else ["scout"] if role == "fix" else ["scout", "fix"]
+                roles = (
+                    []
+                    if role == "scout"
+                    else ["scout"]
+                    if role == "fix"
+                    else ["scout", "fix"]
+                )
                 if role == "verify" and str(raw.get("revision") or "") != str(
                     (rows.get("fix") or {}).get("attempt_id") or ""
                 ):
                     raise DoltIncidentContractError("verification_revision_mismatch")
             handoffs = [
-                role_handoff(rows.get(previous), previous, max_chars=4000) for previous in roles
+                role_handoff(rows.get(previous), previous, max_chars=4000)
+                for previous in roles
             ]
             previous_fix = selector.get("previous_fix")
             if role == "fix" and raw.get("is_transient_retry") is True:
@@ -309,7 +343,12 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                 ):
                     raise DoltIncidentContractError("retry_handoff_missing")
                 handoffs.append(previous_fix)
-            return {"role": role, "source": source, "handoffs": handoffs, "review": actions}
+            return {
+                "role": role,
+                "source": source,
+                "handoffs": handoffs,
+                "review": actions,
+            }
     except DoltIncidentContractError:
         raise
     except RECOVERABLE_ERRORS as exc:
@@ -332,7 +371,9 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
             value = str((item.get("identity") or {}).get(key) or "")
             if value:
                 # Server-generated UUID hex identifies an attempt, not a secret.
-                identity[key] = value if re.fullmatch(r"[a-f0-9]{32}", value) else clean(value, 100)
+                identity[key] = (
+                    value if re.fullmatch(r"[a-f0-9]{32}", value) else clean(value, 100)
+                )
         handoffs.append(
             {
                 "schema": "incident-role-handoff/v1",
@@ -372,12 +413,18 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
     }
     source = contract["source"]
     resolution = source.get("resolution") or {}
-    lines = ["事故岗位执行契约（服务端校验，摘要不代替原任务凭证）:", f"role: {role}", goals[role]]
+    lines = [
+        "事故岗位执行契约（服务端校验，摘要不代替原任务凭证）:",
+        f"role: {role}",
+        goals[role],
+    ]
     if resolution.get("route") == "private_mod":
         lines += [
             "客户需求仅交付到原账号授权的私有 Mod；禁止客户专用宿主分支，禁止把客户业务数据并入共享代码。",
             "target_mod_id: "
-            + clean(source.get("target_mod_id") or resolution.get("target_mod_id"), 120),
+            + clean(
+                source.get("target_mod_id") or resolution.get("target_mod_id"), 120
+            ),
         ]
     elif resolution.get("route") == "shared_core":
         lines.append(
@@ -385,7 +432,8 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
         )
     if resolution.get("source_ref") or source.get("source_ref"):
         lines.append(
-            "source_ref: " + clean(resolution.get("source_ref") or source.get("source_ref"), 160)
+            "source_ref: "
+            + clean(resolution.get("source_ref") or source.get("source_ref"), 160)
         )
     lines.append("structured_handoffs: " + json.dumps(handoffs, ensure_ascii=False))
     if contract["review"]:
@@ -418,7 +466,12 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
                 {
                     "requested": {
                         key: budget[key]
-                        for key in ("role", "context_chars", "output_tokens", "reasoning_effort")
+                        for key in (
+                            "role",
+                            "context_chars",
+                            "output_tokens",
+                            "reasoning_effort",
+                        )
                         if key in budget
                     },
                     "executor": "dolt",
@@ -452,7 +505,9 @@ def build_dolt_prompt(fields: Dict[str, Any], req: Dict[str, Any], mode: str) ->
         "复现信息:",
     ]
     # 版本号形如 1.2.3.4，复现字段不按 IP 遮蔽。
-    lines += [f"- {key}: {clean(fields.get(key), ip=False) or '-'}" for key in _REPRO_KEYS]
+    lines += [
+        f"- {key}: {clean(fields.get(key), ip=False) or '-'}" for key in _REPRO_KEYS
+    ]
     lines.append("执行范围:")
     if mode == MODE_REPORT_ONLY:
         lines += [
@@ -483,9 +538,13 @@ def prepare_dolt_ticket_payload(
     mode = ticket_mode(req, fields)
     if contract and contract["role"] in {"scout", "verify", "escalation_review"}:
         mode = MODE_REPORT_ONLY
-    ticket_no = re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64] or "-"
+    ticket_no = (
+        re.sub(r"[^A-Za-z0-9_\-]", "", str(fields.get("ticket_no") or ""))[:64] or "-"
+    )
     # dot 不合并、不用 MODstore 本机工作区：去掉自动合并和本地路径。
-    out = {k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}}
+    out = {
+        k: v for k, v in payload.items() if k not in {"auto_merge", "workspace_path"}
+    }
     out.update(
         title=f"{control_marker(fields, req)} [dot:{mode}] 客服工单 {ticket_no}"[:240],
         prompt=build_dolt_prompt(fields, req, mode)

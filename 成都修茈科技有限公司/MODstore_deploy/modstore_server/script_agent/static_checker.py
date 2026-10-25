@@ -17,7 +17,9 @@ from pathlib import Path
 from typing import Iterable, List, Optional, Set
 
 from modstore_server.script_agent.package_allowlist import allowed_packages
-from modstore_server.script_agent.semantic_quality import oversized_string_literal_errors
+from modstore_server.script_agent.semantic_quality import (
+    oversized_string_literal_errors,
+)
 
 
 def _syntax_error_is_llm_prose_not_python(code: str, exc: SyntaxError) -> bool:
@@ -184,7 +186,9 @@ def validate_script(
                 if top in ALWAYS_DENY_TOP:
                     errors.append(f"禁止 import {alias.name}（位于禁用列表）")
                 elif top not in allowed_top:
-                    errors.append(f"禁止 import {alias.name}（未在 stdlib 或第三方 allowlist 中）")
+                    errors.append(
+                        f"禁止 import {alias.name}（未在 stdlib 或第三方 allowlist 中）"
+                    )
         elif isinstance(node, ast.ImportFrom):
             top = (node.module or "").split(".")[0]
             if not top:

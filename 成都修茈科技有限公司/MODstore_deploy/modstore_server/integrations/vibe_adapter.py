@@ -269,7 +269,9 @@ def get_vibe_coder(
         coder = _CODER_CACHE.get(key)
         if coder is not None:
             return coder
-        llm = ChatDispatchLLMClient.from_user(session, int(user_id or 0), provider, model)
+        llm = ChatDispatchLLMClient.from_user(
+            session, int(user_id or 0), provider, model
+        )
         coder = VibeCoder(llm=llm, store_dir=_vibe_store_dir(user_id))
         _CODER_CACHE[key] = coder
         return coder
@@ -288,7 +290,9 @@ def get_project_vibe_coder(
     内部复用 :func:`get_vibe_coder` 的 LLMClient,不再单独缓存
     (``VibeCoder.project_coder`` 已按 root 做了 per-instance 缓存)。
     """
-    coder = get_vibe_coder(session=session, user_id=user_id, provider=provider, model=model)
+    coder = get_vibe_coder(
+        session=session, user_id=user_id, provider=provider, model=model
+    )
     return coder.project_coder(root)
 
 
@@ -333,7 +337,9 @@ def ensure_within_workspace(root: str | Path, *, user_id: int) -> Path:
     try:
         target.relative_to(workspace)
     except ValueError as exc:
-        raise VibePathError(f"root={target!s} 不在用户工作区 {workspace!s} 下;拒绝执行") from exc
+        raise VibePathError(
+            f"root={target!s} 不在用户工作区 {workspace!s} 下;拒绝执行"
+        ) from exc
     if not target.exists():
         raise VibePathError(f"root={target!s} 不存在")
     return target

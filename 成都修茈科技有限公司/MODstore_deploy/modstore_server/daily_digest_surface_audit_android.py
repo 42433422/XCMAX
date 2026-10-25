@@ -31,7 +31,9 @@ def _fhd_root() -> Path:
             if p.is_dir():
                 return p
     mono = (
-        os.environ.get("XCMAX_MONOREPO_ROOT") or os.environ.get("MODSTORE_REPO_ROOT") or ""
+        os.environ.get("XCMAX_MONOREPO_ROOT")
+        or os.environ.get("MODSTORE_REPO_ROOT")
+        or ""
     ).strip()
     if mono:
         p = Path(mono).expanduser().resolve() / "FHD"
@@ -50,7 +52,14 @@ def _adb_bin() -> str:
     if custom:
         return custom
     fhd = _fhd_root()
-    bundled = fhd / "mobile-flutter-poc" / ".toolchain" / "android-sdk" / "platform-tools" / "adb"
+    bundled = (
+        fhd
+        / "mobile-flutter-poc"
+        / ".toolchain"
+        / "android-sdk"
+        / "platform-tools"
+        / "adb"
+    )
     if bundled.is_file():
         return str(bundled)
     return "adb"
@@ -83,7 +92,9 @@ def _try_start_emulator() -> bool:
     ):
         return False
     fhd = _fhd_root()
-    script_raw = (os.environ.get("MODSTORE_ANDROID_EMULATOR_START_SCRIPT") or "").strip()
+    script_raw = (
+        os.environ.get("MODSTORE_ANDROID_EMULATOR_START_SCRIPT") or ""
+    ).strip()
     script = (
         Path(script_raw).expanduser().resolve()
         if script_raw

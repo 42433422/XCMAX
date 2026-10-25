@@ -26,7 +26,10 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
 )
-from modstore_server.customer_service_orchestrator import audit, enqueue_customer_service_event
+from modstore_server.customer_service_orchestrator import (
+    audit,
+    enqueue_customer_service_event,
+)
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import Entitlement, User, UserPlan
 from modstore_server.models_cs import (
@@ -82,7 +85,9 @@ def _active_permanent_purchase(db: Session, user_id: int) -> dict[str, Any] | No
             "user_plan_id": int(plan_row.id),
             "entitlement_id": int(entitlement.id) if entitlement is not None else None,
             "source_order_id": (
-                str(entitlement.source_order_id or "") if entitlement is not None else ""
+                str(entitlement.source_order_id or "")
+                if entitlement is not None
+                else ""
             ),
             "plan_id": plan_id,
             "plan_title": str(plan.get("title") or plan_id),
@@ -177,7 +182,9 @@ async def create_custom_delivery(
             "included_in_purchase": True,
         }
         changes = [
-            row for row in active_evidence.get("pre_delivery_changes", []) if isinstance(row, dict)
+            row
+            for row in active_evidence.get("pre_delivery_changes", [])
+            if isinstance(row, dict)
         ]
         changes.append(change)
         active_evidence["pre_delivery_changes"] = changes[-50:]
@@ -234,7 +241,9 @@ async def create_custom_delivery(
                     f"【交付前免费追加需求】{change['title']}\n"
                     f"{change['requirements']}\n验收标准：{change['acceptance_criteria']}"
                 ),
-                payload_json=json_dumps({"delivery_change": change, "included_in_purchase": True}),
+                payload_json=json_dumps(
+                    {"delivery_change": change, "included_in_purchase": True}
+                ),
             )
         )
         audit(
@@ -327,7 +336,9 @@ async def create_custom_delivery(
         status="open",
         title=body.title.strip(),
         intent="custom_delivery",
-        context_json=json_dumps({"source": "desktop_private_delivery", "kind": body.kind}),
+        context_json=json_dumps(
+            {"source": "desktop_private_delivery", "kind": body.kind}
+        ),
         last_message=body.requirements.strip()[:2000],
     )
     db.add(session)
@@ -362,7 +373,9 @@ async def create_custom_delivery(
             user_id=int(user.id),
             role="user",
             content=body.requirements.strip(),
-            payload_json=json_dumps({"acceptance_criteria": body.acceptance_criteria.strip()}),
+            payload_json=json_dumps(
+                {"acceptance_criteria": body.acceptance_criteria.strip()}
+            ),
         )
     )
     audit(
@@ -395,7 +408,9 @@ async def create_custom_delivery(
             )
             evidence["runs"] = [run]
         except RECOVERABLE_ERRORS as exc:
-            logger.exception("custom delivery production start failed ticket=%s", ticket.ticket_no)
+            logger.exception(
+                "custom delivery production start failed ticket=%s", ticket.ticket_no
+            )
             evidence["start_error"] = str(exc)[:1000]
     ticket.evidence_json = json_dumps(evidence)
     ticket.updated_at = datetime.now(UTC)

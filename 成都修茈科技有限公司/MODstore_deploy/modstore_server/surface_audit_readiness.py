@@ -42,7 +42,8 @@ class SurfaceDependencyChecks:
             or "http://127.0.0.1:5102"
         ).rstrip("/")
         digest_base = (
-            os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL") or "https://xiu-ci.com"
+            os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_BASE_URL")
+            or "https://xiu-ci.com"
         ).rstrip("/")
         internal_api = self.internal_api_base()
         api_port = _parse_port(api_url, 5102)

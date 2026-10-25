@@ -30,7 +30,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 
 from modstore_server.api.auth_deps import require_user
-from modstore_server.models import AuthorEarning, AuthorWithdrawal, User, get_session_factory
+from modstore_server.models import (
+    AuthorEarning,
+    AuthorWithdrawal,
+    User,
+    get_session_factory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +90,9 @@ def _earning_row(r: AuthorEarning) -> dict:
 
 @router.get("/api/author/earnings")
 def get_author_earnings(
-    status: Optional[str] = Query(None, description="过滤状态：pending/settled/withdrawn"),
+    status: Optional[str] = Query(
+        None, description="过滤状态：pending/settled/withdrawn"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     user: User = Depends(require_user),
@@ -105,7 +112,9 @@ def get_author_earnings(
         )
         pending_net = (
             session.query(func.sum(AuthorEarning.net))
-            .filter(AuthorEarning.author_id == user.id, AuthorEarning.status == "pending")
+            .filter(
+                AuthorEarning.author_id == user.id, AuthorEarning.status == "pending"
+            )
             .scalar()
             or 0.0
         )
@@ -131,7 +140,9 @@ def post_author_withdraw(
     with sf() as session:
         pending_net = float(
             session.query(func.sum(AuthorEarning.net))
-            .filter(AuthorEarning.author_id == user.id, AuthorEarning.status == "pending")
+            .filter(
+                AuthorEarning.author_id == user.id, AuthorEarning.status == "pending"
+            )
             .scalar()
             or 0.0
         )
@@ -263,7 +274,9 @@ def admin_list_withdrawals(
                     "status": r.status,
                     "admin_note": r.admin_note,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
-                    "processed_at": r.processed_at.isoformat() if r.processed_at else None,
+                    "processed_at": r.processed_at.isoformat()
+                    if r.processed_at
+                    else None,
                 }
                 for r in rows
             ],

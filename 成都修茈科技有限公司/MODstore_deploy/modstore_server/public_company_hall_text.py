@@ -75,7 +75,11 @@ def _public_fallback_from_raw(raw: str) -> str:
     m = _TASK_FIELD.search(s)
     if m:
         token = (m.group(1) or "").strip()
-        if token and not _looks_like_prompt_leak(token) and not _EVENT_TOKEN.fullmatch(token):
+        if (
+            token
+            and not _looks_like_prompt_leak(token)
+            and not _EVENT_TOKEN.fullmatch(token)
+        ):
             return token
     return "岗位任务执行摘要（内部提示词已隐藏）"
 
@@ -115,7 +119,9 @@ def _publicize_feed_text(
     summary = _clean(preferred or detail_src, summary_len) or detail
     if _looks_like_prompt_leak(summary):
         summary = _clean(_public_fallback_from_raw(s), summary_len)
-        detail = summary if len(detail) < 8 or _looks_like_prompt_leak(detail) else detail
+        detail = (
+            summary if len(detail) < 8 or _looks_like_prompt_leak(detail) else detail
+        )
     return summary, detail
 
 
@@ -142,7 +148,9 @@ def _feed_occurred_at(*, raw: Any, day: Any = None, clock: Any = None) -> Option
         return stamp
     day_s = str(day or "").strip()
     clock_s = str(clock or "").strip()
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_s) and re.fullmatch(r"\d{2}:\d{2}", clock_s):
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day_s) and re.fullmatch(
+        r"\d{2}:\d{2}", clock_s
+    ):
         return f"{day_s}T{clock_s}:00+00:00"
     return None
 
@@ -197,7 +205,9 @@ def _public_ai_driver_snapshot() -> Dict[str, Any]:
         provider, model = resolve_platform_bench_llm()
         driver["provider"] = _clean(str(provider or ""), 48)
         driver["model"] = _clean(str(model or ""), 96)
-        driver["route_source"] = "runtime_route" if runtime_route else "platform_default"
+        driver["route_source"] = (
+            "runtime_route" if runtime_route else "platform_default"
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("company_hall: resolve public AI driver route failed")
 
@@ -206,7 +216,9 @@ def _public_ai_driver_snapshot() -> Dict[str, Any]:
 
         status = autopilot_status()
         enabled = bool(status.get("enabled"))
-        last = status.get("last_run") if isinstance(status.get("last_run"), dict) else {}
+        last = (
+            status.get("last_run") if isinstance(status.get("last_run"), dict) else {}
+        )
         action = str(last.get("action") or "").strip()
         driver["enabled"] = enabled
         driver["last_action"] = _clean(action, 48)

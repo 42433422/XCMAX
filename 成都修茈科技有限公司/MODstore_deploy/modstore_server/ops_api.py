@@ -34,7 +34,9 @@ def _read_flags() -> Dict[str, bool]:
 
 def _save_flags(flags: Dict[str, bool]) -> None:
     _FLAGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _FLAGS_FILE.write_text(json.dumps(flags, ensure_ascii=False, indent=2), encoding="utf-8")
+    _FLAGS_FILE.write_text(
+        json.dumps(flags, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 @router.get("/release-gates")
@@ -45,7 +47,9 @@ def get_release_gates(user: User = Depends(_get_current_user)):
 
 
 @router.put("/release-gates")
-def put_release_gates(payload: Dict[str, bool], user: User = Depends(_get_current_user)):
+def put_release_gates(
+    payload: Dict[str, bool], user: User = Depends(_get_current_user)
+):
     if not user.is_admin:
         raise HTTPException(403, "需要管理员权限")
     flags = _read_flags()

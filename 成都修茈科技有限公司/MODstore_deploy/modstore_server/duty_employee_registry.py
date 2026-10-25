@@ -11,7 +11,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 
 
 def duty_registry_path() -> Path:
@@ -42,7 +45,9 @@ def save_duty_registry(data: Dict[str, Any]) -> None:
     payload = dict(data or {})
     payload.setdefault("schema", 1)
     payload.setdefault("packages", [])
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def _record_pkg_id(record: Dict[str, Any]) -> str:
@@ -55,7 +60,9 @@ def duty_employee_records() -> Dict[str, Dict[str, Any]]:
         if not isinstance(raw, dict):
             continue
         pid = _record_pkg_id(raw)
-        if not is_planned_duty_employee_pack(pid, str(raw.get("artifact") or "employee_pack")):
+        if not is_planned_duty_employee_pack(
+            pid, str(raw.get("artifact") or "employee_pack")
+        ):
             continue
         rec = dict(raw)
         rec.update(employee_partition_meta(pid, "employee_pack"))

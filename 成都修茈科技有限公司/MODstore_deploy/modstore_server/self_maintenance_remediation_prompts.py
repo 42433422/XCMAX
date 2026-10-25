@@ -13,7 +13,9 @@ from .self_maintenance_para_merge_remediation import (
 )
 from .self_maintenance_policy import normalize_merge_review_veto_code
 
-_INDETERMINATE_MERGE_REVIEW_CODES = frozenset({"indeterminate-review", "indeterminate_review"})
+_INDETERMINATE_MERGE_REVIEW_CODES = frozenset(
+    {"indeterminate-review", "indeterminate_review"}
+)
 _DIFF_TOO_LARGE_MERGE_REVIEW_CODE = "diff-too-large"
 
 __all__ = [
@@ -60,7 +62,9 @@ def external_review_remediation_prompt(resume_candidate: Any) -> str:
     if candidate.get("reason") != "resume_para_ai_review_rejection":
         return ""
     feedback = str(candidate.get("review_feedback") or "").strip()[:4000]
-    rejected_branch = str(candidate.get("rejected_branch") or candidate.get("branch") or "").strip()
+    rejected_branch = str(
+        candidate.get("rejected_branch") or candidate.get("branch") or ""
+    ).strip()
     veto_code = normalize_merge_review_veto_code(
         str(
             candidate.get("review_veto_code")
@@ -97,7 +101,9 @@ def external_merge_remediation_prompt(resume_candidate: Any) -> str:
     remediation_reason = str(candidate.get("remediation_reason") or "").strip()
     feedback = str(candidate.get("remediation_feedback") or "").strip()[:4000]
     continue_on_branch = bool(candidate.get("continue_existing_code_task"))
-    if remediation_reason == "para_merge_conflict" and is_changed_files_empty_detail(feedback):
+    if remediation_reason == "para_merge_conflict" and is_changed_files_empty_detail(
+        feedback
+    ):
         strategy = (
             "merge-worker reported changed-files-empty after gh pr update-branch, so the PR "
             "exposes zero scoped changed files. Compare the rejected branch against main; if "
@@ -160,13 +166,22 @@ def _structured_gate_for_remediation_item(
             run_gate = run.get("structured_gate")
             if not isinstance(run_gate, dict):
                 continue
-            if selected_run_id and str(run.get("run_id") or "").strip() == selected_run_id:
+            if (
+                selected_run_id
+                and str(run.get("run_id") or "").strip() == selected_run_id
+            ):
                 return run_gate
-            if selected_task_id and str(run.get("para_task_id") or "").strip() == selected_task_id:
+            if (
+                selected_task_id
+                and str(run.get("para_task_id") or "").strip() == selected_task_id
+            ):
                 return run_gate
 
     decision = memory.get("last_policy_decision") if isinstance(memory, dict) else {}
-    if isinstance(decision, dict) and str(decision.get("reason") or "").strip() == hold_reason:
+    if (
+        isinstance(decision, dict)
+        and str(decision.get("reason") or "").strip() == hold_reason
+    ):
         decision_gate = decision.get("structured_gate")
         if isinstance(decision_gate, dict):
             return decision_gate
@@ -188,12 +203,23 @@ def _matched_structured_remediation_open_item(
         if not isinstance(item, dict) or item.get("kind") != "automated_remediation":
             continue
         reason = str(item.get("reason") or "").strip()
-        if not (reason.startswith("structured_review_") or reason.startswith("structured_qa_")):
+        if not (
+            reason.startswith("structured_review_")
+            or reason.startswith("structured_qa_")
+        ):
             continue
-        item_task_id = str(item.get("task_id") or item.get("para_task_id") or "").strip()
+        item_task_id = str(
+            item.get("task_id") or item.get("para_task_id") or ""
+        ).strip()
         if (
-            (selected_branch and str(item.get("branch") or "").strip() == selected_branch)
-            or (selected_run_id and str(item.get("run_id") or "").strip() == selected_run_id)
+            (
+                selected_branch
+                and str(item.get("branch") or "").strip() == selected_branch
+            )
+            or (
+                selected_run_id
+                and str(item.get("run_id") or "").strip() == selected_run_id
+            )
             or (selected_task_id and item_task_id == selected_task_id)
         ):
             return item
@@ -220,18 +246,26 @@ def structured_report_remediation_prompt(memory: Any, resume_candidate: Any) -> 
     if not isinstance(structured_gate, dict):
         return ""
     review = (
-        structured_gate.get("review") if isinstance(structured_gate.get("review"), dict) else {}
+        structured_gate.get("review")
+        if isinstance(structured_gate.get("review"), dict)
+        else {}
     )
-    qa = structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
+    qa = (
+        structured_gate.get("qa") if isinstance(structured_gate.get("qa"), dict) else {}
+    )
     review_blocking = review.get("blocking_findings")
     qa_blocking = qa.get("blocking_findings")
     failed_dimensions = structured_gate.get("failed_dimensions")
     evidence = {
-        "failed_dimensions": failed_dimensions if isinstance(failed_dimensions, list) else [],
+        "failed_dimensions": failed_dimensions
+        if isinstance(failed_dimensions, list)
+        else [],
         "hold_reason": hold_reason,
         "qa_blocking_findings": qa_blocking if isinstance(qa_blocking, list) else [],
         "qa_verdict": str(qa.get("verdict") or "").strip(),
-        "review_blocking_findings": (review_blocking if isinstance(review_blocking, list) else []),
+        "review_blocking_findings": (
+            review_blocking if isinstance(review_blocking, list) else []
+        ),
         "review_max_severity": str(review.get("max_severity") or "").strip(),
     }
     return (

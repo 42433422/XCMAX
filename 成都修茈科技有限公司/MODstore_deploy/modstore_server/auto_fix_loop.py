@@ -97,7 +97,9 @@ def trigger_anomaly_autofix(
     if error_msg:
         detail_parts.append(f"错误信息: {error_msg[:2000]}")
     if affected_files:
-        detail_parts.append(f"影响文件: {', '.join(str(f) for f in affected_files[:20])}")
+        detail_parts.append(
+            f"影响文件: {', '.join(str(f) for f in affected_files[:20])}"
+        )
 
     detail = "\n".join(detail_parts)
 
@@ -154,7 +156,9 @@ def trigger_cve_autofix(
     else:
         risk_level = "low"
 
-    from modstore_server.employee_change_request_service import defer_write_as_change_request
+    from modstore_server.employee_change_request_service import (
+        defer_write_as_change_request,
+    )
     from modstore_server.integrations.ops_action_handlers import repo_root
 
     root = str(repo_root())
@@ -251,7 +255,9 @@ def _patch_requirement(rel_path: str, package: str, fix_version: str) -> Optiona
     return new_content
 
 
-def _patch_pyproject_dependency(rel_path: str, package: str, fix_version: str) -> Optional[str]:
+def _patch_pyproject_dependency(
+    rel_path: str, package: str, fix_version: str
+) -> Optional[str]:
     from modstore_server.integrations.ops_action_handlers import repo_root
 
     root = str(repo_root())

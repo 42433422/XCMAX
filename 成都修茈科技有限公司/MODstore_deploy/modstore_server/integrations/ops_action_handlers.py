@@ -16,7 +16,9 @@ from modstore_server.integrations.ops_action_specs import (
 from modstore_server.integrations.ops_action_specs import (
     OPS_COMMAND_REGISTRY as OPS_COMMAND_REGISTRY,
 )
-from modstore_server.integrations.ops_action_specs import OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS
+from modstore_server.integrations.ops_action_specs import (
+    OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS,
+)
 from modstore_server.integrations.ops_action_specs import CommandSpec as CommandSpec
 from modstore_server.models import OpsActionAuditLog, get_session_factory
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -38,7 +40,9 @@ def _path_hits_user_data(norm: str) -> bool:
     return False
 
 
-def _assert_shell_paths_safe(command_id: str, args: Mapping[str, Any], cwd: Optional[str]) -> None:
+def _assert_shell_paths_safe(
+    command_id: str, args: Mapping[str, Any], cwd: Optional[str]
+) -> None:
     """禁止 shell 命令触及用户数据目录（与 sync tar exclude 对齐）。"""
     blobs: List[str] = []
     if cwd:
@@ -51,7 +55,9 @@ def _assert_shell_paths_safe(command_id: str, args: Mapping[str, Any], cwd: Opti
             raise ValueError(f"refused path (user-data guard): {b[:200]!r}")
 
 
-_BRANCH_SAFE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/")
+_BRANCH_SAFE = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/"
+)
 
 
 def _sanitize_branch(name: str) -> str:
@@ -250,7 +256,9 @@ def _write_audit(
 def _build_local_sync_argv() -> List[str]:
     """Windows: sync-modstore-to-server.ps1；Linux: 依赖 MODSTORE_SYNC_DEPLOY_BASH（sh -c 一行）。"""
     if os.name == "nt":
-        ps1 = repo_root() / "MODstore_deploy" / "scripts" / "sync-modstore-to-server.ps1"
+        ps1 = (
+            repo_root() / "MODstore_deploy" / "scripts" / "sync-modstore-to-server.ps1"
+        )
         if not ps1.is_file():
             raise FileNotFoundError(f"sync script missing: {ps1}")
         return [
@@ -366,7 +374,9 @@ def dispatch_ops_handler(
     force_real_run: bool = False,
 ) -> Dict[str, Any]:
     """Execute a white-listed operation through the split dispatch implementation."""
-    from modstore_server.integrations.ops_action_dispatch import dispatch_ops_handler as _impl
+    from modstore_server.integrations.ops_action_dispatch import (
+        dispatch_ops_handler as _impl,
+    )
 
     return _impl(
         handler,

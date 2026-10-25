@@ -322,7 +322,9 @@ def _execute_route(
         "route_id": rule.get("id"),
         "trigger": trigger,
     }
-    summary = str(payload.get("summary") or payload.get("stage") or rule.get("id") or trigger)
+    summary = str(
+        payload.get("summary") or payload.get("stage") or rule.get("id") or trigger
+    )
     enriched.setdefault("summary", summary[:500])
 
     if action in ("digest_backlog", "digest_defer"):
@@ -358,7 +360,9 @@ def handle_operations_line_event(body: Dict[str, Any]) -> Dict[str, Any]:
     payload = body.get("payload") if isinstance(body.get("payload"), dict) else {}
     rule = _find_operations_route(step_id, status)
     if not rule:
-        logger.info("six_line_event_router: no route for ops step=%s status=%s", step_id, status)
+        logger.info(
+            "six_line_event_router: no route for ops step=%s status=%s", step_id, status
+        )
         return {"routed": False, "step_id": step_id, "status": status}
     result = _execute_route(
         rule,
@@ -378,7 +382,9 @@ def handle_cross_line_trigger(
     payload["from_step"] = from_step
     payload["to_step"] = to_step
     if not rule:
-        logger.info("six_line_event_router: no cross_line route %s→%s", from_step, to_step)
+        logger.info(
+            "six_line_event_router: no cross_line route %s→%s", from_step, to_step
+        )
         return {"routed": False, "from_step": from_step, "to_step": to_step}
     result = _execute_route(
         rule,
@@ -389,7 +395,9 @@ def handle_cross_line_trigger(
     return {"routed": True, **result}
 
 
-def route_incident_type(event_type: str, payload: Dict[str, Any], *, source: str) -> Dict[str, Any]:
+def route_incident_type(
+    event_type: str, payload: Dict[str, Any], *, source: str
+) -> Dict[str, Any]:
     """在 incident_bus.publish 之前可选 enrichment（默认规则表）。"""
     cfg = load_event_routes()
     for row in cfg.get("incident_defaults") or []:
@@ -422,7 +430,9 @@ def get_event_rail_status() -> Dict[str, Any]:
 
 def install_orchestrator_hooks() -> None:
     """注册 cross_line 回调到全局 ProductionLineOrchestrator。"""
-    from modstore_server.production_line_orchestrator import get_production_line_orchestrator
+    from modstore_server.production_line_orchestrator import (
+        get_production_line_orchestrator,
+    )
 
     orch = get_production_line_orchestrator()
 

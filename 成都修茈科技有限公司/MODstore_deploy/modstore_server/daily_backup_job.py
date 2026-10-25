@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 def _enabled() -> bool:
-    return (os.environ.get("MODSTORE_DAILY_BACKUP_ENABLED", "1") or "").strip().lower() not in (
+    return (
+        os.environ.get("MODSTORE_DAILY_BACKUP_ENABLED", "1") or ""
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -243,7 +245,9 @@ def list_backups(*, limit: int = 30) -> List[Dict[str, Any]]:
     if not dst_dir.is_dir():
         return []
     rows: List[Dict[str, Any]] = []
-    for p in sorted(dst_dir.glob("*"), key=lambda x: x.name, reverse=True)[: max(1, int(limit))]:
+    for p in sorted(dst_dir.glob("*"), key=lambda x: x.name, reverse=True)[
+        : max(1, int(limit))
+    ]:
         try:
             rows.append(
                 {

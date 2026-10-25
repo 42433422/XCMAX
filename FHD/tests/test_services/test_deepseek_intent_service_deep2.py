@@ -377,7 +377,10 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "greet", "is_greeting": True, "tool_key": "greet"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -391,7 +394,10 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "products", "tool_key": "products"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -405,7 +411,10 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -426,7 +435,10 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.8)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -452,7 +464,10 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -527,7 +542,10 @@ class TestRecognizeSyncDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
         with (
-            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch(
+                "app.domain.shared_services.intent_service.recognize_intents",
+                return_value=dict(rule),
+            ),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,

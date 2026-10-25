@@ -33,7 +33,9 @@ def _workspace_repo_root_candidates() -> List[Path]:
     else:
         seeds = []
         try:
-            from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
+            from modstore_server.integrations.ops_action_handlers import (
+                repo_root as _ops_rr,
+            )
 
             seeds.append(Path(_ops_rr()))
         except RECOVERABLE_ERRORS:
@@ -118,7 +120,9 @@ def _manifest_ground_globs(pkg_id: str) -> List[str]:
             pack = load_employee_pack(session, pkg_id)
         man = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
         v2 = (
-            man.get("employee_config_v2") if isinstance(man.get("employee_config_v2"), dict) else {}
+            man.get("employee_config_v2")
+            if isinstance(man.get("employee_config_v2"), dict)
+            else {}
         )
         meta = v2.get("metadata") if isinstance(v2.get("metadata"), dict) else {}
         raw = meta.get("daily_brief_ground_paths")
@@ -203,7 +207,9 @@ def _dedupe_paths(paths: List[Path]) -> List[Path]:
     return out
 
 
-def _collect_pack_candidate_paths(pack_dir: Path, pkg_id: str) -> Tuple[List[Path], List[Path]]:
+def _collect_pack_candidate_paths(
+    pack_dir: Path, pkg_id: str
+) -> Tuple[List[Path], List[Path]]:
     """返回 (priority_paths, extended_paths)，均已去重。"""
     priority: List[Path] = []
     for rel in ("employee.yaml", "README.md", "runbook.md", "prompts/system.md"):

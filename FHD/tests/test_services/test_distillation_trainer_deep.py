@@ -459,7 +459,9 @@ class TestPrepareDataDeep:
         t = DistillationTrainer(device="cpu")
         with (
             patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
             patch("app.domain.shared_services.distillation_trainer.DataLoader") as mdl,
             patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
@@ -487,7 +489,9 @@ class TestPrepareDataDeep:
         t = DistillationTrainer(device="cpu")
         with (
             patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
             patch("app.domain.shared_services.distillation_trainer.DataLoader") as mdl,
             patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
@@ -508,7 +512,9 @@ class TestPrepareDataDeep:
         t = DistillationTrainer(device="cpu")
         with (
             patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as mtok,
-            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as mmodel,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as mmodel,
             patch("app.domain.shared_services.distillation_trainer.DataLoader"),
             patch("app.domain.shared_services.distillation_trainer.train_test_split") as msplit,
         ):
@@ -822,7 +828,9 @@ class TestTrainOrchestrationDeep:
             patch(
                 "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup"
             ) as mock_sched,
-            patch("app.domain.shared_services.distillation_trainer.classification_report") as mock_report,
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report"
+            ) as mock_report,
             patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
             patch("app.domain.shared_services.distillation_trainer.LOG_DIR", str(log_dir)),
         ):
@@ -875,12 +883,17 @@ class TestTrainOrchestrationDeep:
         t.model.parameters.return_value = iter([MagicMock()])
 
         with (
-            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
+            ),
             patch(
                 "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="r"),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="r",
+            ),
             patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", str(ckpt_dir)),
             patch("app.domain.shared_services.distillation_trainer.LOG_DIR", str(log_dir)),
         ):
@@ -937,7 +950,9 @@ class TestMainCLIDeep:
                     "custom-model",
                 ],
             ),
-            patch("app.domain.shared_services.distillation_trainer.DistillationTrainer") as mock_cls,
+            patch(
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer"
+            ) as mock_cls,
         ):
             mock_inst = MagicMock()
             mock_cls.return_value = mock_inst

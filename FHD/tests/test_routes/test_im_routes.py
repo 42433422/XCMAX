@@ -162,7 +162,10 @@ class TestNotifyOfflineImMembers:
 
         with (
             patch("app.infrastructure.im.ws_hub.im_ws_hub") as mock_hub,
-            patch("app.domain.shared_services.mobile_push.notify_user", side_effect=RuntimeError("push fail")),
+            patch(
+                "app.domain.shared_services.mobile_push.notify_user",
+                side_effect=RuntimeError("push fail"),
+            ),
         ):
             mock_hub.connected_user_ids.return_value = [1]
             # Should not raise

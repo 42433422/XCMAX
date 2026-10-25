@@ -24,7 +24,17 @@ import threading
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Protocol, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +44,19 @@ _NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,127}$")
 _SECRET_NAME_RE = re.compile(
     r"(PASSWORD|PASSWD|SECRET|TOKEN|API_KEY|APIKEY|PRIVATE_KEY|CREDENTIAL)"
 )
-_NON_SECRET_VALUES = {"", "0", "1", "true", "false", "yes", "no", "on", "off", "none", "null"}
+_NON_SECRET_VALUES = {
+    "",
+    "0",
+    "1",
+    "true",
+    "false",
+    "yes",
+    "no",
+    "on",
+    "off",
+    "none",
+    "null",
+}
 _KEY_VALUE_RE = re.compile(
     r"(?i)(bearer\s+|(?:api[_-]?key|password|passwd|token|secret|authorization)\s*[:=]\s*(?:bearer\s+)?)"
     r"[^\s,;'\"]+"
@@ -96,7 +118,9 @@ class ReservedBackend:
         raise CredentialError(f"凭据后端 {self.name} 尚未实现（预留接口）")
 
 
-def default_backends(environ: Optional[Mapping[str, str]] = None) -> List[CredentialBackend]:
+def default_backends(
+    environ: Optional[Mapping[str, str]] = None,
+) -> List[CredentialBackend]:
     env = os.environ if environ is None else environ
     file_dir = str(env.get("MODSTORE_CREDENTIAL_FILE_DIR") or "").strip()
     order = str(env.get("MODSTORE_CREDENTIAL_BACKENDS") or "").strip()
@@ -109,7 +133,9 @@ def default_backends(environ: Optional[Mapping[str, str]] = None) -> List[Creden
             out.append(EnvBackend(environ))
         elif name == "file":
             if not file_dir:
-                raise CredentialError("选用 file 后端但未配置 MODSTORE_CREDENTIAL_FILE_DIR")
+                raise CredentialError(
+                    "选用 file 后端但未配置 MODSTORE_CREDENTIAL_FILE_DIR"
+                )
             out.append(FileBackend(file_dir))
         elif name in {"vault", "kms"}:
             out.append(ReservedBackend(name))
@@ -156,7 +182,9 @@ def write_audit(event: str, **fields: Any) -> Dict[str, Any]:
     for key, value in fields.items():
         if "value" in key.lower() or value is None:
             continue
-        record[key] = value if isinstance(value, (int, float, bool, list)) else str(value)[:300]
+        record[key] = (
+            value if isinstance(value, (int, float, bool, list)) else str(value)[:300]
+        )
     try:
         path = audit_log_path()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -196,7 +224,13 @@ def get_credential(
     if grant is not None:
         reason = grant.denial_reason(name)
         if reason:
-            write_audit("access", outcome="denied", reason=reason, grant_id=grant.grant_id, **base)
+            write_audit(
+                "access",
+                outcome="denied",
+                reason=reason,
+                grant_id=grant.grant_id,
+                **base,
+            )
             raise CredentialError(f"任务授权不允许读取 {name}：{reason}")
     for candidate in (name, *aliases):
         for backend in backends if backends is not None else default_backends():
@@ -248,11 +282,17 @@ class TaskGrant:
     def prompt_line(self) -> str:
         """写进派单提示词的授权引用：只有编号、任务、作用域、过期时间，没有凭据值。"""
 
-        return GRANT_PROMPT_KEY + "=" + json.dumps(self.payload(), separators=(",", ":"))
+        return (
+            GRANT_PROMPT_KEY + "=" + json.dumps(self.payload(), separators=(",", ":"))
+        )
 
     def token(self) -> str:
-        body = json.dumps(self.payload(), separators=(",", ":"), sort_keys=True).encode()
-        return base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + self.signature
+        body = json.dumps(
+            self.payload(), separators=(",", ":"), sort_keys=True
+        ).encode()
+        return (
+            base64.urlsafe_b64encode(body).decode().rstrip("=") + "." + self.signature
+        )
 
 
 def _signing_key() -> bytes:
@@ -266,12 +306,16 @@ def _sign(payload: Mapping[str, Any]) -> str:
 
 
 def _ttl(ttl_seconds: Optional[int]) -> int:
-    raw = ttl_seconds or int(os.environ.get("MODSTORE_CREDENTIAL_GRANT_TTL_SECONDS") or 3600)
+    raw = ttl_seconds or int(
+        os.environ.get("MODSTORE_CREDENTIAL_GRANT_TTL_SECONDS") or 3600
+    )
     return max(60, min(int(raw), 86400))
 
 
 def default_grant_scopes() -> Tuple[str, ...]:
-    raw = os.environ.get("MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY,CODEX_API_KEY")
+    raw = os.environ.get(
+        "MODSTORE_CREDENTIAL_GRANT_SCOPES", "OPENAI_API_KEY,CODEX_API_KEY"
+    )
     return tuple(s.strip() for s in raw.split(",") if _NAME_RE.match(s.strip()))
 
 
@@ -335,7 +379,11 @@ def verify_grant_token(token: str, now: Optional[float] = None) -> TaskGrant:
 def _load_revocations() -> Dict[str, float]:
     try:
         data = json.loads(_revocation_path().read_text(encoding="utf-8"))
-        return {str(k): float(v) for k, v in data.items()} if isinstance(data, dict) else {}
+        return (
+            {str(k): float(v) for k, v in data.items()}
+            if isinstance(data, dict)
+            else {}
+        )
     except (OSError, ValueError):
         return {}
 

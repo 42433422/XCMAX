@@ -30,15 +30,21 @@ def validate_burn_in_execution_result(execution: Dict[str, Any]) -> Dict[str, An
         return {"passed": False, "reasons": ["execution_not_object"]}
     if execution.get("handler_failed"):
         reasons.append("executor_handler_failed")
-    result = execution.get("result") if isinstance(execution.get("result"), dict) else {}
+    result = (
+        execution.get("result") if isinstance(execution.get("result"), dict) else {}
+    )
     verification = (
-        result.get("verification") if isinstance(result.get("verification"), dict) else {}
+        result.get("verification")
+        if isinstance(result.get("verification"), dict)
+        else {}
     )
     if verification.get("passed") is not True:
         reasons.append("programmatic_verification_failed")
     outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
     agent_outputs = [
-        item for item in outputs if isinstance(item, dict) and item.get("handler") == "agent"
+        item
+        for item in outputs
+        if isinstance(item, dict) and item.get("handler") == "agent"
     ]
     direct_outputs = [
         item
@@ -67,7 +73,9 @@ def validate_burn_in_execution_result(execution: Dict[str, Any]) -> Dict[str, An
         body = output.get("output") if isinstance(output.get("output"), dict) else {}
         status = str(body.get("status") or "").strip().lower()
         summary = str(body.get("summary") or "").strip()
-        evidence = body.get("evidence") if isinstance(body.get("evidence"), list) else []
+        evidence = (
+            body.get("evidence") if isinstance(body.get("evidence"), list) else []
+        )
         if body.get("ok") is not True:
             reasons.append("direct_python_output_not_ok")
         if status not in {"success", "approved", "completed"}:
@@ -109,15 +117,23 @@ def validate_burn_in_execution_result(execution: Dict[str, Any]) -> Dict[str, An
         "direct_python_receipt_count": len(direct_outputs),
         "tool_call_kinds": tool_kinds,
         "tool_call_success_count": sum(
-            (int(output.get("tool_call_success_count") or 0) for output in agent_outputs)
+            (
+                int(output.get("tool_call_success_count") or 0)
+                for output in agent_outputs
+            )
         ),
         "tool_call_failure_count": sum(
-            (int(output.get("tool_call_failure_count") or 0) for output in agent_outputs)
+            (
+                int(output.get("tool_call_failure_count") or 0)
+                for output in agent_outputs
+            )
         ),
     }
 
 
-def _mark_receipt_rejected(employee_id: str, marker: str, status: str, reason: str) -> bool:
+def _mark_receipt_rejected(
+    employee_id: str, marker: str, status: str, reason: str
+) -> bool:
     """Invalidate only the metric emitted for this exact burn-in marker."""
     sf = get_session_factory()
     with sf() as session:
@@ -296,7 +312,9 @@ def run_burn_in(
     try:
         for start in range(0, len(selected), concurrency):
             batch = selected[start : start + concurrency]
-            pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="duty-burn-in")
+            pool = ThreadPoolExecutor(
+                max_workers=concurrency, thread_name_prefix="duty-burn-in"
+            )
             futures: Dict[Future[Dict[str, Any]], Dict[str, Any]] = {
                 pool.submit(
                     _facade()._execute_one,

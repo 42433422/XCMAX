@@ -13,7 +13,9 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
-from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
+from modstore_server.incident_team_dispatch import (
+    dispatch_incident_team as dispatch_incident_team,
+)
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.incident_team_handoff import format_role_handoff
 from modstore_server.llm_failure_classifier import FAILURE_KIND_ROLE_TIMEOUT
@@ -97,7 +99,11 @@ def _execute_employee_task_with_timeout(
     )
     try:
         result = fut.result(timeout=max(15, int(timeout_seconds)))
-        return result if isinstance(result, dict) else {"ok": False, "error": "invalid_result"}
+        return (
+            result
+            if isinstance(result, dict)
+            else {"ok": False, "error": "invalid_result"}
+        )
     except FuturesTimeoutError:
 
         def late_receipt(done):
@@ -108,7 +114,9 @@ def _execute_employee_task_with_timeout(
                     and runtime_input.get("event_id")
                     and runtime_input.get("attempt_id")
                 ):
-                    from modstore_server.incident_team_completion import persist_late_role_result
+                    from modstore_server.incident_team_completion import (
+                        persist_late_role_result,
+                    )
 
                     context.copy().run(
                         persist_late_role_result,
@@ -142,7 +150,10 @@ def _execute_employee_task_with_timeout(
 
 def _admin_user_id(session) -> int:
     row = (
-        session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        session.query(User)
+        .filter(User.is_admin.is_(True))
+        .order_by(User.id.asc())
+        .first()
     )  # noqa: E712
     if row:
         return int(row.id)
@@ -160,7 +171,11 @@ def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
         from modstore_server.employee_task_market import rank_market_candidates
 
         ranked = rank_market_candidates(event_id)
-        rows = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
+        rows = (
+            ranked.get("candidates")
+            if isinstance(ranked.get("candidates"), list)
+            else []
+        )
         return [row for row in rows if isinstance(row, dict)]
     except RECOVERABLE_ERRORS:
         return []
@@ -233,7 +248,11 @@ def build_incident_team(event_id: int) -> Dict[str, Any]:
     code_owner = ""
     code_owner_match: Dict[str, Any] = {}
     for row in candidate_rows:
-        ownership = row.get("code_ownership") if isinstance(row.get("code_ownership"), dict) else {}
+        ownership = (
+            row.get("code_ownership")
+            if isinstance(row.get("code_ownership"), dict)
+            else {}
+        )
         if ownership.get("match_count"):
             code_owner = str(row.get("employee_id") or "").strip()
             code_owner_match = ownership
@@ -269,7 +288,9 @@ def _task_for_role(
 ) -> str:
     from modstore_server.incident_model_router import route_for_incident
 
-    budget = route_for_incident(event_type=event_type, payload=payload, role=role).get("budget", {})
+    budget = route_for_incident(event_type=event_type, payload=payload, role=role).get(
+        "budget", {}
+    )
     handoff_chars = int(budget.get("handoff_chars") or 4000)
     summary = str(payload.get("summary") or event_type or "incident")
     base = (
@@ -445,7 +466,9 @@ def _retry_member(
         "status": "dispatching",
         "ok": False,
         "outcome": "unknown",
-        "verified_fix_attempt_id": runtime_input["revision"] if role == "verify" else "",
+        "verified_fix_attempt_id": runtime_input["revision"]
+        if role == "verify"
+        else "",
     }
     persist_role_attempt(event_id, row)
     result = _execute_employee_task_with_timeout(
@@ -467,7 +490,9 @@ def _retry_member(
         status=(
             "pending"
             if execution_pending(result)
-            else "completed" if execution_succeeded(result) else "failed"
+            else "completed"
+            if execution_succeeded(result)
+            else "failed"
         ),
     )
     row.pop("outcome", None)

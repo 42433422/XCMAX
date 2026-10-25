@@ -97,25 +97,35 @@ class TestVerifySignature:
         expected = hmac.new(
             secret.encode(), f"{ts}.{eid}.".encode() + raw, hashlib.sha256
         ).hexdigest()
-        with patch("app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(raw, f"sha256={expected}", timestamp=ts, event_id=eid) is True
 
     def test_invalid_signature(self):
         secret = "s3cret"
-        with patch("app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(b"{}", "sha256=deadbeef") is False
 
     def test_missing_signature_rejected(self):
         secret = "s3cret"
-        with patch("app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret):
+        with patch(
+            "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+        ):
             assert verify_signature(b"{}", None) is False
 
 
 class TestIngestPaidEvent:
     def test_accepts_and_dedups(self):
         with (
-            patch("app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True) as emit,
-            patch("app.domain.shared_services.order_event_bridge._record_reconciliation_if_user") as rec,
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True
+            ) as emit,
+            patch(
+                "app.domain.shared_services.order_event_bridge._record_reconciliation_if_user"
+            ) as rec,
         ):
             first = ingest_paid_event(_ENVELOPE)
             second = ingest_paid_event(_ENVELOPE)
@@ -136,7 +146,9 @@ class TestIngestPaidEvent:
     def test_rejects_bad_signature(self):
         secret = "s3cret"
         with (
-            patch("app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret),
+            patch(
+                "app.domain.shared_services.order_event_bridge.bridge_secret", return_value=secret
+            ),
             patch("app.domain.shared_services.order_event_bridge.emit_paid_event") as emit,
         ):
             result = ingest_paid_event(
@@ -152,8 +164,12 @@ class TestIngestPaidEvent:
 
     def test_returns_emitted_flag(self):
         with (
-            patch("app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=False),
-            patch("app.domain.shared_services.order_event_bridge._record_reconciliation_if_user") as rec,
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=False
+            ),
+            patch(
+                "app.domain.shared_services.order_event_bridge._record_reconciliation_if_user"
+            ) as rec,
         ):
             result = ingest_paid_event(_ENVELOPE)
         assert result["emitted"] is False
@@ -162,7 +178,9 @@ class TestIngestPaidEvent:
     def test_ties_to_reconciliation(self):
         # 触发履约样板：应调用 record_reconciliation
         with (
-            patch("app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True),
+            patch(
+                "app.domain.shared_services.order_event_bridge.emit_paid_event", return_value=True
+            ),
             patch("app.domain.shared_services.user_cs_pipeline.record_reconciliation") as rec,
         ):
             ingest_paid_event(_ENVELOPE)
@@ -233,6 +251,7 @@ class TestRecordReconciliation:
         from app.domain.shared_services.order_event_bridge import _record_reconciliation_if_user
 
         with patch(
-            "app.domain.shared_services.user_cs_pipeline.record_reconciliation", side_effect=RuntimeError("x")
+            "app.domain.shared_services.user_cs_pipeline.record_reconciliation",
+            side_effect=RuntimeError("x"),
         ):
             _record_reconciliation_if_user(_ENVELOPE["data"])  # 不应抛异常

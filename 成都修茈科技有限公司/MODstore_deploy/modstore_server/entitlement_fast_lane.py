@@ -71,7 +71,10 @@ def resolve_account(db: Session, account: str | int) -> User:
         needle = raw.lower()
         row = (
             db.query(User)
-            .filter((func.lower(User.username) == needle) | (func.lower(User.email) == needle))
+            .filter(
+                (func.lower(User.username) == needle)
+                | (func.lower(User.email) == needle)
+            )
             .first()
         )
     if row is None:
@@ -98,7 +101,9 @@ def list_fast_lane_plans(db: Session) -> list[dict[str, Any]]:
             {
                 "id": str(row.id),
                 "title": str(license_meta.get("title") or row.name or row.id),
-                "description": str(license_meta.get("description") or row.description or ""),
+                "description": str(
+                    license_meta.get("description") or row.description or ""
+                ),
                 "catalog": "account_license" if is_license else "membership",
                 "license_type": str(license_meta.get("license_type") or "membership"),
                 "account_tier": str(license_meta.get("account_tier") or ""),
@@ -109,7 +114,9 @@ def list_fast_lane_plans(db: Session) -> list[dict[str, Any]]:
             }
         )
     catalog_rank = {"account_license": 0, "membership": 1}
-    license_rank = {str(plan["id"]): index for index, plan in enumerate(ACCOUNT_LICENSE_PLANS)}
+    license_rank = {
+        str(plan["id"]): index for index, plan in enumerate(ACCOUNT_LICENSE_PLANS)
+    }
     return sorted(
         result,
         key=lambda item: (
@@ -175,7 +182,9 @@ def account_fast_lane_status(db: Session, account: str | int) -> dict[str, Any]:
     }
 
 
-def _deactivate_plan_entitlements(db: Session, user_id: int, plan_ids: set[str]) -> None:
+def _deactivate_plan_entitlements(
+    db: Session, user_id: int, plan_ids: set[str]
+) -> None:
     if not plan_ids:
         return
     rows = (
@@ -344,7 +353,9 @@ def apply_fast_lane_action(
         if normalized_action == "assign":
             active_rows = (
                 db.query(UserPlan)
-                .filter(UserPlan.user_id == int(target.id), UserPlan.is_active.is_(True))
+                .filter(
+                    UserPlan.user_id == int(target.id), UserPlan.is_active.is_(True)
+                )
                 .with_for_update()
                 .all()
             )
@@ -356,7 +367,9 @@ def apply_fast_lane_action(
             _deactivate_plan_entitlements(db, int(target.id), changed_plan_ids)
 
             effective_days = normalized_duration_days or 0
-            expires_at = now + timedelta(days=effective_days) if effective_days else None
+            expires_at = (
+                now + timedelta(days=effective_days) if effective_days else None
+            )
             db.add(
                 UserPlan(
                     user_id=int(target.id),

@@ -10,7 +10,10 @@ from typing import Any, Dict, List, cast
 from sqlalchemy.orm import Session
 
 from modstore_server.models import User
-from modstore_server.workbench.intent import CANVAS_SKILL_INTENT, _canonical_workbench_intent
+from modstore_server.workbench.intent import (
+    CANVAS_SKILL_INTENT,
+    _canonical_workbench_intent,
+)
 from modstore_server.workbench.sessions import ProgressCallbacks, SessionStore
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
@@ -94,17 +97,32 @@ async def _run_pipeline(
                 ports.sessions.persist(sid)
         await ports.progress.set_step(sid, "spec", "done", spec_msg[:480])
         if execution_mode == "script":
-            await ports.script(sid, user_id, payload, execution_mode, brief, prov, mdl, db)
+            await ports.script(
+                sid, user_id, payload, execution_mode, brief, prov, mdl, db
+            )
             return
         if intent == "mod":
             await ports.suite(
-                sid, payload, intent, brief, prov, mdl, replace, generate_frontend, db, user
+                sid,
+                payload,
+                intent,
+                brief,
+                prov,
+                mdl,
+                replace,
+                generate_frontend,
+                db,
+                user,
             )
             return
         if intent == "employee":
-            await ports.employee(sid, user_id, payload, intent, brief, prov, mdl, replace, db, user)
+            await ports.employee(
+                sid, user_id, payload, intent, brief, prov, mdl, replace, db, user
+            )
             return
         if intent == CANVAS_SKILL_INTENT:
-            await ports.canvas(sid, payload, intent, brief, prov, mdl, gen_wf_graph, db, user)
+            await ports.canvas(
+                sid, payload, intent, brief, prov, mdl, gen_wf_graph, db, user
+            )
             return
         await ports.progress.fail(sid, "spec", f"未知 intent: {intent}")

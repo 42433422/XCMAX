@@ -49,9 +49,13 @@ def _code_task_text(
             f"[HISTORICAL FIX #{idx}]\n  symptom: {symptom}\n  root_cause: {root_cause}\n  fix_diff (first 1500 chars):\n{fix_diff}"
         )
     fix_digest = (
-        "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
+        "\n\n".join(fix_digest_parts)
+        if fix_digest_parts
+        else "(no historical fixes matched)"
     )
-    last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    last_decision = (
+        memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    )
     selected_remediation: Optional[Dict[str, Any]] = None
     if (
         isinstance(resume_candidate, dict)
@@ -66,11 +70,16 @@ def _code_task_text(
             for item in reversed(open_items):
                 if not isinstance(item, dict):
                     continue
-                item_task_id = str(item.get("task_id") or item.get("para_task_id") or "")
+                item_task_id = str(
+                    item.get("task_id") or item.get("para_task_id") or ""
+                )
                 if (
                     selected_branch
                     and str(item.get("branch") or "") == selected_branch
-                    or (selected_run_id and str(item.get("run_id") or "") == selected_run_id)
+                    or (
+                        selected_run_id
+                        and str(item.get("run_id") or "") == selected_run_id
+                    )
                     or (selected_task_id and item_task_id == selected_task_id)
                 ):
                     selected_remediation = {**item, **resume_candidate}
@@ -82,12 +91,18 @@ def _code_task_text(
     }:
         selected_remediation = last_decision
     external_review_remediation = (
-        self_maintenance_remediation_prompts.external_review_remediation_prompt(resume_candidate)
+        self_maintenance_remediation_prompts.external_review_remediation_prompt(
+            resume_candidate
+        )
     )
     external_merge_remediation = (
-        self_maintenance_remediation_prompts.external_merge_remediation_prompt(resume_candidate)
+        self_maintenance_remediation_prompts.external_merge_remediation_prompt(
+            resume_candidate
+        )
     )
-    retort_scope_remediation = retort_remediation.retort_scope_remediation_prompt(resume_candidate)
+    retort_scope_remediation = retort_remediation.retort_scope_remediation_prompt(
+        resume_candidate
+    )
     structured_report_remediation = (
         self_maintenance_remediation_prompts.structured_report_remediation_prompt(
             memory, resume_candidate
@@ -104,7 +119,11 @@ def _code_task_text(
         v3_value = merge_result.get("safety_score_v3")
         v3: Dict[str, Any] = v3_value if isinstance(v3_value, dict) else {}
         semantic_analysis = v2.get("semantic_llm_analysis")
-        reports = semantic_analysis.get("reports") if isinstance(semantic_analysis, dict) else None
+        reports = (
+            semantic_analysis.get("reports")
+            if isinstance(semantic_analysis, dict)
+            else None
+        )
         review_data = reports.get("review") if isinstance(reports, dict) else None
         review = review_data if isinstance(review_data, dict) else {}
         remediation_evidence = {

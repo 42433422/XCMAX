@@ -70,7 +70,9 @@ def _serialize_subscription(row: WebhookSubscription) -> Dict[str, Any]:
         "name": row.name or "",
         "description": row.description or "",
         "target_url": row.target_url,
-        "secret_mask": mask_api_key((row.secret_encrypted or "")[:4]) if has_secret else "",
+        "secret_mask": mask_api_key((row.secret_encrypted or "")[:4])
+        if has_secret
+        else "",
         "has_secret": has_secret,
         "secret_storage": (
             "fernet"
@@ -81,7 +83,9 @@ def _serialize_subscription(row: WebhookSubscription) -> Dict[str, Any]:
         "is_active": bool(row.is_active),
         "success_count": int(row.success_count or 0),
         "failure_count": int(row.failure_count or 0),
-        "last_delivery_at": row.last_delivery_at.isoformat() if row.last_delivery_at else None,
+        "last_delivery_at": row.last_delivery_at.isoformat()
+        if row.last_delivery_at
+        else None,
         "last_delivery_status": row.last_delivery_status or "",
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -139,7 +143,9 @@ async def create_subscription(
     db: Session = Depends(get_db),
     user: User = Depends(_get_current_user),
 ):
-    if not (body.target_url.startswith("http://") or body.target_url.startswith("https://")):
+    if not (
+        body.target_url.startswith("http://") or body.target_url.startswith("https://")
+    ):
         raise HTTPException(400, "target_url 必须是 http(s) 链接")
     enabled = body.enabled_events or ["*"]
     row = WebhookSubscription(
@@ -213,13 +219,18 @@ async def update_subscription(
     if body.description is not None:
         row.description = body.description.strip()
     if body.target_url is not None:
-        if not (body.target_url.startswith("http://") or body.target_url.startswith("https://")):
+        if not (
+            body.target_url.startswith("http://")
+            or body.target_url.startswith("https://")
+        ):
             raise HTTPException(400, "target_url 必须是 http(s) 链接")
         row.target_url = body.target_url.strip()
     if body.secret is not None:
         row.secret_encrypted = _encrypt_secret_or_reject(body.secret.strip())
     if body.enabled_events is not None:
-        row.enabled_events_json = json.dumps(body.enabled_events or ["*"], ensure_ascii=False)
+        row.enabled_events_json = json.dumps(
+            body.enabled_events or ["*"], ensure_ascii=False
+        )
     if body.is_active is not None:
         row.is_active = bool(body.is_active)
     row.updated_at = datetime.now(UTC)
@@ -268,10 +279,14 @@ async def list_deliveries(
     )
     if not sub:
         raise HTTPException(404, "订阅不存在")
-    q = db.query(WebhookDelivery).filter(WebhookDelivery.subscription_id == subscription_id)
+    q = db.query(WebhookDelivery).filter(
+        WebhookDelivery.subscription_id == subscription_id
+    )
     if status:
         q = q.filter(WebhookDelivery.status == status.strip().lower())
-    rows = q.order_by(WebhookDelivery.started_at.desc()).limit(limit).offset(offset).all()
+    rows = (
+        q.order_by(WebhookDelivery.started_at.desc()).limit(limit).offset(offset).all()
+    )
     return [_serialize_delivery(r) for r in rows]
 
 
@@ -321,7 +336,9 @@ async def retry_delivery(
     return _serialize_delivery(new_row) if new_row else {"ok": True}
 
 
-@router.post("/{subscription_id}/test", summary="向订阅发送一条测试事件 (modstore.webhook_test)")
+@router.post(
+    "/{subscription_id}/test", summary="向订阅发送一条测试事件 (modstore.webhook_test)"
+)
 async def send_test_event(
     subscription_id: int,
     db: Session = Depends(get_db),

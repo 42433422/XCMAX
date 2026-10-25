@@ -27,11 +27,21 @@ def _load_deploy_env() -> None:
 
 def main() -> int:
     _load_deploy_env()
-    parser = argparse.ArgumentParser(description="Promote catalog items to enterprise tier")
-    parser.add_argument("--pkg-id", action="append", default=[], help="指定 pkg_id，可重复")
-    parser.add_argument("--all-office", action="store_true", help="办公员工包 10 件（表格类）")
-    parser.add_argument("--all-workflow", action="store_true", help="工作流员工 Mod 6 件")
-    parser.add_argument("--dry-run", action="store_true", help="仅打印将修改的行，不写库")
+    parser = argparse.ArgumentParser(
+        description="Promote catalog items to enterprise tier"
+    )
+    parser.add_argument(
+        "--pkg-id", action="append", default=[], help="指定 pkg_id，可重复"
+    )
+    parser.add_argument(
+        "--all-office", action="store_true", help="办公员工包 10 件（表格类）"
+    )
+    parser.add_argument(
+        "--all-workflow", action="store_true", help="工作流员工 Mod 6 件"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="仅打印将修改的行，不写库"
+    )
     args = parser.parse_args()
 
     pkg_ids: list[str] = []

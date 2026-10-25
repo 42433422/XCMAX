@@ -367,12 +367,18 @@ class TestTrainIntentModel:
 
         with (
             patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
             patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
-            patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding") as MockCollator,
+            patch(
+                "app.domain.shared_services.intent_trainer.DataCollatorWithPadding"
+            ) as MockCollator,
             patch("app.domain.shared_services.intent_trainer.EarlyStoppingCallback"),
-            patch("app.domain.shared_services.intent_trainer.TrainingArguments") as MockTrainingArgs,
+            patch(
+                "app.domain.shared_services.intent_trainer.TrainingArguments"
+            ) as MockTrainingArgs,
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -418,7 +424,9 @@ class TestTrainIntentModel:
 
         with (
             patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
             patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
             patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding"),
@@ -468,7 +476,9 @@ class TestTrainIntentModel:
 
         with (
             patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
             patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
             patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding"),
@@ -513,7 +523,9 @@ class TestExportToOnnx:
 
         with (
             patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.intent_trainer.torch.onnx.export") as mock_export,
             patch.dict("sys.modules", {"onnxruntime": MagicMock()}),
         ):

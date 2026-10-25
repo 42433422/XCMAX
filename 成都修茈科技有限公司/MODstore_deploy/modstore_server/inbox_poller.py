@@ -30,10 +30,14 @@ def _imap_credentials() -> tuple[str, str]:
     仅当需要与 SMTP 使用不同账号时再设 ``MODSTORE_IMAP_USER`` / ``MODSTORE_IMAP_PASSWORD``。
     """
     user = (
-        os.environ.get("MODSTORE_IMAP_USER") or os.environ.get("MODSTORE_SMTP_USER") or ""
+        os.environ.get("MODSTORE_IMAP_USER")
+        or os.environ.get("MODSTORE_SMTP_USER")
+        or ""
     ).strip()
     password = (
-        os.environ.get("MODSTORE_IMAP_PASSWORD") or os.environ.get("MODSTORE_SMTP_PASSWORD") or ""
+        os.environ.get("MODSTORE_IMAP_PASSWORD")
+        or os.environ.get("MODSTORE_SMTP_PASSWORD")
+        or ""
     ).strip()
     return user, password
 

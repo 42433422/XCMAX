@@ -89,7 +89,8 @@ def test_shipment_create_records_the_unit(monkeypatch) -> None:
         return {"success": True, "record_id": 42}
 
     monkeypatch.setattr(
-        "app.domain.shared_services.tools_workflow_shipments_docs._remember_business_shipment", remember
+        "app.domain.shared_services.tools_workflow_shipments_docs._remember_business_shipment",
+        remember,
     )
     monkeypatch.setattr(
         "app.neuro_bus.application_neuro_bridge.publish_neuro_event", lambda *_a, **_k: True

@@ -216,7 +216,9 @@ def matches_black_check_command(
             continue
         if "--check" not in args:
             continue
-        scope_names = {_scope_name(token) for token in args if not token.startswith("-")}
+        scope_names = {
+            _scope_name(token) for token in args if not token.startswith("-")
+        }
         if {"modman", "modstore_server", "tests"} <= scope_names:
             return True
     return False
@@ -253,7 +255,9 @@ def matches_isort_check_command(
             continue
         if "--check-only" not in args or "--diff" not in args:
             continue
-        scope_names = {_scope_name(token) for token in args if not token.startswith("-")}
+        scope_names = {
+            _scope_name(token) for token in args if not token.startswith("-")
+        }
         if {"modman", "modstore_server", "tests"} <= scope_names:
             return True
     return False
@@ -362,7 +366,9 @@ def qa_executor_infrastructure_unavailable(obj: Any) -> bool:
         return False
     if obj.get("target_branch_available") is not True:
         return False
-    test_delta = obj.get("test_delta") if isinstance(obj.get("test_delta"), dict) else {}
+    test_delta = (
+        obj.get("test_delta") if isinstance(obj.get("test_delta"), dict) else {}
+    )
     new_errors = test_delta.get("new_errors")
     if not isinstance(new_errors, list) or not new_errors:
         return False
@@ -373,7 +379,8 @@ def qa_executor_infrastructure_unavailable(obj: Any) -> bool:
     ):
         return False
     supporting = [
-        str(value or "").strip().lower() for value in test_delta.get("new_failures") or []
+        str(value or "").strip().lower()
+        for value in test_delta.get("new_failures") or []
     ]
     supporting.extend(
         str(value or "").strip().lower() for value in obj.get("blocking_findings") or []

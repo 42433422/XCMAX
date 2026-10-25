@@ -41,7 +41,9 @@ def redis_url() -> str:
 
 
 def stream_key() -> str:
-    return (os.environ.get("MODSTORE_EVENT_STREAM_KEY") or "modstore:events:stream").strip()
+    return (
+        os.environ.get("MODSTORE_EVENT_STREAM_KEY") or "modstore:events:stream"
+    ).strip()
 
 
 def _stream_maxlen() -> int:
@@ -114,7 +116,9 @@ def publish_event(
         "incident_id": str(int(incident_id or 0)),
         "fingerprint": str(fingerprint or "")[:128],
         "occurred_at": now_iso,
-        "payload_json": json.dumps(payload or {}, ensure_ascii=False, default=str)[:200_000],
+        "payload_json": json.dumps(payload or {}, ensure_ascii=False, default=str)[
+            :200_000
+        ],
     }
     key = stream_key()
     try:
@@ -146,7 +150,9 @@ def ensure_group(group_name: str, *, key: str | None = None) -> Dict[str, Any]:
         msg = str(exc)
         if "BUSYGROUP" in msg:
             return {"ok": True, "created": False, "stream": stream, "group": group}
-        logger.exception("redis stream ensure_group failed stream=%s group=%s", stream, group)
+        logger.exception(
+            "redis stream ensure_group failed stream=%s group=%s", stream, group
+        )
         return {"ok": False, "error": msg[:300], "stream": stream, "group": group}
 
 
@@ -192,7 +198,9 @@ def read_group(
             block=max(0, int(block_ms or 0)),
         )
     except RECOVERABLE_ERRORS as exc:
-        logger.exception("redis stream read_group failed stream=%s group=%s", stream, group)
+        logger.exception(
+            "redis stream read_group failed stream=%s group=%s", stream, group
+        )
         return {"ok": False, "error": str(exc)[:300], "events": []}
 
     events: List[Dict[str, Any]] = []
@@ -227,7 +235,9 @@ def read_group(
     }
 
 
-def ack(group_name: str, message_ids: List[str], *, key: str | None = None) -> Dict[str, Any]:
+def ack(
+    group_name: str, message_ids: List[str], *, key: str | None = None
+) -> Dict[str, Any]:
     if not stream_enabled():
         return {"ok": False, "reason": "disabled"}
     r = _client()

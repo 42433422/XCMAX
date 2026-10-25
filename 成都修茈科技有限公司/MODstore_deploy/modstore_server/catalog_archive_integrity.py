@@ -22,7 +22,9 @@ def _archive_digest(path: str, identity: tuple[int, ...]) -> str:
     return sha256_file(Path(path))
 
 
-def archive_path(filename: Any, expected_sha256: Any, roots: tuple[Path, ...]) -> Path | None:
+def archive_path(
+    filename: Any, expected_sha256: Any, roots: tuple[Path, ...]
+) -> Path | None:
     name = str(filename or "").strip()
     digest = str(expected_sha256 or "").strip().lower()
     if not name or Path(name).name != name or "\\" in name:

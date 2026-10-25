@@ -26,9 +26,13 @@ def _digest(value: Any) -> str:
 def _receipt_payloads(order: dict[str, Any]) -> list[dict[str, Any]]:
     order_no = str(order.get("out_trade_no") or order.get("order_no") or "").strip()
     identity = _digest(order_no)
-    provider_identity = _digest(order.get("provider_trade_no") or order.get("trade_no") or order_no)
+    provider_identity = _digest(
+        order.get("provider_trade_no") or order.get("trade_no") or order_no
+    )
     artifact_id = str(order.get("fulfillment_artifact_id") or "").strip()
-    artifact_sha256 = str(order.get("fulfillment_artifact_sha256") or "").strip().lower()
+    artifact_sha256 = (
+        str(order.get("fulfillment_artifact_sha256") or "").strip().lower()
+    )
     artifact_kind = str(order.get("fulfillment_artifact_kind") or "").strip().lower()
     goal_id = f"purchase-fulfillment:{identity}"
     common = {
@@ -41,9 +45,13 @@ def _receipt_payloads(order: dict[str, Any]) -> list[dict[str, Any]]:
         "amount_cents": payment_amount_cents(order),
         "currency": order.get("currency") or "CNY",
         "payment_provider": order.get("payment_provider") or "",
-        "provider_trade_no": order.get("provider_trade_no") or order.get("trade_no") or "",
+        "provider_trade_no": order.get("provider_trade_no")
+        or order.get("trade_no")
+        or "",
         "provider_verification": order.get("provider_verification") or "",
-        "environment": order.get("payment_environment") or order.get("environment") or "",
+        "environment": order.get("payment_environment")
+        or order.get("environment")
+        or "",
         "evidence": {
             "source": "authoritative_payment_fulfillment",
             "order_kind": str(order.get("order_kind") or "")[:32],
@@ -106,9 +114,12 @@ def reconcile_paid_customer_value(
         source = load_authoritative_payment_orders(window_days)
         source_owner = str(source.get("source_owner") or "unavailable")
         source_ready = bool(
-            source.get("source_available") is True and source.get("source_authoritative") is True
+            source.get("source_available") is True
+            and source.get("source_authoritative") is True
         )
-        rows = [dict(row) for row in source.get("orders") or [] if isinstance(row, dict)]
+        rows = [
+            dict(row) for row in source.get("orders") or [] if isinstance(row, dict)
+        ]
     else:
         source_owner = "injected"
         source_ready = True
@@ -161,7 +172,9 @@ def reconcile_paid_customer_value(
             skipped["plan_artifact_kind_invalid"] += 1
             continue
         artifact_id = str(order.get("fulfillment_artifact_id") or "").strip()
-        artifact_sha256 = str(order.get("fulfillment_artifact_sha256") or "").strip().lower()
+        artifact_sha256 = (
+            str(order.get("fulfillment_artifact_sha256") or "").strip().lower()
+        )
         if not artifact_id or not artifact_sha256 or len(artifact_sha256) != 64:
             skipped["artifact_proof_missing"] += 1
             continue
@@ -178,7 +191,8 @@ def reconcile_paid_customer_value(
             skipped["acceptance_timestamp_missing"] += 1
         if (
             order.get("acceptance_verified") is True
-            and str(order.get("acceptance_reason") or "").strip().lower() != "verified_plan_usage"
+            and str(order.get("acceptance_reason") or "").strip().lower()
+            != "verified_plan_usage"
         ):
             skipped["acceptance_evidence_invalid"] += 1
         for payload in _receipt_payloads(order):
@@ -214,7 +228,9 @@ def reconcile_paid_customer_value(
         evidence["source_owner"] = source_owner
         evidence["source_available"] = True
         evidence["source_authoritative"] = True
-        evidence["value_ledger_ready"] = bool(evidence.get("append_only_store_available"))
+        evidence["value_ledger_ready"] = bool(
+            evidence.get("append_only_store_available")
+        )
         result["evidence"] = evidence
     return result
 

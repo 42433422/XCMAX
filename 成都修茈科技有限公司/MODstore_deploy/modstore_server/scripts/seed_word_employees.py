@@ -55,7 +55,9 @@ def _build_pack(
 
     is_generate = str(pack_id or "").endswith("-generate-employee")
     rule_spec = (
-        build_word_generate_rule_spec(brief) if is_generate else build_word_extract_rule_spec(brief)
+        build_word_generate_rule_spec(brief)
+        if is_generate
+        else build_word_extract_rule_spec(brief)
     )
     rule_spec["pack_id"] = pack_id
     asset_manifest = {
@@ -68,7 +70,9 @@ def _build_pack(
         "expected_outputs": [],
         "rules": [],
     }
-    manifest = _normalize_manifest(_fallback_manifest(brief, rule_spec), brief, rule_spec)
+    manifest = _normalize_manifest(
+        _fallback_manifest(brief, rule_spec), brief, rule_spec
+    )
     manifest["id"] = pack_id
     display_name = str(spec.get("name") or manifest.get("name") or pack_id).strip()
     manifest["name"] = display_name
@@ -114,11 +118,15 @@ def _load_deploy_env() -> None:
 
 def main() -> int:
     _load_deploy_env()
-    parser = argparse.ArgumentParser(description="Seed Word read/generate employee packs")
+    parser = argparse.ArgumentParser(
+        description="Seed Word read/generate employee packs"
+    )
     parser.add_argument(
         "--set-public", action="store_true", help="设置 catalog_items.is_public=true"
     )
-    parser.add_argument("--force", action="store_true", help="覆盖已存在的同 pkg_id 记录")
+    parser.add_argument(
+        "--force", action="store_true", help="覆盖已存在的同 pkg_id 记录"
+    )
     parser.add_argument("--dry-run", action="store_true", help="仅构建包，不写 catalog")
     args = parser.parse_args()
 
@@ -146,11 +154,15 @@ def main() -> int:
         brief = spec["brief"]
         manifest, rule_spec, raw_zip, pack_dir = _build_pack(pack_id, brief, spec=spec)
         if args.dry_run:
-            results.append({"pack_id": pack_id, "dry_run": True, "pack_dir": str(pack_dir)})
+            results.append(
+                {"pack_id": pack_id, "dry_run": True, "pack_dir": str(pack_dir)}
+            )
             continue
 
         with sf() as db:
-            existing = db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
+            existing = (
+                db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
+            )
         if existing and not args.force:
             results.append({"pack_id": pack_id, "skipped": True, "id": existing.id})
             continue
@@ -187,7 +199,9 @@ def main() -> int:
             saved = append_package(rec, tmp_path)
             with sf() as db:
                 upsert_catalog_item_from_xc_package_dict(db, saved, author_id=author_id)
-                row = db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
+                row = (
+                    db.query(CatalogItem).filter(CatalogItem.pkg_id == pack_id).first()
+                )
                 if row and args.set_public:
                     row.is_public = True
                 db.commit()

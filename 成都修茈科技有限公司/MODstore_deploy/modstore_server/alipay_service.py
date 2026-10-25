@@ -30,10 +30,14 @@ from modstore_server.alipay_config import private_key_source as _private_key_sou
 from modstore_server.alipay_config import public_key_source as _public_key_source
 from modstore_server.alipay_config import read_file_from_env as _read_file_from_env
 from modstore_server.alipay_config import sdk_import_error as sdk_import_error
-from modstore_server.alipay_config import warn_notify_url_path_once as warn_notify_url_path_once
+from modstore_server.alipay_config import (
+    warn_notify_url_path_once as warn_notify_url_path_once,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.payments.alipay_gateway import AlipayGateway
-from modstore_server.payments.alipay_gateway import standard_api_result as _standard_api_result
+from modstore_server.payments.alipay_gateway import (
+    standard_api_result as _standard_api_result,
+)
 from modstore_server.payments.checkout import CheckoutMethods
 from modstore_server.payments.checkout import create_pay_order as _select_checkout
 
@@ -82,14 +86,19 @@ logger = logging.getLogger(__name__)
 
 
 def _gateway() -> AlipayGateway:
-    return AlipayGateway(build_client, credentials_ready, alipay_debug, notify_url_default)
+    return AlipayGateway(
+        build_client, credentials_ready, alipay_debug, notify_url_default
+    )
 
 
 def _build_common_kwargs(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _gateway().common_kwargs(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 
@@ -97,7 +106,10 @@ def _try_precreate(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _gateway().precreate(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 
@@ -141,7 +153,9 @@ def verify_notify(data: dict[str, str], signature: str) -> bool:
     return _gateway().verify(data, signature)
 
 
-def query_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
+def query_order(
+    *, out_trade_no: str | None = None, trade_no: str | None = None
+) -> dict[str, Any]:
     return _gateway().query(out_trade_no=out_trade_no, trade_no=trade_no)
 
 
@@ -162,19 +176,28 @@ def refund_order(
     )
 
 
-def close_order(*, out_trade_no: str | None = None, trade_no: str | None = None) -> dict[str, Any]:
+def close_order(
+    *, out_trade_no: str | None = None, trade_no: str | None = None
+) -> dict[str, Any]:
     return _gateway().close(out_trade_no=out_trade_no, trade_no=trade_no)
 
 
-def query_refund(*, out_trade_no: str, out_request_no: str | None = None) -> dict[str, Any]:
-    return _gateway().query_refund(out_trade_no=out_trade_no, out_request_no=out_request_no)
+def query_refund(
+    *, out_trade_no: str, out_request_no: str | None = None
+) -> dict[str, Any]:
+    return _gateway().query_refund(
+        out_trade_no=out_trade_no, out_request_no=out_request_no
+    )
 
 
 def precreate_order(
     *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
 ) -> dict[str, Any]:
     return _try_precreate(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
 
 

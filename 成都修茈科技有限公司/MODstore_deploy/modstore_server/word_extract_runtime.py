@@ -48,7 +48,10 @@ WORD_OUTPUT_FIELDS = (
 
 def is_word_full_extract(brief: str) -> bool:
     from modstore_server.csv_tabular_runtime import is_csv_full_read, is_csv_generate
-    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
+    from modstore_server.excel_tabular_runtime import (
+        is_excel_full_read,
+        is_excel_generate,
+    )
     from modstore_server.pdf_extract_runtime import is_pdf_full_read, is_pdf_generate
     from modstore_server.ppt_extract_runtime import is_ppt_full_read, is_ppt_generate
     from modstore_server.txt_extract_runtime import is_txt_full_read, is_txt_generate
@@ -66,7 +69,8 @@ def is_word_full_extract(brief: str) -> bool:
     bl = (brief or "").lower()
     has_word_doc = any(k in bl for k in ("word", "docx", ".doc"))
     has_txt_only = (
-        any(k in bl for k in (".txt", "txt文件", "txt 文件", "纯文本")) and not has_word_doc
+        any(k in bl for k in (".txt", "txt文件", "txt 文件", "纯文本"))
+        and not has_word_doc
     )
     if has_txt_only:
         return False
@@ -103,7 +107,8 @@ def is_word_full_extract(brief: str) -> bool:
 def word_extract_structured_spec(brief: str) -> Dict[str, Any]:
     return {
         "domain": "文档处理 / Word 全量提取",
-        "goal": (brief or "").strip().splitlines()[0][:200] or "全量提取 Word 文档所有格式与信息",
+        "goal": (brief or "").strip().splitlines()[0][:200]
+        or "全量提取 Word 文档所有格式与信息",
         "input": "用户上传的 .docx / .doc 文件",
         "output": "document_full.json（结构化全量）+ document_full.txt + images/",
         "output_schema": {
@@ -172,7 +177,9 @@ def validate_word_extract_backend(pack_dir: Path) -> Tuple[List[str], List[str]]
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)
@@ -183,7 +190,10 @@ def validate_word_extract_backend(pack_dir: Path) -> Tuple[List[str], List[str]]
         errors.append("Word 全量提取员工 handlers 必须包含 direct_python")
     if not has_convert:
         errors.append("backend/vendor 中缺少 convert_file 实现")
-    if not any(tok in py_blob for tok in ("docx", "zipfile", "wordprocessingml", "document.xml")):
+    if not any(
+        tok in py_blob
+        for tok in ("docx", "zipfile", "wordprocessingml", "document.xml")
+    ):
         warnings.append("未发现 docx/OOXML 解析相关代码")
     rs_path = pack_dir / "rule_spec.json"
     accepted_ext: List[str] = []
@@ -196,7 +206,9 @@ def validate_word_extract_backend(pack_dir: Path) -> Tuple[List[str], List[str]]
             pass
     if ".doc" in accepted_ext or "legacy_doc" in py_blob:
         if "legacy_doc" not in py_blob and "ensure_docx_for_extract" not in py_blob:
-            warnings.append("已声明 .doc 但 convert 未集成 legacy_doc.ensure_docx_for_extract")
+            warnings.append(
+                "已声明 .doc 但 convert 未集成 legacy_doc.ensure_docx_for_extract"
+            )
 
     for field in (
         "paragraphs",
@@ -263,7 +275,9 @@ def minimal_docx_fixture_b64() -> str:
     return base64.b64encode(minimal_docx_bytes()).decode("ascii")
 
 
-def word_extract_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+def word_extract_orchestration_plan(
+    brief: str, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     from modstore_server.employee_brief_utils import compact_routing_brief
 
     checklist = payload.get("execution_checklist")
@@ -300,7 +314,8 @@ def word_extract_orchestration_plan(brief: str, payload: Dict[str, Any]) -> Dict
         "script_workflow_name": f"{short} 脚本工作流",
         "script_brief": script_brief,
         "script_runtime_notes": script_runtime,
-        "workflow_name": str(payload.get("employee_workflow_name") or short).strip() or short,
+        "workflow_name": str(payload.get("employee_workflow_name") or short).strip()
+        or short,
         "workflow_brief": workflow_brief,
         "acceptance": [
             "员工包 handlers 为 direct_python 且含 vendor convert 模块",

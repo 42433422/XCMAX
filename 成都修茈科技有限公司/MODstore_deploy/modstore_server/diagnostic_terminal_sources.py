@@ -42,7 +42,9 @@ def incident_detail(row: IncidentEvent) -> tuple[str, str]:
     event_text = f"{row.event_type} {detail}".casefold()
     if severity in {"critical", "fatal"}:
         normalized = "critical"
-    elif severity in {"high", "error"} or any(x in event_text for x in ("failed", "error")):
+    elif severity in {"high", "error"} or any(
+        x in event_text for x in ("failed", "error")
+    ):
         normalized = "error"
     elif severity in {"medium", "warning", "warn"} or "incident" in event_text:
         normalized = "warning"
@@ -62,7 +64,11 @@ def incident_items(
     query_builder = db.query(IncidentEvent)
     if since is not None:
         query_builder = query_builder.filter(IncidentEvent.created_at >= since)
-    rows = query_builder.order_by(IncidentEvent.id.desc()).limit(min(MAX_LIMIT, limit * 5)).all()
+    rows = (
+        query_builder.order_by(IncidentEvent.id.desc())
+        .limit(min(MAX_LIMIT, limit * 5))
+        .all()
+    )
     items: list[dict[str, Any]] = []
     for row in rows:
         detail, severity = incident_detail(row)
@@ -96,7 +102,9 @@ def dlq_items(db: Session, query: str, limit: int) -> list[dict[str, Any]]:
     )
     items: list[dict[str, Any]] = []
     for row in rows:
-        if not matches(query, row.event_name, row.event_id, row.last_error, row.producer):
+        if not matches(
+            query, row.event_name, row.event_id, row.last_error, row.producer
+        ):
             continue
         items.append(
             item(
@@ -122,7 +130,9 @@ def scheduler_snapshot(provider: Callable[[], dict[str, Any]] | None) -> dict[st
     return scheduler_runtime()
 
 
-def scheduler_items(snapshot: dict[str, Any], query: str, limit: int) -> list[dict[str, Any]]:
+def scheduler_items(
+    snapshot: dict[str, Any], query: str, limit: int
+) -> list[dict[str, Any]]:
     jobs = [row for row in snapshot.get("jobs") or [] if isinstance(row, dict)]
     jobs.sort(
         key=lambda row: (
@@ -143,10 +153,15 @@ def scheduler_items(snapshot: dict[str, Any], query: str, limit: int) -> list[di
             continue
         state = str(row.get("state") or "unknown").casefold()
         severity = (
-            "error" if state in PROBLEM_STATES else ("warning" if state == "deferred" else "info")
+            "error"
+            if state in PROBLEM_STATES
+            else ("warning" if state == "deferred" else "info")
         )
         detail = (
-            row.get("last_error_code") or row.get("last_error") or row.get("last_status") or state
+            row.get("last_error_code")
+            or row.get("last_error")
+            or row.get("last_status")
+            or state
         )
         items.append(
             item(
@@ -156,7 +171,9 @@ def scheduler_items(snapshot: dict[str, Any], query: str, limit: int) -> list[di
                 detail,
                 source="scheduler_runtime",
                 reference=f"job:{row.get('job_id') or ''}",
-                timestamp=row.get("last_finished_at") or row.get("last_started_at") or "",
+                timestamp=row.get("last_finished_at")
+                or row.get("last_started_at")
+                or "",
                 data={
                     "state": state,
                     "consecutive_failures": int(row.get("consecutive_failures") or 0),
@@ -176,7 +193,9 @@ def delivery_items(
     summary = {
         "purchased_accounts": len(rows),
         "pending_install": sum(row["status"] == "pending_install" for row in rows),
-        "pending_first_login": sum(row["status"] == "pending_first_login" for row in rows),
+        "pending_first_login": sum(
+            row["status"] == "pending_first_login" for row in rows
+        ),
         "completed": sum(row["status"] == "completed" for row in rows),
     }
     items: list[dict[str, Any]] = []
@@ -236,7 +255,11 @@ def file_log_items(query: str, limit: int) -> list[dict[str, Any]]:
                 handle.seek(0, os.SEEK_END)
                 size = handle.tell()
                 handle.seek(max(0, size - MAX_LOG_BYTES))
-                lines = handle.read(MAX_LOG_BYTES).decode("utf-8", errors="replace").splitlines()
+                lines = (
+                    handle.read(MAX_LOG_BYTES)
+                    .decode("utf-8", errors="replace")
+                    .splitlines()
+                )
         except OSError:
             continue
         for line in reversed(lines):

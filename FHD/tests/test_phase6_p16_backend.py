@@ -1790,7 +1790,9 @@ class TestKittenReportFinancialSheet:
 
         service = KittenReportExportService()
         # Patch FinancialReportPlugin to return rich data
-        with patch("app.domain.shared_services.kitten_report.service.FinancialReportPlugin") as MockFinancial:
+        with patch(
+            "app.domain.shared_services.kitten_report.service.FinancialReportPlugin"
+        ) as MockFinancial:
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="financial_report",
                 title="财务报表分析",
@@ -1834,7 +1836,9 @@ class TestKittenReportFinancialSheet:
         from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
-        with patch("app.domain.shared_services.kitten_report.service.InventoryValuationPlugin") as MockInv:
+        with patch(
+            "app.domain.shared_services.kitten_report.service.InventoryValuationPlugin"
+        ) as MockInv:
             MockInv.return_value.run.return_value = SimpleNamespace(
                 key="inventory_valuation",
                 title="库存价值评估",
@@ -1862,8 +1866,12 @@ class TestKittenReportFinancialSheet:
         service = KittenReportExportService()
         # Both plugins return non-matching keys -> _add_financial_sheet returns early
         with (
-            patch("app.domain.shared_services.kitten_report.service.FinancialReportPlugin") as MockFinancial,
-            patch("app.domain.shared_services.kitten_report.service.InventoryValuationPlugin") as MockInv,
+            patch(
+                "app.domain.shared_services.kitten_report.service.FinancialReportPlugin"
+            ) as MockFinancial,
+            patch(
+                "app.domain.shared_services.kitten_report.service.InventoryValuationPlugin"
+            ) as MockInv,
         ):
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="other",

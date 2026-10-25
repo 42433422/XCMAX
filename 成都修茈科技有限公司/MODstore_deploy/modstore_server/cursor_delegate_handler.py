@@ -24,7 +24,9 @@ def _cursor_delegate_enabled() -> bool:
 
 def _cursor_api_key() -> str:
     return (
-        os.environ.get("CURSOR_API_KEY") or os.environ.get("MODSTORE_CURSOR_API_KEY") or ""
+        os.environ.get("CURSOR_API_KEY")
+        or os.environ.get("MODSTORE_CURSOR_API_KEY")
+        or ""
     ).strip()
 
 
@@ -68,7 +70,8 @@ def _try_cursor_sdk_prompt(task: str, *, cwd: str) -> Dict[str, Any]:
         status = str(getattr(result, "status", "") or "")
         text = str(getattr(result, "result", "") or getattr(result, "output", "") or "")
         return {
-            "ok": status.lower() in ("completed", "success", "done", "ok") or bool(text),
+            "ok": status.lower() in ("completed", "success", "done", "ok")
+            or bool(text),
             "source": "cursor_sdk",
             "status": status,
             "output": text[:20_000],
@@ -78,7 +81,9 @@ def _try_cursor_sdk_prompt(task: str, *, cwd: str) -> Dict[str, Any]:
         return {"ok": False, "source": "cursor_sdk", "error": str(exc)}
 
 
-def _try_cursor_webhook(task: str, *, cwd: str, input_data: Dict[str, Any]) -> Dict[str, Any]:
+def _try_cursor_webhook(
+    task: str, *, cwd: str, input_data: Dict[str, Any]
+) -> Dict[str, Any]:
     url = _cursor_webhook_url()
     if not url:
         return {"ok": False, "reason": "no MODSTORE_CURSOR_DELEGATE_WEBHOOK"}
@@ -101,9 +106,13 @@ def _try_cursor_webhook(task: str, *, cwd: str, input_data: Dict[str, Any]) -> D
             "ok": ok,
             "source": "cursor_webhook",
             "status_code": resp.status_code,
-            "output": str(body.get("output") or body.get("result") or resp.text)[:20_000],
+            "output": str(body.get("output") or body.get("result") or resp.text)[
+                :20_000
+            ],
             "files_changed": (
-                body.get("files_changed") if isinstance(body.get("files_changed"), list) else []
+                body.get("files_changed")
+                if isinstance(body.get("files_changed"), list)
+                else []
             ),
         }
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
@@ -128,7 +137,11 @@ def dispatch_cursor_delegate(
     cwd = _resolve_project_root(payload)
 
     out = _try_cursor_sdk_prompt(task, cwd=cwd)
-    if not out.get("ok") and out.get("reason") != "cursor_sdk not installed" or not out.get("ok"):
+    if (
+        not out.get("ok")
+        and out.get("reason") != "cursor_sdk not installed"
+        or not out.get("ok")
+    ):
         if _cursor_webhook_url():
             out = _try_cursor_webhook(task, cwd=cwd, input_data=payload)
 
@@ -136,7 +149,9 @@ def dispatch_cursor_delegate(
         return {
             "handler": "cursor_delegate",
             "ok": False,
-            "error": out.get("error") or out.get("reason") or "cursor delegate unavailable",
+            "error": out.get("error")
+            or out.get("reason")
+            or "cursor delegate unavailable",
             "delegate_attempts": out,
         }
 
@@ -159,7 +174,9 @@ def dispatch_cursor_delegate(
         "output": out.get("output", ""),
         "workspace_root": cwd,
         "files_changed": files_changed,
-        "delegate_meta": {k: v for k, v in out.items() if k not in ("output", "files_changed")},
+        "delegate_meta": {
+            k: v for k, v in out.items() if k not in ("output", "files_changed")
+        },
     }
 
 

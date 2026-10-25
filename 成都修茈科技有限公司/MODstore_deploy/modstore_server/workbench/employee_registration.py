@@ -56,7 +56,9 @@ async def register_and_verify_workflow(
         await ports.progress.set_step(
             state.session_id, "register_pack", "error", _reg_upstream[:480]
         )
-        await ports.progress.fail(state.session_id, "register_pack", _reg_upstream[:1000])
+        await ports.progress.fail(
+            state.session_id, "register_pack", _reg_upstream[:1000]
+        )
         return True
     else:
         state.current_step = "register_pack"
@@ -65,22 +67,35 @@ async def register_and_verify_workflow(
         )
         state.registration_missing = False
         try:
-            _emp_mf = state.result.get("manifest") if isinstance(state.result, dict) else None
-            _emp_pack_id = str(state.result.get("id") or (_emp_mf or {}).get("id") or "").strip()
+            _emp_mf = (
+                state.result.get("manifest") if isinstance(state.result, dict) else None
+            )
+            _emp_pack_id = str(
+                state.result.get("id") or (_emp_mf or {}).get("id") or ""
+            ).strip()
             if _emp_pack_id and state.pack_dir.is_dir():
-                reconcile_employee_pack_manifest(state.pack_dir, brief=state.employee_brief)
-                _raw_mf = json.loads((state.pack_dir / "manifest.json").read_text(encoding="utf-8"))
+                reconcile_employee_pack_manifest(
+                    state.pack_dir, brief=state.employee_brief
+                )
+                _raw_mf = json.loads(
+                    (state.pack_dir / "manifest.json").read_text(encoding="utf-8")
+                )
                 _aligned_mf, _align_errs = normalize_editor_manifest_for_registry(
                     _raw_mf, _emp_pack_id
                 )
                 (state.pack_dir / "manifest.json").write_text(
-                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
                 )
-                reconcile_employee_pack_manifest(state.pack_dir, brief=state.employee_brief)
+                reconcile_employee_pack_manifest(
+                    state.pack_dir, brief=state.employee_brief
+                )
                 if state.use_word_extract:
                     _reg_wx_errs, _ = validate_word_extract_backend(state.pack_dir)
                     if _reg_wx_errs:
-                        _reg_fail = "登记前 Word runtime 未就绪：" + "；".join(_reg_wx_errs[:3])
+                        _reg_fail = "登记前 Word runtime 未就绪：" + "；".join(
+                            _reg_wx_errs[:3]
+                        )
                         await ports.progress.set_step(
                             state.session_id, "register_pack", "error", _reg_fail[:480]
                         )
@@ -93,9 +108,7 @@ async def register_and_verify_workflow(
                         ports.db, ports.user, state.pack_dir
                     )
                     state.published_to_catalog = True
-                    _reg_msg = (
-                        f"员工包已保存并登记至目录（{_emp_pack_id}）；可在「员工制作」左侧列表查看"
-                    )
+                    _reg_msg = f"员工包已保存并登记至目录（{_emp_pack_id}）；可在「员工制作」左侧列表查看"
                 except RECOVERABLE_ERRORS as _cat_exc:
                     _LOG.warning(
                         "register_pack catalog sync failed error_type=%s",
@@ -105,7 +118,9 @@ async def register_and_verify_workflow(
                     await ports.progress.set_step(
                         state.session_id, "register_pack", "error", _reg_msg
                     )
-                    await ports.progress.fail(state.session_id, "register_pack", _reg_msg[:1000])
+                    await ports.progress.fail(
+                        state.session_id, "register_pack", _reg_msg[:1000]
+                    )
                     return True
                 await ports.progress.set_step(
                     state.session_id, "register_pack", "done", _reg_msg[:480]
@@ -113,7 +128,9 @@ async def register_and_verify_workflow(
             else:
                 state.registration_missing = True
                 msg = "未找到有效包 ID 或包目录，员工包未保存——请确认 manifest.id"
-                await ports.progress.set_step(state.session_id, "register_pack", "error", msg[:480])
+                await ports.progress.set_step(
+                    state.session_id, "register_pack", "error", msg[:480]
+                )
                 await ports.progress.fail(state.session_id, "register_pack", msg[:1000])
                 return True
         except RECOVERABLE_ERRORS as _reg_exc:
@@ -123,7 +140,9 @@ async def register_and_verify_workflow(
             )
             state.registration_missing = True
             msg = f"保存异常: {_reg_exc!s}"
-            await ports.progress.set_step(state.session_id, "register_pack", "error", msg[:480])
+            await ports.progress.set_step(
+                state.session_id, "register_pack", "error", msg[:480]
+            )
             await ports.progress.fail(state.session_id, "register_pack", msg[:1000])
             return True
     if state.should_skip("workflow_sandbox"):
@@ -133,7 +152,10 @@ async def register_and_verify_workflow(
     else:
         state.current_step = "workflow_sandbox"
         await ports.progress.set_step(
-            state.session_id, "workflow_sandbox", "running", "工作流结构校验（validate_only）"
+            state.session_id,
+            "workflow_sandbox",
+            "running",
+            "工作流结构校验（validate_only）",
         )
         wid_raw = (
             state.workflow_attachment.get("workflow_id")
@@ -145,7 +167,9 @@ async def register_and_verify_workflow(
         except (TypeError, ValueError):
             wid_int = 0
         if state.target == "pack_plus_workflow" and wid_int <= 0:
-            from modstore_server.craft_failure_signals import invalid_workflow_sandbox_report
+            from modstore_server.craft_failure_signals import (
+                invalid_workflow_sandbox_report,
+            )
 
             _wf_invalid_msg = "输入 workflow_id 无效：pack-registrar / workflow-automator 须先创建画布工作流并写入 wf_attach.workflow_id"
             report = invalid_workflow_sandbox_report(wid_raw)
@@ -160,7 +184,9 @@ async def register_and_verify_workflow(
             await ports.progress.set_step(
                 state.session_id, "workflow_sandbox", "error", _wf_invalid_msg[:480]
             )
-            await ports.progress.fail(state.session_id, "workflow_sandbox", _wf_invalid_msg[:1000])
+            await ports.progress.fail(
+                state.session_id, "workflow_sandbox", _wf_invalid_msg[:1000]
+            )
             return True
         if state.target == "pack_plus_workflow" and wid_int > 0:
             state.workflow_id = wid_int
@@ -236,16 +262,17 @@ async def register_and_verify_workflow(
                         )
                 if not ports.catalog_registered(ports.db, _biz_pack_id):
                     state.workflow_business_ok = False
-                    _wf_sb_msg = (
-                        f"结构校验通过 ✅，真实调用验证失败：员工包未登记（{_biz_pack_id}）"
-                    )
+                    _wf_sb_msg = f"结构校验通过 ✅，真实调用验证失败：员工包未登记（{_biz_pack_id}）"
                     if state.pipeline_label in (
                         "word_full_extract",
                         "txt_full_read",
                         "txt_generate",
                     ):
                         await ports.progress.set_step(
-                            state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                            state.session_id,
+                            "workflow_sandbox",
+                            "error",
+                            _wf_sb_msg[:480],
                         )
                         await ports.progress.fail(
                             state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]
@@ -255,8 +282,12 @@ async def register_and_verify_workflow(
                     try:
                         import base64 as _b64mod
 
-                        from modstore_server.txt_extract_runtime import minimal_txt_fixture_bytes
-                        from modstore_server.word_extract_runtime import minimal_docx_fixture_b64
+                        from modstore_server.txt_extract_runtime import (
+                            minimal_txt_fixture_bytes,
+                        )
+                        from modstore_server.word_extract_runtime import (
+                            minimal_docx_fixture_b64,
+                        )
 
                         _biz_input: Dict[str, Any] = {
                             "task": state.routing_brief or state.brief or "测试任务"
@@ -313,23 +344,33 @@ async def register_and_verify_workflow(
                                 "txt_generate",
                             ):
                                 await ports.progress.set_step(
-                                    state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                                    state.session_id,
+                                    "workflow_sandbox",
+                                    "error",
+                                    _wf_sb_msg[:480],
                                 )
                                 await ports.progress.fail(
-                                    state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]
+                                    state.session_id,
+                                    "workflow_sandbox",
+                                    _wf_sb_msg[:1000],
                                 )
                                 return True
                     except RECOVERABLE_ERRORS as _biz_exc:
                         state.workflow_sandbox["business_tested"] = True
                         state.workflow_business_ok = False
-                        _wf_sb_msg = f"结构校验通过 ✅，真实调用验证异常：{_biz_exc!s}"[:300]
+                        _wf_sb_msg = f"结构校验通过 ✅，真实调用验证异常：{_biz_exc!s}"[
+                            :300
+                        ]
                         if state.pipeline_label in (
                             "word_full_extract",
                             "txt_full_read",
                             "txt_generate",
                         ):
                             await ports.progress.set_step(
-                                state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                                state.session_id,
+                                "workflow_sandbox",
+                                "error",
+                                _wf_sb_msg[:480],
                             )
                             await ports.progress.fail(
                                 state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]
@@ -337,7 +378,9 @@ async def register_and_verify_workflow(
                             return True
             else:
                 _wf_sb_msg = "结构校验有提示，请进画布查看"
-            await ports.progress.set_step(state.session_id, "workflow_sandbox", "done", _wf_sb_msg)
+            await ports.progress.set_step(
+                state.session_id, "workflow_sandbox", "done", _wf_sb_msg
+            )
         else:
             wf_skip_msg = "已跳过结构校验：未创建画布工作流或模式为仅员工包。如需工作流结构校验，请选择 pack_plus_workflow 模式。"
             state.workflow_sandbox = {

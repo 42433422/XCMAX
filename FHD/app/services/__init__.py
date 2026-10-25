@@ -59,7 +59,10 @@ from app.domain.shared_services.intent_confirmation_service import (
     IntentConfirmationService,
     get_confirmation_service,
 )
-from app.domain.shared_services.intent_service import get_tool_key_with_negation_check, recognize_intents
+from app.domain.shared_services.intent_service import (
+    get_tool_key_with_negation_check,
+    recognize_intents,
+)
 
 # Lazy imports for services that cause circular dependencies with application layer
 # These are only imported when their getter functions are called
@@ -70,17 +73,26 @@ from app.utils.async_task.task_context import TaskContextService, get_task_conte
 
 
 from app.domain.shared_services.ai_product_parser import AIProductParser
-from app.domain.shared_services.conversation_service import ConversationService, get_conversation_service
+from app.domain.shared_services.conversation_service import (
+    ConversationService,
+    get_conversation_service,
+)
 from app.domain.shared_services.session_service import SessionService, get_session_service
 from app.domain.shared_services.system_service import SystemService, get_system_service
 from app.domain.shared_services.tts_service import synthesize_to_data_uri
-from app.domain.shared_services.user_preference_service import UserPreferenceService, get_user_preference_service
+from app.domain.shared_services.user_preference_service import (
+    UserPreferenceService,
+    get_user_preference_service,
+)
 
 if TYPE_CHECKING:
     from app.domain.shared_services.materials_service import MaterialsService
     from app.domain.shared_services.printer_service import PrinterService
     from app.domain.shared_services.product_import_service import ProductImportService
-    from app.domain.shared_services.user_memory_service import UserMemoryService, get_user_memory_service
+    from app.domain.shared_services.user_memory_service import (
+        UserMemoryService,
+        get_user_memory_service,
+    )
 
 
 def get_ai_product_parser() -> AIProductParser:

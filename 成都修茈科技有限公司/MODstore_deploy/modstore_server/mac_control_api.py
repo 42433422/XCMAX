@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_db, require_admin
-from modstore_server.db.mac_control import MacControlEvent, MacControlObservation, MacControlTask
+from modstore_server.db.mac_control import (
+    MacControlEvent,
+    MacControlObservation,
+    MacControlTask,
+)
 from modstore_server.mac_control_store import TERMINAL, accept, transition, view
 from modstore_server.mac_control_transport import stale_window
 from modstore_server.models import User
@@ -58,7 +62,9 @@ def create_task(
             raise HTTPException(409, "工单与客户不匹配")
         request["customer_id"] = ticket.user_id
     try:
-        task = accept(db, actor=f"admin:{user.id}", key=body.request_key, request=request)
+        task = accept(
+            db, actor=f"admin:{user.id}", key=body.request_key, request=request
+        )
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
     return {"success": True, "task": view(task), "accepted": True}
@@ -66,7 +72,9 @@ def create_task(
 
 @router.get("/tasks")
 def list_tasks(user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    rows = db.query(MacControlTask).order_by(MacControlTask.created_at.desc()).limit(100)
+    rows = (
+        db.query(MacControlTask).order_by(MacControlTask.created_at.desc()).limit(100)
+    )
     return {
         "success": True,
         "tasks": [view(r) for r in rows],
@@ -119,7 +127,9 @@ def task_detail(
     if request.get("ticket_id") or request.get("customer_id"):
         from modstore_server.mac_control_facts import customer_facts
 
-        payload["facts"] = customer_facts(db, request.get("customer_id"), request.get("ticket_id"))
+        payload["facts"] = customer_facts(
+            db, request.get("customer_id"), request.get("ticket_id")
+        )
     from modstore_server.mac_control_delivery import delivery_trace
 
     payload["delivery_trace"] = delivery_trace(db, task, payload.get("facts"))
@@ -141,7 +151,9 @@ def task_detail(
 
 
 @router.post("/tasks/{task_id}/cancel")
-def cancel_task(task_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)):
+def cancel_task(
+    task_id: str, user: User = Depends(require_admin), db: Session = Depends(get_db)
+):
     task = db.query(MacControlTask).filter_by(id=task_id).with_for_update().first()
     if task is None:
         raise HTTPException(404, "任务不存在")
@@ -176,7 +188,9 @@ def fleet(user: User = Depends(require_admin), db: Session = Depends(get_db)):
         "freshness": (
             "missing"
             if age is None
-            else "stale" if age > stale_window() or (row and row.error) else "fresh"
+            else "stale"
+            if age > stale_window() or (row and row.error)
+            else "fresh"
         ),
         "error": row.error if row else "not_observed",
         "devices": json.loads(row.payload_json) if row and row.observed_at else [],

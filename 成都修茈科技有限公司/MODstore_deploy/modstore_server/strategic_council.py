@@ -19,8 +19,12 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-from modstore_server.strategic_council_live import live_para_evidence as _live_para_evidence
-from modstore_server.strategic_council_live import live_persy_evidence as _live_persy_evidence
+from modstore_server.strategic_council_live import (
+    live_para_evidence as _live_para_evidence,
+)
+from modstore_server.strategic_council_live import (
+    live_persy_evidence as _live_persy_evidence,
+)
 from modstore_server.strategic_council_live import live_veto_state as _live_veto_state
 from modstore_server.strategic_council_live import strategic_council_status
 
@@ -47,12 +51,18 @@ def _text(value: Any, limit: int = 512) -> str:
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime").expanduser()
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR") or "/tmp/modstore_runtime"
+    ).expanduser()
 
 
 def strategic_council_ledger_path() -> Path:
     configured = _text(os.environ.get("MODSTORE_STRATEGIC_COUNCIL_LEDGER"), 4096)
-    return Path(configured).expanduser() if configured else _runtime_dir() / LEDGER_FILENAME
+    return (
+        Path(configured).expanduser()
+        if configured
+        else _runtime_dir() / LEDGER_FILENAME
+    )
 
 
 def _load_retort_alignment() -> Callable[..., dict[str, Any]]:
@@ -87,7 +97,9 @@ def _retort_result(
                 normalized.append(
                     {
                         "path": path,
-                        "hunks": item.get("hunks") if isinstance(item.get("hunks"), list) else [],
+                        "hunks": item.get("hunks")
+                        if isinstance(item.get("hunks"), list)
+                        else [],
                     }
                 )
     if not normalized:
@@ -111,12 +123,20 @@ def _retort_result(
                 package_id=package_id,
                 auto_open=True,
             )
-            effective_intent = _text(gate.get("effective_strategy_intent") or strategy_intent, 4000)
+            effective_intent = _text(
+                gate.get("effective_strategy_intent") or strategy_intent, 4000
+            )
             clarification = (
-                gate.get("clarification") if isinstance(gate.get("clarification"), dict) else {}
+                gate.get("clarification")
+                if isinstance(gate.get("clarification"), dict)
+                else {}
             )
             blockers.extend(list(gate.get("blockers") or []))
-            assessment = gate.get("assessment") if isinstance(gate.get("assessment"), dict) else {}
+            assessment = (
+                gate.get("assessment")
+                if isinstance(gate.get("assessment"), dict)
+                else {}
+            )
             engine_available = True
         else:
             raise RuntimeError("clarification_gate_disabled")
@@ -155,7 +175,9 @@ def _retort_result(
             blockers.append("retort_intent_misaligned")
 
     blockers = list(dict.fromkeys(blockers))
-    summary = assessment.get("summary") if isinstance(assessment.get("summary"), dict) else {}
+    summary = (
+        assessment.get("summary") if isinstance(assessment.get("summary"), dict) else {}
+    )
     return (
         {
             "status": "aligned" if aligned else "blocked",
@@ -177,7 +199,9 @@ def _retort_result(
 def _persy_result(evidence: Mapping[str, Any]) -> tuple[dict[str, Any], list[str]]:
     refs = evidence.get("document_refs")
     if not isinstance(refs, list):
-        refs = evidence.get("sources") if isinstance(evidence.get("sources"), list) else []
+        refs = (
+            evidence.get("sources") if isinstance(evidence.get("sources"), list) else []
+        )
     refs = [_text(item, 256) for item in refs if _text(item, 256)][:20]
     source_count = int(evidence.get("source_count") or len(refs) or 0)
     grounded = evidence.get("grounded") is True and source_count > 0

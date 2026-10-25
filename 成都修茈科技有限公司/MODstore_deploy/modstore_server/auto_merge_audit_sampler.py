@@ -22,12 +22,19 @@ DEFAULT_SAMPLE_SIZE = 100
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR")
+        or Path.home() / ".xcmax" / "modstore-daily"
+    )
 
 
 def _ledger_path() -> Path:
     raw = (os.environ.get("MODSTORE_SELF_MAINTENANCE_LEDGER") or "").strip()
-    return Path(raw).expanduser() if raw else _runtime_dir() / "self_maintenance_loop_runs.jsonl"
+    return (
+        Path(raw).expanduser()
+        if raw
+        else _runtime_dir() / "self_maintenance_loop_runs.jsonl"
+    )
 
 
 def _audit_dir() -> Path:
@@ -70,7 +77,8 @@ def _write_json(path: Path, data: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        + "\n",
         encoding="utf-8",
     )
     tmp.replace(path)
@@ -82,7 +90,9 @@ def _append_jsonl(path: Path, rows: Sequence[Dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         for row in rows:
-            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+            fh.write(
+                json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n"
+            )
 
 
 def _stable_id(*parts: Any) -> str:
@@ -124,7 +134,9 @@ def _is_auto_merge(row: Dict[str, Any]) -> bool:
 
 def _phase_from_row(row: Dict[str, Any]) -> str:
     result = _merge_result(row)
-    reason = str(result.get("reason") or _policy_decision(row).get("reason") or "").lower()
+    reason = str(
+        result.get("reason") or _policy_decision(row).get("reason") or ""
+    ).lower()
     files = "\n".join(_changed_files(row)).lower()
     if (
         result.get("safety_score_v3")
@@ -176,12 +188,18 @@ def _queue_path() -> Path:
 
 def _existing_queue_ids() -> set[str]:
     rows = _read_jsonl(_queue_path(), max_rows=50000)
-    return {str(row.get("sample_id") or "") for row in rows if str(row.get("sample_id") or "")}
+    return {
+        str(row.get("sample_id") or "")
+        for row in rows
+        if str(row.get("sample_id") or "")
+    }
 
 
 def _review_results_path() -> Path:
     raw = (os.environ.get("MODSTORE_AUTO_MERGE_AUDIT_RESULTS") or "").strip()
-    return Path(raw).expanduser() if raw else _audit_dir() / "manual_review_results.jsonl"
+    return (
+        Path(raw).expanduser() if raw else _audit_dir() / "manual_review_results.jsonl"
+    )
 
 
 def _load_review_results() -> Dict[str, Dict[str, Any]]:
@@ -260,9 +278,17 @@ def _metrics_for_phase(
     labeled_count = len(labeled)
     false_positive_rate = None if labeled_count == 0 else false_positive / labeled_count
     recommended_boundary = "hold"
-    if labeled_count >= 30 and false_positive_rate is not None and false_positive_rate < 0.01:
+    if (
+        labeled_count >= 30
+        and false_positive_rate is not None
+        and false_positive_rate < 0.01
+    ):
         recommended_boundary = "expand"
-    elif labeled_count >= 30 and false_positive_rate is not None and false_positive_rate >= 0.03:
+    elif (
+        labeled_count >= 30
+        and false_positive_rate is not None
+        and false_positive_rate >= 0.03
+    ):
         recommended_boundary = "contract"
     return {
         "false_positive_count": false_positive,
@@ -291,11 +317,14 @@ def run_auto_merge_audit_sampling_once(
         requested_phases = list(PHASES)
     size = max(
         1,
-        sample_size or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE),
+        sample_size
+        or _env_int("MODSTORE_AUTO_MERGE_AUDIT_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE),
     )
     size = min(size, 100)
     rows = [row for row in _read_jsonl(_ledger_path()) if _is_auto_merge(row)]
-    by_phase: Dict[str, List[Dict[str, Any]]] = {phase: [] for phase in requested_phases}
+    by_phase: Dict[str, List[Dict[str, Any]]] = {
+        phase: [] for phase in requested_phases
+    }
     for row in rows:
         phase = _phase_from_row(row)
         if phase in by_phase:

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from modstore_server.domain.employee.employee_types import EmployeeExecution, EmployeePack
+from modstore_server.domain.employee.employee_types import (
+    EmployeeExecution,
+    EmployeePack,
+)
 
 
 class EmployeeRepository(Protocol):
@@ -20,7 +23,9 @@ class EmployeeMetricsRepository(Protocol):
 
     def record_execution(self, execution: EmployeeExecution) -> None: ...
 
-    def list_recent(self, employee_id: str, *, limit: int = 20) -> list[dict[str, Any]]: ...
+    def list_recent(
+        self, employee_id: str, *, limit: int = 20
+    ) -> list[dict[str, Any]]: ...
 
 
 __all__ = ["EmployeeRepository", "EmployeeMetricsRepository"]

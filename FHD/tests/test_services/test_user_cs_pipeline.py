@@ -46,7 +46,9 @@ def pipeline_dir(tmp_path):
 @pytest.fixture
 def mock_pipeline_roots(pipeline_dir):
     """mock _pipeline_roots 返回临时目录。"""
-    with patch("app.domain.shared_services.user_cs_pipeline._pipeline_roots", return_value=[pipeline_dir]):
+    with patch(
+        "app.domain.shared_services.user_cs_pipeline._pipeline_roots", return_value=[pipeline_dir]
+    ):
         yield pipeline_dir
 
 

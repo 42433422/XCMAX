@@ -35,7 +35,9 @@ def run_autonomy_metrics_snapshot(*, now: datetime | None = None) -> dict[str, A
     from app.domain.autonomy.operating_metrics import record_autonomy_metrics_snapshots
 
     snapshots = record_autonomy_metrics_snapshots(now=current)
-    attention = [item for item in snapshots if item.get("status") in _ATTENTION_STATUSES]
+    attention = [
+        item for item in snapshots if item.get("status") in _ATTENTION_STATUSES
+    ]
     severity = (
         "critical"
         if any(item.get("status") == "failed" for item in attention)

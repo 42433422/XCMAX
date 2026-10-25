@@ -16,7 +16,10 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.workbench.catalog import _write_workflow_reference_report, store_catalog_row
+from modstore_server.workbench.catalog import (
+    _write_workflow_reference_report,
+    store_catalog_row,
+)
 from modstore_server.workbench.schemas import EmployeeExportBody, EmployeeSaveBody
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
@@ -38,7 +41,10 @@ async def employee_save_impl(
     import tempfile as _tmp
     import zipfile as _zipfile
 
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 
     mf = body.manifest
@@ -53,11 +59,15 @@ async def employee_save_impl(
         raise HTTPException(400, "manifest 中缺少 identity.id 或顶层 id 字段")
     pack_id = _re.sub("[^a-z0-9._-]", "-", raw_id.lower()).strip("-")[:48]
     if not pack_id:
-        raise HTTPException(400, f"无法从 employee_id/manifest.id 生成合法 pack_id: {raw_id!r}")
+        raise HTTPException(
+            400, f"无法从 employee_id/manifest.id 生成合法 pack_id: {raw_id!r}"
+        )
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info("employee_save: manifest validation warnings count=%s", len(registry_errs))
+        _LOG.info(
+            "employee_save: manifest validation warnings count=%s", len(registry_errs)
+        )
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:
@@ -69,14 +79,16 @@ async def employee_save_impl(
             embed_workflow_bundles_in_manifest(db_ref, mf)
         except RECOVERABLE_ERRORS as _bundle_exc:
             _LOG.warning(
-                "employee_save: embed bundles failed error_type=%s", type(_bundle_exc).__name__
+                "employee_save: embed bundles failed error_type=%s",
+                type(_bundle_exc).__name__,
             )
             ref_warnings = _write_workflow_reference_report(db_ref, user, mf)
     from modman.artifact_constants import normalize_artifact
 
     if normalize_artifact(mf) != "employee_pack":
         raise HTTPException(
-            400, f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}"
+            400,
+            f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}",
         )
     from modstore_server.employee_asset_pipeline import (
         DIRECT_PYTHON_RUNTIME_MISSING_MSG,
@@ -94,7 +106,11 @@ async def employee_save_impl(
     ).strip()
     _wants_word = manifest_expects_word_runtime(mf, brief=_brief_for_pack)
     _has_runtime = pack_dir.is_dir() and pack_has_direct_python_runtime(pack_dir)
-    if _wants_word and "direct_python" in manifest_actions_handlers(mf) and (not _has_runtime):
+    if (
+        _wants_word
+        and "direct_python" in manifest_actions_handlers(mf)
+        and (not _has_runtime)
+    ):
         raise HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         mf = persist_manifest_to_pack_dir(pack_dir, mf, brief=_brief_for_pack)
@@ -119,7 +135,9 @@ async def employee_save_impl(
                         if not member.endswith("/"):
                             dest.write_bytes(zf.read(member))
         except RECOVERABLE_ERRORS as exc:
-            _LOG.warning("employee_save: zip extraction failed error_type=%s", type(exc).__name__)
+            _LOG.warning(
+                "employee_save: zip extraction failed error_type=%s", type(exc).__name__
+            )
         finally:
             try:
                 tmp_zip_path.unlink(missing_ok=True)
@@ -136,13 +154,18 @@ async def employee_save_impl(
                 mf = json.loads(mf_path_rh.read_text(encoding="utf-8"))
     except RECOVERABLE_ERRORS as _rh_exc:
         _LOG.warning(
-            "employee_save: rehydrate bundles failed error_type=%s", type(_rh_exc).__name__
+            "employee_save: rehydrate bundles failed error_type=%s",
+            type(_rh_exc).__name__,
         )
     eskill_result: Dict[str, Any] = {"registered": 0, "skipped": False, "error": ""}
     if body.register_skills:
         try:
-            from modstore_server.employee_skill_register import register_employee_pack_as_eskills
-            from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+            from modstore_server.employee_skill_register import (
+                register_employee_pack_as_eskills,
+            )
+            from modstore_server.mod_scaffold_runner import (
+                resolve_llm_provider_model_auto,
+            )
 
             sf_reg = ports.database()
             with sf_reg() as db_reg:
@@ -161,7 +184,11 @@ async def employee_save_impl(
                 )
                 panel_summary = ""
                 wf_rows = mf.get("workflow_employees") or []
-                if isinstance(wf_rows, list) and wf_rows and isinstance(wf_rows[0], dict):
+                if (
+                    isinstance(wf_rows, list)
+                    and wf_rows
+                    and isinstance(wf_rows[0], dict)
+                ):
                     panel_summary = str(wf_rows[0].get("panel_summary") or "")
                 sf_sk = ports.database()
                 with sf_sk() as db_sk:
@@ -198,7 +225,9 @@ async def employee_save_impl(
                         matched = name_to_spec.get(sk_dict.get("name") or "")
                         if matched:
                             sk_dict["eskill_id"] = matched["eskill_id"]
-                            sk_dict["vibe_skill_id"] = matched.get("vibe_skill_id") or ""
+                            sk_dict["vibe_skill_id"] = (
+                                matched.get("vibe_skill_id") or ""
+                            )
                         updated.append(sk_dict)
                     existing_names = {s.get("name") or "" for s in updated}
                     for spec in specs:
@@ -216,7 +245,8 @@ async def employee_save_impl(
                     mf["employee_config_v2"] = v2
                     mf_path = pack_dir / "manifest.json"
                     mf_path.write_text(
-                        json.dumps(mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                        json.dumps(mf, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
                     )
         except RECOVERABLE_ERRORS as exc:
             _LOG.warning("employee_save: Skill registration failed; saving continues")
@@ -230,8 +260,12 @@ async def employee_save_impl(
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(500, f"员工包打包失败: {exc}") from exc
-    version = str(mf.get("version") or (mf.get("identity") or {}).get("version") or "1.0.0").strip()
-    name = str(mf.get("name") or (mf.get("identity") or {}).get("name") or pack_id).strip()
+    version = str(
+        mf.get("version") or (mf.get("identity") or {}).get("version") or "1.0.0"
+    ).strip()
+    name = str(
+        mf.get("name") or (mf.get("identity") or {}).get("name") or pack_id
+    ).strip()
     rec = {
         "id": pack_id,
         "name": name,
@@ -240,7 +274,9 @@ async def employee_save_impl(
             mf.get("description") or (mf.get("identity") or {}).get("description") or ""
         ),
         "artifact": "employee_pack",
-        "industry": str(mf.get("industry") or (mf.get("commerce") or {}).get("industry") or "通用"),
+        "industry": str(
+            mf.get("industry") or (mf.get("commerce") or {}).get("industry") or "通用"
+        ),
         "release_channel": "stable",
         "commerce": mf.get("commerce") or {"mode": "free", "price": 0},
         "license": {"type": "personal", "verify_url": None},
@@ -263,7 +299,9 @@ async def employee_save_impl(
     sf = ports.database()
     with sf() as db:
         try:
-            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=cast(int, user.id))
+            upsert_catalog_item_from_xc_package_dict(
+                db, saved, author_id=cast(int, user.id)
+            )
             store_catalog_row(
                 db,
                 pack_id=pack_id,
@@ -324,7 +362,9 @@ async def employee_export(
     mf["id"] = mf.get("id") or pack_id
     mf, registry_errs = ports.normalize_manifest(mf, pack_id)
     if registry_errs:
-        _LOG.info("employee_export: manifest validation warnings count=%s", len(registry_errs))
+        _LOG.info(
+            "employee_export: manifest validation warnings count=%s", len(registry_errs)
+        )
     ref_warnings: List[str] = []
     sf_ref = ports.database()
     with sf_ref() as db_ref:
@@ -358,12 +398,17 @@ async def employee_export(
         raise HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         if body.standalone:
-            from modstore_server.employee_pack_export import _build_employee_pack_zip_with_source
+            from modstore_server.employee_pack_export import (
+                _build_employee_pack_zip_with_source,
+            )
 
             zip_bytes = _build_employee_pack_zip_with_source(pack_id, mf, None)
         else:
             zip_bytes = build_employee_pack_zip_for_library(
-                pack_id, mf, pack_dir=_lib_pack if _lib_pack.is_dir() else None, brief=_export_brief
+                pack_id,
+                mf,
+                pack_dir=_lib_pack if _lib_pack.is_dir() else None,
+                brief=_export_brief,
             )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

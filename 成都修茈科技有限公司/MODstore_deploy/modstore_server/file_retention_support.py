@@ -9,7 +9,12 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import and_, func, or_, select
 
-from modstore_server.models import EmployeeExecutionMetric, Notification, User, get_session_factory
+from modstore_server.models import (
+    EmployeeExecutionMetric,
+    Notification,
+    User,
+    get_session_factory,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -36,7 +41,9 @@ def prune_notifications(
 
     dry = is_dry_run() if dry_run is None else bool(dry_run)
     current = now or datetime.now(UTC)
-    system_keep = _bounded_env_int("MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER", 200, 10, 5000)
+    system_keep = _bounded_env_int(
+        "MODSTORE_NOTIFICATION_SYSTEM_KEEP_PER_USER", 200, 10, 5000
+    )
     execution_keep = _bounded_env_int(
         "MODSTORE_NOTIFICATION_EXECUTION_KEEP_PER_USER", 200, 10, 5000
     )
@@ -74,12 +81,17 @@ def prune_notifications(
     with session_factory() as session:
         candidate_rows = candidate_ids.subquery()
         candidate_count = int(
-            session.execute(select(func.count()).select_from(candidate_rows)).scalar_one() or 0
+            session.execute(
+                select(func.count()).select_from(candidate_rows)
+            ).scalar_one()
+            or 0
         )
         candidate_by_kind = {
             str(kind): int(count or 0)
             for kind, count in session.execute(
-                select(ranked.c.kind, func.count()).where(candidate_filter).group_by(ranked.c.kind)
+                select(ranked.c.kind, func.count())
+                .where(candidate_filter)
+                .group_by(ranked.c.kind)
             ).all()
         }
         selected_count = min(candidate_count, max_delete)

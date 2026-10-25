@@ -92,7 +92,10 @@ def build_employee_pack_manifest_from_workflow(
     name = name_src[:200] or pack_id
     ver = str(mod_manifest.get("version") or "1.0.0").strip() or "1.0.0"
     desc = str(
-        wf.get("panel_summary") or wf.get("description") or mod_manifest.get("description") or ""
+        wf.get("panel_summary")
+        or wf.get("description")
+        or mod_manifest.get("description")
+        or ""
     ).strip()[:4000]
 
     emp_id = pack_id
@@ -150,9 +153,13 @@ def build_employee_pack_manifest_from_workflow(
 
 
 def _ensure_v2_handlers_consistent(manifest: Dict[str, Any], emp_id: str) -> None:
-    top_actions = manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
+    top_actions = (
+        manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
+    )
     top_handlers = (
-        top_actions.get("handlers") if isinstance(top_actions.get("handlers"), list) else []
+        top_actions.get("handlers")
+        if isinstance(top_actions.get("handlers"), list)
+        else []
     )
     v2 = (
         manifest.get("employee_config_v2")
@@ -160,7 +167,11 @@ def _ensure_v2_handlers_consistent(manifest: Dict[str, Any], emp_id: str) -> Non
         else {}
     )
     v2_actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    v2_handlers = v2_actions.get("handlers") if isinstance(v2_actions.get("handlers"), list) else []
+    v2_handlers = (
+        v2_actions.get("handlers")
+        if isinstance(v2_actions.get("handlers"), list)
+        else []
+    )
     if top_handlers and v2_handlers != top_handlers:
         v2_actions["handlers"] = list(top_handlers)
     if "direct_python" in (v2_actions.get("handlers") or []):
@@ -184,7 +195,9 @@ def _ensure_v2_handlers_consistent(manifest: Dict[str, Any], emp_id: str) -> Non
     agent_cfg = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
     few = agent_cfg.get("few_shot_examples")
     if not few:
-        emp_name = str(v2.get("identity", {}).get("name") or manifest.get("name") or emp_id)
+        emp_name = str(
+            v2.get("identity", {}).get("name") or manifest.get("name") or emp_id
+        )
         if "审核" in emp_name or "合同" in emp_name:
             agent_cfg["few_shot_examples"] = [
                 {
@@ -222,29 +235,39 @@ def _render_employee_py_for_manifest(
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     if "direct_python" in handlers:
-        from modstore_server.employee_asset_pipeline import render_direct_python_asset_worker
+        from modstore_server.employee_asset_pipeline import (
+            render_direct_python_asset_worker,
+        )
 
         runtime_mod = re.sub(r"[^a-z0-9_]+", "_", employee_id.lower()).strip("_")
         if runtime_mod.endswith("_employee"):
             runtime_mod = runtime_mod[: -len("_employee")] or runtime_mod
         rule_spec = {}
         direct_cfg = (
-            actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+            actions.get("direct_python")
+            if isinstance(actions.get("direct_python"), dict)
+            else {}
         )
         if direct_cfg:
             rule_spec["default_output_relpath"] = direct_cfg.get(
                 "default_output_relpath", "outputs/employee_output.xlsx"
             )
-            rule_spec["default_template_relpath"] = direct_cfg.get("default_template_relpath", "")
+            rule_spec["default_template_relpath"] = direct_cfg.get(
+                "default_template_relpath", ""
+            )
         return render_direct_python_asset_worker(
             employee_id=employee_id,
             label=label,
             runtime_module=runtime_mod,
             rule_spec=rule_spec,
         )
-    return render_employee_pack_employee_py(employee_id=employee_id, stem=stem, label=label)
+    return render_employee_pack_employee_py(
+        employee_id=employee_id, stem=stem, label=label
+    )
 
 
 def collect_vendor_modules_from_pack(pack_dir: Path) -> Optional[Dict[str, str]]:
@@ -304,8 +327,14 @@ def _build_employee_pack_zip_with_source(
             if isinstance(manifest.get("employee_config_v2"), dict)
             else {}
         )
-        act_check = v2_check.get("actions") if isinstance(v2_check.get("actions"), dict) else {}
-        h_check = act_check.get("handlers") if isinstance(act_check.get("handlers"), list) else []
+        act_check = (
+            v2_check.get("actions") if isinstance(v2_check.get("actions"), dict) else {}
+        )
+        h_check = (
+            act_check.get("handlers")
+            if isinstance(act_check.get("handlers"), list)
+            else []
+        )
         if "direct_python" in h_check and "_DISPATCH" in source_py:
             use_source = None
     emp_py = (source_py.strip() + "\n") if use_source else rendered_py
@@ -315,7 +344,9 @@ def _build_employee_pack_zip_with_source(
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     is_direct_python = "direct_python" in handlers
     runtime_mod_name = re.sub(r"[^a-z0-9_]+", "_", eid.lower()).strip("_")
     if runtime_mod_name.endswith("_employee"):
@@ -332,7 +363,9 @@ def _build_employee_pack_zip_with_source(
         # ── vendor 运行时模块（direct_python 员工必需）───────────────────────
         if is_direct_python and vendor_modules:
             for mod_name, mod_src in vendor_modules.items():
-                zf.writestr(f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src)
+                zf.writestr(
+                    f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src
+                )
         elif is_direct_python:
             from modstore_server.employee_asset_pipeline import render_runtime_modules
 
@@ -346,11 +379,15 @@ def _build_employee_pack_zip_with_source(
                 "default_output_relpath": direct_cfg.get(
                     "default_output_relpath", "outputs/employee_output.xlsx"
                 ),
-                "default_template_relpath": direct_cfg.get("default_template_relpath", ""),
+                "default_template_relpath": direct_cfg.get(
+                    "default_template_relpath", ""
+                ),
             }
             runtime_modules = render_runtime_modules(rule_spec)
             for mod_name, mod_src in runtime_modules.items():
-                zf.writestr(f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src)
+                zf.writestr(
+                    f"{pack_id}/backend/vendor/{runtime_mod_name}/{mod_name}", mod_src
+                )
         if source_py:
             zf.writestr(f"{pack_id}/source/employee.py", source_py)
             zf.writestr(

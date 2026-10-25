@@ -1,6 +1,6 @@
 {
   "schema": "xcagi.product_lines_status/v1",
-  "generated_at": "2026-10-24 03:48 UTC",
+  "generated_at": "2026-10-25 02:11 UTC",
   "generator": "FHD/scripts/dev/product_lines_status.py",
   "config": "FHD/config/product_lines.yaml",
   "policy": "本文件为生成物：版本/发布/能力/覆盖率的数字全部取自各自权威源，禁止手改；三线「成熟度」只呈现能力目录自有的证据分级计数与 Release Gate 结论，不合成任何自造评分。",
@@ -93,16 +93,16 @@
   "capability_totals": {
     "total": 157,
     "by_status": {
-      "verified": 132,
-      "partial": 18,
-      "implemented": 3,
-      "planned": 4
+      "verified": 0,
+      "partial": 0,
+      "implemented": 124,
+      "planned": 33
     },
     "cancelled_count": 0,
     "domains": 10,
     "modules": 28,
-    "verified_total": 132,
-    "last_verified_at": "2026-09-30",
+    "verified_total": 0,
+    "last_verified_at": null,
     "platform_counts": {
       "windows": 98,
       "macos": 99,
@@ -113,24 +113,24 @@
     "platform_coverage": {
       "windows": {
         "applicable": 98,
-        "verified": 97,
+        "verified": 0,
         "partial": 0,
-        "pending": 1,
-        "last_verified_at": "2026-09-29"
+        "pending": 98,
+        "last_verified_at": null
       },
       "macos": {
         "applicable": 99,
-        "verified": 82,
-        "partial": 13,
-        "pending": 4,
-        "last_verified_at": "2026-09-30"
+        "verified": 0,
+        "partial": 0,
+        "pending": 99,
+        "last_verified_at": null
       },
       "web": {
         "applicable": 128,
-        "verified": 127,
+        "verified": 0,
         "partial": 0,
-        "pending": 1,
-        "last_verified_at": "2026-09-29"
+        "pending": 128,
+        "last_verified_at": null
       },
       "android": {
         "applicable": 8,
@@ -147,9 +147,54 @@
         "last_verified_at": null
       }
     },
-    "completion": 93
+    "completion": 32
   },
-  "capability_warnings": [],
+  "capability_warnings": [
+    "[base-account-security] 实现路径不存在: FHD/app/application/account_security.py",
+    "[base-device-bind] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
+    "[base-update-mgmt] 实现路径不存在: FHD/app/application/enterprise_deploy_pull.py",
+    "[base-update-mgmt] 实现路径不存在: FHD/app/application/admin_deploy_push.py",
+    "[ai-chat-core] 实现路径不存在: FHD/app/domain/services/conversation/chat_tool_intent.py",
+    "[ai-intent] 实现路径不存在: FHD/app/domain/services/conversation/chat_tool_intent.py",
+    "[ai-model-access] 实现路径不存在: FHD/app/services/conversation/llm_adapter.py",
+    "[ai-multimodal] 实现路径不存在: FHD/app/services/conversation",
+    "[ai-run-monitor] 实现路径不存在: FHD/app/services/task_context_service.py",
+    "[ai-csv] 实现路径不存在: FHD/app/services/report_export.py",
+    "[ai-pdf] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-ppt] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-word] 实现路径不存在: FHD/app/services/document_templates_service.py",
+    "[ai-ocr-doc] 实现路径不存在: FHD/app/services/ocr_service.py",
+    "[ai-ocr-doc] 实现路径不存在: FHD/app/services/paddle_ocr_runner.py",
+    "[ai-vector-rag] 实现路径不存在: FHD/app/services/tools_workflow_memory_rag.py",
+    "[erp-master-data] 实现路径不存在: FHD/app/services/products_service.py",
+    "[erp-master-data] 实现路径不存在: FHD/app/services/business_db_customer_mutations.py",
+    "[erp-purchase-inbound] 实现路径不存在: FHD/app/services/purchase_service.py",
+    "[erp-inventory-warehouse] 实现路径不存在: FHD/app/services/inventory_warehouses.py",
+    "[erp-inventory-warehouse] 实现路径不存在: FHD/app/services/inventory_movements.py",
+    "[erp-replenishment] 实现路径不存在: FHD/app/services/replenishment_service.py",
+    "[erp-uom] 实现路径不存在: FHD/app/services/uom_service.py",
+    "[erp-ar-ap] 实现路径不存在: FHD/app/services/accounting_services.py",
+    "[erp-report] 实现路径不存在: FHD/app/services/report_service.py",
+    "[erp-invoice] 实现路径不存在: FHD/app/services/tax_invoice_provider.py",
+    "[erp-reconcile] 实现路径不存在: FHD/app/services/fhd_payment_reconciliation.py",
+    "[erp-contract] 实现路径不存在: FHD/app/services/contract_lifecycle.py",
+    "[erp-ocr] 实现路径不存在: FHD/app/services/ocr_service.py",
+    "[ch-notify] 实现路径不存在: FHD/app/services/mobile_push.py",
+    "[ch-task-center] 实现路径不存在: FHD/app/application/approval_notifications.py",
+    "[ch-mobile-pair] 实现路径不存在: FHD/app/services/mobile_relay_pairing.py",
+    "[mods-pack-io] 实现路径不存在: FHD/app/services/mod_zip_normalize.py",
+    "[mods-store-sync] 实现路径不存在: FHD/app/services/modstore_library_sync.py",
+    "[mods-store-sync] 实现路径不存在: FHD/app/services/catalog_visibility.py",
+    "[ind-workspace] 实现路径不存在: FHD/app/application/attendance_reference_data.py",
+    "[pay-refund] 实现路径不存在: FHD/app/services/reconciliation_scheduler.py",
+    "[pay-author-revenue] 实现路径不存在: FHD/app/services/catalog_client.py",
+    "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_acceptance.py",
+    "[ops-work-order] 实现路径不存在: FHD/app/services/work_order_ssot.py",
+    "[ops-customer-value] 实现路径不存在: FHD/app/application/founder_autonomy_primary_gates.py",
+    "[sec-audit] 实现路径不存在: FHD/app/application/audit_log_reader.py",
+    "[sec-ai-trace] 实现路径不存在: FHD/app/services/ai_action_audit_service.py",
+    "[sec-model-gate] 实现路径不存在: FHD/app/services/conversation/llm_adapter.py"
+  ],
   "capability_domains_unassigned": [],
   "lines": [
     {
@@ -179,11 +224,10 @@
         ],
         "total": 102,
         "by_status": {
-          "verified": 93,
-          "partial": 7,
-          "planned": 2
+          "implemented": 77,
+          "planned": 25
         },
-        "verified": 93
+        "verified": 0
       },
       "releases": {
         "macos": {
@@ -264,11 +308,10 @@
         ],
         "total": 38,
         "by_status": {
-          "verified": 35,
-          "partial": 2,
-          "planned": 1
+          "implemented": 33,
+          "planned": 5
         },
-        "verified": 35
+        "verified": 0
       },
       "releases": {
         "web": {
@@ -297,12 +340,10 @@
         ],
         "total": 17,
         "by_status": {
-          "partial": 9,
-          "verified": 4,
-          "implemented": 3,
-          "planned": 1
+          "implemented": 14,
+          "planned": 3
         },
-        "verified": 4
+        "verified": 0
       },
       "releases": {
         "android": {

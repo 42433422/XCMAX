@@ -285,12 +285,17 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
+            ),
             patch(
                 "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="report",
+            ),
             patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
             patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
@@ -339,12 +344,17 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
+            ),
             patch(
                 "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="report",
+            ),
             patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
             patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
@@ -390,12 +400,17 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch(
+                "app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()
+            ),
             patch(
                 "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch(
+                "app.domain.shared_services.distillation_trainer.classification_report",
+                return_value="report",
+            ),
             patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
             patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
@@ -423,7 +438,9 @@ class TestDistillationTrainerPrepareDataStratify:
         mock_model = MagicMock()
         with (
             patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as MockTokenizer,
-            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as MockModel,
             patch("app.domain.shared_services.distillation_trainer.DataLoader") as MockDataLoader,
             patch("app.domain.shared_services.distillation_trainer.train_test_split") as mock_split,
         ):
@@ -590,7 +607,9 @@ class TestDistillationTrainerEvaluateEdgeCases:
         preds_ft = _FT([0])
         with (
             patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch,
-            patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0),
+            patch(
+                "app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0
+            ),
         ):
             mock_torch.argmax.return_value = preds_ft
             result = trainer.evaluate()

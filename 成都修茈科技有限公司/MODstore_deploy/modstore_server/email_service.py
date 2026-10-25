@@ -163,7 +163,9 @@ def email_status() -> Dict[str, object]:
     _load_modstore_env()
     state = _config_state()
     state["mode"] = (
-        "debug" if state["debug"] else ("smtp" if state["configured"] else "unconfigured")
+        "debug"
+        if state["debug"]
+        else ("smtp" if state["configured"] else "unconfigured")
     )
     return state
 
@@ -288,7 +290,9 @@ def send_test_email(email: str) -> Dict[str, object]:
     }
 
 
-def send_simple_html_email(to_email: str, subject: str, html_body: str) -> Dict[str, object]:
+def send_simple_html_email(
+    to_email: str, subject: str, html_body: str
+) -> Dict[str, object]:
     """发送任意 HTML 邮件（站内通知镜像等）；未配置 SMTP 且非 DEBUG 时静默跳过。"""
     _load_modstore_env()
     if _email_debug_enabled():

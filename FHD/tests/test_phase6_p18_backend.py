@@ -740,7 +740,10 @@ class TestOCRServiceInit:
     def test_init_auto_backend_no_engines(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         with (
-            patch("app.domain.shared_services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
             patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
             patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):
@@ -751,15 +754,23 @@ class TestOCRServiceInit:
 
     def test_init_paddle_backend_unavailable_logs_error(self, monkeypatch, caplog):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
-        with patch("app.domain.shared_services.paddle_ocr_runner.check_paddle_available", return_value=False):
+        with patch(
+            "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+            return_value=False,
+        ):
             svc = OCRService()
         assert svc._paddle_enabled is False
 
     def test_init_paddle_backend_available(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
         with (
-            patch("app.domain.shared_services.paddle_ocr_runner.check_paddle_available", return_value=True),
-            patch("app.domain.shared_services.paddle_ocr_runner.get_paddle_ocr_instance") as mock_inst,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=True,
+            ),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.get_paddle_ocr_instance"
+            ) as mock_inst,
         ):
             svc = OCRService()
         assert svc._paddle_enabled is True
@@ -768,7 +779,10 @@ class TestOCRServiceInit:
     def test_init_easyocr_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "easyocr")
         with (
-            patch("app.domain.shared_services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
             patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
         ):
             svc = OCRService()
@@ -777,7 +791,10 @@ class TestOCRServiceInit:
     def test_init_tesseract_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "tesseract")
         with (
-            patch("app.domain.shared_services.paddle_ocr_runner.check_paddle_available", return_value=False),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
             patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
             patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):

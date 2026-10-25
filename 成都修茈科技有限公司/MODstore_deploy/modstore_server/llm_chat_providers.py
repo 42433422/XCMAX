@@ -100,7 +100,9 @@ async def stream_openai_compatible(
         tools=tools,
         tool_choice=tool_choice,
     )
-    async with _facade().httpx.AsyncClient(timeout=None, limits=_facade()._STREAM_LIMITS) as client:
+    async with _facade().httpx.AsyncClient(
+        timeout=None, limits=_facade()._STREAM_LIMITS
+    ) as client:
         async with client.stream(
             "POST",
             url,
@@ -256,7 +258,9 @@ def _oai_to_gemini(messages: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     return contents
 
 
-async def chat_google(api_key: str, model: str, messages: List[Dict[str, str]]) -> Dict[str, Any]:
+async def chat_google(
+    api_key: str, model: str, messages: List[Dict[str, str]]
+) -> Dict[str, Any]:
     contents = _facade()._oai_to_gemini(messages)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     async with _facade().httpx.AsyncClient(

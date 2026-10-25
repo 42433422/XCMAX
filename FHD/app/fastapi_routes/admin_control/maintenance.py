@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from .ports import ErrorPolicy, MarketProxy
+from .port_contracts import ErrorPolicy, MarketProxy
 
 
 class SelfMaintenance:

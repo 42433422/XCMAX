@@ -110,7 +110,8 @@ async def get_industry_presets():
         "success": True,
         "data": {
             "schema_version": doc.get("schema_version", 1),
-            "preset_ids": doc.get("preset_ids") or list((doc.get("presets") or {}).keys()),
+            "preset_ids": doc.get("preset_ids")
+            or list((doc.get("presets") or {}).keys()),
             "presets": doc.get("presets") or {},
         },
     }
@@ -127,11 +128,15 @@ async def get_workflow_employee_catalog():
         "success": True,
         "data": {
             "catalog": catalog,
-            "workflow_delivery": (prof or {}).get("workflow_delivery") if prof else None,
+            "workflow_delivery": (prof or {}).get("workflow_delivery")
+            if prof
+            else None,
             "workflow_monolith_mod_id": (
                 (prof or {}).get("workflow_monolith_mod_id") if prof else None
             ),
-            "workflow_split_mod_ids": (prof or {}).get("workflow_split_mod_ids") if prof else None,
+            "workflow_split_mod_ids": (prof or {}).get("workflow_split_mod_ids")
+            if prof
+            else None,
             "static_catalog": static or {},
         },
     }
@@ -152,7 +157,11 @@ async def get_employee_registry_rules():
             ):
                 if trial.is_file():
                     base = json.loads(trial.read_text(encoding="utf-8"))
-                    rules = base.get("employee_registry_rules") if isinstance(base, dict) else {}
+                    rules = (
+                        base.get("employee_registry_rules")
+                        if isinstance(base, dict)
+                        else {}
+                    )
                     break
             else:
                 rules = {}

@@ -193,7 +193,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "config.json"), "w") as f:
             json.dump(config_data, f)
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             mock_auto_tokenizer_cls.from_pretrained.assert_called()
@@ -215,7 +217,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "config.json"), "w") as f:
             json.dump(config_data, f)
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             # Should use standard ID_TO_LABEL, not LABEL_0
@@ -238,7 +242,9 @@ class TestBertIntentClassifierModelLoading:
         with open(os.path.join(model_dir, "intent_labels.json"), "w") as f:
             json.dump(labels_data, f)
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_path=model_dir, device="cpu")
             assert clf.id2label[0] == "greet"
@@ -251,7 +257,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls = MagicMock()
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="bert-base-chinese", device="cpu")
             mock_auto_tokenizer_cls.from_pretrained.assert_called()
@@ -264,7 +272,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls.from_pretrained.side_effect = OSError("no network")
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="bert-base-chinese", device="cpu")
             assert clf.model is None
@@ -282,7 +292,9 @@ class TestBertIntentClassifierModelLoading:
         mock_auto_model_cls = MagicMock()
         mock_auto_tokenizer_cls = MagicMock()
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, mock_auto_model_cls, mock_auto_tokenizer_cls)
             clf = BertIntentClassifier(model_name="custom-model-name", device="cpu")
             # Should call from_pretrained with "custom-model-name"
@@ -325,7 +337,9 @@ class TestBertIntentClassifierPredictWithModel:
         mock_tokenizer = MagicMock()
         mock_tokenizer.return_value = {"input_ids": MagicMock(), "attention_mask": MagicMock()}
 
-        with patch("app.domain.shared_services.bert_intent_service._import_ml_stack") as mock_import:
+        with patch(
+            "app.domain.shared_services.bert_intent_service._import_ml_stack"
+        ) as mock_import:
             mock_import.return_value = (mock_torch, MagicMock(), MagicMock())
             clf = BertIntentClassifier(device="cpu", local_files_only=True)
 

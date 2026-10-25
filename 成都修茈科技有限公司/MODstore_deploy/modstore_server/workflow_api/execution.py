@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import User, Workflow, WorkflowExecution, get_session_factory
+from modstore_server.models import (
+    User,
+    Workflow,
+    WorkflowExecution,
+    get_session_factory,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.quota_middleware import require_llm_credit
 from modstore_server.workflow_api.schemas import WorkflowExecuteBody
@@ -59,14 +64,19 @@ async def execute_workflow(
         require_llm_credit(qdb, user.id, 1)
     failure_message: Optional[str] = None
     try:
-        output_data = engine_execute(workflow_id, body.input_data or {}, user_id=user.id)
+        output_data = engine_execute(
+            workflow_id, body.input_data or {}, user_id=user.id
+        )
         execution.status = "completed"
         execution.output_data = json.dumps(output_data)
         execution.completed_at = datetime.now(UTC)
         # 统一计费 + 防免费洞：删计次后，java 后端经 JavaWallet 结算、python 后端扣钱包，
         # 永不免费（见 llm_billing.bill_internal_llm_floor）。
         try:
-            from modstore_server.llm_billing import authorization_header, bill_internal_llm_floor
+            from modstore_server.llm_billing import (
+                authorization_header,
+                bill_internal_llm_floor,
+            )
 
             await bill_internal_llm_floor(
                 authorization_header(request),
@@ -84,7 +94,9 @@ async def execute_workflow(
         failure_message = str(e)
         execution.status = "failed"
         execution.error_message = failure_message
-        execution.output_data = json.dumps(getattr(e, "evidence", {}), ensure_ascii=False)
+        execution.output_data = json.dumps(
+            getattr(e, "evidence", {}), ensure_ascii=False
+        )
         execution.completed_at = datetime.now(UTC)
     db.commit()
 
@@ -95,7 +107,11 @@ async def execute_workflow(
             WORKFLOW_EXECUTION_FAILED,
         )
 
-        event_name = WORKFLOW_EXECUTION_FAILED if failure_message else WORKFLOW_EXECUTION_COMPLETED
+        event_name = (
+            WORKFLOW_EXECUTION_FAILED
+            if failure_message
+            else WORKFLOW_EXECUTION_COMPLETED
+        )
         webhook_dispatcher.publish_event(
             event_name,
             aggregate_id=str(execution.id),
@@ -125,7 +141,9 @@ async def execute_workflow(
         "input_data": json.loads(execution.input_data),
         "output_data": json.loads(execution.output_data or "{}"),
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+        "completed_at": execution.completed_at.isoformat()
+        if execution.completed_at
+        else None,
     }
 
 
@@ -197,5 +215,7 @@ async def get_execution_detail(
         "output_data": json.loads(execution.output_data or "{}"),
         "error_message": execution.error_message,
         "started_at": execution.started_at.isoformat(),
-        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+        "completed_at": execution.completed_at.isoformat()
+        if execution.completed_at
+        else None,
     }

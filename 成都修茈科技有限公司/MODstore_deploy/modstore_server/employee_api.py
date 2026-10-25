@@ -10,7 +10,16 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
@@ -98,7 +107,9 @@ async def list_employees(
         is_admin = bool(getattr(user, "is_admin", False))
         if raw_scope == "duty" and not is_admin:
             raise HTTPException(403, "上岗员工仅管理端可见")
-        effective_scope = ("all" if is_admin else "store") if raw_scope == "auto" else raw_scope
+        effective_scope = (
+            ("all" if is_admin else "store") if raw_scope == "auto" else raw_scope
+        )
         employees = [_annotate_employee_list_row(e) for e in list_employees_exec()]
         duty_rows = _list_duty_employee_rows()
         if effective_scope == "duty":
@@ -109,7 +120,12 @@ async def list_employees(
             employees = [e for e in employees if not e.get("is_duty_employee")]
         elif effective_scope == "all" and is_admin:
             by_id = {
-                str(e.get("employee_id") or e.get("pack_id") or e.get("pkg_id") or e.get("id")): e
+                str(
+                    e.get("employee_id")
+                    or e.get("pack_id")
+                    or e.get("pkg_id")
+                    or e.get("id")
+                ): e
                 for e in employees
                 if not e.get("is_duty_employee")
             }
@@ -130,7 +146,9 @@ async def list_employees(
     summary="运维：员工目录与 manifest 解析路径（仅管理员）",
 )
 async def employee_catalog_manifest_diagnostics(
-    pack_id: Optional[str] = Query(None, description="可选：检查该包 id 是否在目录或 Mod 库可解析"),
+    pack_id: Optional[str] = Query(
+        None, description="可选：检查该包 id 是否在目录或 Mod 库可解析"
+    ),
     user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -180,14 +198,17 @@ async def employee_catalog_manifest_diagnostics(
         try:
             recs = catalog_store.employee_pack_records_from_store()
             in_json = pid in recs or any(
-                catalog_store.norm_pkg_id(k) == catalog_store.norm_pkg_id(pid) for k in recs
+                catalog_store.norm_pkg_id(k) == catalog_store.norm_pkg_id(pid)
+                for k in recs
             )
         except RECOVERABLE_ERRORS:
             pass
         try:
             in_db = (
                 db.query(CatalogItem.id)
-                .filter(CatalogItem.pkg_id == pid, CatalogItem.artifact == "employee_pack")
+                .filter(
+                    CatalogItem.pkg_id == pid, CatalogItem.artifact == "employee_pack"
+                )
                 .first()
                 is not None
             )
@@ -393,7 +414,9 @@ async def execute_employee_task_file_endpoint(
         extra = {}
 
     repo_root = Path(__file__).resolve().parents[1]
-    session_dir = repo_root / "var" / "employee_uploads" / str(user.id) / uuid.uuid4().hex
+    session_dir = (
+        repo_root / "var" / "employee_uploads" / str(user.id) / uuid.uuid4().hex
+    )
     session_dir.mkdir(parents=True, exist_ok=True)
     dest = session_dir / safe_name
 

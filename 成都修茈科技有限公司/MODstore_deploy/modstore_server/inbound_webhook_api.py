@@ -56,7 +56,12 @@ def _resolve_actor_user_id() -> int:
     """没有人类用户的 webhook 任务都挂到首位管理员名下，方便审计。"""
     sf = get_session_factory()
     with sf() as session:
-        u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+        u = (
+            session.query(User)
+            .filter(User.is_admin.is_(True))
+            .order_by(User.id.asc())
+            .first()
+        )
         if u:
             return int(u.id)
         u2 = session.query(User).order_by(User.id.asc()).first()
@@ -125,7 +130,11 @@ def _enqueue_orchestrate_job(
                     allow_high_risk_real_run=allow_high_risk_real_run,
                 )
             with sf2() as session:
-                r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
+                r = (
+                    session.query(OnDemandOrchestrateJob)
+                    .filter_by(job_id=job_id)
+                    .first()
+                )
                 if r:
                     r.status = "done"
                     r.completed_at = datetime.now(UTC)
@@ -152,7 +161,11 @@ def _enqueue_orchestrate_job(
         except RECOVERABLE_ERRORS as exc:
             logger.exception("inbound webhook job %s (%s) failed", job_id, source_label)
             with sf2() as session:
-                r = session.query(OnDemandOrchestrateJob).filter_by(job_id=job_id).first()
+                r = (
+                    session.query(OnDemandOrchestrateJob)
+                    .filter_by(job_id=job_id)
+                    .first()
+                )
                 if r:
                     r.status = "failed"
                     r.completed_at = datetime.now(UTC)
@@ -171,7 +184,9 @@ def _enqueue_orchestrate_job(
 # ─── provider: GitHub ────────────────────────────────────────────────────────
 
 
-def _verify_github_signature(secret: str, body: bytes, signature: Optional[str]) -> bool:
+def _verify_github_signature(
+    secret: str, body: bytes, signature: Optional[str]
+) -> bool:
     if not secret:
         return True  # 未配置 secret 视为开放（但端点会先检查 secret 存在）
     if not signature or not signature.startswith("sha256="):
@@ -187,9 +202,7 @@ def _summarize_github_payload(event: str, payload: Dict[str, Any]) -> str:
         ref = payload.get("ref") or ""
         commits = payload.get("commits") or []
         first = (commits[0].get("message") if commits else "") or ""
-        return (
-            f"GitHub 推送：{repo}@{ref}（{sender}） — {len(commits)} commits；首条：{first[:200]}"
-        )
+        return f"GitHub 推送：{repo}@{ref}（{sender}） — {len(commits)} commits；首条：{first[:200]}"
     if event == "issues":
         action = payload.get("action") or ""
         issue = payload.get("issue") or {}
@@ -217,7 +230,9 @@ def _summarize_github_payload(event: str, payload: Dict[str, Any]) -> str:
     return f"GitHub {event} 事件：{repo}（{sender}） payload keys={list(payload.keys())[:8]}"
 
 
-def _resolve_github_target_employee(event: str, payload: Dict[str, Any]) -> tuple[bool, str]:
+def _resolve_github_target_employee(
+    event: str, payload: Dict[str, Any]
+) -> tuple[bool, str]:
     """Push 到营销路径时定向 site-content-editor，避免泛化 task_router。"""
     if event != "push":
         return True, ""
@@ -236,7 +251,10 @@ def _resolve_github_target_employee(event: str, payload: Dict[str, Any]) -> tupl
         for key in ("added", "modified", "removed"):
             for path in commit.get(key) or []:
                 p = str(path)
-                if any(p == pref.rstrip("/") or p.startswith(pref) for pref in marketing_prefixes):
+                if any(
+                    p == pref.rstrip("/") or p.startswith(pref)
+                    for pref in marketing_prefixes
+                ):
                     return False, "site-content-editor"
     return True, ""
 

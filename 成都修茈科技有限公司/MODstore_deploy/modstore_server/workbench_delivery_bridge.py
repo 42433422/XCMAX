@@ -13,7 +13,9 @@ async def start_workbench_session_for_user(
     run_inline: bool = False,
     delivery_context: dict[str, Any] | None = None,
 ) -> dict[str, str]:
-    from modstore_server.workbench_api import start_workbench_session_for_user as operation
+    from modstore_server.workbench_api import (
+        start_workbench_session_for_user as operation,
+    )
 
     return await operation(
         user_id,
@@ -24,8 +26,12 @@ async def start_workbench_session_for_user(
     )
 
 
-async def get_workbench_session_snapshot(session_id: str, user_id: int) -> dict[str, Any] | None:
-    from modstore_server.workbench_api import get_workbench_session_snapshot as operation
+async def get_workbench_session_snapshot(
+    session_id: str, user_id: int
+) -> dict[str, Any] | None:
+    from modstore_server.workbench_api import (
+        get_workbench_session_snapshot as operation,
+    )
 
     return await operation(session_id, user_id)
 

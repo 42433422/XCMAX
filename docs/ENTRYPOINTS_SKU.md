@@ -13,11 +13,11 @@
 
 禁止宣称「五个入口都在独立生产运行」除非部署核实。
 
-## debt19 SSOT
+## debt19 entrypoints
 
 | 入口 | 角色 |
 |------|------|
-| `FHD/run.py` | **API SSOT** |
+| `FHD/run.py` | **API primary entry** |
 | `FHD/XCAGI/run.py` / `run_fastapi.py` | 兼容委托 |
 | `FHD/desktop` | 官方桌面 |
 | `FHD/frontend` | 官方 Web SPA |

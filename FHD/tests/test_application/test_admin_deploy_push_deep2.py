@@ -211,7 +211,9 @@ class TestCheckDeployUpdatesDeep:
     def test_staging_channel_replaces_url(self) -> None:
         with (
             patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
-            patch("app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch(
+                "app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"
+            ),
             patch("app.domain.app_pure.admin_deploy_push._local_version", return_value="10.0.0"),
             patch("app.domain.app_pure.admin_deploy_push._read_local_manifest", return_value=None),
             patch(
@@ -231,7 +233,9 @@ class TestCheckDeployUpdatesDeep:
     def test_stable_channel_uses_default_url(self) -> None:
         with (
             patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
-            patch("app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch(
+                "app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"
+            ),
             patch("app.domain.app_pure.admin_deploy_push._local_version", return_value="10.0.0"),
             patch("app.domain.app_pure.admin_deploy_push._read_local_manifest", return_value=None),
             patch(
@@ -249,7 +253,9 @@ class TestCheckDeployUpdatesDeep:
     def test_hub_sha_empty_with_local_sha_triggers_push(self) -> None:
         with (
             patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
-            patch("app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch(
+                "app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"
+            ),
             patch("app.domain.app_pure.admin_deploy_push._local_version", return_value="10.0.0"),
             patch("app.domain.app_pure.admin_deploy_push._read_local_manifest", return_value=None),
             patch(
@@ -267,7 +273,9 @@ class TestCheckDeployUpdatesDeep:
     def test_enterprise_pending_with_hub_tar_sha(self) -> None:
         with (
             patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
-            patch("app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch(
+                "app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"
+            ),
             patch("app.domain.app_pure.admin_deploy_push._local_version", return_value="10.0.0"),
             patch(
                 "app.domain.app_pure.admin_deploy_push._read_local_manifest",
@@ -298,7 +306,9 @@ class TestCheckDeployUpdatesDeep:
     def test_up_to_date_with_matching_shas(self) -> None:
         with (
             patch("app.domain.app_pure.admin_deploy_push._fhd_root", return_value=Path("/tmp/fhd")),
-            patch("app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"),
+            patch(
+                "app.domain.app_pure.admin_deploy_push._local_git_sha", return_value="abc123def456"
+            ),
             patch("app.domain.app_pure.admin_deploy_push._local_version", return_value="10.0.0"),
             patch(
                 "app.domain.app_pure.admin_deploy_push._read_local_manifest",

@@ -85,7 +85,9 @@ def _try_parse_json_object(raw: Any) -> Dict[str, Any]:
         score = sum(
             (
                 2 if str(value.get("status") or "").strip() else 0,
-                2 if str(value.get("summary") or value.get("report") or "").strip() else 0,
+                2
+                if str(value.get("summary") or value.get("report") or "").strip()
+                else 0,
                 1 if value.get("evidence") is not None else 0,
             )
         )
@@ -125,7 +127,9 @@ def _try_parse_handler_output(result: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
-def _extract_changed_files(llm_out: Dict[str, Any], result: Dict[str, Any]) -> List[str]:
+def _extract_changed_files(
+    llm_out: Dict[str, Any], result: Dict[str, Any]
+) -> List[str]:
     """从 LLM 输出和 handler output 里抽 files_changed。"""
     files: List[str] = []
     # 1. LLM 输出顶层
@@ -330,7 +334,11 @@ def _check_handler_outputs_nonempty(result: Dict[str, Any]) -> Dict[str, Any]:
         # answer/response.  Treating agent summaries as empty made every
         # read-only agent burn-in unverifiable even after a real tool call.
         out_str = str(
-            o.get("output") or o.get("answer") or o.get("summary") or o.get("response") or ""
+            o.get("output")
+            or o.get("answer")
+            or o.get("summary")
+            or o.get("response")
+            or ""
         ).strip()
         if out_str:
             nonempty += 1

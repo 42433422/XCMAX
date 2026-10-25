@@ -15,7 +15,9 @@ class MacControlTask(Base):
     request_key: Mapped[str] = mapped_column(String(128), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(64), nullable=False)
     request_json: Mapped[str] = mapped_column(Text, nullable=False)
-    state: Mapped[str] = mapped_column(String(40), nullable=False, default="queued", index=True)
+    state: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="queued", index=True
+    )
     reason: Mapped[str] = mapped_column(String(256), nullable=False, default="")
     para_task_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")
     device_id: Mapped[str] = mapped_column(String(128), nullable=False, default="")

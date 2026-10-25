@@ -53,7 +53,9 @@ async def resolve_default_llm_route(
     pref_p, pref_m, keys = await asyncio.to_thread(_load_prefs_and_keys)
 
     async def first_model_id(provider: str) -> str:
-        block = await _facade().get_models_for_provider(db, uid, provider, force_refresh=False)
+        block = await _facade().get_models_for_provider(
+            db, uid, provider, force_refresh=False
+        )
         mids = list(block.get("runtime_models") or block.get("models") or [])
         return str(mids[0]).strip() if mids else ""
 
@@ -205,7 +207,8 @@ async def _fetch_catalog_provider_block(
         "models_detailed": [],
         "runtime_models": [],
         "media_counts": _facade().media_counts_from_detailed([]),
-        "supports_openai_images": provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
+        "supports_openai_images": provider
+        in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
         "fetched_at": None,
         "from_cache": False,
     }
@@ -231,7 +234,8 @@ async def _fetch_catalog_provider_block(
             "models_detailed": detailed,
             "runtime_models": list(block.get("runtime_models") or []),
             "media_counts": _facade().media_counts_from_detailed(detailed),
-            "supports_openai_images": provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
+            "supports_openai_images": provider
+            in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS,
             "fetched_at": block.get("fetched_at"),
             "error": block.get("error"),
             "from_cache": block.get("from_cache", False),
@@ -318,7 +322,10 @@ async def get_platform_runtime_route(
 ):
     """Current platform-funded AI employee route plus effective fallback."""
     from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, platform_api_key
-    from modstore_server.llm_runtime_route import read_runtime_route_state, rollback_target
+    from modstore_server.llm_runtime_route import (
+        read_runtime_route_state,
+        rollback_target,
+    )
     from modstore_server.services.llm import resolve_platform_bench_llm
 
     provider, model = resolve_platform_bench_llm()
@@ -431,7 +438,9 @@ async def post_detect_bare_credential(
 ):
     _facade()._require_byok_membership(db, user)
     if not _facade().fernet_configured():
-        raise _facade().HTTPException(503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存 BYOK")
+        raise _facade().HTTPException(
+            503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存 BYOK"
+        )
     key = body.api_key.strip()
     if not key:
         raise _facade().HTTPException(400, "api_key 为空")
@@ -481,7 +490,9 @@ async def put_llm_credentials(
         raise _facade().HTTPException(400, "unknown provider")
     _facade()._require_byok_membership(db, user)
     if not _facade().fernet_configured():
-        raise _facade().HTTPException(503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存 BYOK")
+        raise _facade().HTTPException(
+            503, "服务端未配置 MODSTORE_LLM_MASTER_KEY，无法保存 BYOK"
+        )
     key = body.api_key.strip()
     if not key:
         raise _facade().HTTPException(400, "api_key 为空")
@@ -593,7 +604,9 @@ def _price_row_to_dict(r: _facade().AiModelPrice) -> _facade().Dict[str, _facade
             float(r.official_min_charge) if r.official_min_charge is not None else None
         ),
         "official_source": str(r.official_source or ""),
-        "official_synced_at": r.official_synced_at.isoformat() if r.official_synced_at else None,
+        "official_synced_at": r.official_synced_at.isoformat()
+        if r.official_synced_at
+        else None,
         "enabled": bool(r.enabled),
         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
     }
@@ -603,7 +616,9 @@ def _price_row_to_dict(r: _facade().AiModelPrice) -> _facade().Dict[str, _facade
 """Implementation extracted from the public facade module."""
 
 
-def _upsert_ai_model_price(db: _facade().Session, body: LlmPriceDTO) -> _facade().AiModelPrice:
+def _upsert_ai_model_price(
+    db: _facade().Session, body: LlmPriceDTO
+) -> _facade().AiModelPrice:
     row = (
         db.query(_facade().AiModelPrice)
         .filter(
@@ -613,7 +628,9 @@ def _upsert_ai_model_price(db: _facade().Session, body: LlmPriceDTO) -> _facade(
         .first()
     )
     if not row:
-        row = _facade().AiModelPrice(provider=body.provider.strip(), model=body.model.strip())
+        row = _facade().AiModelPrice(
+            provider=body.provider.strip(), model=body.model.strip()
+        )
         db.add(row)
     row.label = body.label.strip()
     row.input_price_per_1k = float(body.input_price_per_1k)
@@ -629,7 +646,11 @@ async def llm_pricing(
     user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     settings = _facade().billing_settings_dict(db)
-    rows = db.query(_facade().AiModelPrice).filter(_facade().AiModelPrice.enabled.is_(True)).all()
+    rows = (
+        db.query(_facade().AiModelPrice)
+        .filter(_facade().AiModelPrice.enabled.is_(True))
+        .all()
+    )
     return {
         **settings,
         "items": [
@@ -657,11 +678,14 @@ async def llm_admin_list_pricing(
     if q:
         like = f"%{q.strip()}%"
         query = query.filter(
-            _facade().AiModelPrice.model.ilike(like) | _facade().AiModelPrice.label.ilike(like)
+            _facade().AiModelPrice.model.ilike(like)
+            | _facade().AiModelPrice.label.ilike(like)
         )
     total = query.count()
     rows = (
-        query.order_by(_facade().AiModelPrice.provider.asc(), _facade().AiModelPrice.model.asc())
+        query.order_by(
+            _facade().AiModelPrice.provider.asc(), _facade().AiModelPrice.model.asc()
+        )
         .offset(offset)
         .limit(limit)
         .all()
@@ -691,8 +715,12 @@ async def llm_admin_put_price(
 
 
 class LlmBillingSettingsDTO(_facade().BaseModel):
-    service_fee_multiplier: _facade().Optional[float] = _facade().Field(None, ge=1, le=10)
-    official_markup_multiplier: _facade().Optional[float] = _facade().Field(None, ge=1, le=10)
+    service_fee_multiplier: _facade().Optional[float] = _facade().Field(
+        None, ge=1, le=10
+    )
+    official_markup_multiplier: _facade().Optional[float] = _facade().Field(
+        None, ge=1, le=10
+    )
     default_input_price_per_1k: _facade().Optional[float] = _facade().Field(None, ge=0)
     default_output_price_per_1k: _facade().Optional[float] = _facade().Field(None, ge=0)
     default_min_charge: _facade().Optional[float] = _facade().Field(None, ge=0)
@@ -728,9 +756,13 @@ class LlmPriceBatchTemplateDTO(_facade().BaseModel):
 
 class LlmPriceBatchDTO(_facade().BaseModel):
     provider: str = _facade().Field(..., min_length=2, max_length=64)
-    mode: str = _facade().Field("unpriced_only", pattern="^(unpriced_only|all_catalog)$")
+    mode: str = _facade().Field(
+        "unpriced_only", pattern="^(unpriced_only|all_catalog)$"
+    )
     model_ids: _facade().Optional[_facade().List[str]] = None
-    template: LlmPriceBatchTemplateDTO = _facade().Field(default_factory=LlmPriceBatchTemplateDTO)
+    template: LlmPriceBatchTemplateDTO = _facade().Field(
+        default_factory=LlmPriceBatchTemplateDTO
+    )
 
 
 @_facade().router.post("/admin/pricing/batch")
@@ -745,7 +777,9 @@ async def llm_admin_batch_pricing(
     if body.model_ids:
         target_ids = [m.strip() for m in body.model_ids if m and m.strip()]
     else:
-        block = await _facade().get_models_for_provider(db, admin.id, prov, force_refresh=False)
+        block = await _facade().get_models_for_provider(
+            db, admin.id, prov, force_refresh=False
+        )
         target_ids = [str(x) for x in block.get("models") or [] if x]
     if not target_ids:
         raise _facade().HTTPException(400, "该厂商目录为空，请先刷新模型列表")
@@ -812,7 +846,9 @@ async def llm_admin_sync_official_prices(
     if body.model_ids:
         target_ids = [m.strip() for m in body.model_ids if m and m.strip()]
     else:
-        block = await _facade().get_models_for_provider(db, admin.id, prov, force_refresh=False)
+        block = await _facade().get_models_for_provider(
+            db, admin.id, prov, force_refresh=False
+        )
         target_ids = [str(x) for x in block.get("models") or [] if x]
     if not target_ids:
         raise _facade().HTTPException(400, "该厂商目录为空，请先刷新模型列表")
@@ -821,7 +857,9 @@ async def llm_admin_sync_official_prices(
     )
     if body.apply_markup:
         markup = _facade().official_markup_multiplier(db)
-        apply_result = _facade().apply_official_markup_to_rows(db, prov, target_ids, markup)
+        apply_result = _facade().apply_official_markup_to_rows(
+            db, prov, target_ids, markup
+        )
         result["apply_markup"] = apply_result
     db.commit()
     return {"ok": True, **result}
@@ -845,7 +883,9 @@ async def llm_admin_apply_official_markup(
     if body.model_ids:
         target_ids = [m.strip() for m in body.model_ids if m and m.strip()]
     else:
-        block = await _facade().get_models_for_provider(db, admin.id, prov, force_refresh=False)
+        block = await _facade().get_models_for_provider(
+            db, admin.id, prov, force_refresh=False
+        )
         target_ids = [str(x) for x in block.get("models") or [] if x]
     if not target_ids:
         raise _facade().HTTPException(400, "该厂商目录为空")
@@ -942,7 +982,9 @@ async def llm_conversation_detail(
             _facade().ChatMessage.conversation_id == row.id,
             _facade().ChatMessage.user_id == user.id,
         )
-        .order_by(_facade().ChatMessage.created_at.asc(), _facade().ChatMessage.id.asc())
+        .order_by(
+            _facade().ChatMessage.created_at.asc(), _facade().ChatMessage.id.asc()
+        )
         .all()
     )
     return {
@@ -1116,7 +1158,9 @@ async def llm_image(
         raise _facade().HTTPException(400, "unknown provider")
     api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
     if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
+        raise _facade().HTTPException(
+            400, f"供应商「{body.provider}」未配置可用 API Key。"
+        )
     base = (
         _facade().resolve_base_url(db, user.id, body.provider)
         if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
@@ -1132,7 +1176,9 @@ async def llm_image(
         n=body.n,
     )
     if not result.get("ok"):
-        raise _facade().HTTPException(502, result.get("error") or "image upstream error")
+        raise _facade().HTTPException(
+            502, result.get("error") or "image upstream error"
+        )
     return {
         "ok": True,
         "images": result.get("images") or [],
@@ -1152,7 +1198,9 @@ async def llm_video(
         raise _facade().HTTPException(400, "unknown provider")
     api_key, key_source = _facade().resolve_api_key(db, user.id, body.provider)
     if not api_key:
-        raise _facade().HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
+        raise _facade().HTTPException(
+            400, f"供应商「{body.provider}」未配置可用 API Key。"
+        )
     base = (
         _facade().resolve_base_url(db, user.id, body.provider)
         if body.provider in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
@@ -1168,7 +1216,9 @@ async def llm_video(
         seconds=body.seconds,
     )
     if not result.get("ok"):
-        raise _facade().HTTPException(502, result.get("error") or "video upstream error")
+        raise _facade().HTTPException(
+            502, result.get("error") or "video upstream error"
+        )
     return {
         "ok": True,
         "provider": body.provider,
@@ -1190,7 +1240,10 @@ async def llm_pptx(
     except RuntimeError as e:
         raise _facade().HTTPException(503, str(e))
     filename = (
-        (body.filename or "ai-presentation.pptx").strip().replace("\\", "_").replace("/", "_")
+        (body.filename or "ai-presentation.pptx")
+        .strip()
+        .replace("\\", "_")
+        .replace("/", "_")
     )
     if not filename.lower().endswith(".pptx"):
         filename += ".pptx"

@@ -46,7 +46,9 @@ def find_matching_item_ids(
     day: Optional[str] = None,
 ) -> List[int]:
     action_items = _action_items_module()
-    items = action_items.list_action_items(kind=kind, record_id=int(record_id or 0), limit=500)
+    items = action_items.list_action_items(
+        kind=kind, record_id=int(record_id or 0), limit=500
+    )
     if day:
         items = [item for item in items if str(item.get("day") or "") == day]
     employee = (employee_id or "").strip()
@@ -82,10 +84,14 @@ def set_status_if_advanced(item_id: int, status: str) -> bool:
         if not row:
             return False
         current = str(row[0] or "open").strip().lower()
-        if action_items._STATUS_RANK.get(status, 0) <= action_items._STATUS_RANK.get(current, 0):
+        if action_items._STATUS_RANK.get(status, 0) <= action_items._STATUS_RANK.get(
+            current, 0
+        ):
             return False
         connection.execute(
-            sql_text("UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"),
+            sql_text(
+                "UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"
+            ),
             {"s": status, "u": action_items._now(), "id": int(item_id)},
         )
     return True
@@ -104,13 +110,17 @@ def set_status(item_id: int, status: str) -> Dict[str, Any]:
     engine = action_items._engine()
     with engine.begin() as connection:
         connection.execute(
-            sql_text("UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"),
+            sql_text(
+                "UPDATE daily_action_items SET status=:s, updated_at=:u WHERE id=:id"
+            ),
             {"s": status, "u": action_items._now(), "id": int(item_id)},
         )
     return {"ok": True, "id": int(item_id), "status": status}
 
 
-def sync_dispatched_for_work_units(record_id: int, units: Sequence[Any]) -> Dict[str, Any]:
+def sync_dispatched_for_work_units(
+    record_id: int, units: Sequence[Any]
+) -> Dict[str, Any]:
     action_items = _action_items_module()
     updated = 0
     matched: List[int] = []
@@ -120,7 +130,11 @@ def sync_dispatched_for_work_units(record_id: int, units: Sequence[Any]) -> Dict
             or (unit.get("list_kind") if isinstance(unit, dict) else "")
             or ""
         )
-        kind = action_items.KIND_PATCH if list_kind == "patches" else action_items.KIND_UPDATE
+        kind = (
+            action_items.KIND_PATCH
+            if list_kind == "patches"
+            else action_items.KIND_UPDATE
+        )
         employee_id = str(
             getattr(unit, "employee_id", None)
             or (unit.get("employee_id") if isinstance(unit, dict) else "")
@@ -145,7 +159,9 @@ def sync_dispatched_for_work_units(record_id: int, units: Sequence[Any]) -> Dict
             if action_items.set_status_if_advanced(item_id, "dispatched"):
                 updated += 1
                 matched.append(item_id)
-    logger.info("action_items dispatch writeback record=%s updated=%s", record_id, updated)
+    logger.info(
+        "action_items dispatch writeback record=%s updated=%s", record_id, updated
+    )
     return {"ok": True, "updated": updated, "matched_ids": matched}
 
 
@@ -156,7 +172,9 @@ def sync_merged_on_deploy(
     use_day = (day or "").strip() or action_items.latest_day()
     items = action_items.list_action_items(day=use_day or None, limit=2000)
     if record_id:
-        items = [item for item in items if int(item.get("record_id") or 0) == int(record_id)]
+        items = [
+            item for item in items if int(item.get("record_id") or 0) == int(record_id)
+        ]
     updated = 0
     merged_ids: List[int] = []
     for item in items:

@@ -89,7 +89,9 @@ class TestGetPrinterConfig:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.list_printers.side_effect = RuntimeError("no printer")
-        with patch("app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.get_printer_config()
             assert result["success"] is False
 
@@ -98,7 +100,9 @@ class TestGetPrinterConfig:
         mock_ps = MagicMock()
         mock_ps.list_printers.return_value = ["Printer1"]
         mock_ps.get_default_printer.return_value = "Printer1"
-        with patch("app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.get_printer_config()
             assert result["success"] is True
             assert result["printers"] == ["Printer1"]
@@ -112,7 +116,9 @@ class TestSetDefaultPrinter:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.set_default_printer.return_value = True
-        with patch("app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.set_default_printer("Printer1")
             assert result["success"] is True
 
@@ -120,7 +126,9 @@ class TestSetDefaultPrinter:
         svc = SystemService()
         mock_ps = MagicMock()
         mock_ps.set_default_printer.return_value = False
-        with patch("app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps):
+        with patch(
+            "app.domain.shared_services.printer_service.PrinterService", return_value=mock_ps
+        ):
             result = svc.set_default_printer("BadPrinter")
             assert result["success"] is False
 

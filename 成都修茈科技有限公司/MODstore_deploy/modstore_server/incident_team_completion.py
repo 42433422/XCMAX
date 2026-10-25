@@ -15,7 +15,10 @@ from modstore_server.customer_issue_delivery_contract import (
     para_task_succeeded,
     team_succeeded,
 )
-from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
+from modstore_server.incident_team_handler_digest import (
+    handler_output_digest,
+    redact_text,
+)
 from modstore_server.models import IncidentEvent, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -79,7 +82,8 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
             pending = [
                 o
                 for o in outputs
-                if o.get("handler") == "para_delegate" and execution_requires_reconciliation(o)
+                if o.get("handler") == "para_delegate"
+                and execution_requires_reconciliation(o)
             ]
             for output in pending:
                 task_id = str(output.get("para_task_id") or output.get("task_id") or "")
@@ -127,7 +131,9 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                         output.pop("error", None)
                         if not ok:
                             output["error"] = redact_text(
-                                task.get("error") or _first_para_error(snapshot) or "Para任务失败"
+                                task.get("error")
+                                or _first_para_error(snapshot)
+                                or "Para任务失败"
                             )
                         tried = parse_codex_models_tried(
                             task.get("error"),
@@ -156,7 +162,9 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
                     row["status"] = (
                         "pending"
                         if execution_pending({"result": {"outputs": outputs}})
-                        else "completed" if row["ok"] else "failed"
+                        else "completed"
+                        if row["ok"]
+                        else "failed"
                     )
         if rows == claim.get("team"):
             _resume_pending_verify(eid)
@@ -165,7 +173,9 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
             team=rows,
             ok=team_succeeded(rows),
             handler_failed_roles=[
-                r.get("role") for r in rows if r.get("status") in {"failed", "manual_review"}
+                r.get("role")
+                for r in rows
+                if r.get("status") in {"failed", "manual_review"}
             ],
         )
         claim["handler_failed_count"] = len(claim["handler_failed_roles"])
@@ -206,7 +216,9 @@ def reconcile_pending_teams(*, event_id=None, limit=20, fetcher=None):
         _resume_pending_verify(eid)
     from modstore_server.incident_team_escalation import reconcile_incident_escalations
 
-    escalations = reconcile_incident_escalations(event_id=event_id, limit=limit, fetcher=fetcher)
+    escalations = reconcile_incident_escalations(
+        event_id=event_id, limit=limit, fetcher=fetcher
+    )
     return {"changed": changed, "escalations": escalations}
 
 
@@ -218,7 +230,9 @@ def _resume_pending_verify(event_id: int) -> None:
         advance_team(event_id)
     except RECOVERABLE_ERRORS:
         # Existing dispatch intents remain fenced; recovery never replays them.
-        logging.getLogger(__name__).warning("incident continuation deferred event=%s", event_id)
+        logging.getLogger(__name__).warning(
+            "incident continuation deferred event=%s", event_id
+        )
 
 
 def register_completion_job(scheduler, *, track_job):
@@ -265,7 +279,8 @@ def reconcile_task_notification(task_id=None, *, fetcher=None):
         receipts += list((claim.get("escalations") or {}).values())
         if any(
             isinstance(receipt, dict)
-            and str(receipt.get("task_id") or receipt.get("para_task_id") or "") == task_id
+            and str(receipt.get("task_id") or receipt.get("para_task_id") or "")
+            == task_id
             for receipt in receipts
         ):
             reconcile_pending_teams(event_id=event_id, fetcher=fetcher)
@@ -273,7 +288,9 @@ def reconcile_task_notification(task_id=None, *, fetcher=None):
     return {"matched_events": matched}
 
 
-def persist_role_attempt(event_id: int, row: dict[str, Any], *, expected_attempt: str = "") -> None:
+def persist_role_attempt(
+    event_id: int, row: dict[str, Any], *, expected_attempt: str = ""
+) -> None:
     """Commit intent before execution and its receipt only under current ownership."""
     from modstore_server.incident_team_execution import locked_ticket_repair
     from modstore_server.node_coordinator import assert_incident_claim
@@ -289,7 +306,9 @@ def persist_role_attempt(event_id: int, row: dict[str, Any], *, expected_attempt
             raise ValueError("shared_repair_reused")
         claim = payload.setdefault("_team_claim", {"ok": False, "team": []})
         rows = claim.setdefault("team", [])
-        previous = next((item for item in rows if item.get("role") == row.get("role")), None)
+        previous = next(
+            (item for item in rows if item.get("role") == row.get("role")), None
+        )
         if expected_attempt and (
             previous is None or previous.get("attempt_id") != expected_attempt
         ):
@@ -354,7 +373,9 @@ def persist_late_role_result(
                 "status": (
                     "pending"
                     if execution_requires_reconciliation(receipt)
-                    else "completed" if execution_succeeded(receipt) else "failed"
+                    else "completed"
+                    if execution_succeeded(receipt)
+                    else "failed"
                 ),
                 "handler_outputs": handler_output_digest(receipt),
             }

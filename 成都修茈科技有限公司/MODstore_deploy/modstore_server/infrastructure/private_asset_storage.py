@@ -19,7 +19,9 @@ def require_private_directory(path: Path) -> Path:
     return resolved
 
 
-def draft_asset_directory(*, user_id: int, session_id: str, repo_root: Path | None = None) -> Path:
+def draft_asset_directory(
+    *, user_id: int, session_id: str, repo_root: Path | None = None
+) -> Path:
     """Resolve a draft without creating or deleting anything.
 
     ``repo_root`` remains a compatibility seam for isolated callers, but it must
@@ -34,7 +36,9 @@ def draft_asset_directory(*, user_id: int, session_id: str, repo_root: Path | No
     else:
         configured = os.environ.get("MODSTORE_RUNTIME_DIR", "").strip()
         runtime = require_private_directory(
-            Path(configured) if configured else Path(tempfile.gettempdir()) / "modstore_runtime"
+            Path(configured)
+            if configured
+            else Path(tempfile.gettempdir()) / "modstore_runtime"
         )
     current = runtime
     for component in ("employee_draft_assets", str(user_id), session_id):
@@ -59,4 +63,6 @@ def _git_checkout(path: Path) -> bool:
     marker = path / ".git"
     if marker.is_dir():
         return (marker / "HEAD").is_file()
-    return marker.is_file() and marker.read_text(encoding="utf-8").startswith("gitdir: ")
+    return marker.is_file() and marker.read_text(encoding="utf-8").startswith(
+        "gitdir: "
+    )

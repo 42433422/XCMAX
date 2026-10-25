@@ -23,7 +23,9 @@ def _auto_merge_min_safety_score_v2() -> int:
     return max(
         0,
         min(
-            config._env_int("MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90),
+            config._env_int(
+                "MODSTORE_SELF_MAINTENANCE_AUTO_MERGE_MIN_SAFETY_SCORE_V2", 90
+            ),
             100,
         ),
     )
@@ -47,7 +49,11 @@ def _historical_auto_merge_success_rate(
             continue
         action = str(decision.get("action") or "")
         reason = str(decision.get("reason") or "")
-        if action == "auto_merged_low_risk" or "auto_merge" in reason or "low_risk" in reason:
+        if (
+            action == "auto_merged_low_risk"
+            or "auto_merge" in reason
+            or "low_risk" in reason
+        ):
             considered += 1
             status = str(run.get("status") or "")
             if action == "auto_merged_low_risk" or status == "completed_merged":
@@ -106,7 +112,9 @@ def _historical_rollback_rate(
             for record in rollback_records:
                 if not isinstance(record, dict):
                     continue
-                status = str(record.get("status") or record.get("outcome") or "").lower()
+                status = str(
+                    record.get("status") or record.get("outcome") or ""
+                ).lower()
                 if record.get("executed") is True or status in {
                     "completed",
                     "executed",
@@ -130,9 +138,19 @@ def _file_type_risk(file_name: str) -> int:
         return 10
     if "/tests/" in lower or lower.startswith("tests/"):
         return 12
-    if any((part in lower for part in ("/scripts/dev/", "self_maintenance", "self_evolution"))):
+    if any(
+        (
+            part in lower
+            for part in ("/scripts/dev/", "self_maintenance", "self_evolution")
+        )
+    ):
         return 18
-    if any((part in lower for part in ("/api/", "routes", "scheduler", "workflow", "employee"))):
+    if any(
+        (
+            part in lower
+            for part in ("/api/", "routes", "scheduler", "workflow", "employee")
+        )
+    ):
         return 32
     if any(
         (
@@ -170,10 +188,16 @@ def _auto_merge_risk_score_v1(
     ]
     line_changes = int((diff_stats or {}).get("line_changes") or 0)
     per_file_scores = [
-        {"file": file_name, "score": _file_type_risk(file_name)} for file_name in normalized_files
+        {"file": file_name, "score": _file_type_risk(file_name)}
+        for file_name in normalized_files
     ]
     file_score = max(
-        [score for item in per_file_scores if isinstance((score := item.get("score")), int)] or [0]
+        [
+            score
+            for item in per_file_scores
+            if isinstance((score := item.get("score")), int)
+        ]
+        or [0]
     )
     line_score = min(25, line_changes // 20)
     keyword_terms = (
@@ -233,9 +257,13 @@ def _semantic_review_qa_analysis(
     penalty = 0
     reports: Dict[str, Any] = {}
     review_steps = [
-        step for step in steps if isinstance(step, dict) and step.get("step") == "review"
+        step
+        for step in steps
+        if isinstance(step, dict) and step.get("step") == "review"
     ]
-    qa_steps = [step for step in steps if isinstance(step, dict) and step.get("step") == "qa"]
+    qa_steps = [
+        step for step in steps if isinstance(step, dict) and step.get("step") == "qa"
+    ]
     if review_steps:
         review_json = review._structured_report_from_step(
             review_steps[-1], config.STRUCTURED_REVIEW_MARKER
@@ -257,7 +285,9 @@ def _semantic_review_qa_analysis(
     else:
         penalty += 6
     if qa_steps:
-        qa_json = review._structured_report_from_step(qa_steps[-1], config.STRUCTURED_QA_MARKER)
+        qa_json = review._structured_report_from_step(
+            qa_steps[-1], config.STRUCTURED_QA_MARKER
+        )
         if isinstance(qa_json, dict):
             reports["qa"] = qa_json
             verdict = str(qa_json.get("verdict") or "").upper()
@@ -295,7 +325,12 @@ def _diff_semantic_penalty(diff_excerpt: str) -> Dict[str, Any]:
         if not line.startswith("+") or line.startswith("+++"):
             continue
         normalized_path = current_path.lower()
-        if any((normalized_path.startswith(prefix) for prefix in excluded_added_line_prefixes)):
+        if any(
+            (
+                normalized_path.startswith(prefix)
+                for prefix in excluded_added_line_prefixes
+            )
+        ):
             continue
         path_parts = [part for part in normalized_path.split("/") if part]
         file_name = path_parts[-1] if path_parts else ""
@@ -323,7 +358,9 @@ def _diff_semantic_penalty(diff_excerpt: str) -> Dict[str, Any]:
         "medium_hits": medium_hits,
         "penalty": min(50, len(high_hits) * 16 + len(medium_hits) * 5),
         "source": (
-            "diff_added_source_keyword_scan" if saw_unified_diff else "diff_semantic_keyword_scan"
+            "diff_added_source_keyword_scan"
+            if saw_unified_diff
+            else "diff_semantic_keyword_scan"
         ),
     }
 
@@ -341,10 +378,14 @@ def _auto_merge_safety_score_v2(
     diff_semantic = _diff_semantic_penalty(diff_excerpt)
     rollback_rate = _historical_rollback_rate(memory)
     rollback_penalty = 2 if rollback_rate is None else int(round(rollback_rate * 35))
-    file_penalty = min(25, int((risk_v1.get("components") or {}).get("file_score") or 0) // 4)
+    file_penalty = min(
+        25, int((risk_v1.get("components") or {}).get("file_score") or 0) // 4
+    )
     line_score = int((risk_v1.get("components") or {}).get("line_score") or 0)
     line_penalty = min(18, (line_score + 1) // 2)
-    keyword_penalty = min(18, int((risk_v1.get("components") or {}).get("keyword_score") or 0))
+    keyword_penalty = min(
+        18, int((risk_v1.get("components") or {}).get("keyword_score") or 0)
+    )
     total_penalty = (
         file_penalty
         + line_penalty

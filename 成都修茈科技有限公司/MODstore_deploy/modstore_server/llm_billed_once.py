@@ -86,9 +86,13 @@ async def run_billed_llm_chat_once(
     enforce_risk_limits(db, user.id, provider, model, messages, request)
     wallet = JavaWalletClient()
     if is_byok:
-        hold = WalletHold(hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False)
+        hold = WalletHold(
+            hold_no=f"byok-{request_id}", amount=Decimal("0"), enabled=False
+        )
     else:
-        preauth_amount = estimate_preauthorization(db, provider, model, messages, max_tokens)
+        preauth_amount = estimate_preauthorization(
+            db, provider, model, messages, max_tokens
+        )
         hold = await wallet.preauthorize(
             authorization_header(request), preauth_amount, provider, model, request_id
         )
@@ -139,7 +143,9 @@ async def run_billed_llm_chat_once(
         )
     except HTTPException as exc:
         try:
-            await wallet.release(authorization_header(request), hold, str(exc.detail), request_id)
+            await wallet.release(
+                authorization_header(request), hold, str(exc.detail), request_id
+            )
         except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold")
         raise
@@ -153,7 +159,9 @@ async def run_billed_llm_chat_once(
                 error=str(exc),
                 hold_no=hold.hold_no,
             )
-            await wallet.release(authorization_header(request), hold, str(exc), request_id)
+            await wallet.release(
+                authorization_header(request), hold, str(exc), request_id
+            )
         except RECOVERABLE_ERRORS:
             logger.exception("failed to release LLM wallet hold after unexpected error")
         raise

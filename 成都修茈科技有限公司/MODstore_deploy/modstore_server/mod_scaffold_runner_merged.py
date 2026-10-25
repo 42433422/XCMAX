@@ -25,7 +25,9 @@ def _parse_positive_int(value: _facade().Any) -> int:
     return n if n > 0 else 0
 
 
-def _employee_node_ids_for_workflow(db: _facade().Session, workflow_id: int) -> _facade().List[str]:
+def _employee_node_ids_for_workflow(
+    db: _facade().Session, workflow_id: int
+) -> _facade().List[str]:
     rows = (
         db.query(_facade().WorkflowNode)
         .filter(
@@ -67,7 +69,9 @@ def _ensure_minimal_employee_workflow_graph(
     if not wid or not eid:
         return {"created": False, "reason": "workflow_id/employee_id missing"}
     existing = (
-        db.query(_facade().WorkflowNode).filter(_facade().WorkflowNode.workflow_id == wid).count()
+        db.query(_facade().WorkflowNode)
+        .filter(_facade().WorkflowNode.workflow_id == wid)
+        .count()
     )
     if existing:
         return {
@@ -76,7 +80,9 @@ def _ensure_minimal_employee_workflow_graph(
             "existing_nodes": int(existing),
         }
     label = (employee_label or "执行员工").strip() or "执行员工"
-    task_text = (task or "根据工作流输入完成员工任务").strip()[:400] or "根据工作流输入完成员工任务"
+    task_text = (task or "根据工作流输入完成员工任务").strip()[
+        :400
+    ] or "根据工作流输入完成员工任务"
     start = _facade().WorkflowNode(
         workflow_id=wid,
         node_type="start",
@@ -89,7 +95,9 @@ def _ensure_minimal_employee_workflow_graph(
         workflow_id=wid,
         node_type="employee",
         name=label[:120],
-        config=_facade().json.dumps({"employee_id": eid, "task": task_text}, ensure_ascii=False),
+        config=_facade().json.dumps(
+            {"employee_id": eid, "task": task_text}, ensure_ascii=False
+        ),
         position_x=340,
         position_y=140,
     )
@@ -130,7 +138,9 @@ def _resolve_workflow_entry_pack_id(
     workflow_index: int,
 ) -> tuple[str, str, _facade().Optional[_facade().Dict[str, _facade().Any]]]:
     """返回 (expected_pack_id, error_message, pack_manifest_or_none)。"""
-    from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+    from modstore_server.employee_pack_export import (
+        build_employee_pack_manifest_from_workflow,
+    )
 
     catalog_pkg_id = str(entry.get("catalog_pkg_id") or "").strip()
     if catalog_pkg_id:
@@ -174,11 +184,14 @@ def analyze_mod_employee_readiness(
     for idx, item in enumerate(raw_rows):
         entry = item if isinstance(item, dict) else {}
         label = str(
-            entry.get("label") or entry.get("panel_title") or entry.get("id") or f"员工 {idx + 1}"
+            entry.get("label")
+            or entry.get("panel_title")
+            or entry.get("id")
+            or f"员工 {idx + 1}"
         ).strip()
         catalog_pkg_id = str(entry.get("catalog_pkg_id") or "").strip()
-        expected_pack_id, pack_err, pack_manifest = _facade()._resolve_workflow_entry_pack_id(
-            mod_dir, data, entry, idx
+        expected_pack_id, pack_err, pack_manifest = (
+            _facade()._resolve_workflow_entry_pack_id(mod_dir, data, entry, idx)
         )
         manifest_employee_id = expected_pack_id
         if catalog_pkg_id:
@@ -202,15 +215,26 @@ def analyze_mod_employee_readiness(
         workflow_employee_ids: _facade().List[str] = []
         workflow_employee_match = False
         if workflow_id > 0:
-            wf = db.query(_facade().Workflow).filter(_facade().Workflow.id == workflow_id).first()
+            wf = (
+                db.query(_facade().Workflow)
+                .filter(_facade().Workflow.id == workflow_id)
+                .first()
+            )
             workflow_exists = wf is not None
             workflow_owner_ok = bool(
-                wf and (getattr(user, "is_admin", False) or int(wf.user_id) == int(user.id))
+                wf
+                and (
+                    getattr(user, "is_admin", False) or int(wf.user_id) == int(user.id)
+                )
             )
             if workflow_exists and workflow_owner_ok:
-                workflow_employee_ids = _facade()._employee_node_ids_for_workflow(db, workflow_id)
+                workflow_employee_ids = _facade()._employee_node_ids_for_workflow(
+                    db, workflow_id
+                )
                 workflow_employee_match = (
-                    expected_pack_id in workflow_employee_ids if expected_pack_id else False
+                    expected_pack_id in workflow_employee_ids
+                    if expected_pack_id
+                    else False
                 )
         gaps: _facade().List[str] = []
         if pack_err or not expected_pack_id:
@@ -238,7 +262,10 @@ def analyze_mod_employee_readiness(
             real_status = "blocked"
             real_message = "员工包未登记，生产执行会报“员工包不存在”"
         elif (
-            workflow_id and workflow_exists and workflow_owner_ok and (not workflow_employee_match)
+            workflow_id
+            and workflow_exists
+            and workflow_owner_ok
+            and (not workflow_employee_match)
         ):
             real_status = "blocked"
             real_message = "工作流节点 employee_id 未指向已登记员工包"
@@ -307,7 +334,11 @@ def _pick_employee_pack_catalog_record(
     pid = (pkg_id or "").strip()
     if not pid:
         return None
-    rows = [r for r in cs.list_versions(pid) if str(r.get("artifact") or "") == "employee_pack"]
+    rows = [
+        r
+        for r in cs.list_versions(pid)
+        if str(r.get("artifact") or "") == "employee_pack"
+    ]
     if rows:
         top = rows[0]
         if str(top.get("stored_filename") or "").strip():
@@ -383,7 +414,9 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
     if not (pack_dir / "manifest.json").is_file():
         return False
     try:
-        from modstore_server.employee_pack_workflow_bundle import rehydrate_workflow_bundles
+        from modstore_server.employee_pack_workflow_bundle import (
+            rehydrate_workflow_bundles,
+        )
         from modstore_server.models import get_session_factory
 
         mf_path = pack_dir / "manifest.json"
@@ -397,7 +430,11 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
                 _user_row = None
                 if author_id_raw:
                     try:
-                        _user_row = _db.query(_User).filter(_User.id == int(author_id_raw)).first()
+                        _user_row = (
+                            _db.query(_User)
+                            .filter(_User.id == int(author_id_raw))
+                            .first()
+                        )
                     except RECOVERABLE_ERRORS:
                         pass
                 if _user_row is None:
@@ -411,7 +448,9 @@ def materialize_employee_pack_if_missing(employee_id: str) -> bool:
     except RECOVERABLE_ERRORS:
         import logging as _logging
 
-        _logging.getLogger(__name__).warning("materialize_employee_pack: rehydrate bundles failed")
+        _logging.getLogger(__name__).warning(
+            "materialize_employee_pack: rehydrate bundles failed"
+        )
     return (pack_dir / "manifest.json").is_file()
 
 
@@ -438,7 +477,9 @@ def rehydrate_employee_pack_bundles(
     if not mf_path.is_file():
         return False
     try:
-        from modstore_server.employee_pack_workflow_bundle import rehydrate_workflow_bundles
+        from modstore_server.employee_pack_workflow_bundle import (
+            rehydrate_workflow_bundles,
+        )
 
         raw = _facade().json.loads(mf_path.read_text(encoding="utf-8"))
         if raw.get("workflow_bundles") or raw.get("script_workflow_bundles"):
@@ -507,7 +548,9 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     declared_handlers = [
         str(h).strip()
-        for h in (actions.get("handlers") if isinstance(actions.get("handlers"), list) else [])
+        for h in (
+            actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+        )
         if isinstance(h, str) and str(h).strip()
     ]
     manifest_max_tokens = model.get("max_tokens")
@@ -564,7 +607,9 @@ def employee_pack_consistency_warnings(mod_dir: _facade().Path) -> _facade().Lis
 """Implementation extracted from the public facade module."""
 
 
-def global_registered_employee_ids(*, db: _facade().Optional[_facade().Session] = None) -> set[str]:
+def global_registered_employee_ids(
+    *, db: _facade().Optional[_facade().Session] = None
+) -> set[str]:
     """全局员工注册表：编制 duty_roster + catalog_store + DB catalog + 磁盘 _employees + yuangon。"""
     from modstore_server.duty_roster import all_planned_employee_ids
 
@@ -660,7 +705,9 @@ def _collect_pack_depends_on_ids(
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
-    collab = v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
+    collab = (
+        v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
+    )
     _add(collab.get("depends_on"))
     return deps
 
@@ -695,7 +742,9 @@ def _collect_pack_skill_paths(
 
             ydata = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
             if isinstance(ydata, dict):
-                for sk in (ydata.get("skills") if isinstance(ydata.get("skills"), list) else []):
+                for sk in (
+                    ydata.get("skills") if isinstance(ydata.get("skills"), list) else []
+                ):
                     if isinstance(sk, str) and sk.strip():
                         paths.append(sk.strip())
         except RECOVERABLE_ERRORS:
@@ -724,19 +773,31 @@ def _manifest_validation_stage(
     if not str(emp.get("id") or "").strip():
         stage["errors"].append("manifest.employee.id 缺失")
         stage["status"] = "fail"
-    v2 = mf.get("employee_config_v2") if isinstance(mf.get("employee_config_v2"), dict) else {}
+    v2 = (
+        mf.get("employee_config_v2")
+        if isinstance(mf.get("employee_config_v2"), dict)
+        else {}
+    )
     ident = v2.get("identity") if isinstance(v2.get("identity"), dict) else {}
     for key in ("owner", "area"):
         val = ident.get(key)
         if val is not None and (not isinstance(val, str)):
             stage["errors"].append(f"employee_config_v2.identity.{key} 须为字符串")
             stage["status"] = "fail"
-    wp = v2.get("workspace_policy") if isinstance(v2.get("workspace_policy"), dict) else {}
+    wp = (
+        v2.get("workspace_policy")
+        if isinstance(v2.get("workspace_policy"), dict)
+        else {}
+    )
     scope = wp.get("scope_globs") if isinstance(wp.get("scope_globs"), list) else []
-    forbidden = wp.get("forbidden_globs") if isinstance(wp.get("forbidden_globs"), list) else []
+    forbidden = (
+        wp.get("forbidden_globs") if isinstance(wp.get("forbidden_globs"), list) else []
+    )
     overlap = set((str(x) for x in scope)) & set((str(x) for x in forbidden))
     if overlap:
-        stage["errors"].append(f"scope_globs 与 forbidden_globs 冲突: {sorted(overlap)[:4]}")
+        stage["errors"].append(
+            f"scope_globs 与 forbidden_globs 冲突: {sorted(overlap)[:4]}"
+        )
         stage["status"] = "fail"
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     handlers = actions.get("handlers")
@@ -837,7 +898,9 @@ async def _xcemp_validation_stage(
             collect_vendor_modules_from_pack,
         )
 
-        vendor = collect_vendor_modules_from_pack(pack_dir) if pack_dir.is_dir() else None
+        vendor = (
+            collect_vendor_modules_from_pack(pack_dir) if pack_dir.is_dir() else None
+        )
         zip_bytes = _build_employee_pack_zip_with_source(
             pack_id, manifest, None, vendor_modules=vendor
         )
@@ -933,7 +996,8 @@ async def run_employee_pack_code_validation_report(
         report["consistency_check"]["status"] = "skipped"
         report["xcemp_validation"]["status"] = "skipped"
         report["summary"] = (
-            "manifest 校验失败: " + "；".join(manifest_validation.get("errors") or [])[:400]
+            "manifest 校验失败: "
+            + "；".join(manifest_validation.get("errors") or [])[:400]
         )
         return report
     py_errors, py_warns = _facade().employee_pack_compileall_errors(pack_dir)
@@ -969,7 +1033,9 @@ async def run_employee_pack_code_validation_report(
         report["status"] = "fail"
         if xcemp.get("escalate_to_human"):
             try:
-                from modstore_server.craft_failure_signals import _employee_escalate_to_human
+                from modstore_server.craft_failure_signals import (
+                    _employee_escalate_to_human,
+                )
 
                 if _employee_escalate_to_human("code-validator"):
                     report["xcemp_validation"]["escalate_to_human"] = True
@@ -984,7 +1050,9 @@ async def run_employee_pack_code_validation_report(
         if report["python_compile"].get("status") == "fail":
             parts.append(f"Python 编译 {len(py_errors)} 处错误")
         if consistency.get("missing_depends"):
-            parts.append(f"depends_on 未注册: {', '.join(consistency['missing_depends'][:4])}")
+            parts.append(
+                f"depends_on 未注册: {', '.join(consistency['missing_depends'][:4])}"
+            )
         if consistency.get("missing_skills"):
             parts.append(f"skills 缺失: {', '.join(consistency['missing_skills'][:4])}")
         if xcemp.get("status") == "fail":
@@ -1002,7 +1070,9 @@ def resolve_llm_provider_model(
     user: _facade().User,
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
-) -> _facade().Tuple[_facade().Optional[str], _facade().Optional[str], _facade().Optional[str]]:
+) -> _facade().Tuple[
+    _facade().Optional[str], _facade().Optional[str], _facade().Optional[str]
+]:
     """
     返回 (provider, model, error_message)。
     若 body 未传 provider/model，则读用户 default_llm_json。
@@ -1039,7 +1109,9 @@ async def resolve_llm_provider_model_auto(
     user: _facade().User,
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
-) -> _facade().Tuple[_facade().Optional[str], _facade().Optional[str], _facade().Optional[str]]:
+) -> _facade().Tuple[
+    _facade().Optional[str], _facade().Optional[str], _facade().Optional[str]
+]:
     """
     工作台 Auto 语义：显式 provider/model 必须可用；否则优先账户默认，
     默认无 key 时自动切到第一个有 key 且能拿到模型目录的供应商。
@@ -1123,7 +1195,9 @@ async def generate_workflow_for_intent(
     """
     from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
 
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return {"ok": False, "error": err}
     name = (workflow_name or f"AI 生成工作流 - {role[:20]}")[:256]
@@ -1168,7 +1242,9 @@ async def run_mod_ai_scaffold_async(
     brief = (brief or "").strip()
     if len(brief) < 3:
         return {"ok": False, "error": "描述过短"}
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return {"ok": False, "error": err}
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -1265,11 +1341,17 @@ def _suite_validation_summary(
             workflow_warnings.append(str(item.get("error")))
     repair_suggestions: _facade().List[str] = []
     if manifest_warnings:
-        repair_suggestions.append("检查 manifest 字段、目录名与 workflow_employees 结构。")
+        repair_suggestions.append(
+            "检查 manifest 字段、目录名与 workflow_employees 结构。"
+        )
     if python_warnings:
-        repair_suggestions.append("打开 backend/blueprints.py，根据 Python 语法提示修复路由骨架。")
+        repair_suggestions.append(
+            "打开 backend/blueprints.py，根据 Python 语法提示修复路由骨架。"
+        )
     if workflow_warnings:
-        repair_suggestions.append("进入工作流画布检查节点配置、员工 id、知识库或 OpenAPI 参数。")
+        repair_suggestions.append(
+            "进入工作流画布检查节点配置、员工 id、知识库或 OpenAPI 参数。"
+        )
     return {
         "ok": not (manifest_warnings or python_warnings or workflow_warnings),
         "manifest_warnings": manifest_warnings,
@@ -1290,16 +1372,23 @@ def _json_response_format(
 def _mod_suite_industry_card_payload(
     blueprint: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
-    industry = blueprint.get("industry") if isinstance(blueprint.get("industry"), dict) else {}
-    manifest = blueprint.get("manifest") if isinstance(blueprint.get("manifest"), dict) else {}
+    industry = (
+        blueprint.get("industry") if isinstance(blueprint.get("industry"), dict) else {}
+    )
+    manifest = (
+        blueprint.get("manifest") if isinstance(blueprint.get("manifest"), dict) else {}
+    )
     card: _facade().Dict[str, _facade().Any] = {
         "schema_version": 1,
         "id": str(
             industry.get("id") or industry.get("name") or manifest.get("id") or "通用"
         ).strip()
         or "通用",
-        "name": str(industry.get("name") or manifest.get("name") or "通用").strip() or "通用",
-        "scenario": str(industry.get("scenario") or manifest.get("description") or "").strip(),
+        "name": str(industry.get("name") or manifest.get("name") or "通用").strip()
+        or "通用",
+        "scenario": str(
+            industry.get("scenario") or manifest.get("description") or ""
+        ).strip(),
         "description": str(
             industry.get("description")
             or industry.get("scenario")
@@ -1327,11 +1416,21 @@ def _mod_suite_industry_card_payload(
 def _mod_suite_ui_shell_payload(
     blueprint: _facade().Dict[str, _facade().Any],
 ) -> _facade().Dict[str, _facade().Any]:
-    manifest = blueprint.get("manifest") if isinstance(blueprint.get("manifest"), dict) else {}
-    frontend = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
-    frontend_shell = frontend.get("shell") if isinstance(frontend.get("shell"), dict) else {}
-    ui_shell = blueprint.get("ui_shell") if isinstance(blueprint.get("ui_shell"), dict) else {}
-    industry = blueprint.get("industry") if isinstance(blueprint.get("industry"), dict) else {}
+    manifest = (
+        blueprint.get("manifest") if isinstance(blueprint.get("manifest"), dict) else {}
+    )
+    frontend = (
+        manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
+    )
+    frontend_shell = (
+        frontend.get("shell") if isinstance(frontend.get("shell"), dict) else {}
+    )
+    ui_shell = (
+        blueprint.get("ui_shell") if isinstance(blueprint.get("ui_shell"), dict) else {}
+    )
+    industry = (
+        blueprint.get("industry") if isinstance(blueprint.get("industry"), dict) else {}
+    )
     payload: _facade().Dict[str, _facade().Any] = dict(frontend_shell)
     payload.update(ui_shell)
     payload.setdefault("schema_version", 1)
@@ -1342,7 +1441,9 @@ def _mod_suite_ui_shell_payload(
     payload.setdefault("sidebar_menu", [])
     payload.setdefault(
         "menu_overrides",
-        frontend.get("menu_overrides") if isinstance(frontend.get("menu_overrides"), list) else [],
+        frontend.get("menu_overrides")
+        if isinstance(frontend.get("menu_overrides"), list)
+        else [],
     )
     payload.setdefault(
         "settings",
@@ -1355,7 +1456,9 @@ def _mod_suite_ui_shell_payload(
     return payload
 
 
-def _mod_suite_user_lines(brief: str, suggested_id: _facade().Optional[str]) -> _facade().List[str]:
+def _mod_suite_user_lines(
+    brief: str, suggested_id: _facade().Optional[str]
+) -> _facade().List[str]:
     user_lines = [brief]
     hint = _facade().normalize_mod_id(suggested_id or "")
     if hint:
@@ -1407,7 +1510,9 @@ async def generate_mod_suite_blueprint_async(
     brief = (brief or "").strip()
     if len(brief) < 3:
         return {"ok": False, "error": "描述过短"}
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return {"ok": False, "error": err}
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -1427,7 +1532,9 @@ async def generate_mod_suite_blueprint_async(
             {"role": "system", "content": _facade().SYSTEM_PROMPT_SUITE},
             {
                 "role": "user",
-                "content": "\n\n".join(_facade()._mod_suite_user_lines(brief, suggested_id)),
+                "content": "\n\n".join(
+                    _facade()._mod_suite_user_lines(brief, suggested_id)
+                ),
             },
         ],
         max_tokens=8192,
@@ -1487,7 +1594,9 @@ def import_mod_suite_repository(
             "ok": False,
             "error": f"Mod {mid} 已存在，请传 replace=true 覆盖或更换描述",
         }
-    employees_for_routes = _facade().merge_employees_for_blueprint_routes(manifest, employees)
+    employees_for_routes = _facade().merge_employees_for_blueprint_routes(
+        manifest, employees
+    )
     extra_files = {
         "backend/blueprints.py": _facade().render_suite_blueprints_py(
             mid, mname, employees_for_routes
@@ -1507,20 +1616,32 @@ def import_mod_suite_repository(
         + "\n",
     }
     frontend_app = (
-        blueprint.get("frontend_app") if isinstance(blueprint.get("frontend_app"), dict) else {}
+        blueprint.get("frontend_app")
+        if isinstance(blueprint.get("frontend_app"), dict)
+        else {}
     )
     had_frontend_fallback = False
     if generate_frontend and (not frontend_app):
         desc = str(manifest.get("description") or "").strip()
         industry_payload = _facade()._sanitize_industry(
-            blueprint.get("industry") if isinstance(blueprint.get("industry"), dict) else {},
+            blueprint.get("industry")
+            if isinstance(blueprint.get("industry"), dict)
+            else {},
             mod_name=mname,
             description=desc,
         )
-        fe = manifest.get("frontend") if isinstance(manifest.get("frontend"), dict) else {}
+        fe = (
+            manifest.get("frontend")
+            if isinstance(manifest.get("frontend"), dict)
+            else {}
+        )
         menu_raw = fe.get("menu") if isinstance(fe.get("menu"), list) else None
         fm = _facade()._normalize_frontend_menu(menu_raw, mod_id=mid, mod_name=mname)
-        bp_emp = blueprint.get("employees") if isinstance(blueprint.get("employees"), list) else []
+        bp_emp = (
+            blueprint.get("employees")
+            if isinstance(blueprint.get("employees"), list)
+            else []
+        )
         emp_for_fe = employees if employees else bp_emp
         if not isinstance(emp_for_fe, list):
             emp_for_fe = []
@@ -1550,14 +1671,18 @@ def import_mod_suite_repository(
                     frontend_app, ensure_ascii=False, indent=2
                 )
                 + "\n",
-                "frontend/routes.js": _facade().render_frontend_routes_js(mid, mname, entry_path),
+                "frontend/routes.js": _facade().render_frontend_routes_js(
+                    mid, mname, entry_path
+                ),
                 "frontend/views/HomeView.vue": _facade().render_generated_home_vue(
                     mid, mname, frontend_app
                 ),
             }
         )
     try:
-        raw_zip = _facade().build_scaffold_zip(mid, mname, manifest, extra_files=extra_files)
+        raw_zip = _facade().build_scaffold_zip(
+            mid, mname, manifest, extra_files=extra_files
+        )
     except FileNotFoundError as e:
         return {"ok": False, "error": str(e)}
     with _facade().tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
@@ -1667,11 +1792,15 @@ async def create_mod_suite_workflows_async(
         if not isinstance(emp, dict):
             continue
         try:
-            wf_cfg = emp.get("workflow") if isinstance(emp.get("workflow"), dict) else {}
+            wf_cfg = (
+                emp.get("workflow") if isinstance(emp.get("workflow"), dict) else {}
+            )
             wf_name = str(
                 wf_cfg.get("name") or f"{emp.get('label') or f'员工{idx + 1}'}工作流"
             ).strip()
-            wf_desc = str(wf_cfg.get("description") or emp.get("panel_summary") or brief).strip()
+            wf_desc = str(
+                wf_cfg.get("description") or emp.get("panel_summary") or brief
+            ).strip()
             wf = _facade().Workflow(
                 user_id=user.id,
                 name=(wf_name or f"工作流 {idx + 1}")[:256],
@@ -1697,7 +1826,9 @@ async def create_mod_suite_workflows_async(
             ) -> None:
                 if step_message_hook:
                     snippet = wlab[:28] + "…" if len(wlab) > 28 else wlab
-                    await step_message_hook(f"第 {cur}/{max(tot, 1)} 名「{snippet}」：{msg}")
+                    await step_message_hook(
+                        f"第 {cur}/{max(tot, 1)} 名「{snippet}」：{msg}"
+                    )
 
             (
                 pack_manifest,
@@ -1778,7 +1909,9 @@ def run_mod_suite_workflow_sandboxes(
         wid = item.get("workflow_id") if isinstance(item, dict) else None
         if not wid:
             continue
-        report = run_workflow_sandbox(int(wid), {}, mock_employees=True, validate_only=False)
+        report = run_workflow_sandbox(
+            int(wid), {}, mock_employees=True, validate_only=False
+        )
         try:
             record_workflow_sandbox_run(
                 db,
@@ -1791,7 +1924,9 @@ def run_mod_suite_workflow_sandboxes(
         except RECOVERABLE_ERRORS:
             pass
         item["sandbox_report"] = report
-        reports.append({"workflow_id": int(wid), "ok": bool(report.get("ok")), "report": report})
+        reports.append(
+            {"workflow_id": int(wid), "ok": bool(report.get("ok")), "report": report}
+        )
     return {
         "ok": all((r.get("ok") for r in reports)) if reports else True,
         "reports": reports,
@@ -1890,7 +2025,9 @@ def run_mod_suite_mod_sandbox(
         {
             "id": "python_compile",
             "ok": not py_warnings,
-            "message": "Python 路由骨架可编译" if not py_warnings else "；".join(py_warnings),
+            "message": "Python 路由骨架可编译"
+            if not py_warnings
+            else "；".join(py_warnings),
         }
     )
     return {"ok": all((bool(c.get("ok")) for c in checks)), "checks": checks}
@@ -1964,7 +2101,9 @@ async def run_mod_suite_ai_scaffold_async(
         model=gen.get("model"),
     )
     workflow_results = wf.get("workflow_results") or []
-    workflow_sandbox = _facade().run_mod_suite_workflow_sandboxes(db, user, workflow_results)
+    workflow_sandbox = _facade().run_mod_suite_workflow_sandboxes(
+        db, user, workflow_results
+    )
     api_summary = {
         "nodes": wf.get("api_nodes") or [],
         "warnings": wf.get("api_warnings") or [],
@@ -2103,7 +2242,8 @@ def _index_mod_with_vibe(
             summary["summary"] = idx.summary()
         else:
             summary["summary"] = {
-                "files": getattr(idx, "files_count", None) or len(getattr(idx, "files", []) or [])
+                "files": getattr(idx, "files_count", None)
+                or len(getattr(idx, "files", []) or [])
             }
     except RECOVERABLE_ERRORS as exc:
         summary["summary"] = {"error": f"index summary 取数失败: {exc}"}
@@ -2142,7 +2282,9 @@ async def attach_nl_workflow_to_employee_pack_dir(
             pass
     eskill_specs: list[dict] = []
     try:
-        from modstore_server.employee_skill_register import register_employee_pack_as_eskills
+        from modstore_server.employee_skill_register import (
+            register_employee_pack_as_eskills,
+        )
 
         eskill_specs = await register_employee_pack_as_eskills(
             db,
@@ -2159,7 +2301,8 @@ async def attach_nl_workflow_to_employee_pack_dir(
     wf = _facade().Workflow(
         user_id=user.id,
         name=name,
-        description=(brief or "").strip()[:4000] or "由工作台「做员工」生成的单员工工作流",
+        description=(brief or "").strip()[:4000]
+        or "由工作台「做员工」生成的单员工工作流",
         is_active=True,
     )
     db.add(wf)
@@ -2169,14 +2312,22 @@ async def attach_nl_workflow_to_employee_pack_dir(
     target_label = pack_dir.name
     try:
         mf_for_target = (
-            _facade().json.loads(mf_path.read_text(encoding="utf-8")) if mf_path.is_file() else {}
+            _facade().json.loads(mf_path.read_text(encoding="utf-8"))
+            if mf_path.is_file()
+            else {}
         )
-        target_pack_id = str(mf_for_target.get("id") or pack_dir.name).strip() or pack_dir.name
+        target_pack_id = (
+            str(mf_for_target.get("id") or pack_dir.name).strip() or pack_dir.name
+        )
         emp_obj = (
-            mf_for_target.get("employee") if isinstance(mf_for_target.get("employee"), dict) else {}
+            mf_for_target.get("employee")
+            if isinstance(mf_for_target.get("employee"), dict)
+            else {}
         )
         target_label = (
-            str(emp_obj.get("label") or mf_for_target.get("name") or target_pack_id).strip()
+            str(
+                emp_obj.get("label") or mf_for_target.get("name") or target_pack_id
+            ).strip()
             or target_pack_id
         )
     except RECOVERABLE_ERRORS:
@@ -2215,12 +2366,18 @@ async def attach_nl_workflow_to_employee_pack_dir(
         raw["workflow_employees"] = rows
     v2 = raw.get("employee_config_v2")
     if isinstance(v2, dict):
-        collab = v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
-        workflow = collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
+        collab = (
+            v2.get("collaboration") if isinstance(v2.get("collaboration"), dict) else {}
+        )
+        workflow = (
+            collab.get("workflow") if isinstance(collab.get("workflow"), dict) else {}
+        )
         workflow = {**workflow, "workflow_id": wf.id}
         v2["collaboration"] = {**collab, "workflow": workflow}
         cognition = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
-        agent = cognition.get("agent") if isinstance(cognition.get("agent"), dict) else {}
+        agent = (
+            cognition.get("agent") if isinstance(cognition.get("agent"), dict) else {}
+        )
         if panel_summary and (not str(agent.get("system_prompt") or "").strip()):
             agent = {**agent, "system_prompt": panel_summary}
             cognition = {**cognition, "agent": agent}
@@ -2241,20 +2398,28 @@ async def attach_nl_workflow_to_employee_pack_dir(
         ],
     }
     try:
-        from modstore_server.employee_pack_workflow_bundle import embed_workflow_bundles_in_manifest
+        from modstore_server.employee_pack_workflow_bundle import (
+            embed_workflow_bundles_in_manifest,
+        )
 
         embed_workflow_bundles_in_manifest(db, raw)
     except RECOVERABLE_ERRORS as _bundle_exc:
         _facade().logger.warning(
             "attach_nl_workflow: embed bundles failed wf_id=%d: %s", wf.id, _bundle_exc
         )
-    mf.write_text(_facade().json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mf.write_text(
+        _facade().json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     try:
-        from modstore_server.employee_asset_pipeline import reconcile_employee_pack_manifest
+        from modstore_server.employee_asset_pipeline import (
+            reconcile_employee_pack_manifest,
+        )
 
         reconcile_employee_pack_manifest(pack_dir, brief=(brief or "").strip())
     except RECOVERABLE_ERRORS as _rec_exc:
-        _facade().logger.warning("attach_nl_workflow: manifest reconcile failed: %s", _rec_exc)
+        _facade().logger.warning(
+            "attach_nl_workflow: manifest reconcile failed: %s", _rec_exc
+        )
     return {
         "ok": True,
         "automation_complete": True,
@@ -2290,7 +2455,10 @@ async def run_employee_ai_scaffold_async(
         return {"ok": False, "error": "描述过短"}
     from modstore_server.csv_tabular_runtime import is_csv_full_read, is_csv_generate
     from modstore_server.employee_brief_utils import extract_routing_brief
-    from modstore_server.excel_tabular_runtime import is_excel_full_read, is_excel_generate
+    from modstore_server.excel_tabular_runtime import (
+        is_excel_full_read,
+        is_excel_generate,
+    )
     from modstore_server.pdf_extract_runtime import is_pdf_full_read, is_pdf_generate
     from modstore_server.txt_extract_runtime import is_txt_full_read, is_txt_generate
     from modstore_server.word_extract_runtime import is_word_full_extract
@@ -2327,7 +2495,9 @@ async def run_employee_ai_scaffold_async(
             "ok": False,
             "error": "Word 生成必须走资产/direct_python 管线；请在工作台重新制作员工（勿使用 LLM 通用脚手架）",
         }
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
+        db, user, provider, model
+    )
     if err:
         return {"ok": False, "error": err}
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -2347,10 +2517,15 @@ async def run_employee_ai_scaffold_async(
     )
     if not result.get("ok"):
         return {"ok": False, "error": result.get("error") or "upstream error"}
-    manifest, perr = _facade().parse_employee_pack_llm_json(str(result.get("content") or ""))
+    manifest, perr = _facade().parse_employee_pack_llm_json(
+        str(result.get("content") or "")
+    )
     if perr or not manifest:
         return {"ok": False, "error": perr or "无法解析模型输出"}
-    from modstore_server.employee_ai_scaffold import _is_template_brief, _validate_skill_quality
+    from modstore_server.employee_ai_scaffold import (
+        _is_template_brief,
+        _validate_skill_quality,
+    )
 
     _v2 = (
         manifest.get("employee_config_v2")
@@ -2358,8 +2533,12 @@ async def run_employee_ai_scaffold_async(
         else {}
     )
     _cognition = _v2.get("cognition") if isinstance(_v2.get("cognition"), dict) else {}
-    _skills = _cognition.get("skills") if isinstance(_cognition.get("skills"), list) else []
-    _emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    _skills = (
+        _cognition.get("skills") if isinstance(_cognition.get("skills"), list) else []
+    )
+    _emp = (
+        manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    )
     _label = str(_emp.get("label") or manifest.get("name") or "").strip()
     _desc = str(manifest.get("description") or "").strip()
     _poor_briefs = sum(
@@ -2410,7 +2589,9 @@ async def run_employee_ai_scaffold_async(
                     _v2["cognition"] = _cognition
                     manifest["employee_config_v2"] = _v2
         except RECOVERABLE_ERRORS:
-            _cognition["skills"] = _validate_skill_quality(_skills, label=_label, description=_desc)
+            _cognition["skills"] = _validate_skill_quality(
+                _skills, label=_label, description=_desc
+            )
             _v2["cognition"] = _cognition
             manifest["employee_config_v2"] = _v2
     pid = str(manifest.get("id") or "").strip()
@@ -2430,7 +2611,9 @@ async def run_employee_ai_scaffold_async(
     _facade().add_user_mod(user.id, dest.name)
     saved_package: _facade().Dict[str, _facade().Any] = {}
     if publish_to_catalog:
-        with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
+        with _facade().tempfile.NamedTemporaryFile(
+            suffix=".xcemp", delete=False
+        ) as tmp:
             tmp.write(raw_zip)
             pkg_tmp_path = _facade().Path(tmp.name)
         try:
@@ -2484,7 +2667,9 @@ async def register_mod_employee_packs_async(
     *,
     mod_dir: _facade().Path,
     workflow_results: _facade().List[_facade().Dict[str, _facade().Any]],
-    status_hook: _facade().Optional[_facade().Callable[[str], _facade().Awaitable[None]]] = None,
+    status_hook: _facade().Optional[
+        _facade().Callable[[str], _facade().Awaitable[None]]
+    ] = None,
     industry: str = "通用",
     wf_attach: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
     require_workflow_automation: bool = True,
@@ -2497,7 +2682,9 @@ async def register_mod_employee_packs_async(
     """
     from modman.manifest_util import read_manifest
     from modstore_server.catalog_store import append_package
-    from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
+    from modstore_server.employee_pack_export import (
+        build_employee_pack_zip_from_workflow,
+    )
     from modstore_server.models import CatalogItem
     from modstore_server.pack_registration_guards import (
         audit_failure_error_payload,
@@ -2532,7 +2719,10 @@ async def register_mod_employee_packs_async(
         if not isinstance(entry, dict):
             continue
         label = str(
-            entry.get("label") or entry.get("panel_title") or entry.get("id") or f"员工 {idx + 1}"
+            entry.get("label")
+            or entry.get("panel_title")
+            or entry.get("id")
+            or f"员工 {idx + 1}"
         ).strip()
         catalog_pkg_id = str(entry.get("catalog_pkg_id") or "").strip()
         upstream_block = workflow_automation_block_reason(
@@ -2556,7 +2746,9 @@ async def register_mod_employee_packs_async(
         if catalog_pkg_id:
             if status_hook:
                 short = label[:24] + "…" if len(label) > 24 else label
-                await status_hook(f"第 {idx + 1}/{total} 名员工「{short}」：关联市场员工包…")
+                await status_hook(
+                    f"第 {idx + 1}/{total} 名员工「{short}」：关联市场员工包…"
+                )
             _facade().materialize_employee_pack_if_missing(catalog_pkg_id)
             row = (
                 db.query(CatalogItem)
@@ -2640,7 +2832,9 @@ async def register_mod_employee_packs_async(
             )
             continue
         summary = audit.get("summary") if isinstance(audit.get("summary"), dict) else {}
-        audit_manifest = audit.get("manifest") if isinstance(audit.get("manifest"), dict) else {}
+        audit_manifest = (
+            audit.get("manifest") if isinstance(audit.get("manifest"), dict) else {}
+        )
         classification = classify_audit_failure(audit)
         if summary and summary.get("pass") is False:
             errors.append(
@@ -2653,13 +2847,17 @@ async def register_mod_employee_packs_async(
             )
             continue
         if status_hook:
-            await status_hook(f"第 {idx + 1}/{total} 名员工「{label[:16]}」：写入 Catalog…")
+            await status_hook(
+                f"第 {idx + 1}/{total} 名员工「{label[:16]}」：写入 Catalog…"
+            )
         rec: _facade().Dict[str, _facade().Any] = {
             "id": pack_id,
             "name": str((audit.get("manifest") or {}).get("name") or label or pack_id),
             "version": str((audit.get("manifest") or {}).get("version") or "1.0.0"),
             "description": str(
-                (audit.get("manifest") or {}).get("description") or entry.get("panel_summary") or ""
+                (audit.get("manifest") or {}).get("description")
+                or entry.get("panel_summary")
+                or ""
             ),
             "artifact": "employee_pack",
             "industry": industry_name,
@@ -2689,7 +2887,9 @@ async def register_mod_employee_packs_async(
             continue
         tmp_path: _facade().Optional[_facade().Path] = None
         try:
-            with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
+            with _facade().tempfile.NamedTemporaryFile(
+                suffix=".xcemp", delete=False
+            ) as tmp:
                 tmp.write(raw)
                 tmp_path = _facade().Path(tmp.name)
             try:
@@ -2732,7 +2932,10 @@ async def register_mod_employee_packs_async(
         registered.append(item)
         if isinstance(workflow_results, list):
             for wf_item in workflow_results:
-                if isinstance(wf_item, dict) and int(wf_item.get("workflow_index") or -1) == idx:
+                if (
+                    isinstance(wf_item, dict)
+                    and int(wf_item.get("workflow_index") or -1) == idx
+                ):
                     wf_item["pack_register"] = {
                         "ok": True,
                         "pack_id": pack_id,
@@ -2913,7 +3116,9 @@ def patch_workflow_graph_employee_nodes(
     for idx, entry in enumerate(rows):
         if not isinstance(entry, dict):
             continue
-        wf_id = _facade()._parse_positive_int(entry.get("workflow_id") or entry.get("workflowId"))
+        wf_id = _facade()._parse_positive_int(
+            entry.get("workflow_id") or entry.get("workflowId")
+        )
         if not wf_id:
             patches.append({"workflow_index": idx, "skipped": "无 workflow_id"})
             continue
@@ -2936,8 +3141,8 @@ def patch_workflow_graph_employee_nodes(
                 }
             )
             continue
-        expected_pack_id, perr, _pack_manifest = _facade()._resolve_workflow_entry_pack_id(
-            mod_dir, data, entry, idx
+        expected_pack_id, perr, _pack_manifest = (
+            _facade()._resolve_workflow_entry_pack_id(mod_dir, data, entry, idx)
         )
         if perr or not expected_pack_id:
             patches.append(
@@ -2970,9 +3175,9 @@ def patch_workflow_graph_employee_nodes(
                 continue
             cfg["employee_id"] = expected_pack_id
             if not str(cfg.get("task") or "").strip():
-                cfg["task"] = str(entry.get("panel_summary") or "根据工作流上下文完成员工任务")[
-                    :400
-                ]
+                cfg["task"] = str(
+                    entry.get("panel_summary") or "根据工作流上下文完成员工任务"
+                )[:400]
             try:
                 first["node"].config = _facade().json.dumps(cfg, ensure_ascii=False)
                 db.commit()
@@ -3047,9 +3252,9 @@ def patch_workflow_graph_employee_nodes(
                 config=_facade().json.dumps(
                     {
                         "employee_id": expected_pack_id,
-                        "task": str(entry.get("panel_summary") or "根据工作流上下文完成员工任务")[
-                            :400
-                        ],
+                        "task": str(
+                            entry.get("panel_summary") or "根据工作流上下文完成员工任务"
+                        )[:400],
                     },
                     ensure_ascii=False,
                 ),

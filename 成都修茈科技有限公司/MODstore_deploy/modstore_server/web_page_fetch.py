@@ -67,7 +67,11 @@ def _host_blocked(host: str) -> bool:
     try:
         ip = ipaddress.ip_address(h)
         return bool(
-            ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
         )
     except ValueError:
         pass
@@ -117,7 +121,9 @@ async def fetch_page_text(
 
     client = get_external_client()
     try:
-        r = await client.get(u, headers=headers, timeout=deadline, follow_redirects=True)
+        r = await client.get(
+            u, headers=headers, timeout=deadline, follow_redirects=True
+        )
         r.raise_for_status()
     except RECOVERABLE_ERRORS as e:
         return "", str(e)[:200]
@@ -143,7 +149,11 @@ async def enrich_web_results_with_pages(
     if not web_fetch_pages_enabled() or not results:
         return results
     n = max_pages if max_pages is not None else web_fetch_max_pages()
-    cap = max_chars_per_page if max_chars_per_page is not None else web_fetch_max_chars_per_page()
+    cap = (
+        max_chars_per_page
+        if max_chars_per_page is not None
+        else web_fetch_max_chars_per_page()
+    )
     sem = asyncio.Semaphore(3)
 
     async def _one(it: Dict[str, Any]) -> Dict[str, Any]:

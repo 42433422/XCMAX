@@ -1,4 +1,5 @@
 """Bridge helpers so middleware can depend on app.security instead of ad-hoc checks."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -18,7 +19,9 @@ class SecurityMiddlewareBridge:
         self.allowlist = IpAllowlist(allow_cidrs)
         self.buckets = build_default_buckets()
 
-    def check_auth(self, ctx: RequestSecurityContext, roles: list[str] | None = None) -> tuple[bool, str]:
+    def check_auth(
+        self, ctx: RequestSecurityContext, roles: list[str] | None = None
+    ) -> tuple[bool, str]:
         return evaluate_login_attempt(
             principal=ctx.principal,
             client_ip=ctx.client_ip,
@@ -27,5 +30,7 @@ class SecurityMiddlewareBridge:
             required_roles=roles,
         )
 
-    def wrap_payload(self, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:
+    def wrap_payload(
+        self, payload: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         return secure_response_envelope(payload, apply_security_headers(headers or {}))

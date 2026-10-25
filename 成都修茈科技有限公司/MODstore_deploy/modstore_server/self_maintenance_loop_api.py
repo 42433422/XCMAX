@@ -40,7 +40,11 @@ def _deployment_receipt_token_valid(
 
 def _release_manifest_payload() -> Dict[str, Any]:
     configured = str(os.environ.get("MODSTORE_RELEASE_MANIFEST") or "").strip()
-    path = Path(configured) if configured else Path("/opt/xcmax/current/.xcmax-release.json")
+    path = (
+        Path(configured)
+        if configured
+        else Path("/opt/xcmax/current/.xcmax-release.json")
+    )
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -151,7 +155,9 @@ async def record_self_maintenance_deployment_receipt(
         raise HTTPException(401, "invalid_deployment_receipt_token")
 
     from modstore_server.deploy_context import health_payload
-    from modstore_server.maintenance_loop.deployment import _record_verified_deploy_employee_metric
+    from modstore_server.maintenance_loop.deployment import (
+        _record_verified_deploy_employee_metric,
+    )
     from modstore_server.maintenance_loop.store import (
         _append_governance_audit,
         _append_ledger,
@@ -225,7 +231,9 @@ async def record_modstore_evolution_deployment_receipt(
     if str(body.get("workflow_conclusion") or "").lower() != "success":
         raise HTTPException(409, "workflow_not_successful")
     packages = body.get("packages")
-    if not isinstance(packages, list) or any(not isinstance(item, dict) for item in packages):
+    if not isinstance(packages, list) or any(
+        not isinstance(item, dict) for item in packages
+    ):
         raise HTTPException(422, "packages_must_be_object_list")
 
     from modstore_server.deploy_context import health_payload
@@ -278,7 +286,9 @@ async def record_modstore_evolution_deployment_receipt(
         raise HTTPException(409, exc.reason) from exc
 
 
-@router.post("/governance-review", summary="Acknowledge self-maintenance governance audit")
+@router.post(
+    "/governance-review", summary="Acknowledge self-maintenance governance audit"
+)
 async def review_self_maintenance_governance(
     body: Dict[str, Any] = Body(default_factory=dict),
     admin_user: User = Depends(require_admin),

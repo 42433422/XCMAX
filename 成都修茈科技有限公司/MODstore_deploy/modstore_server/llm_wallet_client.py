@@ -29,7 +29,9 @@ class JavaWalletClient:
         request_id: str,
     ) -> WalletHold:
         if not self.enabled:
-            return WalletHold(hold_no=f"debug-{request_id}", amount=money(amount), enabled=False)
+            return WalletHold(
+                hold_no=f"debug-{request_id}", amount=money(amount), enabled=False
+            )
         data = await self._post(
             "/api/wallet/ai/preauthorize",
             authorization,
@@ -80,7 +82,9 @@ class JavaWalletClient:
                 },
             )
 
-    async def _post(self, path: str, authorization: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    async def _post(
+        self, path: str, authorization: str, body: Dict[str, Any]
+    ) -> Dict[str, Any]:
         if not authorization:
             raise HTTPException(401, "缺少登录令牌，无法完成钱包扣费")
         from modstore_server.infrastructure.http_clients import get_java_client
@@ -96,7 +100,9 @@ class JavaWalletClient:
                 timeout=20.0,
             )
         except httpx.HTTPError as error:
-            from modstore_server.application.payment_gateway import java_payment_unreachable_message
+            from modstore_server.application.payment_gateway import (
+                java_payment_unreachable_message,
+            )
 
             raise HTTPException(502, java_payment_unreachable_message(error)) from error
         if response.status_code >= 400:

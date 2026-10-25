@@ -386,7 +386,10 @@ class TestExecute:
                 return_value=mock_app_svc,
             ),
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -429,7 +432,10 @@ class TestExecute:
         mock_db.query.return_value.filter.return_value.all.return_value = []
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="无法解析的文本",
@@ -446,7 +452,10 @@ class TestExecute:
         mock_db.query.return_value.filter.return_value.all.return_value = []
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="再加2桶",
@@ -476,7 +485,10 @@ class TestExecute:
                 return_value=mock_app_svc,
             ),
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="七彩乐园再加2桶9803规格28",
@@ -498,7 +510,10 @@ class TestExecute:
         ]
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -524,7 +539,10 @@ class TestExecute:
         ]
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -550,7 +568,10 @@ class TestExecute:
         ]
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             # 源码已修复：用 `"quantity_tins" in product` 判断键是否存在（而非 `or` 短路），
             # 且 `float(quantity)` 包裹在 try/except 内回退 0.0；当 quantity_tins=0 时
@@ -580,7 +601,10 @@ class TestExecute:
         ]
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -615,7 +639,10 @@ class TestExecute:
                 return_value=mock_app_svc,
             ),
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -652,7 +679,10 @@ class TestExecute:
                 return_value=mock_app_svc,
             ),
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="",
@@ -692,7 +722,10 @@ class TestExecute:
                 return_value=mock_app_svc,
             ),
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="七彩乐园9803规格28 5桶",
@@ -709,7 +742,10 @@ class TestExecute:
         mock_db.query.return_value.filter.return_value.all.return_value = []
         with (
             patch.object(svc, "_query_active_purchase_unit_names", return_value=["七彩乐园"]),
-            patch("app.domain.shared_services.shipment_number_mode_service.get_db", _mock_get_db(mock_db)),
+            patch(
+                "app.domain.shared_services.shipment_number_mode_service.get_db",
+                _mock_get_db(mock_db),
+            ),
         ):
             result, status = svc.execute(
                 order_text="随便说说",

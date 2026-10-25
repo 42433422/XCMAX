@@ -19,26 +19,42 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-from modstore_server.public_company_hall_config import DEPARTMENT_COLORS as DEPARTMENT_COLORS
-from modstore_server.public_company_hall_config import DEPARTMENT_ORDER as DEPARTMENT_ORDER
+from modstore_server.public_company_hall_config import (
+    DEPARTMENT_COLORS as DEPARTMENT_COLORS,
+)
+from modstore_server.public_company_hall_config import (
+    DEPARTMENT_ORDER as DEPARTMENT_ORDER,
+)
 from modstore_server.public_company_hall_config import LINE_TO_DEPT as _LINE_TO_DEPT
-from modstore_server.public_company_hall_config import WORKING_STATUSES as _WORKING_STATUSES
-from modstore_server.public_company_hall_signals import _action_signals as _action_signals
+from modstore_server.public_company_hall_config import (
+    WORKING_STATUSES as _WORKING_STATUSES,
+)
+from modstore_server.public_company_hall_signals import (
+    _action_signals as _action_signals,
+)
 from modstore_server.public_company_hall_signals import _catalog_names as _catalog_names
 from modstore_server.public_company_hall_signals import _dept_members as _dept_members
 from modstore_server.public_company_hall_signals import (
     _load_published_action_board as _load_published_action_board,
 )
-from modstore_server.public_company_hall_signals import _metric_signals as _metric_signals
+from modstore_server.public_company_hall_signals import (
+    _metric_signals as _metric_signals,
+)
 from modstore_server.public_company_hall_signals import _presence_for as _presence_for
-from modstore_server.public_company_hall_signals import _primary_dept_map as _primary_dept_map
+from modstore_server.public_company_hall_signals import (
+    _primary_dept_map as _primary_dept_map,
+)
 from modstore_server.public_company_hall_signals import _repo_root as _repo_root
 from modstore_server.public_company_hall_text import _clean as _clean
-from modstore_server.public_company_hall_text import _feed_occurred_at as _feed_occurred_at
+from modstore_server.public_company_hall_text import (
+    _feed_occurred_at as _feed_occurred_at,
+)
 from modstore_server.public_company_hall_text import (
     _public_ai_driver_snapshot as _public_ai_driver_snapshot,
 )
-from modstore_server.public_company_hall_text import _publicize_feed_text as _publicize_feed_text
+from modstore_server.public_company_hall_text import (
+    _publicize_feed_text as _publicize_feed_text,
+)
 from modstore_server.public_company_hall_text import _sort_feed as _sort_feed
 
 logger = logging.getLogger(__name__)
@@ -188,7 +204,9 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
             day=t.get("day") or board.get("day"),
             clock=t.get("ts"),
         )
-        summary, detail = _publicize_feed_text(str(t.get("title") or t.get("text") or ""))
+        summary, detail = _publicize_feed_text(
+            str(t.get("title") or t.get("text") or "")
+        )
         href = str(t.get("href") or "").strip()
         if href in {"", "/", "/world-will", "/world-will.html"}:
             href = ""
@@ -199,7 +217,8 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 "occurred_at": occurred_at,
                 "employee_id": eid,
                 "employee_name": emp.get("name") or owner or "AI 员工",
-                "dept_id": emp.get("dept_id") or _LINE_TO_DEPT.get(str(t.get("line") or ""), ""),
+                "dept_id": emp.get("dept_id")
+                or _LINE_TO_DEPT.get(str(t.get("line") or ""), ""),
                 "dept_label": emp.get("dept_label") or t.get("line_label") or "",
                 "dept_color": emp.get("dept_color")
                 or DEPARTMENT_COLORS.get(
@@ -220,7 +239,10 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
     for eid, met in metrics.items():
         if not met.get("last_at") or not met.get("last_task"):
             continue
-        if any(f.get("employee_id") == eid and f.get("source") == "action_board" for f in feed):
+        if any(
+            f.get("employee_id") == eid and f.get("source") == "action_board"
+            for f in feed
+        ):
             continue
         emp = by_emp.get(eid) or {}
         mood = "alert" if str(met.get("last_status")) != "success" else "idle"
@@ -324,9 +346,12 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
         "last_activity": last_activity,
         "board": {
             "breakpoints_total": int(
-                ((board.get("breakpoints") or {}).get("summary") or {}).get("total") or 0
+                ((board.get("breakpoints") or {}).get("summary") or {}).get("total")
+                or 0
             ),
-            "goals_total": int(((board.get("goals") or {}).get("summary") or {}).get("total") or 0),
+            "goals_total": int(
+                ((board.get("goals") or {}).get("summary") or {}).get("total") or 0
+            ),
             "trajectory_total": len(board.get("trajectory") or []),
             "breakpoints": bp_items,
             "goals": goal_items,
@@ -336,8 +361,12 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
                 {
                     "id": (busiest or {}).get("id"),
                     "label": (busiest or {}).get("label"),
-                    "working": int(((busiest or {}).get("counts") or {}).get("working") or 0),
-                    "alert": int(((busiest or {}).get("counts") or {}).get("alert") or 0),
+                    "working": int(
+                        ((busiest or {}).get("counts") or {}).get("working") or 0
+                    ),
+                    "alert": int(
+                        ((busiest or {}).get("counts") or {}).get("alert") or 0
+                    ),
                 }
                 if busiest
                 else None
@@ -359,7 +388,9 @@ def build_public_company_hall(*, day: Optional[str] = None) -> Dict[str, Any]:
 def public_hall_targets() -> List[Path]:
     isolated_output = (os.environ.get("MODSTORE_PUBLIC_OUTPUT_ROOT") or "").strip()
     if isolated_output:
-        return [Path(isolated_output).expanduser().resolve() / "download-company-hall.json"]
+        return [
+            Path(isolated_output).expanduser().resolve() / "download-company-hall.json"
+        ]
     root = _repo_root()
     targets = [
         root / "成都修茈科技有限公司" / "download-company-hall.json",

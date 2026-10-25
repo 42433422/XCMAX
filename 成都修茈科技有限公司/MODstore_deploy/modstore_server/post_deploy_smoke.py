@@ -42,7 +42,9 @@ def _persist_last_result(payload: Dict[str, Any]) -> None:
     try:
         path = _state_file_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        path.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
     except RECOVERABLE_ERRORS:
         logger.exception("post_deploy_smoke: persist last result failed")
 
@@ -61,7 +63,9 @@ def load_last_smoke_result() -> Dict[str, Any]:
 
 def slo_halt_blocks_auto_merge() -> bool:
     """When ``MODSTORE_SLO_HALT_AUTO_MERGE=1`` and last smoke failed, block auto-merge/deploy."""
-    enabled = (os.environ.get("MODSTORE_SLO_HALT_AUTO_MERGE", "0") or "").strip().lower()
+    enabled = (
+        (os.environ.get("MODSTORE_SLO_HALT_AUTO_MERGE", "0") or "").strip().lower()
+    )
     if enabled not in ("1", "true", "yes", "on"):
         return False
     last = load_last_smoke_result()
@@ -74,7 +78,9 @@ def slo_halt_blocks_auto_merge() -> bool:
 
 def _probe_urls() -> List[Tuple[str, str]]:
     health = (os.environ.get("MODSTORE_DEPLOY_HEALTH_URL") or _DEFAULT_HEALTH).strip()
-    market = (os.environ.get("MODSTORE_POST_DEPLOY_MARKET_URL") or _DEFAULT_MARKET).strip()
+    market = (
+        os.environ.get("MODSTORE_POST_DEPLOY_MARKET_URL") or _DEFAULT_MARKET
+    ).strip()
     out: List[Tuple[str, str]] = []
     if health:
         out.append(("health", health))
@@ -98,7 +104,11 @@ def _http_get_status(url: str, *, timeout_sec: float) -> Tuple[int, str]:
 
 def run_post_deploy_smoke(*, timeout_sec: float | None = None) -> Dict[str, Any]:
     """Probe configured URLs; expect HTTP 2xx."""
-    enabled = (os.environ.get("MODSTORE_POST_DEPLOY_SMOKE_ENABLED", "1") or "").strip().lower()
+    enabled = (
+        (os.environ.get("MODSTORE_POST_DEPLOY_SMOKE_ENABLED", "1") or "")
+        .strip()
+        .lower()
+    )
     if enabled in ("0", "false", "no", "off"):
         return {"ok": True, "skipped": True, "probes": []}
 
@@ -124,7 +134,9 @@ def run_post_deploy_smoke(*, timeout_sec: float | None = None) -> Dict[str, Any]
         else:
             row["ok"] = True
         probes.append(row)
-        logger.info("post_deploy_smoke %s %s status=%s ok=%s", name, url, status, row["ok"])
+        logger.info(
+            "post_deploy_smoke %s %s status=%s ok=%s", name, url, status, row["ok"]
+        )
 
     result = {
         "ok": ok and bool(probes),

@@ -31,7 +31,9 @@ from modstore_server.csv_tabular_runtime import (
     render_csv_read_convert_module,
 )
 from modstore_server.employee_ai_scaffold import parse_employee_pack_llm_json
-from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+from modstore_server.employee_pack_blueprints_template import (
+    render_employee_pack_blueprints_py,
+)
 from modstore_server.excel_tabular_runtime import (
     build_excel_generate_rule_spec,
     build_excel_read_rule_spec,

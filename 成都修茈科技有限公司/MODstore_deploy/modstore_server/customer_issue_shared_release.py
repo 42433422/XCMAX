@@ -11,7 +11,10 @@ from typing import Any, Callable, Iterable
 import httpx
 from fastapi import HTTPException
 
-from modstore_server.customer_delivery_receipts import canonical_sha256, trusted_host_release
+from modstore_server.customer_delivery_receipts import (
+    canonical_sha256,
+    trusted_host_release,
+)
 from modstore_server.customer_issue_delivery_contract import (
     issue_resolution,
     repair_verification,
@@ -76,14 +79,16 @@ def _change_request_reference(value: Any) -> int:
     return 0
 
 
-def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[str, Any]]) -> None:
+def record_worker_repair(
+    db: Any, ticket: Any, event_id: int, rows: list[dict[str, Any]]
+) -> None:
     """Called only by incident execution, never by a customer write endpoint."""
     if not team_succeeded(rows):
         return
     fix = next((row for row in rows if row.get("role") == "fix"), {})
-    reference = _change_request_reference(fix.get("result")) or _change_request_reference(
-        fix.get("handler_outputs")
-    )
+    reference = _change_request_reference(
+        fix.get("result")
+    ) or _change_request_reference(fix.get("handler_outputs"))
     if not reference:
         return
     cr = db.get(EmployeeChangeRequest, reference)
@@ -104,7 +109,9 @@ def record_worker_repair(db: Any, ticket: Any, event_id: int, rows: list[dict[st
             request_json=json_dumps(
                 {"incident_event_id": int(event_id), "worker_id": fix["employee_id"]}
             ),
-            result_json=json_dumps({"team_verified": True, "change_request_id": reference}),
+            result_json=json_dumps(
+                {"team_verified": True, "change_request_id": reference}
+            ),
         )
     )
     db.flush()
@@ -119,7 +126,9 @@ def _merged_repair(
         return None
 
     def fetch(url: str) -> Any:
-        return proofs.read(url, lambda: _fetch_json(url)) if proofs else _fetch_json(url)
+        return (
+            proofs.read(url, lambda: _fetch_json(url)) if proofs else _fetch_json(url)
+        )
 
     pulls = (
         proofs.read(f"{_API}/commits/{head}/pulls", lambda: _pulls_for_commit(head))
@@ -135,7 +144,8 @@ def _merged_repair(
         if (
             not pr.get("merged")
             or (pr.get("base") or {}).get("ref") != "main"
-            or ((pr.get("base") or {}).get("repo") or {}).get("full_name") != "42433422/XCMAX"
+            or ((pr.get("base") or {}).get("repo") or {}).get("full_name")
+            != "42433422/XCMAX"
             or (pr.get("head") or {}).get("sha") != head
             or not re.fullmatch(r"[0-9a-f]{40}", merge_sha)
         ):
@@ -181,9 +191,9 @@ def bind_shared_release(
     private_prerequisite = resolution.get("route") == "private_mod" and evidence.get(
         "shared_core_prerequisite"
     )
-    if (resolution.get("route") != "shared_core" and not private_prerequisite) or resolution.get(
-        "repair_verified"
-    ) is not True:
+    if (
+        resolution.get("route") != "shared_core" and not private_prerequisite
+    ) or resolution.get("repair_verified") is not True:
         return None
     release = trusted_host_release(host_sha)
     if not release:
@@ -196,7 +206,8 @@ def bind_shared_release(
         shared_link = active_shared_repair(db, ticket)
     if (
         existing.get("host_sha") == host_sha
-        and existing.get("signed_metadata_sha256") == release.get("signed_metadata_sha256")
+        and existing.get("signed_metadata_sha256")
+        == release.get("signed_metadata_sha256")
         and (
             not resolution.get("shared_repair_action_id")
             or (shared_link and existing.get("action_id") == shared_link["action_id"])
@@ -211,9 +222,14 @@ def bind_shared_release(
             status="completed",
         )
         .filter(
-            CustomerServiceAction.action_type.in_(["issue.repair.result", "issue.repair.shared"])
+            CustomerServiceAction.action_type.in_(
+                ["issue.repair.result", "issue.repair.shared"]
+            )
         )
-        .filter(CustomerServiceAction.id > int(resolution.get("reopen_after_action_id") or 0))
+        .filter(
+            CustomerServiceAction.id
+            > int(resolution.get("reopen_after_action_id") or 0)
+        )
         .order_by(CustomerServiceAction.id.desc())
         .all()
     )
@@ -259,7 +275,9 @@ def bind_shared_release(
             resolution["state"] = "queued_private_production"
         ticket.evidence_json = json_dumps(evidence)
         if private_prerequisite:
-            enqueue_issue(db, ticket, revision=f"prerequisite-released:{target['fix_sha']}")
+            enqueue_issue(
+                db, ticket, revision=f"prerequisite-released:{target['fix_sha']}"
+            )
         db.flush()
         return target
     return None

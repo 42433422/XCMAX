@@ -227,7 +227,9 @@ class TestTrainIntentModelErrors:
                 train_intent_model(data_path="fake.json", output_dir=str(tmp_path / "out"))
 
     @patch("app.domain.shared_services.intent_trainer.Trainer")
-    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
     @patch("app.domain.shared_services.intent_trainer.AutoConfig.from_pretrained")
     @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
     @patch("app.domain.shared_services.intent_trainer.load_training_data")
@@ -263,7 +265,9 @@ class TestTrainIntentModelErrors:
 
 
 class TestExportToOnnxWithRuntime:
-    @patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
     @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
     @patch("app.domain.shared_services.intent_trainer.torch.onnx.export")
     def test_export_with_onnxruntime(self, mock_onnx_export, mock_tokenizer, mock_model, tmp_path):

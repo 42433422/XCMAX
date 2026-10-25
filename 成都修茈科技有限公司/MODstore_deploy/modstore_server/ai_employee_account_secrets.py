@@ -21,13 +21,19 @@ _PLATFORM_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 
 def _secrets_root() -> Path:
     configured = (os.environ.get("MODSTORE_AI_ACCOUNT_SECRETS_DIR") or "").strip()
-    return Path(configured).expanduser() if configured else _PROJECT_ROOT / "_local_secrets"
+    return (
+        Path(configured).expanduser()
+        if configured
+        else _PROJECT_ROOT / "_local_secrets"
+    )
 
 
 def _normalized_platform(platform: str) -> str:
     normalized = (platform or "").strip().lower()
     if not _PLATFORM_RE.fullmatch(normalized):
-        raise ValueError("platform must contain only lowercase letters, digits, '_' or '-'")
+        raise ValueError(
+            "platform must contain only lowercase letters, digits, '_' or '-'"
+        )
     return normalized
 
 

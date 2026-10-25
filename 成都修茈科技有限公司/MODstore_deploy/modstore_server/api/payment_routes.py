@@ -111,7 +111,9 @@ def _fulfill_paid_order(out_trade_no: str) -> None:
             session.commit()
             return
         description, txn_type = strategy.description_and_txn_type(ctx)
-        strategy.fulfill(session, ctx, now=now, description=description, txn_type=txn_type)
+        strategy.fulfill(
+            session, ctx, now=now, description=description, txn_type=txn_type
+        )
         payment_orders.merge_fields(out_trade_no, fulfilled=True)
         session.commit()
     logger.info("_fulfill_paid_order completed for %s", out_trade_no)
@@ -149,7 +151,9 @@ def api_my_plan(user: User = Depends(_get_current_user)):
         row = active_membership_plan(session, int(user.id))
         if not row:
             return {"plan": None, "quotas": [], "membership": _membership_meta(None)}
-        plan = session.query(PlanTemplate).filter(PlanTemplate.id == row.plan_id).first()
+        plan = (
+            session.query(PlanTemplate).filter(PlanTemplate.id == row.plan_id).first()
+        )
         membership = _membership_meta(row.plan_id)
         quotas = session.query(Quota).filter(Quota.user_id == user.id).all()
         return {
@@ -347,7 +351,9 @@ def api_payment_dismiss_non_active_orders(user: User = Depends(_get_current_user
     前端 paymentDismissNonActiveOrders 消费此接口。
     """
     try:
-        rows, _ = payment_orders.list_orders(user_id=user.id, status=None, limit=500, offset=0)
+        rows, _ = payment_orders.list_orders(
+            user_id=user.id, status=None, limit=500, offset=0
+        )
         dismissed = 0
         for o in rows:
             if (o.get("status") or "").lower() in (

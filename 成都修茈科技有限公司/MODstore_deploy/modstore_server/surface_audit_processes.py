@@ -93,7 +93,10 @@ def _kill_pid_file(label: str, pid_file: Path) -> None:
 
 
 def stop_surface_audit_ephemeral(
-    *, pids_directory: Path, fhd_directory: Path, stop_process: Callable[[str, Path], None]
+    *,
+    pids_directory: Path,
+    fhd_directory: Path,
+    stop_process: Callable[[str, Path], None],
 ) -> Dict[str, Any]:
     """关闭 ``ensure_surface_audit_deps`` 拉起的临时服务（不含 MODstore 日更栈）。"""
     stopped: List[str] = []

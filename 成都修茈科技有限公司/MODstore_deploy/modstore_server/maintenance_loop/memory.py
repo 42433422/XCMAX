@@ -14,7 +14,9 @@ def _memory_context(memory: Dict[str, Any]) -> str:
     recent_runs = memory.get("recent_runs") if isinstance(memory, dict) else []
     open_items = memory.get("open_items") if isinstance(memory, dict) else []
     closed_items = memory.get("closed_items") if isinstance(memory, dict) else []
-    last_decision = memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    last_decision = (
+        memory.get("last_policy_decision") if isinstance(memory, dict) else None
+    )
     payload = {
         "closed_items": closed_items[-8:] if isinstance(closed_items, list) else [],
         "last_policy_decision": last_decision,
@@ -208,7 +210,9 @@ def _evict_loop_memory_items(
         else:
             kept.append(item)
     memory["open_items"] = kept
-    memory["evicted_items"] = (evicted_items + newly_evicted)[-config.LOOP_EVICT_MAX_ITEMS :]
+    memory["evicted_items"] = (evicted_items + newly_evicted)[
+        -config.LOOP_EVICT_MAX_ITEMS :
+    ]
     if not newly_evicted:
         return {
             "evicted_count": 0,
@@ -220,7 +224,11 @@ def _evict_loop_memory_items(
             (1 for entry in newly_evicted if entry["evict_reason"] == "aged_out_7d")
         ),
         "stuck_24h_retry_3": sum(
-            (1 for entry in newly_evicted if entry["evict_reason"] == "stuck_24h_retry_3")
+            (
+                1
+                for entry in newly_evicted
+                if entry["evict_reason"] == "stuck_24h_retry_3"
+            )
         ),
     }
     summary_record = {
@@ -259,7 +267,9 @@ def evict_loop_memory_items(
     the loop is stuck resuming long-failed runs.
     """
     memory = store._load_loop_memory()
-    result = _evict_loop_memory_items(memory, actor=actor, note=note, admin_user_id=admin_user_id)
+    result = _evict_loop_memory_items(
+        memory, actor=actor, note=note, admin_user_id=admin_user_id
+    )
     memory["updated_at"] = config._iso(config._utc_now())
     store._write_loop_memory(memory)
     return {

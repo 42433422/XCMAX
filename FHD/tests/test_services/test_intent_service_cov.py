@@ -86,7 +86,9 @@ class TestLoadIntentRuntimeRules:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import (
                 _load_intent_runtime_rules,
                 _quick_intent_patterns,
@@ -107,7 +109,9 @@ class TestLoadIntentRuntimeRules:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import _load_intent_runtime_rules
 
             _load_intent_runtime_rules()
@@ -125,7 +129,9 @@ class TestLoadIntentRuntimeRules:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import _load_intent_runtime_rules
 
             _load_intent_runtime_rules()  # should not raise
@@ -140,7 +146,9 @@ class TestLoadIntentRuntimeRules:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import _load_intent_runtime_rules
 
             _load_intent_runtime_rules()
@@ -158,7 +166,9 @@ class TestLoadIntentRuntimeRules:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import _load_intent_runtime_rules
 
             _load_intent_runtime_rules()  # should not raise
@@ -480,7 +490,8 @@ class TestRecognizeIntentsImpl:
 
         exc_cls = RECOVERABLE_ERRORS[0] if isinstance(RECOVERABLE_ERRORS, tuple) else Exception
         with patch(
-            "app.domain.shared_services.intent_service._recognize_intents_impl", side_effect=exc_cls("boom")
+            "app.domain.shared_services.intent_service._recognize_intents_impl",
+            side_effect=exc_cls("boom"),
         ):
             result = recognize_intents("x")
         assert result["primary_intent"] is None
@@ -979,7 +990,9 @@ class TestLoadIntentRuntimeRulesEdgeCases:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             import app.domain.shared_services.intent_service as _mod
 
             _mod._quick_intent_patterns = []
@@ -999,7 +1012,9 @@ class TestLoadIntentRuntimeRulesEdgeCases:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             import app.domain.shared_services.intent_service as _mod
 
             _mod._context_inherit_patterns = []
@@ -1018,7 +1033,9 @@ class TestLoadIntentRuntimeRulesEdgeCases:
                 "append_keywords": [],
             }
         }
-        with patch("app.domain.shared_services.intent_service.get_intent_config", return_value=config):
+        with patch(
+            "app.domain.shared_services.intent_service.get_intent_config", return_value=config
+        ):
             from app.domain.shared_services.intent_service import _load_intent_runtime_rules
 
             _load_intent_runtime_rules()

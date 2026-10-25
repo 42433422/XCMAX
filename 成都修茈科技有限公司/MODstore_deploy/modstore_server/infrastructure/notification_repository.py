@@ -12,8 +12,13 @@ from typing import Any
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from modstore_server.domain.notification.notification_types import Notification as DomainNotification
-from modstore_server.domain.notification.notification_types import NotificationType, OutboundNotification
+from modstore_server.domain.notification.notification_types import (
+    Notification as DomainNotification,
+)
+from modstore_server.domain.notification.notification_types import (
+    NotificationType,
+    OutboundNotification,
+)
 from modstore_server.models import Notification as NotificationRow
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
@@ -73,7 +78,9 @@ class SqlNotificationRepository:
         kind: str | None = None,
         limit: int = 50,
     ) -> list[DomainNotification]:
-        q = self._session.query(NotificationRow).filter(NotificationRow.user_id == user_id)
+        q = self._session.query(NotificationRow).filter(
+            NotificationRow.user_id == user_id
+        )
         if unread_only:
             q = q.filter(NotificationRow.is_read.is_(False))
         normalised_kind = (kind or "").strip()

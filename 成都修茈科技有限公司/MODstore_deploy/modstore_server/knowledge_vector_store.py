@@ -28,7 +28,11 @@ import time
 from typing import Any, Dict, List, Optional
 
 from modstore_server import vector_engine
-from modstore_server.models import KnowledgeCollection, KnowledgeDocument, get_session_factory
+from modstore_server.models import (
+    KnowledgeCollection,
+    KnowledgeDocument,
+    get_session_factory,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.vector_engine import VectorEngineError
 
@@ -47,7 +51,9 @@ def vector_dim() -> int:
 
 
 def _backend() -> str:
-    return (os.environ.get("MODSTORE_VECTOR_BACKEND") or "chroma").strip().lower() or "chroma"
+    return (
+        os.environ.get("MODSTORE_VECTOR_BACKEND") or "chroma"
+    ).strip().lower() or "chroma"
 
 
 def make_doc_id(user_id: int, filename: str, raw: bytes) -> str:
@@ -313,7 +319,9 @@ def list_documents(user_id: int) -> List[Dict[str, Any]]:
 def delete_document(user_id: int, doc_id: str, *, missing_ok: bool = False) -> bool:
     if _backend() == "redis":
         try:
-            return _redis_module().delete_document(user_id, doc_id, missing_ok=missing_ok)
+            return _redis_module().delete_document(
+                user_id, doc_id, missing_ok=missing_ok
+            )
         except BOUNDARY_ERRORS as e:  # noqa: BLE001
             raise KnowledgeVectorError(str(e)) from e
 
@@ -350,14 +358,18 @@ def delete_document(user_id: int, doc_id: str, *, missing_ok: bool = False) -> b
             pass
         if doc_row is not None:
             session.delete(doc_row)
-            coll.chunk_count = max(0, int(coll.chunk_count or 0) - int(doc_row.chunk_count or 0))
+            coll.chunk_count = max(
+                0, int(coll.chunk_count or 0) - int(doc_row.chunk_count or 0)
+            )
             session.commit()
         if not existed and not missing_ok:
             return False
         return existed
 
 
-def search(user_id: int, query_embedding: List[float], limit: int = 6) -> List[Dict[str, Any]]:
+def search(
+    user_id: int, query_embedding: List[float], limit: int = 6
+) -> List[Dict[str, Any]]:
     if _backend() == "redis":
         try:
             return _redis_module().search(user_id, query_embedding, limit)

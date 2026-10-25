@@ -113,7 +113,10 @@ async def employee_publish(
     将本地库中的员工包重建 zip 并写入商店目录（catalog_store + catalog_items）。
     调用方应先通过 /employee-bench-test 且 passed=true，再调此接口。
     """
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 
     employee_id = (body.employee_id or "").strip()
@@ -128,12 +131,18 @@ async def employee_publish(
         raw_mf = _load_registry_aligned_employee_manifest(pack_dir, employee_id)
     except RECOVERABLE_ERRORS as exc:
         raise HTTPException(500, f"manifest.json 读取失败: {exc}") from exc
-    mf_path.write_text(json.dumps(raw_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mf_path.write_text(
+        json.dumps(raw_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     try:
         pkg_id = str(raw_mf.get("id") or employee_id).strip() or employee_id
-        from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+        from modstore_server.employee_asset_pipeline import (
+            build_employee_pack_zip_for_library,
+        )
 
-        zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
+        zip_bytes = build_employee_pack_zip_for_library(
+            pkg_id, raw_mf, pack_dir=pack_dir
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
@@ -147,7 +156,10 @@ async def employee_publish(
         "artifact": "employee_pack",
         "industry": body.industry or str(raw_mf.get("industry") or "通用"),
         "release_channel": body.release_channel or "stable",
-        "commerce": {"mode": "free" if body.price <= 0 else "paid", "price": body.price},
+        "commerce": {
+            "mode": "free" if body.price <= 0 else "paid",
+            "price": body.price,
+        },
         "license": {"type": "personal", "verify_url": None},
     }
     import tempfile as _tmpmod
@@ -170,7 +182,9 @@ async def employee_publish(
     sf = ports.database()
     with sf() as db:
         try:
-            upsert_catalog_item_from_xc_package_dict(db, saved, author_id=cast(int, user.id))
+            upsert_catalog_item_from_xc_package_dict(
+                db, saved, author_id=cast(int, user.id)
+            )
             row = store_catalog_row(
                 db,
                 pack_id=pkg_id,
@@ -216,7 +230,10 @@ async def employee_sync_test(
     """
     import httpx
 
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
     from modstore_server.employee_bench import generate_bench_tasks, run_and_score_bench
 
@@ -278,9 +295,13 @@ async def employee_sync_test(
     pkg_id = str(raw_mf.get("id") or employee_id).strip() or employee_id
     version = str(raw_mf.get("version") or "1.0.0").strip()
     try:
-        from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+        from modstore_server.employee_asset_pipeline import (
+            build_employee_pack_zip_for_library,
+        )
 
-        zip_bytes = build_employee_pack_zip_for_library(pkg_id, raw_mf, pack_dir=pack_dir)
+        zip_bytes = build_employee_pack_zip_for_library(
+            pkg_id, raw_mf, pack_dir=pack_dir
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RECOVERABLE_ERRORS as exc:
@@ -316,7 +337,9 @@ async def employee_sync_test(
     sf2 = ports.database()
     with sf2() as db2:
         try:
-            upsert_catalog_item_from_xc_package_dict(db2, saved, author_id=cast(int, user.id))
+            upsert_catalog_item_from_xc_package_dict(
+                db2, saved, author_id=cast(int, user.id)
+            )
             store_catalog_row(
                 db2,
                 pack_id=pkg_id,
@@ -346,7 +369,11 @@ async def employee_sync_test(
             if r.status_code < 400:
                 fhd_result = {"ok": True, "status": r.status_code, "data": r.json()}
             else:
-                fhd_result = {"ok": False, "status": r.status_code, "error": r.text[:400]}
+                fhd_result = {
+                    "ok": False,
+                    "status": r.status_code,
+                    "error": r.text[:400],
+                }
         except RECOVERABLE_ERRORS as exc:
             fhd_result = {"ok": False, "error": str(exc)[:400]}
     return {

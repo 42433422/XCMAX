@@ -39,7 +39,11 @@ _LANE_ORDER = ["P-W", "P-S", "P-App"]
 
 
 def _enabled() -> bool:
-    raw = (os.environ.get("MODSTORE_DAILY_SURFACE_PPT_ENABLED", "1") or "").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_DAILY_SURFACE_PPT_ENABLED", "1") or "")
+        .strip()
+        .lower()
+    )
     return raw not in ("0", "false", "no", "off")
 
 
@@ -54,7 +58,8 @@ def _repo_root() -> Path:
 
 def _save_dir(day: str) -> Path:
     raw = (
-        os.environ.get("MODSTORE_DAILY_SURFACE_PPT_SAVE_DIR") or "playwright-report/digest-surfaces"
+        os.environ.get("MODSTORE_DAILY_SURFACE_PPT_SAVE_DIR")
+        or "playwright-report/digest-surfaces"
     ).strip()
     out = _repo_root() / raw / day
     out.mkdir(parents=True, exist_ok=True)
@@ -82,7 +87,11 @@ def _fit_image_box(
 
 
 def _lane_analysis_for(report: Dict[str, Any], lane: str) -> Dict[str, Any]:
-    la = report.get("lane_analysis") if isinstance(report.get("lane_analysis"), dict) else {}
+    la = (
+        report.get("lane_analysis")
+        if isinstance(report.get("lane_analysis"), dict)
+        else {}
+    )
     row = la.get(lane) if isinstance(la, dict) else None
     return row if isinstance(row, dict) else {}
 
@@ -147,8 +156,12 @@ def build_surface_audit_pptx(
     green = RGBColor(0x04, 0x78, 0x57)
     indigo = RGBColor(0x43, 0x38, 0xCA)
 
-    def _add_text(slide, left, top, width, height, lines: List[Tuple[str, int, Any, bool]]):
-        box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(width), Inches(height))
+    def _add_text(
+        slide, left, top, width, height, lines: List[Tuple[str, int, Any, bool]]
+    ):
+        box = slide.shapes.add_textbox(
+            Inches(left), Inches(top), Inches(width), Inches(height)
+        )
         tf = box.text_frame
         tf.word_wrap = True
         first = True
@@ -173,7 +186,9 @@ def build_surface_audit_pptx(
 
     # ── 封面 ─────────────────────────────────────────────────────────────
     cover = prs.slides.add_slide(blank)
-    cover.shapes.add_textbox(Inches(0), Inches(0), Inches(_SLIDE_W_IN), Inches(_SLIDE_H_IN))
+    cover.shapes.add_textbox(
+        Inches(0), Inches(0), Inches(_SLIDE_W_IN), Inches(_SLIDE_H_IN)
+    )
     _add_text(
         cover,
         0.8,
@@ -227,7 +242,9 @@ def build_surface_audit_pptx(
             [(_LANE_TITLES.get(lane, lane), 28, navy, True)],
         )
         owner_line = (
-            f"对应员工：{', '.join(str(o) for o in owners[:6])}" if owners else "对应员工：—"
+            f"对应员工：{', '.join(str(o) for o in owners[:6])}"
+            if owners
+            else "对应员工：—"
         )
         lines: List[Tuple[str, int, Any, bool]] = [
             (owner_line, 14, indigo, True),
@@ -283,7 +300,9 @@ def build_surface_audit_pptx(
             img_left, img_top = 0.5, 1.6
             img_max_w, img_max_h = 6.2, 5.4
             if saved and Path(saved).is_file():
-                w_in, h_in = _fit_image_box(Path(saved), max_w_in=img_max_w, max_h_in=img_max_h)
+                w_in, h_in = _fit_image_box(
+                    Path(saved), max_w_in=img_max_w, max_h_in=img_max_h
+                )
                 try:
                     slide.shapes.add_picture(
                         saved,
@@ -332,7 +351,9 @@ def build_surface_audit_pptx(
                     (f"console 报错（{len(ce)}）", 11, RGBColor(0xB4, 0x53, 0x09), True)
                 )
                 for x in ce[:4]:
-                    info_lines.append((f"· {str(x)[:160]}", 10, RGBColor(0x92, 0x40, 0x0E), False))
+                    info_lines.append(
+                        (f"· {str(x)[:160]}", 10, RGBColor(0x92, 0x40, 0x0E), False)
+                    )
             analysis = str(r.get("analysis") or "").strip()
             if analysis:
                 info_lines.append(("AI 分析", 12, indigo, True))
@@ -358,6 +379,10 @@ def build_surface_audit_pptx(
         "skipped": False,
         "path": str(out_path),
         "slides": slide_count,
-        "lanes": [lane for lane in _LANE_ORDER if any(str(r.get("lane")) == lane for r in results)],
+        "lanes": [
+            lane
+            for lane in _LANE_ORDER
+            if any(str(r.get("lane")) == lane for r in results)
+        ],
         "day": day,
     }

@@ -19,7 +19,8 @@ router = APIRouter(tags=["app"])
 _DEFAULT_BASE = "https://xiu-ci.com"
 _LEGAL_VERSION = os.environ.get("XCAGI_LEGAL_VERSION", "1").strip() or "1"
 _ICP_NUMBER = (
-    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-3A").strip() or "蜀ICP备2026014056号-3A"
+    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-3A").strip()
+    or "蜀ICP备2026014056号-3A"
 )
 _APP_FILING_NUMBER = (
     os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026014056号-3A").strip()
@@ -36,8 +37,12 @@ _APP_FILING_APPROVED = (
 )
 
 # versionCode / versionName 对齐 FHD/VERSION.md 与 Flutter Android Runner
-_ANDROID_MIN_VERSION = int(os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10")
-_ANDROID_LATEST_VERSION = int(os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10")
+_ANDROID_MIN_VERSION = int(
+    os.environ.get("XCAGI_ANDROID_MIN_VERSION_CODE", "10") or "10"
+)
+_ANDROID_LATEST_VERSION = int(
+    os.environ.get("XCAGI_ANDROID_LATEST_VERSION_CODE", "10") or "10"
+)
 _ANDROID_LATEST_NAME = (
     os.environ.get("XCAGI_ANDROID_LATEST_VERSION_NAME", "1.0.0.0").strip() or "1.0.0.0"
 )
@@ -123,10 +128,15 @@ def _apk_delta(sku: str, current_version_code: int) -> Dict[str, Any]:
 
 _PROFILE_PAGE_DEFAULTS: Dict[str, Any] = {
     "enabled": True,
-    "revision": os.environ.get("XCAGI_PROFILE_PAGE_REVISION", "2026-06-26.profile-hot-v1").strip()
+    "revision": os.environ.get(
+        "XCAGI_PROFILE_PAGE_REVISION", "2026-06-26.profile-hot-v1"
+    ).strip()
     or "2026-06-26.profile-hot-v1",
-    "hero_variant": os.environ.get("XCAGI_PROFILE_PAGE_HERO_VARIANT", "glass").strip() or "glass",
-    "headline": os.environ.get("XCAGI_PROFILE_PAGE_HEADLINE", "XCAGI 企业工作身份").strip()
+    "hero_variant": os.environ.get("XCAGI_PROFILE_PAGE_HERO_VARIANT", "glass").strip()
+    or "glass",
+    "headline": os.environ.get(
+        "XCAGI_PROFILE_PAGE_HEADLINE", "XCAGI 企业工作身份"
+    ).strip()
     or "XCAGI 企业工作身份",
     "subtitle": os.environ.get(
         "XCAGI_PROFILE_PAGE_SUBTITLE", "账号、工作台与执行端状态统一管理"
@@ -202,7 +212,9 @@ def api_app_config(
         "apk_download_url": _apk_url(sku_norm),
         "apk_delta": _apk_delta(sku_norm, current_version_code),
         "profile_page": _profile_page_config(sku_norm),
-        "feedback_email": os.environ.get("XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com").strip(),
+        "feedback_email": os.environ.get(
+            "XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com"
+        ).strip(),
     }
 
 

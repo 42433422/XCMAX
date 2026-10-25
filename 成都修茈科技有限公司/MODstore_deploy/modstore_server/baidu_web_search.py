@@ -108,7 +108,9 @@ async def baidu_html_search(query: str, max_results: int = 10) -> List[Dict[str,
     from modstore_server.infrastructure.http_clients import get_external_client
 
     client = get_external_client()
-    await client.get("https://www.baidu.com/", headers=headers, timeout=18.0, follow_redirects=True)
+    await client.get(
+        "https://www.baidu.com/", headers=headers, timeout=18.0, follow_redirects=True
+    )
     headers = {**headers, "Referer": "https://www.baidu.com/"}
     r = await client.get(url, headers=headers, timeout=22.0, follow_redirects=True)
     r.raise_for_status()

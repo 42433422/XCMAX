@@ -24,7 +24,11 @@ from modstore_server import (
     webhook_dispatcher,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.eventing.contracts import REFUND_APPROVED, REFUND_FAILED, REFUND_REJECTED
+from modstore_server.eventing.contracts import (
+    REFUND_APPROVED,
+    REFUND_FAILED,
+    REFUND_REJECTED,
+)
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import Entitlement, RefundRequest, User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -57,7 +61,9 @@ def _refund_payload(refund: RefundRequest) -> dict:
 
 
 def _publish_refund_event(event_type: str, refund: RefundRequest) -> None:
-    webhook_dispatcher.publish_event(event_type, refund.order_no, _refund_payload(refund))
+    webhook_dispatcher.publish_event(
+        event_type, refund.order_no, _refund_payload(refund)
+    )
 
 
 @router.get("/admin/pending")
@@ -157,7 +163,9 @@ async def admin_review_refund(
     else:
         refund.status = "refund_failed"
         err = res.get("message") or str(res.get("raw") or "")
-        refund.admin_note = (note + ("\n" if note else "") + f"支付宝退款失败: {err}")[:2000]
+        refund.admin_note = (note + ("\n" if note else "") + f"支付宝退款失败: {err}")[
+            :2000
+        ]
         db.commit()
         db.refresh(refund)
         _publish_refund_event(REFUND_FAILED, refund)
@@ -178,7 +186,9 @@ async def apply_refund(
         raise HTTPException(400, "只有已支付订单可申请退款")
 
     existing = (
-        db.query(RefundRequest).filter(RefundRequest.order_no == body.order_no.strip()).first()
+        db.query(RefundRequest)
+        .filter(RefundRequest.order_no == body.order_no.strip())
+        .first()
     )
     if existing:
         raise HTTPException(400, "该订单已有退款申请")
@@ -202,7 +212,9 @@ async def apply_refund(
 
 
 @router.get("/my")
-async def my_refunds(db: Session = Depends(get_db), user: User = Depends(_get_current_user)):
+async def my_refunds(
+    db: Session = Depends(get_db), user: User = Depends(_get_current_user)
+):
     rows = (
         db.query(RefundRequest)
         .filter(RefundRequest.user_id == user.id)

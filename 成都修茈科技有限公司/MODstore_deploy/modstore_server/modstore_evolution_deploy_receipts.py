@@ -60,7 +60,9 @@ def _live_market_listing(package_id: str, version: str) -> dict[str, Any]:
 
     session_factory = get_session_factory()
     with session_factory() as session:
-        row = session.query(CatalogItem).filter(CatalogItem.pkg_id == package_id).first()
+        row = (
+            session.query(CatalogItem).filter(CatalogItem.pkg_id == package_id).first()
+        )
         if row is None:
             return {}
         return {
@@ -88,7 +90,9 @@ def _archive_manifest(path: Path, package_id: str) -> dict[str, Any]:
                     raise EvolutionDeploymentReceiptError("unsafe_archive_path")
             expected = f"{package_id}/manifest.json"
             if normalized.count(expected) != 1:
-                raise EvolutionDeploymentReceiptError("archive_manifest_identity_mismatch")
+                raise EvolutionDeploymentReceiptError(
+                    "archive_manifest_identity_mismatch"
+                )
             manifest = json.loads(archive.read(expected).decode("utf-8"))
     except EvolutionDeploymentReceiptError:
         raise
@@ -116,7 +120,9 @@ def _catalog_source_commit(record: Mapping[str, Any], package_sha256: str) -> st
                 not _text(provenance.get("source_repository"), 256)
                 or not _text(provenance.get("workflow_run_id"), 128).isdigit()
             ):
-                raise EvolutionDeploymentReceiptError("catalog_automation_provenance_incomplete")
+                raise EvolutionDeploymentReceiptError(
+                    "catalog_automation_provenance_incomplete"
+                )
             source_commit_sha = provenance_sha
     if source_commit_sha and not _COMMIT_RE.fullmatch(source_commit_sha):
         raise EvolutionDeploymentReceiptError("catalog_source_commit_invalid")
@@ -143,14 +149,19 @@ def verify_catalog_package(
     if not archive_path.is_file() or archive_path.suffix.lower() != ".xcemp":
         raise EvolutionDeploymentReceiptError("catalog_archive_missing")
     digest = _sha256(archive_path)
-    if not _SHA256_RE.fullmatch(digest) or digest != _text(record.get("sha256"), 64).lower():
+    if (
+        not _SHA256_RE.fullmatch(digest)
+        or digest != _text(record.get("sha256"), 64).lower()
+    ):
         raise EvolutionDeploymentReceiptError("catalog_archive_digest_mismatch")
 
     manifest = _archive_manifest(archive_path, package_id)
     try:
         validate_pack_schema(manifest)
     except (TypeError, ValueError) as exc:
-        raise EvolutionDeploymentReceiptError("archive_manifest_schema_invalid") from exc
+        raise EvolutionDeploymentReceiptError(
+            "archive_manifest_schema_invalid"
+        ) from exc
     if (
         _text(manifest.get("id") or manifest.get("name"), 128).lower() != package_id
         or _text(manifest.get("name"), 128).lower() != package_id
@@ -170,7 +181,9 @@ def verify_catalog_package(
         raise EvolutionDeploymentReceiptError("employee_pack_runtime_contract_invalid")
     runtime = parse_employee_config_v2(manifest)
     actions = runtime.get("actions") if isinstance(runtime.get("actions"), dict) else {}
-    handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     clean_handlers = {_text(handler, 64) for handler in handlers if _text(handler, 64)}
     if not clean_handlers or not clean_handlers.issubset(EXECUTOR_ACTION_HANDLERS):
         raise EvolutionDeploymentReceiptError("employee_pack_handler_contract_invalid")
@@ -221,7 +234,11 @@ def _strategic_council_receipt(package: Mapping[str, Any]) -> dict[str, Any]:
     )
 
     status = strategic_council_status(limit=20)
-    latest = status.get("latest_receipt") if isinstance(status.get("latest_receipt"), dict) else {}
+    latest = (
+        status.get("latest_receipt")
+        if isinstance(status.get("latest_receipt"), dict)
+        else {}
+    )
     if status.get("ready") is not True or latest.get("verified") is not True:
         raise EvolutionDeploymentReceiptError("strategic_council_source_unavailable")
     goal_id = _text(latest.get("goal_id"), 128)
@@ -283,7 +300,9 @@ def record_evolution_deployment_receipts(
     workflow_run_id: str,
     rows: Sequence[Mapping[str, Any]],
     record_event: Callable[[Dict[str, Any]], None],
-    council_builder: Callable[[Mapping[str, Any]], Mapping[str, Any]] = _strategic_council_receipt,
+    council_builder: Callable[
+        [Mapping[str, Any]], Mapping[str, Any]
+    ] = _strategic_council_receipt,
 ) -> dict[str, Any]:
     """Verify changed packs and append idempotent production milestone receipts."""
 
@@ -308,7 +327,9 @@ def record_evolution_deployment_receipts(
             package_id=package_id,
             version=version,
         ):
-            results.append({"package_id": package_id, "version": version, "recorded": False})
+            results.append(
+                {"package_id": package_id, "version": version, "recorded": False}
+            )
             continue
         verified = verify_catalog_package(package_id, version)
         run_id = f"evolution-deploy-{workflow_run_id}-{package_id}"[:128]

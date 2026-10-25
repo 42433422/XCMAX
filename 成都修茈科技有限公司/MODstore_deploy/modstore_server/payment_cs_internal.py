@@ -138,7 +138,9 @@ async def create_custom_delivery_payment_order(
         }
     url = f"{gw.target_base_url()}/api/internal/payment/custom-delivery-checkout"
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0, connect=5.0)) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0)
+        ) as client:
             response = await client.post(
                 url,
                 json={

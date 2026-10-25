@@ -13,7 +13,6 @@ logger = logging.getLogger("modstore_server.alipay_service")
 
 
 class AlipayClient(Protocol):
-
     def api_alipay_trade_precreate(self, **kwargs: Any) -> object: ...
 
     def api_alipay_trade_page_pay(self, **kwargs: Any) -> object: ...
@@ -41,7 +40,12 @@ class AlipayGateway:
     notify_url: Callable[[], str | None]
 
     def common_kwargs(
-        self, *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
+        self,
+        *,
+        out_trade_no: str,
+        subject: str,
+        total_amount: str,
+        notify_url: str | None = None,
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "out_trade_no": out_trade_no,
@@ -54,10 +58,20 @@ class AlipayGateway:
         return kwargs
 
     def precreate(
-        self, *, out_trade_no: str, subject: str, total_amount: str, notify_url: str | None = None
+        self,
+        *,
+        out_trade_no: str,
+        subject: str,
+        total_amount: str,
+        notify_url: str | None = None,
     ) -> dict[str, Any]:
         if not self.credentials_ready():
-            return {"ok": False, "qr_code": None, "message": "支付宝密钥未配全", "raw": None}
+            return {
+                "ok": False,
+                "qr_code": None,
+                "message": "支付宝密钥未配全",
+                "raw": None,
+            }
         try:
             client = self.client_factory()
         except RuntimeError as e:
@@ -72,11 +86,26 @@ class AlipayGateway:
             result = client.api_alipay_trade_precreate(**kwargs)
         except RECOVERABLE_ERRORS as e:
             logger.exception("alipay.trade.precreate 请求异常")
-            return {"ok": False, "qr_code": None, "message": f"请求支付宝异常: {e}", "raw": None}
+            return {
+                "ok": False,
+                "qr_code": None,
+                "message": f"请求支付宝异常: {e}",
+                "raw": None,
+            }
         if not isinstance(result, dict):
-            return {"ok": False, "qr_code": None, "message": "支付宝返回格式异常", "raw": None}
+            return {
+                "ok": False,
+                "qr_code": None,
+                "message": "支付宝返回格式异常",
+                "raw": None,
+            }
         if result.get("code") == "10000" and result.get("qr_code"):
-            return {"ok": True, "qr_code": str(result["qr_code"]), "message": None, "raw": result}
+            return {
+                "ok": True,
+                "qr_code": str(result["qr_code"]),
+                "message": None,
+                "raw": result,
+            }
         msg = result.get("sub_msg") or result.get("msg") or "预下单失败"
         return {"ok": False, "qr_code": None, "message": str(msg), "raw": result}
 
@@ -221,7 +250,11 @@ class AlipayGateway:
         self, *, out_trade_no: str | None = None, trade_no: str | None = None
     ) -> dict[str, Any]:
         if not out_trade_no and (not trade_no):
-            return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+            return {
+                "ok": False,
+                "message": "out_trade_no 与 trade_no 至少提供一个",
+                "raw": None,
+            }
         try:
             client = self.client_factory()
         except RuntimeError as e:
@@ -248,7 +281,11 @@ class AlipayGateway:
         refund_reason: str | None = None,
     ) -> dict[str, Any]:
         if not out_trade_no and (not trade_no):
-            return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+            return {
+                "ok": False,
+                "message": "out_trade_no 与 trade_no 至少提供一个",
+                "raw": None,
+            }
         try:
             client = self.client_factory()
         except RuntimeError as e:
@@ -273,7 +310,11 @@ class AlipayGateway:
         self, *, out_trade_no: str | None = None, trade_no: str | None = None
     ) -> dict[str, Any]:
         if not out_trade_no and (not trade_no):
-            return {"ok": False, "message": "out_trade_no 与 trade_no 至少提供一个", "raw": None}
+            return {
+                "ok": False,
+                "message": "out_trade_no 与 trade_no 至少提供一个",
+                "raw": None,
+            }
         try:
             client = self.client_factory()
         except RuntimeError as e:
@@ -301,7 +342,9 @@ class AlipayGateway:
             return {"ok": False, "message": str(e), "raw": None}
         req_no = out_request_no or out_trade_no
         try:
-            result = client.api_alipay_trade_fastpay_refund_query(req_no, out_trade_no=out_trade_no)
+            result = client.api_alipay_trade_fastpay_refund_query(
+                req_no, out_trade_no=out_trade_no
+            )
         except RECOVERABLE_ERRORS as e:
             logger.exception("alipay.trade.fastpay.refund.query 请求异常")
             return {"ok": False, "message": f"请求支付宝异常: {e}", "raw": None}

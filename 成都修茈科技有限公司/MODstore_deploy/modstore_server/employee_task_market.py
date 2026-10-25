@@ -47,7 +47,12 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def _admin_user_id(session) -> int:
-    row = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
+    row = (
+        session.query(User)
+        .filter(User.is_admin.is_(True))
+        .order_by(User.id.asc())
+        .first()
+    )
     if row:
         return int(row.id)
     row = session.query(User).order_by(User.id.asc()).first()
@@ -109,7 +114,9 @@ def _binding_candidates(session, event_type: str, source: str) -> Dict[str, int]
     for row in (
         session.query(EmployeeTriggerBinding)
         .filter(EmployeeTriggerBinding.is_active.is_(True))
-        .order_by(EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc())
+        .order_by(
+            EmployeeTriggerBinding.priority.asc(), EmployeeTriggerBinding.id.asc()
+        )
         .all()
     ):
         stored = str(row.event_type or "").strip()
@@ -128,7 +135,9 @@ def _binding_candidates(session, event_type: str, source: str) -> Dict[str, int]
 def _recent_stats(session, employee_id: str, *, hours: int = 24) -> Dict[str, Any]:
     cutoff = datetime.now(UTC) - timedelta(hours=max(1, int(hours or 24)))
     rows = (
-        session.query(EmployeeExecutionMetric.status, func.count(EmployeeExecutionMetric.id))
+        session.query(
+            EmployeeExecutionMetric.status, func.count(EmployeeExecutionMetric.id)
+        )
         .filter(
             EmployeeExecutionMetric.employee_id == employee_id,
             EmployeeExecutionMetric.created_at >= cutoff,
@@ -205,7 +214,9 @@ def _score_candidate(
     priority_bonus = incident_priority / 10.0
     ownership_bonus = 0.0
     if isinstance(ownership_match, dict) and ownership_match:
-        ownership_bonus = min(55.0, 28.0 + float(ownership_match.get("match_count") or 0) * 8.0)
+        ownership_bonus = min(
+            55.0, 28.0 + float(ownership_match.get("match_count") or 0) * 8.0
+        )
     score = round(
         max(
             0.0,
@@ -251,7 +262,9 @@ def rank_market_candidates(event_id: int) -> Dict[str, Any]:
             if isinstance(row, dict) and str(row.get("employee_id") or "").strip()
         }
         catalog_ids = _catalog_employee_ids(session)
-        bindings = _binding_candidates(session, str(ev.event_type or ""), str(ev.source or ""))
+        bindings = _binding_candidates(
+            session, str(ev.event_type or ""), str(ev.source or "")
+        )
         for owner_id in ownership_by_employee:
             bindings[owner_id] = min(bindings.get(owner_id, 100), 1)
         candidates: List[Tuple[float, Dict[str, Any]]] = []
@@ -287,7 +300,9 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
     ranked = rank_market_candidates(event_id)
     if not ranked.get("ok"):
         return {**ranked, "claimed": False}
-    candidates = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
+    candidates = (
+        ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
+    )
     if not candidates:
         return {**ranked, "claimed": False, "reason": "no_market_candidates"}
     chosen = candidates[0]

@@ -28,7 +28,11 @@ def select_reviewed_burn_in_handlers(
             }
         }
     selected = (
-        [str(item).strip() for item in raw or [] if isinstance(item, str) and str(item).strip()]
+        [
+            str(item).strip()
+            for item in raw or []
+            if isinstance(item, str) and str(item).strip()
+        ]
         if explicit
         else handlers
     )
@@ -73,7 +77,8 @@ def bind_reviewed_burn_in_handlers(
     """Bind an eligible explicit burn-in to its reviewed handler set."""
 
     if not (
-        eligibility.get("eligible") is True and eligibility.get("burn_in_handlers_explicit") is True
+        eligibility.get("eligible") is True
+        and eligibility.get("burn_in_handlers_explicit") is True
     ):
         return config
     selected = [
@@ -85,7 +90,9 @@ def bind_reviewed_burn_in_handlers(
         raise RuntimeError("reviewed burn-in has no executable handlers")
 
     bound = dict(config)
-    actions = dict(bound.get("actions")) if isinstance(bound.get("actions"), dict) else {}
+    actions = (
+        dict(bound.get("actions")) if isinstance(bound.get("actions"), dict) else {}
+    )
     if isinstance(actions.get("actions"), dict):
         nested = dict(actions["actions"])
         nested["handlers"] = selected
@@ -96,7 +103,9 @@ def bind_reviewed_burn_in_handlers(
     return bound
 
 
-def deterministic_direct_input_ready(actions_cfg: Dict[str, Any], payload: Dict[str, Any]) -> bool:
+def deterministic_direct_input_ready(
+    actions_cfg: Dict[str, Any], payload: Dict[str, Any]
+) -> bool:
     """Return true only for a reviewed read-only employee-module contract."""
 
     direct = (
@@ -110,9 +119,17 @@ def deterministic_direct_input_ready(actions_cfg: Dict[str, Any], payload: Dict[
         or direct.get("read_only") is not True
     ):
         return False
-    schema = direct.get("input_schema") if isinstance(direct.get("input_schema"), dict) else {}
-    required = schema.get("required") if isinstance(schema.get("required"), list) else []
-    return bool(required) and all(str(key).strip() and str(key) in payload for key in required)
+    schema = (
+        direct.get("input_schema")
+        if isinstance(direct.get("input_schema"), dict)
+        else {}
+    )
+    required = (
+        schema.get("required") if isinstance(schema.get("required"), list) else []
+    )
+    return bool(required) and all(
+        str(key).strip() and str(key) in payload for key in required
+    )
 
 
 def is_reviewed_direct_burn_in(

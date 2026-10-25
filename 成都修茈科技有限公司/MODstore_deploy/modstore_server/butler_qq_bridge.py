@@ -194,7 +194,9 @@ _SPECIFIC_WEBHOOKS: Dict[str, Dict[str, str]] = {
 }
 
 # 兼容旧调用：仍允许其他模块/测试按 webhook_key 拿 app_id 字符串。
-_SPECIFIC_WEBHOOK_APP_IDS: Dict[str, str] = {k: v["app_id"] for k, v in _SPECIFIC_WEBHOOKS.items()}
+_SPECIFIC_WEBHOOK_APP_IDS: Dict[str, str] = {
+    k: v["app_id"] for k, v in _SPECIFIC_WEBHOOKS.items()
+}
 
 
 if not _ensure_runtime_ready():

@@ -46,7 +46,9 @@ async def bind_employee_workflows(
             ][:5]
             _asset_hint = f"（资产：{'、'.join(_asset_names)}）" if _asset_names else ""
             if state.use_word_extract:
-                _skip_reason = "Word direct_python 模式：员工内置 vendor convert，无需配套小程序"
+                _skip_reason = (
+                    "Word direct_python 模式：员工内置 vendor convert，无需配套小程序"
+                )
             elif state.needs_llm_reasoning and state.uploaded_docx:
                 _skip_reason = "LLM 驱动文档审核模式"
             else:
@@ -71,7 +73,9 @@ async def bind_employee_workflows(
             )
 
             async def _script_progress(msg: str) -> None:
-                await ports.progress.set_step(state.session_id, "script_workflow", "running", msg)
+                await ports.progress.set_step(
+                    state.session_id, "script_workflow", "running", msg
+                )
 
             _sw_result = await ports.craft_step(
                 "script_workflow",
@@ -109,7 +113,9 @@ async def bind_employee_workflows(
                     status_hook=_script_progress,
                 )
                 state.script_workflow = None
-                if state.script_result.get("ok") and (not state.script_result.get("errors")):
+                if state.script_result.get("ok") and (
+                    not state.script_result.get("errors")
+                ):
                     state.script_workflow = ports.commit_script(
                         ports.db,
                         user_id=state.user_id,
@@ -132,7 +138,9 @@ async def bind_employee_workflows(
                         _script_err_parts.append("脚本代码为空")
                     if state.script_result.get("errors"):
                         _script_err_parts.append(
-                            "；".join((str(e) for e in state.script_result["errors"][:3]))
+                            "；".join(
+                                (str(e) for e in state.script_result["errors"][:3])
+                            )
                         )
                     _skip_reason = (
                         "；".join(_script_err_parts)
@@ -140,7 +148,10 @@ async def bind_employee_workflows(
                         else "未能生成可保存的脚本工作流"
                     )
                     await ports.progress.set_step(
-                        state.session_id, "script_workflow", "skipped", f"已跳过：{_skip_reason}"
+                        state.session_id,
+                        "script_workflow",
+                        "skipped",
+                        f"已跳过：{_skip_reason}",
                     )
                     _LOG.warning(
                         "pipeline: script_wf=None but ok=True — skipping, reason=%s session=%s",
@@ -149,14 +160,21 @@ async def bind_employee_workflows(
                     )
                 else:
                     _script_err = (
-                        "；".join((str(e) for e in (state.script_result.get("errors") or [])[:3]))
+                        "；".join(
+                            (
+                                str(e)
+                                for e in (state.script_result.get("errors") or [])[:3]
+                            )
+                        )
                         or "脚本执行失败"
                     )
                     msg = f"脚本运行失败：{_script_err}"
                     await ports.progress.set_step(
                         state.session_id, "script_workflow", "error", msg[:300]
                     )
-                    await ports.progress.fail(state.session_id, "script_workflow", msg[:1000])
+                    await ports.progress.fail(
+                        state.session_id, "script_workflow", msg[:1000]
+                    )
                     return True
             else:
                 await ports.progress.set_step(
@@ -167,7 +185,10 @@ async def bind_employee_workflows(
                 )
         else:
             await ports.progress.set_step(
-                state.session_id, "script_workflow", "skipped", "已跳过：未开启配套小程序"
+                state.session_id,
+                "script_workflow",
+                "skipped",
+                "已跳过：未开启配套小程序",
             )
     if state.should_skip("embed_script"):
         await ports.progress.set_step(
@@ -180,7 +201,10 @@ async def bind_employee_workflows(
         state.current_step = "embed_script"
         if state.embed_script_workflow and state.script_workflow:
             await ports.progress.set_step(
-                state.session_id, "embed_script", "running", "正在把配套小程序绑定到员工能力"
+                state.session_id,
+                "embed_script",
+                "running",
+                "正在把配套小程序绑定到员工能力",
             )
             _es_result = await ports.craft_step(
                 "embed_script",
@@ -219,9 +243,13 @@ async def bind_employee_workflows(
                 _embed_skip = "已跳过绑定：未生成配套脚本工作流"
             else:
                 _embed_skip = "已跳过绑定：未开启 embed_script_workflow"
-            await ports.progress.set_step(state.session_id, "embed_script", "skipped", _embed_skip)
+            await ports.progress.set_step(
+                state.session_id, "embed_script", "skipped", _embed_skip
+            )
     if state.should_skip("workflow"):
-        await ports.progress.set_step(state.session_id, "workflow", "done", "已完成（重试复用）")
+        await ports.progress.set_step(
+            state.session_id, "workflow", "done", "已完成（重试复用）"
+        )
     else:
         state.current_step = "workflow"
         await ports.progress.set_step(
@@ -269,7 +297,9 @@ async def bind_employee_workflows(
                 wmsg = f"已创建工作流 id={state.workflow_attachment.get('workflow_id')}；注入 {_eskill_n} 个真脚本 Skill，NL 编排{('成功' if _nl_ok else '有提示')}"
             else:
                 wmsg = f"已创建工作流 id={state.workflow_attachment.get('workflow_id')}；NL 生图{('成功' if _nl_ok else '有提示')}"
-            await ports.progress.set_step(state.session_id, "workflow", "done", wmsg[:480])
+            await ports.progress.set_step(
+                state.session_id, "workflow", "done", wmsg[:480]
+            )
         else:
             await ports.progress.set_step(
                 state.session_id,

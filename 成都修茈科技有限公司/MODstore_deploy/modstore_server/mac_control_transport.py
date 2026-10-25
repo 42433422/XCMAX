@@ -17,7 +17,10 @@ class ParaUnavailable(RuntimeError):
 
 def stale_window() -> int:
     try:
-        return max(15, min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))))
+        return max(
+            15,
+            min(3600, int(os.environ.get("MODSTORE_MAC_CONTROL_STALE_SECONDS", "90"))),
+        )
     except ValueError:
         return 90
 
@@ -26,7 +29,9 @@ class ParaClient:
     def __init__(self):
         self.base = os.environ.get("MODSTORE_PARA_API_BASE", "").rstrip("/")
         token = get_credential(
-            "MODSTORE_PARA_CONTROL_TOKEN", task_id="mac-control", purpose="para_control_api"
+            "MODSTORE_PARA_CONTROL_TOKEN",
+            task_id="mac-control",
+            purpose="para_control_api",
         )
         if not self.base or not token:
             raise ParaUnavailable("service_identity_not_configured")
@@ -66,7 +71,9 @@ class ParaClient:
         return rows
 
     def task(self, task_id: str) -> dict:
-        task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get("task", {})
+        task = self.request("GET", "/api/tasks/" + quote(task_id, safe="")).get(
+            "task", {}
+        )
         if not isinstance(task, dict) or not task.get("id") or not task.get("status"):
             raise ParaUnavailable("task_status_missing")
         return task
@@ -100,7 +107,9 @@ def device_view(raw: dict, now: float) -> dict:
         "status": (
             "offline"
             if raw.get("status") == "offline"
-            else "stale" if stale else raw.get("status", "unknown")
+            else "stale"
+            if stale
+            else raw.get("status", "unknown")
         ),
         "last_seen": raw.get("lastSeen"),
         "tools": tools,
@@ -112,7 +121,9 @@ def device_view(raw: dict, now: float) -> dict:
     }
 
 
-def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict | None, str]:
+def choose_device(
+    devices: list[dict], request: dict, now: float
+) -> tuple[dict | None, str]:
     preferred = os.environ.get("MODSTORE_PARA_DEVICE_ID", "")
     target = request.get("target", "mac")
     tool = request.get("tool", "codex")
@@ -136,10 +147,15 @@ def choose_device(devices: list[dict], request: dict, now: float) -> tuple[dict 
         tools = raw.get("tools", [])
         if any(t.get("status") == "running" for t in tools):
             continue
-        if not any(t.get("toolName") == tool and t.get("status") == "idle" for t in tools):
+        if not any(
+            t.get("toolName") == tool and t.get("status") == "idle" for t in tools
+        ):
             continue
         probe = (caps.get("tool_preflight") or {}).get(tool, {})
-        if not (probe.get("ok") is True and age_seconds(probe.get("checked_at", ""), now) <= 90):
+        if not (
+            probe.get("ok") is True
+            and age_seconds(probe.get("checked_at", ""), now) <= 90
+        ):
             continue
         return raw, ""
     return None, reason

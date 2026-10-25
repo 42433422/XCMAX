@@ -14,7 +14,9 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
-def _prepend_package_path(module_name: str, package_path: Path, *, create: bool) -> None:
+def _prepend_package_path(
+    module_name: str, package_path: Path, *, create: bool
+) -> None:
     module = sys.modules.get(module_name)
     if module is None and create:
         module = types.ModuleType(module_name)
@@ -78,7 +80,8 @@ def ensure_fhd_on_path() -> None:
         and not (os.environ.get("XCAGI_DATA_DIR") or "").strip()
     ):
         runtime = Path(
-            os.environ.get("MODSTORE_RUNTIME_DIR") or str(Path.home() / ".xcmax" / "modstore-daily")
+            os.environ.get("MODSTORE_RUNTIME_DIR")
+            or str(Path.home() / ".xcmax" / "modstore-daily")
         ).expanduser()
         os.environ["XCAGI_AUTONOMY_DATA_DIR"] = str(runtime / "autonomy")
     for candidate in _candidate_fhd_roots():
@@ -90,7 +93,9 @@ def ensure_fhd_on_path() -> None:
             # ``app`` namespace loaded. sys.path alone cannot change that
             # package's submodule search path, so explicitly attach FHD.
             _prepend_package_path("app", candidate / "app", create=True)
-            _prepend_package_path("app.domain", candidate / "app" / "domain", create=False)
+            _prepend_package_path(
+                "app.domain", candidate / "app" / "domain", create=False
+            )
             _prepend_package_path(
                 "app.domain.autonomy",
                 candidate / "app" / "domain" / "autonomy",
@@ -101,7 +106,9 @@ def ensure_fhd_on_path() -> None:
             # autonomy subpackage, so expose it as a namespace package here.
             # This avoids coupling the lightweight loop worker to unrelated FHD
             # dependencies while preserving the canonical module paths.
-            _prepend_package_path("app.application", candidate / "app" / "application", create=True)
+            _prepend_package_path(
+                "app.application", candidate / "app" / "application", create=True
+            )
             _prepend_package_path(
                 "app.application.employee_runtime",
                 candidate / "app" / "application" / "employee_runtime",
@@ -127,11 +134,17 @@ def evaluate_risk(
     from app.domain.autonomy.autonomy_guard import evaluate_risk as domain_evaluate_risk
 
     try:
-        decision = domain_evaluate_risk(action, context, action_id=action_id, source=source)
+        decision = domain_evaluate_risk(
+            action, context, action_id=action_id, source=source
+        )
     except RECOVERABLE_ERRORS as exc:
-        if exc.__class__.__name__ == "ProhibitedActionError" and getattr(exc, "action_id", None):
+        if exc.__class__.__name__ == "ProhibitedActionError" and getattr(
+            exc, "action_id", None
+        ):
             try:
-                from modstore_server.autonomy_decision_audit import append_prohibited_exception
+                from modstore_server.autonomy_decision_audit import (
+                    append_prohibited_exception,
+                )
 
                 append_prohibited_exception(
                     action=getattr(exc, "action", "unknown"),
@@ -161,7 +174,9 @@ def request_action(
     source: str,
 ):
     ensure_fhd_on_path()
-    from app.application.autonomy.approval_resume import request_action as application_request
+    from app.application.autonomy.approval_resume import (
+        request_action as application_request,
+    )
 
     return application_request(
         action,

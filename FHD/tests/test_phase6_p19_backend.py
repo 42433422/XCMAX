@@ -592,13 +592,18 @@ class TestDistillationCollectSamplesViaDeepseek:
 
         mock_intent_result = {"intent": "unknown_intent", "slots": {}, "confidence": 0.9}
         with (
-            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.domain.shared_services.distillation_data_collector.get_sample_count",
+                return_value=0,
+            ),
             patch(
                 "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=mock_intent_result,
             ),
-            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample") as mock_save,
+            patch(
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
+            ) as mock_save,
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         # unknown_intent is not in INTENT_LABELS, so no samples saved
@@ -611,13 +616,18 @@ class TestDistillationCollectSamplesViaDeepseek:
         )
 
         with (
-            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.domain.shared_services.distillation_data_collector.get_sample_count",
+                return_value=0,
+            ),
             patch(
                 "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
-            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample"),
+            patch(
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
+            ),
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count == 0
@@ -630,13 +640,18 @@ class TestDistillationCollectSamplesViaDeepseek:
 
         mock_result = {"intent": "greet", "slots": {}, "confidence": 0.9}
         with (
-            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
+            patch(
+                "app.domain.shared_services.distillation_data_collector.get_sample_count",
+                return_value=0,
+            ),
             patch(
                 "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=mock_result,
             ),
-            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample") as mock_save,
+            patch(
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
+            ) as mock_save,
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count > 0
@@ -652,7 +667,9 @@ class TestDistillationMain:
 
         with (
             patch("sys.argv", ["prog", "--init"]),
-            patch("app.domain.shared_services.distillation_data_collector.init_distillation_db") as mock_init,
+            patch(
+                "app.domain.shared_services.distillation_data_collector.init_distillation_db"
+            ) as mock_init,
         ):
             await main()
         mock_init.assert_called_once()
@@ -2022,7 +2039,9 @@ class TestSendToUserDevices:
             {"push_provider": "fcm", "push_token": "fcm1"},
             {"push_provider": "selfpush", "push_token": "sp1"},
         ]
-        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=True) as mock_fcm:
+        with patch(
+            "app.domain.shared_services.mobile_push.send_fcm", return_value=True
+        ) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["fcm1"], "title", "body", None)
         assert result == {"fcm": True}
@@ -2031,7 +2050,9 @@ class TestSendToUserDevices:
         from app.domain.shared_services.mobile_push import send_to_user_devices
 
         devices = [{"push_provider": "fcm", "push_token": ""}]
-        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=False) as mock_fcm:
+        with patch(
+            "app.domain.shared_services.mobile_push.send_fcm", return_value=False
+        ) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with([], "title", "body", None)
 
@@ -2039,7 +2060,9 @@ class TestSendToUserDevices:
         from app.domain.shared_services.mobile_push import send_to_user_devices
 
         devices = [{"push_provider": "fcm", "fcm_token": "legacy1"}]
-        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=True) as mock_fcm:
+        with patch(
+            "app.domain.shared_services.mobile_push.send_fcm", return_value=True
+        ) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["legacy1"], "title", "body", None)
 

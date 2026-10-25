@@ -45,7 +45,10 @@ def _looks_like_non_python(code: str) -> bool:
     except SyntaxError:
         first = text.splitlines()[0] if text.splitlines() else text
         has_py_marker = any(
-            (token in text for token in ("import ", "from ", "def ", "class ", "Path(", "open("))
+            (
+                token in text
+                for token in ("import ", "from ", "def ", "class ", "Path(", "open(")
+            )
         )
         has_cjk = bool(re.search("[\\u4e00-\\u9fff]", first))
         return has_cjk and (not has_py_marker)
@@ -86,7 +89,8 @@ def _ensure_script_outputs_fallback(code: str, brief: str) -> str:
             isinstance(node, ast.Call)
             and (
                 isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"write_text", "write_bytes", "open", "save", "dump"}
+                and node.func.attr
+                in {"write_text", "write_bytes", "open", "save", "dump"}
                 or (isinstance(node.func, ast.Name) and node.func.id == "open")
             )
             for node in ast.walk(tree)
@@ -159,7 +163,9 @@ async def _generate_script(
     upload_items: Optional[List[Dict[str, Any]]] = None,
 ) -> _ScriptGenResult:
     if db is None or not (provider or "").strip() or (not (model or "").strip()):
-        if db is not None and (not (provider or "").strip() or not (model or "").strip()):
+        if db is not None and (
+            not (provider or "").strip() or not (model or "").strip()
+        ):
             _facade().logger.info(
                 "_generate_script: provider/model missing, auto-resolving for user=%s",
                 user_id,
@@ -193,7 +199,9 @@ async def _generate_script(
         )
         return _facade()._ScriptGenResult(
             "",
-            ["请配置 LLM 供应商与模型（工作台自选或用户默认 LLM 设置），否则无法使用 AI 生成脚本"],
+            [
+                "请配置 LLM 供应商与模型（工作台自选或用户默认 LLM 设置），否则无法使用 AI 生成脚本"
+            ],
         )
     key, _src = _facade().resolve_api_key(db, user_id, provider)
     if not key:
@@ -227,13 +235,19 @@ async def _generate_script(
         return _facade()._ScriptGenResult("", [f"LLM 调用失败：{err[:800]}"])
     code = _facade()._extract_code(str(res.get("content") or ""))
     if not code.strip():
-        return _facade()._ScriptGenResult("", ["模型未返回有效 Python 代码（解析后为空）"])
+        return _facade()._ScriptGenResult(
+            "", ["模型未返回有效 Python 代码（解析后为空）"]
+        )
     if _facade()._looks_like_non_python(code):
         return _facade()._ScriptGenResult(
             code,
-            ["模型未按要求返回 Python 代码，而是返回了说明文字；请重试或切换更适合代码生成的模型"],
+            [
+                "模型未按要求返回 Python 代码，而是返回了说明文字；请重试或切换更适合代码生成的模型"
+            ],
         )
-    return _facade()._ScriptGenResult(_facade()._ensure_script_outputs_fallback(code, brief), [])
+    return _facade()._ScriptGenResult(
+        _facade()._ensure_script_outputs_fallback(code, brief), []
+    )
 
 
 async def _repair_script_once(
@@ -278,7 +292,9 @@ async def _repair_script_once(
         return _facade()._ScriptGenResult("", [f"LLM 修复调用失败：{err[:800]}"])
     repaired = _facade()._extract_code(str(res.get("content") or ""))
     if not repaired.strip():
-        return _facade()._ScriptGenResult("", ["模型修复后未返回有效 Python 代码（解析后为空）"])
+        return _facade()._ScriptGenResult(
+            "", ["模型修复后未返回有效 Python 代码（解析后为空）"]
+        )
     if _facade()._looks_like_non_python(repaired):
         return _facade()._ScriptGenResult(
             repaired,

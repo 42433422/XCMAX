@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 
 def _orchestrator_digest_mode() -> str:
     return (
-        (os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow") or "shadow")
+        (
+            os.environ.get("MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE", "shadow")
+            or "shadow"
+        )
         .strip()
         .lower()
     )
@@ -79,8 +82,12 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
             "shadow": result.get("shadow"),
         }
         ok = bool(result.get("ok"))
-        record_node_run("ORCH", ok=ok, source="daily_release_train_orchestrator_job", meta=meta)
-        record_node_run("KIND", ok=True, source="daily_release_train_orchestrator_job", meta=meta)
+        record_node_run(
+            "ORCH", ok=ok, source="daily_release_train_orchestrator_job", meta=meta
+        )
+        record_node_run(
+            "KIND", ok=True, source="daily_release_train_orchestrator_job", meta=meta
+        )
         record_node_run(
             "BR",
             ok=bool(result.get("digest_mode") in ("primary", "digest")),
@@ -88,12 +95,20 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
             meta=meta,
         )
 
-        phase_b = result.get("phase_b") if isinstance(result.get("phase_b"), dict) else {}
+        phase_b = (
+            result.get("phase_b") if isinstance(result.get("phase_b"), dict) else {}
+        )
         line_results = (
-            phase_b.get("line_results") if isinstance(phase_b.get("line_results"), dict) else {}
+            phase_b.get("line_results")
+            if isinstance(phase_b.get("line_results"), dict)
+            else {}
         )
         for line_key, node_id in (("P-W", "PW"), ("P-App", "APPB"), ("S-R", "SR")):
-            row = line_results.get(line_key) if isinstance(line_results.get(line_key), dict) else {}
+            row = (
+                line_results.get(line_key)
+                if isinstance(line_results.get(line_key), dict)
+                else {}
+            )
             if row:
                 record_node_run(
                     node_id,
@@ -136,12 +151,16 @@ def _record_time_rail_runtime(result: Dict[str, Any]) -> None:
                 meta={**meta, "rollback": pipeline.get("rollback")},
             )
 
-        phase_c = result.get("phase_c") if isinstance(result.get("phase_c"), dict) else {}
+        phase_c = (
+            result.get("phase_c") if isinstance(result.get("phase_c"), dict) else {}
+        )
         steps = phase_c.get("steps") if isinstance(phase_c.get("steps"), list) else []
         for step_row in steps:
             if not isinstance(step_row, dict):
                 continue
-            node_id = {"P9": "P9I", "P5": "P5I", "P6": "P6I"}.get(str(step_row.get("step") or ""))
+            node_id = {"P9": "P9I", "P5": "P5I", "P6": "P6I"}.get(
+                str(step_row.get("step") or "")
+            )
             if node_id:
                 record_node_run(
                     node_id,
@@ -201,7 +220,9 @@ def run_daily_release_train_orchestrator_job(
             "reason": "MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE=off",
         }
 
-    from modstore_server.daily_vibe_line_execute_job import find_digest_record_for_execute
+    from modstore_server.daily_vibe_line_execute_job import (
+        find_digest_record_for_execute,
+    )
     from modstore_server.digest_daily_line_chain import (
         execute_installer_employee_chain,
         execute_phase_b_line_chain,
@@ -237,7 +258,9 @@ def run_daily_release_train_orchestrator_job(
         )
     elif mode in ("primary", "digest") and not force:
         try:
-            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
+            from modstore_server.daily_orchestrator_job import (
+                run_daily_orchestrator_job,
+            )
 
             orch = run_daily_orchestrator_job(bypass_digest_gate=True)
             result["daily_orchestrator"] = orch
@@ -304,7 +327,9 @@ def run_daily_release_train_orchestrator_job(
 
     # daily-digest 完成后触发战略层集成（失败 review / installer+major 战略复盘）
     try:
-        from modstore_server.digest_daily_line_chain import trigger_strategic_layer_dispatch
+        from modstore_server.digest_daily_line_chain import (
+            trigger_strategic_layer_dispatch,
+        )
 
         result["strategic_layer"] = trigger_strategic_layer_dispatch(
             rid,
@@ -318,7 +343,9 @@ def run_daily_release_train_orchestrator_job(
 
     # 行动条目 → 战略层镜像（复用上一步 decision_id；日常成功日由 bridge 自建追踪决策）
     try:
-        from modstore_server.strategic_layer.digest_strategic_bridge import sync_daily_to_strategic
+        from modstore_server.strategic_layer.digest_strategic_bridge import (
+            sync_daily_to_strategic,
+        )
 
         sl = result.get("strategic_layer") or {}
         result["strategic_action_bridge"] = sync_daily_to_strategic(
@@ -345,7 +372,9 @@ def cron_trigger_for_release_train_orchestrator():
         from apscheduler.triggers.cron import CronTrigger
 
         tz = ZoneInfo(
-            os.environ.get("MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_TZ", "Asia/Shanghai").strip()
+            os.environ.get(
+                "MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_TZ", "Asia/Shanghai"
+            ).strip()
         )
         hour = int(os.environ.get("MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_HOUR", "8"))
         minute = int(os.environ.get("MODSTORE_RELEASE_TRAIN_ORCHESTRATOR_MINUTE", "25"))

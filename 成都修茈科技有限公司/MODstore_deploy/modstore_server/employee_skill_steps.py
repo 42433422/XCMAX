@@ -37,7 +37,9 @@ def fallback_step_script(step: Dict[str, Any], employee_fn: str) -> str:
     output_variable = step.get("output_var") or "result"
     input_keys = step.get("input_keys") or []
     arguments = (
-        ", ".join(f"{key}=kwargs.get({key!r})" for key in input_keys) if input_keys else "**kwargs"
+        ", ".join(f"{key}=kwargs.get({key!r})" for key in input_keys)
+        if input_keys
+        else "**kwargs"
     )
     return f'''\
 def {function_name}(**kwargs):
@@ -63,18 +65,26 @@ def manifest_skill_steps(
         if isinstance(manifest.get("employee_config_v2"), dict)
         else {}
     )
-    cognition = config.get("cognition") if isinstance(config.get("cognition"), dict) else {}
-    skills = cognition.get("skills") if isinstance(cognition.get("skills"), list) else []
+    cognition = (
+        config.get("cognition") if isinstance(config.get("cognition"), dict) else {}
+    )
+    skills = (
+        cognition.get("skills") if isinstance(cognition.get("skills"), list) else []
+    )
     for item in skills:
         if isinstance(item, dict):
             raw_items.append(
                 {
                     "name": str(item.get("name") or "").strip(),
-                    "brief": str(item.get("brief") or item.get("description") or "").strip(),
+                    "brief": str(
+                        item.get("brief") or item.get("description") or ""
+                    ).strip(),
                     "domain": str(item.get("domain") or "").strip(),
                 }
             )
-    metadata = config.get("metadata") if isinstance(config.get("metadata"), dict) else {}
+    metadata = (
+        config.get("metadata") if isinstance(config.get("metadata"), dict) else {}
+    )
     suggested = (
         metadata.get("suggested_skills")
         if isinstance(metadata.get("suggested_skills"), list)
@@ -85,13 +95,19 @@ def manifest_skill_steps(
             raw_items.append(
                 {
                     "name": str(item.get("name") or "").strip(),
-                    "brief": str(item.get("brief") or item.get("description") or "").strip(),
+                    "brief": str(
+                        item.get("brief") or item.get("description") or ""
+                    ).strip(),
                     "domain": str(item.get("domain") or "").strip(),
                 }
             )
-    employee = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    employee = (
+        manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+    )
     capabilities = (
-        employee.get("capabilities") if isinstance(employee.get("capabilities"), list) else []
+        employee.get("capabilities")
+        if isinstance(employee.get("capabilities"), list)
+        else []
     )
     for capability in capabilities:
         text = str(capability or "").strip()
@@ -130,7 +146,9 @@ def manifest_skill_steps(
 def brief_skill_steps(brief: str, panel_summary: str) -> List[Dict[str, Any]]:
     text = "。".join(value for value in [brief, panel_summary] if value)
     parts = [
-        part.strip(" ，,;；。") for part in re.split(r"[；;。\n]+", text) if part.strip(" ，,;；。")
+        part.strip(" ，,;；。")
+        for part in re.split(r"[；;。\n]+", text)
+        if part.strip(" ，,;；。")
     ]
     if len(parts) <= 1 and any(keyword in text for keyword in ("并", "和", "、", "，")):
         parts = [

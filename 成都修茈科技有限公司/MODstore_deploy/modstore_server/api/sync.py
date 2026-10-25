@@ -32,7 +32,9 @@ def api_sync_push(body: SyncDTO, user: User = Depends(require_admin_user)):
     if not user.is_admin and body.mod_ids:
         for mod_id in body.mod_ids:
             assert_user_owns_mod(user, mod_id)
-    enforce_sync_quota = (os.environ.get("MODSTORE_ENFORCE_SYNC_QUOTA") or "").strip().lower() in (
+    enforce_sync_quota = (
+        os.environ.get("MODSTORE_ENFORCE_SYNC_QUOTA") or ""
+    ).strip().lower() in (
         "1",
         "true",
         "yes",

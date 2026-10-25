@@ -111,13 +111,19 @@ def _manifest_excerpt(pack_dir: Path, limit: int = 3500) -> Dict[str, Any]:
     return {
         "id": str(mf.get("id") or ident.get("id") or "").strip(),
         "name": str(mf.get("name") or ident.get("name") or "").strip()[:200],
-        "description": str(mf.get("description") or ident.get("description") or "").strip()[:800],
+        "description": str(
+            mf.get("description") or ident.get("description") or ""
+        ).strip()[:800],
         "artifact": str(mf.get("artifact") or "").strip(),
         "handlers": handlers if isinstance(handlers, list) else [],
         "capabilities_count": (
-            len(mf.get("capabilities") or []) if isinstance(mf.get("capabilities"), list) else 0
+            len(mf.get("capabilities") or [])
+            if isinstance(mf.get("capabilities"), list)
+            else 0
         ),
-        "skills_count": len(mf.get("skills") or []) if isinstance(mf.get("skills"), list) else 0,
+        "skills_count": len(mf.get("skills") or [])
+        if isinstance(mf.get("skills"), list)
+        else 0,
     }
 
 

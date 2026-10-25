@@ -525,7 +525,10 @@ def test_online_sales_planner_preserves_explicit_fields_before_model(llm_variant
             return_value="full",
         ),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch("app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory),
+        patch(
+            "app.domain.shared_services.user_memory_service.get_user_memory_service",
+            return_value=memory,
+        ),
         patch("app.application.workflow.planner.execute_tool") as execute,
     ):
         for attempt in range(2):

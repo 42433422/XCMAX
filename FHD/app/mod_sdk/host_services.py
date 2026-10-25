@@ -58,7 +58,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.application.tools.workflow",
         "_parse_excel_header_row_1based",
     ),
-    "_primary_contact_name": ("app.domain.shared_services.user_cs_intake_notice", "_primary_contact_name"),
+    "_primary_contact_name": (
+        "app.domain.shared_services.user_cs_intake_notice",
+        "_primary_contact_name",
+    ),
     "_proxy_json": ("app.fastapi_routes.market_account", "_proxy_json"),
     "_read_excel_dataframe": ("app.application.tools.workflow", "_read_excel_dataframe"),
     "_shared_resolve_table_spec": (
@@ -111,8 +114,14 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.user_cs_intake_notice",
         "build_intake_form_notice_message",
     ),
-    "build_intake_form_url": ("app.domain.shared_services.user_cs_demand_form", "build_intake_form_url"),
-    "build_merged_fields": ("app.domain.shared_services.service_contract_fill", "build_merged_fields"),
+    "build_intake_form_url": (
+        "app.domain.shared_services.user_cs_demand_form",
+        "build_intake_form_url",
+    ),
+    "build_merged_fields": (
+        "app.domain.shared_services.service_contract_fill",
+        "build_merged_fields",
+    ),
     "build_ops_dispatch_task_description": (
         "app.domain.shared_services.user_cs_change_request",
         "build_ops_dispatch_task_description",
@@ -128,7 +137,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "compat_purchase_units_by_name",
     ),
     "confirm_signoff": ("app.domain.shared_services.user_cs_delivery_signoff", "confirm_signoff"),
-    "contract_assets_dir": ("app.domain.shared_services.service_contract_fill", "contract_assets_dir"),
+    "contract_assets_dir": (
+        "app.domain.shared_services.service_contract_fill",
+        "contract_assets_dir",
+    ),
     "create_change_request": (
         "app.domain.shared_services.user_cs_change_request",
         "create_change_request",
@@ -142,7 +154,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "customers_get_one": ("app.fastapi_routes.domains.customer.routes", "customers_get_one"),
     "customers_update": ("app.fastapi_routes.domains.customer.routes", "customers_update"),
     "diagnostics": ("app.fastapi_routes.model_payment", "diagnostics"),
-    "ensure_delivery_on_doc": ("app.domain.shared_services.user_cs_delivery", "ensure_delivery_on_doc"),
+    "ensure_delivery_on_doc": (
+        "app.domain.shared_services.user_cs_delivery",
+        "ensure_delivery_on_doc",
+    ),
     "entitlements": ("app.fastapi_routes.model_payment", "entitlements"),
     "fetch_submission_by_audit_code": (
         "app.domain.shared_services.user_cs_demand_form",
@@ -156,7 +171,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.service_contract_fill",
         "generate_contract_docx",
     ),
-    "generate_office_file": ("app.domain.shared_services.kitten_ai_document.generate", "generate_office_file"),
+    "generate_office_file": (
+        "app.domain.shared_services.kitten_ai_document.generate",
+        "generate_office_file",
+    ),
     "generated_contracts_dir": (
         "app.domain.shared_services.service_contract_fill",
         "generated_contracts_dir",
@@ -216,7 +234,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "list_allowlist_endpoint",
     ),
     "list_audit_endpoint": ("app.fastapi_routes.lan_admin_routes", "list_audit_endpoint"),
-    "list_change_requests": ("app.domain.shared_services.user_cs_change_request", "list_change_requests"),
+    "list_change_requests": (
+        "app.domain.shared_services.user_cs_change_request",
+        "list_change_requests",
+    ),
     "list_field_schema": ("app.domain.shared_services.service_contract_fill", "list_field_schema"),
     "list_keys_endpoint": ("app.fastapi_routes.lan_admin_routes", "list_keys_endpoint"),
     "list_lan_facade_registry": ("app.legacy.lan.lan_compat", "list_lan_facade_registry"),
@@ -228,7 +249,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.fastapi_routes.lan_admin_routes",
         "list_sessions_endpoint",
     ),
-    "load_field_overrides": ("app.domain.shared_services.service_contract_fill", "load_field_overrides"),
+    "load_field_overrides": (
+        "app.domain.shared_services.service_contract_fill",
+        "load_field_overrides",
+    ),
     "load_pipeline": ("app.domain.shared_services.user_cs_pipeline", "load_pipeline"),
     "logout": ("app.fastapi_routes.lan_routes", "logout"),
     "mark_change_request_ops_dispatched": (
@@ -351,7 +375,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.user_cs_employee_runner",
         "run_user_cs_employee",
     ),
-    "save_field_overrides": ("app.domain.shared_services.service_contract_fill", "save_field_overrides"),
+    "save_field_overrides": (
+        "app.domain.shared_services.service_contract_fill",
+        "save_field_overrides",
+    ),
     "save_pipeline": ("app.domain.shared_services.user_cs_pipeline", "save_pipeline"),
     "resolve_session_user": ("app.infrastructure.auth.dependencies", "resolve_session_user"),
     "session_id_from_request": (
@@ -369,7 +396,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "shipment_records_units",
     ),
     "status": ("app.fastapi_routes.lan_routes", "status"),
-    "store_document_pickup": ("app.domain.shared_services.kitten_ai_document.pickup", "store_document_pickup"),
+    "store_document_pickup": (
+        "app.domain.shared_services.kitten_ai_document.pickup",
+        "store_document_pickup",
+    ),
     "svc": ("app.application.approval_workspace_app_service", ""),
     "sync_crm_from_pipeline_doc": (
         "app.domain.shared_services.user_cs_crm_store",

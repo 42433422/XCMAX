@@ -39,7 +39,9 @@ _STATUS_MAP = {
 
 def _env_enabled() -> bool:
     raw = (
-        (os.environ.get("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1") or "").strip().lower()
+        (os.environ.get("MODSTORE_STRATEGIC_LAYER_INTEGRATION_ENABLED", "1") or "")
+        .strip()
+        .lower()
     )
     return raw not in ("0", "false", "no", "off")
 
@@ -68,7 +70,9 @@ def _find_track_decision_id(record_id: int) -> Optional[str]:
         ).scalar_one_or_none()
         return str(row.decision_id) if row is not None else None
     except RECOVERABLE_ERRORS:
-        logger.debug("find track decision failed record_id=%s", record_id, exc_info=True)
+        logger.debug(
+            "find track decision failed record_id=%s", record_id, exc_info=True
+        )
         return None
     finally:
         session.close()
@@ -231,7 +235,10 @@ def sync_daily_to_strategic(
                 if not text:
                     skipped += 1
                     continue
-                assigned = str(it.get("employee_id") or "unassigned").strip()[:64] or "unassigned"
+                assigned = (
+                    str(it.get("employee_id") or "unassigned").strip()[:64]
+                    or "unassigned"
+                )
                 action_id = _action_id_for_daily(daily_id)
                 status = _map_status(str(it.get("status") or "open"))
                 day = str(it.get("day") or "")
@@ -247,7 +254,9 @@ def sync_daily_to_strategic(
                     "record_id": rid,
                 }
                 existing = session.execute(
-                    select(StrategicActionItem).where(StrategicActionItem.action_id == action_id)
+                    select(StrategicActionItem).where(
+                        StrategicActionItem.action_id == action_id
+                    )
                 ).scalar_one_or_none()
                 completed_at = now if status == "completed" else None
                 if existing is None:
@@ -273,7 +282,9 @@ def sync_daily_to_strategic(
                     existing.assigned_to = assigned
                     existing.status = status
                     existing.decision_id = anchor
-                    existing.result_json = json.dumps(result_payload, ensure_ascii=False)
+                    existing.result_json = json.dumps(
+                        result_payload, ensure_ascii=False
+                    )
                     existing.updated_at = now
                     if status == "completed" and existing.completed_at is None:
                         existing.completed_at = now
@@ -331,7 +342,9 @@ def mirror_daily_status(daily_item_id: int, status: str) -> Dict[str, Any]:
         session = get_session_factory()()
         try:
             row = session.execute(
-                select(StrategicActionItem).where(StrategicActionItem.action_id == action_id)
+                select(StrategicActionItem).where(
+                    StrategicActionItem.action_id == action_id
+                )
             ).scalar_one_or_none()
             if row is None:
                 return {

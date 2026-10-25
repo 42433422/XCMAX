@@ -55,7 +55,11 @@ def _blueprints_is_skeleton_mergeable(text: str) -> bool:
         return False
     if text.count("APIRouter(") != 1:
         return False
-    if "importlib" in text or "exec_module" in text or "spec_from_file_location" in text:
+    if (
+        "importlib" in text
+        or "exec_module" in text
+        or "spec_from_file_location" in text
+    ):
         return False
     if text.count("app.include_router(router)") != 1:
         return False
@@ -105,7 +109,9 @@ def _merge_blueprints(blueprints_text: str, safe_mod: str, emp_id: str) -> str:
     if line_end < 0:
         line_end = len(blueprints_text)
     insert_at = line_end + 1
-    indent_match = re.search(r"^(\s*)" + re.escape(needle), blueprints_text, re.MULTILINE)
+    indent_match = re.search(
+        r"^(\s*)" + re.escape(needle), blueprints_text, re.MULTILINE
+    )
     indent = indent_match.group(1) if indent_match else "    "
     block = (
         f"{indent}try:\n"
@@ -162,16 +168,21 @@ def run_workflow_employee_scaffold(
     if bp_path.is_file():
         bp_text = bp_path.read_text(encoding="utf-8")
         already_mounted = (
-            f"_emp_stub_{safe_mod}" in bp_text or f"employee_stubs.{safe_mod}" in bp_text
+            f"_emp_stub_{safe_mod}" in bp_text
+            or f"employee_stubs.{safe_mod}" in bp_text
         )
-        can_merge = False if already_mounted else _blueprints_is_skeleton_mergeable(bp_text)
+        can_merge = (
+            False if already_mounted else _blueprints_is_skeleton_mergeable(bp_text)
+        )
         if already_mounted:
             merge_hint = "blueprints 中似乎已包含该员工的挂载代码，已跳过自动合并。"
         elif can_merge and (allow_blueprint_merge or body.force_auto_merge):
             try:
                 new_bp = _merge_blueprints(bp_text, safe_mod, emp_id)
                 write_text_file(bp_path, new_bp)
-                files_written.append(str(bp_path.relative_to(mod_dir)).replace("\\", "/"))
+                files_written.append(
+                    str(bp_path.relative_to(mod_dir)).replace("\\", "/")
+                )
                 merged_blueprint = True
             except RECOVERABLE_ERRORS as e:
                 merge_hint = f"已生成占位文件，但自动合并 blueprints 失败：{e}。请手动在 register_fastapi_routes 内调用 mount_employee_router。"
@@ -215,7 +226,11 @@ def scaffold_auto_merge_default() -> bool:
     """是否默认允许骨架 blueprints 自动合并（可用环境变量关闭）。"""
     import os
 
-    raw = (os.environ.get("MODSTORE_SCAFFOLD_AUTO_MERGE_BLUEPRINTS") or "1").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_SCAFFOLD_AUTO_MERGE_BLUEPRINTS") or "1")
+        .strip()
+        .lower()
+    )
     return raw in ("1", "true", "yes", "on")
 
 

@@ -60,7 +60,8 @@ class TestReadDeployedSha256:
 class TestReadLocalManifestFile:
     def test_no_file(self, tmp_path):
         with patch(
-            "app.domain.app_pure.enterprise_deploy_pull.MANIFEST_PATH", str(tmp_path / "missing.json")
+            "app.domain.app_pure.enterprise_deploy_pull.MANIFEST_PATH",
+            str(tmp_path / "missing.json"),
         ):
             result = _read_local_manifest_file()
             assert result is None
@@ -103,7 +104,9 @@ class TestFetchHubManifest:
             assert result is not None
             assert result["git_sha"] == "local123"
 
-    @patch("app.domain.app_pure.enterprise_deploy_pull._read_local_manifest_file", return_value=None)
+    @patch(
+        "app.domain.app_pure.enterprise_deploy_pull._read_local_manifest_file", return_value=None
+    )
     @patch("app.domain.app_pure.enterprise_deploy_pull.urllib.request.urlopen")
     def test_remote_manifest_success(self, mock_urlopen, mock_local):
         mock_resp = MagicMock()
@@ -115,7 +118,9 @@ class TestFetchHubManifest:
         assert result is not None
         assert result["git_sha"] == "remote123"
 
-    @patch("app.domain.app_pure.enterprise_deploy_pull._read_local_manifest_file", return_value=None)
+    @patch(
+        "app.domain.app_pure.enterprise_deploy_pull._read_local_manifest_file", return_value=None
+    )
     @patch("app.domain.app_pure.enterprise_deploy_pull.urllib.request.urlopen")
     def test_remote_manifest_error(self, mock_urlopen, mock_local):
         mock_urlopen.side_effect = OSError("connection failed")

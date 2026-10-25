@@ -181,7 +181,9 @@ def append_event(
                 arr.append(evt)
                 if len(arr) > max_keep:
                     arr = arr[-max_keep:]
-                row.value_json = json.dumps(arr, ensure_ascii=False, default=str)[:300_000]
+                row.value_json = json.dumps(arr, ensure_ascii=False, default=str)[
+                    :300_000
+                ]
                 row.updated_at = datetime.now(UTC)
             else:
                 row = ProjectContextMemo(
@@ -419,7 +421,9 @@ def gather_for_employee(
         )
         proj_key = _project_key_from_input(input_data or {})
         if proj_key:
-            out["project"] = get_memos(scope="project", scope_key=proj_key, limit=project_max)
+            out["project"] = get_memos(
+                scope="project", scope_key=proj_key, limit=project_max
+            )
         out["global"] = get_memos(scope="global", scope_key="global", limit=4)
     except RECOVERABLE_ERRORS:
         logger.debug("gather_for_employee failed", exc_info=True)
@@ -444,7 +448,9 @@ def record_execution_outcome(
             "task": (task or "")[:200],
             "status": status,
             "at": ts,
-            "summary": (outcome or {}).get("summary") if isinstance(outcome, dict) else None,
+            "summary": (outcome or {}).get("summary")
+            if isinstance(outcome, dict)
+            else None,
         }
         upsert_memo(
             scope="employee",

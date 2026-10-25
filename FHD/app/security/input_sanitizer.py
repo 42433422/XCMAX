@@ -1,4 +1,5 @@
 """Input sanitization helpers for API and agent surfaces."""
+
 from __future__ import annotations
 
 import re

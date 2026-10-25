@@ -76,7 +76,8 @@ def _load_creds_from_env() -> _facade().Dict[str, _facade().Any]:
         "app_id": _facade()._env("BUTLER_QQ_APP_ID"),
         "app_secret": _facade()._env("BUTLER_QQ_APP_SECRET"),
         "bot_token": _facade()._env("BUTLER_QQ_BOT_TOKEN"),
-        "sandbox": _facade()._env("BUTLER_QQ_SANDBOX", "0") in ("1", "true", "yes", "on"),
+        "sandbox": _facade()._env("BUTLER_QQ_SANDBOX", "0")
+        in ("1", "true", "yes", "on"),
         "source": "env",
         "account_id": None,
     }
@@ -151,7 +152,11 @@ def _own_llm() -> _facade().Tuple[str, str, str, _facade().Optional[str]]:
 
 def is_configured() -> bool:
     """是否已经配齐能正常跑的最小凭证集合。"""
-    return bool(_facade()._qq_app_id() and _facade()._qq_app_secret() and _facade()._qq_bot_token())
+    return bool(
+        _facade()._qq_app_id()
+        and _facade()._qq_app_secret()
+        and _facade()._qq_bot_token()
+    )
 
 
 def _derive_seed(secret: str) -> bytes:
@@ -183,10 +188,14 @@ def _sign_payload_for(payload: bytes, app_secret: str) -> bytes:
 
 
 def verify_inbound(timestamp: str, body: bytes, signature_hex: str) -> bool:
-    return _facade()._verify_inbound_for(timestamp, body, signature_hex, _facade()._qq_app_secret())
+    return _facade()._verify_inbound_for(
+        timestamp, body, signature_hex, _facade()._qq_app_secret()
+    )
 
 
-def _verify_inbound_for(timestamp: str, body: bytes, signature_hex: str, app_secret: str) -> bool:
+def _verify_inbound_for(
+    timestamp: str, body: bytes, signature_hex: str, app_secret: str
+) -> bool:
     from nacl.exceptions import BadSignatureError
 
     if not (timestamp and signature_hex):
@@ -228,7 +237,10 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         with sf() as session:
             rows = (
                 session.query(AIEmployeeAccount)
-                .filter(AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active")
+                .filter(
+                    AIEmployeeAccount.platform == "qq",
+                    AIEmployeeAccount.status == "active",
+                )
                 .all()
             )
         for row in rows:
@@ -248,7 +260,8 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         if secret:
             if result.get(aid) and result[aid] != secret:
                 _facade().logger.info(
-                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）", aid
+                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）",
+                    aid,
                 )
             result[aid] = secret
     return result
@@ -278,7 +291,10 @@ async def get_access_token(force_refresh: bool = False) -> str:
     if (
         not force_refresh
         and _facade()._token_state.token
-        and (_facade()._token_state.expires_at - now > _facade()._TOKEN_REFRESH_LEAD_SECONDS)
+        and (
+            _facade()._token_state.expires_at - now
+            > _facade()._TOKEN_REFRESH_LEAD_SECONDS
+        )
     ):
         return _facade()._token_state.token
     async with _facade()._token_state._lock_or_create():
@@ -286,16 +302,22 @@ async def get_access_token(force_refresh: bool = False) -> str:
         if (
             not force_refresh
             and _facade()._token_state.token
-            and (_facade()._token_state.expires_at - now > _facade()._TOKEN_REFRESH_LEAD_SECONDS)
+            and (
+                _facade()._token_state.expires_at - now
+                > _facade()._TOKEN_REFRESH_LEAD_SECONDS
+            )
         ):
             return _facade()._token_state.token
         app_id = _facade()._qq_app_id()
         app_secret = _facade()._qq_app_secret()
         if not (app_id and app_secret):
-            raise _facade().HTTPException(503, "BUTLER_QQ_APP_ID / BUTLER_QQ_APP_SECRET 未配置")
+            raise _facade().HTTPException(
+                503, "BUTLER_QQ_APP_ID / BUTLER_QQ_APP_SECRET 未配置"
+            )
         async with _facade().httpx.AsyncClient(timeout=15.0) as client:
             r = await client.post(
-                _facade()._qq_token_endpoint(), json={"appId": app_id, "clientSecret": app_secret}
+                _facade()._qq_token_endpoint(),
+                json={"appId": app_id, "clientSecret": app_secret},
             )
             if r.status_code >= 400:
                 raise _facade().HTTPException(
@@ -365,7 +387,9 @@ async def _send(
     if msg_id:
         body["msg_id"] = msg_id
         if kind in ("group", "c2c"):
-            body["msg_seq"] = msg_seq if msg_seq else await _facade()._seq_registry.next(msg_id)
+            body["msg_seq"] = (
+                msg_seq if msg_seq else await _facade()._seq_registry.next(msg_id)
+            )
     headers = {
         "Authorization": f"QQBot {token}",
         "Content-Type": "application/json",
@@ -415,7 +439,11 @@ class _BotContext:
         self._seq = _facade()._SeqRegistry()
 
     def api_base(self) -> str:
-        return "https://sandbox.api.sgroup.qq.com" if self.sandbox else "https://api.sgroup.qq.com"
+        return (
+            "https://sandbox.api.sgroup.qq.com"
+            if self.sandbox
+            else "https://api.sgroup.qq.com"
+        )
 
     async def access_token(self, force: bool = False) -> str:
         if self._bot_token_static:
@@ -453,7 +481,10 @@ class _BotContext:
         base = self.api_base()
         if kind == "group":
             url = f"{base}/v2/groups/{target_id}/messages"
-            body: _facade().Dict[str, _facade().Any] = {"content": content, "msg_type": 0}
+            body: _facade().Dict[str, _facade().Any] = {
+                "content": content,
+                "msg_type": 0,
+            }
         elif kind == "c2c":
             url = f"{base}/v2/users/{target_id}/messages"
             body = {"content": content, "msg_type": 0}
@@ -483,7 +514,9 @@ class _BotContext:
                     r.status_code,
                     r.text[:300],
                 )
-                raise _facade().HTTPException(r.status_code, f"QQ 接口失败: {r.text[:300]}")
+                raise _facade().HTTPException(
+                    r.status_code, f"QQ 接口失败: {r.text[:300]}"
+                )
             try:
                 return r.json()
             except RECOVERABLE_ERRORS:
@@ -535,7 +568,8 @@ async def _get_bot_ctx(app_id: str) -> _facade().Optional[_BotContext]:
                     rows = (
                         session.query(AIEmployeeAccount)
                         .filter(
-                            AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active"
+                            AIEmployeeAccount.platform == "qq",
+                            AIEmployeeAccount.status == "active",
                         )
                         .all()
                     )
@@ -625,7 +659,9 @@ async def _get_bot_ctx_by_employee(employee_id: str) -> _facade().Optional[_BotC
                 _facade()._bot_ctx_cache[app_id] = ctx
                 return ctx
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.debug("_get_bot_ctx_by_employee 失败 employee_id=%s: %s", employee_id, exc)
+        _facade().logger.debug(
+            "_get_bot_ctx_by_employee 失败 employee_id=%s: %s", employee_id, exc
+        )
     static_ctx = _facade()._specific_ctx_for_employee(eid)
     if static_ctx is not None:
         if static_ctx.app_id not in _facade()._bot_ctx_cache:
@@ -645,7 +681,9 @@ def _strip_at(text: str) -> str:
     return s
 
 
-def _extract_target_id(kind: _facade().MsgKind, payload: _facade().Dict[str, _facade().Any]) -> str:
+def _extract_target_id(
+    kind: _facade().MsgKind, payload: _facade().Dict[str, _facade().Any]
+) -> str:
     """根据事件类型从 payload 取回复目标。"""
     if kind == "group":
         return str(payload.get("group_openid") or "")
@@ -655,9 +693,13 @@ def _extract_target_id(kind: _facade().MsgKind, payload: _facade().Dict[str, _fa
     return str(payload.get("channel_id") or "")
 
 
-async def dispatch_to_butler(event_type: str, payload: _facade().Dict[str, _facade().Any]) -> None:
+async def dispatch_to_butler(
+    event_type: str, payload: _facade().Dict[str, _facade().Any]
+) -> None:
     """兼容旧调用入口（数字管家默认上下文）。"""
-    await _facade().dispatch_to_employee(event_type, payload, app_id=_facade()._qq_app_id())
+    await _facade().dispatch_to_employee(
+        event_type, payload, app_id=_facade()._qq_app_id()
+    )
 
 
 async def dispatch_to_employee(
@@ -691,7 +733,9 @@ async def dispatch_to_employee(
         return
     target_id = _facade()._extract_target_id(kind, payload)
     if not target_id:
-        _facade().logger.warning("QQ 事件缺少目标 id: %s payload=%s", event_type, payload)
+        _facade().logger.warning(
+            "QQ 事件缺少目标 id: %s payload=%s", event_type, payload
+        )
         return
     msg_id = str(payload.get("id") or "")
     ctx: _facade().Optional[_facade()._BotContext] = None
@@ -719,7 +763,10 @@ async def dispatch_to_employee(
         await ctx.send(kind, target_id, reply, msg_id=msg_id)
     except RECOVERABLE_ERRORS:
         _facade().logger.exception(
-            "QQ 出站失败 kind=%s target=%s employee=%s", kind, target_id, ctx.employee_id
+            "QQ 出站失败 kind=%s target=%s employee=%s",
+            kind,
+            target_id,
+            ctx.employee_id,
         )
 
 
@@ -735,7 +782,9 @@ async def _resolve_reply(employee_id: str, user_text: str) -> str:
         reply = await _facade()._execute_employee_for_qq(employee_id, user_text)
         if reply:
             return reply
-        _facade().logger.info("执行器无文本输出 employee=%s，回退到 persona chat", employee_id)
+        _facade().logger.info(
+            "执行器无文本输出 employee=%s，回退到 persona chat", employee_id
+        )
     except RECOVERABLE_ERRORS as exc:
         _facade().logger.exception(
             "执行器失败 employee=%s，回退到 persona chat: %s", employee_id, exc
@@ -809,7 +858,9 @@ async def _employee_chat(user_text: str, *, employee_id: str) -> str:
     from modstore_server.llm_chat_proxy import chat_dispatch
 
     provider, model, api_key, base_url = await _facade()._resolve_llm_for_butler()
-    persona = _facade()._EMPLOYEE_PERSONAS.get(employee_id, _facade()._EMPLOYEE_FALLBACK_PERSONA)
+    persona = _facade()._EMPLOYEE_PERSONAS.get(
+        employee_id, _facade()._EMPLOYEE_FALLBACK_PERSONA
+    )
     msgs: _facade().List[_facade().Dict[str, _facade().Any]] = [
         {"role": "system", "content": persona},
         {
@@ -819,12 +870,19 @@ async def _employee_chat(user_text: str, *, employee_id: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=600
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=600,
     )
     return str(result.get("content") or "").strip()
 
 
-async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().Optional[str]]:
+async def _resolve_llm_for_butler() -> _facade().Tuple[
+    str, str, str, _facade().Optional[str]
+]:
     """解析数字管家自己用的 LLM 凭证。优先用员工自带的（``BUTLER_QQ_LLM_*``），
     其次才退回 ``BUTLER_QQ_BRIDGE_USER_ID`` 名下挂的真人钥匙。
 
@@ -852,7 +910,9 @@ async def _resolve_llm_for_butler() -> _facade().Tuple[str, str, str, _facade().
     try:
         user = db.query(User).filter(User.id == bridge_uid).first()
         if not user:
-            raise RuntimeError(f"BUTLER_QQ_BRIDGE_USER_ID={bridge_uid} 在 users 表中找不到")
+            raise RuntimeError(
+                f"BUTLER_QQ_BRIDGE_USER_ID={bridge_uid} 在 users 表中找不到"
+            )
         prefs: _facade().Dict[str, _facade().Any] = {}
         raw = getattr(user, "default_llm_json", None) or ""
         if raw.strip():
@@ -903,7 +963,12 @@ async def _butler_chat(user_text: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=800
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=800,
     )
     return str(result.get("content") or "").strip()
 
@@ -922,7 +987,9 @@ class _PushDTO(_facade().BaseModel):
 def _check_admin(request: _facade().Request) -> None:
     expected = _facade()._env("MODSTORE_ADMIN_RECHARGE_TOKEN")
     if not expected:
-        raise _facade().HTTPException(503, "MODSTORE_ADMIN_RECHARGE_TOKEN 未配置，拒绝主动推送")
+        raise _facade().HTTPException(
+            503, "MODSTORE_ADMIN_RECHARGE_TOKEN 未配置，拒绝主动推送"
+        )
     got = (request.headers.get("X-Modstore-Recharge-Token") or "").strip()
     if got != expected:
         raise _facade().HTTPException(403, "管理员令牌不匹配")
@@ -1007,7 +1074,9 @@ def _specific_app_secret(webhook_key: str) -> str:
             if v:
                 return v
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.debug("_specific_app_secret 查账号池失败 key=%s: %s", webhook_key, exc)
+        _facade().logger.debug(
+            "_specific_app_secret 查账号池失败 key=%s: %s", webhook_key, exc
+        )
     return ""
 
 
@@ -1034,7 +1103,9 @@ def _specific_bot_token(webhook_key: str) -> str:
             if v:
                 return v
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.debug("_specific_bot_token 查账号池失败 key=%s: %s", webhook_key, exc)
+        _facade().logger.debug(
+            "_specific_bot_token 查账号池失败 key=%s: %s", webhook_key, exc
+        )
     return ""
 
 
@@ -1111,7 +1182,9 @@ async def qq_employee_webhook_probe(employee_id: str) -> _facade().JSONResponse:
         raise _facade().HTTPException(404, "employee 未绑定 QQ 账号")
     secret = rec.get("secret") or {}
     app_id = str(secret.get("app_id") or rec.get("external_id") or "")
-    return _facade().JSONResponse({"ok": True, "employee_id": employee_id, "app_id": app_id})
+    return _facade().JSONResponse(
+        {"ok": True, "employee_id": employee_id, "app_id": app_id}
+    )
 
 
 @_facade().router.post("/by-employee/{employee_id}/webhook")
@@ -1129,7 +1202,9 @@ async def qq_employee_webhook(
 
         rec = lookup_active_account_for(employee_id, "qq")
     except RECOVERABLE_ERRORS as exc:
-        _facade().logger.warning("by-employee webhook 查账号失败 employee=%s: %s", employee_id, exc)
+        _facade().logger.warning(
+            "by-employee webhook 查账号失败 employee=%s: %s", employee_id, exc
+        )
         rec = None
     if not rec:
         raise _facade().HTTPException(404, "employee 未绑定 QQ 账号")
@@ -1144,7 +1219,9 @@ async def qq_employee_webhook(
 
 @_facade().router.post("/webhook")
 async def qq_webhook(request: _facade().Request) -> _facade().JSONResponse:
-    return await _facade()._qq_webhook_impl(request, forced_app_id=None, forced_employee_id="")
+    return await _facade()._qq_webhook_impl(
+        request, forced_app_id=None, forced_employee_id=""
+    )
 
 
 async def _qq_webhook_impl(
@@ -1168,7 +1245,9 @@ async def _qq_webhook_impl(
         if not (plain_token and event_ts):
             raise _facade().HTTPException(400, "op=13 缺少 plain_token / event_ts")
         secrets_map = _facade()._all_known_app_secrets()
-        inbound_app_id_13 = (forced_app_id or request.headers.get("X-Union-Appid") or "").strip()
+        inbound_app_id_13 = (
+            forced_app_id or request.headers.get("X-Union-Appid") or ""
+        ).strip()
         if forced_app_id and forced_app_id in secrets_map:
             use_secret = secrets_map[forced_app_id]
             chosen_for = f"forced app_id={forced_app_id}"
@@ -1199,9 +1278,13 @@ async def _qq_webhook_impl(
             _facade().logger.exception("op=13 签名失败 app_id=%s", inbound_app_id_13)
             raise _facade().HTTPException(500, f"签名失败: {exc}")
         _facade().logger.info(
-            "op=13 握手成功 app_id=%s chosen_secret=%s", inbound_app_id_13 or "unknown", chosen_for
+            "op=13 握手成功 app_id=%s chosen_secret=%s",
+            inbound_app_id_13 or "unknown",
+            chosen_for,
         )
-        return _facade().JSONResponse({"plain_token": plain_token, "signature": sig_bytes.hex()})
+        return _facade().JSONResponse(
+            {"plain_token": plain_token, "signature": sig_bytes.hex()}
+        )
     secrets_map = _facade()._all_known_app_secrets()
     verified = (
         any(
@@ -1214,7 +1297,9 @@ async def _qq_webhook_impl(
         else _facade().verify_inbound(timestamp, body_bytes, sig)
     )
     if not verified:
-        _facade().logger.warning("QQ webhook 签名校验失败 ts=%s sig=%s", timestamp, sig[:16])
+        _facade().logger.warning(
+            "QQ webhook 签名校验失败 ts=%s sig=%s", timestamp, sig[:16]
+        )
         raise _facade().HTTPException(401, "签名校验失败")
     if op == 0:
         event_type = str(envelope.get("t") or "")
@@ -1237,15 +1322,23 @@ async def _qq_webhook_impl(
 
 
 @_facade().router.post("/push")
-async def qq_push(body: _PushDTO, request: _facade().Request) -> _facade().Dict[str, _facade().Any]:
+async def qq_push(
+    body: _PushDTO, request: _facade().Request
+) -> _facade().Dict[str, _facade().Any]:
     _facade()._check_admin(request)
     return await _facade()._send(
-        body.kind, body.target_id, body.content, msg_id=body.msg_id, msg_seq=body.msg_seq
+        body.kind,
+        body.target_id,
+        body.content,
+        msg_id=body.msg_id,
+        msg_seq=body.msg_seq,
     )
 
 
 @_facade().router.post("/cache/reload")
-async def qq_reload_cache(request: _facade().Request) -> _facade().Dict[str, _facade().Any]:
+async def qq_reload_cache(
+    request: _facade().Request,
+) -> _facade().Dict[str, _facade().Any]:
     """让凭证 / BotContext 缓存立刻失效；admin CRUD 之后会自动调，
     这里也提供手动触发（运维侧排障用）。"""
     _facade()._check_admin(request)

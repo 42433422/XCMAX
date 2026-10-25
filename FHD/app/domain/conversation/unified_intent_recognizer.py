@@ -79,7 +79,9 @@ class UnifiedIntentRecognizer:
                 deepseek_module = import_module("app.ai_engines.deepseek.intent_service")
                 deepseek_cls = deepseek_module.DeepseekIntentClassifier
             except RECOVERABLE_ERRORS:
-                deepseek_module = import_module("app.domain.shared_services.deepseek_intent_service")
+                deepseek_module = import_module(
+                    "app.domain.shared_services.deepseek_intent_service"
+                )
                 deepseek_cls = deepseek_module.DeepSeekIntentRecognizer
             self.deepseek_recognizer = deepseek_cls()
             loader = getattr(self.deepseek_recognizer, "load_model", None)

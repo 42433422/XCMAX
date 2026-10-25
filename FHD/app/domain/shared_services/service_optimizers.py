@@ -403,5 +403,9 @@ class ShipmentServiceOptimizer:
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
 instrument_service_layer_class(AIOptimizedService, "app.domain.shared_services.service_optimizers")
-instrument_service_layer_class(CustomerServiceOptimizer, "app.domain.shared_services.service_optimizers")
-instrument_service_layer_class(ShipmentServiceOptimizer, "app.domain.shared_services.service_optimizers")
+instrument_service_layer_class(
+    CustomerServiceOptimizer, "app.domain.shared_services.service_optimizers"
+)
+instrument_service_layer_class(
+    ShipmentServiceOptimizer, "app.domain.shared_services.service_optimizers"
+)

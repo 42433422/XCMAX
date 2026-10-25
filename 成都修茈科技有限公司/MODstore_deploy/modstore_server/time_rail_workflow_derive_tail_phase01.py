@@ -15,12 +15,16 @@ def _facade():
 
 def _derive_from_sources_tail_phase_01(state):
     if state["digest"] is not None:
-        state["created"] = _facade()._iso_or_none(getattr(state["digest"], "created_at", None))
+        state["created"] = _facade()._iso_or_none(
+            getattr(state["digest"], "created_at", None)
+        )
         state["latest_digest_created"] = state["created"]
         state["day"] = str(getattr(state["digest"], "day", "") or "")
         state["record_id"] = int(getattr(state["digest"], "id", 0) or 0)
         state["latest_digest_record_id"] = state["record_id"]
-        state["release_kind"] = str(getattr(state["digest"], "release_kind", "") or "daily")
+        state["release_kind"] = str(
+            getattr(state["digest"], "release_kind", "") or "daily"
+        )
         state["latest_release_kind"] = state["release_kind"]
         state["derived"]["daily-hub"] = _facade()._node_status_shell(
             "daily-hub",
@@ -113,7 +117,9 @@ def _derive_from_sources_tail_phase_01(state):
                 detail=state["action_stats"],
                 observed=True,
             )
-            state["patch_count"] = int((state["action_stats"].get("by_kind") or {}).get("patch", 0))
+            state["patch_count"] = int(
+                (state["action_stats"].get("by_kind") or {}).get("patch", 0)
+            )
             state["update_count"] = int(
                 (state["action_stats"].get("by_kind") or {}).get("update", 0)
             )
@@ -139,7 +145,9 @@ def _derive_from_sources_tail_phase_01(state):
                 },
                 observed=True,
             )
-            state["merged"] = int((state["action_stats"].get("by_status") or {}).get("merged", 0))
+            state["merged"] = int(
+                (state["action_stats"].get("by_status") or {}).get("merged", 0)
+            )
             if state["merged"]:
                 state["derived"]["WB_M"] = _facade()._node_status_shell(
                     "WB_M",
@@ -199,16 +207,18 @@ def _derive_from_sources_tail_phase_01(state):
                         ("P-S", "SS"),
                         ("P-App", "SA"),
                     ):
-                        state["lane_row"] = state["audit"].get(state["lane"]) or state["audit"].get(
-                            state["lane"].replace("-", "")
-                        )
+                        state["lane_row"] = state["audit"].get(state["lane"]) or state[
+                            "audit"
+                        ].get(state["lane"].replace("-", ""))
                         if isinstance(state["lane_row"], dict):
-                            state["derived"][state["nid"]] = _facade()._node_status_shell(
-                                state["nid"],
-                                last_run=state["created"],
-                                ok=state["lane_row"].get("ok") is not False,
-                                source="daily_digest.surface_audit",
-                                detail=state["lane_row"],
+                            state["derived"][state["nid"]] = (
+                                _facade()._node_status_shell(
+                                    state["nid"],
+                                    last_run=state["created"],
+                                    ok=state["lane_row"].get("ok") is not False,
+                                    source="daily_digest.surface_audit",
+                                    detail=state["lane_row"],
+                                )
                             )
                     state["ppt"] = (
                         state["audit"].get("ppt")
@@ -235,13 +245,16 @@ def _derive_from_sources_tail_phase_01(state):
                     state["derived"]["BR"] = _facade()._node_status_shell(
                         "BR",
                         last_run=_facade()._iso_or_none(state["orch"].get("ran_at")),
-                        ok=state["orch"].get("orchestrator_mode") in ("primary", "digest"),
+                        ok=state["orch"].get("orchestrator_mode")
+                        in ("primary", "digest"),
                         source="daily_digest.orchestrator_audit",
                         detail=state["orch"],
                         observed=True,
                     )
             except RECOVERABLE_ERRORS:
-                _facade().logger.debug("time_rail: surface_audit meta parse failed", exc_info=True)
+                _facade().logger.debug(
+                    "time_rail: surface_audit meta parse failed", exc_info=True
+                )
         state["exec_raw"] = getattr(state["digest"], "vibe_line_execute_json", "") or ""
         if state["exec_raw"]:
             try:
@@ -262,7 +275,9 @@ def _derive_from_sources_tail_phase_01(state):
                         },
                     )
                     state["runs"] = (
-                        state["ex"].get("runs") if isinstance(state["ex"].get("runs"), dict) else {}
+                        state["ex"].get("runs")
+                        if isinstance(state["ex"].get("runs"), dict)
+                        else {}
                     )
                     state["phase_a"] = (
                         state["ex"].get("phase_a")
@@ -315,28 +330,32 @@ def _derive_from_sources_tail_phase_01(state):
                             state["source_nid"] in state["derived"]
                             and state["mapped_nid"] not in state["derived"]
                         ):
-                            state["derived"][state["mapped_nid"]] = _facade()._derive_mapped_node(
-                                state["mapped_nid"],
-                                state["derived"][state["source_nid"]],
-                                source=f"time_rail.derive.{state['source_nid']}",
-                                detail={
-                                    "record_id": state["record_id"],
-                                    "release_kind": state["release_kind"],
-                                },
+                            state["derived"][state["mapped_nid"]] = (
+                                _facade()._derive_mapped_node(
+                                    state["mapped_nid"],
+                                    state["derived"][state["source_nid"]],
+                                    source=f"time_rail.derive.{state['source_nid']}",
+                                    detail={
+                                        "record_id": state["record_id"],
+                                        "release_kind": state["release_kind"],
+                                    },
+                                )
                             )
                     for state["line_key"], state["nid"] in (
                         ("P-W", "PW"),
                         ("P-App", "APPB"),
                         ("S-R", "SR"),
                     ):
-                        state["line_block"] = (state["phase_b"].get("line_results") or {}).get(
-                            state["line_key"]
-                        ) or {}
+                        state["line_block"] = (
+                            state["phase_b"].get("line_results") or {}
+                        ).get(state["line_key"]) or {}
                         if state["line_block"]:
-                            state["derived"][state["nid"]] = _facade()._status_from_block(
-                                state["nid"],
-                                state["line_block"],
-                                source=f"daily_digest.phase_b.{state['line_key']}",
+                            state["derived"][state["nid"]] = (
+                                _facade()._status_from_block(
+                                    state["nid"],
+                                    state["line_block"],
+                                    source=f"daily_digest.phase_b.{state['line_key']}",
+                                )
                             )
                     _facade()._ensure_p2_line_mappings(
                         state["derived"],
@@ -371,17 +390,22 @@ def _derive_from_sources_tail_phase_01(state):
                         )
                         for state["step"] in ("P3", "P4", "P5", "P6", "P7", "P8", "P9"):
                             if state["step"] in state["step_ids"]:
-                                state["derived"][state["step"]] = _facade()._status_from_block(
-                                    state["step"],
-                                    state["phase_c_pipeline"],
-                                    source="daily_digest.phase_c_pipeline",
-                                    detail={
-                                        "step": state["step"],
-                                        "step_ids": state["step_ids"],
-                                    },
+                                state["derived"][state["step"]] = (
+                                    _facade()._status_from_block(
+                                        state["step"],
+                                        state["phase_c_pipeline"],
+                                        source="daily_digest.phase_c_pipeline",
+                                        detail={
+                                            "step": state["step"],
+                                            "step_ids": state["step_ids"],
+                                        },
+                                    )
                                 )
                         if any(
-                            (state["step"] in state["step_ids"] for state["step"] in ("P5", "P6"))
+                            (
+                                state["step"] in state["step_ids"]
+                                for state["step"] in ("P5", "P6")
+                            )
                         ):
                             state["derived"]["CANARY"] = _facade()._status_from_block(
                                 "CANARY",
@@ -415,10 +439,12 @@ def _derive_from_sources_tail_phase_01(state):
                             ("P6", "P6I"),
                         ):
                             if state["source_step"] in state["step_map"]:
-                                state["derived"][state["nid"]] = _facade()._status_from_block(
-                                    state["nid"],
-                                    state["step_map"][state["source_step"]],
-                                    source="daily_digest.phase_c.installer_chain",
+                                state["derived"][state["nid"]] = (
+                                    _facade()._status_from_block(
+                                        state["nid"],
+                                        state["step_map"][state["source_step"]],
+                                        source="daily_digest.phase_c.installer_chain",
+                                    )
                                 )
                         if state["phase_c"].get("fastgate"):
                             state["derived"]["FASTGATE"] = _facade()._status_from_block(

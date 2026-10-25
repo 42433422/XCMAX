@@ -21,12 +21,19 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRO
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR")
+        or Path.home() / ".xcmax" / "modstore-daily"
+    )
 
 
 def queue_path() -> Path:
     raw = (os.environ.get("MODSTORE_AUTONOMOUS_UNCERTAINTY_QUEUE") or "").strip()
-    return Path(raw).expanduser() if raw else _runtime_dir() / "autonomous_uncertainty_queue.jsonl"
+    return (
+        Path(raw).expanduser()
+        if raw
+        else _runtime_dir() / "autonomous_uncertainty_queue.jsonl"
+    )
 
 
 def _fingerprint(payload: Dict[str, Any]) -> str:
@@ -105,7 +112,9 @@ def enqueue_uncertain_item(
     path = queue_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(item, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+        fh.write(
+            json.dumps(item, ensure_ascii=False, sort_keys=True, default=str) + "\n"
+        )
     return {"fingerprint": item["fingerprint"], "path": str(path), "queued": True}
 
 
@@ -116,7 +125,9 @@ def enqueue_uncertain_item(
 
 def _enabled() -> bool:
     """Phase-D 双向问答是否启用。环境变量 MODSTORE_ASK_HUMAN_BLOCKING_ENABLED。"""
-    return (os.environ.get("MODSTORE_ASK_HUMAN_BLOCKING_ENABLED") or "1").strip().lower() in {
+    return (
+        os.environ.get("MODSTORE_ASK_HUMAN_BLOCKING_ENABLED") or "1"
+    ).strip().lower() in {
         "1",
         "true",
         "yes",
@@ -172,7 +183,9 @@ def ask_human_blocking(
     # 延迟 import 避免循环依赖
     from modstore_server.models import PendingHumanQuestion, get_session_factory
 
-    timeout = timeout_seconds if timeout_seconds is not None else _default_timeout_seconds()
+    timeout = (
+        timeout_seconds if timeout_seconds is not None else _default_timeout_seconds()
+    )
     poll = (
         poll_interval_seconds
         if poll_interval_seconds is not None
@@ -258,7 +271,9 @@ def ask_human_blocking(
                     "status": "answered",
                     "answer": row.answer or "",
                     "question_id": question_id,
-                    "answered_at": row.answered_at.isoformat() if row.answered_at else None,
+                    "answered_at": row.answered_at.isoformat()
+                    if row.answered_at
+                    else None,
                 }
 
     # 超时降级
@@ -353,16 +368,16 @@ def answer_pending_question(
         session_id = str(context.get("session_id") or "").strip()
         if session_id:
             try:
-                from modstore_server.retort_clarification_gate import answer_clarification
+                from modstore_server.retort_clarification_gate import (
+                    answer_clarification,
+                )
 
                 retort_bridge = answer_clarification(
                     session_id,
                     answers=answer,
                     answered_by=f"user:{answered_by_user_id}",
                 )
-            except (
-                BOUNDARY_ERRORS
-            ) as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - answering inbox must not fail closed on bridge
                 retort_bridge = {"ok": False, "error": type(exc).__name__}
 
     return {

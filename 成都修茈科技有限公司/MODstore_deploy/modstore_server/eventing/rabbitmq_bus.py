@@ -130,7 +130,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
             self._rebind_all()
             self._start_consumer()
         except RECOVERABLE_ERRORS:
-            logger.error("RabbitMqNeuroBus connection failed; falling back to in-memory mode")
+            logger.error(
+                "RabbitMqNeuroBus connection failed; falling back to in-memory mode"
+            )
             self._connected = False
             self._connection = None
             self._channel = None
@@ -148,7 +150,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                     routing_key=routing_key,
                 )
             except RECOVERABLE_ERRORS:
-                logger.debug("queue_bind failed for %s during rebind", event_name, exc_info=True)
+                logger.debug(
+                    "queue_bind failed for %s during rebind", event_name, exc_info=True
+                )
 
     def _start_consumer(self) -> None:
         if self._consumer_thread and self._consumer_thread.is_alive():
@@ -178,7 +182,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                 except RECOVERABLE_ERRORS:
                     if self._stop_event.is_set():
                         break
-                    logger.debug("RabbitMQ consumer loop error, reconnecting", exc_info=True)
+                    logger.debug(
+                        "RabbitMQ consumer loop error, reconnecting", exc_info=True
+                    )
                     self._connected = False
                     self._try_reconnect()
                     if self._connected:
@@ -299,7 +305,9 @@ class RabbitMqNeuroBus(InMemoryNeuroBus):
                             routing_key=routing_key,
                         )
                     except RECOVERABLE_ERRORS:
-                        logger.debug("queue_bind failed for %s", event_name, exc_info=True)
+                        logger.debug(
+                            "queue_bind failed for %s", event_name, exc_info=True
+                        )
         return sub
 
     def publish(self, event: DomainEvent) -> bool:

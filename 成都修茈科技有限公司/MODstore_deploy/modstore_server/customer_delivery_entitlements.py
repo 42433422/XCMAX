@@ -7,14 +7,24 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_commerce_blockers,
+)
 from modstore_server.models import User, UserMod
 
 
 def grant_verified_delivery_access(
-    db: Any, ticket: Any, evidence: dict[str, Any], manifest: dict[str, Any], *, owner_id: int
+    db: Any,
+    ticket: Any,
+    evidence: dict[str, Any],
+    manifest: dict[str, Any],
+    *,
+    owner_id: int,
 ) -> list[str]:
-    if int(ticket.user_id) != owner_id or manifest.get("delivery_owner_user_id") != owner_id:
+    if (
+        int(ticket.user_id) != owner_id
+        or manifest.get("delivery_owner_user_id") != owner_id
+    ):
         raise HTTPException(403, "只有原工单账号可以获取私有交付权益")
     if (
         evidence.get("acceptance_status") != "accepted"

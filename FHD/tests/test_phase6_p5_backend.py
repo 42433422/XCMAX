@@ -480,7 +480,9 @@ class TestModEmployeeComplete:
 
         fake_mod = types.ModuleType("app.domain.shared_services.ai_conversation_service")
         # 不设置 get_ai_conversation_service 属性
-        monkeypatch.setitem(sys.modules, "app.domain.shared_services.ai_conversation_service", fake_mod)
+        monkeypatch.setitem(
+            sys.modules, "app.domain.shared_services.ai_conversation_service", fake_mod
+        )
 
         out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False

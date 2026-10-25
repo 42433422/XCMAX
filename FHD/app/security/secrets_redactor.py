@@ -1,4 +1,5 @@
 """Redact secrets from logs and outbound payloads."""
+
 from __future__ import annotations
 
 import re
@@ -23,7 +24,11 @@ def redact_obj(value: Any) -> Any:
         return redact_text(value)
     if isinstance(value, dict):
         return {
-            k: ("[REDACTED]" if re.search(r"(?i)key|token|secret|password", str(k)) else redact_obj(v))
+            k: (
+                "[REDACTED]"
+                if re.search(r"(?i)key|token|secret|password", str(k))
+                else redact_obj(v)
+            )
             for k, v in value.items()
         }
     if isinstance(value, list):

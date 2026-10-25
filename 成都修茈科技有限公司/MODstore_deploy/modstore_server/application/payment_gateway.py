@@ -19,14 +19,24 @@ def _float_env(name: str, default: float) -> float:
 
 class PaymentGatewayService:
     def __init__(self, backend: str | None = None, java_url: str | None = None):
-        self.backend = (backend or os.environ.get("PAYMENT_BACKEND") or "python").strip().lower()
+        self.backend = (
+            (backend or os.environ.get("PAYMENT_BACKEND") or "python").strip().lower()
+        )
         self.java_url = (
-            (java_url or os.environ.get("JAVA_PAYMENT_SERVICE_URL") or "http://127.0.0.1:8080")
+            (
+                java_url
+                or os.environ.get("JAVA_PAYMENT_SERVICE_URL")
+                or "http://127.0.0.1:8080"
+            )
             .strip()
             .rstrip("/")
         )
-        self.connect_timeout_seconds = _float_env("PAYMENT_PROXY_CONNECT_TIMEOUT_SECONDS", 5.0)
-        self.read_timeout_seconds = _float_env("PAYMENT_PROXY_READ_TIMEOUT_SECONDS", 30.0)
+        self.connect_timeout_seconds = _float_env(
+            "PAYMENT_PROXY_CONNECT_TIMEOUT_SECONDS", 5.0
+        )
+        self.read_timeout_seconds = _float_env(
+            "PAYMENT_PROXY_READ_TIMEOUT_SECONDS", 30.0
+        )
 
     def should_proxy_to_java(self, path: str) -> bool:
         if self.backend != "java":

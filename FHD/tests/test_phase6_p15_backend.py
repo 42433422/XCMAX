@@ -2643,7 +2643,9 @@ class TestTWRBusinessDocking:
             patch(
                 "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview"
             ) as mock_all,
-            patch("app.domain.shared_services.document_templates_service._list_excel_sheet_names") as mock_names,
+            patch(
+                "app.domain.shared_services.document_templates_service._list_excel_sheet_names"
+            ) as mock_names,
         ):
             mock_struct.return_value = {"fields": [], "sample_rows": []}
             mock_grid.return_value = {}
@@ -4258,7 +4260,10 @@ class TestCCIterCatalogPackages:
                 "app.infrastructure.mods.catalog_client._fetch_market_catalog_rows",
                 new_callable=AsyncMock,
             ) as mock_fetch,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.return_value = [{"id": "p1"}, {"id": "p2"}]
             rows = []
@@ -4277,7 +4282,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.return_value = []
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4297,7 +4305,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.side_effect = HTTPException(status_code=502, detail="err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4317,7 +4328,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_fetch.side_effect = RuntimeError("err")
             mock_get.return_value = {"packages": [{"id": "p1"}]}
@@ -4333,7 +4347,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": [{"id": "p1"}, {"id": "p2"}]}
             rows = []
@@ -4348,7 +4365,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": "not a list"}
             with pytest.raises(HTTPException) as exc_info:
@@ -4363,7 +4383,10 @@ class TestCCIterCatalogPackages:
             patch(
                 "app.infrastructure.mods.catalog_client.catalog_get_json", new_callable=AsyncMock
             ) as mock_get,
-            patch("app.domain.shared_services.catalog_visibility.is_public_catalog_row", return_value=True),
+            patch(
+                "app.domain.shared_services.catalog_visibility.is_public_catalog_row",
+                return_value=True,
+            ),
         ):
             mock_get.return_value = {"packages": [{"id": "p1"}, "not_dict", 42]}
             rows = []

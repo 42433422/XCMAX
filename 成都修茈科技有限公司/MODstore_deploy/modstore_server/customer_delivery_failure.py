@@ -21,13 +21,18 @@ def apply_runtime_failure(
         last_error="客户宿主实际业务验证失败",
     )
     evidence["resolution"] = resolution
-    ticket.status, ticket.closed_at, ticket.decision_status = "processing", None, "pending"
+    ticket.status, ticket.closed_at, ticket.decision_status = (
+        "processing",
+        None,
+        "pending",
+    )
     handled = list(evidence.get("automatic_rework_generations") or [])
     if generation in handled:
         return
     if not record.get("release_evidence"):
         resolution.update(
-            state="awaiting_runtime", last_error="业务验证失败且宿主发行身份尚未核实，待核实后返工"
+            state="awaiting_runtime",
+            last_error="业务验证失败且宿主发行身份尚未核实，待核实后返工",
         )
         return
     evidence["acceptance_status"] = "pending"
@@ -37,7 +42,12 @@ def apply_runtime_failure(
     evidence["automatic_rework_generations"] = [*handled, generation]
     evidence["runtime_mod_id"] = record["id"]
     source: dict[str, Any] = next(
-        (row for row in evidence.get("delivery_artifacts", []) if row.get("id") == record["id"]), {}
+        (
+            row
+            for row in evidence.get("delivery_artifacts", [])
+            if row.get("id") == record["id"]
+        ),
+        {},
     )
     evidence["rework_artifact_kind"] = (
         "employee" if source.get("source_employee_pack_id") else "module"
@@ -48,7 +58,9 @@ def apply_runtime_failure(
     evidence["runtime_failure"] = record["business_verification"]
     resolution["state"] = "queued_rework"
     ticket.evidence_json = json_dumps(evidence)
-    enqueue_issue(db, ticket, revision=f"runtime-failed:{generation}", private_factory=True)
+    enqueue_issue(
+        db, ticket, revision=f"runtime-failed:{generation}", private_factory=True
+    )
 
 
 def reconcile_runtime_failures(db: Any, ticket: Any) -> bool:

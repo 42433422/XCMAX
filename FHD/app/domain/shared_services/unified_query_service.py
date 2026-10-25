@@ -349,4 +349,6 @@ def delete_purchase_unit(**kwargs) -> int:
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(UnifiedQueryService, "app.domain.shared_services.unified_query_service")
+instrument_service_layer_class(
+    UnifiedQueryService, "app.domain.shared_services.unified_query_service"
+)

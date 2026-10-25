@@ -23,7 +23,11 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
+from modstore_server.eventing.contracts import (
+    canonical_event_name,
+    event_version,
+    validate_payload,
+)
 from modstore_server.eventing.events import DomainEvent, new_event
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.models import OutboxDeadLetter, OutboxEvent, get_session_factory
@@ -137,7 +141,9 @@ def enqueue(
             session.add(row)
             session.flush()
     except IntegrityError:
-        existing = session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
+        existing = (
+            session.query(OutboxEvent).filter(OutboxEvent.event_id == eid).first()
+        )
         if existing is None:
             raise
         logger.debug("outbox enqueue idempotent skip event_id=%s", eid)
@@ -184,7 +190,9 @@ def fetch_pending(
 ) -> list[OutboxRecord]:
     with get_session_factory()() as session:
         query = session.query(OutboxEvent).filter(
-            OutboxEvent.status.in_(["pending", "dispatched"] if include_dispatched else ["pending"])
+            OutboxEvent.status.in_(
+                ["pending", "dispatched"] if include_dispatched else ["pending"]
+            )
         )
         if aggregate_prefix:
             query = query.filter(
@@ -291,7 +299,9 @@ def mark_dispatched(record_id: int, *, claim_token: str = "") -> bool:
     return bool(won)
 
 
-def mark_failed(record_id: int, error: str, *, terminal: bool, claim_token: str = "") -> None:
+def mark_failed(
+    record_id: int, error: str, *, terminal: bool, claim_token: str = ""
+) -> None:
     with _session_scope() as session:
         query = session.query(OutboxEvent).filter(OutboxEvent.id == record_id)
         if claim_token:
@@ -370,7 +380,9 @@ def drain(
             try:
                 neuro_bus.publish(record.to_domain_event())
             except RECOVERABLE_ERRORS:
-                logger.exception("neuro_bus publish failed event_id=%s", record.event_id)
+                logger.exception(
+                    "neuro_bus publish failed event_id=%s", record.event_id
+                )
         try:
             if record.event_name == "ops.intake.customer_ticket":
                 from modstore_server.customer_issue_intake import dispatch_issue_event
@@ -445,7 +457,9 @@ class OutboxDispatcherWorker:
         while not self._stop.is_set():
             try:
                 drain(limit=self.batch_size)
-                from modstore_server.customer_issue_intake import recover_pending_incidents
+                from modstore_server.customer_issue_intake import (
+                    recover_pending_incidents,
+                )
 
                 recover_pending_incidents(limit=self.batch_size)
             except RECOVERABLE_ERRORS:

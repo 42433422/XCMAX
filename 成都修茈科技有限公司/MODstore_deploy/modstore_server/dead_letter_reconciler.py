@@ -52,7 +52,9 @@ def _event_age_hours(row: OutboxDeadLetter, now: datetime) -> float:
 
 
 def _safe_replay_prefixes() -> tuple[str, ...]:
-    raw = os.environ.get("MODSTORE_DLQ_SAFE_REPLAY_PREFIXES", _DEFAULT_SAFE_REPLAY_PREFIXES)
+    raw = os.environ.get(
+        "MODSTORE_DLQ_SAFE_REPLAY_PREFIXES", _DEFAULT_SAFE_REPLAY_PREFIXES
+    )
     return tuple(item.strip().lower() for item in str(raw).split(",") if item.strip())
 
 
@@ -123,9 +125,17 @@ def verify_storage_recovered() -> dict[str, Any]:
 def _schedule_replay(session: Any, row: OutboxDeadLetter, now: datetime) -> bool:
     source = None
     if row.source_outbox_id:
-        source = session.query(OutboxEvent).filter(OutboxEvent.id == row.source_outbox_id).first()
+        source = (
+            session.query(OutboxEvent)
+            .filter(OutboxEvent.id == row.source_outbox_id)
+            .first()
+        )
     if source is None:
-        source = session.query(OutboxEvent).filter(OutboxEvent.event_id == row.event_id).first()
+        source = (
+            session.query(OutboxEvent)
+            .filter(OutboxEvent.event_id == row.event_id)
+            .first()
+        )
     if source is None:
         return False
     source.status = "pending"
@@ -134,7 +144,9 @@ def _schedule_replay(session: Any, row: OutboxDeadLetter, now: datetime) -> bool
     source.dispatched_at = None
     row.resolution_status = "replay_scheduled"
     row.resolution_action = "automatic_replay"
-    row.resolution_note = "transient storage failure recovered; idempotent event allow-list matched"
+    row.resolution_note = (
+        "transient storage failure recovered; idempotent event allow-list matched"
+    )
     row.resolved_at = now
     row.replay_outbox_id = int(source.id)
     return True
@@ -156,7 +168,9 @@ def _quarantine(row: OutboxDeadLetter, now: datetime, *, sensitive: bool) -> Non
     row.resolved_at = now
 
 
-def reconcile_dead_letters(*, limit: int = 200, now: datetime | None = None) -> dict[str, Any]:
+def reconcile_dead_letters(
+    *, limit: int = 200, now: datetime | None = None
+) -> dict[str, Any]:
     """Resolve eligible infrastructure DLQ rows without erasing their evidence."""
 
     checked_at = now or _utcnow_naive()
@@ -187,7 +201,10 @@ def reconcile_dead_letters(*, limit: int = 200, now: datetime | None = None) -> 
         for row in rows:
             stats["checked"] += 1
             row.last_reconciled_at = checked_at
-            if not _is_disk_full(row) or _event_age_hours(row, checked_at) < min_age_hours:
+            if (
+                not _is_disk_full(row)
+                or _event_age_hours(row, checked_at) < min_age_hours
+            ):
                 stats["deferred"] += 1
                 continue
             if not storage.get("ok"):
@@ -204,7 +221,9 @@ def reconcile_dead_letters(*, limit: int = 200, now: datetime | None = None) -> 
 
         session.commit()
         stats["unresolved_count"] = int(
-            session.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
+            session.query(OutboxDeadLetter)
+            .filter(OutboxDeadLetter.resolved_at.is_(None))
+            .count()
         )
     return stats
 
@@ -213,7 +232,9 @@ def dead_letter_health() -> dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
         unresolved = int(
-            session.query(OutboxDeadLetter).filter(OutboxDeadLetter.resolved_at.is_(None)).count()
+            session.query(OutboxDeadLetter)
+            .filter(OutboxDeadLetter.resolved_at.is_(None))
+            .count()
         )
         resolved = int(
             session.query(OutboxDeadLetter)

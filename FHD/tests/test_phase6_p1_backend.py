@@ -632,7 +632,10 @@ class TestConversationSaveMessage:
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=123),
-            patch("app.domain.shared_services.conversation_service.AIConversation", return_value=conversation),
+            patch(
+                "app.domain.shared_services.conversation_service.AIConversation",
+                return_value=conversation,
+            ),
         ):
             msg_id = svc.save_message("sess-1", "123", "assistant", "hi")
 

@@ -28,7 +28,11 @@ class SelfEvolutionRedisVLError(RuntimeError):
 
 
 def enabled() -> bool:
-    raw = (os.environ.get("MODSTORE_SELF_EVOLUTION_REDISVL_ENABLED") or "1").strip().lower()
+    raw = (
+        (os.environ.get("MODSTORE_SELF_EVOLUTION_REDISVL_ENABLED") or "1")
+        .strip()
+        .lower()
+    )
     return raw in {"1", "true", "yes", "on"}
 
 
@@ -51,7 +55,8 @@ def _embedding_dim() -> int:
         return int(embedding_config_snapshot().get("dim") or DEFAULT_DIM)
     except RECOVERABLE_ERRORS:
         return int(
-            (os.environ.get("MODSTORE_EMBEDDING_DIM") or str(DEFAULT_DIM)).strip() or DEFAULT_DIM
+            (os.environ.get("MODSTORE_EMBEDDING_DIM") or str(DEFAULT_DIM)).strip()
+            or DEFAULT_DIM
         )
 
 
@@ -84,7 +89,8 @@ def _doc_text(doc: Dict[str, Any], fields: Sequence[str]) -> str:
     template = doc.get("executable_template")
     if isinstance(template, dict):
         parts.append(
-            "executable_template: " + json.dumps(template, ensure_ascii=False, sort_keys=True)
+            "executable_template: "
+            + json.dumps(template, ensure_ascii=False, sort_keys=True)
         )
     if not parts:
         parts.append(json.dumps(doc, ensure_ascii=False, sort_keys=True, default=str))
@@ -282,7 +288,9 @@ def query(
     except RECOVERABLE_ERRORS as exc:
         raise SelfEvolutionRedisVLError(f"redisvl query failed: {exc}") from exc
 
-    by_path = {str(doc.get("_path") or ""): doc for doc in docs if isinstance(doc, dict)}
+    by_path = {
+        str(doc.get("_path") or ""): doc for doc in docs if isinstance(doc, dict)
+    }
     by_id = {_doc_id(kind, doc): doc for doc in docs if isinstance(doc, dict)}
     out: List[Dict[str, Any]] = []
     for row in rows or []:

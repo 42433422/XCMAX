@@ -26,7 +26,9 @@ def _guess_employee_id_from_empty_workflow(workflow: Workflow) -> str:
 
 
 def _repair_empty_employee_workflow_graph(db: Session, workflow: Workflow) -> bool:
-    existing = db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow.id).count()
+    existing = (
+        db.query(WorkflowNode).filter(WorkflowNode.workflow_id == workflow.id).count()
+    )
     if existing:
         return False
     marker = f"{workflow.name or ''} {workflow.description or ''}"
@@ -202,7 +204,9 @@ def _workflow_summary(db: Session, workflow: Workflow, user_id: int) -> Dict[str
         "updated_at": workflow.updated_at.isoformat(),
         "graph_fingerprint": sandbox_status["graph_fingerprint"],
         "sandbox_status": sandbox_status,
-        "sandbox_passed_for_current_graph": sandbox_status["sandbox_passed_for_current_graph"],
+        "sandbox_passed_for_current_graph": sandbox_status[
+            "sandbox_passed_for_current_graph"
+        ],
     }
 
 
@@ -213,7 +217,12 @@ def _employee_id_matches(candidate_id: str, target_employee_id: str) -> bool:
         return False
     if c == t:
         return True
-    return c.endswith(f"-{t}") or c.endswith(f"_{t}") or t.endswith(f"-{c}") or t.endswith(f"_{c}")
+    return (
+        c.endswith(f"-{t}")
+        or c.endswith(f"_{t}")
+        or t.endswith(f"-{c}")
+        or t.endswith(f"_{c}")
+    )
 
 
 def _employee_matches_manifest_entry(entry: Dict[str, Any], employee_id: str) -> bool:

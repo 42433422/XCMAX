@@ -69,8 +69,12 @@ def _get_optional_user(
 class RegisterDTO(_facade().BaseModel):
     username: str = _facade().Field(..., min_length=2, max_length=64)
     password: str = _facade().Field(..., min_length=6)
-    email: str = _facade().Field(default="", max_length=128, description="选填；填写时必须验证")
-    verification_code: str = _facade().Field(default="", max_length=16, description="邮箱验证码")
+    email: str = _facade().Field(
+        default="", max_length=128, description="选填；填写时必须验证"
+    )
+    verification_code: str = _facade().Field(
+        default="", max_length=16, description="邮箱验证码"
+    )
 
 
 class LoginDTO(_facade().BaseModel):
@@ -307,7 +311,9 @@ def api_send_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
 
 
 @_facade().router.post("/auth/send-register-code", status_code=202)
-def api_send_register_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
+def api_send_register_code(
+    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
+):
     """向未注册邮箱发送注册验证码：先 202 落库，再异步 SMTP。"""
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
@@ -374,7 +380,9 @@ def api_login_with_code(body: LoginWithCodeDTO):
 
 
 @_facade().router.post("/auth/send-reset-password-code", status_code=202)
-def api_send_reset_password_code(body: SendCodeDTO, background_tasks: _facade().BackgroundTasks):
+def api_send_reset_password_code(
+    body: SendCodeDTO, background_tasks: _facade().BackgroundTasks
+):
     """忘记密码：向已注册邮箱发送验证码（未注册邮箱返回相同提示，不泄露是否存在）。"""
     email_norm = _facade()._normalize_email(body.email)
     if not email_norm:
@@ -493,9 +501,13 @@ def api_change_password(
 
 
 @_facade().router.post("/admin/reset-user-password")
-def api_admin_reset_user_password(body: AdminResetUserPasswordDTO, request: _facade().Request):
+def api_admin_reset_user_password(
+    body: AdminResetUserPasswordDTO, request: _facade().Request
+):
     """凭 ``MODSTORE_ADMIN_RECHARGE_TOKEN`` 重置用户密码；请求头 ``X-Modstore-Recharge-Token`` 与钱包直充一致。"""
-    admin_token = (_facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or "").strip()
+    admin_token = (
+        _facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or ""
+    ).strip()
     if not admin_token:
         raise _facade().HTTPException(
             503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法执行管理员密码重置"
@@ -508,7 +520,9 @@ def api_admin_reset_user_password(body: AdminResetUserPasswordDTO, request: _fac
         raise _facade().HTTPException(400, "请填写用户名")
     sf = _facade().get_session_factory()
     with sf() as session:
-        row = session.query(_facade().User).filter(_facade().User.username == un).first()
+        row = (
+            session.query(_facade().User).filter(_facade().User.username == un).first()
+        )
         if not row:
             raise _facade().HTTPException(404, "用户不存在")
         row.password_hash = _facade().hash_password(body.new_password)
@@ -564,7 +578,11 @@ def api_wallet_balance(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = session.query(_facade().Wallet).filter(_facade().Wallet.user_id == user.id).first()
+        wallet = (
+            session.query(_facade().Wallet)
+            .filter(_facade().Wallet.user_id == user.id)
+            .first()
+        )
         if not wallet:
             wallet = _facade().Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -586,9 +604,13 @@ def api_wallet_recharge(
         raise _facade().HTTPException(
             403, "仅管理员可使用 Token 直充接口，且只能为当前登录账号加款"
         )
-    admin_token = (_facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or "").strip()
+    admin_token = (
+        _facade().os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or ""
+    ).strip()
     if not admin_token:
-        raise _facade().HTTPException(503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法直充")
+        raise _facade().HTTPException(
+            503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法直充"
+        )
     client_token = (request.headers.get("X-Modstore-Recharge-Token") or "").strip() or (
         body.recharge_token or ""
     ).strip()
@@ -680,7 +702,9 @@ def api_admin_credit_user_wallet(
     description = (body.description or "").strip() or "后台加款"
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         wallet = (
@@ -783,7 +807,10 @@ def _find_ai_preauth_by_hold(
         .all()
     )
     for row in rows:
-        if str(_facade()._parse_ai_wallet_meta(row.description).get("hold_no") or "") == hold_no:
+        if (
+            str(_facade()._parse_ai_wallet_meta(row.description).get("hold_no") or "")
+            == hold_no
+        ):
             return row
     return None
 
@@ -818,7 +845,8 @@ def _ai_txns_for_hold(
     return [
         row
         for row in rows
-        if str(_facade()._parse_ai_wallet_meta(row.description).get("hold_no") or "") == hold_no
+        if str(_facade()._parse_ai_wallet_meta(row.description).get("hold_no") or "")
+        == hold_no
     ]
 
 
@@ -841,7 +869,9 @@ def _ai_refunded_amount_for_hold(
     return sum(
         (
             _facade()._wallet_money(row.amount)
-            for row in _facade()._ai_txns_for_hold(session, user_id, "ai_refund", hold_no)
+            for row in _facade()._ai_txns_for_hold(
+                session, user_id, "ai_refund", hold_no
+            )
         ),
         _facade().Decimal("0.00"),
     )
@@ -853,7 +883,9 @@ def _ai_hold_payload(
     meta = _facade()._parse_ai_wallet_meta(preauth.description)
     return {
         "hold_no": meta.get("hold_no") or "",
-        "amount": _facade()._wallet_money_str(abs(_facade()._wallet_money(preauth.amount))),
+        "amount": _facade()._wallet_money_str(
+            abs(_facade()._wallet_money(preauth.amount))
+        ),
         "settled_amount": _facade()._wallet_money_str(settled_amount),
         "status": status,
         "provider": meta.get("provider") or "",
@@ -949,7 +981,9 @@ def api_wallet_ai_settle(
             wallet = _facade().Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
             session.flush()
-        preauth = _facade()._find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
+        preauth = _facade()._find_ai_preauth_by_hold(
+            session, user.id, body.hold_no.strip()
+        )
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
         if existing:
@@ -987,7 +1021,9 @@ def api_wallet_ai_settle(
         session.commit()
         return {
             "ok": True,
-            "hold": _facade()._ai_hold_payload(preauth, status="settled", settled_amount=actual),
+            "hold": _facade()._ai_hold_payload(
+                preauth, status="settled", settled_amount=actual
+            ),
             "balance": _facade()._wallet_money_str(wallet.balance),
         }
 
@@ -1012,13 +1048,17 @@ def api_wallet_ai_release(
             wallet = _facade().Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
             session.flush()
-        preauth = _facade()._find_ai_preauth_by_hold(session, user.id, body.hold_no.strip())
+        preauth = _facade()._find_ai_preauth_by_hold(
+            session, user.id, body.hold_no.strip()
+        )
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
         if existing:
             return {
                 "ok": True,
-                "hold": _facade()._ai_hold_payload(preauth, status="released", settled_amount=0),
+                "hold": _facade()._ai_hold_payload(
+                    preauth, status="released", settled_amount=0
+                ),
                 "balance": _facade()._wallet_money_str(wallet.balance),
                 "idempotent": True,
             }
@@ -1034,14 +1074,19 @@ def api_wallet_ai_release(
         )
         if any(
             (
-                str(_facade()._parse_ai_wallet_meta(row.description).get("hold_no") or "")
+                str(
+                    _facade()._parse_ai_wallet_meta(row.description).get("hold_no")
+                    or ""
+                )
                 == body.hold_no.strip()
                 for row in settled
             )
         ):
             return {
                 "ok": True,
-                "hold": _facade()._ai_hold_payload(preauth, status="settled", settled_amount=0),
+                "hold": _facade()._ai_hold_payload(
+                    preauth, status="settled", settled_amount=0
+                ),
                 "balance": _facade()._wallet_money_str(wallet.balance),
                 "idempotent": True,
             }
@@ -1062,7 +1107,9 @@ def api_wallet_ai_release(
         session.commit()
         return {
             "ok": True,
-            "hold": _facade()._ai_hold_payload(preauth, status="released", settled_amount=0),
+            "hold": _facade()._ai_hold_payload(
+                preauth, status="released", settled_amount=0
+            ),
             "balance": _facade()._wallet_money_str(wallet.balance),
         }
 
@@ -1092,7 +1139,9 @@ def api_wallet_ai_refund(
         preauth = _facade()._find_ai_preauth_by_hold(session, user.id, hold_no)
         if not preauth:
             raise _facade().HTTPException(404, "预授权不存在")
-        settled_amount = _facade()._ai_settled_amount_for_hold(session, user.id, hold_no)
+        settled_amount = _facade()._ai_settled_amount_for_hold(
+            session, user.id, hold_no
+        )
         if settled_amount <= 0:
             raise _facade().HTTPException(400, "预授权尚未结算，不能退款")
         if existing:
@@ -1110,7 +1159,9 @@ def api_wallet_ai_refund(
                 "balance": _facade()._wallet_money_str(wallet.balance),
                 "idempotent": True,
             }
-        refunded_before = _facade()._ai_refunded_amount_for_hold(session, user.id, hold_no)
+        refunded_before = _facade()._ai_refunded_amount_for_hold(
+            session, user.id, hold_no
+        )
         refundable = settled_amount - refunded_before
         if refund_amount > refundable:
             raise _facade().HTTPException(
@@ -1128,7 +1179,9 @@ def api_wallet_ai_refund(
                 hold_no=hold_no,
                 refund_amount=_facade()._wallet_money_str(refund_amount),
                 settled_amount=_facade()._wallet_money_str(settled_amount),
-                refunded_total_after=_facade()._wallet_money_str(refunded_before + refund_amount),
+                refunded_total_after=_facade()._wallet_money_str(
+                    refunded_before + refund_amount
+                ),
                 reason=(body.reason or "refund")[:128],
             ),
             idempotency_key=key,
@@ -1195,7 +1248,9 @@ def api_buy_item(
     sf = _facade().get_session_factory()
     with sf() as session:
         item = (
-            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+            session.query(_facade().CatalogItem)
+            .filter(_facade().CatalogItem.id == item_id)
+            .first()
         )
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
@@ -1226,7 +1281,9 @@ def api_buy_item(
                 return {"ok": True, "message": "已拥有"}
             purchase = _facade().Purchase(user_id=user.id, catalog_id=item.id, amount=0)
             session.add(purchase)
-            _grant_catalog_entitlement(session, user_id=user.id, item=item, source="free_catalog")
+            _grant_catalog_entitlement(
+                session, user_id=user.id, item=item, source="free_catalog"
+            )
             session.commit()
             return {"ok": True, "message": "免费领取成功"}
         existing = (
@@ -1261,7 +1318,9 @@ def api_buy_item(
             )
         wallet.balance -= item.price
         wallet.updated_at = _facade().datetime.now(_facade().timezone.utc)
-        purchase = _facade().Purchase(user_id=user.id, catalog_id=item.id, amount=item.price)
+        purchase = _facade().Purchase(
+            user_id=user.id, catalog_id=item.id, amount=item.price
+        )
         txn = _facade().Transaction(
             user_id=user.id,
             amount=-item.price,
@@ -1282,7 +1341,9 @@ def api_download_item(
     sf = _facade().get_session_factory()
     with sf() as session:
         item = (
-            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+            session.query(_facade().CatalogItem)
+            .filter(_facade().CatalogItem.id == item_id)
+            .first()
         )
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
@@ -1296,9 +1357,15 @@ def api_download_item(
             )
             .first()
         )
-        if not _facade()._market_item_visible_to_user(item, user, purchased=bool(purchased)):
+        if not _facade()._market_item_visible_to_user(
+            item, user, purchased=bool(purchased)
+        ):
             raise _facade().HTTPException(404, "商品不存在")
-        if item.price > 0 and not purchased and not (user.is_admin or item.author_id == user.id):
+        if (
+            item.price > 0
+            and not purchased
+            and not (user.is_admin or item.author_id == user.id)
+        ):
             raise _facade().HTTPException(403, "未购买此商品，请先购买后下载")
         if not item.stored_filename:
             raise _facade().HTTPException(404, "该商品无文件可下载")
@@ -1338,7 +1405,9 @@ def api_my_store(
     sf = _facade().get_session_factory()
     with sf() as session:
         total = (
-            session.query(_facade().Purchase).filter(_facade().Purchase.user_id == user.id).count()
+            session.query(_facade().Purchase)
+            .filter(_facade().Purchase.user_id == user.id)
+            .count()
         )
         rows = (
             session.query(_facade().Purchase)
@@ -1365,7 +1434,9 @@ def api_my_store(
                         "name": item.name,
                         "artifact": item.artifact or "mod",
                         "price_paid": p.amount,
-                        "purchased_at": p.created_at.isoformat() if p.created_at else "",
+                        "purchased_at": p.created_at.isoformat()
+                        if p.created_at
+                        else "",
                     }
                 )
         return {"items": items, "total": total}
@@ -1420,7 +1491,11 @@ def _existing_upload_session(session_id: str) -> _facade().Path | None:
 
 def _catalog_suffix(raw_name: str) -> str | None:
     raw = str(raw_name or "").lower()
-    suffix = raw if raw in {".zip", ".xcmod", ".xcemp"} else _facade().Path(raw).suffix.lower()
+    suffix = (
+        raw
+        if raw in {".zip", ".xcmod", ".xcemp"}
+        else _facade().Path(raw).suffix.lower()
+    )
     return {".zip": ".zip", ".xcmod": ".xcmod", ".xcemp": ".xcemp"}.get(suffix)
 
 
@@ -1478,7 +1553,9 @@ class CatalogItemAdminPatchDTO(_facade().BaseModel):
     is_public: bool
 
 
-@_facade().router.post("/admin/catalog", summary="管理员上传 MOD 到市场（支持文件上传）")
+@_facade().router.post(
+    "/admin/catalog", summary="管理员上传 MOD 到市场（支持文件上传）"
+)
 async def api_admin_upload_catalog(
     pkg_id: str = _facade().Form(..., min_length=1, max_length=128),
     version: str = _facade().Form(..., min_length=1, max_length=32),
@@ -1502,7 +1579,9 @@ async def api_admin_upload_catalog(
             .first()
         )
         if existing:
-            raise _facade().HTTPException(409, f"pkg_id '{pkg_id}' + version '{version}' 已存在")
+            raise _facade().HTTPException(
+                409, f"pkg_id '{pkg_id}' + version '{version}' 已存在"
+            )
         stored_filename = ""
         sha256 = ""
         if file and file.filename:
@@ -1541,7 +1620,9 @@ async def api_admin_upload_catalog(
         }
 
 
-@_facade().router.patch("/admin/catalog/{item_id}", summary="更新商品是否对 AI 市场公开展示")
+@_facade().router.patch(
+    "/admin/catalog/{item_id}", summary="更新商品是否对 AI 市场公开展示"
+)
 def api_admin_patch_catalog_item(
     item_id: int,
     body: CatalogItemAdminPatchDTO,
@@ -1551,7 +1632,9 @@ def api_admin_patch_catalog_item(
     sf = _facade().get_session_factory()
     with sf() as session:
         item = (
-            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+            session.query(_facade().CatalogItem)
+            .filter(_facade().CatalogItem.id == item_id)
+            .first()
         )
         if not item:
             raise _facade().HTTPException(404, "商品不存在")
@@ -1725,7 +1808,9 @@ def api_complete_upload(
             .first()
         )
         if existing:
-            raise _facade().HTTPException(409, f"pkg_id '{pkg_id}' + version '{version}' 已存在")
+            raise _facade().HTTPException(
+                409, f"pkg_id '{pkg_id}' + version '{version}' 已存在"
+            )
         ind = (industry or "").strip() or "通用"
         item = _facade().CatalogItem(
             pkg_id=pkg_id,
@@ -1778,7 +1863,9 @@ def api_admin_delete_catalog(
     sf = _facade().get_session_factory()
     with sf() as session:
         item = (
-            session.query(_facade().CatalogItem).filter(_facade().CatalogItem.id == item_id).first()
+            session.query(_facade().CatalogItem)
+            .filter(_facade().CatalogItem.id == item_id)
+            .first()
         )
         if not item:
             return {
@@ -1796,7 +1883,11 @@ def api_admin_delete_catalog(
             item.delist_reason = "管理员手动下架"
             item.rank_score = 0.0
             session.commit()
-    n_json = catalog_store.remove_package(pkg_id, version=None, remove_files=False) if pkg_id else 0
+    n_json = (
+        catalog_store.remove_package(pkg_id, version=None, remove_files=False)
+        if pkg_id
+        else 0
+    )
     try:
         from modstore_server.market_catalog_api import _invalidate_market_catalog_caches
 
@@ -1857,7 +1948,9 @@ def api_admin_delete_employee_pack(
 
 @_facade().router.post("/admin/employee-packs/align-llm-from-deepseek")
 async def api_admin_align_employee_llm_from_deepseek(
-    dry_run: bool = _facade().Query(False, description="为 true 时只返回将要修改的内容，不写库"),
+    dry_run: bool = _facade().Query(
+        False, description="为 true 时只返回将要修改的内容，不写库"
+    ),
     user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
     """把仍为 ``provider=deepseek`` 的员工包批量改为当前环境下首个可用 LLM（平台密钥或作者 BYOK），并执行与 employee-save 相同的落盘。"""
@@ -1870,7 +1963,9 @@ async def api_admin_align_employee_llm_from_deepseek(
 
 @_facade().router.post("/admin/employee-packs/align-llm-to-auto")
 async def api_admin_align_employee_llm_to_auto(
-    dry_run: bool = _facade().Query(False, description="为 true 时只返回将要修改的内容，不写库"),
+    dry_run: bool = _facade().Query(
+        False, description="为 true 时只返回将要修改的内容，不写库"
+    ),
     user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
     """把仍为 ``provider=deepseek`` 的员工包改为 manifest 内 ``provider=model_name=auto``（工作台「自动」），与 employee-save 相同落盘。"""
@@ -1878,20 +1973,26 @@ async def api_admin_align_employee_llm_to_auto(
         align_catalog_employee_packs_llm_to_auto_sentinel,
     )
 
-    return await align_catalog_employee_packs_llm_to_auto_sentinel(user, dry_run=dry_run)
+    return await align_catalog_employee_packs_llm_to_auto_sentinel(
+        user, dry_run=dry_run
+    )
 
 
 @_facade().router.post("/admin/employee-packs/{pkg_id}/align-llm-to-auto-single")
 async def api_admin_align_single_employee_llm_to_auto(
     pkg_id: str,
-    dry_run: bool = _facade().Query(False, description="为 true 时只返回将要修改的内容，不写库"),
+    dry_run: bool = _facade().Query(
+        False, description="为 true 时只返回将要修改的内容，不写库"
+    ),
     user: _facade().User = _facade().Depends(_facade()._require_admin),
 ):
     """单个员工包的 LLM 绑定改为 ``provider=model_name=auto``，不再受 provider==deepseek 过滤。
 
     用于「无密钥」修复路径：管理员在 dg-stats 上直接点单条「改为自动」时调用。
     """
-    from modstore_server.employee_pack_deepseek_align import align_single_employee_pack_llm_to_auto
+    from modstore_server.employee_pack_deepseek_align import (
+        align_single_employee_pack_llm_to_auto,
+    )
 
     result = await align_single_employee_pack_llm_to_auto(user, pkg_id, dry_run=dry_run)
     if not result.get("ok"):
@@ -2026,7 +2127,12 @@ def api_admin_list_users(
         elif is_enterprise is False:
             q = q.filter(_facade().User.is_enterprise.is_(False))
         total = q.count()
-        rows = q.order_by(_facade().User.created_at.desc()).offset(offset).limit(limit).all()
+        rows = (
+            q.order_by(_facade().User.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         uid_list = [int(r.id) for r in rows]
         mod_map = _facade()._user_mod_ids_map(uid_list)
         return {
@@ -2054,7 +2160,9 @@ def api_admin_set_admin_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_admin = is_admin
@@ -2070,12 +2178,16 @@ def api_admin_set_enterprise_status(
 ):
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
         target.is_enterprise = is_enterprise
         target.account_state = (
-            _facade().ACCOUNT_ACTIVE if is_enterprise else _facade().ACCOUNT_PENDING_PLAN
+            _facade().ACCOUNT_ACTIVE
+            if is_enterprise
+            else _facade().ACCOUNT_PENDING_PLAN
         )
         session.commit()
         return {
@@ -2106,7 +2218,9 @@ def api_admin_list_user_mods(
 
     sf = _facade().get_session_factory()
     with sf() as session:
-        target = session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        target = (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+        )
         if not target:
             raise _facade().HTTPException(404, "用户不存在")
     mod_ids = sorted(get_user_mod_ids(user_id))
@@ -2131,7 +2245,10 @@ def api_admin_bind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
+        if (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+            is None
+        ):
             raise _facade().HTTPException(404, "用户不存在")
     add_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -2148,7 +2265,10 @@ def api_admin_unbind_user_mod(
     mid = _facade()._assert_enterprise_assignable_mod_id(mod_id)
     sf = _facade().get_session_factory()
     with sf() as session:
-        if session.query(_facade().User).filter(_facade().User.id == user_id).first() is None:
+        if (
+            session.query(_facade().User).filter(_facade().User.id == user_id).first()
+            is None
+        ):
             raise _facade().HTTPException(404, "用户不存在")
     remove_user_mod(user_id, mid)
     return {"ok": True, "user_id": user_id, "mod_id": mid}
@@ -2294,8 +2414,12 @@ def api_admin_list_orders(
     """
     from modstore_server import payment_orders
 
-    rows, total = payment_orders.list_orders(user_id=0, status=status, limit=limit, offset=offset)
-    all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
+    rows, total = payment_orders.list_orders(
+        user_id=0, status=status, limit=limit, offset=offset
+    )
+    all_rows, _ = payment_orders.list_orders(
+        user_id=0, status=None, limit=100000, offset=0
+    )
     summary: dict[str, _facade().Any] = {
         "total_orders": len(all_rows),
         "paid_orders": 0,
@@ -2309,7 +2433,9 @@ def api_admin_list_orders(
         if st == "paid":
             summary["paid_orders"] += 1
             try:
-                summary["paid_revenue"] += _facade().Decimal(str(o.get("total_amount") or "0"))
+                summary["paid_revenue"] += _facade().Decimal(
+                    str(o.get("total_amount") or "0")
+                )
             except RECOVERABLE_ERRORS:
                 pass
         elif st == "pending":
@@ -2319,7 +2445,9 @@ def api_admin_list_orders(
         "items": rows,
         "total": total,
         "summary": summary,
-        "source": "python_json" if payment_orders.is_local_source_of_truth() else "java",
+        "source": "python_json"
+        if payment_orders.is_local_source_of_truth()
+        else "java",
     }
 
 
@@ -2332,9 +2460,15 @@ def api_wallet_overview(
     """钱包概览：余额 + 最近交易流水（前端 walletOverview 消费此接口）。"""
     sf = _facade().get_session_factory()
     with sf() as session:
-        wallet = session.query(_facade().Wallet).filter(_facade().Wallet.user_id == user.id).first()
+        wallet = (
+            session.query(_facade().Wallet)
+            .filter(_facade().Wallet.user_id == user.id)
+            .first()
+        )
         balance = wallet.balance if wallet else 0.0
-        updated_at = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+        updated_at = (
+            wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+        )
         total = (
             session.query(_facade().Transaction)
             .filter(_facade().Transaction.user_id == user.id)

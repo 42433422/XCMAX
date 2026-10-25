@@ -49,7 +49,9 @@ def locate_employee_mod(employee_id: str, scope: str) -> tuple[Path | None, list
             for employee in employees:
                 if not isinstance(employee, dict):
                     continue
-                declared_id = str(employee.get("id") or employee.get("employee_id") or "").strip()
+                declared_id = str(
+                    employee.get("id") or employee.get("employee_id") or ""
+                ).strip()
                 if declared_id and (
                     declared_id == employee_id or employee_id.startswith(declared_id)
                 ):

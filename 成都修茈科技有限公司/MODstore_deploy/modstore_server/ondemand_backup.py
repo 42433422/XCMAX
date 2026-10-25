@@ -18,7 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 def _enabled() -> bool:
-    return (os.environ.get("MODSTORE_ONDEMAND_BACKUP_ENABLED", "1") or "").strip().lower() not in (
+    return (
+        os.environ.get("MODSTORE_ONDEMAND_BACKUP_ENABLED", "1") or ""
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -51,7 +53,11 @@ def run_ondemand_backup(
             "reason": "MODSTORE_ONDEMAND_BACKUP_ENABLED=0",
         }
 
-    from modstore_server.daily_backup_job import _backup_release_train, _backup_sqlite, _keep
+    from modstore_server.daily_backup_job import (
+        _backup_release_train,
+        _backup_sqlite,
+        _keep,
+    )
 
     dst_dir = _backup_dir()
     dst_dir.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,12 @@ from modstore_server.db.mac_control import MacControlObservation
 from modstore_server.mac_control_store import digest, encoded
 from modstore_server.mac_control_transport import age_seconds
 
-COMMANDS = {"codex": "codex", "claude_code": "claude", "cursor": "agent", "trae": "trae-cli"}
+COMMANDS = {
+    "codex": "codex",
+    "claude_code": "claude",
+    "cursor": "agent",
+    "trae": "trae-cli",
+}
 
 
 def prepare_windows_probe(db, client, devices, request):
@@ -26,23 +31,34 @@ def prepare_windows_probe(db, client, devices, request):
         if age_seconds(device.get("lastSeen", ""), now) > 90:
             continue
         if not any(
-            t.get("toolName") == tool and t.get("status") == "idle" for t in device.get("tools", [])
+            t.get("toolName") == tool and t.get("status") == "idle"
+            for t in device.get("tools", [])
         ):
             continue
         key = digest(["preflight", device["id"], tool])
         record = db.get(MacControlObservation, key)
         if record and record.observed_at and now - record.observed_at < 90:
             probe = json.loads(record.payload_json).get("probe", {})
-            device.setdefault("capabilities", {}).setdefault("tool_preflight", {})[tool] = probe
+            device.setdefault("capabilities", {}).setdefault("tool_preflight", {})[
+                tool
+            ] = probe
             return
         path = "/api/devices/" + quote(device["id"], safe="") + "/commands"
         pending = json.loads(record.payload_json) if record else {}
         if pending.get("command_id"):
-            command = client.request("GET", path + "/" + quote(pending["command_id"], safe="")).get(
-                "command", {}
-            )
-            if command.get("status") in {"completed", "failed", "cancelled", "timed_out"}:
-                ok = command.get("status") == "completed" and command.get("exit_code") == 0
+            command = client.request(
+                "GET", path + "/" + quote(pending["command_id"], safe="")
+            ).get("command", {})
+            if command.get("status") in {
+                "completed",
+                "failed",
+                "cancelled",
+                "timed_out",
+            }:
+                ok = (
+                    command.get("status") == "completed"
+                    and command.get("exit_code") == 0
+                )
                 probe = {
                     "ok": ok,
                     "kind": "cli_launch",
@@ -50,7 +66,9 @@ def prepare_windows_probe(db, client, devices, request):
                 }
                 record.payload_json, record.observed_at = encoded({"probe": probe}), now
                 db.commit()
-                device.setdefault("capabilities", {}).setdefault("tool_preflight", {})[tool] = probe
+                device.setdefault("capabilities", {}).setdefault("tool_preflight", {})[
+                    tool
+                ] = probe
             return
         if pending.get("submitted"):
             # Acceptance may have succeeded without a response; never blindly replay.
@@ -63,7 +81,10 @@ def prepare_windows_probe(db, client, devices, request):
             return
         title = f"xcmax-tool-probe:{key[:20]}:{int(now)}"
         record = record or MacControlObservation(id=key)
-        record.payload_json, record.checked_at = encoded({"submitted": True, "title": title}), now
+        record.payload_json, record.checked_at = (
+            encoded({"submitted": True, "title": title}),
+            now,
+        )
         db.add(record)
         db.commit()
         command = client.request(

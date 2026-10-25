@@ -489,5 +489,9 @@ def cn_to_number(cn: str) -> int:
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(DeepSeekIntentRecognizer, "app.domain.shared_services.deepseek_intent_service")
-instrument_service_layer_class(HybridIntentWithDeepSeek, "app.domain.shared_services.deepseek_intent_service")
+instrument_service_layer_class(
+    DeepSeekIntentRecognizer, "app.domain.shared_services.deepseek_intent_service"
+)
+instrument_service_layer_class(
+    HybridIntentWithDeepSeek, "app.domain.shared_services.deepseek_intent_service"
+)

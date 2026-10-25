@@ -162,7 +162,9 @@ def auto_rollback_on_gate_failure(
         logger.exception("auto_rollback: rollback_release_train failed gate=%s", gate)
         rollback = {"ok": False, "error": str(exc)[:300]}
     out["rollback"] = rollback
-    out["alert"] = _publish_alert(gate, release_train, release_kind, reason, failed_step, rollback)
+    out["alert"] = _publish_alert(
+        gate, release_train, release_kind, reason, failed_step, rollback
+    )
     out["staged_change"] = _stage_postmortem(
         gate, release_train, release_kind, reason, failed_step, rollback
     )

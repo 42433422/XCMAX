@@ -88,7 +88,10 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             },
             "overall_automation_rate": round(
                 (p_completed + o_completed)
-                / (len(_facade().PRODUCTION_LINE_STEPS) + len(_facade().OPERATIONS_LINE_STEPS))
+                / (
+                    len(_facade().PRODUCTION_LINE_STEPS)
+                    + len(_facade().OPERATIONS_LINE_STEPS)
+                )
                 * 100,
                 1,
             ),
@@ -109,7 +112,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         self._step_results[step_id] = _facade().StepResult(
             step_id=step_id, status=_facade().StepStatus.RUNNING
         )
-        self._fire("step_started", step_id=step_id, step_name=step.name, line=step.line.value)
+        self._fire(
+            "step_started", step_id=step_id, step_name=step.name, line=step.line.value
+        )
         try:
             result_data = await self._execute_step(step, context or {})
             if step_id == "O7" and not execution_succeeded(result_data.get("result")):
@@ -121,7 +126,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                     data={**result_data, "context": dict(context or {})},
                     error=error,
                 )
-                self._fire("step_failed", step_id=step_id, step_name=step.name, error=error)
+                self._fire(
+                    "step_failed", step_id=step_id, step_name=step.name, error=error
+                )
                 from modstore_server.customer_issue_intake import (
                     record_dispatch_failure,
                 )
@@ -158,7 +165,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                     **cross_context,
                     result_data=result_data,
                 )
-            if step.auto_trigger_next and (not getattr(self, "_release_train_subset", False)):
+            if step.auto_trigger_next and (
+                not getattr(self, "_release_train_subset", False)
+            ):
                 next_step = self._get_next_step(step)
                 if next_step:
                     return await self.run_step(next_step.step_id, context=result_data)
@@ -168,7 +177,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             self._step_results[step_id] = _facade().StepResult(
                 step_id=step_id, status=_facade().StepStatus.FAILED, error=str(exc)
             )
-            self._fire("step_failed", step_id=step_id, step_name=step.name, error=str(exc))
+            self._fire(
+                "step_failed", step_id=step_id, step_name=step.name, error=str(exc)
+            )
             if step_id == "O7":
                 from modstore_server.customer_issue_intake import (
                     record_dispatch_failure,
@@ -180,7 +191,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 return await self._retry_step(step, context, remaining=step.max_retries)
             return self._step_results[step_id]
 
-    def _get_next_step(self, step: _facade().FlowStep) -> _facade().Optional[_facade().FlowStep]:
+    def _get_next_step(
+        self, step: _facade().FlowStep
+    ) -> _facade().Optional[_facade().FlowStep]:
         if step.line == _facade().LineType.PRODUCTION:
             steps = _facade().PRODUCTION_LINE_STEPS
         else:
@@ -214,7 +227,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             self._step_results[step.step_id] = _facade().StepResult(
                 step_id=step.step_id, status=_facade().StepStatus.FAILED, error=str(exc)
             )
-            self._fire("step_failed", step_id=step.step_id, step_name=step.name, error=str(exc))
+            self._fire(
+                "step_failed", step_id=step.step_id, step_name=step.name, error=str(exc)
+            )
             return self._step_results[step.step_id]
 
     async def _execute_step(
@@ -250,7 +265,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             "result": {"ok": True, "message": f"{step.name} executed"},
         }
 
-    async def approve_step(self, step_id: str, admin_user_id: int = 0) -> _facade().StepResult:
+    async def approve_step(
+        self, step_id: str, admin_user_id: int = 0
+    ) -> _facade().StepResult:
         step = self.get_step(step_id)
         if not step:
             return _facade().StepResult(
@@ -282,8 +299,12 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
         )
         self._fire("step_completed", step_id=step_id, step_name=step.name)
         if step.cross_line_trigger:
-            self._fire("cross_line_trigger", from_step=step_id, to_step=step.cross_line_trigger)
-        if step.auto_trigger_next and (not getattr(self, "_release_train_subset", False)):
+            self._fire(
+                "cross_line_trigger", from_step=step_id, to_step=step.cross_line_trigger
+            )
+        if step.auto_trigger_next and (
+            not getattr(self, "_release_train_subset", False)
+        ):
             next_step = self._get_next_step(step)
             if next_step:
                 return await self.run_step(next_step.step_id, context=current.data)
@@ -305,7 +326,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             data=current.data,
             error=reason,
         )
-        self._fire("step_rejected", step_id=step_id, admin_user_id=admin_user_id, reason=reason)
+        self._fire(
+            "step_rejected", step_id=step_id, admin_user_id=admin_user_id, reason=reason
+        )
         return self._step_results[step_id]
 
     async def run_full_pipeline(
@@ -337,7 +360,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
                 break
             result = await self.run_step(step.step_id, context=current_context)
             if result.status == _facade().StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step.step_id, reason="awaiting approval")
+                self._fire(
+                    "pipeline_paused", step_id=step.step_id, reason="awaiting approval"
+                )
                 return {
                     "ok": True,
                     "paused": True,
@@ -394,7 +419,9 @@ class __ProductionLineOrchestratorPart01MixinPart01Mixin:
             result = await self.run_step(step_id, context=current_context)
             executed.append(step_id)
             if result.status == _facade().StepStatus.AWAITING_APPROVAL:
-                self._fire("pipeline_paused", step_id=step_id, reason="awaiting approval")
+                self._fire(
+                    "pipeline_paused", step_id=step_id, reason="awaiting approval"
+                )
                 return {
                     "ok": True,
                     "paused": True,

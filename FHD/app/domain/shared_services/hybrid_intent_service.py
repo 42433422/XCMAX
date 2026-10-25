@@ -252,7 +252,9 @@ class HybridIntentService(NeuroEventPublisherMixin):
 
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(HybridIntentService, "app.domain.shared_services.hybrid_intent_service")
+instrument_service_layer_class(
+    HybridIntentService, "app.domain.shared_services.hybrid_intent_service"
+)
 
 _hybrid_service_instance: HybridIntentService | None = None
 

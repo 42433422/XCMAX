@@ -1,4 +1,5 @@
 """Reject path traversal in user-supplied relative paths."""
+
 from __future__ import annotations
 
 from pathlib import Path

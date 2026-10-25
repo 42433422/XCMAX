@@ -58,7 +58,9 @@ class GhActionsDeploymentGateway:
             raise DeploymentReceiptError("github_deploy_config_missing")
 
     @classmethod
-    def from_environment(cls, *, repo_root: Path, ref: str) -> GhActionsDeploymentGateway:
+    def from_environment(
+        cls, *, repo_root: Path, ref: str
+    ) -> GhActionsDeploymentGateway:
         return cls(
             repo_root=repo_root,
             repository=str(
@@ -68,7 +70,8 @@ class GhActionsDeploymentGateway:
             ),
             ref=ref,
             workflow=str(
-                os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW") or "fhd-deploy.yml"
+                os.environ.get("MODSTORE_SELF_MAINTENANCE_DEPLOY_WORKFLOW")
+                or "fhd-deploy.yml"
             ),
         )
 
@@ -116,10 +119,14 @@ class GhActionsDeploymentGateway:
             raise DeploymentReceiptError("github_run_list_invalid")
         return [dict(row) for row in payload if isinstance(row, Mapping)]
 
-    def dispatch(self, *, environment: str, merge_sha: str, action_id: str) -> DispatchReceipt:
+    def dispatch(
+        self, *, environment: str, merge_sha: str, action_id: str
+    ) -> DispatchReceipt:
         environment = _environment(environment)
         merge_sha = _merge_sha(merge_sha)
-        ref_data = self._json(["gh", "api", f"repos/{self.repository}/commits/{self.ref}"])
+        ref_data = self._json(
+            ["gh", "api", f"repos/{self.repository}/commits/{self.ref}"]
+        )
         if not isinstance(ref_data, Mapping) or _sha(ref_data.get("sha")) != merge_sha:
             raise DeploymentReceiptError("deploy_ref_not_at_merge_sha")
         baseline = {str(row.get("databaseId") or "") for row in self._runs()}
@@ -195,7 +202,9 @@ class GhActionsDeploymentGateway:
     @staticmethod
     def _fetch(url: str) -> BuildIdentity:
         try:
-            with httpx.Client(timeout=10.0, follow_redirects=True, trust_env=False) as client:
+            with httpx.Client(
+                timeout=10.0, follow_redirects=True, trust_env=False
+            ) as client:
                 response = client.get(url)
                 response.raise_for_status()
                 payload = response.json()

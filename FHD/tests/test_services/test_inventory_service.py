@@ -154,7 +154,9 @@ class TestCreateWarehouse:
         mock_db.commit.return_value = None
         mock_db.refresh.return_value = None
         # Make the Warehouse constructor return our mock
-        with patch("app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse):
+        with patch(
+            "app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse
+        ):
             svc = InventoryService()
             result = svc.create_warehouse({"code": "WH01", "name": "Main"})
         assert result["success"] is True
@@ -170,7 +172,9 @@ class TestCreateWarehouse:
         mock_warehouse = MagicMock()
         mock_warehouse.__table__ = MagicMock()
         mock_warehouse.__table__.columns = []
-        with patch("app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse):
+        with patch(
+            "app.domain.shared_services.inventory_service.Warehouse", return_value=mock_warehouse
+        ):
             svc = InventoryService()
             result = svc.create_warehouse({"code": "WH01"})
         assert result["success"] is False
@@ -305,7 +309,9 @@ class TestCreateStorageLocation:
         mock_db.add.return_value = None
         mock_db.commit.return_value = None
         mock_db.refresh.return_value = None
-        with patch("app.domain.shared_services.inventory_service.StorageLocation", return_value=mock_loc):
+        with patch(
+            "app.domain.shared_services.inventory_service.StorageLocation", return_value=mock_loc
+        ):
             svc = InventoryService()
             result = svc.create_storage_location(
                 {"warehouse_id": 1, "code": "LOC01", "name": "A-1"}

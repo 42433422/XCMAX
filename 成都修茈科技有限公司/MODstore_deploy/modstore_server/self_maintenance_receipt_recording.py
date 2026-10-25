@@ -70,7 +70,9 @@ def record_completed_deployment_receipt(
             # A second successful deployment for the same loop/SHA is a valid
             # idempotent retry, but it must still expose the exact runtime
             # identity before the new workflow may be acknowledged.
-            verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
+            verify_deployed_identity(
+                merge_sha=merge_sha, release=release, health=health
+            )
         run_id = str(existing.get("run_id") or "")
         merge_recorded = any(
             row.get("event") == "merge_completed"
@@ -108,7 +110,9 @@ def record_completed_deployment_receipt(
         attested_branch=attested_branch,
         attested_branch_head_sha=attested_branch_head_sha,
     )
-    identity = verify_deployed_identity(merge_sha=merge_sha, release=release, health=health)
+    identity = verify_deployed_identity(
+        merge_sha=merge_sha, release=release, health=health
+    )
     run_id = str(pending.get("run_id") or "").strip()
     branch_head_sha = _sha(pending.get("branch_head_sha"))
     action_id = str(action_id or "").strip() or (

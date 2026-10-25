@@ -44,7 +44,9 @@ class WorkflowNode(Base):
     __tablename__ = "workflow_nodes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     node_type = Column(String(64), nullable=False)
     name = Column(String(256), nullable=False)
     config = Column(Text, default="{}")
@@ -57,7 +59,9 @@ class WorkflowEdge(Base):
     __tablename__ = "workflow_edges"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     source_node_id = Column(Integer, ForeignKey("workflow_nodes.id"), nullable=False)
     target_node_id = Column(Integer, ForeignKey("workflow_nodes.id"), nullable=False)
     condition = Column(Text, default="")
@@ -68,7 +72,9 @@ class WorkflowSandboxRun(Base):
     __tablename__ = "workflow_sandbox_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     ok = Column(Boolean, default=False, index=True)
     validate_only = Column(Boolean, default=False, index=True)
@@ -82,7 +88,9 @@ class WorkflowExecution(Base):
     __tablename__ = "workflow_executions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     status = Column(String(32), default="pending")
     input_data = Column(Text, default="{}")
@@ -96,7 +104,9 @@ class WorkflowTrigger(Base):
     __tablename__ = "workflow_triggers"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     trigger_type = Column(String(32), nullable=False, index=True)
     trigger_key = Column(String(128), default="", index=True)
@@ -112,10 +122,14 @@ class WorkflowTrigger(Base):
 
 class WorkflowVersion(Base):
     __tablename__ = "workflow_versions"
-    __table_args__ = (UniqueConstraint("workflow_id", "version_no", name="uq_workflow_version_no"),)
+    __table_args__ = (
+        UniqueConstraint("workflow_id", "version_no", name="uq_workflow_version_no"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("workflows.id"), nullable=False, index=True
+    )
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     version_no = Column(Integer, nullable=False)
     note = Column(Text, default="")
@@ -148,11 +162,15 @@ class ScriptWorkflow(Base):
 class ScriptWorkflowVersion(Base):
     __tablename__ = "script_workflow_versions"
     __table_args__ = (
-        UniqueConstraint("workflow_id", "version_no", name="uq_script_workflow_version_no"),
+        UniqueConstraint(
+            "workflow_id", "version_no", name="uq_script_workflow_version_no"
+        ),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("script_workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("script_workflows.id"), nullable=False, index=True
+    )
     version_no = Column(Integer, nullable=False)
     script_text = Column(Text, default="")
     plan_md = Column(Text, default="")
@@ -165,7 +183,9 @@ class ScriptWorkflowRun(Base):
     __tablename__ = "script_workflow_runs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    workflow_id = Column(Integer, ForeignKey("script_workflows.id"), nullable=False, index=True)
+    workflow_id = Column(
+        Integer, ForeignKey("script_workflows.id"), nullable=False, index=True
+    )
     version_id = Column(
         Integer, ForeignKey("script_workflow_versions.id"), nullable=True, index=True
     )

@@ -18,7 +18,11 @@ from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_value_evidence import build_customer_value_evidence
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
-from modstore_server.strategic_layer import DecisionProposer, DecisionType, StrategicDecisionLedger
+from modstore_server.strategic_layer import (
+    DecisionProposer,
+    DecisionType,
+    StrategicDecisionLedger,
+)
 
 ESCALATION_SCHEMA = "xcagi.customer_value_escalation/v1"
 ESCALATION_SCOPE = "global"
@@ -46,7 +50,8 @@ def _snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "source_owner": str(evidence.get("source_owner") or "")[:96],
         "source_available": evidence.get("source_available") is True,
         "source_authoritative": evidence.get("source_authoritative") is True,
-        "append_only_store_available": evidence.get("append_only_store_available") is True,
+        "append_only_store_available": evidence.get("append_only_store_available")
+        is True,
         "value_ledger_ready": evidence.get("value_ledger_ready") is True,
         "verified_paid_count": _int(evidence.get("verified_paid_count")),
         "verified_paid_amount_cents": _int(evidence.get("verified_paid_amount_cents")),
@@ -55,12 +60,15 @@ def _snapshot(evidence: Mapping[str, Any]) -> dict[str, Any]:
         "paid_acceptance_count": _int(evidence.get("paid_acceptance_count")),
         "production_value_verified": evidence.get("production_value_verified") is True,
         "outcome_verified": evidence.get("outcome_verified") is True,
-        "customer_acceptance_verified": evidence.get("customer_acceptance_verified") is True,
+        "customer_acceptance_verified": evidence.get("customer_acceptance_verified")
+        is True,
     }
 
 
 def _digest(snapshot: Mapping[str, Any]) -> str:
-    encoded = json.dumps(dict(snapshot), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    encoded = json.dumps(
+        dict(snapshot), ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -105,7 +113,9 @@ def _ensure_blocked_action(
     now = datetime.now(UTC)
     with factory()() as session:
         existing = session.execute(
-            select(StrategicActionItem).where(StrategicActionItem.action_id == ESCALATION_ACTION_ID)
+            select(StrategicActionItem).where(
+                StrategicActionItem.action_id == ESCALATION_ACTION_ID
+            )
         ).scalar_one_or_none()
         if existing is not None:
             if existing.decision_id != decision_id:

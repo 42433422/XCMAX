@@ -59,7 +59,9 @@ def _lifecycle_error_to_http(exc: Exception) -> _facade().HTTPException:
     return _facade().HTTPException(500, f"internal error: {exc}")
 
 
-@_facade().router.get("/council/status", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.get(
+    "/council/status", response_model=_facade().Dict[str, _facade().Any]
+)
 def get_strategic_council_status(
     limit: int = _facade().Query(20, ge=1, le=100),
     _: _facade().User = _facade().Depends(_facade().get_current_user),
@@ -70,7 +72,9 @@ def get_strategic_council_status(
     return {"ok": True, "data": strategic_council_status(limit=limit)}
 
 
-@_facade().router.post("/council/review", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.post(
+    "/council/review", response_model=_facade().Dict[str, _facade().Any]
+)
 def run_strategic_council_review(
     body: _facade().StrategicCouncilReviewRequest,
     _: _facade().User = _facade().Depends(_facade().require_admin),
@@ -91,7 +95,9 @@ class RetortClarificationAnswerRequest(_facade().BaseModel):
     )
 
 
-@_facade().router.get("/council/clarifications", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.get(
+    "/council/clarifications", response_model=_facade().Dict[str, _facade().Any]
+)
 def list_retort_clarifications(
     include_terminal: bool = _facade().Query(False),
     limit: int = _facade().Query(50, ge=1, le=200),
@@ -104,7 +110,8 @@ def list_retort_clarifications(
 
 
 @_facade().router.get(
-    "/council/clarifications/{session_id}", response_model=_facade().Dict[str, _facade().Any]
+    "/council/clarifications/{session_id}",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def get_retort_clarification(
     session_id: str, _: _facade().User = _facade().Depends(_facade().get_current_user)
@@ -118,7 +125,8 @@ def get_retort_clarification(
 
 
 @_facade().router.post(
-    "/council/clarifications/{session_id}/answer", response_model=_facade().Dict[str, _facade().Any]
+    "/council/clarifications/{session_id}/answer",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def answer_retort_clarification(
     session_id: str,
@@ -128,7 +136,9 @@ def answer_retort_clarification(
     from modstore_server.retort_clarification_gate import answer_clarification
 
     out = answer_clarification(
-        session_id, answers=body.answers, answered_by=_facade().authenticated_admin_actor(admin)
+        session_id,
+        answers=body.answers,
+        answered_by=_facade().authenticated_admin_actor(admin),
     )
     if not out.get("ok"):
         raise _facade().HTTPException(409, str(out.get("error") or "answer failed"))
@@ -156,7 +166,9 @@ def propose_decision(
     try:
         decision_type = _facade().DecisionType(body.decision_type)
     except ValueError as exc:
-        raise _facade().HTTPException(422, f"invalid decision_type: {body.decision_type}") from exc
+        raise _facade().HTTPException(
+            422, f"invalid decision_type: {body.decision_type}"
+        ) from exc
     try:
         record = (
             _facade()
@@ -181,7 +193,9 @@ def propose_decision(
 @_facade().router.get("/decisions", response_model=_facade().Dict[str, _facade().Any])
 def list_decisions(
     status: _facade().Optional[str] = _facade().Query(None, description="按状态过滤"),
-    decision_type: _facade().Optional[str] = _facade().Query(None, description="按类型过滤"),
+    decision_type: _facade().Optional[str] = _facade().Query(
+        None, description="按类型过滤"
+    ),
     scope: _facade().Optional[str] = _facade().Query(None, description="按作用域过滤"),
     limit: int = _facade().Query(50, ge=1, le=500),
     _: _facade().User = _facade().Depends(_facade().get_current_user),
@@ -198,11 +212,15 @@ def list_decisions(
         try:
             type_enum = _facade().DecisionType(decision_type)
         except ValueError as exc:
-            raise _facade().HTTPException(422, f"invalid decision_type: {decision_type}") from exc
+            raise _facade().HTTPException(
+                422, f"invalid decision_type: {decision_type}"
+            ) from exc
     records = (
         _facade()
         ._ledger()
-        .list_recent(status=status_enum, decision_type=type_enum, scope=scope, limit=limit)
+        .list_recent(
+            status=status_enum, decision_type=type_enum, scope=scope, limit=limit
+        )
     )
     return {
         "ok": True,
@@ -211,7 +229,9 @@ def list_decisions(
     }
 
 
-@_facade().router.get("/decisions/{decision_id}", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.get(
+    "/decisions/{decision_id}", response_model=_facade().Dict[str, _facade().Any]
+)
 def get_decision(
     decision_id: str, _: _facade().User = _facade().Depends(_facade().get_current_user)
 ) -> _facade().Dict[str, _facade().Any]:
@@ -223,7 +243,8 @@ def get_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/approve", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/approve",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def approve_decision(
     decision_id: str,
@@ -234,7 +255,9 @@ def approve_decision(
     try:
         decided_by = _facade().DecidedBy(body.decided_by)
     except ValueError as exc:
-        raise _facade().HTTPException(422, f"invalid decided_by: {body.decided_by}") from exc
+        raise _facade().HTTPException(
+            422, f"invalid decided_by: {body.decided_by}"
+        ) from exc
     try:
         record = (
             _facade()
@@ -258,7 +281,9 @@ def reject_decision(
     try:
         decided_by = _facade().DecidedBy(body.decided_by)
     except ValueError as exc:
-        raise _facade().HTTPException(422, f"invalid decided_by: {body.decided_by}") from exc
+        raise _facade().HTTPException(
+            422, f"invalid decided_by: {body.decided_by}"
+        ) from exc
     try:
         record = (
             _facade()
@@ -271,7 +296,8 @@ def reject_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/withdraw", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/withdraw",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def withdraw_decision(
     decision_id: str,
@@ -280,7 +306,11 @@ def withdraw_decision(
 ) -> _facade().Dict[str, _facade().Any]:
     """撤回决策（任意非终态可调用）。"""
     try:
-        record = _facade()._ledger().withdraw(decision_id, actor=body.actor, reason=body.reason)
+        record = (
+            _facade()
+            ._ledger()
+            .withdraw(decision_id, actor=body.actor, reason=body.reason)
+        )
         return {"ok": True, "decision": _facade()._to_public_dict(record)}
     except _facade().RECOVERABLE_ERRORS as exc:
         raise _facade()._lifecycle_error_to_http(exc) from exc
@@ -307,7 +337,8 @@ def start_decision(
 
 
 @_facade().router.post(
-    "/decisions/{decision_id}/complete", response_model=_facade().Dict[str, _facade().Any]
+    "/decisions/{decision_id}/complete",
+    response_model=_facade().Dict[str, _facade().Any],
 )
 def complete_decision(
     decision_id: str,
@@ -349,7 +380,9 @@ def review_decision(
         raise _facade()._lifecycle_error_to_http(exc) from exc
 
 
-@_facade().router.get("/autonomy/rules", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.get(
+    "/autonomy/rules", response_model=_facade().Dict[str, _facade().Any]
+)
 def list_autonomy_rules(
     _: _facade().User = _facade().Depends(_facade().get_current_user),
 ) -> _facade().Dict[str, _facade().Any]:
@@ -370,14 +403,21 @@ def list_autonomy_rules(
 """Implementation extracted from the public facade module."""
 
 
-@_facade().router.post("/autonomy/seed", response_model=_facade().Dict[str, _facade().Any])
+@_facade().router.post(
+    "/autonomy/seed", response_model=_facade().Dict[str, _facade().Any]
+)
 def seed_autonomy_rules(
     _: _facade().User = _facade().Depends(_facade().require_admin),
 ) -> _facade().Dict[str, _facade().Any]:
     """幂等 seed 默认自治边界规则（13 条）。"""
     try:
         inserted = _facade().seed_default_boundaries()
-        return {"ok": True, "inserted": inserted, "skipped": 13 - inserted, "total_default": 13}
+        return {
+            "ok": True,
+            "inserted": inserted,
+            "skipped": 13 - inserted,
+            "total_default": 13,
+        }
     except _facade().RECOVERABLE_ERRORS as exc:
         _facade().logger.exception("seed_default_boundaries failed")
         raise _facade().HTTPException(500, f"seed failed: {exc}") from exc

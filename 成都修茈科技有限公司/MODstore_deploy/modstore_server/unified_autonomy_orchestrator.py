@@ -31,10 +31,14 @@ def _scope(payload: Dict[str, Any], source: str) -> str:
 
 def _priority(event_type: str, payload: Dict[str, Any], scope: str) -> int:
     try:
-        base = int(payload.get("priority")) if payload.get("priority") is not None else 60
+        base = (
+            int(payload.get("priority")) if payload.get("priority") is not None else 60
+        )
     except (TypeError, ValueError):
         base = 60
-    text = json.dumps({"event_type": event_type, "payload": payload}, ensure_ascii=False).lower()
+    text = json.dumps(
+        {"event_type": event_type, "payload": payload}, ensure_ascii=False
+    ).lower()
     if any(
         token in text
         for token in (
@@ -48,7 +52,10 @@ def _priority(event_type: str, payload: Dict[str, Any], scope: str) -> int:
         )
     ):
         base += 25
-    if any(token in text for token in ("down", "outage", "500", "crash", "slo", "不可用", "宕机")):
+    if any(
+        token in text
+        for token in ("down", "outage", "500", "crash", "slo", "不可用", "宕机")
+    ):
         base += 18
     if event_type in {"on_error", "incident.unknown"}:
         base += 8
@@ -63,12 +70,16 @@ def _priority(event_type: str, payload: Dict[str, Any], scope: str) -> int:
     return max(0, min(base + scope_weight, 100))
 
 
-def _resource_plan(scope: str, priority: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+def _resource_plan(
+    scope: str, priority: int, payload: Dict[str, Any]
+) -> Dict[str, Any]:
     try:
         from modstore_server.node_coordinator import cluster_status
 
         cluster = cluster_status()
-        leader = cluster.get("leader") if isinstance(cluster.get("leader"), dict) else None
+        leader = (
+            cluster.get("leader") if isinstance(cluster.get("leader"), dict) else None
+        )
     except RECOVERABLE_ERRORS as exc:
         cluster = {"ok": False, "error": str(exc)[:300]}
         leader = None
@@ -95,7 +106,11 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
 
     sf = get_session_factory()
     with sf() as session:
-        ev = session.query(IncidentEvent).filter(IncidentEvent.id == int(event_id)).first()
+        ev = (
+            session.query(IncidentEvent)
+            .filter(IncidentEvent.id == int(event_id))
+            .first()
+        )
         if not ev:
             return {"ok": False, "reason": "incident_not_found"}
         payload = _incident_payload(ev)
@@ -133,13 +148,13 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         #  runner 内部已自增 IncidentEvent.dispatched_count 并写 JSONL audit）
         if scope == "website":
             try:
-                from modstore_server.website_runner import dispatch_incident as _website_dispatch
+                from modstore_server.website_runner import (
+                    dispatch_incident as _website_dispatch,
+                )
 
                 runner_report = _website_dispatch(event_id=int(event_id))
                 plan["website_runner"] = runner_report.to_dict()
-            except (
-                BOUNDARY_ERRORS
-            ) as exc:  # noqa: BLE001 - fail-open：runner 故障不影响 orchestrator
+            except BOUNDARY_ERRORS as exc:  # noqa: BLE001 - fail-open：runner 故障不影响 orchestrator
                 plan["website_runner"] = {"ok": False, "error": str(exc)[:300]}
 
         return {"ok": True, **plan}

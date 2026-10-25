@@ -3,6 +3,7 @@
 debt19: thickens app.security beyond JWT/LAN/license stores with practical controls
 that other packages can import without reaching into middleware internals.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -175,7 +176,9 @@ def evaluate_login_attempt(
     return True, "ok"
 
 
-def secure_response_envelope(payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any]:
+def secure_response_envelope(
+    payload: dict[str, Any], headers: dict[str, str] | None = None
+) -> dict[str, Any]:
     return {
         "data": redact_obj(payload),
         "headers": apply_security_headers(headers or {}),
@@ -210,8 +213,18 @@ __all__ = [
 
 # --- control matrix (documentation-as-data) ---
 CONTROL_MATRIX = [
-    {"id": "input_validation_0", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_1", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_0",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_1",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_2", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_3", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_4", "control": "session", "owner": "platform", "severity": True},
@@ -230,8 +243,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_17", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_18", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_19", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_20", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_21", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_20",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_21",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_22", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_23", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_24", "control": "session", "owner": "platform", "severity": True},
@@ -250,8 +273,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_37", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_38", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_39", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_40", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_41", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_40",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_41",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_42", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_43", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_44", "control": "session", "owner": "platform", "severity": True},
@@ -270,8 +303,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_57", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_58", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_59", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_60", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_61", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_60",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_61",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_62", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_63", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_64", "control": "session", "owner": "platform", "severity": True},
@@ -290,8 +333,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_77", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_78", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_79", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_80", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_81", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_80",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_81",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_82", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_83", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_84", "control": "session", "owner": "platform", "severity": True},
@@ -310,8 +363,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_97", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_98", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_99", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_100", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_101", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_100",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_101",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_102", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_103", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_104", "control": "session", "owner": "platform", "severity": True},
@@ -322,7 +385,12 @@ CONTROL_MATRIX = [
     {"id": "tls_109", "control": "tls", "owner": "platform", "severity": True},
     {"id": "cors_110", "control": "cors", "owner": "platform", "severity": True},
     {"id": "headers_111", "control": "headers", "owner": "platform", "severity": True},
-    {"id": "path_traversal_112", "control": "path_traversal", "owner": "platform", "severity": True},
+    {
+        "id": "path_traversal_112",
+        "control": "path_traversal",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "upload_113", "control": "upload", "owner": "platform", "severity": True},
     {"id": "replay_114", "control": "replay", "owner": "platform", "severity": True},
     {"id": "password_hash_115", "control": "password_hash", "owner": "platform", "severity": True},
@@ -330,8 +398,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_117", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_118", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_119", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_120", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_121", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_120",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_121",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_122", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_123", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_124", "control": "session", "owner": "platform", "severity": True},
@@ -342,7 +420,12 @@ CONTROL_MATRIX = [
     {"id": "tls_129", "control": "tls", "owner": "platform", "severity": True},
     {"id": "cors_130", "control": "cors", "owner": "platform", "severity": True},
     {"id": "headers_131", "control": "headers", "owner": "platform", "severity": True},
-    {"id": "path_traversal_132", "control": "path_traversal", "owner": "platform", "severity": True},
+    {
+        "id": "path_traversal_132",
+        "control": "path_traversal",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "upload_133", "control": "upload", "owner": "platform", "severity": True},
     {"id": "replay_134", "control": "replay", "owner": "platform", "severity": True},
     {"id": "password_hash_135", "control": "password_hash", "owner": "platform", "severity": True},
@@ -350,8 +433,18 @@ CONTROL_MATRIX = [
     {"id": "signed_token_137", "control": "signed_token", "owner": "platform", "severity": True},
     {"id": "pii_redaction_138", "control": "pii_redaction", "owner": "platform", "severity": True},
     {"id": "license_gate_139", "control": "license_gate", "owner": "platform", "severity": True},
-    {"id": "input_validation_140", "control": "input_validation", "owner": "platform", "severity": True},
-    {"id": "output_encoding_141", "control": "output_encoding", "owner": "platform", "severity": True},
+    {
+        "id": "input_validation_140",
+        "control": "input_validation",
+        "owner": "platform",
+        "severity": True,
+    },
+    {
+        "id": "output_encoding_141",
+        "control": "output_encoding",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "authn_142", "control": "authn", "owner": "platform", "severity": True},
     {"id": "authz_143", "control": "authz", "owner": "platform", "severity": True},
     {"id": "session_144", "control": "session", "owner": "platform", "severity": True},
@@ -362,7 +455,12 @@ CONTROL_MATRIX = [
     {"id": "tls_149", "control": "tls", "owner": "platform", "severity": True},
     {"id": "cors_150", "control": "cors", "owner": "platform", "severity": True},
     {"id": "headers_151", "control": "headers", "owner": "platform", "severity": True},
-    {"id": "path_traversal_152", "control": "path_traversal", "owner": "platform", "severity": True},
+    {
+        "id": "path_traversal_152",
+        "control": "path_traversal",
+        "owner": "platform",
+        "severity": True,
+    },
     {"id": "upload_153", "control": "upload", "owner": "platform", "severity": True},
     {"id": "replay_154", "control": "replay", "owner": "platform", "severity": True},
     {"id": "password_hash_155", "control": "password_hash", "owner": "platform", "severity": True},

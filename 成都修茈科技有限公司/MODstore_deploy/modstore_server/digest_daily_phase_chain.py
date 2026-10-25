@@ -47,7 +47,9 @@ def _merge_phase_block(
 ) -> Dict[str, Any]:
     out = dict(meta or {})
     out[block_key] = payload
-    out[f"{block_key}_at"] = payload.get("completed_at") or datetime.now(UTC).isoformat()
+    out[f"{block_key}_at"] = (
+        payload.get("completed_at") or datetime.now(UTC).isoformat()
+    )
     return out
 
 
@@ -99,9 +101,7 @@ def trigger_strategic_layer_dispatch(
 
     if not overall_ok:
         action = "review_digest_failure"
-        title = (
-            f"daily-digest#{record_id} 失败 review (phases: {','.join(failed_phases) or 'unknown'})"
-        )
+        title = f"daily-digest#{record_id} 失败 review (phases: {','.join(failed_phases) or 'unknown'})"
         decision_type = DecisionType.OPERATIONAL
         rationale = (
             f"auto-proposed by digest_daily_line_chain record_id={record_id} "
@@ -189,7 +189,8 @@ def wait_for_phase_a(record_id: int, *, required: bool = True) -> Dict[str, Any]
     if lines_ok:
         return {
             "ok": True,
-            "phase_a": phase_a_block or {"runs": {DISPATCH_PS: ps_run, DISPATCH_APP: app_run}},
+            "phase_a": phase_a_block
+            or {"runs": {DISPATCH_PS: ps_run, DISPATCH_APP: app_run}},
             "ps_run": ps_run,
             "app_run": app_run,
         }
@@ -262,7 +263,11 @@ def execute_phase_a_line_chain(
             for u in (lr.get("units") or [])
             if u.get("employee_id")
         }
-        | {e for lr in line_results.values() for e in (lr.get("planned_employees") or [])}
+        | {
+            e
+            for lr in line_results.values()
+            for e in (lr.get("planned_employees") or [])
+        }
     )
 
     meta = _read_execute_meta(int(record_id))
@@ -350,7 +355,11 @@ def execute_phase_b_line_chain(
             for u in (lr.get("units") or [])
             if u.get("employee_id")
         }
-        | {e for lr in line_results.values() for e in (lr.get("planned_employees") or [])}
+        | {
+            e
+            for lr in line_results.values()
+            for e in (lr.get("planned_employees") or [])
+        }
     )
     block["employee_chain"] = employees
 

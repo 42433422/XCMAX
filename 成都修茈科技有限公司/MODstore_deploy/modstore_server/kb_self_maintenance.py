@@ -16,7 +16,10 @@ from modstore_server.self_evolution_knowledge import kb_root
 
 
 def _runtime_dir() -> Path:
-    return Path(os.environ.get("MODSTORE_RUNTIME_DIR") or Path.home() / ".xcmax" / "modstore-daily")
+    return Path(
+        os.environ.get("MODSTORE_RUNTIME_DIR")
+        or Path.home() / ".xcmax" / "modstore-daily"
+    )
 
 
 def _env_float(name: str, default: float) -> float:
@@ -87,7 +90,8 @@ def _load_docs(kind: str) -> List[Tuple[Path, Dict[str, Any]]]:
 def _write_doc(path: Path, data: Dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
+        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, default=str)
+        + "\n",
         encoding="utf-8",
     )
     tmp.replace(path)
@@ -159,22 +163,30 @@ def _merge_similar(
             score = _similarity(doc_a, doc_b, kind)
             if score < threshold:
                 continue
-            meta_a = doc_a.get("metadata") if isinstance(doc_a.get("metadata"), dict) else {}
-            meta_b = doc_b.get("metadata") if isinstance(doc_b.get("metadata"), dict) else {}
+            meta_a = (
+                doc_a.get("metadata") if isinstance(doc_a.get("metadata"), dict) else {}
+            )
+            meta_b = (
+                doc_b.get("metadata") if isinstance(doc_b.get("metadata"), dict) else {}
+            )
             conf_a = float(meta_a.get("confidence") or 0.0)
             conf_b = float(meta_b.get("confidence") or 0.0)
             keep_path, keep_doc, drop_path = (
                 (path_a, doc_a, path_b) if conf_a >= conf_b else (path_b, doc_b, path_a)
             )
             keep_meta = (
-                keep_doc.get("metadata") if isinstance(keep_doc.get("metadata"), dict) else {}
+                keep_doc.get("metadata")
+                if isinstance(keep_doc.get("metadata"), dict)
+                else {}
             )
             merged_sources = (
                 keep_meta.get("merged_sources")
                 if isinstance(keep_meta.get("merged_sources"), list)
                 else []
             )
-            merged_sources.append({"path": str(drop_path), "similarity": round(score, 4)})
+            merged_sources.append(
+                {"path": str(drop_path), "similarity": round(score, 4)}
+            )
             keep_meta["merged_sources"] = merged_sources[-20:]
             keep_meta["merged_at"] = datetime.now(UTC).isoformat()
             keep_meta["merge_source"] = "phase_d_kb_similarity"
@@ -225,7 +237,9 @@ def run_kb_self_maintenance_once(*, dry_run: bool | None = None) -> Dict[str, An
                     "type": "archive_stale",
                 }
                 if not dry_run:
-                    action["archived_to"] = str(_archive_doc(path, kind, "stale_low_confidence"))
+                    action["archived_to"] = str(
+                        _archive_doc(path, kind, "stale_low_confidence")
+                    )
                 actions.append(action)
                 continue
             if not dry_run:
@@ -245,7 +259,9 @@ def run_kb_self_maintenance_once(*, dry_run: bool | None = None) -> Dict[str, An
     audit = _runtime_dir() / "kb_self_maintenance_audit.jsonl"
     audit.parent.mkdir(parents=True, exist_ok=True)
     with audit.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(result, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+        fh.write(
+            json.dumps(result, ensure_ascii=False, sort_keys=True, default=str) + "\n"
+        )
     result["audit_path"] = str(audit)
     return result
 

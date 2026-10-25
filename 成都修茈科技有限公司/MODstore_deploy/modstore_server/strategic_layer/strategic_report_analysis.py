@@ -54,7 +54,11 @@ class StrategicReportAnalysisMixin:
                 "release_train_before",
                 "release_train_after",
             ):
-                values = [getattr(r, field_name, "") for r in rows if getattr(r, field_name, None)]
+                values = [
+                    getattr(r, field_name, "")
+                    for r in rows
+                    if getattr(r, field_name, None)
+                ]
                 if values:
                     metrics[field_name] = values
             return ids, metrics
@@ -69,7 +73,9 @@ class StrategicReportAnalysisMixin:
         session = self._session_factory()()
         try:
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+            )
 
             rows = (
                 session.execute(
@@ -117,7 +123,9 @@ class StrategicReportAnalysisMixin:
         session = self._session_factory()()
         try:
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+            )
 
             rows = (
                 session.execute(
@@ -137,7 +145,11 @@ class StrategicReportAnalysisMixin:
             for r in rows:
                 by_status[r.status] = by_status.get(r.status, 0) + 1
                 by_assignee[r.assigned_to] = by_assignee.get(r.assigned_to, 0) + 1
-                if r.status not in ("completed", "cancelled") and r.due_at and r.due_at < now:
+                if (
+                    r.status not in ("completed", "cancelled")
+                    and r.due_at
+                    and r.due_at < now
+                ):
                     overdue += 1
 
             return {
@@ -163,7 +175,9 @@ class StrategicReportAnalysisMixin:
                 return {"note": "IncidentEvent model unavailable"}
 
             start_dt = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
-            end_dt = datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+            end_dt = datetime.combine(
+                end + timedelta(days=1), datetime.min.time(), tzinfo=UTC
+            )
             count = (
                 session.execute(
                     select(func.count(IncidentEvent.id))
@@ -330,7 +344,9 @@ class StrategicReportAnalysisMixin:
             lines.append("- 无具体建议，保持当前节奏")
         else:
             for rec in recommendations:
-                lines.append(f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}")
+                lines.append(
+                    f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}"
+                )
         lines.append("")
         return "\n".join(lines)
 
@@ -379,7 +395,9 @@ class StrategicReportAnalysisMixin:
             lines.append("- 无具体建议，保持当前节奏")
         else:
             for rec in recommendations:
-                lines.append(f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}")
+                lines.append(
+                    f"- **[{rec['priority'].upper()}] {rec['id']}**：{rec['description']}"
+                )
         lines.append("")
         return "\n".join(lines)
 

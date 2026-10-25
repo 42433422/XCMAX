@@ -28,7 +28,10 @@ class VibePorts:
 
 
 async def workbench_vibe_code_skill(
-    body: WorkbenchVibeCodeSkillBody, user: User = Depends(_get_current_user), *, ports: VibePorts
+    body: WorkbenchVibeCodeSkillBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: VibePorts,
 ):
     """vibe-coding 端到端 API:生成代码、试跑、可选直接上架本 MODstore。
 
@@ -39,7 +42,9 @@ async def workbench_vibe_code_skill(
 
     sf = ports.database()
     with sf() as db:
-        prov, mdl, err = await resolve_llm_provider_model_auto(db, user, body.provider, body.model)
+        prov, mdl, err = await resolve_llm_provider_model_auto(
+            db, user, body.provider, body.model
+        )
         if err:
             raise HTTPException(400, err)
 
@@ -69,7 +74,10 @@ async def workbench_vibe_code_skill(
         with sf2() as session:
             try:
                 coder = get_vibe_coder(
-                    session=session, user_id=int(cast(int, user.id) or 0), provider=prov, model=mdl
+                    session=session,
+                    user_id=int(cast(int, user.id) or 0),
+                    provider=prov,
+                    model=mdl,
                 )
             except VibeIntegrationError as exc:
                 return {"ok": False, "error": str(exc)}
@@ -144,7 +152,12 @@ async def workbench_vibe_code_skill(
 
 
 def _publish_vibe_skill_via_local_modstore(
-    coder: Any, skill_id: str, publish_cfg: Dict[str, Any], *, user_id: int, ports: VibePorts
+    coder: Any,
+    skill_id: str,
+    publish_cfg: Dict[str, Any],
+    *,
+    user_id: int,
+    ports: VibePorts,
 ) -> Dict[str, Any]:
     """直接调本 MODstore 的 catalog 上传接口,不用 HTTP 自调来回。
 
@@ -209,7 +222,10 @@ def _publish_vibe_skill_via_local_modstore(
             "artifact": artifact_kind,
             "industry": options.industry,
             "release_channel": "stable",
-            "commerce": {"mode": "free" if options.price <= 0 else "paid", "price": options.price},
+            "commerce": {
+                "mode": "free" if options.price <= 0 else "paid",
+                "price": options.price,
+            },
             "license": {"type": "personal", "verify_url": None},
         }
         sf3 = ports.database()

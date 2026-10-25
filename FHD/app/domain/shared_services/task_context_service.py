@@ -66,4 +66,6 @@ def get_task_context_service() -> TaskContextService:
 # NEURO-DDD: 为 Services 层类添加 instrumentation
 from app.neuro_bus.neuro_service_instrumentation import instrument_service_layer_class
 
-instrument_service_layer_class(TaskContextService, "app.domain.shared_services.task_context_service")
+instrument_service_layer_class(
+    TaskContextService, "app.domain.shared_services.task_context_service"
+)

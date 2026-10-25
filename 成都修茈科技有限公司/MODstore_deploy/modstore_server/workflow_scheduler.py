@@ -17,7 +17,9 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
-from modstore_server.scheduler_extensions import register_extensions as _register_extensions
+from modstore_server.scheduler_extensions import (
+    register_extensions as _register_extensions,
+)
 from modstore_server.scheduler_timing import (
     cleanup_misfire_grace_time as _cleanup_misfire_grace_time,
 )
@@ -70,10 +72,18 @@ _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
     "boss_daily_im_report": "boss_daily_im_report",
     **autonomy_scheduler.CRITICAL_RUNTIME_JOBS,
 }
-from modstore_server.workflow_scheduler_startup_phase01 import _register_scheduler_phase_01
-from modstore_server.workflow_scheduler_startup_phase02 import _register_scheduler_phase_02
-from modstore_server.workflow_scheduler_startup_phase03 import _register_scheduler_phase_03
-from modstore_server.workflow_scheduler_startup_phase04 import _register_scheduler_phase_04
+from modstore_server.workflow_scheduler_startup_phase01 import (
+    _register_scheduler_phase_01,
+)
+from modstore_server.workflow_scheduler_startup_phase02 import (
+    _register_scheduler_phase_02,
+)
+from modstore_server.workflow_scheduler_startup_phase03 import (
+    _register_scheduler_phase_03,
+)
+from modstore_server.workflow_scheduler_startup_phase04 import (
+    _register_scheduler_phase_04,
+)
 from modstore_server.workflow_scheduler_merged import (
     _env_int as _env_int,
     _env_bool as _env_bool,
@@ -108,7 +118,10 @@ from modstore_server.workflow_scheduler_merged import (
 
 
 def start_scheduler() -> None:
-    global _scheduler, _scheduler_registration_complete, _scheduler_startup_probe_failures
+    global \
+        _scheduler, \
+        _scheduler_registration_complete, \
+        _scheduler_startup_probe_failures
     global _scheduler_startup_recovery_deadlines
     if _scheduler is not None:
         return

@@ -75,7 +75,9 @@ class SandboxRpcServer:
 
     async def start(self) -> int:
         """绑定到 127.0.0.1 上随机端口，返回端口号供 child env 注入。"""
-        self._server = await asyncio.start_server(self._handle_conn, host="127.0.0.1", port=0)
+        self._server = await asyncio.start_server(
+            self._handle_conn, host="127.0.0.1", port=0
+        )
         sock = self._server.sockets[0] if self._server.sockets else None
         if sock is None:
             raise RuntimeError("无法分配本地端口启动沙箱 RPC server")
@@ -102,7 +104,9 @@ class SandboxRpcServer:
             except json.JSONDecodeError:
                 hello = {}
             if hello.get("hello") != self.token:
-                writer.write(json.dumps({"ok": False, "error": "invalid token"}).encode() + b"\n")
+                writer.write(
+                    json.dumps({"ok": False, "error": "invalid token"}).encode() + b"\n"
+                )
                 try:
                     await writer.drain()
                 except BOUNDARY_ERRORS:  # noqa: BLE001
@@ -139,19 +143,27 @@ class SandboxRpcServer:
         handler = self._handlers.get(method)
         if handler is None:
             resp = {"id": req_id, "ok": False, "error": f"unknown method: {method}"}
-            self.ctx.sdk_calls.append({"method": method, "ok": False, "error": "unknown"})
+            self.ctx.sdk_calls.append(
+                {"method": method, "ok": False, "error": "unknown"}
+            )
         else:
             try:
-                result = await asyncio.wait_for(handler(params), timeout=RPC_TIMEOUT_SECONDS)
+                result = await asyncio.wait_for(
+                    handler(params), timeout=RPC_TIMEOUT_SECONDS
+                )
                 resp = {"id": req_id, "ok": True, "result": result}
                 self.ctx.sdk_calls.append({"method": method, "ok": True})
             except TimeoutError:
                 resp = {"id": req_id, "ok": False, "error": f"{method} timeout"}
-                self.ctx.sdk_calls.append({"method": method, "ok": False, "error": "timeout"})
+                self.ctx.sdk_calls.append(
+                    {"method": method, "ok": False, "error": "timeout"}
+                )
             except BOUNDARY_ERRORS as e:  # noqa: BLE001
                 msg = str(e)[:500]
                 resp = {"id": req_id, "ok": False, "error": msg}
-                self.ctx.sdk_calls.append({"method": method, "ok": False, "error": msg[:200]})
+                self.ctx.sdk_calls.append(
+                    {"method": method, "ok": False, "error": msg[:200]}
+                )
         try:
             writer.write((json.dumps(resp, ensure_ascii=False) + "\n").encode("utf-8"))
             await writer.drain()
@@ -178,8 +190,9 @@ class SandboxRpcServer:
 
         sys_prompt = "你是受控运行时的辅助 AI。严格按用户要求输出，不要附加多余解释。"
         if schema:
-            sys_prompt += "\n输出必须是合法 JSON 且符合下述 JSON Schema:\n" + json.dumps(
-                schema, ensure_ascii=False
+            sys_prompt += (
+                "\n输出必须是合法 JSON 且符合下述 JSON Schema:\n"
+                + json.dumps(schema, ensure_ascii=False)
             )
         user_prompt = prompt
         if text:
@@ -197,7 +210,9 @@ class SandboxRpcServer:
             max_tokens=max_tokens,
         )
         if not res.get("ok"):
-            raise RuntimeError(f"LLM 调用失败: {res.get('error') or res.get('status') or ''}")
+            raise RuntimeError(
+                f"LLM 调用失败: {res.get('error') or res.get('status') or ''}"
+            )
         content = str(res.get("content") or "")
         if schema:
             stripped = content.strip()

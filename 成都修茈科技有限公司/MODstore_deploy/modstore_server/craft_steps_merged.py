@@ -70,7 +70,9 @@ async def _craft_spec(
 
     spec_warnings: _facade().List[str] = []
     brief_domain_hints: _facade().List[str] = []
-    structured_requirement: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
+    structured_requirement: _facade().Optional[_facade().Dict[str, _facade().Any]] = (
+        None
+    )
     rb = (routing_brief or "").strip()
     if not rb:
         rb = extract_routing_brief(
@@ -85,7 +87,9 @@ async def _craft_spec(
             f"需求描述仅 {len(rb)} 字，信息可能不足；建议补充员工的目标、输入输出和业务场景"
         )
     elif len(rb) > 2000:
-        spec_warnings.append(f"需求描述 {len(rb)} 字较长，LLM 可能截断；建议精简到 500 字以内")
+        spec_warnings.append(
+            f"需求描述 {len(rb)} 字较长，LLM 可能截断；建议精简到 500 字以内"
+        )
     _brief_lower = rb.lower() if rb else ""
     for _kw, _domain in _facade()._SPEC_DOMAIN_KEYWORDS.items():
         if _kw.lower() in _brief_lower and _domain not in brief_domain_hints:
@@ -173,7 +177,9 @@ async def _craft_spec(
         if isinstance(_caps, list) and _caps:
             spec_warnings.append(f"建议能力：{'、'.join((str(c) for c in _caps[:4]))}")
     elif rb and len(rb) >= 10 and prov and mdl:
-        from modstore_server.employee_pipeline_routing import is_ambiguous_employee_brief
+        from modstore_server.employee_pipeline_routing import (
+            is_ambiguous_employee_brief,
+        )
 
         if is_ambiguous_employee_brief(rb):
             try:
@@ -203,7 +209,10 @@ async def _craft_spec(
                     if isinstance(_parsed_req, dict):
                         structured_requirement = _parsed_req
                         _extracted_domain = str(_parsed_req.get("domain") or "").strip()
-                        if _extracted_domain and _extracted_domain not in brief_domain_hints:
+                        if (
+                            _extracted_domain
+                            and _extracted_domain not in brief_domain_hints
+                        ):
                             brief_domain_hints.append(_extracted_domain)
                         _extracted_caps = _parsed_req.get("suggested_capabilities")
                         if isinstance(_extracted_caps, list) and _extracted_caps:
@@ -220,7 +229,9 @@ async def _craft_spec(
             "domain": brief_domain_hints[0] if brief_domain_hints else "通用",
             "goal": rb.strip().splitlines()[0][:200],
             "input": (
-                "Word/文档" if any((k in bl for k in ("word", "docx", "文档"))) else "用户输入"
+                "Word/文档"
+                if any((k in bl for k in ("word", "docx", "文档")))
+                else "用户输入"
             ),
             "output": "txt 文本" if "txt" in bl or "文本" in bl else "结构化结果",
             "constraints": [],
@@ -266,7 +277,9 @@ async def _craft_generate(
     employee_plan: _facade().Any = None,
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.artifact_generator_blueprint import artifact_generator_preflight
+    from modstore_server.artifact_generator_blueprint import (
+        artifact_generator_preflight,
+    )
     from modstore_server.employee_asset_pipeline import (
         run_asset_employee_scaffold_async,
         run_word_extract_employee_scaffold_async,
@@ -301,7 +314,9 @@ async def _craft_generate(
         payload=_payload,
     )
     if use_word_extract:
-        res = await run_word_extract_employee_scaffold_async(db=db, user=user, **_scaffold_kw)
+        res = await run_word_extract_employee_scaffold_async(
+            db=db, user=user, **_scaffold_kw
+        )
     else:
         res = await run_asset_employee_scaffold_async(db=db, user=user, **_scaffold_kw)
     return {"res": res}
@@ -326,13 +341,21 @@ async def _craft_validate(
         validate_errors.extend((str(x) for x in res["validate_errors"] if x))
     from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
 
-    _rt = res.get("runtime_generation") if isinstance(res.get("runtime_generation"), dict) else {}
+    _rt = (
+        res.get("runtime_generation")
+        if isinstance(res.get("runtime_generation"), dict)
+        else {}
+    )
     if _rt and (not is_llm_codegen_source(_rt)):
         validate_errors.append(f"convert 非 LLM 生成：source={_rt.get('source')}")
     _ds = res.get("domain_smoke") if isinstance(res.get("domain_smoke"), dict) else {}
     if _ds.get("ok") is False:
         validate_errors.append(f"领域冒烟失败：{_ds.get('error') or 'failed'}"[:200])
-    _gc = res.get("golden_comparison") if isinstance(res.get("golden_comparison"), dict) else {}
+    _gc = (
+        res.get("golden_comparison")
+        if isinstance(res.get("golden_comparison"), dict)
+        else {}
+    )
     if _gc.get("golden_pack_id") and (not _gc.get("passed")):
         validate_errors.append(
             f"黄金对比未达标：parity={_gc.get('parity_score')} diffs={len(_gc.get('diff_items') or [])}"
@@ -363,7 +386,9 @@ async def _craft_validate(
                 if isinstance(actions, dict):
                     handlers = actions.get("handlers")
                     if not isinstance(handlers, list) or not handlers:
-                        validate_warnings.append("employee_config_v2.actions.handlers 为空")
+                        validate_warnings.append(
+                            "employee_config_v2.actions.handlers 为空"
+                        )
             emp = mf.get("employee")
             if not isinstance(emp, dict) or not str(emp.get("id") or "").strip():
                 validate_warnings.append("manifest.employee.id 缺失")
@@ -415,12 +440,24 @@ async def _craft_validate(
         routing_brief = extract_routing_brief({"brief": brief}, fallback=brief)
         bl = routing_brief.lower()
         csv_gen_runtime = rule_kind == "csv_generate" or is_csv_generate(routing_brief)
-        csv_read_runtime = rule_kind == "csv_full_read" or is_csv_full_read(routing_brief)
-        excel_gen_runtime = rule_kind == "excel_generate" or is_excel_generate(routing_brief)
-        excel_read_runtime = rule_kind == "excel_full_read" or is_excel_full_read(routing_brief)
-        word_runtime = rule_kind == "word_full_extract" or is_word_full_extract(routing_brief)
-        word_gen_runtime = rule_kind == "word_generate" or is_word_generate(routing_brief)
-        txt_read_runtime = rule_kind == "txt_full_read" or is_txt_full_read(routing_brief)
+        csv_read_runtime = rule_kind == "csv_full_read" or is_csv_full_read(
+            routing_brief
+        )
+        excel_gen_runtime = rule_kind == "excel_generate" or is_excel_generate(
+            routing_brief
+        )
+        excel_read_runtime = rule_kind == "excel_full_read" or is_excel_full_read(
+            routing_brief
+        )
+        word_runtime = rule_kind == "word_full_extract" or is_word_full_extract(
+            routing_brief
+        )
+        word_gen_runtime = rule_kind == "word_generate" or is_word_generate(
+            routing_brief
+        )
+        txt_read_runtime = rule_kind == "txt_full_read" or is_txt_full_read(
+            routing_brief
+        )
         txt_gen_runtime = rule_kind == "txt_generate" or is_txt_generate(routing_brief)
         if csv_gen_runtime:
             cg_errs, cg_warns = validate_csv_generate_backend(_pack)
@@ -476,11 +513,16 @@ async def _craft_validate(
             if backend.is_dir():
                 for py_path in backend.rglob("*.py"):
                     try:
-                        py_blob += py_path.read_text(encoding="utf-8", errors="ignore").lower()
+                        py_blob += py_path.read_text(
+                            encoding="utf-8", errors="ignore"
+                        ).lower()
                     except RECOVERABLE_ERRORS:
                         pass
             if not any(
-                (tok in py_blob for tok in ("docx", "document", "python-docx", "word", "zipfile"))
+                (
+                    tok in py_blob
+                    for tok in ("docx", "document", "python-docx", "word", "zipfile")
+                )
             ):
                 validate_warnings.append(
                     "Word/文档提取类任务：backend 中未发现 docx/文档解析相关实现，请确认生成逻辑"
@@ -500,7 +542,9 @@ async def _craft_script_workflow(
     system_hint: _facade().Optional[str] = None,
     payload: _facade().Any = None,
     status_hook: _facade().Optional[
-        _facade().Callable[..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]]
+        _facade().Callable[
+            ..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]
+        ]
     ] = None,
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
@@ -564,7 +608,9 @@ async def _craft_embed_script(
     )
     saved_package = None
     if published_to_catalog and user:
-        saved_package = _refresh_employee_pack_catalog_zip(db=db, user=user, pack_dir=pack_dir)
+        saved_package = _refresh_employee_pack_catalog_zip(
+            db=db, user=user, pack_dir=pack_dir
+        )
     return {"script_attachment": script_attachment, "saved_package": saved_package}
 
 
@@ -579,11 +625,15 @@ async def _craft_workflow(
     model: _facade().Optional[str],
     published_to_catalog: bool = False,
     status_hook: _facade().Optional[
-        _facade().Callable[..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]]
+        _facade().Callable[
+            ..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]
+        ]
     ] = None,
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.mod_scaffold_runner import attach_nl_workflow_to_employee_pack_dir
+    from modstore_server.mod_scaffold_runner import (
+        attach_nl_workflow_to_employee_pack_dir,
+    )
     from modstore_server.workbench_api import _refresh_employee_pack_catalog_zip
 
     wf_attach = await attach_nl_workflow_to_employee_pack_dir(
@@ -598,7 +648,9 @@ async def _craft_workflow(
     )
     saved_package = None
     if published_to_catalog:
-        saved_package = _refresh_employee_pack_catalog_zip(db=db, user=user, pack_dir=pack_dir)
+        saved_package = _refresh_employee_pack_catalog_zip(
+            db=db, user=user, pack_dir=pack_dir
+        )
     return {"wf_attach": wf_attach, "saved_package": saved_package}
 
 
@@ -610,13 +662,17 @@ async def _craft_register_pack(
     workflow_results: _facade().Any = None,
     wf_attach: _facade().Any = None,
     status_hook: _facade().Optional[
-        _facade().Callable[..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]]
+        _facade().Callable[
+            ..., _facade().Coroutine[_facade().Any, _facade().Any, _facade().Any]
+        ]
     ] = None,
     industry: str = "通用",
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
     from modstore_server.mod_scaffold_runner import register_mod_employee_packs_async
-    from modstore_server.pack_registration_guards import workflow_automation_block_reason
+    from modstore_server.pack_registration_guards import (
+        workflow_automation_block_reason,
+    )
 
     _wf_results = workflow_results if isinstance(workflow_results, list) else []
     _wf_attach = wf_attach if isinstance(wf_attach, dict) else None
@@ -645,14 +701,18 @@ async def _craft_register_pack(
         industry=industry,
         wf_attach=_wf_attach,
     )
-    reg_ok = bool(_emp_reg_result.get("ok")) and (not (_emp_reg_result.get("errors") or []))
+    reg_ok = bool(_emp_reg_result.get("ok")) and (
+        not (_emp_reg_result.get("errors") or [])
+    )
     return {
         "ok": reg_ok,
         "status": "ok" if reg_ok else "fail",
         "summary": (
             f"已登记 {len(_emp_reg_result.get('registered') or [])} 个员工包"
             if reg_ok
-            else (_emp_reg_result.get("errors") or [{}])[0].get("error", "登记失败")[:400]
+            else (_emp_reg_result.get("errors") or [{}])[0].get("error", "登记失败")[
+                :400
+            ]
         ),
         "_emp_reg_result": _emp_reg_result,
     }
@@ -690,7 +750,9 @@ async def _craft_workflow_sandbox(
             "status": "fail",
             "summary": report["summary"],
         }
-    report = run_workflow_sandbox(wid, {}, mock_employees=True, validate_only=True, user_id=user_id)
+    report = run_workflow_sandbox(
+        wid, {}, mock_employees=True, validate_only=True, user_id=user_id
+    )
     return {"report": report}
 
 
@@ -712,7 +774,11 @@ async def _craft_mod_sandbox(
     )
 
     mod_checks: _facade().List[_facade().Dict[str, _facade().Any]] = []
-    _pack = _facade().Path(str(pack_dir)) if not isinstance(pack_dir, _facade().Path) else pack_dir
+    _pack = (
+        _facade().Path(str(pack_dir))
+        if not isinstance(pack_dir, _facade().Path)
+        else pack_dir
+    )
     validation_report = await run_employee_pack_code_validation_report(
         _pack, db=db, xcemp_timeout_seconds=20.0
     )
@@ -757,7 +823,9 @@ async def _craft_mod_sandbox(
     )
     _cc_msg_parts: _facade().List[str] = []
     if cc.get("missing_depends"):
-        _cc_msg_parts.append("depends_on 未注册: " + ", ".join(cc["missing_depends"][:6]))
+        _cc_msg_parts.append(
+            "depends_on 未注册: " + ", ".join(cc["missing_depends"][:6])
+        )
     if cc.get("missing_skills"):
         _cc_msg_parts.append("skills 缺失: " + ", ".join(cc["missing_skills"][:6]))
     if cc.get("warnings"):
@@ -766,7 +834,9 @@ async def _craft_mod_sandbox(
         {
             "id": "consistency_check",
             "ok": cc.get("status") in ("ok", "skipped"),
-            "message": "；".join(_cc_msg_parts)[:1200] if _cc_msg_parts else "一致性校验通过",
+            "message": "；".join(_cc_msg_parts)[:1200]
+            if _cc_msg_parts
+            else "一致性校验通过",
         }
     )
     mod_checks.append(
@@ -792,7 +862,9 @@ async def _craft_mod_sandbox(
             vibe_checks = _check_vibe_coding_capability(_pack, wf_attach or {})
             mod_checks.extend(vibe_checks)
         except RECOVERABLE_ERRORS as vibe_exc:
-            _facade().logger.warning("vibe-coding capability check failed: %s", vibe_exc)
+            _facade().logger.warning(
+                "vibe-coding capability check failed: %s", vibe_exc
+            )
             mod_checks.append(
                 {
                     "id": "vibe_check",
@@ -802,7 +874,8 @@ async def _craft_mod_sandbox(
             )
     core_ok = validation_report.get("status") == "ok"
     emp_mod_sandbox = {
-        "ok": core_ok and all((c.get("ok") for c in mod_checks if c.get("id") != "vibe_check")),
+        "ok": core_ok
+        and all((c.get("ok") for c in mod_checks if c.get("id") != "vibe_check")),
         "checks": mod_checks,
         "validation_report": validation_report,
         "note": "员工包四阶段校验（manifest / Python / 一致性 / xcemp）",
@@ -812,7 +885,8 @@ async def _craft_mod_sandbox(
 
         _xv_errs = xv.get("errors") if isinstance(xv.get("errors"), list) else []
         _xv_err = str(
-            xv.get("timeout_log") or (_xv_errs[0] if _xv_errs else "xcemp validate 超时")
+            xv.get("timeout_log")
+            or (_xv_errs[0] if _xv_errs else "xcemp validate 超时")
         )[:500]
         emit_craft_step_failure(
             step_id="mod_sandbox",
@@ -826,7 +900,9 @@ async def _craft_mod_sandbox(
             },
         )
     _all_pass = emp_mod_sandbox["ok"]
-    _vibe_gaps = [c for c in mod_checks if not c.get("ok") and "vibe" in str(c.get("id") or "")]
+    _vibe_gaps = [
+        c for c in mod_checks if not c.get("ok") and "vibe" in str(c.get("id") or "")
+    ]
     mod_sb_msg = str(validation_report.get("summary") or "")
     if _all_pass:
         mod_sb_msg = mod_sb_msg or "包体四阶段校验通过"
@@ -878,14 +954,21 @@ async def _craft_standalone_smoke(
             if not _mf_disk_err:
                 _sm_manifest = _mf_disk
         if _sm_manifest and isinstance(_sm_manifest, dict):
-            _sm_pid = str(_sm_manifest.get("id") or "employee-pack").strip() or "employee-pack"
+            _sm_pid = (
+                str(_sm_manifest.get("id") or "employee-pack").strip()
+                or "employee-pack"
+            )
             _sm_vendor_modules_first = (
-                collect_vendor_modules_from_pack(_pack) if _pack and _pack.is_dir() else None
+                collect_vendor_modules_from_pack(_pack)
+                if _pack and _pack.is_dir()
+                else None
             )
             _sm_zip_bytes = _build_employee_pack_zip_with_source(
                 _sm_pid, _sm_manifest, None, vendor_modules=_sm_vendor_modules_first
             )
-            with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as _tf:
+            with _facade().tempfile.NamedTemporaryFile(
+                suffix=".xcemp", delete=False
+            ) as _tf:
                 _tf.write(_sm_zip_bytes)
                 _tmp_xcemp = _tf.name
             try:
@@ -899,12 +982,18 @@ async def _craft_standalone_smoke(
                     ),
                     timeout=20,
                 )
-                _stdout, _stderr = await _facade().asyncio.wait_for(_proc.communicate(), timeout=20)
+                _stdout, _stderr = await _facade().asyncio.wait_for(
+                    _proc.communicate(), timeout=20
+                )
                 if _proc.returncode == 0:
                     _standalone_smoke_ok = True
-                    _standalone_smoke_msg = f"独立运行 OK — python {_sm_pid}.xcemp validate 通过 ✅"
+                    _standalone_smoke_msg = (
+                        f"独立运行 OK — python {_sm_pid}.xcemp validate 通过 ✅"
+                    )
                 else:
-                    _out_text = (_stderr or _stdout or b"").decode("utf-8", errors="replace")[:300]
+                    _out_text = (_stderr or _stdout or b"").decode(
+                        "utf-8", errors="replace"
+                    )[:300]
                     _standalone_smoke_msg = (
                         f"validate 失败（退出码 {_proc.returncode}）：{_out_text}"
                     )
@@ -916,9 +1005,7 @@ async def _craft_standalone_smoke(
                         if "成功" in _repair_msg or "✅" in _repair_msg:
                             _standalone_smoke_ok = True
             except RECOVERABLE_ERRORS as _se:
-                _standalone_smoke_msg = (
-                    f"⚠️ 自检子进程异常：{_se}；建议手动运行 python xxx.xcemp validate 排查"
-                )
+                _standalone_smoke_msg = f"⚠️ 自检子进程异常：{_se}；建议手动运行 python xxx.xcemp validate 排查"
             finally:
                 try:
                     _facade().os.unlink(_tmp_xcemp)
@@ -929,7 +1016,9 @@ async def _craft_standalone_smoke(
             _standalone_smoke_ok = True
             _standalone_smoke_skipped = True
     except RECOVERABLE_ERRORS as _smoke_exc:
-        _standalone_smoke_msg = f"⚠️ 独立自检异常：{_smoke_exc}；建议手动验证 .xcemp 包完整性"
+        _standalone_smoke_msg = (
+            f"⚠️ 独立自检异常：{_smoke_exc}；建议手动验证 .xcemp 包完整性"
+        )
     if not _standalone_smoke_ok:
         _standalone_smoke_msg = "⚠️ " + _standalone_smoke_msg.lstrip("⚠️ ")
     return {
@@ -958,7 +1047,11 @@ async def _standalone_smoke_auto_repair(
         )
         from modstore_server.mod_employee_impl_scaffold import sanitize_employee_stem
 
-        _sm_emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        _sm_emp = (
+            manifest.get("employee")
+            if isinstance(manifest.get("employee"), dict)
+            else {}
+        )
         _sm_eid = pack_id
         _sm_stem = sanitize_employee_stem(_sm_eid)
         _sm_label = str(_sm_emp.get("label") or _sm_eid).strip()
@@ -970,13 +1063,19 @@ async def _standalone_smoke_auto_repair(
             if isinstance(manifest.get("employee_config_v2"), dict)
             else {}
         )
-        _sm_actions = _sm_v2.get("actions") if isinstance(_sm_v2.get("actions"), dict) else {}
+        _sm_actions = (
+            _sm_v2.get("actions") if isinstance(_sm_v2.get("actions"), dict) else {}
+        )
         _sm_handlers = (
-            _sm_actions.get("handlers") if isinstance(_sm_actions.get("handlers"), list) else []
+            _sm_actions.get("handlers")
+            if isinstance(_sm_actions.get("handlers"), list)
+            else []
         )
         _is_direct_python = "direct_python" in _sm_handlers
         if _is_direct_python:
-            from modstore_server.employee_asset_pipeline import render_direct_python_asset_worker
+            from modstore_server.employee_asset_pipeline import (
+                render_direct_python_asset_worker,
+            )
 
             _rule_spec_path = pack_dir / "rule_spec.json"
             _sm_rule_spec = {}
@@ -988,7 +1087,9 @@ async def _standalone_smoke_auto_repair(
                 except RECOVERABLE_ERRORS:
                     pass
             _runtime_mod = (
-                _facade().re.sub("[^a-z0-9_]+", "_", (_sm_eid or pack_id).lower()).strip("_")
+                _facade()
+                .re.sub("[^a-z0-9_]+", "_", (_sm_eid or pack_id).lower())
+                .strip("_")
             )
             if _runtime_mod.endswith("_employee"):
                 _runtime_mod = _runtime_mod[: -len("_employee")] or _runtime_mod
@@ -1016,7 +1117,9 @@ async def _standalone_smoke_auto_repair(
         _sm_zip_bytes = _build_employee_pack_zip_with_source(
             pack_id, manifest, None, vendor_modules=_sm_vendor_modules
         )
-        with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as _tf2:
+        with _facade().tempfile.NamedTemporaryFile(
+            suffix=".xcemp", delete=False
+        ) as _tf2:
             _tf2.write(_sm_zip_bytes)
             _tmp_xcemp2 = _tf2.name
         try:
@@ -1030,11 +1133,17 @@ async def _standalone_smoke_auto_repair(
                 ),
                 timeout=20,
             )
-            _stdout2, _stderr2 = await _facade().asyncio.wait_for(_proc2.communicate(), timeout=20)
+            _stdout2, _stderr2 = await _facade().asyncio.wait_for(
+                _proc2.communicate(), timeout=20
+            )
             if _proc2.returncode == 0:
-                return "自检失败后自动修复成功 ✅ — 已重新生成 backend 代码并通过 validate"
+                return (
+                    "自检失败后自动修复成功 ✅ — 已重新生成 backend 代码并通过 validate"
+                )
             else:
-                _out_text2 = (_stderr2 or _stdout2 or b"").decode("utf-8", errors="replace")[:200]
+                _out_text2 = (_stderr2 or _stdout2 or b"").decode(
+                    "utf-8", errors="replace"
+                )[:200]
                 return f"⚠️ 自动修复后仍失败：{_out_text2}；建议手动检查 run() 函数"
         finally:
             try:
@@ -1095,7 +1204,11 @@ async def _craft_host_check(
                     pass
         except RECOVERABLE_ERRORS:
             pass
-        msg = f"HTTP {r.status_code}" if host_probe.get("ok") else f"HTTP {r.status_code}（异常）"
+        msg = (
+            f"HTTP {r.status_code}"
+            if host_probe.get("ok")
+            else f"HTTP {r.status_code}（异常）"
+        )
         if host_warnings:
             msg += "；" + "；".join(host_warnings[:3])[:400]
             host_probe["warnings"] = host_warnings
@@ -1129,7 +1242,9 @@ async def _craft_six_dim_gate(
     **_kw: _facade().Any,
 ) -> _facade().Dict[str, _facade().Any]:
     from modstore_server.employee_six_dimension import compute_six_dimension_report
-    from modstore_server.employee_six_dimension_llm import enrich_six_dimension_report_with_llm
+    from modstore_server.employee_six_dimension_llm import (
+        enrich_six_dimension_report_with_llm,
+    )
 
     _pack = (
         _facade().Path(str(pack_dir))
@@ -1147,21 +1262,31 @@ async def _craft_six_dim_gate(
         spec_warnings=spec_warnings if isinstance(spec_warnings, list) else None,
         validate_errors=validate_errors if isinstance(validate_errors, list) else None,
         mod_sandbox=mod_sandbox if isinstance(mod_sandbox, dict) else None,
-        workflow_sandbox=workflow_sandbox if isinstance(workflow_sandbox, dict) else None,
+        workflow_sandbox=workflow_sandbox
+        if isinstance(workflow_sandbox, dict)
+        else None,
         workflow_biz_ok=workflow_biz_ok,
         standalone_smoke_ok=bool(standalone_smoke_ok),
         catalog_registered=bool(catalog_registered),
         employee_target=employee_target or "pack_only",
         asset_count=int(asset_count or 0),
         domain_smoke=domain_smoke if isinstance(domain_smoke, dict) else None,
-        golden_comparison=golden_comparison if isinstance(golden_comparison, dict) else None,
-        runtime_generation=runtime_generation if isinstance(runtime_generation, dict) else None,
+        golden_comparison=golden_comparison
+        if isinstance(golden_comparison, dict)
+        else None,
+        runtime_generation=runtime_generation
+        if isinstance(runtime_generation, dict)
+        else None,
     )
     eid = (target_employee_id or _kw.get("employee_id") or "").strip()
     if not eid and _pack_path.is_dir():
         try:
-            mf = _facade().json.loads((_pack_path / "manifest.json").read_text(encoding="utf-8"))
-            eid = str(mf.get("id") or (mf.get("identity") or {}).get("id") or "").strip()
+            mf = _facade().json.loads(
+                (_pack_path / "manifest.json").read_text(encoding="utf-8")
+            )
+            eid = str(
+                mf.get("id") or (mf.get("identity") or {}).get("id") or ""
+            ).strip()
         except RECOVERABLE_ERRORS:
             eid = ""
     llm_report, llm_meta = await enrich_six_dimension_report_with_llm(
