@@ -31,7 +31,7 @@ def test_host_attendance_units_merge_private_db_and_host_data(tmp_path, monkeypa
 
 def test_shipment_units_route_returns_real_attendance_departments(tmp_path, monkeypatch) -> None:
     backend_dir = (
-        Path(__file__).resolve().parents[2] / "XCAGI" / "mods" / "taiyangniao-pro" / "backend"
+        Path(__file__).resolve().parents[2] / "mods" / "taiyangniao-pro" / "backend"
     )
     db_path = tmp_path / "taiyangniao.db"
     with sqlite3.connect(db_path) as conn:

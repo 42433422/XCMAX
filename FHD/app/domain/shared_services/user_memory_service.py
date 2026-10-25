@@ -48,7 +48,9 @@ from app.utils.process_lock import exclusive_file_lock
 logger = logging.getLogger(__name__)
 
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+BASE_DIR = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 MEMORY_DIR = os.environ.get("XCAGI_USER_MEMORY_DIR", os.path.join(BASE_DIR, "user_memory"))
 
