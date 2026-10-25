@@ -46,9 +46,7 @@ class InProcessNotificationClient(NotificationClient):
         content: str,
         data: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        from modstore_server.application.notification import (
-            NotificationApplicationService,
-        )
+        from modstore_server.application.notification import NotificationApplicationService
         from modstore_server.infrastructure.notification_repository import (
             SqlNotificationRepository,
             WebsocketRealtimePusher,

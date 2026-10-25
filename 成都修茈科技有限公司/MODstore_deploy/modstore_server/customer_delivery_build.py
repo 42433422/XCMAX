@@ -339,9 +339,7 @@ def prepare_private_artifact(
         ):
             raise ValueError("主线私有 Mod 在签包前身份或源码摘要不匹配")
     if artifact_kind == "employee":
-        from modstore_server.customer_delivery_employee_wrapper import (
-            wrap_private_employee,
-        )
+        from modstore_server.customer_delivery_employee_wrapper import wrap_private_employee
 
         with tempfile.TemporaryDirectory(prefix="private-employee-wrapper-") as temporary:
             wrapped = wrap_private_employee(source, Path(temporary) / target)

@@ -150,16 +150,23 @@ class CatalogComplaintReviewDTO(BaseModel):
     delist_reason: str = Field(default="", max_length=1000)
 
 
-_browse_routes = importlib.import_module("modstore_server.market_catalog_browse_routes")
-api_market_facets = _browse_routes.api_market_facets
-api_market_catalog = _browse_routes.api_market_catalog
-api_office_employee_pack_bundle = _browse_routes.api_office_employee_pack_bundle
-api_host_foundation_employee_pack_download = (
-    _browse_routes.api_host_foundation_employee_pack_download
-)
-api_workflow_employee_pack_bundle = _browse_routes.api_workflow_employee_pack_bundle
-api_market_catalog_detail = _browse_routes.api_market_catalog_detail
-_enrich_catalog_creator_profile = _browse_routes._enrich_catalog_creator_profile
+_BROWSE_EXPORTS = {
+    "api_market_facets",
+    "api_market_catalog",
+    "api_office_employee_pack_bundle",
+    "api_host_foundation_employee_pack_download",
+    "api_workflow_employee_pack_bundle",
+    "api_market_catalog_detail",
+    "_enrich_catalog_creator_profile",
+}
+
+
+def __getattr__(name: str):
+    """Lazy browse-route aliases — avoid import cycle with browse_routes_merged."""
+    if name in _BROWSE_EXPORTS:
+        mod = importlib.import_module("modstore_server.market_catalog_browse_routes")
+        return getattr(mod, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 @router.get("/market/catalog/{item_id}/quality")
@@ -448,3 +455,9 @@ def api_admin_review_catalog_complaint(
             "status": complaint.status,
             "resolution": complaint.resolution,
         }
+
+
+# Browse list/detail/facets live in market_catalog_browse_routes_merged and
+# decorate this module's router at import time. Eager-load so create_app
+# include_router(market_catalog_api.router) mounts /market/catalog.
+importlib.import_module("modstore_server.market_catalog_browse_routes")

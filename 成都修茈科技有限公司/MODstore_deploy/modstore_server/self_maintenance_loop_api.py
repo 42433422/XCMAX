@@ -14,15 +14,9 @@ from typing import Any, Dict
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
 from modstore_server.api.deps import require_admin
-from modstore_server.maintenance_loop.coordinator import (
-    run_self_maintenance_loop,
-)
-from modstore_server.maintenance_loop.governance import (
-    record_governance_audit_review,
-)
-from modstore_server.maintenance_loop.status import (
-    get_self_maintenance_runtime_status,
-)
+from modstore_server.maintenance_loop.coordinator import run_self_maintenance_loop
+from modstore_server.maintenance_loop.governance import record_governance_audit_review
+from modstore_server.maintenance_loop.status import get_self_maintenance_runtime_status
 from modstore_server.models import User
 
 router = APIRouter(prefix="/api/ops/self-maintenance", tags=["ops"])
@@ -157,9 +151,7 @@ async def record_self_maintenance_deployment_receipt(
         raise HTTPException(401, "invalid_deployment_receipt_token")
 
     from modstore_server.deploy_context import health_payload
-    from modstore_server.maintenance_loop.deployment import (
-        _record_verified_deploy_employee_metric,
-    )
+    from modstore_server.maintenance_loop.deployment import _record_verified_deploy_employee_metric
     from modstore_server.maintenance_loop.store import (
         _append_governance_audit,
         _append_ledger,

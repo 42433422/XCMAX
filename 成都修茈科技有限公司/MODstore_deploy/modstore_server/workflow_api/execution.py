@@ -11,12 +11,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-    WorkflowExecution,
-    get_session_factory,
-)
+from modstore_server.models import User, Workflow, WorkflowExecution, get_session_factory
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 from modstore_server.quota_middleware import require_llm_credit
 from modstore_server.workflow_api.schemas import WorkflowExecuteBody
@@ -71,10 +66,7 @@ async def execute_workflow(
         # 统一计费 + 防免费洞：删计次后，java 后端经 JavaWallet 结算、python 后端扣钱包，
         # 永不免费（见 llm_billing.bill_internal_llm_floor）。
         try:
-            from modstore_server.llm_billing import (
-                authorization_header,
-                bill_internal_llm_floor,
-            )
+            from modstore_server.llm_billing import authorization_header, bill_internal_llm_floor
 
             await bill_internal_llm_floor(
                 authorization_header(request),

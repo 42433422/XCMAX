@@ -14,10 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.services.employee import (
-    decrypt_employee_policy,
-    encrypt_employee_policy,
-)
+from modstore_server.services.employee import decrypt_employee_policy, encrypt_employee_policy
 
 DEFAULT_POLICY_NAME = "employee_runtime_policy.json"
 

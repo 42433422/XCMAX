@@ -319,9 +319,7 @@ def _host_auth(request, x_user_id=None):
 
 @pytest.mark.parametrize("kind", ["employee_pack", "mod_suite"])
 def test_generated_employee_run_routes_require_host_login(monkeypatch, tmp_path, kind) -> None:
-    from modstore_server.employee_pack_blueprints_template import (
-        render_employee_pack_blueprints_py,
-    )
+    from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
     from modstore_server.mod_suite_blueprints_template import render_suite_blueprints_py
 
     if kind == "employee_pack":

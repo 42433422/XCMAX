@@ -15,10 +15,7 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from .models_base import Base
 from .models_catalog import UserMod
 from .models_cs import CustomerServiceStandard
-from .models_db_defaults import (
-    DEFAULT_CUSTOMER_SERVICE_STANDARDS,
-    DEFAULT_PLAN_TEMPLATES,
-)
+from .models_db_defaults import DEFAULT_CUSTOMER_SERVICE_STANDARDS, DEFAULT_PLAN_TEMPLATES
 from .models_order import PlanTemplate, UserPlan
 from .models_user import User
 

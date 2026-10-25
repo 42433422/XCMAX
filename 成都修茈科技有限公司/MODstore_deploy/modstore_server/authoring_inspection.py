@@ -9,11 +9,7 @@ from typing import Any, Callable, Dict, List
 import httpx
 
 from modman.blueprint_scan import scan_fastapi_router_routes
-from modman.manifest_util import (
-    folder_name_must_match_id,
-    read_manifest,
-    validate_manifest_dict,
-)
+from modman.manifest_util import folder_name_must_match_id, read_manifest, validate_manifest_dict
 from modman.surface_bundle import load_bundled_extension_surface
 from modstore_server.authoring import slim_openapi_paths
 from modstore_server.infrastructure import library_paths

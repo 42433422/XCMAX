@@ -10,10 +10,7 @@ import pytest
 
 from modstore_server.db.base import init_db
 from modstore_server.digest_daily_line_chain import trigger_strategic_layer_dispatch
-from modstore_server.strategic_layer import (
-    StrategicDecisionLedger,
-    seed_default_boundaries,
-)
+from modstore_server.strategic_layer import StrategicDecisionLedger, seed_default_boundaries
 
 
 @pytest.fixture(scope="module", autouse=True)

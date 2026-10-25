@@ -51,26 +51,9 @@ from modstore_server.models import (
 from modstore_server.services.employee import get_default_employee_client
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/admin", tags=["admin-duty-graph"])
 
-_HIGH_RISK_HANDLERS = frozenset(
-    {
-        "shell_exec",
-        "ssh_exec",
-        "vibe_edit",
-        "vibe_heal",
-        "vibe_code",
-        "openapi_tool",
-        "agent",
-    }
-)
-_LLM_FREE_HANDLERS = frozenset({"echo", "webhook"})
-_MAX_RUN_INPUT_BYTES = 100_000
-_MAX_RESULT_BYTES = 60_000
-
-
-from modstore_server.admin_duty_graph_api_part01 import (
+from modstore_server.admin_duty_graph_api_merged import (
     _json_dumps as _json_dumps,
     _json_loads as _json_loads,
     _as_str as _as_str,
@@ -89,12 +72,23 @@ from modstore_server.admin_duty_graph_api_part01 import (
     get_employee_execution_capability as get_employee_execution_capability,
     post_employee_execution_capabilities as post_employee_execution_capabilities,
     get_duty_graph_no_key_employees as get_duty_graph_no_key_employees,
-)
-
-
-from modstore_server.admin_duty_graph_api_part02 import (
     execute_duty_graph_programmatic as execute_duty_graph_programmatic,
     create_duty_graph_run as create_duty_graph_run,
     get_duty_graph_run as get_duty_graph_run,
     duty_graph_health as duty_graph_health,
 )
+
+_HIGH_RISK_HANDLERS = frozenset(
+    {
+        "shell_exec",
+        "ssh_exec",
+        "vibe_edit",
+        "vibe_heal",
+        "vibe_code",
+        "openapi_tool",
+        "agent",
+    }
+)
+_LLM_FREE_HANDLERS = frozenset({"echo", "webhook"})
+_MAX_RUN_INPUT_BYTES = 100_000
+_MAX_RESULT_BYTES = 60_000

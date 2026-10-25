@@ -1,9 +1,9 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
+
 """工作流 cron 触发：从 DB 加载 APScheduler 任务。"""
 
 from __future__ import annotations
-
 import asyncio
 import json
 import logging
@@ -12,32 +12,25 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
-
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-
 from modstore_server import autonomy_scheduler, payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
-from modstore_server.scheduler_extensions import (
-    register_extensions as _register_extensions,
-)
+from modstore_server.scheduler_extensions import register_extensions as _register_extensions
 from modstore_server.scheduler_timing import (
     cleanup_misfire_grace_time as _cleanup_misfire_grace_time,
 )
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
 logger = logging.getLogger(__name__)
-
 _scheduler: Optional[BackgroundScheduler] = None
 _scheduler_registration_complete = False
 _scheduler_startup_probe_failures: list[dict[str, str]] = []
 _scheduler_startup_recovery_deadlines: dict[str, datetime] = {}
-
 _JOB_PREFIX = "wf_trigger_"
 _LAST_TIME_RAIL_OBSERVABILITY_SYNC_TS = 0.0
 _LAST_TIME_RAIL_OBSERVABILITY_MISSING = -1
-
 _REQUIRED_CORE_JOB_IDS = frozenset(
     {
         "auto_fix_event_bindings_refresh",
@@ -77,9 +70,11 @@ _CRITICAL_RUNTIME_JOB_TO_SCHEDULER_ID = {
     "boss_daily_im_report": "boss_daily_im_report",
     **autonomy_scheduler.CRITICAL_RUNTIME_JOBS,
 }
-
-
-from modstore_server.workflow_scheduler_part01 import (
+from modstore_server.workflow_scheduler_startup_phase01 import _register_scheduler_phase_01
+from modstore_server.workflow_scheduler_startup_phase02 import _register_scheduler_phase_02
+from modstore_server.workflow_scheduler_startup_phase03 import _register_scheduler_phase_03
+from modstore_server.workflow_scheduler_startup_phase04 import _register_scheduler_phase_04
+from modstore_server.workflow_scheduler_merged import (
     _env_int as _env_int,
     _env_bool as _env_bool,
     _business_misfire_grace_time as _business_misfire_grace_time,
@@ -95,20 +90,20 @@ from modstore_server.workflow_scheduler_part01 import (
     _run_authoritative_customer_value_job as _run_authoritative_customer_value_job,
     _trigger_self_maintenance_from_incident as _trigger_self_maintenance_from_incident,
     _run_collector_with_timeout as _run_collector_with_timeout,
-)
-
-
-from modstore_server.workflow_scheduler_startup_phase01 import (
-    _register_scheduler_phase_01,
-)
-from modstore_server.workflow_scheduler_startup_phase02 import (
-    _register_scheduler_phase_02,
-)
-from modstore_server.workflow_scheduler_startup_phase03 import (
-    _register_scheduler_phase_03,
-)
-from modstore_server.workflow_scheduler_startup_phase04 import (
-    _register_scheduler_phase_04,
+    _employee_auto_cron_enabled as _employee_auto_cron_enabled,
+    _employee_cron_job_id as _employee_cron_job_id,
+    _extract_employee_schedule as _extract_employee_schedule,
+    _employee_project_root as _employee_project_root,
+    _register_employee_cron_jobs as _register_employee_cron_jobs,
+    list_employee_cron_jobs as list_employee_cron_jobs,
+    reload_employee_cron_jobs as reload_employee_cron_jobs,
+    stop_scheduler as stop_scheduler,
+    _job_id as _job_id,
+    _load_triggers as _load_triggers,
+    _register_cron_trigger as _register_cron_trigger,
+    unregister_cron_trigger as unregister_cron_trigger,
+    refresh_cron_trigger as refresh_cron_trigger,
+    reload_all_cron_triggers as reload_all_cron_triggers,
 )
 
 
@@ -144,21 +139,3 @@ def start_scheduler() -> None:
 
 
 _EMPLOYEE_CRON_JOB_PREFIX = "emp_cron_"
-
-
-from modstore_server.workflow_scheduler_part02 import (
-    _employee_auto_cron_enabled as _employee_auto_cron_enabled,
-    _employee_cron_job_id as _employee_cron_job_id,
-    _extract_employee_schedule as _extract_employee_schedule,
-    _employee_project_root as _employee_project_root,
-    _register_employee_cron_jobs as _register_employee_cron_jobs,
-    list_employee_cron_jobs as list_employee_cron_jobs,
-    reload_employee_cron_jobs as reload_employee_cron_jobs,
-    stop_scheduler as stop_scheduler,
-    _job_id as _job_id,
-    _load_triggers as _load_triggers,
-    _register_cron_trigger as _register_cron_trigger,
-    unregister_cron_trigger as unregister_cron_trigger,
-    refresh_cron_trigger as refresh_cron_trigger,
-    reload_all_cron_triggers as reload_all_cron_triggers,
-)

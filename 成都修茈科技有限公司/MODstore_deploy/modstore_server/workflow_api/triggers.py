@@ -9,11 +9,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    User,
-    Workflow,
-    WorkflowTrigger,
-)
+from modstore_server.models import User, Workflow, WorkflowTrigger
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_api.schemas import WorkflowTriggerBody
 from modstore_server.workflow_event_runner import run_workflow_for_trigger

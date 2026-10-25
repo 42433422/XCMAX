@@ -11,9 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.datetime_utils import as_utc_aware
 from modstore_server.email_service import send_simple_html_email
-from modstore_server.employee_change_request_service import (
-    apply_employee_change_request,
-)
+from modstore_server.employee_change_request_service import apply_employee_change_request
 from modstore_server.integrations.ops_action_handlers import (
     APPROVAL_DISPATCHER_EMPLOYEE_ID,
     dispatch_ops_handler,

@@ -13,17 +13,66 @@ from datetime import date
 from html import unescape
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, quote_plus, unquote, urlparse
+from modstore_server.research_tools_merged import (
+    _cap_for_key as _cap_for_key,
+    _today_allowed as _today_allowed,
+    _resolve_counter_key as _resolve_counter_key,
+    _request_error_fragment as _request_error_fragment,
+    searxng_instance_url as searxng_instance_url,
+    _searxng_search_at_base as _searxng_search_at_base,
+    _contact_searxng_fallback_bases as _contact_searxng_fallback_bases,
+    searxng_search as searxng_search,
+    contact_searxng_search as contact_searxng_search,
+    extract_github_pairs as extract_github_pairs,
+    web_search_use_tavily as web_search_use_tavily,
+    tavily_api_key as tavily_api_key,
+    github_token as github_token,
+    truncate as truncate,
+    format_web_result_item as format_web_result_item,
+    tavily_search as tavily_search,
+    strip_html as strip_html,
+    ddg_result_url as ddg_result_url,
+    is_duckduckgo_host as is_duckduckgo_host,
+    duckduckgo_html_search as duckduckgo_html_search,
+    web_crawl_engines_from_env as web_crawl_engines_from_env,
+    web_crawl_per_engine_limit as web_crawl_per_engine_limit,
+    merge_crawl_results as merge_crawl_results,
+    format_web_results_combined as format_web_results_combined,
+    _crawl_one_engine as _crawl_one_engine,
+    web_search_crawl_parallel as web_search_crawl_parallel,
+    web_search_with_fallback as web_search_with_fallback,
+    _company_name_key as _company_name_key,
+    _normalize_company_key as _normalize_company_key,
+    _query_matches_company_name as _query_matches_company_name,
+    sanitize_contact_company_web_error as sanitize_contact_company_web_error,
+    is_plausible_company_name as is_plausible_company_name,
+    extract_company_names_from_text as extract_company_names_from_text,
+    _extract_companies_for_query as _extract_companies_for_query,
+    contact_web_company_search_enabled as contact_web_company_search_enabled,
+    clean_web_company_candidate as clean_web_company_candidate,
+    web_search_result_titles as web_search_result_titles,
+    contact_company_web_search_queries as contact_company_web_search_queries,
+    contact_web_search_budget_sec as contact_web_search_budget_sec,
+    rank_contact_serp_rows as rank_contact_serp_rows,
+    contact_known_site_company_lookup as contact_known_site_company_lookup,
+    _contact_company_web_fetch_one as _contact_company_web_fetch_one,
+    _contact_company_web_raw_results as _contact_company_web_raw_results,
+    search_company_names_via_web as search_company_names_via_web,
+    _web_search_free_tier as _web_search_free_tier,
+    github_repo_meta as github_repo_meta,
+    github_readme_raw as github_readme_raw,
+    consume_agent_tool_quota as consume_agent_tool_quota,
+    _web_results_for_llm as _web_results_for_llm,
+    fetch_web_search_context_pack as fetch_web_search_context_pack,
+    internet_search_tool as internet_search_tool,
+    github_repo_snapshot_tool as github_repo_snapshot_tool,
+    build_research_context as build_research_context,
+)
 
 # ── rate limits（内存计数，进程重启清零）──────────────────────────────────────
 _DEFAULT_USER_CAP = 40
 _counters: Dict[str, Tuple[date, int]] = {}
 
-
-from modstore_server.research_tools_part01 import (
-    _cap_for_key as _cap_for_key,
-    _today_allowed as _today_allowed,
-    _resolve_counter_key as _resolve_counter_key,
-)
 
 _GH_URL_RE = re.compile(
     r"https?://github\.com/([a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38})/([a-zA-Z0-9._-]+)",
@@ -63,32 +112,6 @@ _DDG_HTML_ENDPOINTS = (
 )
 
 
-from modstore_server.research_tools_part02 import (
-    _request_error_fragment as _request_error_fragment,
-    searxng_instance_url as searxng_instance_url,
-    _searxng_search_at_base as _searxng_search_at_base,
-    _contact_searxng_fallback_bases as _contact_searxng_fallback_bases,
-    searxng_search as searxng_search,
-    contact_searxng_search as contact_searxng_search,
-    extract_github_pairs as extract_github_pairs,
-    web_search_use_tavily as web_search_use_tavily,
-    tavily_api_key as tavily_api_key,
-    github_token as github_token,
-    truncate as truncate,
-    format_web_result_item as format_web_result_item,
-    tavily_search as tavily_search,
-    strip_html as strip_html,
-    ddg_result_url as ddg_result_url,
-    duckduckgo_html_search as duckduckgo_html_search,
-    web_crawl_engines_from_env as web_crawl_engines_from_env,
-    web_crawl_per_engine_limit as web_crawl_per_engine_limit,
-    merge_crawl_results as merge_crawl_results,
-    format_web_results_combined as format_web_results_combined,
-    _crawl_one_engine as _crawl_one_engine,
-    web_search_crawl_parallel as web_search_crawl_parallel,
-    web_search_with_fallback as web_search_with_fallback,
-)
-
 _COMPANY_SUFFIXES = (
     "股份有限公司",
     "有限责任公司",
@@ -125,17 +148,6 @@ _COMPANY_NAME_RE = re.compile(
 )
 
 
-from modstore_server.research_tools_part03 import (
-    _company_name_key as _company_name_key,
-    _normalize_company_key as _normalize_company_key,
-    _query_matches_company_name as _query_matches_company_name,
-    sanitize_contact_company_web_error as sanitize_contact_company_web_error,
-    is_plausible_company_name as is_plausible_company_name,
-    extract_company_names_from_text as extract_company_names_from_text,
-    _extract_companies_for_query as _extract_companies_for_query,
-    contact_web_company_search_enabled as contact_web_company_search_enabled,
-)
-
 _TITLE_SOURCE_MARKERS = (
     "爱企查",
     "启信宝",
@@ -150,26 +162,4 @@ _TITLE_SOURCE_MARKERS = (
     "黄页网",
     "查企业",
     "顺企网",
-)
-
-
-from modstore_server.research_tools_part04 import (
-    clean_web_company_candidate as clean_web_company_candidate,
-    web_search_result_titles as web_search_result_titles,
-    contact_company_web_search_queries as contact_company_web_search_queries,
-    contact_web_search_budget_sec as contact_web_search_budget_sec,
-    rank_contact_serp_rows as rank_contact_serp_rows,
-    contact_known_site_company_lookup as contact_known_site_company_lookup,
-    _contact_company_web_fetch_one as _contact_company_web_fetch_one,
-    _contact_company_web_raw_results as _contact_company_web_raw_results,
-    search_company_names_via_web as search_company_names_via_web,
-    _web_search_free_tier as _web_search_free_tier,
-    github_repo_meta as github_repo_meta,
-    github_readme_raw as github_readme_raw,
-    consume_agent_tool_quota as consume_agent_tool_quota,
-    _web_results_for_llm as _web_results_for_llm,
-    fetch_web_search_context_pack as fetch_web_search_context_pack,
-    internet_search_tool as internet_search_tool,
-    github_repo_snapshot_tool as github_repo_snapshot_tool,
-    build_research_context as build_research_context,
 )

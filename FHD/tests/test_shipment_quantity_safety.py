@@ -151,7 +151,7 @@ def test_direct_adapter_rejects_before_loading_generator_or_labels():
 def test_agent_clarification_and_schema_accept_actual_kg(weight):
     from jsonschema import validate
 
-    from app.application.agent_orchestrator.tool_spec_data.input_schemas_part_2 import (
+    from app.application.agent_orchestrator.tool_spec_data.input_schemas import (
         _SHIPMENT_PRODUCTS_SCHEMA,
     )
     from app.application.shipment_inputs import missing_shipment_fields
@@ -427,7 +427,7 @@ def test_structured_invalid_explicit_value_is_not_erased_by_kg(key, bad):
 def test_schema_and_shared_validator_support_same_explicit_aliases(fields):
     from jsonschema import validate
 
-    from app.application.agent_orchestrator.tool_spec_data.input_schemas_part_2 import (
+    from app.application.agent_orchestrator.tool_spec_data.input_schemas import (
         _SHIPMENT_PRODUCTS_SCHEMA,
     )
     from app.application.shipment_inputs import missing_shipment_fields

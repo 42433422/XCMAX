@@ -26,10 +26,7 @@ from modstore_server.customer_service_delivery_models import (
 from modstore_server.customer_service_delivery_models import (
     custom_delivery_evidence as _custom_delivery_evidence,
 )
-from modstore_server.customer_service_orchestrator import (
-    audit,
-    enqueue_customer_service_event,
-)
+from modstore_server.customer_service_orchestrator import audit, enqueue_customer_service_event
 from modstore_server.customer_service_tools import json_dumps
 from modstore_server.models import Entitlement, User, UserPlan
 from modstore_server.models_cs import (

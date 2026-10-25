@@ -303,9 +303,7 @@ def _score_domain_delivery(
                 reasons.append(f"黄金未达标 parity={parity}")
         if isinstance(runtime_generation, dict):
             try:
-                from modstore_server.vibecoding_convert_loop import (
-                    is_llm_codegen_source,
-                )
+                from modstore_server.vibecoding_convert_loop import is_llm_codegen_source
 
                 if is_llm_codegen_source(runtime_generation):
                     reasons.append("convert 为 LLM 生成")

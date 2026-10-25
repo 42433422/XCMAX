@@ -1,6 +1,6 @@
 """AI 能力分级 (P1/P2) 与受限工具判定。
 
-Phase 3 从 ``app.legacy.ai_tier`` 迁入。
+Phase 3 从 ``legacy-layer.ai_tier`` 迁入。
 """
 
 from __future__ import annotations

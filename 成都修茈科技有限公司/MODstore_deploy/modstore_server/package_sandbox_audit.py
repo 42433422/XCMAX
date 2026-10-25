@@ -16,11 +16,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from modman.artifact_constants import (
-    ARTIFACT_EMPLOYEE_PACK,
-    ARTIFACT_MOD,
-    normalize_artifact,
-)
+from modman.artifact_constants import ARTIFACT_EMPLOYEE_PACK, ARTIFACT_MOD, normalize_artifact
 from modman.manifest_util import validate_manifest_dict
 from modstore_server.employee_config_v2 import validate_v2_config
 from modstore_server.operational_errors import BOUNDARY_ERRORS

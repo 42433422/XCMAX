@@ -519,9 +519,7 @@ def test_public_metadata_cannot_disguise_private_archive(
 def test_existing_private_rows_are_not_publicly_readable(
     client, monkeypatch, tmp_path, classification
 ):
-    from modstore_server.catalog_public_index import (
-        package_row_eligible_for_public_index,
-    )
+    from modstore_server.catalog_public_index import package_row_eligible_for_public_index
     from modstore_server.catalog_store import append_package
 
     monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path / "catalog"))

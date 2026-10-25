@@ -8,16 +8,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from fastapi import (
-    APIRouter,
-    Body,
-    File,
-    Form,
-    Header,
-    HTTPException,
-    Query,
-    UploadFile,
-)
+from fastapi import APIRouter, Body, File, Form, Header, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from modstore_server.api.catalog_public_helpers import authorize_upload as _authorize_upload
@@ -38,10 +29,7 @@ from modstore_server.catalog_public_index import (
     _public_pkg_ids_from_db,
     package_row_eligible_for_public_index,
 )
-from modstore_server.catalog_publication_policy import (
-    is_private_package,
-    require_public_manifest,
-)
+from modstore_server.catalog_publication_policy import is_private_package, require_public_manifest
 from modstore_server.catalog_store import (
     PackageConflictError,
     append_package,
@@ -55,16 +43,11 @@ from modstore_server.catalog_store import (
 )
 from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 from modstore_server.duty_roster import is_planned_duty_employee_pack
-from modstore_server.employee_config_v2 import (
-    extract_or_upgrade_v2_config,
-    validate_v2_config,
-)
+from modstore_server.employee_config_v2 import extract_or_upgrade_v2_config, validate_v2_config
 from modstore_server.industry_taxonomy import get_industry_tree
 from modstore_server.models import get_session_factory
 from modstore_server.vector_store import insert_embedding as insert_embedding
-from modstore_server.vector_store import (
-    query_similar,
-)
+from modstore_server.vector_store import query_similar
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
 

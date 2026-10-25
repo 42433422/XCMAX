@@ -37,36 +37,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/agent/butler/qq", tags=["butler-qq"])
 
 
-# ─── 配置读取（账号池优先，ENV 作 fallback） ─────────────────────────
-#
-# 凭证有两种来源：
-#
-# 1. AI 员工账号池（DB 表 ``ai_employee_accounts`` + 密钥文件
-#    ``_local_secrets/qq/<id>.json``）——首选；
-# 2. 进程 ENV ``BUTLER_QQ_APP_ID / BUTLER_QQ_APP_SECRET / BUTLER_QQ_BOT_TOKEN
-#    / BUTLER_QQ_SANDBOX``——单租户/极简部署的 fallback。
-#
-# 真正下游使用的入口函数仍是 ``_qq_app_id() / _qq_app_secret() / _qq_bot_token()
-# / _qq_sandbox()``——签名、AccessToken 拉取、出站三类发送都从这里取，
-# 切换实现不需要动其它代码。
+MsgKind = Literal["group", "c2c", "channel"]
 
-
-_BUTLER_EMPLOYEE_ID = "xc-digital-butler"
-_CREDS_CACHE_TTL_SECONDS = 30
-
-
-from modstore_server.butler_qq_bridge_part01 import (
+from modstore_server.butler_qq_bridge_merged import (
     _env as _env,
     _bridge_user_id as _bridge_user_id,
     _CredsState as _CredsState,
-)
-
-_creds_state = _CredsState()
-
-
-from modstore_server.butler_qq_bridge_part02 import (
     _load_creds_from_pool as _load_creds_from_pool,
     _load_creds_from_env as _load_creds_from_env,
     _resolve_creds as _resolve_creds,
@@ -89,45 +68,76 @@ from modstore_server.butler_qq_bridge_part02 import (
     _verify_inbound_for as _verify_inbound_for,
     _all_known_app_secrets as _all_known_app_secrets,
     _TokenState as _TokenState,
+    get_access_token as get_access_token,
+    _SeqRegistry as _SeqRegistry,
+    _send as _send,
+    _BotContext as _BotContext,
+    invalidate_bot_ctx_cache as invalidate_bot_ctx_cache,
+    _get_bot_ctx as _get_bot_ctx,
+    _specific_ctx_for_employee as _specific_ctx_for_employee,
+    _get_bot_ctx_by_employee as _get_bot_ctx_by_employee,
+    _strip_at as _strip_at,
+    _extract_target_id as _extract_target_id,
+    dispatch_to_butler as dispatch_to_butler,
+    dispatch_to_employee as dispatch_to_employee,
+    _resolve_reply as _resolve_reply,
+    _execute_employee_for_qq as _execute_employee_for_qq,
+    _employee_chat as _employee_chat,
+    _resolve_llm_for_butler as _resolve_llm_for_butler,
+    _butler_chat as _butler_chat,
+    _PushDTO as _PushDTO,
+    _check_admin as _check_admin,
+    qq_status as qq_status,
+    qq_webhook_probe as qq_webhook_probe,
+    _specific_app_secret as _specific_app_secret,
+    _specific_bot_token as _specific_bot_token,
+    _resolve_webhook_app_id as _resolve_webhook_app_id,
+    qq_specific_webhook_probe as qq_specific_webhook_probe,
+    qq_specific_webhook as qq_specific_webhook,
+    qq_employee_webhook_probe as qq_employee_webhook_probe,
+    qq_employee_webhook as qq_employee_webhook,
+    qq_webhook as qq_webhook,
+    _qq_webhook_impl as _qq_webhook_impl,
+    qq_push as qq_push,
+    qq_reload_cache as qq_reload_cache,
+    _ensure_runtime_ready as _ensure_runtime_ready,
 )
+
+# ─── 配置读取（账号池优先，ENV 作 fallback） ─────────────────────────
+#
+# 凭证有两种来源：
+#
+# 1. AI 员工账号池（DB 表 ``ai_employee_accounts`` + 密钥文件
+#    ``_local_secrets/qq/<id>.json``）——首选；
+# 2. 进程 ENV ``BUTLER_QQ_APP_ID / BUTLER_QQ_APP_SECRET / BUTLER_QQ_BOT_TOKEN
+#    / BUTLER_QQ_SANDBOX``——单租户/极简部署的 fallback。
+#
+# 真正下游使用的入口函数仍是 ``_qq_app_id() / _qq_app_secret() / _qq_bot_token()
+# / _qq_sandbox()``——签名、AccessToken 拉取、出站三类发送都从这里取，
+# 切换实现不需要动其它代码。
+
+
+_BUTLER_EMPLOYEE_ID = "xc-digital-butler"
+_CREDS_CACHE_TTL_SECONDS = 30
+
+
+_creds_state = _CredsState()
+
 
 _token_state = _TokenState()
 _TOKEN_REFRESH_LEAD_SECONDS = 300
 
 
-from modstore_server.butler_qq_bridge_part03 import (
-    get_access_token as get_access_token,
-)
-
 # ─── 出站消息客户端 ─────────────────────────────────────────────────
 
 
-MsgKind = Literal["group", "c2c", "channel"]
-
-
-from modstore_server.butler_qq_bridge_part04 import (
-    _SeqRegistry as _SeqRegistry,
-)
-
 _seq_registry = _SeqRegistry()
 
-
-from modstore_server.butler_qq_bridge_part05 import (
-    _send as _send,
-    _BotContext as _BotContext,
-)
 
 # 进程内按 app_id 缓存 BotContext，启动时惰性填充
 _bot_ctx_cache: Dict[str, _BotContext] = {}
 _bot_ctx_lock = asyncio.Lock()
 
-
-from modstore_server.butler_qq_bridge_part06 import (
-    invalidate_bot_ctx_cache as invalidate_bot_ctx_cache,
-    _get_bot_ctx as _get_bot_ctx,
-    _specific_ctx_for_employee as _specific_ctx_for_employee,
-    _get_bot_ctx_by_employee as _get_bot_ctx_by_employee,
-)
 
 # ─── 入站 → 多员工分发 ───────────────────────────────────────────────
 
@@ -140,20 +150,8 @@ _KIND_BY_EVENT: Dict[str, MsgKind] = {
 }
 
 
-from modstore_server.butler_qq_bridge_part07 import (
-    _strip_at as _strip_at,
-    _extract_target_id as _extract_target_id,
-    dispatch_to_butler as dispatch_to_butler,
-    dispatch_to_employee as dispatch_to_employee,
-    _resolve_reply as _resolve_reply,
-)
-
 _QQ_REPLY_MAX_LEN = 800
 
-
-from modstore_server.butler_qq_bridge_part08 import (
-    _execute_employee_for_qq as _execute_employee_for_qq,
-)
 
 _EMPLOYEE_PERSONAS: Dict[str, str] = {
     "xc-digital-butler": "你是 XC AGI 数字管家，平台全站智能助手，擅长页面导航、解答平台问题、协调 AI 员工。",
@@ -164,24 +162,8 @@ _EMPLOYEE_PERSONAS: Dict[str, str] = {
 _EMPLOYEE_FALLBACK_PERSONA = "你是 XC AGI 平台 AI 员工，请专业、简洁地回答用户问题。"
 
 
-from modstore_server.butler_qq_bridge_part09 import (
-    _employee_chat as _employee_chat,
-    _resolve_llm_for_butler as _resolve_llm_for_butler,
-    _butler_chat as _butler_chat,
-)
-
 # ─── FastAPI 路由 ───────────────────────────────────────────────────
 
-
-router = APIRouter(prefix="/api/agent/butler/qq", tags=["butler-qq"])
-
-
-from modstore_server.butler_qq_bridge_part10 import (
-    _PushDTO as _PushDTO,
-    _check_admin as _check_admin,
-    qq_status as qq_status,
-    qq_webhook_probe as qq_webhook_probe,
-)
 
 # ─── 已配 QQ 的两位员工：webhook_key → (app_id, employee_id, app_secret) ──
 #
@@ -214,21 +196,6 @@ _SPECIFIC_WEBHOOKS: Dict[str, Dict[str, str]] = {
 # 兼容旧调用：仍允许其他模块/测试按 webhook_key 拿 app_id 字符串。
 _SPECIFIC_WEBHOOK_APP_IDS: Dict[str, str] = {k: v["app_id"] for k, v in _SPECIFIC_WEBHOOKS.items()}
 
-
-from modstore_server.butler_qq_bridge_part11 import (
-    _specific_app_secret as _specific_app_secret,
-    _specific_bot_token as _specific_bot_token,
-    _resolve_webhook_app_id as _resolve_webhook_app_id,
-    qq_specific_webhook_probe as qq_specific_webhook_probe,
-    qq_specific_webhook as qq_specific_webhook,
-    qq_employee_webhook_probe as qq_employee_webhook_probe,
-    qq_employee_webhook as qq_employee_webhook,
-    qq_webhook as qq_webhook,
-    _qq_webhook_impl as _qq_webhook_impl,
-    qq_push as qq_push,
-    qq_reload_cache as qq_reload_cache,
-    _ensure_runtime_ready as _ensure_runtime_ready,
-)
 
 if not _ensure_runtime_ready():
     # 缺 pynacl 时让 app_factory 的 include_router 仍能跑，但路由表保持空。

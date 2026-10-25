@@ -1,3 +1,12 @@
+# debt24 round2 (revised): keep capability/e2e canonical still needed by
+# evidence_assets materialization; archive only bulky acceptance videos.
+# Archive batches: ~/XCMAX-archives/evidence-bulk-20261025(-round2)/
+**/feature-acceptance-*/**/video/**
+**/feature-acceptance-*/**/*.mp4
+**/feature-acceptance-*/**/*.webm
+**/windows-real-machine-*/**/videos/**
+**/macos-release-*/**/*.{mp4,webm}
+
 # Exact historical media aliases rebuilt from the reviewed evidence manifest.
 # Canonical files and acceptance JSON records stay tracked.
 /capabilities/ch-im-cs-02-customer-service.png

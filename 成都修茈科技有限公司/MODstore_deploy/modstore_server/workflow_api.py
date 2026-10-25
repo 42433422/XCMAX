@@ -1,19 +1,17 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
+
 """工作流API模块，提供工作流的CRUD操作和执行监控功能。"""
 
 from __future__ import annotations
-
 import hmac
 import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-
 from modman.manifest_util import read_manifest
 from modman.repo_config import load_config, resolved_library
 from modman.store import iter_mod_dirs
@@ -40,17 +38,11 @@ from modstore_server.workflow_sandbox_state import (
 )
 
 router = APIRouter(prefix="/api/workflow", tags=["workflow"])
-
-
-from modstore_server.workflow_api_part01 import (
-    _guess_employee_id_from_empty_workflow as _guess_employee_id_from_empty_workflow,
-    _repair_empty_employee_workflow_graph as _repair_empty_employee_workflow_graph,
-)
-
 workflow_hooks_router = APIRouter(prefix="/api/workflow-hooks", tags=["workflow-hooks"])
 
-
-from modstore_server.workflow_api_part02 import (
+from modstore_server.workflow_api_merged import (
+    _guess_employee_id_from_empty_workflow as _guess_employee_id_from_empty_workflow,
+    _repair_empty_employee_workflow_graph as _repair_empty_employee_workflow_graph,
     CreateWorkflowBody as CreateWorkflowBody,
     WorkflowExecuteBody as WorkflowExecuteBody,
     SandboxRunBody as SandboxRunBody,
@@ -80,10 +72,6 @@ from modstore_server.workflow_api_part02 import (
     delete_workflow_edge as delete_workflow_edge,
     validate_workflow_endpoint as validate_workflow_endpoint,
     sandbox_run_workflow as sandbox_run_workflow,
-)
-
-
-from modstore_server.workflow_api_part03 import (
     execute_workflow as execute_workflow,
     get_workflow_executions as get_workflow_executions,
     list_workflow_triggers as list_workflow_triggers,

@@ -19,17 +19,8 @@ from modman.manifest_util import (
     validate_manifest_dict,
 )
 from modman.scaffold import create_mod
-from modman.store import (
-    import_zip,
-    list_mod_relative_files,
-    list_mods,
-    remove_mod_by_manifest_id,
-)
-from modstore_server.api.auth_deps import (
-    assert_user_owns_mod,
-    get_optional_user,
-    require_user,
-)
+from modman.store import import_zip, list_mod_relative_files, list_mods, remove_mod_by_manifest_id
+from modstore_server.api.auth_deps import assert_user_owns_mod, get_optional_user, require_user
 from modstore_server.api.dto import CreateModDTO, ManifestPutDTO, ModFilePutDTO
 from modstore_server.api.service_auth import require_admin_user
 from modstore_server.application.catalog import CatalogShellService

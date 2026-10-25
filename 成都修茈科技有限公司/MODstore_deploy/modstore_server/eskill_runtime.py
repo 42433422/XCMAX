@@ -12,9 +12,7 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.eskill_adapter import (
-    RuleBasedESkillAdapter,
-)
+from modstore_server.eskill_adapter import RuleBasedESkillAdapter
 from modstore_server.eskill_adapter import dumps as _dumps
 from modstore_server.eskill_adapter import loads as _loads
 from modstore_server.eskill_adapter import render_template as _render_template
@@ -291,9 +289,7 @@ class ESkillRuntime:
             return self._execute_pipeline(logic, input_data, user_id=user_id)
 
         if logic_type in ("vibe_code", "vibe_workflow"):
-            from modstore_server.integrations.vibe_eskill_adapter import (
-                execute_vibe_kind,
-            )
+            from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_kind
 
             return execute_vibe_kind(logic, input_data, user_id=user_id)
 

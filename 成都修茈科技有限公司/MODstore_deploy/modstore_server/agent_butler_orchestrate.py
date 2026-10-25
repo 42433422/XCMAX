@@ -38,9 +38,7 @@ async def _run_butler_orchestrate_pipeline(
 ) -> None:
     """异步管线主体，由 butler_orchestrate 路由用 asyncio.create_task 启动。"""
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import (
-        _fail_session,
-    )
+    from modstore_server.workbench_api import _fail_session
 
     target_type = str(payload.get("target_type") or "mod").strip()
     target_id = str(payload.get("target_id") or "").strip()
@@ -115,11 +113,7 @@ async def _pipeline_mod(
         resolve_llm_provider_model_auto,
     )
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import (
-        _fail_session,
-        _finalize_session_done,
-        _set_step,
-    )
+    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
 
     # ── snapshot ──────────────────────────────────────────────────────
     await _set_step(sid, "snapshot", "running", "正在创建 manifest 快照…")
@@ -216,11 +210,7 @@ async def _pipeline_workflow(
 ) -> None:
     from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
     from modstore_server.models import User, Workflow, get_session_factory
-    from modstore_server.workbench_api import (
-        _fail_session,
-        _finalize_session_done,
-        _set_step,
-    )
+    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
     from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
 
     # snapshot — workflows have no manifest file; skip gracefully
@@ -307,11 +297,7 @@ async def _pipeline_employee(
     若找不到 Mod 目录，退化为 refine_system_prompt（仅改 prompt 字段）。"""
     from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
     from modstore_server.models import User, get_session_factory
-    from modstore_server.workbench_api import (
-        _fail_session,
-        _finalize_session_done,
-        _set_step,
-    )
+    from modstore_server.workbench_api import _fail_session, _finalize_session_done, _set_step
 
     await _set_step(sid, "snapshot", "done", "员工场景：跳过文件快照")
 

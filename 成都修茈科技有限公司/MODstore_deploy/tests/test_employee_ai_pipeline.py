@@ -354,9 +354,7 @@ async def test_stage_assemble_no_workflow():
 
 
 def test_normalize_editor_manifest_fills_runtime_required_fields():
-    from modstore_server.employee_ai_scaffold import (
-        normalize_editor_manifest_for_registry,
-    )
+    from modstore_server.employee_ai_scaffold import normalize_editor_manifest_for_registry
 
     sparse = {
         "identity": {
@@ -506,9 +504,7 @@ def test_seo_employee_pack_zip_contains_complete_runnable_manifest():
 
 
 def test_normalize_editor_manifest_overrides_stale_requirement_summary_id():
-    from modstore_server.employee_ai_scaffold import (
-        normalize_editor_manifest_for_registry,
-    )
+    from modstore_server.employee_ai_scaffold import normalize_editor_manifest_for_registry
 
     sparse = {
         "id": "requirement-summary-assistant",
@@ -613,9 +609,7 @@ def test_catalog_alignment_accepts_registry_normalized_stale_employee_ids(tmp_pa
 
 
 def test_seo_vibe_edit_focus_paths_match_asset_scope_when_enabled():
-    from modstore_server.employee_ai_scaffold import (
-        normalize_editor_manifest_for_registry,
-    )
+    from modstore_server.employee_ai_scaffold import normalize_editor_manifest_for_registry
 
     sparse = {
         "identity": {

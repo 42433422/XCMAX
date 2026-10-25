@@ -16,9 +16,7 @@ from modstore_server.incident_bus import _incident_payload as _payload  # noqa: 
 from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.incident_team_handoff import format_role_handoff
-from modstore_server.llm_failure_classifier import (
-    FAILURE_KIND_ROLE_TIMEOUT,
-)
+from modstore_server.llm_failure_classifier import FAILURE_KIND_ROLE_TIMEOUT
 from modstore_server.models import IncidentEvent as IncidentEvent
 from modstore_server.models import User
 from modstore_server.models import get_session_factory as get_session_factory
@@ -110,9 +108,7 @@ def _execute_employee_task_with_timeout(
                     and runtime_input.get("event_id")
                     and runtime_input.get("attempt_id")
                 ):
-                    from modstore_server.incident_team_completion import (
-                        persist_late_role_result,
-                    )
+                    from modstore_server.incident_team_completion import persist_late_role_result
 
                     context.copy().run(
                         persist_late_role_result,

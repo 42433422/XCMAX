@@ -1,7 +1,7 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
-from __future__ import annotations
 
+from __future__ import annotations
 import io
 import json
 import logging
@@ -12,21 +12,10 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
 import httpx
-from fastapi import (
-    APIRouter,
-    Body,
-    Depends,
-    FastAPI,
-    File,
-    HTTPException,
-    Request,
-    UploadFile,
-)
+from fastapi import APIRouter, Body, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-
 from modman.blueprint_scan import scan_fastapi_router_routes
 from modman.fhd_shell_export import write_fhd_shell_mods_json
 from modman.industry_presets import apply_industry_to_mod_dir
@@ -88,10 +77,7 @@ from modstore_server.authoring import slim_openapi_paths
 from modstore_server.constants import DEFAULT_XCAGI_BACKEND_URL
 from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
 from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
-from modstore_server.mod_ai_scaffold import (
-    render_frontend_routes_js,
-    render_generated_home_vue,
-)
+from modstore_server.mod_ai_scaffold import render_frontend_routes_js, render_generated_home_vue
 from modstore_server.mod_scaffold_runner import (
     analyze_mod_employee_readiness,
     patch_workflow_graph_employee_nodes,
@@ -112,34 +98,9 @@ from modstore_server.workflow_employee_scaffold import (
     scaffold_auto_merge_default,
 )
 
-_TAGS = [
-    {"name": "health", "description": "服务探活"},
-    {
-        "name": "config",
-        "description": "库路径、XCAGI 根目录、后端 URL、导出 FHD 壳层 /api/mods JSON",
-    },
-    {"name": "mods", "description": "Mod 列表、详情、manifest、文件读写、导入导出"},
-    {"name": "sync", "description": "与 XCAGI/mods 推送与拉回"},
-    {"name": "debug", "description": "沙箱目录、primary 批量标记、XCAGI 状态代理"},
-    {
-        "name": "authoring",
-        "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并",
-    },
-    {"name": "payment", "description": "支付、订单与会员计划"},
-    {"name": "workflow", "description": "工作流编排与执行"},
-    {"name": "webhooks", "description": "业务 Webhook 投递与重放"},
-    {"name": "refunds", "description": "退款申请与审核"},
-    {"name": "catalog", "description": "公开目录与市场检索"},
-    {
-        "name": "catalog-mod-sync",
-        "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）",
-    },
-]
-
 api_router = APIRouter()
 
-
-from modstore_server.routes_registry_part01 import (
+from modstore_server.routes_registry_merged import (
     _read_mod_json_file as _read_mod_json_file,
     _mod_shell_ui_row as _mod_shell_ui_row,
     _frontend_spec_for_existing_mod as _frontend_spec_for_existing_mod,
@@ -159,10 +120,6 @@ from modstore_server.routes_registry_part01 import (
     api_put_mod_file as api_put_mod_file,
     api_create_mod as api_create_mod,
     api_mod_ai_scaffold as api_mod_ai_scaffold,
-)
-
-
-from modstore_server.routes_registry_part02 import (
     api_mod_frontend_regenerate as api_mod_frontend_regenerate,
     api_delete_mod as api_delete_mod,
     api_import_mod as api_import_mod,
@@ -175,8 +132,31 @@ from modstore_server.routes_registry_part02 import (
     api_xcagi_loading_status as api_xcagi_loading_status,
     api_xcagi_installed_mods as api_xcagi_installed_mods,
     _include_optional as _include_optional,
+    _maybe_mount_dev_docs as _maybe_mount_dev_docs,
+    _maybe_mount_ui as _maybe_mount_ui,
+    register_all_routes as register_all_routes,
 )
 
+_TAGS = [
+    {"name": "health", "description": "服务探活"},
+    {
+        "name": "config",
+        "description": "库路径、XCAGI 根目录、后端 URL、导出 FHD 壳层 /api/mods JSON",
+    },
+    {"name": "mods", "description": "Mod 列表、详情、manifest、文件读写、导入导出"},
+    {"name": "sync", "description": "与 XCAGI/mods 推送与拉回"},
+    {"name": "debug", "description": "沙箱目录、primary 批量标记、XCAGI 状态代理"},
+    {"name": "authoring", "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并"},
+    {"name": "payment", "description": "支付、订单与会员计划"},
+    {"name": "workflow", "description": "工作流编排与执行"},
+    {"name": "webhooks", "description": "业务 Webhook 投递与重放"},
+    {"name": "refunds", "description": "退款申请与审核"},
+    {"name": "catalog", "description": "公开目录与市场检索"},
+    {
+        "name": "catalog-mod-sync",
+        "description": "公网机器令牌：库与 XCAGI/mods 推送/拉回（/v1/mod-sync）",
+    },
+]
 _OPTIONAL_MODULES = (
     "modstore_server.llm_api",
     "modstore_server.openai_llm_gateway_api",
@@ -206,11 +186,4 @@ _OPTIONAL_MODULES = (
     "modstore_server.developer_key_export_api",
     "modstore_server.webhook_subscription_api",
     "modstore_server.templates_api",
-)
-
-
-from modstore_server.routes_registry_part03 import (
-    _maybe_mount_dev_docs as _maybe_mount_dev_docs,
-    _maybe_mount_ui as _maybe_mount_ui,
-    register_all_routes as register_all_routes,
 )

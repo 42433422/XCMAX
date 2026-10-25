@@ -131,9 +131,7 @@ def evaluate_risk(
     except RECOVERABLE_ERRORS as exc:
         if exc.__class__.__name__ == "ProhibitedActionError" and getattr(exc, "action_id", None):
             try:
-                from modstore_server.autonomy_decision_audit import (
-                    append_prohibited_exception,
-                )
+                from modstore_server.autonomy_decision_audit import append_prohibited_exception
 
                 append_prohibited_exception(
                     action=getattr(exc, "action", "unknown"),

@@ -74,15 +74,8 @@ from modstore_server.db.strategic import StrategicDecision
 
 logger = logging.getLogger(__name__)
 
-
-from modstore_server.daily_digest_part01 import (
+from modstore_server.daily_digest_merged import (
     digest_calendar_day as digest_calendar_day,
-)
-
-DEFAULT_DIGEST_EMAIL = "1499383833@qq.com"
-
-
-from modstore_server.daily_digest_part02 import (
     _new_unique_ops_token_plain as _new_unique_ops_token_plain,
     parse_daily_digest_recipient_emails as parse_daily_digest_recipient_emails,
     _notify_daily_digest_in_app as _notify_daily_digest_in_app,
@@ -90,24 +83,6 @@ from modstore_server.daily_digest_part02 import (
     count_on_duty_employees as count_on_duty_employees,
     autonomy_decisions_digest_html as autonomy_decisions_digest_html,
     count_catalog_employee_packs as count_catalog_employee_packs,
-)
-
-# ---------------------------------------------------------------------------
-# 邮件视觉基元（presentation primitives）
-# 纯函数 · 无 DB / 无副作用，邮件安全（全内联样式），便于本地预览与复用。
-# ---------------------------------------------------------------------------
-
-# 状态色板： (前景, 背景, 边框)
-_DIGEST_TONES: Dict[str, Tuple[str, str, str]] = {
-    "ok": ("#047857", "#ecfdf5", "#a7f3d0"),
-    "warn": ("#b45309", "#fffbeb", "#fde68a"),
-    "crit": ("#b91c1c", "#fef2f2", "#fecaca"),
-    "info": ("#1d4ed8", "#eff6ff", "#bfdbfe"),
-    "muted": ("#475569", "#f1f5f9", "#e2e8f0"),
-}
-
-
-from modstore_server.daily_digest_part03 import (
     _status_pill as _status_pill,
     _section_title as _section_title,
     _hero_overview_html as _hero_overview_html,
@@ -129,10 +104,6 @@ from modstore_server.daily_digest_part03 import (
     _run_pytest_summary as _run_pytest_summary,
     _digest_product_work_summary_html as _digest_product_work_summary_html,
     _digest_kpi_cards_html as _digest_kpi_cards_html,
-)
-
-
-from modstore_server.daily_digest_part04 import (
     _meeting_minutes_md_to_html as _meeting_minutes_md_to_html,
     _surface_meeting_topic as _surface_meeting_topic,
     _surface_audit_meeting_minutes_html as _surface_audit_meeting_minutes_html,
@@ -144,10 +115,23 @@ from modstore_server.daily_digest_part04 import (
     build_digest_approval_bundle as build_digest_approval_bundle,
     _surface_audit_failed_bundle as _surface_audit_failed_bundle,
     _build_surface_audit_bundle as _build_surface_audit_bundle,
-)
-
-
-from modstore_server.daily_digest_part05 import (
     run_daily_digest_email as run_daily_digest_email,
     cron_trigger_for_digest as cron_trigger_for_digest,
 )
+
+DEFAULT_DIGEST_EMAIL = "1499383833@qq.com"
+
+
+# ---------------------------------------------------------------------------
+# 邮件视觉基元（presentation primitives）
+# 纯函数 · 无 DB / 无副作用，邮件安全（全内联样式），便于本地预览与复用。
+# ---------------------------------------------------------------------------
+
+# 状态色板： (前景, 背景, 边框)
+_DIGEST_TONES: Dict[str, Tuple[str, str, str]] = {
+    "ok": ("#047857", "#ecfdf5", "#a7f3d0"),
+    "warn": ("#b45309", "#fffbeb", "#fde68a"),
+    "crit": ("#b91c1c", "#fef2f2", "#fecaca"),
+    "info": ("#1d4ed8", "#eff6ff", "#bfdbfe"),
+    "muted": ("#475569", "#f1f5f9", "#e2e8f0"),
+}

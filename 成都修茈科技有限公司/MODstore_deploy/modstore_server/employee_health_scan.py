@@ -121,10 +121,7 @@ def _notification_cooldown_hours() -> int:
 
 def _notify_admins(title: str, content: str, *, kind: str, payload: Dict[str, Any]) -> None:
     try:
-        from modstore_server.notification_service import (
-            NotificationType,
-            create_notification,
-        )
+        from modstore_server.notification_service import NotificationType, create_notification
 
         notif_type = NotificationType.SYSTEM if kind != "deactivated" else NotificationType.SYSTEM
         admin_ids = _get_admin_user_ids()

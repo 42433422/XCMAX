@@ -30,9 +30,7 @@ def trusted_host_release(host_sha: str) -> dict[str, Any] | None:
     if not _SHA1.fullmatch(host_sha):
         return None
     try:
-        from modstore_server.customer_issue_release_provenance import (
-            resolve_host_release,
-        )
+        from modstore_server.customer_issue_release_provenance import resolve_host_release
     except ImportError:
         return None
     return resolve_host_release(host_sha)

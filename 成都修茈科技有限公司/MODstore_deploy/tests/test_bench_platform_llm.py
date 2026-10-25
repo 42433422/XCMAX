@@ -162,10 +162,7 @@ def test_parse_machine_score_from_text():
 
 
 def test_peer_review_gate_env(monkeypatch):
-    from modstore_server.employee_bench import (
-        _peer_review_gate_enabled,
-        _peer_review_min_score,
-    )
+    from modstore_server.employee_bench import _peer_review_gate_enabled, _peer_review_min_score
 
     monkeypatch.delenv("MODSTORE_BENCH_PEER_REVIEW_GATE", raising=False)
     assert _peer_review_gate_enabled() is False

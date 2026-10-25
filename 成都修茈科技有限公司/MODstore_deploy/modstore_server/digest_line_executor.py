@@ -238,15 +238,8 @@ def _verify_vibe_prep_generation_breakpoint_unit(
     try:
         from sqlalchemy import text as _sql
 
-        from modstore_server.digest_action_items import (
-            ensure_table,
-            find_matching_item_ids,
-        )
-        from modstore_server.models import (
-            DailyDigestRecord,
-            get_engine,
-            get_session_factory,
-        )
+        from modstore_server.digest_action_items import ensure_table, find_matching_item_ids
+        from modstore_server.models import DailyDigestRecord, get_engine, get_session_factory
 
         sf = get_session_factory()
         with sf() as session:

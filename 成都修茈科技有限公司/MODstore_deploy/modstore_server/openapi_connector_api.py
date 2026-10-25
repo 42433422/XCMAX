@@ -27,15 +27,8 @@ from modstore_server.models import (
     Workflow,
     WorkflowNode,
 )
-from modstore_server.openapi_connector_codegen import (
-    cleanup_old_versions,
-    generate_client_files,
-)
-from modstore_server.openapi_connector_parser import (
-    OpenApiParseError,
-    ParsedSpec,
-    parse_spec,
-)
+from modstore_server.openapi_connector_codegen import cleanup_old_versions, generate_client_files
+from modstore_server.openapi_connector_parser import OpenApiParseError, ParsedSpec, parse_spec
 from modstore_server.openapi_connector_runtime import (
     SUPPORTED_AUTH_TYPES,
     call_generated_operation,

@@ -14,12 +14,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from modstore_server.account_license_plans import is_account_license_plan_id
-from modstore_server.models import (
-    CatalogItem,
-    PlanTemplate,
-    Purchase,
-    UserPlan,
-)
+from modstore_server.models import CatalogItem, PlanTemplate, Purchase, UserPlan
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

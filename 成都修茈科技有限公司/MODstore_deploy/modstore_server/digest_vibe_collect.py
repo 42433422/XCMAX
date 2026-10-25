@@ -91,9 +91,7 @@ def _merge_event_backlog_into_patches(
     ):
         return (patches_markdown, {"merged_count": 0, "skipped": True})
     try:
-        from modstore_server.six_line_event_router import (
-            merge_event_backlog_into_vibe_patches,
-        )
+        from modstore_server.six_line_event_router import merge_event_backlog_into_vibe_patches
 
         return merge_event_backlog_into_vibe_patches(patches_markdown, consume=True)
     except RECOVERABLE_ERRORS:

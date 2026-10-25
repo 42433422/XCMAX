@@ -172,12 +172,31 @@ def e(path: str) -> Path:
     return _EVIDENCE_ASSETS["resolve_source"](REPO_ROOT, path)
 
 
+def evidence_state(rel: str) -> dict:
+    """Local file or archive-MANIFEST-verified pin (blob may be unmounted)."""
+    if not rel or urlsplit(rel).scheme:
+        return {"exists": False, "path": None, "sha256": None, "size": None}
+    return _EVIDENCE_ASSETS["evidence_file_state"](REPO_ROOT, rel)
+
+
 def path_exists(rel: str) -> bool:
     # External provenance links are not repository files.
-    return bool(rel) and not urlsplit(rel).scheme and e(rel).exists()
+    # Directories (impl roots) use ordinary exists(); media may be archive-only
+    # (MANIFEST-verified, blob not mounted) and still count as present so CI
+    # --check matches a fully materialized tree.
+    if not rel or urlsplit(rel).scheme:
+        return False
+    try:
+        path = e(rel)
+    except ValueError:
+        return False
+    if path.exists():
+        return True
+    return evidence_state(rel)["exists"]
 
 
 def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
+    """Decode local videos; archive-MANIFEST pins without mounted blobs pass without ffmpeg."""
     results = []
     for domain in catalog["domains"]:
         for module in domain["modules"]:
@@ -185,9 +204,23 @@ def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
                 for path in feature.get("evidence", {}).get("videos", []):
                     row = {"feature": feature["id"], "path": path, "error": None}
                     try:
-                        row["sha256"] = hashlib.sha256(e(path).read_bytes()).hexdigest()
+                        st = evidence_state(path)
+                        if not st["exists"]:
+                            row["error"] = f"[Errno 2] No such file or directory: {path!r}"
+                            results.append(row)
+                            continue
+                        local = st["path"]
+                        if local is None or not Path(local).is_file():
+                            # Committed archive MANIFEST verifies the pin; CI has no blob to decode.
+                            row["sha256"] = st["sha256"]
+                            row["frames"] = None
+                            row["duration_seconds"] = None
+                            row["archive_manifest_only"] = True
+                            results.append(row)
+                            continue
+                        row["sha256"] = st["sha256"] or hashlib.sha256(Path(local).read_bytes()).hexdigest()
                         run = subprocess.run([ffmpeg, "-v", "error", "-xerror", "-threads", "1",
-                                              "-i", str(e(path)), "-map", "0:v:0", "-progress", "pipe:1",
+                                              "-i", str(local), "-map", "0:v:0", "-progress", "pipe:1",
                                               "-f", "null", "-"], capture_output=True, text=True, timeout=180)
                         frames = re.findall(r"^frame=(\d+)$", run.stdout, re.M)
                         times = re.findall(r"^out_time_us=(\d+)$", run.stdout, re.M)
@@ -195,7 +228,7 @@ def check_videos(catalog: dict, ffmpeg: str) -> list[dict]:
                         row["duration_seconds"] = int(times[-1]) / 1000000 if times else 0
                         if run.returncode or row["frames"] < 2 or row["duration_seconds"] <= 0:
                             row["error"] = run.stderr.strip() or "录像没有可解码的视频时间轴"
-                    except (OSError, subprocess.SubprocessError) as exc:
+                    except (OSError, subprocess.SubprocessError, ValueError) as exc:
                         row["error"] = str(exc)
                     results.append(row)
     return results
@@ -213,13 +246,18 @@ _EVIDENCE_INDEX: dict[str, dict] = {}
 
 
 def file_digest(rel: str) -> tuple[str, int] | None:
-    """仓库内文件的 SHA-256 与字节数（同一次构建内缓存）。"""
+    """仓库内或归档 MANIFEST 钉扎文件的 SHA-256 与字节数（同一次构建内缓存）。"""
     if rel not in _SHA_CACHE:
-        try:
-            raw = e(rel).read_bytes()
-        except OSError:
+        st = evidence_state(rel)
+        if not st["exists"] or not st.get("sha256") or st.get("size") is None:
             return None
-        _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+        local = st.get("path")
+        if local is not None and Path(local).is_file():
+            raw = Path(local).read_bytes()
+            _SHA_CACHE[rel] = (hashlib.sha256(raw).hexdigest(), len(raw))
+        else:
+            # Blob unmounted; committed archive MANIFEST verifies the pin.
+            _SHA_CACHE[rel] = (st["sha256"], int(st["size"]))
     return _SHA_CACHE[rel]
 
 
@@ -390,8 +428,8 @@ def reviewed_runs(feat: dict, head: str | None = None) -> list[dict]:
             declared = sum((feat["evidence"].get(k, []) for k in ("screenshots", "videos")), [])
             if not all(m.get("feature") == feat["id"] and m.get("visual_review") == "accepted"
                        and m.get("visible_result") and m.get("reviewed_at") and m["path"] in declared
-                       and e(m["path"]).is_file()
-                       and hashlib.sha256(e(m["path"]).read_bytes()).hexdigest() == m.get("sha256") for m in media):
+                       and (st := evidence_state(m["path"]))["exists"]
+                       and st["sha256"] == m.get("sha256") for m in media):
                 continue
             run["_acceptance_path"] = rel
             run["_acceptance_sha256"] = hashlib.sha256(raw).hexdigest()
@@ -418,7 +456,8 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
         run_log = run.get("log")
         run_log_matches = run_log is None or (isinstance(run_log, dict) and any(
             item.get("path") == run_log.get("path") and item.get("sha256") == run_log.get("sha256")
-            and type(run_log.get("bytes")) is int and e(run_log["path"]).stat().st_size == run_log["bytes"]
+            and type(run_log.get("bytes")) is int
+            and evidence_state(run_log["path"])["size"] == run_log["bytes"]
             for item in logs))
         types = {Path(m["path"]).suffix.lower() for m in run["media"]}
         complete = (ident["path"] in assets.get("raw", [])
@@ -429,8 +468,8 @@ def traceable_pass(feat: dict, platform: str, run: dict) -> tuple[bool, str | No
                     and re.fullmatch(r"[0-9a-f]{64}", str(sha or ""))
                     and types & {".png", ".jpg", ".jpeg", ".webp"} and types & {".mp4", ".webm", ".mov"}
                     and run_log_matches
-                    and logs and all(e(log["path"]).is_file() and e(log["path"]).stat().st_size
-                                     and hashlib.sha256(e(log["path"]).read_bytes()).hexdigest() == log["sha256"]
+                    and logs and all((st := evidence_state(log["path"]))["exists"] and (st["size"] or 0)
+                                     and st["sha256"] == log["sha256"]
                                      for log in logs))
         return bool(complete), sha if complete else None
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
@@ -529,8 +568,9 @@ def platform_observations(feat: dict, platform: str, warnings: list[str], head: 
         media_by_kind = {m.get("kind"): m for m in record.get("media", []) if isinstance(m, dict)}
         for asset_spec in spec.get("assets", []) or []:
             path = asset_spec.get("path", "")
-            exists = e(path).is_file()
-            digest = hashlib.sha256(e(path).read_bytes()).hexdigest() if exists else None
+            st = evidence_state(path)
+            exists = st["exists"]
+            digest = st["sha256"]
             expected = asset_spec.get("sha256")
             bound = media_by_kind.get(asset_spec.get("kind"))
             record_path_ref = record.get(asset_spec.get("kind")) if asset_spec.get("kind") in {"screenshot", "video", "log"} else None
@@ -1600,9 +1640,15 @@ def main() -> int:
         if args.video_report:
             args.video_report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         failures = [v for v in videos if v["error"]]
+        archived = [v for v in videos if v.get("archive_manifest_only") and not v["error"]]
         for failure in failures:
             print(f"ERROR {failure['feature']}: {failure['path']}: {failure['error']}")
-        print(f"录像完整解码：{len(videos) - len(failures)}/{len(videos)}；不代表业务验收通过。")
+        decoded = len(videos) - len(failures) - len(archived)
+        print(
+            f"录像完整解码：{decoded}/{len(videos)}；"
+            f"归档MANIFEST免解码：{len(archived)}；"
+            f"不代表业务验收通过。"
+        )
         return int(bool(failures) or not videos)
 
     data, warnings, domains_full = build()

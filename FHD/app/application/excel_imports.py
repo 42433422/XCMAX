@@ -1,7 +1,7 @@
 """Excel 导入应用层辅助。
 
-Phase 3B 从 ``app.legacy.customers_excel_import`` 与
-``app.legacy.products_bulk_import`` 吸收。
+Phase 3B 从 ``legacy-layer.customers_excel_import`` 与
+``legacy-layer.products_bulk_import`` 吸收。
 """
 
 from __future__ import annotations
@@ -104,7 +104,7 @@ _LOST_LEGACY_SYMBOLS = frozenset(
 def __getattr__(name: str):
     """Latent API fallback.
 
-    历史上 ``app.legacy.products_bulk_import`` 暴露过 ``_parse_price``、
+    历史上 ``legacy-layer.products_bulk_import`` 暴露过 ``_parse_price``、
     ``_norm_model``,``customers_excel_import`` 暴露过 ``run_customers_excel_import_bytes``,
     但这些实现在 2026-04 清理时已不存在; xcagi_compat 中仍有少数路由引用它们。
     此处抛出明确的 ImportError,让异常信息指向真实原因。
@@ -112,6 +112,6 @@ def __getattr__(name: str):
     if name in _LOST_LEGACY_SYMBOLS:
         raise ImportError(
             f"{name!r} is not implemented in app.application.excel_imports; "
-            "this function was lost in the backend → app.legacy cleanup."
+            "this function was lost in the backend → legacy-layer cleanup."
         )
     raise AttributeError(f"module 'app.application.excel_imports' has no attribute {name!r}")

@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from modstore_server.employee_autonomy_service import (
-    create_collab_thread,
-    post_collab_message,
-)
+from modstore_server.employee_autonomy_service import create_collab_thread, post_collab_message
 from modstore_server.models import init_db
 
 

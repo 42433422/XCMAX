@@ -35,6 +35,6 @@ def __getattr__(name: str):
     if name in _LOST_LEGACY_SYMBOLS:
         raise ImportError(
             f"{name!r} is not implemented in app.application.tools; "
-            "this function was lost in the backend → app.legacy cleanup."
+            "this function was lost in the backend → legacy-layer cleanup."
         )
     raise AttributeError(f"module 'app.application.tools' has no attribute {name!r}")

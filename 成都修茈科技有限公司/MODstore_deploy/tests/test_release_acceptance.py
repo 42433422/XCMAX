@@ -14,10 +14,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from modstore_server.release_acceptance import (
-    judge_release_acceptance,
-    normalize_platform,
-)
+from modstore_server.release_acceptance import judge_release_acceptance, normalize_platform
 
 
 @dataclass

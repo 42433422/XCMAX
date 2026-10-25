@@ -22,12 +22,7 @@ from sqlalchemy.orm import Session
 from modstore_server.eventing.contracts import WORKFLOW_SANDBOX_COMPLETED
 from modstore_server.eventing.events import new_event
 from modstore_server.eventing.global_bus import neuro_bus
-from modstore_server.models import (
-    Workflow,
-    WorkflowEdge,
-    WorkflowNode,
-    get_session_factory,
-)
+from modstore_server.models import Workflow, WorkflowEdge, WorkflowNode, get_session_factory
 from modstore_server.workflow_variables import eval_condition, resolve_value
 
 logger = logging.getLogger(__name__)
@@ -69,12 +64,8 @@ def _json_safe(value: Any, max_depth: int = 6, max_str: int = 8000) -> Any:
     return str(type(value).__name__) + ":<non-serializable>"
 
 
-from modstore_server.workflow_engine_workflowengine_mixin01 import (
-    _WorkflowEnginePart01Mixin,
-)
-from modstore_server.workflow_engine_workflowengine_mixin02 import (
-    _WorkflowEnginePart02Mixin,
-)
+from modstore_server.workflow_engine_workflowengine_mixin01 import _WorkflowEnginePart01Mixin
+from modstore_server.workflow_engine_workflowengine_mixin02 import _WorkflowEnginePart02Mixin
 
 
 class WorkflowEngine(_WorkflowEnginePart01Mixin, _WorkflowEnginePart02Mixin):

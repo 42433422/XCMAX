@@ -15,10 +15,7 @@ from modstore_server.eventing.contracts import (
 from modstore_server.eventing.events import new_event
 from modstore_server.eventing.global_bus import neuro_bus as default_neuro_bus
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.services.employee import (
-    EmployeeRuntimeClient,
-    get_default_employee_client,
-)
+from modstore_server.services.employee import EmployeeRuntimeClient, get_default_employee_client
 
 
 class EmployeeApplicationService:

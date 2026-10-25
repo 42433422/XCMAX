@@ -353,9 +353,7 @@ def maybe_auto_approve(
                 }
 
         # SSOT + 窄 CI 通过后自动落盘。
-        from modstore_server.employee_change_request_service import (
-            apply_employee_change_request,
-        )
+        from modstore_server.employee_change_request_service import apply_employee_change_request
         from modstore_server.models import User
 
         sf2 = get_session_factory()

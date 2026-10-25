@@ -9,11 +9,7 @@ import pytest
 from modstore_server import incident_team_completion as completion
 from modstore_server import incident_team_orchestrator as team
 from modstore_server import para_task_events as events
-from tests.test_incident_team_continuation import (
-    _accepted,
-    _claim,
-    _terminal,
-)
+from tests.test_incident_team_continuation import _accepted, _claim, _terminal
 from tests.test_incident_team_continuation import incident as incident
 from tests.test_para_first_no_planning_llm import fresh_db as fresh_db
 

@@ -12,9 +12,7 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.xss_sanitizer import _sanitize_value
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import (
-    WorkflowTrigger,
-)
+from modstore_server.models import WorkflowTrigger
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 

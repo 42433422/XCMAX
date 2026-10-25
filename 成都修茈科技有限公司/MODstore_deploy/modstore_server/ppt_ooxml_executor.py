@@ -11,10 +11,7 @@ from xml.etree import ElementTree as ET
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.ppt_edit_plan import validate_ooxml_fragment
-from modstore_server.ppt_homework_marquee import (
-    TIMING_XML,
-    enhance_pptx_homework_marquee,
-)
+from modstore_server.ppt_homework_marquee import TIMING_XML, enhance_pptx_homework_marquee
 
 NS = {
     "p": "http://schemas.openxmlformats.org/presentationml/2006/main",

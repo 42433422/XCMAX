@@ -56,13 +56,8 @@ def test_case_a_publish_enrich_then_intake_plan_then_routing_dispatch(
     monkeypatch, case_ticket_payload, tmp_path
 ):
     from modstore_server import customer_service_api
-    from modstore_server.duty_workforce_contracts import (
-        enrich_customer_ticket_publish_payload,
-    )
-    from modstore_server.incident_bus import (
-        _dispatch_intake_routing_plan,
-        _extract_routing_plan,
-    )
+    from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
+    from modstore_server.incident_bus import _dispatch_intake_routing_plan, _extract_routing_plan
 
     # 1) publish 边界 enrich
     enriched = enrich_customer_ticket_publish_payload(dict(case_ticket_payload))

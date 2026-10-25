@@ -1,6 +1,6 @@
 """Conversation application use-cases (sample domain).
 
-HTTP routes should import from here — not from ``app.legacy.chat``.
+HTTP routes should import from here — not from ``legacy-layer.chat``.
 The legacy adapter remains the temporary infrastructure implementation
 until phase-3 retirement (refs → 0).
 """

@@ -45,8 +45,7 @@ from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 
-
-from modstore_server.employee_autonomy_service_part01 import (
+from modstore_server.employee_autonomy_service_merged import (
     _jloads as _jloads,
     _jdumps as _jdumps,
     _dedupe_strs as _dedupe_strs,
@@ -66,19 +65,21 @@ from modstore_server.employee_autonomy_service_part01 import (
     _build_subtask_text as _build_subtask_text,
     dispatch_suggestion as dispatch_suggestion,
     dispatch_pending_suggestions as dispatch_pending_suggestions,
-)
-
-_TODO_BULLET_RE = re.compile(r"^\s*(?:[-*•]|(?:\d+[\.\)\、]))\s*(.+?)\s*$")
-
-
-from modstore_server.employee_autonomy_service_part02 import (
     _parse_todo_lines as _parse_todo_lines,
     enqueue_daily_brief_todos as enqueue_daily_brief_todos,
     list_pending_brief_tasks as list_pending_brief_tasks,
     dispatch_pending_brief_tasks as dispatch_pending_brief_tasks,
     trigger_doc_autofix_from_report as trigger_doc_autofix_from_report,
     _PlatformBenchLlmClient as _PlatformBenchLlmClient,
+    _alert_evolution_quota_circuit_break as _alert_evolution_quota_circuit_break,
+    _evolution_failure_candidates as _evolution_failure_candidates,
+    run_employee_evolution_scan as run_employee_evolution_scan,
+    aggregate_admin_suggestion_dashboard as aggregate_admin_suggestion_dashboard,
+    propose_employee_pack as propose_employee_pack,
 )
+
+_TODO_BULLET_RE = re.compile(r"^\s*(?:[-*•]|(?:\d+[\.\)\、]))\s*(.+?)\s*$")
+
 
 # 进化引擎只应对「prompt 可修」的失败做 prompt 优化。配额/限流/鉴权/缺 key 等基建类失败
 # 不是 prompt 问题，refine prompt 救不回来；这些失败进入候选会导致进化引擎空转。
@@ -115,13 +116,6 @@ _PARA_DELEGATE_EMPLOYEES: Tuple[str, ...] = (
 _GENERIC_HANDLER_FAILURE = "one or more handlers returned ok=false"
 
 
-from modstore_server.employee_autonomy_service_part03 import (
-    _alert_evolution_quota_circuit_break as _alert_evolution_quota_circuit_break,
-    _evolution_failure_candidates as _evolution_failure_candidates,
-    run_employee_evolution_scan as run_employee_evolution_scan,
-    aggregate_admin_suggestion_dashboard as aggregate_admin_suggestion_dashboard,
-)
-
 __all__ = [
     "aggregate_admin_suggestion_dashboard",
     "approve_suggestion",
@@ -145,8 +139,3 @@ __all__ = [
 ProposalValidationError = _employee_pack_proposal.ProposalValidationError
 validate_proposal = _employee_pack_proposal.validate_proposal
 _call_llm = _employee_pack_proposal._call_llm
-
-
-from modstore_server.employee_autonomy_service_part04 import (
-    propose_employee_pack as propose_employee_pack,
-)

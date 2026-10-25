@@ -12,10 +12,7 @@ import re
 from typing import List
 
 from modstore_server.script_agent.brief import Brief, PlanResult, Verdict
-from modstore_server.script_agent.llm_client import (
-    SCRIPT_AGENT_JUDGE_MAX_TOKENS,
-    LlmClient,
-)
+from modstore_server.script_agent.llm_client import SCRIPT_AGENT_JUDGE_MAX_TOKENS, LlmClient
 from modstore_server.script_agent.sandbox_runner import SandboxResult
 
 OBSERVE_SYSTEM_PROMPT = """\

@@ -200,9 +200,7 @@ class _EmployeeAgentRunnerPart01Mixin:
                         "ok": False,
                         "error": f"员工 {employee_id or '?'} 无权使用 {name}",
                     }
-                from modstore_server.employee_specialized_tools import (
-                    validate_xcemp_package,
-                )
+                from modstore_server.employee_specialized_tools import validate_xcemp_package
 
                 employee_input = (
                     self.ctx.get("employee_input")
@@ -310,9 +308,7 @@ class _EmployeeAgentRunnerPart01Mixin:
 
                 return autopilot_status()
             if name == "run_llm_route_autopilot":
-                from modstore_server.llm_runtime_autopilot import (
-                    reconcile_llm_route_autopilot,
-                )
+                from modstore_server.llm_runtime_autopilot import reconcile_llm_route_autopilot
 
                 return await reconcile_llm_route_autopilot(
                     triggered_by=str(input_data.get("reason") or "employee:llm-ops-engineer"),

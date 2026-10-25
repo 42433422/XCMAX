@@ -5,10 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from modstore_server.api.config import (
-    _configured_repo_path,
-    api_export_fhd_shell_mods,
-)
+from modstore_server.api.config import _configured_repo_path, api_export_fhd_shell_mods
 from modstore_server.api.dto import ExportFhdShellDTO
 
 

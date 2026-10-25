@@ -26,7 +26,7 @@ class PreparedTaskGroup:
 def validated_check_units(
     req: dict[str, Any],
 ) -> tuple[list[dict[str, Any]], str, dict[str, Any] | None]:
-    from modstore_server.para_delegate_handler_part03 import _independent_check_plan
+    from modstore_server.para_delegate_handler import _independent_check_plan
 
     try:
         units, revision = _independent_check_plan(req) if not req.get("para_task_id") else ([], "")

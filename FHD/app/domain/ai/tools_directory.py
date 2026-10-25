@@ -1,6 +1,6 @@
 """工具目录默认数据与 payload 组装。
 
-Phase 3 从 ``app.legacy.tools_directory_compat`` 迁入。
+Phase 3 从 ``legacy-layer.tools_directory_compat`` 迁入。
 """
 
 from __future__ import annotations

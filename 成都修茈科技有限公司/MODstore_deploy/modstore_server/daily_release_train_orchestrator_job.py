@@ -201,9 +201,7 @@ def run_daily_release_train_orchestrator_job(
             "reason": "MODSTORE_DAILY_ORCHESTRATOR_DIGEST_MODE=off",
         }
 
-    from modstore_server.daily_vibe_line_execute_job import (
-        find_digest_record_for_execute,
-    )
+    from modstore_server.daily_vibe_line_execute_job import find_digest_record_for_execute
     from modstore_server.digest_daily_line_chain import (
         execute_installer_employee_chain,
         execute_phase_b_line_chain,
@@ -239,9 +237,7 @@ def run_daily_release_train_orchestrator_job(
         )
     elif mode in ("primary", "digest") and not force:
         try:
-            from modstore_server.daily_orchestrator_job import (
-                run_daily_orchestrator_job,
-            )
+            from modstore_server.daily_orchestrator_job import run_daily_orchestrator_job
 
             orch = run_daily_orchestrator_job(bypass_digest_gate=True)
             result["daily_orchestrator"] = orch
@@ -308,9 +304,7 @@ def run_daily_release_train_orchestrator_job(
 
     # daily-digest 完成后触发战略层集成（失败 review / installer+major 战略复盘）
     try:
-        from modstore_server.digest_daily_line_chain import (
-            trigger_strategic_layer_dispatch,
-        )
+        from modstore_server.digest_daily_line_chain import trigger_strategic_layer_dispatch
 
         result["strategic_layer"] = trigger_strategic_layer_dispatch(
             rid,
@@ -324,9 +318,7 @@ def run_daily_release_train_orchestrator_job(
 
     # 行动条目 → 战略层镜像（复用上一步 decision_id；日常成功日由 bridge 自建追踪决策）
     try:
-        from modstore_server.strategic_layer.digest_strategic_bridge import (
-            sync_daily_to_strategic,
-        )
+        from modstore_server.strategic_layer.digest_strategic_bridge import sync_daily_to_strategic
 
         sl = result.get("strategic_layer") or {}
         result["strategic_action_bridge"] = sync_daily_to_strategic(

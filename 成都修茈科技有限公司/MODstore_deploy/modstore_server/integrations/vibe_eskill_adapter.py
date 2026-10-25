@@ -24,9 +24,7 @@ def _resolve_provider_model(logic: Dict[str, Any], user_id: int) -> Dict[str, st
     if prov and mdl:
         return {"provider": prov, "model": mdl}
     try:
-        from modstore_server.integrations.vibe_action_handlers import (
-            _safe_resolve_provider_model,
-        )
+        from modstore_server.integrations.vibe_action_handlers import _safe_resolve_provider_model
 
         return _safe_resolve_provider_model(int(user_id or 0), prov, mdl)
     except RECOVERABLE_ERRORS:  # pragma: no cover
@@ -61,9 +59,7 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
     if not raw:
         return None
     try:
-        from modstore_server.employee_executor import (
-            _trusted_system_burn_in_project_root,
-        )
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
         from modstore_server.integrations.vibe_adapter import ensure_within_workspace
 
         trusted = _trusted_system_burn_in_project_root(
@@ -97,10 +93,7 @@ def execute_vibe_code_kind(
         project_root: str             可选;合法工作区路径;用于项目分析/文档生成 Skill
     """
     try:
-        from modstore_server.integrations.vibe_adapter import (
-            VibeIntegrationError,
-            get_vibe_coder,
-        )
+        from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
     except ImportError as exc:  # pragma: no cover
         return {
             "eskill_logic_type": "vibe_code",
@@ -282,10 +275,7 @@ def execute_vibe_workflow_kind(
     返回 ``vibe_workflow_run`` 包含 vibe-coding 的 :class:`WorkflowRunResult`。
     """
     try:
-        from modstore_server.integrations.vibe_adapter import (
-            VibeIntegrationError,
-            get_vibe_coder,
-        )
+        from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
     except ImportError as exc:  # pragma: no cover
         return {
             "eskill_logic_type": "vibe_workflow",

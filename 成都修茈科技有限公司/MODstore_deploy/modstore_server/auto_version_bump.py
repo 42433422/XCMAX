@@ -369,9 +369,7 @@ def auto_version_bump(project_root: str) -> Dict[str, Any]:
         logger.warning("failed to write release/VERSION")
 
     try:
-        from modstore_server.employee_change_request_service import (
-            defer_write_as_change_request,
-        )
+        from modstore_server.employee_change_request_service import defer_write_as_change_request
         from modstore_server.integrations.ops_action_handlers import repo_root
 
         root = str(repo_root())

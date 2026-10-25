@@ -86,13 +86,9 @@ from modstore_server.multimodal_llm import (
 from modstore_server.pptx_export import build_pptx_from_markdown
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter(prefix="/api/llm", tags=["llm"])
 
-_BYOK_PLAN_IDS = {"plan_pro", "plan_enterprise"}
-
-
-from modstore_server.llm_api_part01 import (
+from modstore_server.llm_api_merged import (
     resolve_default_llm_route as resolve_default_llm_route,
     _membership_meta as _membership_meta,
     _active_plan_id as _active_plan_id,
@@ -100,12 +96,6 @@ from modstore_server.llm_api_part01 import (
     _provider_labels as _provider_labels,
     llm_status as llm_status,
     resolve_chat_default as resolve_chat_default,
-)
-
-_CATALOG_PROVIDER_TIMEOUT_SEC = 12.0
-
-
-from modstore_server.llm_api_part02 import (
     _fetch_catalog_provider_block as _fetch_catalog_provider_block,
     llm_catalog as llm_catalog,
     PlatformRuntimeRouteDTO as PlatformRuntimeRouteDTO,
@@ -141,10 +131,6 @@ from modstore_server.llm_api_part02 import (
     llm_admin_apply_official_markup as llm_admin_apply_official_markup,
     llm_admin_disable_pricing as llm_admin_disable_pricing,
     llm_conversations as llm_conversations,
-)
-
-
-from modstore_server.llm_api_part03 import (
     llm_conversation_detail as llm_conversation_detail,
     llm_usage as llm_usage,
     ChatMessageDTO as ChatMessageDTO,
@@ -158,3 +144,8 @@ from modstore_server.llm_api_part03 import (
     llm_video as llm_video,
     llm_pptx as llm_pptx,
 )
+
+_BYOK_PLAN_IDS = {"plan_pro", "plan_enterprise"}
+
+
+_CATALOG_PROVIDER_TIMEOUT_SEC = 12.0

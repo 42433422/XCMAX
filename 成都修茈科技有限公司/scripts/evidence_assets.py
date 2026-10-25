@@ -29,6 +29,67 @@ MEDIA = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov"}
 SECTIONS = ("retained_sources", "source_aliases", "assets")
 
 
+
+@lru_cache(maxsize=1)
+def archive_manifest_index() -> dict[str, dict]:
+    """Map repo-relative evidence paths to archive metadata.
+
+    Supports both MANIFEST shapes used by hygiene trains:
+    - dict path -> {sha256, size}
+    - list of {path, sha256, bytes}
+    See FHD/docs/evidence/ARCHIVE_POINTER.md.
+    """
+    roots: list[Path] = []
+    env = os.environ.get("XCMAX_ARCHIVE_ROOT")
+    if env:
+        roots.append(Path(env))
+    roots.append(Path.home() / "XCMAX-archives")
+    # Committed manifests travel with the repo so CI can verify without blobs.
+    index: dict[str, dict] = {}
+    in_repo = []
+    # ROOT may not be defined yet at function definition time; resolve relative to this file.
+    repo_root = Path(__file__).resolve().parents[2]
+    in_repo_dir = repo_root / "FHD" / "docs" / "evidence" / "archives"
+    if in_repo_dir.is_dir():
+        roots.append(in_repo_dir)
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for man in sorted(root.glob("evidence-bulk-*/MANIFEST.json")):
+            try:
+                data = json.loads(man.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            batch = data.get("batch") or man.parent.name
+            files = data.get("files") or []
+            if isinstance(files, dict):
+                iterable = [
+                    (rel, meta.get("sha256"), meta.get("bytes", meta.get("size", 0)))
+                    for rel, meta in files.items()
+                    if isinstance(meta, dict)
+                ]
+            else:
+                iterable = [
+                    (
+                        item.get("path"),
+                        item.get("sha256"),
+                        item.get("bytes", item.get("size", 0)),
+                    )
+                    for item in files
+                    if isinstance(item, dict)
+                ]
+            for rel, sha, nbytes in iterable:
+                rel_s = str(rel or "").replace("\\", "/")
+                if not rel_s or not sha:
+                    continue
+                index[rel_s] = {
+                    "sha256": sha,
+                    "bytes": int(nbytes or 0),
+                    "batch": batch,
+                    "archive_path": str(man.parent / rel_s),
+                }
+    return index
+
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -103,37 +164,159 @@ def resolve_source(root: Path, rel: str) -> Path:
     return inside(root, entry["source"] if entry else rel)
 
 
+def readable_evidence_source(root: Path, entry: dict) -> Path | None:
+    """Return a readable path for an evidence entry, or None when only the archive
+    MANIFEST verifies the bytes (CI without archive blobs mounted).
+    """
+    rel = relative(entry["source"])
+    source = inside(root, rel)
+    if source.is_file():
+        return source
+    meta = archive_manifest_index().get(rel)
+    if not meta or meta.get("sha256") != entry["sha256"]:
+        raise ValueError(f"missing original evidence: {entry['source']}")
+    if int(meta.get("bytes") or 0) != int(entry["size"]):
+        raise ValueError(f"archived evidence size mismatch: {entry['source']}")
+    archive_path = Path(meta["archive_path"])
+    if archive_path.is_file():
+        return archive_path
+    return None
+
+
+
+def _pinned_entry(root: Path, rel: str) -> dict | None:
+    """Find a materialization entry for a repo-relative evidence path or public alias."""
+    data = load(root)
+    norm = rel.replace("\\", "/")
+    prefix = PUBLIC + "/"
+    if norm.startswith(prefix):
+        entry = data.get("assets", {}).get(norm[len(prefix):])
+        if entry:
+            return entry
+    entry = data.get("source_aliases", {}).get(norm)
+    if entry:
+        return entry
+    for section in SECTIONS:
+        for _name, ent in (data.get(section) or {}).items():
+            src = str(ent.get("source") or "").replace("\\", "/")
+            if src == norm:
+                return ent
+    return None
+
+
+def evidence_file_state(root: Path, rel: str) -> dict:
+    """Return availability for an evidence path without requiring archive blobs.
+
+    ``exists`` is True when bytes are readable locally OR the committed archive
+    MANIFEST (+ materialization pin when present) verifies the checksum. CI
+    checkouts without mounted blobs must keep the same verified/pending status
+    as a full archive mount.
+    """
+    empty = {"exists": False, "path": None, "sha256": None, "size": None}
+    if not rel or "://" in rel.split(":", 1)[0]:
+        return empty
+    try:
+        path = resolve_source(root, rel)
+    except ValueError:
+        return empty
+    if path.is_file():
+        return {
+            "exists": True,
+            "path": path,
+            "sha256": digest(path),
+            "size": path.stat().st_size,
+        }
+    try:
+        norm = relative(rel.replace("\\", "/"))
+    except ValueError:
+        return empty
+    entry = _pinned_entry(root, norm)
+    archive_key = relative(entry["source"]) if entry else norm
+    meta = archive_manifest_index().get(archive_key)
+    if entry:
+        if not meta or meta.get("sha256") != entry["sha256"]:
+            return empty
+        if int(meta.get("bytes") or 0) != int(entry["size"]):
+            return empty
+        archive_path = Path(meta["archive_path"])
+        return {
+            "exists": True,
+            "path": archive_path if archive_path.is_file() else None,
+            "sha256": entry["sha256"],
+            "size": int(entry["size"]),
+        }
+    if meta and meta.get("sha256"):
+        archive_path = Path(meta["archive_path"])
+        return {
+            "exists": True,
+            "path": archive_path if archive_path.is_file() else None,
+            "sha256": meta["sha256"],
+            "size": int(meta.get("bytes") or 0),
+        }
+    return empty
+
+
 def verified_sources(root: Path, data: dict) -> dict[str, Path]:
     sources = {}
+    archived = 0
+    archive_index = archive_manifest_index()
     for name, entry in entries(data).items():
         source = inside(root, entry["source"])
+        rel = relative(entry["source"])
         if source not in sources:
-            if not source.is_file():
-                raise ValueError(f"missing original evidence: {entry['source']} (alias {name})")
-            sources[source] = (source.stat().st_size, digest(source))
+            if source.is_file():
+                sources[source] = (source.stat().st_size, digest(source))
+            else:
+                meta = archive_index.get(rel)
+                if not meta or meta.get("sha256") != entry["sha256"]:
+                    raise ValueError(
+                        f"missing original evidence: {entry['source']} (alias {name})"
+                    )
+                if int(meta.get("bytes") or 0) != int(entry["size"]):
+                    raise ValueError(
+                        f"archived evidence size mismatch: {entry['source']}"
+                    )
+                # Treat as verified via external archive (not present in git tree).
+                sources[source] = (int(entry["size"]), entry["sha256"])
+                archived += 1
         if sources[source] != (entry["size"], entry["sha256"]):
             raise ValueError(f"original evidence checksum mismatch: {entry['source']}")
+    if archived:
+        print(f"[evidence-assets] INFO: {archived} originals verified via XCMAX-archives manifests")
     return {name: inside(root, entry["source"]) for name, entry in data["assets"].items()}
 
 
 def materialize(root: Path = ROOT, destination: Path | None = None) -> int:
     data = load(root)
-    sources = verified_sources(root, data)  # Verify all inputs before creating output.
+    verified_sources(root, data)  # Verify all inputs before creating output.
     publications = data["assets"]
     if destination is not None:
         publications = {**publications, **data["retained_sources"]}
-        sources.update({name: inside(root, entry["source"]) for name, entry in data["retained_sources"].items()})
     output = destination or inside(root, PUBLIC)
     if output.is_symlink():
         raise ValueError("evidence output must not be a symlink")
     output.mkdir(parents=True, exist_ok=True)
-    for name, source in sources.items():
-        copy_verified(source, inside(output, name), publications[name])
+    published = 0
+    skipped = 0
+    for name, entry in publications.items():
+        source = readable_evidence_source(root, entry)
+        if source is None:
+            # Manifest-verified historical media: capability-center serves via COS;
+            # CI without archive mounts skips local publication of those bytes.
+            skipped += 1
+            continue
+        copy_verified(source, inside(output, name), entry)
+        published += 1
+    if skipped:
+        print(
+            f"[evidence-assets] INFO: skipped {skipped} archive-only assets "
+            "(manifest-verified; blob not mounted)"
+        )
     # Reviewed records keep their original paths and checksums. Reconstruct that
     # layout for historical scripts without changing or re-certifying the records.
     if destination is None:
         materialize_sources(root, data)
-    return len(sources) + (len(data.get("source_aliases", {})) if destination is None else 0)
+    return published + (len(data.get("source_aliases", {})) if destination is None else 0)
 
 
 def materialize_sources(root: Path = ROOT, verified: dict | None = None) -> int:

@@ -166,10 +166,7 @@ async def chat_dispatch_via_session(
     if uid > 0 and result.get("ok"):
         # 统一计费：按 token 算出 ¥ 金额从钱包扣（计次配额已退役）。
         try:
-            from modstore_server.llm_billing import (
-                calculate_charge,
-                usage_from_response,
-            )
+            from modstore_server.llm_billing import calculate_charge, usage_from_response
             from modstore_server.quota_middleware import consume_llm_credit
 
             usage = usage_from_response(

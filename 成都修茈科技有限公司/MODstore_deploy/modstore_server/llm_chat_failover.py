@@ -13,10 +13,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_failure_classifier import (
-    is_quota_or_billing_failure,
-    is_transient_failure,
-)
+from modstore_server.llm_failure_classifier import is_quota_or_billing_failure, is_transient_failure
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, resolve_api_key
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

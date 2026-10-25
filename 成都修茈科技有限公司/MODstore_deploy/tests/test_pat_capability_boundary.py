@@ -177,10 +177,7 @@ def test_jwt_user_authority_is_unchanged(pat_case, uid, expected):
 def test_pat_rejection_covers_direct_admin_and_alternate_user_dependencies(
     pat_case, path, method, body, monkeypatch
 ):
-    from modstore_server import (
-        customer_issue_shared_release,
-        production_line_orchestrator,
-    )
+    from modstore_server import customer_issue_shared_release, production_line_orchestrator
 
     forbidden = [
         Mock(side_effect=AssertionError("protected business action reached")) for _ in range(3)
@@ -261,10 +258,7 @@ def test_scoped_mod_sync_pat_keeps_scope_and_csrf_boundaries(
 
 
 def test_pat_identity_preserves_scopes_without_generic_user_access(pat_case):
-    from modstore_server.application.auth import (
-        AuthApplicationService,
-        ScopeAuthorizationError,
-    )
+    from modstore_server.application.auth import AuthApplicationService, ScopeAuthorizationError
 
     _, sessions, _, _ = pat_case
     token = _pat(sessions, ["mod:sync"])

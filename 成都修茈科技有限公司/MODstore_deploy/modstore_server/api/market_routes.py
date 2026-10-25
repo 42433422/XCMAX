@@ -1,9 +1,9 @@
 # isort: skip_file
 # ruff: noqa: E402, F401
+
 """XC AGI 在线市场 API：认证、钱包、购买、个人商店。"""
 
 from __future__ import annotations
-
 import hashlib
 import json
 import os
@@ -13,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any, List, Optional
-
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -27,7 +26,6 @@ from fastapi import (
     UploadFile,
 )
 from pydantic import BaseModel, Field
-
 from modstore_server import account_level_service, catalog_sync
 from modstore_server.account_lifecycle import (
     ACCOUNT_ACTIVE,
@@ -48,10 +46,7 @@ from modstore_server.auth_service import (
     register_user,
     verify_password,
 )
-from modstore_server.duty_roster import (
-    employee_partition_meta,
-    is_planned_duty_employee_pack,
-)
+from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
 from modstore_server.email_service import (
     assert_email_outbound_configured,
     find_user_by_email,
@@ -80,13 +75,13 @@ from modstore_server.market_shared import (
 )
 
 router = APIRouter(prefix="/api", tags=["market"])
-
-# ── Auth helpers (legacy aliases) ───────────────────────────────
 _get_current_user = get_current_user
 _require_admin = require_admin
-
-
-from modstore_server.api.market_routes_part01 import (
+from modstore_server.api.market_enterprise_identity import (
+    EnterpriseIdentityDTO as EnterpriseIdentityDTO,
+    api_admin_verify_enterprise_identity as api_admin_verify_enterprise_identity,
+)
+from modstore_server.api.market_routes_merged import (
     _enterprise_assignable_mod_ids as _enterprise_assignable_mod_ids,
     _assert_enterprise_assignable_mod_id as _assert_enterprise_assignable_mod_id,
     _user_mod_ids_map as _user_mod_ids_map,
@@ -125,10 +120,6 @@ from modstore_server.api.market_routes_part01 import (
     api_admin_reset_user_password as api_admin_reset_user_password,
     api_refresh_token as api_refresh_token,
     api_admin_status as api_admin_status,
-)
-
-
-from modstore_server.api.market_routes_part02 import (
     api_wallet_balance as api_wallet_balance,
     api_wallet_recharge as api_wallet_recharge,
     _admin_self_credit_cap as _admin_self_credit_cap,
@@ -156,10 +147,6 @@ from modstore_server.api.market_routes_part02 import (
     api_my_store as api_my_store,
     _catalog_files_dir as _catalog_files_dir,
     _upload_chunks_dir as _upload_chunks_dir,
-)
-
-
-from modstore_server.api.market_routes_part03 import (
     _existing_child_file as _existing_child_file,
     _existing_upload_session as _existing_upload_session,
     _catalog_suffix as _catalog_suffix,
@@ -183,10 +170,6 @@ from modstore_server.api.market_routes_part03 import (
     api_admin_align_single_employee_llm_to_auto as api_admin_align_single_employee_llm_to_auto,
     api_admin_purge_all_employee_packs as api_admin_purge_all_employee_packs,
     api_admin_purge_all_mods as api_admin_purge_all_mods,
-)
-
-
-from modstore_server.api.market_routes_part04 import (
     api_admin_list_users as api_admin_list_users,
     api_admin_set_admin_status as api_admin_set_admin_status,
     api_admin_set_enterprise_status as api_admin_set_enterprise_status,
@@ -202,12 +185,5 @@ from modstore_server.api.market_routes_part04 import (
     api_wallet_overview as api_wallet_overview,
     api_package_audit as api_package_audit,
 )
-
-from modstore_server.api.market_enterprise_identity import (
-    EnterpriseIdentityDTO as EnterpriseIdentityDTO,
-    api_admin_verify_enterprise_identity as api_admin_verify_enterprise_identity,
-)
-
-# ── Init on import ──────────────────────────────────────────
 
 init_db()

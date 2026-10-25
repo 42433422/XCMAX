@@ -216,9 +216,7 @@ async def build_employee_quality_report(
 ) -> Dict[str, Any]:
     """对单个员工包目录执行 validate + 六维汇总；use_llm 时调用 hex-quality-assessor。"""
     from modstore_server.employee_six_dimension import compute_six_dimension_report
-    from modstore_server.employee_six_dimension_llm import (
-        enrich_six_dimension_report_with_llm,
-    )
+    from modstore_server.employee_six_dimension_llm import enrich_six_dimension_report_with_llm
 
     pipeline_label = pipeline_label_from_pack(pack_dir, brief)
     val = await run_pack_validate(pack_dir=pack_dir, brief=brief)

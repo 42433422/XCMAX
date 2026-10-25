@@ -155,9 +155,7 @@ async def start_versioned_main_run(
     assert_owner_source(user_id, str(evidence.get("suggested_id") or ""))
     _, provenance = release_source()
     session_id = uuid.uuid4().hex[:24]
-    from modstore_server.customer_delivery_build import (
-        versioned_sunbird_probe_runtime_identity,
-    )
+    from modstore_server.customer_delivery_build import versioned_sunbird_probe_runtime_identity
 
     runtime_identity = versioned_sunbird_probe_runtime_identity(provenance)
     scope = create_private_source_scope(user_id, session_id, ticket_id)
@@ -236,9 +234,7 @@ async def start_versioned_main_run(
             )
             step = "signed_probe"
             await workbench._set_step(session_id, "signed_probe", "running")
-            from modstore_server.customer_delivery_build import (
-                run_versioned_sunbird_probe,
-            )
+            from modstore_server.customer_delivery_build import run_versioned_sunbird_probe
 
             probe_report = await asyncio.to_thread(
                 run_versioned_sunbird_probe, signed, runtime_identity

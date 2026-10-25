@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- 工程债收口：合并 Mod 商店机械拆分文件、外置大体积验收媒体、压缩巨型矩阵测试，并诚实安置工具契约样例；结构门禁加严。用户侧功能与操作路径不变。
 - 架构分层收口：领域端口归位、对话/出货/产品领域服务归域，并收紧结构门禁（用户无感）。
 （1.0.0.6 候选，尚未发布）
 - CodeQL 本地路径屏障包改用标准 qlpack.yml（无 dependencies 的 model pack），经 init `packs: +./...` 挂载；`_validated_path_component` 改为返回 `re.fullmatch(...).group(0)`，三处 dir_fd sink 同步 `codeql[py/path-injection]` 抑制，收口 shipment ETL py/path-injection 高危告警。

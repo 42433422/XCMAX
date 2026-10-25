@@ -31,40 +31,22 @@ import secrets
 from datetime import UTC, datetime, timezone  # noqa: F401
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Query,
-    UploadFile,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
-from modstore_server.models import (
-    ScriptWorkflow,
-    ScriptWorkflowRun,
-    ScriptWorkflowVersion,
-    User,
-)
+from modstore_server.models import ScriptWorkflow, ScriptWorkflowRun, ScriptWorkflowVersion, User
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief
 from modstore_server.script_agent.llm_client import RealLlmClient
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox as run_in_sandbox
-from modstore_server.script_workflow_models import (
-    CommitSessionBody,
-)
+from modstore_server.script_workflow_models import CommitSessionBody
 from modstore_server.script_workflow_models import EditWithAiBody as EditWithAiBody
-from modstore_server.script_workflow_models import (
-    FeedbackBody,
-    UpdateWorkflowBody,
-)
+from modstore_server.script_workflow_models import FeedbackBody, UpdateWorkflowBody
 from modstore_server.script_workflow_models import WorkflowSummary as WorkflowSummary
 from modstore_server.workbench_script_runner import DEFAULT_SCRIPT_AGENT_ITERATIONS
 

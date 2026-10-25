@@ -268,9 +268,7 @@ def execute_installer_employee_chain(
                 }
                 # 即时门禁不过 → 自动回滚闭环（回退上一稳定版 + 告警 + 落 OpsStagedChange 复盘待审）
                 try:
-                    from modstore_server.auto_rollback import (
-                        auto_rollback_on_gate_failure,
-                    )
+                    from modstore_server.auto_rollback import auto_rollback_on_gate_failure
 
                     block["rollback"] = auto_rollback_on_gate_failure(
                         gate="FASTGATE",

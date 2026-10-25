@@ -136,12 +136,7 @@ def test_admin_approve_refund_dispatches_webhook(client, tmp_path, monkeypatch, 
     order_no = _create_paid_order(
         tmp_path, monkeypatch, user.id, f"RF-PYTEST-APPROVE-{uuid.uuid4().hex[:8]}"
     )
-    from modstore_server import (
-        alipay_service,
-        refund_api,
-        webhook_api,
-        webhook_dispatcher,
-    )
+    from modstore_server import alipay_service, refund_api, webhook_api, webhook_dispatcher
     from modstore_server.app import app
 
     app.dependency_overrides[refund_api._get_current_user] = lambda: user

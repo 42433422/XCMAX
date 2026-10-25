@@ -52,8 +52,7 @@ from modstore_server.api.app_metadata import OPENAPI_TAGS as _OPENAPI_TAGS
 
 logger = logging.getLogger(__name__)
 
-
-from modstore_server.api.app_factory_part01 import (
+from modstore_server.api.app_factory_merged import (
     _include_optional as _include_optional,
     _iter_route_method_signatures as _iter_route_method_signatures,
     _include_router_without_method_conflicts as _include_router_without_method_conflicts,
@@ -61,6 +60,9 @@ from modstore_server.api.app_factory_part01 import (
     _init_event_subscribers as _init_event_subscribers,
     _init_background_jobs as _init_background_jobs,
     _register_core_routes as _register_core_routes,
+    _register_optional_routes as _register_optional_routes,
+    _register_diagnostics as _register_diagnostics,
+    create_app as create_app,
 )
 
 _FULL_OPTIONAL_MODULES = (
@@ -148,11 +150,5 @@ _LLM_ONLY_OPTIONAL_MODULES = (
     "modstore_server.health_api",
 )
 
-
-from modstore_server.api.app_factory_part02 import (
-    _register_optional_routes as _register_optional_routes,
-    _register_diagnostics as _register_diagnostics,
-    create_app as create_app,
-)
 
 __all__ = ["AppConfig", "create_app", "load_default_config"]

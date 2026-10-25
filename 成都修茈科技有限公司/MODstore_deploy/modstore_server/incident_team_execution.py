@@ -341,9 +341,7 @@ def project_team(event_id: int) -> dict[str, Any]:
                 )
                 record_worker_repair(db, ticket, event_id, rows)
                 if claim.get("follow_ups"):
-                    from modstore_server.incident_team_dispatch import (
-                        _write_repair_loop,
-                    )
+                    from modstore_server.incident_team_dispatch import _write_repair_loop
 
                     _write_repair_loop(db, ticket, event_id, claim["follow_ups"])
                 payload["_cs_progress"] = {

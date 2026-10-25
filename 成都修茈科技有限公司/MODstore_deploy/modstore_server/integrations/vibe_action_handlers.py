@@ -145,9 +145,7 @@ def vibe_edit_handler(
         or ""
     )
     try:
-        from modstore_server.employee_executor import (
-            _trusted_system_burn_in_project_root,
-        )
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
 
         trusted = _trusted_system_burn_in_project_root(
             raw_root,
@@ -275,9 +273,7 @@ def vibe_heal_handler(
         or ""
     )
     try:
-        from modstore_server.employee_executor import (
-            _trusted_system_burn_in_project_root,
-        )
+        from modstore_server.employee_executor import _trusted_system_burn_in_project_root
 
         trusted = _trusted_system_burn_in_project_root(
             raw_root,
@@ -362,10 +358,7 @@ def vibe_code_handler(
         provider/model     可选
     """
     try:
-        from modstore_server.integrations.vibe_adapter import (
-            VibeIntegrationError,
-            get_vibe_coder,
-        )
+        from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
     except ImportError as exc:  # pragma: no cover
         return {
             "handler": "vibe_code",

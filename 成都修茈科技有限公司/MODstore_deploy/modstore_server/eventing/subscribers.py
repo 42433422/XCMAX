@@ -88,10 +88,7 @@ def _on_payment_paid(event: DomainEvent) -> None:
     if not user_id:
         return
     try:
-        from modstore_server.notification_service import (
-            NotificationType,
-            create_notification,
-        )
+        from modstore_server.notification_service import NotificationType, create_notification
     except RECOVERABLE_ERRORS:
         logger.exception("notification subscriber failed to import service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()
@@ -305,10 +302,7 @@ def _on_refund_outcome(event: DomainEvent) -> None:
     if not user_id:
         return
     try:
-        from modstore_server.notification_service import (
-            NotificationType,
-            create_notification,
-        )
+        from modstore_server.notification_service import NotificationType, create_notification
     except RECOVERABLE_ERRORS:
         logger.exception("refund subscriber failed to import notification service")
         EVENT_PUBLISHED_TOTAL.labels(event.event_name, "subscriber_error").inc()

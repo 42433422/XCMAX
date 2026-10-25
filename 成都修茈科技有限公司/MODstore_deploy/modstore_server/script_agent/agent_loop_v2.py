@@ -7,10 +7,7 @@ import importlib
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from modstore_server.script_agent.brief import AgentEvent, Brief
-from modstore_server.script_agent.llm_client import (
-    SCRIPT_AGENT_CODE_MAX_TOKENS,
-    LlmClient,
-)
+from modstore_server.script_agent.llm_client import SCRIPT_AGENT_CODE_MAX_TOKENS, LlmClient
 from modstore_server.script_agent.sandbox_runner import run_in_sandbox
 
 DEFAULT_MAX_ITERATIONS = 4

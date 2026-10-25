@@ -52,10 +52,7 @@ async def run_vibe_agent_loop(
     _facade()._merge_script_sandbox_policy_kwargs(brief, sandbox_kwargs)
     trace: List[Dict[str, Any]] = []
     try:
-        from modstore_server.integrations.vibe_adapter import (
-            VibeIntegrationError,
-            get_vibe_coder,
-        )
+        from modstore_server.integrations.vibe_adapter import VibeIntegrationError, get_vibe_coder
     except ImportError as exc:
         outcome = _facade().AgentLoopOutcome(
             ok=False, iterations=0, error=f"integrations 未导入: {exc}", trace=trace

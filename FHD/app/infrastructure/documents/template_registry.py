@@ -1,6 +1,6 @@
 """Builtin 文档模板注册表(销售合同 / 价目表默认模板)。
 
-Phase 3B 从 ``app.legacy.document_template_service`` 吸收而来。
+Phase 3B 从 ``legacy-layer.document_template_service`` 吸收而来。
 """
 
 from __future__ import annotations

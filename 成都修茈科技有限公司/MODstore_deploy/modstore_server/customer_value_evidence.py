@@ -21,13 +21,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from modstore_server import payment_orders
 from modstore_server.customer_value_classification import amount_cents as _amount_cents
-from modstore_server.customer_value_classification import (
-    classify_payment_order,
-)
+from modstore_server.customer_value_classification import classify_payment_order
 from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
-from modstore_server.customer_value_classification import (
-    payment_amount_cents,
-)
+from modstore_server.customer_value_classification import payment_amount_cents
 from modstore_server.customer_value_classification import sanitize_evidence as _sanitize_evidence
 from modstore_server.customer_value_classification import text as _text
 from modstore_server.customer_value_lifecycle import build_customer_lifecycle
