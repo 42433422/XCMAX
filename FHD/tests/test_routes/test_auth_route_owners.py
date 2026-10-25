@@ -19,7 +19,7 @@ from app.fastapi_routes.domains.auth.session_routes import SessionRoutes
 
 def test_auth_package_loads_compatibility_routes_only_when_requested(monkeypatch):
     name = "_auth_domain_export_test"
-    root_name = f"{name}.routes"
+    root_name = f"{name}.auth_routes"  # debt19: routes.py → auth_routes.py; package.routes still lazy-loads
     loaded = []
 
     class SyntheticRoutes(importlib.abc.MetaPathFinder, importlib.abc.Loader):
