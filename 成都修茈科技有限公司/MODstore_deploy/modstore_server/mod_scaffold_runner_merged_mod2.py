@@ -75,9 +75,7 @@ async def run_employee_ai_scaffold_async(
             "ok": False,
             "error": "Word 生成必须走资产/direct_python 管线；请在工作台重新制作员工（勿使用 LLM 通用脚手架）",
         }
-    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(
-        db, user, provider, model
-    )
+    prov, mdl, err = await _facade().resolve_llm_provider_model_auto(db, user, provider, model)
     if err:
         return {"ok": False, "error": err}
     api_key, _ = _facade().resolve_api_key(db, user.id, prov)
@@ -97,9 +95,7 @@ async def run_employee_ai_scaffold_async(
     )
     if not result.get("ok"):
         return {"ok": False, "error": result.get("error") or "upstream error"}
-    manifest, perr = _facade().parse_employee_pack_llm_json(
-        str(result.get("content") or "")
-    )
+    manifest, perr = _facade().parse_employee_pack_llm_json(str(result.get("content") or ""))
     if perr or not manifest:
         return {"ok": False, "error": perr or "无法解析模型输出"}
     from modstore_server.employee_ai_scaffold import (
@@ -113,12 +109,8 @@ async def run_employee_ai_scaffold_async(
         else {}
     )
     _cognition = _v2.get("cognition") if isinstance(_v2.get("cognition"), dict) else {}
-    _skills = (
-        _cognition.get("skills") if isinstance(_cognition.get("skills"), list) else []
-    )
-    _emp = (
-        manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
-    )
+    _skills = _cognition.get("skills") if isinstance(_cognition.get("skills"), list) else []
+    _emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
     _label = str(_emp.get("label") or manifest.get("name") or "").strip()
     _desc = str(manifest.get("description") or "").strip()
     _poor_briefs = sum(
@@ -169,9 +161,7 @@ async def run_employee_ai_scaffold_async(
                     _v2["cognition"] = _cognition
                     manifest["employee_config_v2"] = _v2
         except RECOVERABLE_ERRORS:
-            _cognition["skills"] = _validate_skill_quality(
-                _skills, label=_label, description=_desc
-            )
+            _cognition["skills"] = _validate_skill_quality(_skills, label=_label, description=_desc)
             _v2["cognition"] = _cognition
             manifest["employee_config_v2"] = _v2
     pid = str(manifest.get("id") or "").strip()
@@ -191,9 +181,7 @@ async def run_employee_ai_scaffold_async(
     _facade().add_user_mod(user.id, dest.name)
     saved_package: _facade().Dict[str, _facade().Any] = {}
     if publish_to_catalog:
-        with _facade().tempfile.NamedTemporaryFile(
-            suffix=".xcemp", delete=False
-        ) as tmp:
+        with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
             tmp.write(raw_zip)
             pkg_tmp_path = _facade().Path(tmp.name)
         try:
@@ -247,9 +235,7 @@ async def register_mod_employee_packs_async(
     *,
     mod_dir: _facade().Path,
     workflow_results: _facade().List[_facade().Dict[str, _facade().Any]],
-    status_hook: _facade().Optional[
-        _facade().Callable[[str], _facade().Awaitable[None]]
-    ] = None,
+    status_hook: _facade().Optional[_facade().Callable[[str], _facade().Awaitable[None]]] = None,
     industry: str = "通用",
     wf_attach: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
     require_workflow_automation: bool = True,
@@ -299,10 +285,7 @@ async def register_mod_employee_packs_async(
         if not isinstance(entry, dict):
             continue
         label = str(
-            entry.get("label")
-            or entry.get("panel_title")
-            or entry.get("id")
-            or f"员工 {idx + 1}"
+            entry.get("label") or entry.get("panel_title") or entry.get("id") or f"员工 {idx + 1}"
         ).strip()
         catalog_pkg_id = str(entry.get("catalog_pkg_id") or "").strip()
         upstream_block = workflow_automation_block_reason(
@@ -326,9 +309,7 @@ async def register_mod_employee_packs_async(
         if catalog_pkg_id:
             if status_hook:
                 short = label[:24] + "…" if len(label) > 24 else label
-                await status_hook(
-                    f"第 {idx + 1}/{total} 名员工「{short}」：关联市场员工包…"
-                )
+                await status_hook(f"第 {idx + 1}/{total} 名员工「{short}」：关联市场员工包…")
             _facade().materialize_employee_pack_if_missing(catalog_pkg_id)
             row = (
                 db.query(CatalogItem)
@@ -412,9 +393,7 @@ async def register_mod_employee_packs_async(
             )
             continue
         summary = audit.get("summary") if isinstance(audit.get("summary"), dict) else {}
-        audit_manifest = (
-            audit.get("manifest") if isinstance(audit.get("manifest"), dict) else {}
-        )
+        audit_manifest = audit.get("manifest") if isinstance(audit.get("manifest"), dict) else {}
         classification = classify_audit_failure(audit)
         if summary and summary.get("pass") is False:
             errors.append(
@@ -427,17 +406,13 @@ async def register_mod_employee_packs_async(
             )
             continue
         if status_hook:
-            await status_hook(
-                f"第 {idx + 1}/{total} 名员工「{label[:16]}」：写入 Catalog…"
-            )
+            await status_hook(f"第 {idx + 1}/{total} 名员工「{label[:16]}」：写入 Catalog…")
         rec: _facade().Dict[str, _facade().Any] = {
             "id": pack_id,
             "name": str((audit.get("manifest") or {}).get("name") or label or pack_id),
             "version": str((audit.get("manifest") or {}).get("version") or "1.0.0"),
             "description": str(
-                (audit.get("manifest") or {}).get("description")
-                or entry.get("panel_summary")
-                or ""
+                (audit.get("manifest") or {}).get("description") or entry.get("panel_summary") or ""
             ),
             "artifact": "employee_pack",
             "industry": industry_name,
@@ -467,9 +442,7 @@ async def register_mod_employee_packs_async(
             continue
         tmp_path: _facade().Optional[_facade().Path] = None
         try:
-            with _facade().tempfile.NamedTemporaryFile(
-                suffix=".xcemp", delete=False
-            ) as tmp:
+            with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
                 tmp.write(raw)
                 tmp_path = _facade().Path(tmp.name)
             try:
@@ -512,10 +485,7 @@ async def register_mod_employee_packs_async(
         registered.append(item)
         if isinstance(workflow_results, list):
             for wf_item in workflow_results:
-                if (
-                    isinstance(wf_item, dict)
-                    and int(wf_item.get("workflow_index") or -1) == idx
-                ):
+                if isinstance(wf_item, dict) and int(wf_item.get("workflow_index") or -1) == idx:
                     wf_item["pack_register"] = {
                         "ok": True,
                         "pack_id": pack_id,
@@ -696,9 +666,7 @@ def patch_workflow_graph_employee_nodes(
     for idx, entry in enumerate(rows):
         if not isinstance(entry, dict):
             continue
-        wf_id = _facade()._parse_positive_int(
-            entry.get("workflow_id") or entry.get("workflowId")
-        )
+        wf_id = _facade()._parse_positive_int(entry.get("workflow_id") or entry.get("workflowId"))
         if not wf_id:
             patches.append({"workflow_index": idx, "skipped": "无 workflow_id"})
             continue
@@ -721,8 +689,8 @@ def patch_workflow_graph_employee_nodes(
                 }
             )
             continue
-        expected_pack_id, perr, _pack_manifest = (
-            _facade()._resolve_workflow_entry_pack_id(mod_dir, data, entry, idx)
+        expected_pack_id, perr, _pack_manifest = _facade()._resolve_workflow_entry_pack_id(
+            mod_dir, data, entry, idx
         )
         if perr or not expected_pack_id:
             patches.append(
@@ -755,9 +723,9 @@ def patch_workflow_graph_employee_nodes(
                 continue
             cfg["employee_id"] = expected_pack_id
             if not str(cfg.get("task") or "").strip():
-                cfg["task"] = str(
-                    entry.get("panel_summary") or "根据工作流上下文完成员工任务"
-                )[:400]
+                cfg["task"] = str(entry.get("panel_summary") or "根据工作流上下文完成员工任务")[
+                    :400
+                ]
             try:
                 first["node"].config = _facade().json.dumps(cfg, ensure_ascii=False)
                 db.commit()
@@ -832,9 +800,9 @@ def patch_workflow_graph_employee_nodes(
                 config=_facade().json.dumps(
                     {
                         "employee_id": expected_pack_id,
-                        "task": str(
-                            entry.get("panel_summary") or "根据工作流上下文完成员工任务"
-                        )[:400],
+                        "task": str(entry.get("panel_summary") or "根据工作流上下文完成员工任务")[
+                            :400
+                        ],
                     },
                     ensure_ascii=False,
                 ),
