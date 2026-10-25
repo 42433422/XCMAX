@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Request
 
+from app.application.admin_control.protocols import ErrorPolicy, JsonObject, LocalProxy, MarketProxy
 from app.fastapi_routes.mac_control_proxy import router as mac_control_router
 from app.fastapi_routes.xcmax_admin_auth import (
     admin_approver_from_session as _admin_approver_from_session,
@@ -44,7 +45,6 @@ from .admin_control.maintenance import SelfMaintenance
 from .admin_control.market_accounts import MarketAccounts
 from .admin_control.market_gateway import MarketGateway
 from .admin_control.operations import Operations
-from .admin_control.port_contracts import ErrorPolicy, JsonObject, LocalProxy, MarketProxy
 from .admin_control.profile_store import profile_repository
 from .admin_control.profiles import UserProfiles
 from .admin_control.routes import register_routes

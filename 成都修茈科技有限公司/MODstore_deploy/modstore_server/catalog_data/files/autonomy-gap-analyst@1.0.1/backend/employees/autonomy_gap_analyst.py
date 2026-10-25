@@ -11,7 +11,9 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     vendor_dir = Path(__file__).resolve().parents[1] / "vendor"
     if str(vendor_dir) not in sys.path:
         sys.path.insert(0, str(vendor_dir))
-    from autonomy_gap_analyst.autonomy_gap_analyst_convert import analyze_scorecard  # type: ignore[import-not-found]
+    from autonomy_gap_analyst.autonomy_gap_analyst_convert import (
+        analyze_scorecard,  # type: ignore[import-not-found]
+    )
 
     result = analyze_scorecard(dict(payload or {}))
     return {
