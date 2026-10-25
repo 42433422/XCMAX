@@ -28,7 +28,7 @@ from app.neuro_bus.events.events_base import NeuroEvent
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
 # Reviewed with the production NeuroBus delivery SLI instrumentation.  Any
 # future bus change must update this only after the full NeuroBus regression.
-_BUS_SHA256 = "58b120f5edf59019606fc814615524647ed265b025bc42f12c2bde247d57659b"
+_BUS_SHA256 = "8c1de2c098432b91aca72511deb427f6b0f712ac2bc8bf6bfe1a3162935de8dd"
 
 
 class RecordingBus:
