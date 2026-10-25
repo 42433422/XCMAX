@@ -1,22 +1,61 @@
-"""Re-export split modules (debt19). Includes private (_*) names."""
+"""Re-export split modules (debt19). Explicit names for mypy + private (_*)."""
 
 from __future__ import annotations
 
-from . import employee_executor_merged_mod1 as _split_0
-from . import employee_executor_merged_mod2 as _split_1
+from .employee_executor_merged_mod1 import (
+    _facade as _facade,
+    _emp_im_notify_boss as _emp_im_notify_boss,
+    _is_all_hands_cognition_context as _is_all_hands_cognition_context,
+    _build_all_hands_cognition_user_message as _build_all_hands_cognition_user_message,
+    _metric_task_preview as _metric_task_preview,
+    _flag_enabled as _flag_enabled,
+    _resolve_metric_user_id as _resolve_metric_user_id,
+    _executor_max_concurrent as _executor_max_concurrent,
+    _get_executor_semaphore as _get_executor_semaphore,
+    _executor_extra_cognition_retries as _executor_extra_cognition_retries,
+    _executor_detail_log_enabled as _executor_detail_log_enabled,
+    _is_transient_llm_error as _is_transient_llm_error,
+    _run_cognition_with_transient_retries as _run_cognition_with_transient_retries,
+    _get_section as _get_section,
+    _perception_excel as _perception_excel,
+    _extract_vision_data_urls as _extract_vision_data_urls,
+    _perception_image as _perception_image,
+    _memory_long_term_chroma as _memory_long_term_chroma,
+    _perception_real as _perception_real,
+    _perception_document as _perception_document,
+    _perception_web_rankings as _perception_web_rankings,
+    _PARA_FIRST_PLANNING_EMPLOYEES as _PARA_FIRST_PLANNING_EMPLOYEES,
+    _para_first_skip_cognition as _para_first_skip_cognition,
+    _memory_real as _memory_real,
+    _cognition_real as _cognition_real,
+    _cognition_sync as _cognition_sync,
+    _action_wechat_notify as _action_wechat_notify,
+    _action_openapi_tool as _action_openapi_tool,
+    _tpl_str as _tpl_str,
+    _tpl_obj as _tpl_obj,
+    _action_fhd_business as _action_fhd_business,
+    _merge_original_input_into_reasoning as _merge_original_input_into_reasoning,
+    _trusted_system_burn_in_project_root as _trusted_system_burn_in_project_root,
+    _trusted_system_duty_contract_execution as _trusted_system_duty_contract_execution,
+    _action_agent_runner as _action_agent_runner,
+    _employee_pack_extract_root as _employee_pack_extract_root,
+    _action_direct_python as _action_direct_python,
+    _prefer_para_with_local_fallback as _prefer_para_with_local_fallback,
+    _filter_handlers_vibe_coding_maintainer as _filter_handlers_vibe_coding_maintainer,
+    _actions_real as _actions_real,
+    _extract_token_count as _extract_token_count,
+    _auto_wrap_execution_result_to_change_requests as _auto_wrap_execution_result_to_change_requests,
+    _handlers_execution_ok as _handlers_execution_ok,
+    _handler_failure_detail as _handler_failure_detail,
+    _evaluate_employee_risk_gate as _evaluate_employee_risk_gate,
+)
 
-
-def _reexport(module) -> None:
-    g = globals()
-    for name, value in vars(module).items():
-        if name.startswith("__") and name.endswith("__"):
-            continue
-        g[name] = value
-
-
-_reexport(_split_0)
-_reexport(_split_1)
-
-del _reexport
-del _split_0
-del _split_1
+from .employee_executor_merged_mod2 import (
+    _execute_employee_phase_01 as _execute_employee_phase_01,
+    _execute_employee_phase_04 as _execute_employee_phase_04,
+    _execute_employee_phase_03 as _execute_employee_phase_03,
+    _execute_employee_phase_02 as _execute_employee_phase_02,
+    execute_employee_task as execute_employee_task,
+    get_employee_status as get_employee_status,
+    list_employees as list_employees,
+)
