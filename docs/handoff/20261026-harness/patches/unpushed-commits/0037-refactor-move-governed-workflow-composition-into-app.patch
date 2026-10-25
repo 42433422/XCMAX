@@ -1,0 +1,1787 @@
+From 8103eeca02b3ec00399358d7b7f16517e60a5224 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 02:02:57 +0800
+Subject: [PATCH 37/43] refactor: move governed workflow composition into
+ application owners
+
+
+diff --git a/FHD/app/application/__init__.py b/FHD/app/application/__init__.py
+index 62441d65b2..dca992aa5e 100644
+--- a/FHD/app/application/__init__.py
++++ b/FHD/app/application/__init__.py
+@@ -147,6 +147,7 @@ _SERVICE_EXPORTS: dict[str, str] = {
+ _MODULE_EXPORTS = frozenset(_SERVICE_EXPORTS.values()) | frozenset(
+     [
+         "ai_chat_helpers",
++        "kitten_ai_document",
+         "employee_pack_runner",
+         "excel_template_http_app_service",
+         "facades",
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index 1871bc999b..ffe9bdd543 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -20,7 +20,7 @@ def verify_action_result(
+         from zipfile import BadZipFile
+ 
+         from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+-        from app.domain.shared_services.kitten_ai_document.pickup import verify_document_pickup
++        from app.application.kitten_ai_document.pickup import verify_document_pickup
+ 
+         evidence = {"verified": False, "method": "owned_document_hash_readback"}
+         try:
+diff --git a/FHD/app/application/ai_chat/planned_workflow_dispatch.py b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+index f46e8ddc78..34145c9994 100644
+--- a/FHD/app/application/ai_chat/planned_workflow_dispatch.py
++++ b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+@@ -293,7 +293,7 @@ class PlannedWorkflowDispatch:
+         )
+ 
+         if references_recent_business_record(str(message or "")):
+-            from app.domain.shared_services.tools_workflow_registered import (
++            from app.application.tools_workflow_registered import (
+                 get_recent_business_db_target,
+             )
+ 
+diff --git a/FHD/app/application/ai_chat/workflow_session.py b/FHD/app/application/ai_chat/workflow_session.py
+index 4fe50b96bf..501fd110ce 100644
+--- a/FHD/app/application/ai_chat/workflow_session.py
++++ b/FHD/app/application/ai_chat/workflow_session.py
+@@ -380,7 +380,7 @@ class WorkflowSession:
+         candidates = item.get("candidates") or []
+         confirmed = resolve_confirmed_target(text, candidates)
+         if confirmed is None and target.tool_id == "business_db" and (not candidates):
+-            from app.domain.shared_services.tools_workflow_registered import (
++            from app.application.tools_workflow_registered import (
+                 prepare_business_db_write_target,
+             )
+ 
+diff --git a/FHD/app/application/facades/kitten_facade.py b/FHD/app/application/facades/kitten_facade.py
+index 5d62d3d994..d303a9cea9 100644
+--- a/FHD/app/application/facades/kitten_facade.py
++++ b/FHD/app/application/facades/kitten_facade.py
+@@ -1,5 +1,5 @@
++from app.application.kitten_ai_document.pickup import pop_document_pickup
+ from app.domain.shared_services.kitten_ai_document.generate import generate_office_file
+-from app.domain.shared_services.kitten_ai_document.pickup import pop_document_pickup
+ from app.domain.shared_services.kitten_business_snapshot import build_kitten_business_snapshot
+ from app.domain.shared_services.kitten_report import KittenReportExportService
+ from app.domain.shared_services.kitten_report.chart_data_service import chart_service
+diff --git a/FHD/app/application/facades/tools_facade.py b/FHD/app/application/facades/tools_facade.py
+index 39575ee8aa..623cd8db05 100644
+--- a/FHD/app/application/facades/tools_facade.py
++++ b/FHD/app/application/facades/tools_facade.py
+@@ -1,6 +1,6 @@
++from app.application.tools_workflow_registered import execute_registered_workflow_tool
+ from app.domain.shared_services.tools_execution_service import (
+     _parse_order_text,
+-    execute_registered_workflow_tool,
+     execute_tool_from_payload,
+     get_workflow_tool_registry,
+     set_tool_execute_headers,
+diff --git a/FHD/app/application/kitten_ai_document/__init__.py b/FHD/app/application/kitten_ai_document/__init__.py
+new file mode 100644
+index 0000000000..6d8eab3381
+--- /dev/null
++++ b/FHD/app/application/kitten_ai_document/__init__.py
+@@ -0,0 +1,10 @@
++"""Document generation and pickup application API, shared by HTTP and the host SDK."""
++
++from app.application.kitten_ai_document import pickup as pickup
++from app.domain.shared_services.kitten_ai_document import generate as generate
++from app.domain.shared_services.kitten_ai_document.generate import (
++    draft_document_spec,
++    generate_office_file,
++)
++
++__all__ = ["draft_document_spec", "generate", "generate_office_file", "pickup"]
+diff --git a/FHD/app/domain/shared_services/kitten_ai_document/pickup.py b/FHD/app/application/kitten_ai_document/pickup.py
+similarity index 100%
+rename from FHD/app/domain/shared_services/kitten_ai_document/pickup.py
+rename to FHD/app/application/kitten_ai_document/pickup.py
+diff --git a/FHD/app/application/shipment_excel_etl_app_service.py b/FHD/app/application/shipment_excel_etl_app_service.py
+index f31e6c2056..d785d64dd6 100644
+--- a/FHD/app/application/shipment_excel_etl_app_service.py
++++ b/FHD/app/application/shipment_excel_etl_app_service.py
+@@ -104,7 +104,7 @@ def _workbook_reader() -> WorkbookReader:
+ 
+ 
+ def _import_product_records(records: list[dict[str, Any]]) -> dict[str, Any]:
+-    from app.domain.shared_services.tools_workflow_registered import _execute_excel_import_records
++    from app.application.tools_workflow_registered import _execute_excel_import_records
+ 
+     return _execute_excel_import_records(records)
+ 
+diff --git a/FHD/app/application/tools/workflow_business_db.py b/FHD/app/application/tools/workflow_business_db.py
+index 8b501b8ea9..b1b17146bc 100644
+--- a/FHD/app/application/tools/workflow_business_db.py
++++ b/FHD/app/application/tools/workflow_business_db.py
+@@ -88,7 +88,7 @@ def try_execute_business_db_tool(name: str, args: dict[str, Any]) -> dict[str, A
+     if action is None:
+         return None
+ 
+-    from app.domain.shared_services.tools_workflow_registered import (
++    from app.application.tools_workflow_registered import (
+         execute_registered_workflow_tool,
+     )
+ 
+diff --git a/FHD/app/application/tools/workflow_tools/adapters.py b/FHD/app/application/tools/workflow_tools/adapters.py
+index 7d07f09366..66985bf0dc 100644
+--- a/FHD/app/application/tools/workflow_tools/adapters.py
++++ b/FHD/app/application/tools/workflow_tools/adapters.py
+@@ -62,7 +62,7 @@ def legacy_employee(call: ToolCall) -> str | None:
+ 
+ 
+ def template(call: ToolCall) -> str:
+-    from app.domain.shared_services.tools_workflow_registered import (
++    from app.application.tools_workflow_registered import (
+         execute_registered_workflow_tool,
+     )
+ 
+@@ -192,6 +192,6 @@ def generate_document(request: str, output_format: Literal["docx", "xlsx"]) -> t
+ 
+ 
+ def store_document(content: bytes, name: str, mime: str) -> str:
+-    from app.domain.shared_services.kitten_ai_document.pickup import store_document_pickup
++    from app.application.kitten_ai_document.pickup import store_document_pickup
+ 
+     return store_document_pickup(content, name, mime)
+diff --git a/FHD/app/application/tools_workflow_dispatch.py b/FHD/app/application/tools_workflow_dispatch.py
+new file mode 100644
+index 0000000000..0eaeaf2ac0
+--- /dev/null
++++ b/FHD/app/application/tools_workflow_dispatch.py
+@@ -0,0 +1,71 @@
++"""Admit and dispatch registered workflow actions through the original tool kernel."""
++
++from __future__ import annotations
++
++import logging
++
++from app.domain.shared_services.tools_workflow_common import (
++    _normalize_business_db_entity,
++    _remember_business_db_target,
++)
++from app.utils.operational_errors import RECOVERABLE_ERRORS
++
++logger = logging.getLogger(__name__)
++
++
++class _WorkflowRouterMap(dict):
++    _hidden_keys = {"employee", "business_db"}
++
++    def keys(self):
++        return [key for key in super().keys() if key not in self._hidden_keys]
++
++
++def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
++    """统一 dispatcher（供 WorkflowEngine 与 /api/tools/execute 复用）。"""
++    from app.application.agent_orchestrator.tool_executor import (
++        execute_registered_tool,
++        registered_dispatch_is_controlled,
++    )
++
++    if not registered_dispatch_is_controlled(tool_id, action):
++        return execute_registered_tool(tool_id, action, params)
++    from app.application.normal_chat_dispatch import resolve_tool_execution_profile
++    from app.application.tools_workflow_registered import _REGISTERED_WORKFLOW_ROUTERS
++
++    params = dict(params or {})
++    runtime_context = dict(params.pop("_runtime_context", None) or {})
++    profile = resolve_tool_execution_profile(runtime_context)
++    user_message = str(runtime_context.get("message") or "").strip()
++    router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
++    if router is not None:
++        result = router(action, params, runtime_context, profile, user_message)
++        if tool_id == "business_db" and action == "write" and isinstance(result, dict):
++            payload = params.get("payload")
++            if isinstance(payload, dict):
++                result = _remember_business_db_target(
++                    runtime_context,
++                    _normalize_business_db_entity(params.get("entity"), user_message),
++                    str(params.get("operation") or params.get("op") or "create").strip().lower(),
++                    result,
++                )
++        return result
++    try:
++        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
++
++        if is_employee_tool(tool_id):
++            workspace_root = runtime_context.get("workspace_root")
++            raw = execute_employee_tool(
++                tool_id,
++                dict(params)
++                if "execution_snapshot" in params
++                else {**params, "task": params.get("task") or user_message},
++                str(workspace_root) if workspace_root else None,
++                runtime_context=runtime_context,
++            )
++            import json
++
++            parsed = json.loads(raw)
++            return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
++    except RECOVERABLE_ERRORS:
++        logger.debug("employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True)
++    return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}
+diff --git a/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py b/FHD/app/application/tools_workflow_excel_ocr.py
+similarity index 100%
+rename from FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
+rename to FHD/app/application/tools_workflow_excel_ocr.py
+diff --git a/FHD/app/domain/shared_services/tools_workflow_memory_rag.py b/FHD/app/application/tools_workflow_memory_rag.py
+similarity index 100%
+rename from FHD/app/domain/shared_services/tools_workflow_memory_rag.py
+rename to FHD/app/application/tools_workflow_memory_rag.py
+diff --git a/FHD/app/domain/shared_services/tools_workflow_dispatch.py b/FHD/app/application/tools_workflow_registered.py
+similarity index 58%
+rename from FHD/app/domain/shared_services/tools_workflow_dispatch.py
+rename to FHD/app/application/tools_workflow_registered.py
+index 9dc5970e4a..ecde67ab60 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_dispatch.py
++++ b/FHD/app/application/tools_workflow_registered.py
+@@ -1,20 +1,54 @@
+-# mypy: disable-error-code="no-any-return"
+-"""工作流工具统一分发：路由注册表与 execute_registered_workflow_tool。"""
++"""已注册工作流工具：按 tool_id 路由到实现（自 tools_execution_service 拆分）。"""
+ 
+ from __future__ import annotations
+ 
+ import logging
++import sys
+ from collections.abc import Callable
++from typing import cast
+ 
++from app.application.tools_workflow_dispatch import (
++    _WorkflowRouterMap,
++    execute_registered_workflow_tool,
++)
++from app.application.tools_workflow_excel_ocr import (
++    _registered_router_excel_analysis,
++    _registered_router_excel_vector_index,
++    _registered_router_generate_office_document,
++)
++from app.application.tools_workflow_memory_rag import (
++    _registered_router_dataset_rag,
++    _registered_router_memory_v2,
++    _registered_router_persy_memory,
++)
++from app.application.tools_workflow_shipments_docs_ops import (
++    _registered_router_document_template,
++    _registered_router_excel_analyzer,
++    _registered_router_excel_toolkit,
++    _registered_router_label_template_generator,
++)
+ from app.domain.shared_services.tools_workflow_business_db import (
+-    _registered_router_business_db,
++    _registered_router_business_db as _domain_router_business_db,
+ )
+ from app.domain.shared_services.tools_workflow_common import (
++    _BUSINESS_DB_CONTROL_FIELDS,
++    _BUSINESS_DB_ENTITY_ALIASES,
++    _DEFAULT_PREPARE_BUSINESS_DB_WRITE_TARGET,
++    _RECENT_BUSINESS_DB_TARGETS,
++    _business_db_payload_contains_key,
++    _business_db_selector,
++    _business_db_target_candidates,
++    _business_db_update_fields,
+     _normalize_business_db_entity,
+     _remember_business_db_target,
++    _result_record_id,
++    get_recent_business_db_target,
++    prepare_business_db_write_target,
++)
++from app.domain.shared_services.tools_workflow_erp import (
++    _registered_router_customers as _domain_router_customers,
+ )
+ from app.domain.shared_services.tools_workflow_erp import (
+-    _registered_router_customers,
+     _registered_router_finance,
+     _registered_router_inventory,
+     _registered_router_normal_slot_dispatch,
+@@ -26,21 +60,13 @@ from app.domain.shared_services.tools_workflow_erp_master import (
+     _registered_router_materials,
+     _registered_router_products,
+ )
+-from app.domain.shared_services.tools_workflow_excel_ocr import (
+-    _registered_router_excel_analysis,
+-    _registered_router_excel_vector_index,
+-    _registered_router_generate_office_document,
+-)
+ from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
++    _execute_excel_import_records,
++    _ocr_artifact_payload,
+     _registered_router_excel_import,
+     _registered_router_ocr,
+     _registered_router_unit_products_import,
+ )
+-from app.domain.shared_services.tools_workflow_memory_rag import (
+-    _registered_router_dataset_rag,
+-    _registered_router_memory_v2,
+-    _registered_router_persy_memory,
+-)
+ from app.domain.shared_services.tools_workflow_shipments_docs import (
+     _registered_router_business_docking_family,
+     _registered_router_business_event,
+@@ -50,12 +76,6 @@ from app.domain.shared_services.tools_workflow_shipments_docs import (
+     _registered_router_suppliers,
+     _registered_router_system_maintenance,
+ )
+-from app.domain.shared_services.tools_workflow_shipments_docs_ops import (
+-    _registered_router_document_template,
+-    _registered_router_excel_analyzer,
+-    _registered_router_excel_toolkit,
+-    _registered_router_label_template_generator,
+-)
+ from app.domain.shared_services.tools_workflow_workspace import (
+     _registered_router_desktop_automation,
+     _registered_router_employee,
+@@ -64,16 +84,39 @@ from app.domain.shared_services.tools_workflow_workspace import (
+     _registered_router_settings,
+     _registered_router_template_preview,
+ )
+-from app.utils.operational_errors import RECOVERABLE_ERRORS
++from app.domain.workflow.ports import RegisteredWorkflowRouting
+ 
+ logger = logging.getLogger(__name__)
+ 
++# ruff: noqa: F401
++
++
++def tenant_id_for_write():
++    from app.infrastructure.tenant_scope import tenant_id_for_write as current
+ 
+-class _WorkflowRouterMap(dict):
+-    _hidden_keys = {"employee", "business_db"}
++    return current()
+ 
+-    def keys(self):
+-        return [key for key in super().keys() if key not in self._hidden_keys]
++
++def _registered_router_business_db(action, params, runtime_context, profile, user_message):
++    return _domain_router_business_db(
++        action,
++        params,
++        runtime_context,
++        profile,
++        user_message,
++        routing=cast(RegisteredWorkflowRouting, sys.modules[__name__]),
++    )
++
++
++def _registered_router_customers(action, params, runtime_context, profile, user_message):
++    return _domain_router_customers(
++        action,
++        params,
++        runtime_context,
++        profile,
++        user_message,
++        routing=cast(RegisteredWorkflowRouting, sys.modules[__name__]),
++    )
+ 
+ 
+ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMap(
+@@ -117,53 +160,3 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
+         "unit_products_import": _registered_router_unit_products_import,
+     }
+ )
+-
+-
+-def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
+-    """统一 dispatcher（供 WorkflowEngine 与 /api/tools/execute 复用）。"""
+-    from app.application.agent_orchestrator.tool_executor import (
+-        execute_registered_tool,
+-        registered_dispatch_is_controlled,
+-    )
+-
+-    if not registered_dispatch_is_controlled(tool_id, action):
+-        return execute_registered_tool(tool_id, action, params)
+-    from app.application.normal_chat_dispatch import resolve_tool_execution_profile
+-
+-    params = dict(params or {})
+-    runtime_context = dict(params.pop("_runtime_context", None) or {})
+-    profile = resolve_tool_execution_profile(runtime_context)
+-    user_message = str(runtime_context.get("message") or "").strip()
+-    router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
+-    if router is not None:
+-        result = router(action, params, runtime_context, profile, user_message)
+-        if tool_id == "business_db" and action == "write" and isinstance(result, dict):
+-            payload = params.get("payload")
+-            if isinstance(payload, dict):
+-                result = _remember_business_db_target(
+-                    runtime_context,
+-                    _normalize_business_db_entity(params.get("entity"), user_message),
+-                    str(params.get("operation") or params.get("op") or "create").strip().lower(),
+-                    result,
+-                )
+-        return result
+-    try:
+-        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
+-
+-        if is_employee_tool(tool_id):
+-            workspace_root = runtime_context.get("workspace_root")
+-            raw = execute_employee_tool(
+-                tool_id,
+-                dict(params)
+-                if "execution_snapshot" in params
+-                else {**params, "task": params.get("task") or user_message},
+-                str(workspace_root) if workspace_root else None,
+-                runtime_context=runtime_context,
+-            )
+-            import json
+-
+-            parsed = json.loads(raw)
+-            return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
+-    except RECOVERABLE_ERRORS:
+-        logger.debug("employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True)
+-    return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}
+diff --git a/FHD/app/domain/shared_services/tools_workflow_shipments_docs_ops.py b/FHD/app/application/tools_workflow_shipments_docs_ops.py
+similarity index 100%
+rename from FHD/app/domain/shared_services/tools_workflow_shipments_docs_ops.py
+rename to FHD/app/application/tools_workflow_shipments_docs_ops.py
+diff --git a/FHD/app/application/workflow/clarification_node.py b/FHD/app/application/workflow/clarification_node.py
+index 34bb037b45..ceeae57026 100644
+--- a/FHD/app/application/workflow/clarification_node.py
++++ b/FHD/app/application/workflow/clarification_node.py
+@@ -79,7 +79,7 @@ def needs_clarification(
+             operation = str(params.get("operation") or "").strip().lower()
+             payload = params.get("payload")
+             if operation in {"update", "delete"} and isinstance(payload, dict):
+-                from app.domain.shared_services.tools_workflow_registered import (
++                from app.application.tools_workflow_registered import (
+                     prepare_business_db_write_target,
+                 )
+ 
+diff --git a/FHD/app/application/workflow/planner.py b/FHD/app/application/workflow/planner.py
+index 480f409d38..c71cb73982 100644
+--- a/FHD/app/application/workflow/planner.py
++++ b/FHD/app/application/workflow/planner.py
+@@ -10,10 +10,10 @@ from typing import Any, cast
+ 
+ import httpx
+ 
++from app.application.tools_workflow_registered import execute_registered_workflow_tool
+ from app.domain.conversation.services.chat_tool_intent import (
+     looks_like_business_db_write as _looks_like_business_db_write,
+ )
+-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+ from app.services import get_ai_conversation_service
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ from app.utils.path_io.path_utils import ensure_fhd_repo_on_syspath
+diff --git a/FHD/app/domain/product/product_compat_ports.py b/FHD/app/domain/product/product_compat_ports.py
+index d1278c544f..b0e542a861 100644
+--- a/FHD/app/domain/product/product_compat_ports.py
++++ b/FHD/app/domain/product/product_compat_ports.py
+@@ -2,7 +2,6 @@
+ 
+ from __future__ import annotations
+ 
+-from collections.abc import Callable
+ from typing import Any, Protocol
+ 
+ from fastapi import Request
+@@ -60,35 +59,3 @@ class BusinessVisibility(Protocol):
+     def business_data_exposed(self) -> bool: ...
+ 
+     def business_data_hidden_reason(self) -> str | None: ...
+-
+-
+-def load_product_dispatcher() -> ProductListDispatcher:
+-    from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
+-
+-    return try_invoke_erp_domain_handler
+-
+-
+-def load_product_service_facade() -> ProductServiceFacade:
+-    from app.mod_sdk import erp_products_facade
+-
+-    return erp_products_facade
+-
+-
+-def load_product_lookup() -> ProductLookup:
+-    from app.bootstrap import get_products_service
+-
+-    return get_products_service()
+-
+-
+-def load_business_visibility() -> BusinessVisibility:
+-    from app.shell import mod_business_scope
+-
+-    return mod_business_scope
+-
+-
+-def load_price_preview() -> Callable[[str | None], Payload]:
+-    from app.infrastructure.documents.price_list_export import (
+-        build_price_list_template_preview_json,
+-    )
+-
+-    return build_price_list_template_preview_json
+diff --git a/FHD/app/domain/shared_services/kitten_ai_document/__init__.py b/FHD/app/domain/shared_services/kitten_ai_document/__init__.py
+index 609739df45..dcf2ab008e 100755
+--- a/FHD/app/domain/shared_services/kitten_ai_document/__init__.py
++++ b/FHD/app/domain/shared_services/kitten_ai_document/__init__.py
+@@ -1,7 +1,6 @@
+ """LLM-driven Word/Excel generation for 小猫分析."""
+ 
+ from app.domain.shared_services.kitten_ai_document import generate as generate
+-from app.domain.shared_services.kitten_ai_document import pickup as pickup
+ from app.domain.shared_services.kitten_ai_document.generate import (
+     draft_document_spec,
+     generate_office_file,
+@@ -11,5 +10,4 @@ __all__ = [
+     "draft_document_spec",
+     "generate",
+     "generate_office_file",
+-    "pickup",
+ ]
+diff --git a/FHD/app/domain/shared_services/tools_execution_service.py b/FHD/app/domain/shared_services/tools_execution_service.py
+index a2e121fc64..a4d2010fae 100755
+--- a/FHD/app/domain/shared_services/tools_execution_service.py
++++ b/FHD/app/domain/shared_services/tools_execution_service.py
+@@ -5,9 +5,6 @@
+ 
+ from __future__ import annotations
+ 
+-from app.domain.shared_services.tools_workflow_registered import (
+-    execute_registered_workflow_tool,  # noqa: F401
+-)
+ from app.services.tools_execution import (  # noqa: F401
+     ACTION_ALIASES,
+     ASR_MODEL_SEGMENT_MAP,
+diff --git a/FHD/app/domain/shared_services/tools_workflow_business_db.py b/FHD/app/domain/shared_services/tools_workflow_business_db.py
+index e3662a8fba..eb27c103cc 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_business_db.py
++++ b/FHD/app/domain/shared_services/tools_workflow_business_db.py
+@@ -10,19 +10,21 @@ from app.domain.shared_services.tools_workflow_common import (
+     _normalize_business_db_entity,
+     prepare_business_db_write_target,
+ )
++from app.domain.workflow.ports import RegisteredWorkflowRouting
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ 
+-def _facade():
+-    """跨域路由经组合根晚绑定：测试 patch facade 属性与运行时装饰同样生效。"""
+-    from app.services import tools_workflow_registered as facade
+-
+-    return facade
+-
+-
+ def _registered_router_business_db(
+-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
++    action: str,
++    params: dict,
++    runtime_context: dict,
++    profile: str,
++    user_message: str,
++    *,
++    routing: RegisteredWorkflowRouting | None = None,
+ ) -> dict:
++    if routing is None:
++        return {"success": False, "error_code": "workflow_routing_dependencies_required"}
+     entity = _normalize_business_db_entity(params.get("entity"), user_message)
+     if not entity:
+         return {
+@@ -39,7 +41,6 @@ def _registered_router_business_db(
+         if params.get("id") is not None:
+             from app.application.business_db_write_verification import _model_config
+             from app.db.session import get_db
+-            from app.infrastructure.tenant_scope import tenant_id_for_write
+ 
+             record_id = params["id"]
+             if isinstance(record_id, bool) or not isinstance(record_id, int) or record_id <= 0:
+@@ -48,7 +49,7 @@ def _registered_router_business_db(
+             with get_db() as db:
+                 record = (
+                     db.query(model)
+-                    .filter(model.tenant_id == tenant_id_for_write(), model.id == record_id)
++                    .filter(model.tenant_id == routing.tenant_id_for_write(), model.id == record_id)
+                     .first()
+                 )
+                 data = (
+@@ -65,19 +66,19 @@ def _registered_router_business_db(
+         read_params = dict(params)
+         read_params.setdefault("keyword", params.get("keyword") or params.get("query") or "")
+         if entity == "customers":
+-            return _facade()._registered_router_customers(
++            return routing._registered_router_customers(
+                 "query", read_params, runtime_context, profile, user_message
+             )
+         if entity == "products":
+-            return _facade()._registered_router_products(
++            return routing._registered_router_products(
+                 "query", read_params, runtime_context, "admin", user_message
+             )
+         if entity == "materials":
+-            return _facade()._registered_router_materials(
++            return routing._registered_router_materials(
+                 "query", read_params, runtime_context, profile, user_message
+             )
+         if entity == "shipment_records":
+-            return _facade()._registered_router_shipment_records(
++            return routing._registered_router_shipment_records(
+                 "query", read_params, runtime_context, profile, user_message
+             )
+     if action != "write":
+@@ -94,16 +95,14 @@ def _registered_router_business_db(
+     if _business_db_payload_contains_key(payload, {"tenant_id"}):
+         return {"success": False, "message": "tenant_id 只能来自当前登录会话，拒绝跨租户目标。"}
+     try:
+-        from app.infrastructure.tenant_scope import tenant_id_for_write
+-
+-        tenant_id_for_write()
++        routing.tenant_id_for_write()
+     except RECOVERABLE_ERRORS as exc:
+         return {"success": False, "message": f"缺少有效租户上下文，拒绝写入：{exc}"}
+     # Preserve both historical patch seams: direct callers patch this extracted
+     # function's globals, while integration callers patch the public facade.
+     # Compare against the module-load-time default so a globals patch cannot
+     # skew the facade-override detection.
+-    facade_prepare = getattr(_facade(), "prepare_business_db_write_target", None)
++    facade_prepare = getattr(routing, "prepare_business_db_write_target", None)
+     if (
+         facade_prepare is not None
+         and facade_prepare is not _DEFAULT_PREPARE_BUSINESS_DB_WRITE_TARGET
+@@ -131,7 +130,7 @@ def _registered_router_business_db(
+     if entity == "customers":
+         if operation in ("create", "ensure_exists", "upsert"):
+             return verified(
+-                _facade()._registered_router_customers(
++                routing._registered_router_customers(
+                     operation, payload, runtime_context, profile, user_message
+                 )
+             )
+@@ -140,7 +139,7 @@ def _registered_router_business_db(
+             if not fields:
+                 return {"success": False, "message": "customers.update 缺少 changes/fields。"}
+             return verified(
+-                _facade()._registered_router_customers(
++                routing._registered_router_customers(
+                     "update",
+                     {"id": payload["id"], **fields},
+                     runtime_context,
+@@ -150,7 +149,7 @@ def _registered_router_business_db(
+             )
+         if operation == "delete":
+             return verified(
+-                _facade()._registered_router_customers(
++                routing._registered_router_customers(
+                     "delete",
+                     {"id": payload["id"], "force": False},
+                     runtime_context,
+@@ -165,7 +164,7 @@ def _registered_router_business_db(
+     if entity == "products":
+         if operation == "create":
+             return verified(
+-                _facade()._registered_router_products(
++                routing._registered_router_products(
+                     "create", payload, runtime_context, profile, user_message
+                 )
+             )
+@@ -174,7 +173,7 @@ def _registered_router_business_db(
+             if not fields:
+                 return {"success": False, "message": "products.update 缺少 changes/fields。"}
+             return verified(
+-                _facade()._registered_router_products(
++                routing._registered_router_products(
+                     "update",
+                     {"id": payload["id"], **fields},
+                     runtime_context,
+@@ -184,7 +183,7 @@ def _registered_router_business_db(
+             )
+         if operation == "delete":
+             return verified(
+-                _facade()._registered_router_products(
++                routing._registered_router_products(
+                     "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+                 )
+             )
+@@ -192,7 +191,7 @@ def _registered_router_business_db(
+     if entity == "materials":
+         if operation == "create":
+             return verified(
+-                _facade()._registered_router_materials(
++                routing._registered_router_materials(
+                     "create", payload, runtime_context, profile, user_message
+                 )
+             )
+@@ -201,7 +200,7 @@ def _registered_router_business_db(
+             if not fields:
+                 return {"success": False, "message": "materials.update 缺少 changes/fields。"}
+             return verified(
+-                _facade()._registered_router_materials(
++                routing._registered_router_materials(
+                     "update",
+                     {"id": payload["id"], **fields},
+                     runtime_context,
+@@ -210,20 +209,19 @@ def _registered_router_business_db(
+                 )
+             )
+         if operation == "delete":
+-            result = _facade()._registered_router_materials(
++            result = routing._registered_router_materials(
+                 "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+             )
+             if result.get("success"):
+                 from app.db.models.material import Material
+                 from app.db.session import get_db
+-                from app.infrastructure.tenant_scope import tenant_id_for_write
+ 
+                 with get_db() as db:
+                     deleted = (
+                         db.query(Material)
+                         .filter(
+                             Material.id == int(payload["id"]),
+-                            Material.tenant_id == tenant_id_for_write(),
++                            Material.tenant_id == routing.tenant_id_for_write(),
+                         )
+                         .delete(synchronize_session=False)
+                     )
+@@ -237,7 +235,7 @@ def _registered_router_business_db(
+     if entity == "shipment_records":
+         if operation == "create":
+             return verified(
+-                _facade()._registered_router_shipment_records(
++                routing._registered_router_shipment_records(
+                     "create", payload, runtime_context, profile, user_message
+                 )
+             )
+@@ -249,7 +247,7 @@ def _registered_router_business_db(
+                     "message": "shipment_records.update 缺少 changes/fields。",
+                 }
+             return verified(
+-                _facade()._registered_router_shipment_records(
++                routing._registered_router_shipment_records(
+                     "update",
+                     {"id": payload["id"], **fields},
+                     runtime_context,
+@@ -259,7 +257,7 @@ def _registered_router_business_db(
+             )
+         if operation == "delete":
+             return verified(
+-                _facade()._registered_router_shipment_records(
++                routing._registered_router_shipment_records(
+                     "delete", {"id": payload["id"]}, runtime_context, profile, user_message
+                 )
+             )
+diff --git a/FHD/app/domain/shared_services/tools_workflow_erp.py b/FHD/app/domain/shared_services/tools_workflow_erp.py
+index abe5e1dd6e..c1d63c7bec 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_erp.py
++++ b/FHD/app/domain/shared_services/tools_workflow_erp.py
+@@ -6,6 +6,8 @@ from __future__ import annotations
+ import logging
+ from typing import Any, cast
+ 
++from app.domain.workflow.ports import RegisteredWorkflowRouting
++
+ logger = logging.getLogger(__name__)
+ from app.domain.shared_services.tools_workflow_common import (
+     _business_db_target_candidates,
+@@ -32,18 +34,22 @@ def _registered_router_normal_slot_dispatch(
+     return {"success": False, "message": f"未注册的 normal_slot_dispatch 动作: {action}"}
+ 
+ 
+-def _resolve_target_candidates():
++def _resolve_target_candidates(routing: RegisteredWorkflowRouting | None = None):
+     """目标解析晚绑定：facade 属性 patch 与本模块全局 patch 两个接缝等价生效。"""
+-    from app.services import tools_workflow_registered as facade
+-
+-    resolved = getattr(facade, "_business_db_target_candidates", None)
++    resolved = getattr(routing, "_business_db_target_candidates", None)
+     if resolved is not None and resolved is not _DEFAULT_TARGET_CANDIDATES:
+         return resolved
+     return _business_db_target_candidates
+ 
+ 
+ def _registered_router_customers(
+-    action: str, params: dict, runtime_context: dict, profile: str, user_message: str
++    action: str,
++    params: dict,
++    runtime_context: dict,
++    profile: str,
++    user_message: str,
++    *,
++    routing: RegisteredWorkflowRouting | None = None,
+ ) -> dict:
+     if str(runtime_context.get("service_source") or "") == "fastapi_customer_route":
+         from app.fastapi_routes.domains.customer import routes as customer_routes
+@@ -61,7 +67,7 @@ def _registered_router_customers(
+         )
+ 
+         return execute_customer_create_like(
+-            action, params, svc=svc, resolve_targets=_resolve_target_candidates()
++            action, params, svc=svc, resolve_targets=_resolve_target_candidates(routing)
+         )
+     if action == "query":
+         keyword = str(params.get("keyword") or unit_name or "").strip()
+diff --git a/FHD/app/domain/shared_services/tools_workflow_registered.py b/FHD/app/domain/shared_services/tools_workflow_registered.py
+deleted file mode 100644
+index d519f77ee3..0000000000
+--- a/FHD/app/domain/shared_services/tools_workflow_registered.py
++++ /dev/null
+@@ -1,84 +0,0 @@
+-"""已注册工作流工具：按 tool_id 路由到实现（自 tools_execution_service 拆分）。"""
+-
+-from __future__ import annotations
+-
+-import logging
+-
+-from app.domain.shared_services.tools_workflow_business_db import (
+-    _registered_router_business_db,
+-)
+-from app.domain.shared_services.tools_workflow_common import (
+-    _BUSINESS_DB_CONTROL_FIELDS,
+-    _BUSINESS_DB_ENTITY_ALIASES,
+-    _DEFAULT_PREPARE_BUSINESS_DB_WRITE_TARGET,
+-    _RECENT_BUSINESS_DB_TARGETS,
+-    _business_db_payload_contains_key,
+-    _business_db_selector,
+-    _business_db_target_candidates,
+-    _business_db_update_fields,
+-    _normalize_business_db_entity,
+-    _remember_business_db_target,
+-    _result_record_id,
+-    get_recent_business_db_target,
+-    prepare_business_db_write_target,
+-)
+-from app.domain.shared_services.tools_workflow_dispatch import (
+-    _REGISTERED_WORKFLOW_ROUTERS,
+-    _WorkflowRouterMap,
+-    execute_registered_workflow_tool,
+-)
+-from app.domain.shared_services.tools_workflow_erp import (
+-    _registered_router_customers,
+-    _registered_router_finance,
+-    _registered_router_inventory,
+-    _registered_router_normal_slot_dispatch,
+-    _registered_router_purchase,
+-    _registered_router_reports,
+-    _registered_router_sales,
+-)
+-from app.domain.shared_services.tools_workflow_erp_master import (
+-    _registered_router_materials,
+-    _registered_router_products,
+-)
+-from app.domain.shared_services.tools_workflow_excel_ocr import (
+-    _registered_router_excel_analysis,
+-    _registered_router_excel_vector_index,
+-    _registered_router_generate_office_document,
+-)
+-from app.domain.shared_services.tools_workflow_excel_ocr_ops import (
+-    _execute_excel_import_records,
+-    _ocr_artifact_payload,
+-    _registered_router_excel_import,
+-    _registered_router_ocr,
+-    _registered_router_unit_products_import,
+-)
+-from app.domain.shared_services.tools_workflow_memory_rag import (
+-    _registered_router_dataset_rag,
+-    _registered_router_memory_v2,
+-)
+-from app.domain.shared_services.tools_workflow_shipments_docs import (
+-    _registered_router_business_docking_family,
+-    _registered_router_business_event,
+-    _registered_router_mrp,
+-    _registered_router_shipment_orders,
+-    _registered_router_shipment_records,
+-    _registered_router_suppliers,
+-    _registered_router_system_maintenance,
+-)
+-from app.domain.shared_services.tools_workflow_shipments_docs_ops import (
+-    _registered_router_document_template,
+-    _registered_router_excel_analyzer,
+-    _registered_router_excel_toolkit,
+-    _registered_router_label_template_generator,
+-)
+-from app.domain.shared_services.tools_workflow_workspace import (
+-    _registered_router_employee,
+-    _registered_router_print,
+-    _registered_router_printer_list,
+-    _registered_router_settings,
+-    _registered_router_template_preview,
+-)
+-
+-logger = logging.getLogger(__name__)
+-
+-# ruff: noqa: F401
+diff --git a/FHD/app/domain/workflow/ports.py b/FHD/app/domain/workflow/ports.py
+index 558fc8dfad..13de23ab2c 100644
+--- a/FHD/app/domain/workflow/ports.py
++++ b/FHD/app/domain/workflow/ports.py
+@@ -6,6 +6,7 @@ references application-layer plan/result types; new non-typed contracts land her
+ 
+ from __future__ import annotations
+ 
++from collections.abc import Callable
+ from dataclasses import dataclass, field
+ from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
+ 
+@@ -128,3 +129,15 @@ class ToolDispatcher(Protocol):
+     def __call__(self, tool_id: str, action: str, params: dict[str, Any]) -> dict[str, Any]:
+         """Dispatch ``tool_id.action`` with ``params`` and return the result dict."""
+         ...
++
++
++class RegisteredWorkflowRouting(Protocol):
++    """Outer composition supplies live handlers without a domain facade lookup."""
++
++    tenant_id_for_write: Callable[[], Any]
++    _business_db_target_candidates: Callable[..., Any]
++    prepare_business_db_write_target: Callable[..., dict]
++    _registered_router_customers: Callable[..., dict]
++    _registered_router_products: Callable[..., dict]
++    _registered_router_materials: Callable[..., dict]
++    _registered_router_shipment_records: Callable[..., dict]
+diff --git a/FHD/app/legacy/routes/product/port_contracts.py b/FHD/app/legacy/routes/product/port_contracts.py
+index ddd54fdaec..fe72dfdc6c 100644
+--- a/FHD/app/legacy/routes/product/port_contracts.py
++++ b/FHD/app/legacy/routes/product/port_contracts.py
+@@ -1,5 +1,46 @@
+-"""Compat re-export — canonical at app.domain.product.product_compat_ports."""
++"""Product request contracts and concrete lazy dependency composition."""
+ 
+ from __future__ import annotations
+ 
++from collections.abc import Callable
++
+ from app.domain.product.product_compat_ports import *  # noqa: F403
++from app.domain.product.product_compat_ports import (
++    BusinessVisibility,
++    Payload,
++    ProductListDispatcher,
++    ProductLookup,
++    ProductServiceFacade,
++)
++
++
++def load_product_dispatcher() -> ProductListDispatcher:
++    from app.mod_sdk.erp_domain_dispatch import try_invoke_erp_domain_handler
++
++    return try_invoke_erp_domain_handler
++
++
++def load_product_service_facade() -> ProductServiceFacade:
++    from app.mod_sdk import erp_products_facade
++
++    return erp_products_facade
++
++
++def load_product_lookup() -> ProductLookup:
++    from app.bootstrap import get_products_service
++
++    return get_products_service()
++
++
++def load_business_visibility() -> BusinessVisibility:
++    from app.shell import mod_business_scope
++
++    return mod_business_scope
++
++
++def load_price_preview() -> Callable[[str | None], Payload]:
++    from app.infrastructure.documents.price_list_export import (
++        build_price_list_template_preview_json,
++    )
++
++    return build_price_list_template_preview_json
+diff --git a/FHD/app/mod_sdk/host_services.py b/FHD/app/mod_sdk/host_services.py
+index e130f0392d..be756656f9 100644
+--- a/FHD/app/mod_sdk/host_services.py
++++ b/FHD/app/mod_sdk/host_services.py
+@@ -403,7 +403,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
+     ),
+     "status": ("app.fastapi_routes.lan_routes", "status"),
+     "store_document_pickup": (
+-        "app.domain.shared_services.kitten_ai_document.pickup",
++        "app.application.kitten_ai_document.pickup",
+         "store_document_pickup",
+     ),
+     "svc": ("app.application.approval_workspace_app_service", ""),
+diff --git a/FHD/app/services/__init__.py b/FHD/app/services/__init__.py
+index 173dd5b6f4..c90f3d1e6b 100644
+--- a/FHD/app/services/__init__.py
++++ b/FHD/app/services/__init__.py
+@@ -89,7 +89,7 @@ from app.domain.shared_services.user_preference_service import (
+ from app.domain.shared_services import user_memory_service as user_memory_service
+ from app.domain.shared_services import printer_service as printer_service
+ from app.domain.shared_services import tools_workflow_common as tools_workflow_common
+-from app.domain.shared_services import kitten_ai_document as kitten_ai_document
++from app.application import kitten_ai_document as kitten_ai_document
+ from app.domain.shared_services import document_templates_service as document_templates_service
+ 
+ if TYPE_CHECKING:
+@@ -130,6 +130,8 @@ def __getattr__(name: str):
+ 
+     # Explicit renames after debt19 splits / moves.
+     aliases = {
++        "tools_workflow_registered": "app.application.tools_workflow_registered",
++        "tools_execution_service": "app.services.tools_execution",
+         "work_order_ssot": "app.domain.shared_services.ssot",
+         "work_order_gate": "app.domain.shared_services.gate",
+     }
+diff --git a/FHD/app/services/tools_execution/__init__.py b/FHD/app/services/tools_execution/__init__.py
+index 96bccc2111..1cc4bb6f4e 100755
+--- a/FHD/app/services/tools_execution/__init__.py
++++ b/FHD/app/services/tools_execution/__init__.py
+@@ -37,7 +37,7 @@ from app.services.tools_execution.registry import (
+     _validate_required_params,
+     get_workflow_tool_registry,
+ )
+-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
++from app.application.tools_workflow_registered import execute_registered_workflow_tool
+ 
+ __all__ = [
+     "set_tool_execute_headers",
+diff --git a/FHD/app/services/tools_execution/executor.py b/FHD/app/services/tools_execution/executor.py
+index cad82d4472..392c65c579 100755
+--- a/FHD/app/services/tools_execution/executor.py
++++ b/FHD/app/services/tools_execution/executor.py
+@@ -2,8 +2,8 @@ from __future__ import annotations
+ 
+ import logging
+ 
++from app.application.tools_workflow_registered import execute_registered_workflow_tool
+ from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
+-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+ from app.services.tools_execution.context import _hdr, _j
+ from app.services.tools_execution.order_parser import _parse_order_text
+ from app.services.tools_execution.registry import (
+diff --git a/FHD/scripts/dev/neuro_bus_events_ssot.py b/FHD/scripts/dev/neuro_bus_events_ssot.py
+index 9f07e82f84..ece670cde2 100644
+--- a/FHD/scripts/dev/neuro_bus_events_ssot.py
++++ b/FHD/scripts/dev/neuro_bus_events_ssot.py
+@@ -50,7 +50,7 @@ ORCHESTRATOR_FILES = [
+ ]
+ APP_BRIDGE_FILES = [
+     ROOT / "app" / "middleware" / "neuro_http_trace.py",
+-    ROOT / "app" / "services" / "tools_workflow_registered.py",
++    ROOT / "app" / "application" / "tools_workflow_registered.py",
+     ROOT / "app" / "fastapi_routes" / "template_api.py",
+ ]
+ FRONTEND_COMPOSABLE = ROOT / "frontend" / "src" / "composables" / "useAgentRunEvents.ts"
+diff --git a/FHD/scripts/dev/test_form_separation_usability.py b/FHD/scripts/dev/test_form_separation_usability.py
+index 937d0ad7d7..e119be9b7a 100644
+--- a/FHD/scripts/dev/test_form_separation_usability.py
++++ b/FHD/scripts/dev/test_form_separation_usability.py
+@@ -187,7 +187,7 @@ def _eval_one(path: Path) -> dict:
+             with (
+                 patch("app.bootstrap.get_shipment_app_service", return_value=_FakeShip()),
+                 patch(
+-                    "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++                    "app.application.tools_workflow_registered._execute_excel_import_records",
+                     return_value={"success": True, "imported": 1},
+                 ),
+                 patch(
+diff --git a/FHD/scripts/dev/verify_shipment_excel_etl_closed_loop.py b/FHD/scripts/dev/verify_shipment_excel_etl_closed_loop.py
+index 2f0667ca62..e1760c0708 100644
+--- a/FHD/scripts/dev/verify_shipment_excel_etl_closed_loop.py
++++ b/FHD/scripts/dev/verify_shipment_excel_etl_closed_loop.py
+@@ -160,7 +160,7 @@ def main() -> int:
+ 
+         bootstrap.get_shipment_app_service = lambda: fake  # type: ignore
+ 
+-        import app.domain.shared_services.tools_workflow_registered as tw
++        import app.application.tools_workflow_registered as tw
+ 
+         tw._execute_excel_import_records = lambda records: {  # type: ignore
+             "success": True,
+diff --git a/FHD/tests/test_application/test_agent_orchestrator.py b/FHD/tests/test_application/test_agent_orchestrator.py
+index 993eaabeb7..78b419bf15 100644
+--- a/FHD/tests/test_application/test_agent_orchestrator.py
++++ b/FHD/tests/test_application/test_agent_orchestrator.py
+@@ -1121,8 +1121,8 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
+ ):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
++    from app.application.kitten_ai_document import pickup
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+-    from app.domain.shared_services.kitten_ai_document import pickup
+ 
+     monkeypatch.setenv("KITTEN_PICKUP_DIR", str(tmp_path / "pickup"))
+     monkeypatch.setattr(pickup, "_CACHED_BASE", None)
+diff --git a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+index 247a5e94d3..f0d41bf2c6 100644
+--- a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
++++ b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+@@ -3083,7 +3083,7 @@ class TestTryHandleDynamicWorkflow:
+         svc = _make_svc()
+         svc.workflow_planner.plan.return_value = None
+         with patch(
+-            "app.domain.shared_services.tools_workflow_registered.get_recent_business_db_target",
++            "app.application.tools_workflow_registered.get_recent_business_db_target",
+             return_value=target,
+         ) as recent:
+             result = svc._try_handle_dynamic_workflow_after_excel(
+diff --git a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+index 0e41dcd443..c7957fcec1 100644
+--- a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
++++ b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+@@ -177,7 +177,7 @@ def test_fallback_planner_ignores_recoverable_memory_rag_error():
+ 
+ 
+ def test_employee_tool_dispatch_calls_local_employee_runtime():
+-    from app.domain.shared_services.tools_workflow_registered import (
++    from app.application.tools_workflow_registered import (
+         execute_registered_workflow_tool,
+     )
+ 
+@@ -235,7 +235,7 @@ def test_business_db_read_routes_to_business_service_router():
+ 
+ 
+ def test_business_db_rejects_raw_sql():
+-    from app.domain.shared_services.tools_workflow_registered import (
++    from app.application.tools_workflow_registered import (
+         execute_registered_workflow_tool,
+     )
+ 
+@@ -255,12 +255,12 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
+ 
+     import app.db as db_mod
+     from app.application.business_db_write_verification import verify_business_db_write
++    from app.application.tools_workflow_registered import (
++        execute_registered_workflow_tool,
++    )
+     from app.db.db_base import Base
+     from app.db.models.product import Product, UomCategory, UomUnit
+     from app.db.models.purchase_unit import PurchaseUnit
+-    from app.domain.shared_services.tools_workflow_registered import (
+-        execute_registered_workflow_tool,
+-    )
+     from app.infrastructure.tenant_scope import tenant_scope
+ 
+     db_mod.dispose_and_recreate_engine()
+@@ -392,15 +392,15 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
+     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
+ 
+     import app.db as db_mod
++    from app.application.tools_workflow_registered import (
++        execute_registered_workflow_tool,
++    )
+     from app.db.db_base import Base
+     from app.db.models.material import Material
+     from app.db.models.product import Product, UomCategory, UomUnit
+     from app.db.models.purchase_unit import PurchaseUnit
+     from app.db.models.shipment import ShipmentRecord
+     from app.db.session import get_db
+-    from app.domain.shared_services.tools_workflow_registered import (
+-        execute_registered_workflow_tool,
+-    )
+     from app.infrastructure.tenant_scope import tenant_scope
+ 
+     tables = [
+diff --git a/FHD/tests/test_application/test_excel_vector_scope.py b/FHD/tests/test_application/test_excel_vector_scope.py
+index b971545fdb..45012c117f 100644
+--- a/FHD/tests/test_application/test_excel_vector_scope.py
++++ b/FHD/tests/test_application/test_excel_vector_scope.py
+@@ -403,7 +403,7 @@ def test_runtime_events_are_not_copied_or_used_as_ownership(excel_vector_case):
+ def test_provider_failure_is_safe_in_public_receipt_and_application_trace(
+     excel_vector_case, monkeypatch, caplog
+ ):
+-    from app.domain.shared_services.tools_workflow_excel_ocr import (
++    from app.application.tools_workflow_excel_ocr import (
+         _registered_router_excel_vector_index,
+     )
+     from app.neuro_bus import neuro_application_instrumentation as instrumentation
+diff --git a/FHD/tests/test_application/test_multimodal_autonomous_planner.py b/FHD/tests/test_application/test_multimodal_autonomous_planner.py
+index d28ecbf788..10018392aa 100644
+--- a/FHD/tests/test_application/test_multimodal_autonomous_planner.py
++++ b/FHD/tests/test_application/test_multimodal_autonomous_planner.py
+@@ -226,7 +226,7 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
+                 return_value=(b"content", "risk-summary.docx"),
+             ),
+             patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
++                "app.application.kitten_ai_document.pickup.store_document_pickup",
+                 return_value="doc-token",
+             ),
+             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+diff --git a/FHD/tests/test_application/test_registered_capabilities.py b/FHD/tests/test_application/test_registered_capabilities.py
+index edd067cba0..a5af6f133d 100644
+--- a/FHD/tests/test_application/test_registered_capabilities.py
++++ b/FHD/tests/test_application/test_registered_capabilities.py
+@@ -191,7 +191,7 @@ def test_registered_dispatch_preserves_trusted_context_and_uses_bounded_executor
+ 
+ def test_registered_employee_fallback_preserves_trusted_runtime_context(monkeypatch, trusted_actor):
+     from app.application.agent_orchestrator.tool_executor import _registered_dispatch_scope
+-    from app.domain.shared_services.tools_workflow_dispatch import execute_registered_workflow_tool
++    from app.application.tools_workflow_dispatch import execute_registered_workflow_tool
+ 
+     actor = trusted_actor()
+     invoke = Mock(return_value='{"success": false, "outcome": "pending"}')
+diff --git a/FHD/tests/test_application/test_shipment_etl_component_boundaries.py b/FHD/tests/test_application/test_shipment_etl_component_boundaries.py
+index 12608e93af..47e2421faa 100644
+--- a/FHD/tests/test_application/test_shipment_etl_component_boundaries.py
++++ b/FHD/tests/test_application/test_shipment_etl_component_boundaries.py
+@@ -404,7 +404,7 @@ def test_dry_run_deduplicates_without_constructing_any_writer(import_ports, monk
+ 
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", unexpected)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         unexpected,
+     )
+     note = _note("SYNTH-A")
+@@ -421,7 +421,7 @@ def test_product_import_failure_prevents_shipment_service_construction(import_po
+ 
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", unexpected)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": False, "message": "product validation rejected"},
+     )
+     result = etl.execute_shipment_excel_etl("", notes=[_note("SYNTH-A")])
+diff --git a/FHD/tests/test_application/test_shipment_excel_etl_advanced.py b/FHD/tests/test_application/test_shipment_excel_etl_advanced.py
+index f9802b162a..cc2c42f715 100644
+--- a/FHD/tests/test_application/test_shipment_excel_etl_advanced.py
++++ b/FHD/tests/test_application/test_shipment_excel_etl_advanced.py
+@@ -246,7 +246,7 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
+ 
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+     monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
+@@ -306,7 +306,7 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
+ 
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+     fp = tmp_path / "fp2.sqlite3"
+diff --git a/FHD/tests/test_application/test_shipment_excel_etl_app_service.py b/FHD/tests/test_application/test_shipment_excel_etl_app_service.py
+index ed9e1731af..d39e6d293f 100644
+--- a/FHD/tests/test_application/test_shipment_excel_etl_app_service.py
++++ b/FHD/tests/test_application/test_shipment_excel_etl_app_service.py
+@@ -242,7 +242,7 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
+         lambda: _FakeShipmentSvc(),
+     )
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+     fp_db = tmp_path / "fps.sqlite3"
+@@ -365,7 +365,7 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
+ 
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _FakeShipmentSvc())
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+     monkeypatch.setattr(
+@@ -443,7 +443,7 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
+         lambda: _FakeShipmentSvc(),
+     )
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported_count": len(records)},
+     )
+     monkeypatch.setattr(
+diff --git a/FHD/tests/test_application/test_shipment_excel_etl_app_service_branch_cov.py b/FHD/tests/test_application/test_shipment_excel_etl_app_service_branch_cov.py
+index a013249cd2..7c22ca476a 100644
+--- a/FHD/tests/test_application/test_shipment_excel_etl_app_service_branch_cov.py
++++ b/FHD/tests/test_application/test_shipment_excel_etl_app_service_branch_cov.py
+@@ -1324,7 +1324,7 @@ def test_execute_dry_run_with_duplicates(monkeypatch, delivery_profile, tmp_path
+ def test_execute_product_import_failed(monkeypatch, delivery_profile, tmp_path):
+     _patch_execute(monkeypatch, tmp_path, delivery_profile)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": False, "message": "导入失败"},
+     )
+     res = execute_shipment_excel_etl(
+diff --git a/FHD/tests/test_application/test_shipment_excel_etl_production_ready.py b/FHD/tests/test_application/test_shipment_excel_etl_production_ready.py
+index 8821d8759e..f022268ddd 100644
+--- a/FHD/tests/test_application/test_shipment_excel_etl_production_ready.py
++++ b/FHD/tests/test_application/test_shipment_excel_etl_production_ready.py
+@@ -158,7 +158,7 @@ def test_real_create_shipment_idempotent_and_order_meta(tmp_path, monkeypatch, o
+     svc = ShipmentApplicationService(repository=repo)
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+ 
+@@ -235,7 +235,7 @@ def test_compensate_on_failure_rolls_back_created(tmp_path, monkeypatch, orm_fp_
+     svc = _FlakySvc(repo)
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+ 
+@@ -304,7 +304,7 @@ def test_production_gates_checklist(tmp_path, monkeypatch, orm_fp_db):
+     svc = ShipmentApplicationService(repository=repo)
+     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: svc)
+     monkeypatch.setattr(
+-        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
++        "app.application.tools_workflow_registered._execute_excel_import_records",
+         lambda records: {"success": True, "imported": len(records)},
+     )
+     dry = execute_shipment_excel_etl(path, dry_run=True, workspace_root=tmp_path)
+diff --git a/FHD/tests/test_application/test_tools_workflow_branch_cov3.py b/FHD/tests/test_application/test_tools_workflow_branch_cov3.py
+index adfcdaaa70..07da0ca81a 100644
+--- a/FHD/tests/test_application/test_tools_workflow_branch_cov3.py
++++ b/FHD/tests/test_application/test_tools_workflow_branch_cov3.py
+@@ -818,7 +818,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+                 create=True,
+             ),
+             patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
++                "app.application.kitten_ai_document.pickup.store_document_pickup",
+                 return_value="token123",
+                 create=True,
+             ),
+@@ -836,7 +836,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+                 create=True,
+             ),
+             patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
++                "app.application.kitten_ai_document.pickup.store_document_pickup",
+                 return_value="token123",
+                 create=True,
+             ),
+@@ -866,7 +866,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+                 create=True,
+             ),
+             patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
++                "app.application.kitten_ai_document.pickup.store_document_pickup",
+                 return_value="token123",
+                 create=True,
+             ),
+@@ -926,7 +926,7 @@ class TestExecuteWorkflowToolMisc:
+                 create=True,
+             ),
+             patch(
+-                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
++                "app.application.tools_workflow_registered.execute_registered_workflow_tool",
+                 return_value={"result": "ok"},
+                 create=True,
+             ),
+diff --git a/FHD/tests/test_application/test_tools_workflow_cov.py b/FHD/tests/test_application/test_tools_workflow_cov.py
+index 92e150d095..7127d021c8 100644
+--- a/FHD/tests/test_application/test_tools_workflow_cov.py
++++ b/FHD/tests/test_application/test_tools_workflow_cov.py
+@@ -377,7 +377,7 @@ class TestExecuteWorkflowTool:
+                 create=True,
+             ),
+             patch(
+-                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
++                "app.application.tools_workflow_registered.execute_registered_workflow_tool",
+                 return_value={"result": "ok"},
+                 create=True,
+             ),
+diff --git a/FHD/tests/test_application/test_tools_workflow_registered_branch_cov2.py b/FHD/tests/test_application/test_tools_workflow_registered_branch_cov2.py
+index d9f7a4a337..60576450a7 100644
+--- a/FHD/tests/test_application/test_tools_workflow_registered_branch_cov2.py
++++ b/FHD/tests/test_application/test_tools_workflow_registered_branch_cov2.py
+@@ -4,8 +4,8 @@ from __future__ import annotations
+ 
+ from unittest.mock import MagicMock, patch
+ 
+-from app.domain.shared_services import tools_workflow_registered as _twr
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application import tools_workflow_registered as _twr
++from app.application.tools_workflow_registered import (
+     _ocr_artifact_payload,
+     _registered_router_business_docking_family,
+     _registered_router_customers,
+diff --git a/FHD/tests/test_application/test_workflow_business_db.py b/FHD/tests/test_application/test_workflow_business_db.py
+index aac6eb7819..73ea18cf3c 100644
+--- a/FHD/tests/test_application/test_workflow_business_db.py
++++ b/FHD/tests/test_application/test_workflow_business_db.py
+@@ -23,7 +23,7 @@ def test_business_db_specs_expose_read_and_write_contracts() -> None:
+ 
+ def test_business_db_aliases_route_to_registered_service() -> None:
+     with patch(
+-        "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
++        "app.application.tools_workflow_registered.execute_registered_workflow_tool",
+         return_value={"success": True},
+     ) as execute:
+         read_result = try_execute_business_db_tool("business_db_read", {"entity": "products"})
+diff --git a/FHD/tests/test_application/test_workflow_tools_ext3.py b/FHD/tests/test_application/test_workflow_tools_ext3.py
+index 7646c54a27..1475e7bc64 100644
+--- a/FHD/tests/test_application/test_workflow_tools_ext3.py
++++ b/FHD/tests/test_application/test_workflow_tools_ext3.py
+@@ -376,8 +376,8 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+ 
+         from docx import Document
+ 
++        from app.application.kitten_ai_document import generate, pickup
+         from app.application.tools.workflow import execute_workflow_tool
+-        from app.domain.shared_services.kitten_ai_document import generate, pickup
+         from tests.test_services.test_kitten_ai_document_pickup import _verify_case
+ 
+         denied = json.loads(
+diff --git a/FHD/tests/test_application/test_workflow_tools_ext5.py b/FHD/tests/test_application/test_workflow_tools_ext5.py
+index 4185a93dd2..fa401f466d 100644
+--- a/FHD/tests/test_application/test_workflow_tools_ext5.py
++++ b/FHD/tests/test_application/test_workflow_tools_ext5.py
+@@ -600,9 +600,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+             patch(
+                 "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+             ) as mock_gen,
+-            patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+-            ) as mock_store,
++            patch("app.application.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+             patch(
+                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+@@ -631,9 +629,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+             patch(
+                 "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+             ) as mock_gen,
+-            patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+-            ) as mock_store,
++            patch("app.application.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+             patch(
+                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+@@ -662,9 +658,7 @@ class TestExecuteWorkflowToolGenerateOffice:
+             patch(
+                 "app.domain.shared_services.kitten_ai_document.generate.generate_office_file"
+             ) as mock_gen,
+-            patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup"
+-            ) as mock_store,
++            patch("app.application.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+         ):
+             mock_gen.return_value = (b"content", "out.docx")
+             mock_store.return_value = "tok789"
+diff --git a/FHD/tests/test_chat_template_save_chain.py b/FHD/tests/test_chat_template_save_chain.py
+index 582e999d28..25d9d7df1a 100644
+--- a/FHD/tests/test_chat_template_save_chain.py
++++ b/FHD/tests/test_chat_template_save_chain.py
+@@ -6,13 +6,13 @@ import json
+ from unittest.mock import MagicMock, patch
+ 
+ from app.application.tools.workflow import execute_workflow_tool, get_workflow_tool_registry
+-from app.domain.context.session_context import (
+-    merge_system_prompt,
+-)
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application.tools_workflow_registered import (
+     _REGISTERED_WORKFLOW_ROUTERS,
+     execute_registered_workflow_tool,
+ )
++from app.domain.context.session_context import (
++    merge_system_prompt,
++)
+ 
+ 
+ def test_planner_registry_includes_template_preview() -> None:
+diff --git a/FHD/tests/test_infrastructure/test_desktop_drivers.py b/FHD/tests/test_infrastructure/test_desktop_drivers.py
+index 446f81fc82..374bd266d5 100644
+--- a/FHD/tests/test_infrastructure/test_desktop_drivers.py
++++ b/FHD/tests/test_infrastructure/test_desktop_drivers.py
+@@ -119,8 +119,8 @@ def test_desktop_requests_plan_without_llm_and_keep_approval(
+ 
+ def test_desktop_dispatch_uses_registered_profile_and_truthful_driver_result(svc, monkeypatch):
+     from app.application.normal_chat_dispatch import route_normal_mode_message
++    from app.application.tools_workflow_dispatch import execute_registered_workflow_tool
+     from app.desktop_automation import service as module
+-    from app.domain.shared_services.tools_workflow_dispatch import execute_registered_workflow_tool
+ 
+     monkeypatch.setattr(module, "_service", svc[0])
+     params = {"app_id": "textedit", "_runtime_context": {"user_id": "7"}}
+diff --git a/FHD/tests/test_phase3_p2_services_routes.py b/FHD/tests/test_phase3_p2_services_routes.py
+index 9bd360e3a0..a4c29b66c8 100644
+--- a/FHD/tests/test_phase3_p2_services_routes.py
++++ b/FHD/tests/test_phase3_p2_services_routes.py
+@@ -11,6 +11,7 @@ import pytest
+ from fastapi import FastAPI
+ from fastapi.testclient import TestClient
+ 
++from app.application.tools_workflow_registered import _registered_router_customers
+ from app.application.workflow.planner import (
+     LLMWorkflowPlanner,
+     _filter_tool_registry_for_profile,
+@@ -18,7 +19,6 @@ from app.application.workflow.planner import (
+ )
+ from app.domain.shared_services.purchase_service import PurchaseService
+ from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
+-from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
+ 
+ # ---------------------------------------------------------------------------
+ # DB mock helpers
+diff --git a/FHD/tests/test_phase4_p26_backend.py b/FHD/tests/test_phase4_p26_backend.py
+index e4601d6ec1..8eae5a83db 100644
+--- a/FHD/tests/test_phase4_p26_backend.py
++++ b/FHD/tests/test_phase4_p26_backend.py
+@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
+ 
+ import pytest
+ 
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application.tools_workflow_registered import (
+     _registered_router_business_docking_family,
+     _registered_router_customers,
+     _registered_router_excel_analysis,
+diff --git a/FHD/tests/test_phase6_p15_backend.py b/FHD/tests/test_phase6_p15_backend.py
+index 6bf6d7d515..8b05c7896c 100644
+--- a/FHD/tests/test_phase6_p15_backend.py
++++ b/FHD/tests/test_phase6_p15_backend.py
+@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
+ from fastapi.testclient import TestClient
+ from PIL import Image
+ 
+-import app.domain.shared_services.tools_workflow_registered as twr
++import app.application.tools_workflow_registered as twr
+ import app.fastapi_routes.market_account as ma
+ import app.fastapi_routes.mod_store_routes as msr
+ import app.infrastructure.mods.catalog_client as cc
+diff --git a/FHD/tests/test_planner_native_tools.py b/FHD/tests/test_planner_native_tools.py
+index 172601ee02..c1742d9727 100644
+--- a/FHD/tests/test_planner_native_tools.py
++++ b/FHD/tests/test_planner_native_tools.py
+@@ -122,7 +122,7 @@ def test_native_generate_office_document(monkeypatch):
+         lambda req, fmt: (b"fake", "test.docx"),
+     )
+     monkeypatch.setattr(
+-        "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
++        "app.application.kitten_ai_document.pickup.store_document_pickup",
+         lambda content, fname, mime: "tok-test-123",
+     )
+     raw = mod.run_native_tool(
+diff --git a/FHD/tests/test_services/test_erp_absorb_e2e.py b/FHD/tests/test_services/test_erp_absorb_e2e.py
+index e4a5d9c99b..477b9441e8 100644
+--- a/FHD/tests/test_services/test_erp_absorb_e2e.py
++++ b/FHD/tests/test_services/test_erp_absorb_e2e.py
+@@ -45,6 +45,7 @@ from sqlalchemy.orm import sessionmaker
+ from app.application.ai_chat_app_service import AIChatApplicationService
+ from app.application.normal_chat_dispatch import route_normal_mode_message
+ from app.application.sales_app_service import SalesAppService
++from app.application.tools_workflow_registered import execute_registered_workflow_tool
+ from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
+ from app.application.workflow.approval_service import ApprovalService
+ from app.application.workflow.engine import WorkflowEngine
+@@ -65,7 +66,6 @@ from app.db.models import (
+     Warehouse,
+ )
+ from app.domain.shared_services.report_service import ReportService
+-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+ from app.infrastructure.tenant_scope import tenant_scope
+ 
+ # 精确验收句子（实体名按句中原样：A 产品含「产品」标记与空格，客户B含「客户」前缀）
+diff --git a/FHD/tests/test_services/test_kitten_ai_document_pickup.py b/FHD/tests/test_services/test_kitten_ai_document_pickup.py
+index 65eb979b0b..df419d37f1 100644
+--- a/FHD/tests/test_services/test_kitten_ai_document_pickup.py
++++ b/FHD/tests/test_services/test_kitten_ai_document_pickup.py
+@@ -1,4 +1,4 @@
+-"""Tests for app.domain.shared_services.kitten_ai_document.pickup — document pickup store/pop."""
++"""Tests for app.application.kitten_ai_document.pickup — document pickup store/pop."""
+ 
+ from __future__ import annotations
+ 
+@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
+ 
+ import pytest
+ 
+-from app.domain.shared_services.kitten_ai_document.pickup import (
++from app.application.kitten_ai_document.pickup import (
+     _pickup_base_dir,
+     _prune_disk,
+     _sanitize_token,
+@@ -67,7 +67,7 @@ class TestPickupBaseDir:
+         with tempfile.TemporaryDirectory() as tmp:
+             with patch.dict(os.environ, {env_name: tmp}):
+                 # Reset cached value
+-                import app.domain.shared_services.kitten_ai_document.pickup as mod
++                import app.application.kitten_ai_document.pickup as mod
+ 
+                 monkeypatch.setattr(mod, "_CACHED_BASE", None)
+                 result = _pickup_base_dir()
+@@ -85,7 +85,7 @@ class TestPickupBaseDir:
+         with patch.dict(os.environ, {}, clear=False):
+             os.environ.pop("KITTEN_PICKUP_DIR", None)
+             os.environ.pop("WORKSPACE_ROOT", None)
+-            import app.domain.shared_services.kitten_ai_document.pickup as mod
++            import app.application.kitten_ai_document.pickup as mod
+ 
+             mod._CACHED_BASE = None
+             result = _pickup_base_dir()
+@@ -134,7 +134,7 @@ class TestStoreAndPopDocumentPickup:
+     def test_store_and_pop_roundtrip(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
+-                import app.domain.shared_services.kitten_ai_document.pickup as mod
++                import app.application.kitten_ai_document.pickup as mod
+ 
+                 mod._CACHED_BASE = None
+ 
+@@ -155,7 +155,7 @@ class TestStoreAndPopDocumentPickup:
+     def test_pop_nonexistent_token_returns_none(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
+-                import app.domain.shared_services.kitten_ai_document.pickup as mod
++                import app.application.kitten_ai_document.pickup as mod
+ 
+                 mod._CACHED_BASE = None
+ 
+@@ -175,7 +175,7 @@ class TestStoreAndPopDocumentPickup:
+     def test_pop_twice_returns_none(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
+-                import app.domain.shared_services.kitten_ai_document.pickup as mod
++                import app.application.kitten_ai_document.pickup as mod
+ 
+                 mod._CACHED_BASE = None
+ 
+@@ -190,7 +190,7 @@ class TestStoreAndPopDocumentPickup:
+     def test_store_large_content(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             with patch.dict(os.environ, {"KITTEN_PICKUP_DIR": tmp}):
+-                import app.domain.shared_services.kitten_ai_document.pickup as mod
++                import app.application.kitten_ai_document.pickup as mod
+ 
+                 mod._CACHED_BASE = None
+ 
+@@ -215,7 +215,7 @@ def owned_document_case(trusted_actor, approved_tool_context, tmp_path, monkeypa
+     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
+     from app.application.agent_orchestrator.run_repository import get_agent_run_repository
+     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+-    from app.domain.shared_services.kitten_ai_document import generate, pickup
++    from app.application.kitten_ai_document import generate, pickup
+ 
+     actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
+     monkeypatch.setenv("KITTEN_PICKUP_DIR", str(tmp_path / "owned-pickup"))
+@@ -428,8 +428,8 @@ def test_owned_document_expiry_does_not_consume_record(owned_document_case, monk
+     from datetime import timedelta
+     from types import SimpleNamespace
+ 
++    from app.application.kitten_ai_document import pickup
+     from app.db.models.user import Session as UserSession
+-    from app.domain.shared_services.kitten_ai_document import pickup
+     from app.utils.time import utc_now_naive
+ 
+     case = owned_document_case()
+@@ -481,7 +481,7 @@ def test_owned_document_invalid_opc_never_completes(owned_document_case, monkeyp
+ def test_owned_document_pruning_does_not_evict_another_owner(
+     owned_document_case, trusted_actor, monkeypatch
+ ):
+-    from app.domain.shared_services.kitten_ai_document import pickup
++    from app.application.kitten_ai_document import pickup
+ 
+     monkeypatch.setattr(pickup, "_MAX_ITEMS", 1)
+     first = owned_document_case()
+@@ -520,7 +520,7 @@ def test_owned_document_two_processes_consume_one_original_receipt(owned_documen
+     script = """
+ import json, sys, time
+ from pathlib import Path
+-from app.domain.shared_services.kitten_ai_document.pickup import pop_document_pickup
++from app.application.kitten_ai_document.pickup import pop_document_pickup
+ body = json.loads(sys.stdin.read())
+ ready, gate = Path(sys.argv[1]), Path(sys.argv[2])
+ ready.touch()
+diff --git a/FHD/tests/test_services/test_sales_facade_integration.py b/FHD/tests/test_services/test_sales_facade_integration.py
+index 873497f7be..2a0927e6af 100644
+--- a/FHD/tests/test_services/test_sales_facade_integration.py
++++ b/FHD/tests/test_services/test_sales_facade_integration.py
+@@ -16,9 +16,9 @@ from app.application.normal_chat_dispatch import (
+     route_normal_mode_message,
+ )
+ from app.application.sales_app_service import SalesAppService
++from app.application.tools_workflow_registered import _registered_router_sales
+ from app.db.db_base import Base
+ from app.db.models import Customer, Product, SalesOrder
+-from app.domain.shared_services.tools_workflow_registered import _registered_router_sales
+ from app.infrastructure.tenant_scope import tenant_scope
+ 
+ 
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered.py b/FHD/tests/test_services/test_tools_workflow_registered.py
+index 5eb30709f1..0ba3b3549c 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered.py
+@@ -1,4 +1,4 @@
+-"""Tests for app.domain.shared_services.tools_workflow_registered — registered workflow tool routers."""
++"""Tests for app.application.tools_workflow_registered — registered workflow tool routers."""
+ 
+ from __future__ import annotations
+ 
+@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
+ 
+ import pytest
+ 
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application.tools_workflow_registered import (
+     _REGISTERED_WORKFLOW_ROUTERS,
+     _registered_router_business_docking_family,
+     _registered_router_customers,
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py b/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
+index 397f4780d6..c4f7d0c0da 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
+@@ -16,7 +16,7 @@ trusted_actor = backend_ci_isolation.trusted_actor
+ # app.services.get_products_service (circular).
+ # Importing app.application first ensures the chain resolves cleanly.
+ import app.application  # noqa: F401
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application.tools_workflow_registered import (
+     _execute_excel_import_records,
+     _normalize_business_db_entity,
+     _ocr_artifact_payload,
+@@ -726,7 +726,7 @@ class TestBusinessDbRouter:
+         with (
+             patch("app.application.get_customer_app_service") as mock_get,
+             patch(
+-                "app.domain.shared_services.tools_workflow_registered._business_db_target_candidates",
++                "app.application.tools_workflow_registered._business_db_target_candidates",
+                 return_value=([{"id": 9, "customer_name": "X"}], "customer_name"),
+             ),
+         ):
+@@ -763,7 +763,7 @@ class TestBusinessDbRouter:
+         with (
+             patch("app.application.get_customer_app_service") as mock_get,
+             patch(
+-                "app.domain.shared_services.tools_workflow_registered._business_db_target_candidates",
++                "app.application.tools_workflow_registered._business_db_target_candidates",
+                 return_value=([], "customer_name"),
+             ),
+         ):
+@@ -859,7 +859,7 @@ class TestBusinessDbRouter:
+             patch("app.bootstrap.get_shipment_app_service") as mock_get,
+             patch("app.infrastructure.tenant_scope.tenant_id_for_write", return_value=1),
+             patch(
+-                "app.domain.shared_services.tools_workflow_registered.prepare_business_db_write_target",
++                "app.application.tools_workflow_registered.prepare_business_db_write_target",
+                 return_value={
+                     "success": True,
+                     "payload": {"id": 1, "changes": {"status": "pending"}},
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+index 4358e70dc9..c5f9f1c3fa 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
+ 
+ import pytest
+ 
+-from app.domain.shared_services.tools_workflow_registered import (
++from app.application.tools_workflow_registered import (
+     _registered_router_customers,
+     _registered_router_inventory,
+     _registered_router_materials,
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/data/capabilities/catalog.json" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/data/capabilities/catalog.json"
+index fdabb0bcd6..1c6fe3d1b2 100644
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/data/capabilities/catalog.json"
++++ "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/data/capabilities/catalog.json"
+@@ -237,7 +237,7 @@
+             {"id":"ai-ppt","name":"PPT 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"演示文稿生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/ai-ppt-macos-visual-review.json", "impl": ["FHD/app/services/document_templates_service.py"], "api": [], "tests": [], "ci": [], "docs": [], "screenshots": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/shot/00-login-form.png", "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/shot/P1-ppt-generate.png", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/result.png", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-run.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/ai-ppt-macos-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json"], "videos": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/video/ai-ppt-web-20260929-135612.webm", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/operation.webm", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt.mp4"], "logs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/log/ai-ppt-web-20260929-135612.log", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/run.log", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt.log"], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-identity.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"], "platform_assets": {"macos": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/ai-ppt-macos-run.json", "sha256": "02d517e89bea5484a670ca972dadf52e6396ad2e26a47cbc51f005608e971199", "required_case_ids": ["M1", "M2", "M3", "M4"]}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ppt/macos/run.log", "sha256": "8f173333d993abaa7dbee11eb7e6446670e0298e7dc1cfb6978dda53e5f1f94f"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json"], "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "git_sha": "build_info|gitSha", "version": "build_info|version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-dmg-artifact.json", "sha256": "dmg_sha256", "git_sha": "expected_git_sha", "version": "expected_version"}}, "web": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-run.json", "sha256": "019963b02b6223e07fe5c094d551111275971675c9a13b61e5a0565888e6ae97", "required_case_ids": ["P1", "P2", "P3", "P4"]}, "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-identity.json", "git_sha": "site_git_sha", "version": "site_version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-identity.json", "sha256": "admin_console_dist_sha256", "git_sha": "site_git_sha", "version": "site_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/log/ai-ppt-web-20260929-135612.log", "sha256": "3ce5b6e90b45aa9f8ab66daf3c8a63d61cf9d10f6dfae592318f9a4f957f67c1"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ppt/ai-ppt-web-identity.json"]}, "windows": {"acceptance": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json", "sha256": "07ff08f7619e34c309931ae16b598f7d7b5cba37aab0106bde23c1ab157db755", "required_case_ids": ["W1", "W2", "W3"]}, "identity": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json", "version": "app_version", "git_sha": "app_git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json", "sha256": "installer_sha256", "git_sha": "git_sha", "version": "version"}, "logs": [{"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt.log", "sha256": "37714e8da56802440d15713f7cf10c815774f9ecfe577052c9fea834ed13c5d6"}], "raw": ["FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ppt/ai-ppt-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"]}}}},
+             {"id":"ai-word","name":"Word 生成与解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"ai-excel","summary":"Word 文档生成与解析。","evidence":{"review": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/ai-word-macos-visual-review.json", "impl": ["FHD/app/services/document_templates_service.py"], "api": [], "tests": [], "ci": [], "docs": [], "screenshots": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/shot/00-login-form.png", "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/shot/W1-word-generate.png", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/result.png", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-run.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/ai-word-macos-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json"], "videos": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/video/ai-word-web-20260929-135626.webm", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/operation.webm", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.mp4"], "logs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/log/ai-word-web-20260929-135626.log", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/run.log", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.log"], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-identity.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"], "platform_assets": {"macos": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/ai-word-macos-run.json", "sha256": "e9f3db11df56c72f9ec6af87e3ce87230cf9ba34993d5d3a84a8b8d18f90fdba", "required_case_ids": ["M1", "M2", "M3", "M4"]}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-word/macos/run.log", "sha256": "89f0836c6b5bdd542d33b85bda17f0a55324d406119a46600f5112fbd3270ca1"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json"], "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "git_sha": "build_info|gitSha", "version": "build_info|version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-dmg-artifact.json", "sha256": "dmg_sha256", "git_sha": "expected_git_sha", "version": "expected_version"}}, "web": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-run.json", "sha256": "ebbb27aa10d701c8b0fc306c830875a6b1acdb07434a003514465f8ccdc022dd", "required_case_ids": ["W1", "W2", "W3", "W4"]}, "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-identity.json", "git_sha": "site_git_sha", "version": "site_version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-identity.json", "sha256": "admin_console_dist_sha256", "git_sha": "site_git_sha", "version": "site_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/log/ai-word-web-20260929-135626.log", "sha256": "801aba527194f6068b73fb6d8424810967099c008dd5cb5dbd4c5488732da29a"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-word/ai-word-web-identity.json"]}, "windows": {"acceptance": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json", "sha256": "b24d4f68f67e8b54e87c1ad9a388253edfe32e772e9aa53cb51fa4a967e1ca59", "required_case_ids": ["W1", "W2", "W3"]}, "identity": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json", "version": "app_version", "git_sha": "app_git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json", "sha256": "installer_sha256", "git_sha": "git_sha", "version": "version"}, "logs": [{"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word.log", "sha256": "069bc448128de6f0d6131f8216200809cfc351cb58dc449228a72e0a09c990a2"}], "raw": ["FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-word/ai-word-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"]}}}},
+             {"id":"ai-ocr-doc","name":"单据图像识别解析","platforms":["windows","macos","web"],"featured":false,"evidence_ref":"erp-ocr","summary":"单据图片的 OCR 结构化解析。","evidence":{"review": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/ai-ocr-doc-macos-visual-review.json", "impl": ["FHD/app/services/ocr_service.py", "FHD/app/services/paddle_ocr_runner.py"], "api": [], "tests": [], "ci": [], "docs": [], "screenshots": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/shot/00-login-form.png", "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/shot/O1-ocr-health.png", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/result.png", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc.png"], "commits": [], "runs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-run.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/ai-ocr-doc-macos-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json"], "videos": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/video/ai-ocr-doc-web-20260929-135641.webm", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/operation.webm", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc.mp4"], "logs": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/log/ai-ocr-doc-web-20260929-135641.log", "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/run.log", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc.log"], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-identity.json", "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"], "platform_assets": {"macos": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/ai-ocr-doc-macos-run.json", "sha256": "c7d719ba242960f248acd79ccedbadcdf2975c7a48aab58e0872fa89ae6688dc", "required_case_ids": ["M1", "M2", "M3", "M4", "M5"]}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/ai-ocr-doc/macos/run.log", "sha256": "51e2be7e910e35f25d7125443706a727853447dcc1e1489a9927701530f3fd1b"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json"], "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-install-identity.json", "git_sha": "build_info|gitSha", "version": "build_info|version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-20260930/identity/macos-dmg-artifact.json", "sha256": "dmg_sha256", "git_sha": "expected_git_sha", "version": "expected_version"}}, "web": {"acceptance": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-run.json", "sha256": "321a8a933f5c0eae44578a9d7b6fe92c2623b1c779fa0b8391241d433f89dc79", "required_case_ids": ["O1", "O2", "O3", "O4", "O5"]}, "identity": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-identity.json", "git_sha": "site_git_sha", "version": "site_version"}, "artifact": {"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-identity.json", "sha256": "admin_console_dist_sha256", "git_sha": "site_git_sha", "version": "site_version"}, "logs": [{"path": "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/log/ai-ocr-doc-web-20260929-135641.log", "sha256": "dae3b129fd6a055e04592bec069f583ee0724e0f636e85387c6cc57dbfecaed3"}], "raw": ["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-ocr-doc/ai-ocr-doc-web-identity.json"]}, "windows": {"acceptance": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json", "sha256": "2e50af95f438bc0af6a29f9846d0b3a34de66182afaef910e770d9c87faec8c1", "required_case_ids": ["W1", "W2", "W3"]}, "identity": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json", "version": "app_version", "git_sha": "app_git_sha"}, "artifact": {"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json", "sha256": "installer_sha256", "git_sha": "git_sha", "version": "version"}, "logs": [{"path": "FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc.log", "sha256": "1e7bafec0f1c5851803898e8b6c4c4678f16d4e5ca9aae3605b01aa1fccacef1"}], "raw": ["FHD/docs/evidence/e2e/windows-capabilities-20260929/ai-ocr-doc/ai-ocr-doc-windows-run.json", "FHD/docs/evidence/e2e/windows-capabilities-20260929/windows-installer.json"]}}}},
+-            {"id":"ai-vector-rag","name":"知识库向量检索（RAG 工具链）","platforms":["web"],"featured":false,"evidence_ref":"ai-knowledge","summary":"检索增强生成的工具链实现。","evidence":{"review":"FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-vector-rag-visual-review.json","impl":["FHD/app/services/tools_workflow_memory_rag.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/shot/00-login-form.png","FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/shot/V-persy-knowledge.png"],"commits":[],"runs":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-run.json"],"videos":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/video/ai-vector-rag-web-20260929-062839.webm"],"logs":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/log/ai-vector-rag-web-20260929-062839.log"],"raw":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json"],"platform_assets":{"web":{"acceptance":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-run.json","sha256":"38eefd4c80d2c27d9852ddeb789b113d8eef35994816188d143d72b9663fde9c","required_case_ids":["V1","V2","V3","V4","V5","V6"]},"identity":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json","git_sha":"site_git_sha","version":"site_version"},"artifact":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json","sha256":"admin_console_dist_sha256","git_sha":"site_git_sha","version":"site_version"},"logs":[{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/log/ai-vector-rag-web-20260929-062839.log","sha256":"11b484167b546ac6eb5938b260d992c5d70bb172f0b196636a848b5148fa2dd6"}],"raw":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json"]}}}}
++            {"id":"ai-vector-rag","name":"知识库向量检索（RAG 工具链）","platforms":["web"],"featured":false,"evidence_ref":"ai-knowledge","summary":"检索增强生成的工具链实现。","evidence":{"review":"FHD/docs/evidence/e2e/macos-visual-review-20260920/ai-vector-rag-visual-review.json","impl":["FHD/app/application/tools_workflow_memory_rag.py"],"api":[],"tests":[],"ci":[],"docs":[],"screenshots":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/shot/00-login-form.png","FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/shot/V-persy-knowledge.png"],"commits":[],"runs":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-run.json"],"videos":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/video/ai-vector-rag-web-20260929-062839.webm"],"logs":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/log/ai-vector-rag-web-20260929-062839.log"],"raw":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json"],"platform_assets":{"web":{"acceptance":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-run.json","sha256":"38eefd4c80d2c27d9852ddeb789b113d8eef35994816188d143d72b9663fde9c","required_case_ids":["V1","V2","V3","V4","V5","V6"]},"identity":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json","git_sha":"site_git_sha","version":"site_version"},"artifact":{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json","sha256":"admin_console_dist_sha256","git_sha":"site_git_sha","version":"site_version"},"logs":[{"path":"FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/log/ai-vector-rag-web-20260929-062839.log","sha256":"11b484167b546ac6eb5938b260d992c5d70bb172f0b196636a848b5148fa2dd6"}],"raw":["FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/ai-vector-rag/ai-vector-rag-web-identity.json"]}}}}
+           ]
+         }
+       ]
+-- 
+2.50.1 (Apple Git-155)
+

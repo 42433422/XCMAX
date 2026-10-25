@@ -1,0 +1,28 @@
+{
+  "synthetic_db_and_xlsx_only": true,
+  "paid_model_or_embedding_calls": 0,
+  "status": "confirmed_open_gap_not_fixed_in_current_checkpoint",
+  "original_input_sha256": "d7e9f28dddd8fa77291289797a1d36590dabdfd85e9ebb43956d971eac8c8ec0",
+  "replacement_input_sha256": "9ac05f995fef9a6fae25a5572162e50c53c1916c101945278bdfba89b1022e00",
+  "approved_params_keys": [
+    "file_path",
+    "index_id",
+    "index_name"
+  ],
+  "approved_path_unchanged": true,
+  "actual_final_status": "completed",
+  "actual_readback_verification": {
+    "verified": true,
+    "method": "excel_vector_owner_readback",
+    "index_id": "snapshot-gap"
+  },
+  "actual_contents": [
+    "sheet=Sheet1; row=1; model: REPLACED_AFTER_APPROVAL | quantity: 17",
+    "sheet=Sheet1; rows=1-1\nrow=1; model: REPLACED_AFTER_APPROVAL | quantity: 17"
+  ],
+  "source_hashes": {
+    "app/fastapi_routes/excel_vector.py": "b32f5d93a8c97410e301d36f789326fe1581ba6a20a68b5b8ef578a4dbbe651d",
+    "app/application/excel_vector_app_service.py": "0aca25899df913a52a7141ba5a94b22c83b3c8d51e73ef4f9f1711677eb670f1",
+    "app/domain/shared_services/tools_workflow_excel_ocr.py": "61aacb843d0686d70af2dc12af3231d8c610b89a963b089358ef94cf757d4c58"
+  }
+}

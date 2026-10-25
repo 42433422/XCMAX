@@ -1,0 +1,173 @@
+[
+  {
+    "database": "/Users/[REDACTED]/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026/green-temp/test_material_readback_rejects0/trusted-actors.sqlite",
+    "materials": [
+      [
+        1,
+        7,
+        "READBACK-1",
+        "Readback resin",
+        12.0,
+        3.5
+      ]
+    ],
+    "receipts": [
+      {
+        "ledger_state": "completed",
+        "success": true,
+        "outcome": null,
+        "error_code": null,
+        "business_verification": {
+          "verified": true,
+          "entity": "materials",
+          "operation": "create",
+          "tenant_id": 7,
+          "state": "present",
+          "checked_fields": [
+            "material_code",
+            "min_stock",
+            "name",
+            "unit_price"
+          ],
+          "record_id": 1
+        }
+      }
+    ]
+  },
+  {
+    "database": "/Users/[REDACTED]/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026/green-temp/test_real_material_create_veri0/trusted-actors.sqlite",
+    "materials": [
+      [
+        1,
+        7,
+        "READBACK-1",
+        "Readback resin",
+        12.0,
+        0
+      ]
+    ],
+    "receipts": [
+      {
+        "ledger_state": "completed",
+        "success": true,
+        "outcome": null,
+        "error_code": null,
+        "business_verification": {
+          "verified": true,
+          "entity": "materials",
+          "operation": "create",
+          "tenant_id": 7,
+          "state": "present",
+          "checked_fields": [
+            "material_code",
+            "min_stock",
+            "name"
+          ],
+          "record_id": 1
+        }
+      }
+    ]
+  },
+  {
+    "database": "/Users/[REDACTED]/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026/green-temp/test_real_material_create_veri1/trusted-actors.sqlite",
+    "materials": [
+      [
+        1,
+        7,
+        "READBACK-1",
+        "Readback resin",
+        0.0,
+        0
+      ]
+    ],
+    "receipts": [
+      {
+        "ledger_state": "completed",
+        "success": true,
+        "outcome": null,
+        "error_code": null,
+        "business_verification": {
+          "verified": true,
+          "entity": "materials",
+          "operation": "create",
+          "tenant_id": 7,
+          "state": "present",
+          "checked_fields": [
+            "material_code",
+            "min_stock",
+            "name"
+          ],
+          "record_id": 1
+        }
+      }
+    ]
+  },
+  {
+    "database": "/Users/[REDACTED]/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026/green-temp/test_real_material_create_veri2/trusted-actors.sqlite",
+    "materials": [
+      [
+        1,
+        7,
+        "READBACK-1",
+        "Readback resin",
+        0.0,
+        3.5
+      ]
+    ],
+    "receipts": [
+      {
+        "ledger_state": "completed",
+        "success": true,
+        "outcome": null,
+        "error_code": null,
+        "business_verification": {
+          "verified": true,
+          "entity": "materials",
+          "operation": "create",
+          "tenant_id": 7,
+          "state": "present",
+          "checked_fields": [
+            "material_code",
+            "name",
+            "unit_price"
+          ],
+          "record_id": 1
+        }
+      }
+    ]
+  },
+  {
+    "database": "/Users/[REDACTED]/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026/green-temp/test_real_material_create_veri3/trusted-actors.sqlite",
+    "materials": [
+      [
+        1,
+        7,
+        "READBACK-1",
+        "Readback resin",
+        0.0,
+        3.5
+      ]
+    ],
+    "receipts": [
+      {
+        "ledger_state": "completed",
+        "success": true,
+        "outcome": null,
+        "error_code": null,
+        "business_verification": {
+          "verified": true,
+          "entity": "materials",
+          "operation": "create",
+          "tenant_id": 7,
+          "state": "present",
+          "checked_fields": [
+            "material_code",
+            "name",
+            "unit_price"
+          ],
+          "record_id": 1
+        }
+      }
+    ]
+  }
+]

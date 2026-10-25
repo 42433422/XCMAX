@@ -1,0 +1,843 @@
+From 68fe5688518609ed03196d61b0283098e1e38df5 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 01:13:09 +0800
+Subject: [PATCH 33/43] build(mac): bundle a minimal employee leaf helper
+
+
+diff --git a/FHD/scripts/package/build-backend.sh b/FHD/scripts/package/build-backend.sh
+index 3e51931957..fed52a6934 100755
+--- a/FHD/scripts/package/build-backend.sh
++++ b/FHD/scripts/package/build-backend.sh
+@@ -81,6 +81,23 @@ mkdir -p release
+ printf '%s\n' "${VERSION}" > release/VERSION
+ "${PYTHON}" -m PyInstaller --noconfirm --clean scripts/package/xcagi_backend.spec
+ 
++if [[ "$(uname -s)" == "Darwin" ]]; then
++  # One-directory helper: its bootloader must not spawn an extraction child.
++  "${PYTHON}" -m PyInstaller --noconfirm --clean \
++    --distpath "${ROOT}/dist/employee-leaf-build" \
++    --workpath "${ROOT}/build/employee-leaf" \
++    scripts/package/xcagi_employee_leaf.spec
++  LEAF_BUNDLE="${ROOT}/dist/xcagi-backend/employee-leaf"
++  mkdir -p "${LEAF_BUNDLE}"
++  cp -R "${ROOT}/dist/employee-leaf-build/xcagi-employee-leaf/." "${LEAF_BUNDLE}/"
++  [[ -x "${LEAF_BUNDLE}/xcagi-employee-leaf" ]]
++  for projection in app/mod_sdk/office_employee_worker.py \
++    app/mod_sdk/generated_employee_worker.py app/mod_sdk/host_services.py \
++    app/application/agent_orchestrator/tool_receipt.py; do
++    [[ -f "${LEAF_BUNDLE}/_internal/leaf_sdk/${projection}" ]]
++  done
++fi
++
+ # 冻结后端内嵌前端复核（运行时从 _internal/templates/vue-dist 提供页面）
+ BUNDLED_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/vue-dist/index.html"
+ if [[ ! -f "${BUNDLED_INDEX}" ]]; then
+diff --git a/FHD/scripts/package/xcagi_employee_leaf.spec b/FHD/scripts/package/xcagi_employee_leaf.spec
+new file mode 100644
+index 0000000000..80fbf86fa8
+--- /dev/null
++++ b/FHD/scripts/package/xcagi_employee_leaf.spec
+@@ -0,0 +1,172 @@
++"""Portable office runtime; host services remain in the parent process."""
++# PyInstaller injects its build classes and SPECPATH into the spec namespace.
++# ruff: noqa: F821
++
++import importlib.util
++import sys
++from pathlib import Path
++
++from PyInstaller.utils.hooks import collect_data_files, collect_submodules
++
++if sys.platform != "darwin":
++    raise RuntimeError("the employee leaf requires the macOS sandbox")
++
++ROOT = Path(SPECPATH).resolve().parents[1]
++OFFICE_PACKAGES = (
++    "docx",
++    "openpyxl",
++    "pptx",
++    "xlsxwriter",
++    "pypdf",
++    "reportlab",
++    "PIL",
++    "lxml",
++    "numpy",
++    "et_xmlfile",
++    "charset_normalizer",
++    "defusedxml",
++    "typing_extensions",
++)
++EXCLUDES = (
++    "app",
++    "fastapi",
++    "starlette",
++    "sqlalchemy",
++    "alembic",
++    "uvicorn",
++    "pydantic",
++    "openai",
++    "httpx",
++    "httpcore",
++    "requests",
++    "urllib3",
++    "aiohttp",
++    "redis",
++    "langchain",
++    "langgraph",
++    "torch",
++    "transformers",
++    "tensorflow",
++    "pandas",
++    "scipy",
++    "sklearn",
++    "matplotlib",
++    "IPython",
++    "pytest",
++    "tkinter",
++    "PyQt5",
++    "PyQt6",
++    "PySide2",
++    "PySide6",
++    "wx",
++    "numpy.f2py",
++    "numpy.distutils",
++    "numpy.testing",
++    "PyInstaller",
++    "setuptools",
++    "pkg_resources",
++    "distutils",
++    "mypy",
++    "mypy_extensions",
++    "pygments",
++    "pathspec",
++    "psutil",
++    "yaml",
++    "threadpoolctl",
++    "librt",
++    "orjson",
++    "ast_serialize",
++)
++
++
++def portable_module(name):
++    return not any(
++        "test" in part or part in {"f2py", "distutils", "_pyinstaller", "mypy_plugin"}
++        for part in name.split(".")
++    )
++
++
++# Reviewed pack modules and these SDK sources are imported after admission, so
++# static analysis of the tiny entry script cannot discover their dependencies.
++hiddenimports = [
++    "csv",
++    "ctypes",
++    "ctypes.util",
++    "decimal",
++    "html",
++    "uuid",
++    "zipfile",
++    "xml.dom.minidom",
++    "xml.etree.ElementTree",
++]
++for package in OFFICE_PACKAGES:
++    if importlib.util.find_spec(package) is None:
++        raise RuntimeError(f"missing employee leaf office dependency: {package}")
++    hiddenimports.extend(collect_submodules(package, filter=portable_module))
++if importlib.util.find_spec("chardet") is not None:
++    hiddenimports.extend(collect_submodules("chardet", filter=portable_module))
++
++datas = []
++for package in ("docx", "pptx", "reportlab"):
++    datas.extend(collect_data_files(package, include_py_files=False))
++
++a = Analysis(
++    [str(ROOT / "app/mod_sdk/employee_leaf.py")],
++    pathex=[],
++    binaries=[],
++    datas=datas,
++    hiddenimports=sorted(set(hiddenimports)),
++    hookspath=[],
++    hooksconfig={},
++    runtime_hooks=[],
++    excludes=list(EXCLUDES),
++    noarchive=False,
++)
++
++# Exact source projections, without importing the application package or its
++# configuration. TOC entries permit the host_services projection's rename.
++SDK_SOURCES = {
++    "app/mod_sdk/office_employee_worker.py": "app/mod_sdk/office_employee_worker.py",
++    "app/mod_sdk/generated_employee_worker.py": "app/mod_sdk/generated_employee_worker.py",
++    "app/mod_sdk/host_services.py": "app/application/office_plaintext_generate.py",
++    "app/application/agent_orchestrator/tool_receipt.py": "app/application/agent_orchestrator/tool_receipt.py",
++}
++for target, source in SDK_SOURCES.items():
++    a.datas.append((f"leaf_sdk/{target}", str(ROOT / source), "DATA"))
++for name, *_ in a.pure:
++    if any(name == excluded or name.startswith(excluded + ".") for excluded in EXCLUDES):
++        raise RuntimeError(f"forbidden host dependency in employee leaf: {name}")
++    root = name.split(".")[0]
++    if root not in set(OFFICE_PACKAGES) | {"chardet", "cryptography"} | sys.stdlib_module_names:
++        if not root.startswith("_sysconfigdata_"):
++            raise RuntimeError(f"unapproved employee leaf dependency: {name}")
++for target, source, _ in a.datas:
++    if Path(source).resolve().is_relative_to(ROOT) and target not in {
++        f"leaf_sdk/{name}" for name in SDK_SOURCES
++    }:
++        raise RuntimeError(f"unapproved employee leaf host data: {target}")
++
++pyz = PYZ(a.pure)
++exe = EXE(
++    pyz,
++    a.scripts,
++    [],
++    exclude_binaries=True,
++    name="xcagi-employee-leaf",
++    debug=False,
++    bootloader_ignore_signals=False,
++    strip=False,
++    upx=False,
++    console=True,
++    contents_directory="_internal",
++    codesign_identity=None,
++    entitlements_file=None,
++)
++coll = COLLECT(
++    exe,
++    a.binaries,
++    a.datas,
++    strip=False,
++    upx=False,
++    name="xcagi-employee-leaf",
++)
+diff --git a/FHD/tests/test_packaged_employee_leaf.py b/FHD/tests/test_packaged_employee_leaf.py
+new file mode 100644
+index 0000000000..b5e59d177b
+--- /dev/null
++++ b/FHD/tests/test_packaged_employee_leaf.py
+@@ -0,0 +1,622 @@
++"""Real frozen helper probes; these do not qualify a signed installed product."""
++
++import csv
++import hashlib
++import json
++import os
++import platform
++import shutil
++import sys
++import time
++from pathlib import Path
++
++import psutil
++import pytest
++
++from app.application.employee_runtime import leaf_process as leaf
++
++pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS OS policy")
++SDK_FILES = (
++    "app/mod_sdk/office_employee_worker.py",
++    "app/mod_sdk/generated_employee_worker.py",
++    "app/mod_sdk/host_services.py",
++    "app/application/agent_orchestrator/tool_receipt.py",
++)
++
++
++@pytest.fixture(scope="module")
++def packaged_runtime(tmp_path_factory):
++    configured = os.environ.get("XCAGI_TEST_EMPLOYEE_LEAF")
++    if not configured:
++        pytest.skip("set XCAGI_TEST_EMPLOYEE_LEAF to the actual frozen helper executable")
++    original = Path(configured)
++    assert original.is_absolute() and original.is_file() and not original.is_symlink()
++    assert original.name == "xcagi-employee-leaf"
++    assert os.access(original, os.X_OK)
++    backend = tmp_path_factory.mktemp("frozen-backend").resolve()
++    bundle = backend / "employee-leaf"
++    shutil.copytree(original.parent, bundle, symlinks=True)
++    executable = bundle / original.name
++    with pytest.MonkeyPatch.context() as patch:
++        patch.setattr(sys, "frozen", True, raising=False)
++        patch.setattr(sys, "executable", str(backend / "xcagi-backend"))
++        runtime = leaf._runtime()
++    assert runtime == ([str(executable)], [bundle], [])
++    sdk = bundle / "_internal/leaf_sdk"
++    hashes = {name: hashlib.sha256((sdk / name).read_bytes()).hexdigest() for name in SDK_FILES}
++    try:
++        yield {
++            "runtime": runtime,
++            "sdk": sdk,
++            "sdk_hashes": hashes,
++            "helper_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
++        }
++    finally:
++        shutil.rmtree(bundle)
++
++
++def _stage_frozen_sdk(packaged_runtime, stage):
++    backend = Path(packaged_runtime["runtime"][0][0]).parent.parent
++    with pytest.MonkeyPatch.context() as patch:
++        patch.setattr(sys, "frozen", True, raising=False)
++        patch.setattr(sys, "executable", str(backend / "xcagi-backend"))
++        return leaf.stage_sdk(stage)
++
++
++@pytest.fixture
++def frozen_leaf(packaged_runtime, tmp_path, monkeypatch, record_property):
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    runtime = packaged_runtime["runtime"]
++    monkeypatch.setattr(leaf, "_runtime", lambda: runtime)
++    root = tmp_path.resolve()
++    record_property("frozen_helper_sha256", packaged_runtime["helper_sha256"])
++    record_property("frozen_sdk_sha256", json.dumps(packaged_runtime["sdk_hashes"], sort_keys=True))
++    record_property("os_build", os.uname().release)
++    record_property("architecture", platform.machine())
++
++    def prepare(source, *, input_value=None, suffix="json", extra_payload=None):
++        pack = root / "synthetic-pack"
++        module = pack / "backend/employees/probe.py"
++        module.parent.mkdir(parents=True)
++        module.write_text(source, encoding="utf-8")
++        stage = root / "private-stage"
++        stage.mkdir(mode=0o700)
++        inputs = []
++        if input_value is not None:
++            original = root / "approved-input.json"
++            original.write_text(json.dumps(input_value), encoding="utf-8")
++            inputs.append(
++                {
++                    "parameter": "file_path",
++                    "path": str(original),
++                    "sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
++                    "size_bytes": original.stat().st_size,
++                }
++            )
++        snapshot = {
++            "code_sha256": canonical_hash(
++                {"backend/employees/probe.py": hashlib.sha256(module.read_bytes()).hexdigest()}
++            ),
++            "inputs": inputs,
++            "output_path": str(root / f"approved-output.{suffix}"),
++        }
++        payload = leaf.stage_employee(pack, snapshot, dict(extra_payload or {}), stage)
++        sdk = _stage_frozen_sdk(packaged_runtime, stage)
++        for name in SDK_FILES:
++            target = sdk / name
++            assert (
++                hashlib.sha256(target.read_bytes()).hexdigest()
++                == packaged_runtime["sdk_hashes"][name]
++            )
++        config = {
++            "sdk_root": str(sdk),
++            "pack_root": str(stage / "pack"),
++            "workspace_root": str(stage / "work"),
++            "payload": payload,
++            "employee_id": "frozen-probe",
++            "module": "backend/employees/probe.py",
++        }
++        record_property(
++            "profile_sha256",
++            hashlib.sha256(leaf._profile(runtime[0], runtime[1], stage).encode()).hexdigest(),
++        )
++        return config, stage
++
++    def run(config, stage, *, timeout=30, model_callback=None):
++        result, audit = leaf.spawn_leaf(
++            config, stage, deadline=time.monotonic() + timeout, model_callback=model_callback
++        )
++        policy = leaf._profile(runtime[0], runtime[1], stage)
++        assert audit["profile_sha256"] == hashlib.sha256(policy.encode()).hexdigest()
++        assert audit["helper"] == runtime[0][0]
++        assert audit["os_build"] == os.uname().release
++        assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++        return result, audit
++
++    return prepare, run
++
++
++def test_frozen_helper_imports_only_bundled_portable_sdk(frozen_leaf):
++    prepare, run = frozen_leaf
++    config, stage = prepare("""
++async def run(payload, ctx):
++    import importlib, sys
++    from pathlib import Path
++    names = (
++        "app.mod_sdk.office_employee_worker",
++        "app.mod_sdk.generated_employee_worker",
++        "app.mod_sdk.host_services",
++        "app.application.agent_orchestrator.tool_receipt",
++    )
++    modules = [importlib.import_module(name) for name in names]
++    unavailable = []
++    for name in ("app.db", "fastapi", "app.infrastructure.llm.client", "sqlalchemy"):
++        try:
++            importlib.import_module(name)
++        except ImportError:
++            unavailable.append(name)
++    spec, warnings = await modules[2].resolve_table_spec(
++        Path(ctx["workspace_root"]) / "unused.json",
++        {"plain_text": "name,count\\nfixture,2"}, {}, {},
++    )
++    worker = modules[1].GeneratedEmployeeWorker(__file__, "probe", "probe", "", __name__)
++    return {
++        "ok": True,
++        "sdk_files": [module.__file__ for module in modules],
++        "host_modules": [name for name in sys.modules
++                         if name.startswith(("fastapi", "app.db", "app.infrastructure", "sqlalchemy"))],
++        "unavailable": unavailable,
++        "receipt": modules[3].tool_receipt_outcome({"success": True}),
++        "uncertain": worker._dependency_error(None, "probe")["outcome"],
++        "rows": spec["rows"],
++    }
++""")
++    result, audit = run(config, stage)
++    assert result["ok"] is True
++    assert result["host_modules"] == []
++    assert result["unavailable"] == [
++        "app.db",
++        "fastapi",
++        "app.infrastructure.llm.client",
++        "sqlalchemy",
++    ]
++    assert result["receipt"] == "success" and result["uncertain"] == "unknown"
++    assert result["rows"] == [{"name": "fixture", "count": "2"}]
++    assert set(result["sdk_files"]) == {str(stage / "sdk" / name) for name in SDK_FILES}
++    assert audit["model_calls"] == 0
++
++
++def test_frozen_helper_denies_host_files_native_reads_network_and_children(
++    frozen_leaf, tmp_path, monkeypatch
++):
++    forbidden = tmp_path.resolve() / "host-private.txt"
++    forbidden.write_text("SYNTHETIC_HOST_DATA")
++    monkeypatch.setenv("SYNTHETIC_HOST_API_KEY", "SYNTHETIC_CREDENTIAL")
++    prepare, run = frozen_leaf
++    config, stage = prepare(f"""
++def run(payload, ctx):
++    import ctypes, errno, os, socket, subprocess, sys
++    checks = {{}}
++    for name, operation in (
++        ("read", lambda: open({str(forbidden)!r}).read()),
++        ("write", lambda: open({str(forbidden)!r}, "w").write("changed")),
++        ("network", lambda: socket.create_connection(("127.0.0.1", 9))),
++        ("shell", lambda: subprocess.run(["/bin/sh", "-c", "true"])),
++        ("same_helper_exec", lambda: subprocess.run(
++            [sys.executable], input=b"", capture_output=True, timeout=2)),
++    ):
++        try:
++            operation()
++        except PermissionError:
++            checks[name] = True
++        else:
++            checks[name] = False
++    native = ctypes.CDLL(None, use_errno=True)
++    descriptor = native.open(os.fsencode({str(forbidden)!r}), 0)
++    checks["native_read"] = descriptor < 0 and ctypes.get_errno() in (errno.EPERM, errno.EACCES)
++    if descriptor >= 0:
++        os.close(descriptor)
++    try:
++        pid = os.fork()
++    except PermissionError:
++        checks["fork"] = True
++    else:
++        if pid == 0:
++            os._exit(0)
++        os.waitpid(pid, 0)
++        checks["fork"] = False
++    checks["credential_absent"] = os.getenv("SYNTHETIC_HOST_API_KEY") is None
++    checks["host_absent"] = not any(name.startswith("app.db") for name in sys.modules)
++    return {{"ok": True, "checks": checks}}
++""")
++    result, _ = run(config, stage)
++    assert result == {
++        "ok": True,
++        "checks": dict.fromkeys(
++            (
++                "read",
++                "write",
++                "network",
++                "shell",
++                "same_helper_exec",
++                "native_read",
++                "fork",
++                "credential_absent",
++                "host_absent",
++            ),
++            True,
++        ),
++    }
++    assert forbidden.read_text() == "SYNTHETIC_HOST_DATA"
++
++
++@pytest.mark.parametrize("suffix", ["csv", "json"])
++def test_frozen_helper_writes_readable_csv_and_json_from_pinned_input(
++    frozen_leaf, tmp_path, suffix
++):
++    prepare, run = frozen_leaf
++    config, stage = prepare(
++        """
++def run(payload, ctx):
++    import csv, json
++    from pathlib import Path
++    src, dest = Path(payload["file_path"]), Path(payload["output_path"])
++    data = json.loads(src.read_bytes())
++    try:
++        src.write_text("changed")
++    except PermissionError:
++        readonly = True
++    else:
++        readonly = False
++    if dest.suffix == ".csv":
++        with dest.open("w", newline="") as stream:
++            writer = csv.DictWriter(stream, fieldnames=["name", "count"])
++            writer.writeheader()
++            writer.writerows(data["rows"])
++    else:
++        dest.write_text(json.dumps(data))
++    return {"ok": True, "input_readonly": readonly, "output_path": str(dest)}
++""",
++        input_value={"rows": [{"name": "approved-fixture", "count": 2}]},
++        suffix=suffix,
++    )
++    original = tmp_path.resolve() / "approved-input.json"
++    original.write_text('{"rows": [{"name": "replaced-after-staging", "count": 999}]}')
++    result, _ = run(config, stage)
++    assert result["ok"] is True and result["input_readonly"] is True
++    output = Path(result["output_path"])
++    assert output == stage / f"work/outputs/approved-output.{suffix}"
++    if suffix == "csv":
++        with output.open(newline="") as stream:
++            assert list(csv.DictReader(stream)) == [{"name": "approved-fixture", "count": "2"}]
++    else:
++        assert json.loads(output.read_bytes()) == {
++            "rows": [{"name": "approved-fixture", "count": 2}]
++        }
++    assert "replaced-after-staging" in original.read_text()
++
++
++@pytest.mark.parametrize("suffix", ["docx", "xlsx", "pdf", "pptx"])
++def test_frozen_helper_office_dependencies_produce_reopenable_documents(frozen_leaf, suffix):
++    prepare, run = frozen_leaf
++    config, stage = prepare(
++        """
++def run(payload, ctx):
++    import json
++    from pathlib import Path
++    dest = Path(payload["output_path"])
++    text = json.loads(Path(payload["file_path"]).read_bytes())["text"]
++    if dest.suffix == ".docx":
++        from docx import Document
++        document = Document()
++        document.add_paragraph(text)
++        document.save(dest)
++        reopened = Document(dest).paragraphs[0].text
++    elif dest.suffix == ".xlsx":
++        from openpyxl import Workbook, load_workbook
++        book = Workbook()
++        book.active.append([text, 2])
++        book.save(dest)
++        reopened_book = load_workbook(dest, read_only=True)
++        reopened = reopened_book.active.cell(1, 1).value
++        reopened_book.close()
++    elif dest.suffix == ".pdf":
++        from reportlab.pdfgen.canvas import Canvas
++        from pypdf import PdfReader
++        canvas = Canvas(str(dest))
++        canvas.drawString(72, 720, text)
++        canvas.save()
++        reopened = PdfReader(dest).pages[0].extract_text().strip()
++    else:
++        from pptx import Presentation
++        presentation = Presentation()
++        slide = presentation.slides.add_slide(presentation.slide_layouts[6])
++        slide.shapes.add_textbox(0, 0, 3000000, 1000000).text = text
++        presentation.save(dest)
++        reopened = Presentation(dest).slides[0].shapes[0].text
++    return {"ok": True, "output_path": str(dest), "reopened": reopened}
++""",
++        input_value={"text": "Frozen helper fixture"},
++        suffix=suffix,
++    )
++    result, _ = run(config, stage)
++    assert result == {
++        "ok": True,
++        "output_path": str(stage / f"work/outputs/approved-output.{suffix}"),
++        "reopened": "Frozen helper fixture",
++    }
++    output = Path(result["output_path"])
++    if suffix == "docx":
++        from docx import Document
++
++        assert Document(output).paragraphs[0].text == "Frozen helper fixture"
++    elif suffix == "xlsx":
++        from openpyxl import load_workbook
++
++        book = load_workbook(output, read_only=True)
++        try:
++            assert list(book.active.values) == [("Frozen helper fixture", 2)]
++        finally:
++            book.close()
++    elif suffix == "pdf":
++        from pypdf import PdfReader
++
++        assert PdfReader(output).pages[0].extract_text().strip() == "Frozen helper fixture"
++    else:
++        from pptx import Presentation
++
++        assert Presentation(output).slides[0].shapes[0].text == "Frozen helper fixture"
++
++
++def test_frozen_helper_model_broker_keeps_host_credentials_outside_leaf(frozen_leaf, monkeypatch):
++    monkeypatch.setenv("SYNTHETIC_HOST_API_KEY", "SYNTHETIC_CREDENTIAL")
++    prepare, run = frozen_leaf
++    config, stage = prepare("""
++async def run(payload, ctx):
++    import os
++    reply = await ctx["call_llm"]([{"role": "user", "content": "synthetic prompt"}], max_tokens=17)
++    return {"ok": reply["success"], "content": reply["content"],
++            "credential_absent": "SYNTHETIC_HOST_API_KEY" not in os.environ,
++            "context_keys": sorted(ctx)}
++""")
++    calls = []
++
++    def complete(messages, tokens, temperature):
++        assert os.environ["SYNTHETIC_HOST_API_KEY"] == "SYNTHETIC_CREDENTIAL"
++        calls.append((messages, tokens, temperature))
++        return {"success": True, "content": "synthetic reply"}
++
++    result, audit = run(config, stage, model_callback=complete)
++    assert calls == [([{"role": "user", "content": "synthetic prompt"}], 17, 0.7)]
++    assert result == {
++        "ok": True,
++        "content": "synthetic reply",
++        "credential_absent": True,
++        "context_keys": ["call_llm", "employee_id", "workspace_root"],
++    }
++    assert audit["model_calls"] == 1
++
++
++def test_frozen_helper_deadline_reaps_entered_worker_and_removes_canary(frozen_leaf):
++    prepare, _ = frozen_leaf
++    config, stage = prepare("""
++def run(payload, ctx):
++    from pathlib import Path
++    (Path(ctx["workspace_root"]) / "entered").write_text("yes")
++    while True:
++        pass
++""")
++    children = {child.pid for child in psutil.Process().children()}
++    with pytest.raises(TimeoutError, match="employee_leaf_deadline"):
++        leaf.spawn_leaf(config, stage, deadline=time.monotonic() + 8)
++    assert (stage / "work/entered").read_text() == "yes"
++    assert {child.pid for child in psutil.Process().children()} == children
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++def test_frozen_helper_discards_worker_exception_and_printed_secret(frozen_leaf, capsys):
++    prepare, _ = frozen_leaf
++    config, stage = prepare("""
++def run(payload, ctx):
++    from pathlib import Path
++    (Path(ctx["workspace_root"]) / "entered").write_text("yes")
++    print("SYNTHETIC_PRIVATE_DIAGNOSTIC")
++    raise ValueError("SYNTHETIC_PRIVATE_ERROR")
++""")
++    with pytest.raises(ValueError, match="employee_leaf_incomplete") as error:
++        leaf.spawn_leaf(config, stage, deadline=time.monotonic() + 30)
++    assert (stage / "work/entered").read_text() == "yes"
++    captured = capsys.readouterr()
++    assert "SYNTHETIC_PRIVATE" not in str(error.value) + captured.out + captured.err
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++def test_frozen_sdk_staging_reads_bundle_without_host_source(
++    packaged_runtime, tmp_path, monkeypatch, record_property
++):
++    # Initialize the trusted pinned reader before temporarily selecting frozen paths.
++    assert leaf._pinned_bytes(packaged_runtime["sdk"] / SDK_FILES[0])
++    missing_source = tmp_path / "missing-host/app/application/employee_runtime/leaf_process.py"
++    assert not missing_source.exists()
++    monkeypatch.setattr(leaf, "__file__", str(missing_source))
++    stage = tmp_path / "sdk-source-check"
++    stage.mkdir(mode=0o700)
++    sdk = _stage_frozen_sdk(packaged_runtime, stage)
++    assert {p.relative_to(sdk).as_posix() for p in sdk.rglob("*") if p.is_file()} == set(SDK_FILES)
++    for name in SDK_FILES:
++        target = sdk / name
++        assert (
++            hashlib.sha256(target.read_bytes()).hexdigest() == packaged_runtime["sdk_hashes"][name]
++        )
++        assert target.stat().st_mode & 0o777 == 0o400
++        assert target.stat().st_nlink == 1 and not target.is_symlink()
++    record_property("frozen_helper_sha256", packaged_runtime["helper_sha256"])
++    record_property("frozen_sdk_sha256", json.dumps(packaged_runtime["sdk_hashes"], sort_keys=True))
++    record_property("os_build", os.uname().release)
++    record_property("architecture", platform.machine())
++
++
++def _actual_pack_call(
++    runtime,
++    packaged_runtime,
++    tmp_path,
++    monkeypatch,
++    record_property,
++    pack_id,
++    *,
++    source=None,
++    payload=None,
++):
++    """Portable pack/publication boundary; real caller approval is tested elsewhere."""
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.application.employee_runtime.leaf_action import _publish_outputs
++    from app.mod_sdk.employee_tool_registry import _office_output_paths
++
++    pack = Path(__file__).resolve().parents[1] / "mods/_employees" / pack_id
++    rules = json.loads((pack / "rule_spec.json").read_bytes())
++    manifest = json.loads((pack / "manifest.json").read_bytes())
++    module = manifest["employee_config_v2"]["actions"]["direct_python"]["module"]
++    workspace = tmp_path.resolve() / "trusted-workspace"
++    workspace.mkdir()
++    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
++    primary = workspace / rules["default_output_relpath"]
++    reviewed = {
++        "code_sha256": canonical_hash(
++            {
++                p.relative_to(pack).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
++                for p in pack.rglob("*")
++                if p.is_file()
++                and "__pycache__" not in p.parts
++                and not any(part.startswith(".") for part in p.relative_to(pack).parts)
++            }
++        ),
++        "inputs": []
++        if source is None
++        else [
++            {
++                "parameter": "file_path",
++                "path": str(source),
++                "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++                "size_bytes": source.stat().st_size,
++            }
++        ],
++        "output_path": str(primary),
++        "workspace_root": str(workspace),
++        "output_kind": "artifacts",
++        "outputs": [{"path": str(primary), "before": None}],
++    }
++    stage = tmp_path.resolve() / "actual-pack-stage"
++    stage.mkdir(mode=0o700)
++    staged = leaf.stage_employee(pack, reviewed, dict(payload or {}), stage)
++    if runtime == "frozen":
++        selected = packaged_runtime["runtime"]
++        monkeypatch.setattr(leaf, "_runtime", lambda: selected)
++        sdk = _stage_frozen_sdk(packaged_runtime, stage)
++    else:
++        sdk = leaf.stage_sdk(stage)
++    result, audit = leaf.spawn_leaf(
++        {
++            "sdk_root": str(sdk),
++            "pack_root": str(stage / "pack"),
++            "workspace_root": str(stage / "work"),
++            "payload": staged,
++            "employee_id": pack_id,
++            "module": f"backend/employees/{module}.py",
++        },
++        stage,
++        deadline=time.monotonic() + 30,
++    )
++    assert result["ok"] is True
++    published, artifacts = _publish_outputs(stage, reviewed, result, deadline=time.monotonic() + 30)
++    assert str(stage) not in json.dumps(published)
++    paths = {artifact["path"] for artifact in artifacts}
++    claims = _office_output_paths(pack_id, {"result": {"outputs": [{"output": published}]}})
++    assert claims and set(claims).issubset(paths)
++    for artifact in artifacts:
++        target = Path(artifact["path"])
++        assert target.is_relative_to(workspace) and not target.is_symlink()
++        data = target.read_bytes()
++        assert hashlib.sha256(data).hexdigest() == artifact["sha256"]
++        assert len(data) == artifact["size_bytes"]
++    record_property("runtime", runtime)
++    record_property("profile_sha256", audit["profile_sha256"])
++    record_property("helper_sha256", hashlib.sha256(Path(audit["helper"]).read_bytes()).hexdigest())
++    record_property("frozen_candidate_sha256", packaged_runtime["helper_sha256"])
++    record_property("pack_code_sha256", reviewed["code_sha256"])
++    return primary, artifacts, workspace
++
++
++@pytest.mark.parametrize("runtime", ["source", "frozen"])
++def test_actual_excel_natural_language_retains_approved_rows(
++    runtime, packaged_runtime, tmp_path, monkeypatch, record_property
++):
++    from openpyxl import load_workbook
++
++    primary, _, _ = _actual_pack_call(
++        runtime,
++        packaged_runtime,
++        tmp_path,
++        monkeypatch,
++        record_property,
++        "excel-generate-employee",
++        payload={"user_request": "name,count\nfixture,2"},
++    )
++    book = load_workbook(primary, read_only=True)
++    try:
++        assert list(book.active.values) == [("name", "count"), ("fixture", "2")]
++    finally:
++        book.close()
++
++
++@pytest.mark.parametrize("runtime", ["source", "frozen"])
++def test_actual_ppt_reader_publishes_resolvable_image_references(
++    runtime, packaged_runtime, tmp_path, monkeypatch, record_property
++):
++    from PIL import Image
++    from pptx import Presentation
++
++    image_path = tmp_path / "approved-image.png"
++    Image.new("RGB", (32, 32), (34, 102, 170)).save(image_path)
++    image_sha = hashlib.sha256(image_path.read_bytes()).hexdigest()
++    presentation = Presentation()
++    slide = presentation.slides.add_slide(presentation.slide_layouts[6])
++    slide.shapes.add_textbox(0, 0, 3000000, 1000000).text = "asset-fixture"
++    slide.shapes.add_picture(str(image_path), 0, 1000000)
++    original = tmp_path / "approved.pptx"
++    presentation.save(original)
++    original_sha = hashlib.sha256(original.read_bytes()).hexdigest()
++    primary, artifacts, workspace = _actual_pack_call(
++        runtime,
++        packaged_runtime,
++        tmp_path,
++        monkeypatch,
++        record_property,
++        "ppt-full-read-employee",
++        source=original,
++    )
++    assert "asset-fixture" in primary.read_text()
++    owners = set()
++
++    def inspect(value, owner):
++        if isinstance(value, dict):
++            for key, item in value.items():
++                if key == "relpath" and isinstance(item, str) and item.endswith(".png"):
++                    assert not Path(item).is_absolute()
++                    target = owner.parent / item
++                    assert target.resolve().is_relative_to(workspace)
++                    assert hashlib.sha256(target.read_bytes()).hexdigest() == image_sha
++                    with Image.open(target) as image:
++                        image.verify()
++                    owners.add(owner.name)
++                inspect(item, owner)
++        elif isinstance(value, list):
++            for item in value:
++                inspect(item, owner)
++
++    for artifact in artifacts:
++        owner = Path(artifact["path"])
++        if owner.suffix == ".json":
++            inspect(json.loads(owner.read_bytes()), owner)
++    assert {"presentation_full.json", "images_index.json"}.issubset(owners)
++    assert hashlib.sha256(original.read_bytes()).hexdigest() == original_sha
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,12 @@
+Full evidence root (not fully copied):
+  /Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/
+
+Key subdirs left in place:
+  eval-failure-triage-20261026/
+  sql-route-eval-migration-20261026/materials/
+  material-batch-verification-20261026/
+  materials-readback-alias-fix-20261026/
+  architecture-runtime-plan-20261026/
+  excel-vector-isolation-20261025/
+  excel-vector-snapshot-20261025/
+  net-deletion-*.json / net-deletion-current.log

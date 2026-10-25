@@ -1,0 +1,3003 @@
+From 37d73775b280e9b45d346a00cc134b0a83793cfc Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:10:42 +0800
+Subject: [PATCH 15/43] refactor(employees): share generated handlers without
+ changing pack behavior
+
+
+diff --git a/FHD/app/mod_sdk/generated_employee_worker.py b/FHD/app/mod_sdk/generated_employee_worker.py
+new file mode 100644
+index 0000000000..8833f3d37b
+--- /dev/null
++++ b/FHD/app/mod_sdk/generated_employee_worker.py
+@@ -0,0 +1,276 @@
++"""Shared generated Employee handlers; pack identity and manifest stay source-local."""
++
++from __future__ import annotations
++
++import asyncio
++import json
++import logging
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++from app.mod_sdk.errors import BOUNDARY_ERRORS
++
++DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
++
++
++class GeneratedEmployeeWorker:
++    """Run a generated pack without sharing its identity or mutable dispatch state."""
++
++    def __init__(
++        self, source_file: str, employee_id: str, label: str, system_prompt: str, module_name: str
++    ):
++        self.source_file = source_file
++        self.employee_id = employee_id
++        self.label = label
++        self.system_prompt = system_prompt
++        self.logger = logging.getLogger(module_name)
++        self._DISPATCH = {
++            "echo": self._handle_echo,
++            "llm_md": self._handle_llm_md,
++            "webhook": self._handle_webhook,
++            "agent": self._handle_agent,
++        }
++
++    def _ok(
++        self,
++        data: Any,
++        *,
++        warnings: Optional[List[str]] = None,
++        meta: Optional[Dict[str, Any]] = None,
++    ) -> Dict[str, Any]:
++        return {
++            "ok": True,
++            "summary": ""
++            if data is None
++            else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
++            "items": data
++            if isinstance(data, list)
++            else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
++            "warnings": list(warnings or []),
++            "error": "",
++            "meta": dict(meta or {}),
++        }
++
++    def _err(
++        self,
++        msg: str,
++        *,
++        warnings: Optional[List[str]] = None,
++        meta: Optional[Dict[str, Any]] = None,
++    ) -> Dict[str, Any]:
++        return {
++            "ok": False,
++            "summary": msg[:400],
++            "items": [],
++            "warnings": list(warnings or []),
++            "error": msg[:1000],
++            "meta": dict(meta or {}),
++        }
++
++    def _manifest_path(self) -> Optional[Path]:
++        here = Path(self.source_file).resolve()
++        for parent in (here.parent, *here.parents):
++            cand = parent / "manifest.json"
++            if cand.is_file():
++                return cand
++        return None
++
++    def _load_manifest(self) -> Optional[Dict[str, Any]]:
++        mp = self._manifest_path()
++        if not mp:
++            return None
++        try:
++            data = json.loads(mp.read_text(encoding="utf-8"))
++        except (OSError, json.JSONDecodeError):
++            return None
++        return data if isinstance(data, dict) else None
++
++    def _v2(self, manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
++        if not isinstance(manifest, dict):
++            return {}
++        v2 = manifest.get("employee_config_v2")
++        return v2 if isinstance(v2, dict) else {}
++
++    def _agent_model(self, v2: Dict[str, Any]) -> Dict[str, Any]:
++        cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
++        agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
++        model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
++        return {
++            "system_prompt": str(agent.get("system_prompt") or "").strip(),
++            "max_tokens": int(model.get("max_tokens") or 4000),
++            "temperature": float(
++                model.get("temperature") if model.get("temperature") is not None else 0.2
++            ),
++        }
++
++    def _actions(self, v2: Dict[str, Any]) -> Dict[str, Any]:
++        a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
++        return a
++
++    def _handlers(self, actions: Dict[str, Any]) -> List[str]:
++        raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
++        return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
++
++    async def _handle_echo(
++        self, payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
++    ) -> Dict[str, Any]:
++        return self._ok({"echo": payload}, meta={"handler": "echo"})
++
++    async def _handle_llm_md(
++        self, payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
++    ) -> Dict[str, Any]:
++        call_llm = ctx.get("call_llm")
++        if not callable(call_llm):
++            summary = [
++                f"# {self.label} 执行方案",
++                "",
++                "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
++                "",
++                "## 输入",
++                json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
++                "",
++                "## 下一步",
++                "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
++                "- 也可通过 payload.handler=echo 获取原始输入回显。",
++            ]
++            return self._ok(
++                "\n".join(summary),
++                warnings=["ctx.call_llm unavailable; returned offline plan"],
++                meta={"handler": "llm_md", "offline": True},
++            )
++        cfg = self._agent_model(v2)
++        sys_prompt = cfg["system_prompt"] or self.system_prompt
++        if "##" not in sys_prompt:
++            sys_prompt = (
++                sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
++            )
++        user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
++        messages = [
++            {"role": "system", "content": sys_prompt},
++            {"role": "user", "content": user_msg},
++        ]
++        try:
++            res = await asyncio.wait_for(
++                call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
++                timeout=120.0,
++            )
++        except TimeoutError:
++            return self._err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
++        except BOUNDARY_ERRORS as e:  # noqa: BLE001
++            self.logger.exception("call_llm raised")
++            return self._err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
++        if not isinstance(res, dict) or not res.get("ok"):
++            return self._err(
++                str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
++            )
++        content = str(res.get("content") or "").strip()
++        return self._ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
++
++    async def _handle_webhook(
++        self, payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
++    ) -> Dict[str, Any]:
++        http_post = ctx.get("http_post")
++        if not callable(http_post):
++            return self._err(
++                "ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"}
++            )
++        cfg = (
++            self._actions(v2).get("webhook")
++            if isinstance(self._actions(v2).get("webhook"), dict)
++            else {}
++        )
++        url = str(cfg.get("url") or "").strip()
++        if not url:
++            return self._err("actions.webhook.url 未配置", meta={"handler": "webhook"})
++        try:
++            r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
++        except TimeoutError:
++            return self._err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
++        except BOUNDARY_ERRORS as e:  # noqa: BLE001
++            return self._err(
++                "webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url}
++            )
++        if not isinstance(r, dict) or not r.get("ok"):
++            return self._err(
++                str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
++                meta={"handler": "webhook", "url": url},
++            )
++        return self._ok(
++            {"status": r.get("status"), "text": r.get("text")},
++            meta={"handler": "webhook", "url": url},
++        )
++
++    async def _handle_agent(
++        self, payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
++    ) -> Dict[str, Any]:
++        runner = ctx.get("agent_runner")
++        if runner is None:
++            return self._err(
++                "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
++            )
++        cfg = self._agent_model(v2)
++        task = (
++            payload.get("task")
++            or payload.get("message")
++            or payload.get("input")
++            or json.dumps(payload or {}, ensure_ascii=False)[:2000]
++        )
++        sys_prompt = cfg["system_prompt"] or self.system_prompt
++        try:
++            result = await asyncio.wait_for(
++                runner.run(task, system_prompt=sys_prompt),
++                timeout=300.0,
++            )
++        except TimeoutError:
++            return self._err("agent 执行超时（300s）", meta={"handler": "agent"})
++        except BOUNDARY_ERRORS as e:  # noqa: BLE001
++            self.logger.exception("agent run raised")
++            return self._err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
++        if not result.get("ok"):
++            return self._err(
++                str(result.get("error") or "agent 失败"),
++                meta={"handler": "agent", "rounds": result.get("rounds", 0)},
++            )
++        return self._ok(
++            result.get("summary") or "",
++            meta={
++                "handler": "agent",
++                "rounds": result.get("rounds", 0),
++                "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
++            },
++        )
++
++    async def run(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
++        self.logger.info(
++            "[employee:%s] run keys=%s", self.employee_id, list((payload or {}).keys())[:12]
++        )
++        payload = payload or {}
++        ctx = ctx or {}
++        manifest = self._load_manifest()
++        v2 = self._v2(manifest)
++        if not v2:
++            return self._err(
++                "manifest.employee_config_v2 缺失或不可读，无法决定行为",
++                meta={"employee_id": self.employee_id},
++            )
++        handlers = self._handlers(self._actions(v2))
++        if not handlers:
++            return self._err(
++                "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
++                meta={"employee_id": self.employee_id},
++            )
++        requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
++        chosen = requested if requested in handlers else handlers[0]
++        fn = self._DISPATCH.get(chosen)
++        if fn is None:
++            return self._err(
++                f"不支持的 handler：{chosen}（支持：{sorted(self._DISPATCH.keys())}）",
++                meta={"employee_id": self.employee_id, "declared_handlers": handlers},
++            )
++        out = await fn(payload, ctx, v2)
++        if isinstance(out, dict):
++            meta = out.setdefault("meta", {})
++            if isinstance(meta, dict):
++                meta.setdefault("declared_handlers", handlers)
++                meta.setdefault("chosen_handler", chosen)
++        return out
+diff --git a/FHD/mods/_employees/deploy-release-officer/backend/employees/deploy_release_officer.py b/FHD/mods/_employees/deploy-release-officer/backend/employees/deploy_release_officer.py
+index ebc5cc0f4a..8df5c82109 100644
+--- a/FHD/mods/_employees/deploy-release-officer/backend/employees/deploy_release_officer.py
++++ b/FHD/mods/_employees/deploy-release-officer/backend/employees/deploy_release_officer.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "deploy-release-officer"
+ EMPLOYEE_LABEL = "发布部署主管"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「发布部署主管」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/deploy-release-officer/manifest.json b/FHD/mods/_employees/deploy-release-officer/manifest.json
+index a7d6c3d6b8..84917632ed 100644
+--- a/FHD/mods/_employees/deploy-release-officer/manifest.json
++++ b/FHD/mods/_employees/deploy-release-officer/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "deploy-release-officer",
+diff --git a/FHD/mods/_employees/fhd-core-maintainer/backend/employees/fhd_core_maintainer.py b/FHD/mods/_employees/fhd-core-maintainer/backend/employees/fhd_core_maintainer.py
+index b514bb2734..edcd89ce03 100644
+--- a/FHD/mods/_employees/fhd-core-maintainer/backend/employees/fhd_core_maintainer.py
++++ b/FHD/mods/_employees/fhd-core-maintainer/backend/employees/fhd_core_maintainer.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "fhd-core-maintainer"
+ EMPLOYEE_LABEL = "FHD 核心应用维护员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「FHD 核心应用维护员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/fhd-core-maintainer/manifest.json b/FHD/mods/_employees/fhd-core-maintainer/manifest.json
+index 38f9844a6a..206a302832 100644
+--- a/FHD/mods/_employees/fhd-core-maintainer/manifest.json
++++ b/FHD/mods/_employees/fhd-core-maintainer/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "fhd-core-maintainer",
+diff --git a/FHD/mods/_employees/flask-entry-keeper/backend/employees/flask_entry_keeper.py b/FHD/mods/_employees/flask-entry-keeper/backend/employees/flask_entry_keeper.py
+index 5ecf234ccd..70b5ec76e1 100644
+--- a/FHD/mods/_employees/flask-entry-keeper/backend/employees/flask_entry_keeper.py
++++ b/FHD/mods/_employees/flask-entry-keeper/backend/employees/flask_entry_keeper.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "flask-entry-keeper"
+ EMPLOYEE_LABEL = "Flask 入口维护员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「Flask 入口维护员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/flask-entry-keeper/manifest.json b/FHD/mods/_employees/flask-entry-keeper/manifest.json
+index c3ae41d7ed..457ea0d4ac 100644
+--- a/FHD/mods/_employees/flask-entry-keeper/manifest.json
++++ b/FHD/mods/_employees/flask-entry-keeper/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "flask-entry-keeper",
+diff --git a/FHD/mods/_employees/retention-officer/backend/employees/retention_officer.py b/FHD/mods/_employees/retention-officer/backend/employees/retention_officer.py
+index cc6e600a2e..33d011f7f1 100644
+--- a/FHD/mods/_employees/retention-officer/backend/employees/retention_officer.py
++++ b/FHD/mods/_employees/retention-officer/backend/employees/retention_officer.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "retention-officer"
+ EMPLOYEE_LABEL = "档案清理员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「档案清理员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/retention-officer/manifest.json b/FHD/mods/_employees/retention-officer/manifest.json
+index f62cbbb9e9..b319c1442a 100644
+--- a/FHD/mods/_employees/retention-officer/manifest.json
++++ b/FHD/mods/_employees/retention-officer/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "retention-officer",
+diff --git a/FHD/mods/_employees/self-checker/backend/employees/self_checker.py b/FHD/mods/_employees/self-checker/backend/employees/self_checker.py
+index a5a0da8fc7..dd9806db20 100644
+--- a/FHD/mods/_employees/self-checker/backend/employees/self_checker.py
++++ b/FHD/mods/_employees/self-checker/backend/employees/self_checker.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "self-checker"
+ EMPLOYEE_LABEL = "自检员工"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「自检员工」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/self-checker/manifest.json b/FHD/mods/_employees/self-checker/manifest.json
+index 631f2a7db0..4969e665bd 100644
+--- a/FHD/mods/_employees/self-checker/manifest.json
++++ b/FHD/mods/_employees/self-checker/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "self-checker",
+diff --git a/FHD/mods/_employees/seo-sitemap-curator/backend/employees/seo_sitemap_curator.py b/FHD/mods/_employees/seo-sitemap-curator/backend/employees/seo_sitemap_curator.py
+index a1b64b7709..1b09145d94 100644
+--- a/FHD/mods/_employees/seo-sitemap-curator/backend/employees/seo_sitemap_curator.py
++++ b/FHD/mods/_employees/seo-sitemap-curator/backend/employees/seo_sitemap_curator.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "seo-sitemap-curator"
+ EMPLOYEE_LABEL = "SEO 站点地图管理员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「SEO 站点地图管理员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/seo-sitemap-curator/manifest.json b/FHD/mods/_employees/seo-sitemap-curator/manifest.json
+index c69612cb41..7c8e3fab39 100644
+--- a/FHD/mods/_employees/seo-sitemap-curator/manifest.json
++++ b/FHD/mods/_employees/seo-sitemap-curator/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "seo-sitemap-curator",
+diff --git a/FHD/mods/_employees/task-router-officer/backend/employees/task_router_officer.py b/FHD/mods/_employees/task-router-officer/backend/employees/task_router_officer.py
+index 0c3dc26589..61ba293015 100644
+--- a/FHD/mods/_employees/task-router-officer/backend/employees/task_router_officer.py
++++ b/FHD/mods/_employees/task-router-officer/backend/employees/task_router_officer.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "task-router-officer"
+ EMPLOYEE_LABEL = "任务派发员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「任务派发员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/task-router-officer/manifest.json b/FHD/mods/_employees/task-router-officer/manifest.json
+index 3a3096e058..9e93b7b9de 100644
+--- a/FHD/mods/_employees/task-router-officer/manifest.json
++++ b/FHD/mods/_employees/task-router-officer/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "task-router-officer",
+diff --git a/FHD/mods/_employees/workbench-ux-stylist/backend/employees/workbench_ux_stylist.py b/FHD/mods/_employees/workbench-ux-stylist/backend/employees/workbench_ux_stylist.py
+index 3ad62d8f93..e2bd939bd7 100644
+--- a/FHD/mods/_employees/workbench-ux-stylist/backend/employees/workbench_ux_stylist.py
++++ b/FHD/mods/_employees/workbench-ux-stylist/backend/employees/workbench_ux_stylist.py
+@@ -1,271 +1,10 @@
+-"""employee_pack 员工实现（MODstore 生成）。
++"""Generated Employee entry; handlers live in the shared host SDK."""
+ 
+-行为按 manifest.employee_config_v2.actions.handlers 分支：
+-  - echo     → 直接回显 payload，不调 LLM
+-  - llm_md   → 调 ctx.call_llm 出 Markdown（默认章节：用途/输入/输出/示例/异常）
+-  - webhook  → 调 ctx.http_post 转发到 actions.webhook.url
+-若 handlers 为空或不被支持，run 返回 {ok: False, error: ...}，绝不默认走 LLM。
+-"""
+-
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import logging
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
+-
+-logger = logging.getLogger(__name__)
++from app.mod_sdk.generated_employee_worker import GeneratedEmployeeWorker
+ 
+ EMPLOYEE_ID = "workbench-ux-stylist"
+ EMPLOYEE_LABEL = "工作台 UX 设计员"
+-
+ SYSTEM_PROMPT = "你是 XCAGI 员工「工作台 UX 设计员」。按 manifest.employee_config_v2.actions.handlers 选择 echo、llm_md、webhook 或 agent 分支执行；先读取 payload 与 manifest 配置，提取关键字段，再调用 ctx 工具；输出统一返回 {ok, summary, items, warnings, error, meta}；信息不足时如实说明，禁止编造数据、密钥或外部执行结果。"
+ 
+-DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+-
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": ""
+-        if data is None
+-        else (data if isinstance(data, str) else json.dumps(data, ensure_ascii=False))[:4000],
+-        "items": data
+-        if isinstance(data, list)
+-        else ([] if data is None else [data] if not isinstance(data, dict) else [data]),
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _manifest_path() -> Optional[Path]:
+-    here = Path(__file__).resolve()
+-    for parent in (here.parent, *here.parents):
+-        cand = parent / "manifest.json"
+-        if cand.is_file():
+-            return cand
+-    return None
+-
+-
+-def _load_manifest() -> Optional[Dict[str, Any]]:
+-    mp = _manifest_path()
+-    if not mp:
+-        return None
+-    try:
+-        data = json.loads(mp.read_text(encoding="utf-8"))
+-    except (OSError, json.JSONDecodeError):
+-        return None
+-    return data if isinstance(data, dict) else None
+-
+-
+-def _v2(manifest: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+-    if not isinstance(manifest, dict):
+-        return {}
+-    v2 = manifest.get("employee_config_v2")
+-    return v2 if isinstance(v2, dict) else {}
+-
+-
+-def _agent_model(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+-    agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+-    model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-    return {
+-        "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-        "max_tokens": int(model.get("max_tokens") or 4000),
+-        "temperature": float(
+-            model.get("temperature") if model.get("temperature") is not None else 0.2
+-        ),
+-    }
+-
+-
+-def _actions(v2: Dict[str, Any]) -> Dict[str, Any]:
+-    a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+-    return a
+-
+-
+-def _handlers(actions: Dict[str, Any]) -> List[str]:
+-    raw = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+-    return [str(h).strip() for h in raw if isinstance(h, str) and str(h).strip()]
+-
+-
+-async def _handle_echo(
+-    payload: Dict[str, Any], _ctx: Dict[str, Any], _v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    return _ok({"echo": payload}, meta={"handler": "echo"})
+-
+-
+-async def _handle_llm_md(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    call_llm = ctx.get("call_llm")
+-    if not callable(call_llm):
+-        summary = [
+-            f"# {EMPLOYEE_LABEL} 执行方案",
+-            "",
+-            "宿主未注入 ctx.call_llm，本次以离线方案模式运行。",
+-            "",
+-            "## 输入",
+-            json.dumps(payload or {}, ensure_ascii=False, indent=2)[:3000],
+-            "",
+-            "## 下一步",
+-            "- 在宿主上下文注入 call_llm 后，可由 llm_md 生成完整 Markdown 结果。",
+-            "- 也可通过 payload.handler=echo 获取原始输入回显。",
+-        ]
+-        return _ok(
+-            "\n".join(summary),
+-            warnings=["ctx.call_llm unavailable; returned offline plan"],
+-            meta={"handler": "llm_md", "offline": True},
+-        )
+-    cfg = _agent_model(v2)
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    if "##" not in sys_prompt:
+-        sys_prompt = sys_prompt + "\n\n请用 Markdown 输出，固定章节：\n" + DEFAULT_README_SECTIONS
+-    user_msg = json.dumps(payload or {}, ensure_ascii=False)[:6000]
+-    messages = [
+-        {"role": "system", "content": sys_prompt},
+-        {"role": "user", "content": user_msg},
+-    ]
+-    try:
+-        res = await asyncio.wait_for(
+-            call_llm(messages, max_tokens=cfg["max_tokens"], temperature=cfg["temperature"]),
+-            timeout=120.0,
+-        )
+-    except TimeoutError:
+-        return _err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("call_llm raised")
+-        return _err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
+-    if not isinstance(res, dict) or not res.get("ok"):
+-        return _err(
+-            str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-        )
+-    content = str(res.get("content") or "").strip()
+-    return _ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+-
+-
+-async def _handle_webhook(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    http_post = ctx.get("http_post")
+-    if not callable(http_post):
+-        return _err("ctx.http_post 不可用：宿主未注入 HTTP 能力", meta={"handler": "webhook"})
+-    cfg = _actions(v2).get("webhook") if isinstance(_actions(v2).get("webhook"), dict) else {}
+-    url = str(cfg.get("url") or "").strip()
+-    if not url:
+-        return _err("actions.webhook.url 未配置", meta={"handler": "webhook"})
+-    try:
+-        r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+-    except TimeoutError:
+-        return _err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        return _err("webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url})
+-    if not isinstance(r, dict) or not r.get("ok"):
+-        return _err(
+-            str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-            meta={"handler": "webhook", "url": url},
+-        )
+-    return _ok(
+-        {"status": r.get("status"), "text": r.get("text")}, meta={"handler": "webhook", "url": url}
+-    )
+-
+-
+-async def _handle_agent(
+-    payload: Dict[str, Any], ctx: Dict[str, Any], v2: Dict[str, Any]
+-) -> Dict[str, Any]:
+-    runner = ctx.get("agent_runner")
+-    if runner is None:
+-        return _err(
+-            "ctx.agent_runner 未注入，请确认 modstore_server 版本", meta={"handler": "agent"}
+-        )
+-    cfg = _agent_model(v2)
+-    task = (
+-        payload.get("task")
+-        or payload.get("message")
+-        or payload.get("input")
+-        or json.dumps(payload or {}, ensure_ascii=False)[:2000]
+-    )
+-    sys_prompt = cfg["system_prompt"] or SYSTEM_PROMPT
+-    try:
+-        result = await asyncio.wait_for(
+-            runner.run(task, system_prompt=sys_prompt),
+-            timeout=300.0,
+-        )
+-    except TimeoutError:
+-        return _err("agent 执行超时（300s）", meta={"handler": "agent"})
+-    except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-        logger.exception("agent run raised")
+-        return _err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-    if not result.get("ok"):
+-        return _err(
+-            str(result.get("error") or "agent 失败"),
+-            meta={"handler": "agent", "rounds": result.get("rounds", 0)},
+-        )
+-    return _ok(
+-        result.get("summary") or "",
+-        meta={
+-            "handler": "agent",
+-            "rounds": result.get("rounds", 0),
+-            "tools_used": [t.get("tool") for t in (result.get("tool_calls") or [])],
+-        },
+-    )
+-
+-
+-_DISPATCH = {
+-    "echo": _handle_echo,
+-    "llm_md": _handle_llm_md,
+-    "webhook": _handle_webhook,
+-    "agent": _handle_agent,
+-}
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    logger.info("[employee:%s] run keys=%s", EMPLOYEE_ID, list((payload or {}).keys())[:12])
+-    payload = payload or {}
+-    ctx = ctx or {}
+-    manifest = _load_manifest()
+-    v2 = _v2(manifest)
+-    if not v2:
+-        return _err(
+-            "manifest.employee_config_v2 缺失或不可读，无法决定行为",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    handlers = _handlers(_actions(v2))
+-    if not handlers:
+-        return _err(
+-            "manifest.employee_config_v2.actions.handlers 未声明；请在打包时显式声明 echo / llm_md / webhook 之一",
+-            meta={"employee_id": EMPLOYEE_ID},
+-        )
+-    requested = str(payload.get("handler") or "").strip() if isinstance(payload, dict) else ""
+-    chosen = requested if requested in handlers else handlers[0]
+-    fn = _DISPATCH.get(chosen)
+-    if fn is None:
+-        return _err(
+-            f"不支持的 handler：{chosen}（支持：{sorted(_DISPATCH.keys())}）",
+-            meta={"employee_id": EMPLOYEE_ID, "declared_handlers": handlers},
+-        )
+-    out = await fn(payload, ctx, v2)
+-    if isinstance(out, dict):
+-        meta = out.setdefault("meta", {})
+-        if isinstance(meta, dict):
+-            meta.setdefault("declared_handlers", handlers)
+-            meta.setdefault("chosen_handler", chosen)
+-    return out
++_worker = GeneratedEmployeeWorker(__file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, __name__)
++run = _worker.run
+diff --git a/FHD/mods/_employees/workbench-ux-stylist/manifest.json b/FHD/mods/_employees/workbench-ux-stylist/manifest.json
+index a7daacdab1..a20cd5c91f 100644
+--- a/FHD/mods/_employees/workbench-ux-stylist/manifest.json
++++ b/FHD/mods/_employees/workbench-ux-stylist/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "workbench-ux-stylist",
+diff --git a/FHD/tests/test_mod_sdk/test_generated_employee_worker.py b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+new file mode 100644
+index 0000000000..2e02e0617c
+--- /dev/null
++++ b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+@@ -0,0 +1,361 @@
++"""Characterize generated worker behavior across source and installed pack locations."""
++
++from __future__ import annotations
++
++import asyncio
++import importlib.util
++import json
++import os
++import shutil
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++PACKS = (
++    "fhd-core-maintainer",
++    "deploy-release-officer",
++    "flask-entry-keeper",
++    "retention-officer",
++    "self-checker",
++    "seo-sitemap-curator",
++    "task-router-officer",
++    "workbench-ux-stylist",
++)
++ROOT = Path(os.environ.get("WORKER_CHARACTERIZATION_ROOT") or Path(__file__).resolve().parents[2])
++OBSERVED = {}
++
++
++@pytest.fixture(scope="session", autouse=True)
++def save_behavior_proof():
++    yield
++    if destination := os.environ.get("WORKER_BEHAVIOR_PROOF"):
++        Path(destination).write_text(
++            json.dumps(OBSERVED, ensure_ascii=False, sort_keys=True, indent=2)
++        )
++
++
++@pytest.fixture(params=PACKS)
++def worker(request):
++    pack = ROOT / "mods" / "_employees" / request.param
++    source = pack / "backend" / "employees" / (request.param.replace("-", "_") + ".py")
++    spec = importlib.util.spec_from_file_location("characterized_" + request.param, source)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    implementation = getattr(module, "_worker", module)
++
++    def record(value):
++        OBSERVED[request.node.nodeid] = value
++        return value
++
++    return SimpleNamespace(module=module, impl=implementation, pack=pack, record=record)
++
++
++def config(handler, **actions):
++    return {"actions": {"handlers": [handler], **actions}}
++
++
++def invoke(worker, handler, monkeypatch, *, payload=None, ctx=None, v2=None):
++    monkeypatch.setattr(
++        worker.impl, "_load_manifest", lambda: {"employee_config_v2": v2 or config(handler)}
++    )
++    return asyncio.run(worker.impl.run(payload or {}, ctx or {}))
++
++
++@pytest.mark.parametrize("value", [None, "x" * 4100, [1, 2], {"a": 1}, 3])
++def test_result_envelopes(worker, value):
++    ok = worker.impl._ok(value, warnings=["w"], meta={"m": 1})
++    expected_items = value if isinstance(value, list) else ([] if value is None else [value])
++    assert ok["items"] == expected_items and ok["warnings"] == ["w"] and ok["meta"] == {"m": 1}
++    assert (
++        ok["summary"]
++        == (
++            ""
++            if value is None
++            else value
++            if isinstance(value, str)
++            else json.dumps(value, ensure_ascii=False)
++        )[:4000]
++    )
++    error = worker.impl._err("e" * 1100)
++    assert len(error["summary"]) == 400 and len(error["error"]) == 1000
++    assert error["items"] == [] and error["warnings"] == [] and error["meta"] == {}
++    worker.record([ok, error])
++
++
++@pytest.mark.parametrize(
++    "content", [None, "not json", "[]", "{}", '{"employee_config_v2": {"actions": {}}}']
++)
++def test_manifest_reading_and_source_anchor(worker, tmp_path, monkeypatch, content):
++    assert worker.impl._manifest_path() == worker.pack / "manifest.json"
++    assert worker.impl._load_manifest()["id"] == worker.module.EMPLOYEE_ID
++    source = tmp_path / "installed" / "backend" / "employees" / "entry.py"
++    source.parent.mkdir(parents=True)
++    source.write_text("")
++    target, attribute = (
++        (worker.impl, "source_file")
++        if hasattr(worker.module, "_worker")
++        else (worker.module, "__file__")
++    )
++    monkeypatch.setattr(target, attribute, str(source))
++    manifest = source.parents[2] / "manifest.json"
++    if content is not None:
++        manifest.write_text(content)
++    expected = json.loads(content) if content and content.startswith("{") else None
++    assert worker.impl._load_manifest() == expected
++    monkeypatch.setattr(worker.impl, "_manifest_path", lambda: tmp_path)
++    assert worker.impl._load_manifest() is None
++    worker.record(expected)
++
++
++@pytest.mark.parametrize(
++    "manifest", [None, [], {}, {"employee_config_v2": []}, {"employee_config_v2": {"a": 1}}]
++)
++def test_config_shapes(worker, manifest):
++    result = worker.impl._v2(manifest)
++    assert result == ({"a": 1} if manifest == {"employee_config_v2": {"a": 1}} else {})
++    models = [
++        worker.impl._agent_model(v)
++        for v in (
++            {},
++            {"cognition": []},
++            {"cognition": {"agent": []}},
++            {"cognition": {"agent": {"model": []}}},
++        )
++    ]
++    assert all(
++        value == {"system_prompt": "", "max_tokens": 4000, "temperature": 0.2} for value in models
++    )
++    assert worker.impl._actions({"actions": []}) == {}
++    assert worker.impl._handlers({"handlers": "echo"}) == []
++    assert worker.impl._handlers({"handlers": [" echo ", "", None, 3]}) == ["echo"]
++    worker.record([result, models])
++
++
++@pytest.mark.parametrize("model", [{"max_tokens": "invalid"}, {"temperature": "invalid"}])
++def test_invalid_model_numbers_remain_explicit_errors(worker, model):
++    with pytest.raises(ValueError) as exc:
++        worker.impl._agent_model({"cognition": {"agent": {"model": model}}})
++    worker.record({"exception": type(exc.value).__name__, "message": str(exc.value)})
++
++
++@pytest.mark.parametrize(
++    "manifest",
++    [
++        None,
++        {},
++        {"employee_config_v2": {}},
++        {"employee_config_v2": config("unsupported")},
++        {"employee_config_v2": {"actions": {}}},
++    ],
++)
++def test_explicit_handler_errors(worker, monkeypatch, manifest):
++    monkeypatch.setattr(worker.impl, "_load_manifest", lambda: manifest)
++    out = asyncio.run(worker.impl.run({}, {}))
++    assert out["ok"] is False and out["meta"]["employee_id"] == worker.module.EMPLOYEE_ID
++    assert out["error"] and out["items"] == []
++    worker.record(out)
++
++
++@pytest.mark.parametrize(
++    "returned",
++    [
++        "plain",
++        {"meta": []},
++        {"meta": {"chosen_handler": "keep", "declared_handlers": ["keep"]}},
++        {"meta": None},
++    ],
++)
++def test_dispatch_metadata_and_requested_selection(worker, monkeypatch, returned):
++    async def handler(*_args):
++        return returned
++
++    monkeypatch.setitem(worker.impl._DISPATCH, "echo", handler)
++    out = invoke(worker, "echo", monkeypatch, payload={"handler": "not-declared"})
++    assert out == returned
++    worker.record(out)
++
++
++@pytest.mark.parametrize(
++    "kind", ["ok", "empty", "failed", "unknown", "none", "list", "timeout", "exception"]
++)
++@pytest.mark.parametrize("handler", ["llm_md", "webhook", "agent"])
++def test_handlers_results_failures_and_timeouts(worker, monkeypatch, handler, kind):
++    calls = []
++    result = {
++        "ok": True,
++        "content": "  content  ",
++        "summary": "summary",
++        "rounds": 2,
++        "tool_calls": [{"tool": "read"}],
++        "status": 201,
++        "text": "body",
++    }
++    result = {
++        "empty": {},
++        "failed": {"ok": False, "error": "denied", "rounds": 3},
++        "unknown": {"ok": False, "outcome": "unknown", "error": "核对原任务", "retryable": False},
++        "none": None,
++        "list": [1],
++    }.get(kind, result)
++
++    async def callback(*args, **kwargs):
++        calls.append([args, kwargs])
++        if kind == "timeout":
++            raise TimeoutError("timeout")
++        if kind == "exception":
++            raise OSError("offline")
++        return result
++
++    actual_wait = asyncio.wait_for
++    timeouts = []
++
++    async def checked_wait(awaitable, timeout):
++        timeouts.append(timeout)
++        return await actual_wait(awaitable, timeout=timeout)
++
++    monkeypatch.setattr(asyncio, "wait_for", checked_wait)
++    ctx = {
++        "call_llm": callback,
++        "http_post": callback,
++        "agent_runner": SimpleNamespace(run=callback),
++    }
++    v2 = config(handler, webhook={"url": "https://example.invalid/hook"})
++    v2["cognition"] = {
++        "agent": {"system_prompt": "## approved", "model": {"max_tokens": 17, "temperature": 0}}
++    }
++    if kind == "list" or (handler == "agent" and kind == "none"):
++        with pytest.raises(AttributeError) as exc:
++            invoke(
++                worker,
++                handler,
++                monkeypatch,
++                payload={"handler": handler, "task": "task"},
++                ctx=ctx,
++                v2=v2,
++            )
++        out = {"exception": type(exc.value).__name__, "message": str(exc.value)}
++    else:
++        out = invoke(
++            worker,
++            handler,
++            monkeypatch,
++            payload={"handler": handler, "task": "task"},
++            ctx=ctx,
++            v2=v2,
++        )
++        assert out["ok"] is (kind == "ok")
++        if kind == "ok":
++            assert out["meta"]["chosen_handler"] == handler
++            if handler == "llm_md":
++                assert out["summary"] == "content" and calls[0][1] == {
++                    "max_tokens": 17,
++                    "temperature": 0.0,
++                }
++            elif handler == "agent":
++                assert out["meta"]["tools_used"] == ["read"] and out["meta"]["rounds"] == 2
++            else:
++                assert out["items"] == [{"status": 201, "text": "body"}]
++        else:
++            assert out["error"]
++    assert timeouts == [{"llm_md": 120.0, "webhook": 30.0, "agent": 300.0}[handler]]
++    worker.record([out, calls, timeouts])
++
++
++@pytest.mark.parametrize("handler", ["echo", "llm_md", "webhook", "agent"])
++def test_missing_capabilities_and_offline_plan(worker, monkeypatch, handler):
++    out = invoke(worker, handler, monkeypatch, payload={"handler": handler, "value": "input"})
++    assert out["ok"] is (handler in {"echo", "llm_md"})
++    if handler == "llm_md":
++        assert worker.module.EMPLOYEE_LABEL in out["summary"] and out["meta"]["offline"]
++        assert out["warnings"] == ["ctx.call_llm unavailable; returned offline plan"]
++    if handler == "echo":
++        assert out["items"] == [{"echo": {"handler": "echo", "value": "input"}}]
++    worker.record(out)
++
++
++@pytest.mark.parametrize("payload", [{"task": "a"}, {"message": "b"}, {"input": {"x": 1}}, {}])
++def test_agent_task_precedence_and_prompt_defaults(worker, monkeypatch, payload):
++    calls = []
++
++    async def callback(task, **kwargs):
++        calls.append([task, kwargs])
++        return {"ok": True}
++
++    out = invoke(
++        worker,
++        "agent",
++        monkeypatch,
++        payload=payload,
++        ctx={"agent_runner": SimpleNamespace(run=callback)},
++    )
++    expected = payload.get("task") or payload.get("message") or payload.get("input") or "{}"
++    assert calls == [[expected, {"system_prompt": worker.module.SYSTEM_PROMPT}]]
++    assert out["summary"] == "" and out["meta"]["tools_used"] == []
++    worker.record([out, calls])
++
++
++def test_llm_default_prompt_limits_and_webhook_missing_url(worker, monkeypatch):
++    calls = []
++
++    async def callback(*args, **kwargs):
++        calls.append([args, kwargs])
++        return {"ok": True}
++
++    out = invoke(
++        worker, "llm_md", monkeypatch, payload={"value": "x" * 7000}, ctx={"call_llm": callback}
++    )
++    messages = calls[0][0][0]
++    assert messages[0]["content"].startswith(worker.module.SYSTEM_PROMPT)
++    assert "## 异常与边界" in messages[0]["content"] and len(messages[1]["content"]) == 6000
++    assert calls[0][1] == {"max_tokens": 4000, "temperature": 0.2} and out["summary"] == ""
++    missing = invoke(worker, "webhook", monkeypatch, ctx={"http_post": callback})
++    assert missing["error"] == "actions.webhook.url 未配置" and len(calls) == 1
++    worker.record([out, calls, missing])
++
++
++def test_copied_installed_entry_uses_its_own_manifest(worker, tmp_path):
++    installed = tmp_path / "installed-pack"
++    entry = installed / "backend" / "employees" / "worker.py"
++    entry.parent.mkdir(parents=True)
++    shutil.copyfile(worker.module.__file__, entry)
++    (installed / "manifest.json").write_text(json.dumps({"employee_config_v2": config("echo")}))
++    spec = importlib.util.spec_from_file_location("installed_employee", entry)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    result = asyncio.run(module.run({"installed": True}, {}))
++    assert result["items"] == [{"echo": {"installed": True}}]
++    assert result["meta"]["chosen_handler"] == "echo"
++    worker.record(result)
++
++
++def test_pack_instances_keep_prompts_and_dispatch_isolated(worker, monkeypatch):
++    spec = importlib.util.spec_from_file_location("second_employee", worker.module.__file__)
++    second = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(second)
++    other = getattr(second, "_worker", second)
++    config_value = {"employee_config_v2": config("llm_md")}
++    for target in (worker.impl, other):
++        monkeypatch.setattr(target, "_load_manifest", lambda: config_value)
++    if hasattr(second, "_worker"):
++        monkeypatch.setattr(other, "system_prompt", "second prompt")
++    else:
++        monkeypatch.setattr(second, "SYSTEM_PROMPT", "second prompt")
++    prompts = []
++
++    async def callback(messages, **_kwargs):
++        prompts.append(messages[0]["content"])
++        await asyncio.sleep(0)
++        return {"ok": True, "content": messages[0]["content"]}
++
++    async def together():
++        return await asyncio.gather(
++            worker.impl.run({}, {"call_llm": callback}),
++            other.run({}, {"call_llm": callback}),
++        )
++
++    results = asyncio.run(together())
++    assert prompts[0].startswith(worker.module.SYSTEM_PROMPT)
++    assert prompts[1].startswith("second prompt") and results[0] != results[1]
++    assert worker.impl._DISPATCH is not other._DISPATCH
++    worker.record(results)
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,1620 @@
+From 63dcee75434fab9177ce99ec6bf401bd77ee6884 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 02:25:58 +0800
+Subject: [PATCH 39/43] build(mac): require complete final-package employee
+ leaf evidence
+
+
+diff --git a/.github/workflows/fhd-release-desktop-mac-ota.yml b/.github/workflows/fhd-release-desktop-mac-ota.yml
+index 0e572581cd..9f4f8a76e4 100644
+--- a/.github/workflows/fhd-release-desktop-mac-ota.yml
++++ b/.github/workflows/fhd-release-desktop-mac-ota.yml
+@@ -151,6 +151,7 @@ jobs:
+ 
+       - name: Verify notarized DMG and packaged runtime
+         run: |
++          python3 -m pip install -r deploy/requirements-dev.txt
+           read -r v arch <<<"${{ inputs.version }} ${{ inputs.architecture || 'arm64' }}"; dmg="$(find "release/xcagi-v${v}/enterprise" -name "XCAGI-Enterprise-${v}-mac-${arch}.dmg" -print -quit)"
+           bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
+           if [ "${{ inputs.candidate_only }}" = true ]; then evidence_dir="release/xcagi-v${v}/enterprise/acceptance-evidence"; mkdir -p "${evidence_dir}"; XCAGI_ACCEPTANCE_SYSTEM_INTEGRATION=1 XCAGI_ACCEPTANCE_EVIDENCE_DIR="${evidence_dir}" bash scripts/package/acceptance-macos.sh --version "${v}" --dmg "${dmg}"; fi
+diff --git a/.github/workflows/fhd-release-desktop.yml b/.github/workflows/fhd-release-desktop.yml
+index b7d691bc2b..e9fe808eec 100644
+--- a/.github/workflows/fhd-release-desktop.yml
++++ b/.github/workflows/fhd-release-desktop.yml
+@@ -671,6 +671,7 @@ jobs:
+         shell: bash
+         run: |
+           set -euo pipefail
++          python3 -m pip install -r deploy/requirements-dev.txt
+           v="${{ github.event.inputs.version || github.ref_name }}"
+           v="${v#FHD/}"
+           v="${v#v}"
+@@ -682,6 +683,7 @@ jobs:
+         with:
+           name: xcagi-desktop-macos-enterprise
+           path: |
++            FHD/release/xcagi-v*/enterprise/acceptance-evidence/**
+             FHD/release/xcagi-v*/enterprise/*.dmg
+             FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
+             FHD/release/xcagi-v*/enterprise/*.zip
+diff --git a/FHD/.github/workflows/release-desktop-mac-ota.yml b/FHD/.github/workflows/release-desktop-mac-ota.yml
+index 22030fd0c7..e47cd7ac95 100644
+--- a/FHD/.github/workflows/release-desktop-mac-ota.yml
++++ b/FHD/.github/workflows/release-desktop-mac-ota.yml
+@@ -149,6 +149,7 @@ jobs:
+ 
+       - name: Verify notarized DMG and packaged runtime
+         run: |
++          python3 -m pip install -r deploy/requirements-dev.txt
+           read -r v arch <<<"${{ inputs.version }} ${{ inputs.architecture || 'arm64' }}"; dmg="$(find "release/xcagi-v${v}/enterprise" -name "XCAGI-Enterprise-${v}-mac-${arch}.dmg" -print -quit)"
+           bash scripts/package/verify-macos-release-dmg.sh "${dmg}" "${v}" "${XCAGI_BUILD_SHA}"
+           if [ "${{ inputs.candidate_only }}" = true ]; then evidence_dir="release/xcagi-v${v}/enterprise/acceptance-evidence"; mkdir -p "${evidence_dir}"; XCAGI_ACCEPTANCE_SYSTEM_INTEGRATION=1 XCAGI_ACCEPTANCE_EVIDENCE_DIR="${evidence_dir}" bash scripts/package/acceptance-macos.sh --version "${v}" --dmg "${dmg}"; fi
+diff --git a/FHD/.github/workflows/release-desktop.yml b/FHD/.github/workflows/release-desktop.yml
+index 3ec02c0d53..edcdf211a6 100644
+--- a/FHD/.github/workflows/release-desktop.yml
++++ b/FHD/.github/workflows/release-desktop.yml
+@@ -669,6 +669,7 @@ jobs:
+         shell: bash
+         run: |
+           set -euo pipefail
++          python3 -m pip install -r deploy/requirements-dev.txt
+           v="${{ github.event.inputs.version || github.ref_name }}"
+           v="${v#FHD/}"
+           v="${v#v}"
+@@ -680,6 +681,7 @@ jobs:
+         with:
+           name: xcagi-desktop-macos-enterprise
+           path: |
++            FHD/release/xcagi-v*/enterprise/acceptance-evidence/**
+             FHD/release/xcagi-v*/enterprise/*.dmg
+             FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
+             FHD/release/xcagi-v*/enterprise/*.zip
+diff --git a/FHD/deploy/requirements-server-api.lock.txt b/FHD/deploy/requirements-server-api.lock.txt
+index 46db291a3c..cbc8d36ed9 100644
+--- a/FHD/deploy/requirements-server-api.lock.txt
++++ b/FHD/deploy/requirements-server-api.lock.txt
+@@ -9,6 +9,7 @@ Celery==5.6.3
+ APScheduler==3.11.3
+ redis==5.0.1
+ openpyxl==3.1.5
++defusedxml==0.7.1
+ python-docx==1.2.0
+ python-pptx==1.0.2
+ pdfplumber==0.11.10
+diff --git a/FHD/pyproject.toml b/FHD/pyproject.toml
+index 72025b9f04..78adb4083a 100644
+--- a/FHD/pyproject.toml
++++ b/FHD/pyproject.toml
+@@ -28,6 +28,7 @@ server-api = [
+     "APScheduler>=3.10,<4",
+     "redis==5.0.1",
+     "openpyxl==3.1.5",
++    "defusedxml==0.7.1",
+     "python-docx>=1.1.0",
+     "python-pptx>=1.0.2",
+     "pdfplumber>=0.11.0",
+diff --git a/FHD/requirements-server-api.txt b/FHD/requirements-server-api.txt
+index d08b48cb0e..9306da4f24 100644
+--- a/FHD/requirements-server-api.txt
++++ b/FHD/requirements-server-api.txt
+@@ -21,6 +21,7 @@ Celery==5.6.3
+ APScheduler>=3.10,<4
+ redis==5.0.1
+ openpyxl==3.1.5
++defusedxml==0.7.1
+ python-docx>=1.1.0
+ python-pptx>=1.0.2
+ pdfplumber>=0.11.0
+diff --git a/FHD/requirements.txt b/FHD/requirements.txt
+index a184314ac9..4aabb77c62 100644
+--- a/FHD/requirements.txt
++++ b/FHD/requirements.txt
+@@ -12,6 +12,7 @@ Celery==5.6.3
+ APScheduler>=3.10,<4
+ redis==5.0.1
+ openpyxl==3.1.5
++defusedxml==0.7.1
+ python-docx>=1.1.0
+ python-pptx>=1.0.2
+ pdfplumber>=0.11.0
+diff --git a/FHD/scripts/package/verify-macos-release-dmg.sh b/FHD/scripts/package/verify-macos-release-dmg.sh
+index c01b7282f3..a2ddf049e2 100644
+--- a/FHD/scripts/package/verify-macos-release-dmg.sh
++++ b/FHD/scripts/package/verify-macos-release-dmg.sh
+@@ -38,5 +38,12 @@ PY
+ backend="${app}/Contents/Resources/backend/xcagi-backend"
+ test -x "${backend}"
+ "${backend}" --verify-frozen-critical-runtime
++archive="${dmg%.dmg}.zip"
++test -f "${archive}"
++arch="$(uname -m | sed 's/^x86_64$/x64/')"
++python3 "${ROOT}/scripts/package/verify_employee_leaf_evidence.py" \
++  --app "${app}" --dmg "${dmg}" --archive "${archive}" \
++  --sha "${sha}" --version "${version}" --arch "${arch}" \
++  --evidence-dir "$(dirname "${dmg}")/acceptance-evidence"
+ python3 "${ROOT}/scripts/package/staple-macos-dmg.py" --validate-only "${app}"
+ spctl -a -vv -t exec "${app}"
+diff --git a/FHD/scripts/package/verify_employee_leaf_evidence.py b/FHD/scripts/package/verify_employee_leaf_evidence.py
+new file mode 100644
+index 0000000000..7c72a15afc
+--- /dev/null
++++ b/FHD/scripts/package/verify_employee_leaf_evidence.py
+@@ -0,0 +1,564 @@
++"""Produce native final-package leaf evidence and verify it during frozen promotion."""
++
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++import platform
++import plistlib
++import re
++import stat
++import struct
++import subprocess
++import sys
++import xml.etree.ElementTree as ET
++import zipfile
++from pathlib import Path, PurePosixPath
++
++ROOT = Path(__file__).resolve().parents[2]
++SCHEMA = "employee-leaf-validation/v1"
++TEAM = "G26WSH472M"
++TEST_FILE = "tests/test_packaged_employee_leaf.py"
++PREFIX = "XCAGI.app/Contents/Resources/backend/employee-leaf/"
++PREFIX_ANCESTORS = {
++    str(path)
++    for path in (PurePosixPath(PREFIX), *PurePosixPath(PREFIX).parents)
++    if str(path) != "."
++}
++PREFIX_ANCESTORS_CASEFOLD = {name.casefold() for name in PREFIX_ANCESTORS}
++HELPER = "xcagi-employee-leaf"
++FRAMEWORK_BINARY = "_internal/Python.framework/Versions/3.11/Python"
++FRAMEWORK_LINKS = {
++    "_internal/Python": "Python.framework/Versions/3.11/Python",
++    "_internal/Python.framework/Python": "Versions/Current/Python",
++    "_internal/Python.framework/Resources": "Versions/Current/Resources",
++    "_internal/Python.framework/Versions/Current": "3.11",
++}
++SDK_SOURCES = {
++    "app/mod_sdk/office_employee_worker.py": "app/mod_sdk/office_employee_worker.py",
++    "app/mod_sdk/generated_employee_worker.py": "app/mod_sdk/generated_employee_worker.py",
++    "app/mod_sdk/host_services.py": "app/application/office_plaintext_generate.py",
++    "app/application/agent_orchestrator/tool_receipt.py": "app/application/agent_orchestrator/tool_receipt.py",
++}
++SOURCE_FILES = (
++    TEST_FILE,
++    "scripts/package/verify_employee_leaf_evidence.py",
++    "app/mod_sdk/employee_leaf.py",
++    "app/application/employee_runtime/leaf_process.py",
++    "desktop/build/entitlements.mac.plist",
++    *dict.fromkeys(SDK_SOURCES.values()),
++)
++EXPECTED_CASES = frozenset(
++    [
++        "test_frozen_helper_imports_only_bundled_portable_sdk",
++        "test_frozen_helper_denies_host_files_native_reads_network_and_children",
++        "test_frozen_helper_model_broker_keeps_host_credentials_outside_leaf",
++        "test_frozen_helper_deadline_reaps_entered_worker_and_removes_canary",
++        "test_frozen_helper_discards_worker_exception_and_printed_secret",
++        "test_frozen_sdk_staging_reads_bundle_without_host_source",
++    ]
++    + [
++        f"test_frozen_helper_writes_readable_csv_and_json_from_pinned_input[{s}]"
++        for s in ("csv", "json")
++    ]
++    + [
++        f"test_frozen_helper_office_dependencies_produce_reopenable_documents[{s}]"
++        for s in ("docx", "xlsx", "pdf", "pptx")
++    ]
++    + [
++        f"test_actual_{name}[{runtime}]"
++        for name in (
++            "excel_natural_language_retains_approved_rows",
++            "ppt_reader_publishes_resolvable_image_references",
++        )
++        for runtime in ("source", "frozen")
++    ]
++)
++
++
++def canonical(value):
++    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
++
++
++def _unique(pairs):
++    result = dict(pairs)
++    if len(result) != len(pairs):
++        raise ValueError("duplicate evidence key")
++    return result
++
++
++def _json(data):
++    def invalid(_):
++        raise ValueError("non-finite evidence")
++
++    return json.loads(data, object_pairs_hook=_unique, parse_constant=invalid)
++
++
++def file_digest(path, algorithm="sha256"):
++    path = Path(path)
++    before = path.lstat()
++    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
++        raise ValueError("evidence file must be plain and unlinked")
++    digest = hashlib.new(algorithm)
++    with path.open("rb") as stream:
++        identity = lambda info: (
++            info.st_dev,
++            info.st_ino,
++            info.st_size,
++            info.st_mtime_ns,
++            info.st_ctime_ns,
++            info.st_mode,
++            info.st_nlink,
++        )
++        if identity(os.fstat(stream.fileno())) != identity(before):
++            raise ValueError("evidence file changed before read")
++        for chunk in iter(lambda: stream.read(1 << 20), b""):
++            digest.update(chunk)
++        if identity(os.fstat(stream.fileno())) != identity(before) or identity(
++            path.lstat()
++        ) != identity(before):
++            raise ValueError("evidence file changed during read")
++    return digest.hexdigest()
++
++
++def source_hashes():
++    return {name: file_digest(ROOT / name) for name in SOURCE_FILES}
++
++
++def _bundle(records, arch):
++    if arch not in {"arm64", "x64"}:
++        raise ValueError("native architecture required")
++    rows, native = [], []
++    for name, data, mode in records:
++        if len(data) > 64 * 1024 * 1024:
++            raise ValueError("helper file too large")
++        row = {
++            "path": name,
++            "sha256": hashlib.sha256(data).hexdigest(),
++            "size": len(data),
++            "mode": stat.S_IMODE(mode),
++        }
++        rows.append(row)
++        if stat.S_ISLNK(mode):
++            target = data.decode("utf-8")
++            if FRAMEWORK_LINKS.get(name) != target:
++                raise ValueError("unexpected helper symbolic link")
++            row["type"] = "symlink"
++            row["link"] = target
++            continue
++        if data[:4] == b"\xcf\xfa\xed\xfe" or name.endswith((".dylib", ".so")) or name == HELPER:
++            if len(data) < 8 or struct.unpack("<II", data[:8]) != (
++                0xFEEDFACF,
++                {"arm64": 0x100000C, "x64": 0x1000007}[arch],
++            ):
++                raise ValueError("helper native architecture mismatch")
++            native.append(name)
++    rows.sort(key=lambda item: item["path"])
++    by_name = {item["path"]: item for item in rows}
++    if (
++        len(by_name) != len(rows)
++        or HELPER not in native
++        or len({"_internal/libpython3.11.dylib", FRAMEWORK_BINARY} & set(native)) != 1
++    ):
++        raise ValueError("incomplete or duplicate helper bundle")
++    links = {row["path"]: row["link"] for row in rows if "link" in row}
++    if FRAMEWORK_BINARY in native:
++        if links != FRAMEWORK_LINKS or (
++            "_internal/Python.framework/Versions/3.11/Resources/Info.plist" not in by_name
++        ):
++            raise ValueError("incomplete Python framework")
++    elif links:
++        raise ValueError("framework links require the actual framework binary")
++    if any(str(parent) in by_name for name in by_name for parent in PurePosixPath(name).parents):
++        raise ValueError("helper file aliases a file or symbolic link")
++    if len(rows) > 10000 or sum(r["size"] for r in rows) > 512 * 1024 * 1024:
++        raise ValueError("helper bundle limit")
++    sdk = {name: by_name[f"_internal/leaf_sdk/{name}"]["sha256"] for name in SDK_SOURCES}
++    if sdk != {name: file_digest(ROOT / source) for name, source in SDK_SOURCES.items()}:
++        raise ValueError("helper SDK does not match reviewed source")
++    if not by_name[HELPER]["mode"] & 0o111:
++        raise ValueError("helper is not executable")
++    return {
++        "files": rows,
++        "sha256": hashlib.sha256(canonical(rows)).hexdigest(),
++        "helper_sha256": by_name[HELPER]["sha256"],
++        "sdk": sdk,
++        "native_paths": sorted(native),
++    }
++
++
++def snapshot_directory(bundle, arch):
++    if not stat.S_ISDIR(bundle.lstat().st_mode):
++        raise ValueError("helper bundle root must be a real directory")
++    records, total = [], 0
++    for path in sorted(bundle.rglob("*")):
++        mode = path.lstat().st_mode
++        if stat.S_ISDIR(mode):
++            continue
++        name = path.relative_to(bundle).as_posix()
++        if stat.S_ISLNK(mode):
++            target = os.readlink(path)
++            if FRAMEWORK_LINKS.get(name) != target:
++                raise ValueError("unexpected helper symbolic link")
++            records.append((name, target.encode(), mode))
++            continue
++        if not stat.S_ISREG(mode) or path.stat().st_nlink != 1:
++            raise ValueError("helper bundle contains links or special files")
++        total += path.stat().st_size
++        if (
++            path.stat().st_size > 64 * 1024 * 1024
++            or total > 512 * 1024 * 1024
++            or len(records) >= 10000
++        ):
++            raise ValueError("helper bundle limit")
++        digest = file_digest(path)
++        data = path.read_bytes()
++        if hashlib.sha256(data).hexdigest() != digest:
++            raise ValueError("helper bundle changed")
++        records.append((name, data, mode))
++    return _bundle(records, arch)
++
++
++def snapshot_zip(archive, arch):
++    records, directories, total = [], [], 0
++    with zipfile.ZipFile(archive) as package:
++        names = package.namelist()
++        if len(names) != len(set(names)):
++            raise ValueError("duplicate application members")
++        for item in package.infolist():
++            path = PurePosixPath(item.filename)
++            if (
++                path.is_absolute()
++                or ".." in path.parts
++                or "\\" in item.filename
++                or str(path) + ("/" if item.is_dir() else "") != item.filename
++            ):
++                raise ValueError("unsafe application members")
++            mode = item.external_attr >> 16
++            if (
++                str(path).casefold() in PREFIX_ANCESTORS_CASEFOLD
++                and str(path) not in PREFIX_ANCESTORS
++            ) or (
++                item.filename.casefold().startswith(PREFIX.casefold())
++                and not item.filename.startswith(PREFIX)
++            ):
++                raise ValueError("noncanonical helper prefix")
++            if str(path) in PREFIX_ANCESTORS:
++                if (
++                    not item.is_dir()
++                    or stat.S_IFMT(mode) not in (0, stat.S_IFDIR)
++                    or item.file_size
++                ):
++                    raise ValueError("helper ancestor must be a plain empty directory entry")
++                continue
++            if not item.filename.startswith(PREFIX):
++                continue
++            if item.is_dir():
++                if stat.S_IFMT(mode) not in (0, stat.S_IFDIR) or item.file_size:
++                    raise ValueError("helper directory member has unexpected type or data")
++                directories.append(PurePosixPath(item.filename[len(PREFIX) :]))
++                continue
++            if stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFLNK):
++                raise ValueError("special helper archive member")
++            if stat.S_ISLNK(mode) and (
++                item.filename[len(PREFIX) :] not in FRAMEWORK_LINKS or item.file_size > 128
++            ):
++                raise ValueError("unexpected helper symbolic link")
++            if item.file_size > 64 * 1024 * 1024:
++                raise ValueError("helper file too large")
++            total += item.file_size
++            if total > 512 * 1024 * 1024 or len(records) >= 10000:
++                raise ValueError("helper bundle limit")
++            records.append((item.filename[len(PREFIX) :], package.read(item), mode))
++    snapshot = _bundle(records, arch)
++    names = {row["path"] for row in snapshot["files"]}
++    if any(
++        str(path) in names for directory in directories for path in (directory, *directory.parents)
++    ):
++        raise ValueError("helper directory aliases a file or symbolic link")
++    return snapshot
++
++
++def junit_summary(data, bundle):
++    root = ET.fromstring(data)
++    cases = root.findall(".//testcase")
++    if root.findall(".//failure") or root.findall(".//error") or root.findall(".//skipped"):
++        raise ValueError("leaf suite contains a failure or skip")
++    names = [case.get("name") for case in cases]
++    if len(names) != 16 or set(names) != EXPECTED_CASES:
++        raise ValueError("complete leaf16 suite required")
++    profiles = {}
++    for case in cases:
++        if (
++            case.get("classname") != "tests.test_packaged_employee_leaf"
++            or case.get("file") != TEST_FILE
++        ):
++            raise ValueError("unexpected leaf test source")
++        properties = _unique(
++            [(p.attrib["name"], p.attrib["value"]) for p in case.findall("./properties/property")]
++        )
++        candidate = properties.get(
++            "frozen_helper_sha256", properties.get("frozen_candidate_sha256")
++        )
++        if candidate != bundle["helper_sha256"]:
++            raise ValueError("tests did not execute this candidate helper")
++        if (
++            "frozen_sdk_sha256" in properties
++            and _json(properties["frozen_sdk_sha256"]) != bundle["sdk"]
++        ):
++            raise ValueError("tested SDK differs from candidate")
++        if case.get("name") != "test_frozen_sdk_staging_reads_bundle_without_host_source":
++            profile = properties.get("profile_sha256", "")
++            if not re.fullmatch(r"[0-9a-f]{64}", profile):
++                raise ValueError("actual sandbox profile evidence required")
++            profiles[case.get("name")] = profile
++    return {
++        "collected": 16,
++        "passed": 16,
++        "failed": 0,
++        "errors": 0,
++        "skipped": 0,
++        "cases": sorted(names),
++        "profiles": profiles,
++    }
++
++
++def _entitlements(value):
++    expected = plistlib.loads((ROOT / "desktop/build/entitlements.mac.plist").read_bytes())
++    extra = set(value) - set(expected)
++    if any(value.get(key) != item for key, item in expected.items()) or extra - {
++        "com.apple.application-identifier",
++        "com.apple.developer.team-identifier",
++    }:
++        raise ValueError("helper entitlements differ from release policy")
++    if (
++        "com.apple.developer.team-identifier" in extra
++        and value["com.apple.developer.team-identifier"] != TEAM
++    ):
++        raise ValueError("helper entitlement team mismatch")
++    if "com.apple.application-identifier" in extra and not str(
++        value["com.apple.application-identifier"]
++    ).startswith(TEAM + "."):
++        raise ValueError("helper application identity mismatch")
++
++
++def _signatures(bundle, snapshot):
++    for name in snapshot["native_paths"]:
++        target = str(bundle / name)
++        subprocess.run(
++            ["codesign", "--verify", "--strict", target], check=True, capture_output=True
++        )
++        result = subprocess.run(
++            ["codesign", "-dv", "--verbose=4", target], check=True, capture_output=True, text=True
++        )
++        display = result.stdout + result.stderr
++        if (
++            "Signature=adhoc" in display
++            or f"TeamIdentifier={TEAM}" not in display
++            or not re.search(r"flags=.*\([^\n]*runtime", display)
++        ):
++            raise ValueError("Developer ID hardened helper signature required")
++    result = subprocess.run(
++        ["codesign", "-d", "--entitlements", ":-", str(bundle / HELPER)],
++        check=True,
++        capture_output=True,
++    )
++    entitlements = plistlib.loads(result.stdout)
++    _entitlements(entitlements)
++    return {"team_id": TEAM, "adhoc": False, "hardened_runtime": True, "entitlements": entitlements}
++
++
++def _payload(path):
++    return {"name": path.name, "sha256": file_digest(path), "size": path.stat().st_size}
++
++
++def verify_candidate_evidence(archive, dmg, evidence_dir, *, sha, version, arch, run):
++    try:
++        proof_path = evidence_dir / "employee-leaf.json"
++        proof = _json(proof_path.read_bytes())
++        bundle = snapshot_zip(archive, arch)
++        junit = evidence_dir / "employee-leaf-junit.xml"
++        log = evidence_dir / "employee-leaf.log"
++        expected = {
++            "schema": SCHEMA,
++            "source_sha": sha,
++            "version": version,
++            "architecture": arch,
++            "run_id": run["id"],
++            "run_attempt": run["run_attempt"],
++            "job": "macos-ota",
++            "source_hashes": source_hashes(),
++            "dmg": _payload(dmg),
++            "archive": _payload(archive),
++            "bundle": bundle,
++            "pytest": junit_summary(junit.read_bytes(), bundle),
++            "junit_sha256": file_digest(junit),
++            "log_sha256": file_digest(log),
++        }
++        if (
++            type(run["id"]) is not int
++            or type(run["run_attempt"]) is not int
++            or min(run["id"], run["run_attempt"]) < 1
++        ):
++            raise ValueError("actual Actions run identity required")
++        if any(canonical(proof.get(key)) != canonical(value) for key, value in expected.items()):
++            raise ValueError("leaf evidence does not match original candidate")
++        signature = proof["signature"]
++        if (
++            signature.get("team_id") != TEAM
++            or signature.get("adhoc") is not False
++            or signature.get("hardened_runtime") is not True
++        ):
++            raise ValueError("final helper signature evidence missing")
++        _entitlements(signature["entitlements"])
++        if not re.fullmatch(r"\d+(?:\.\d+)+", proof["os_build"]):
++            raise ValueError("native OS evidence required")
++        return {
++            "proof_sha256": file_digest(proof_path),
++            "junit_sha256": file_digest(junit),
++            "bundle_sha256": bundle["sha256"],
++            "helper_sha256": bundle["helper_sha256"],
++        }
++    except (KeyError, TypeError, OSError, ET.ParseError, zipfile.BadZipFile) as error:
++        raise ValueError("complete original leaf evidence required") from error
++
++
++def _mounted_bundle(app):
++    path = app
++    try:
++        for part in ("", *PurePosixPath(PREFIX).parts[1:]):
++            path = path / part
++            if not stat.S_ISDIR(path.lstat().st_mode):
++                raise ValueError("mounted helper ancestors must be real directories")
++    except OSError as error:
++        raise ValueError("mounted helper ancestors must be real directories") from error
++    return path
++
++
++def produce(app, dmg, archive, evidence_dir, *, sha, version, arch):
++    if (
++        sys.platform != "darwin"
++        or {"arm64": "arm64", "x86_64": "x64"}.get(platform.machine()) != arch
++    ):
++        raise ValueError("native macOS runner required")
++    if (
++        subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
++        != sha
++    ):
++        raise ValueError("leaf test source must match release SHA")
++    run_id, attempt = os.environ["GITHUB_RUN_ID"], os.environ["GITHUB_RUN_ATTEMPT"]
++    if (
++        not run_id.isdecimal()
++        or not attempt.isdecimal()
++        or min(int(run_id), int(attempt)) < 1
++        or os.environ.get("GITHUB_JOB") not in {"macos-ota", "macos"}
++    ):
++        raise ValueError("actual candidate Actions job required")
++    bundle = _mounted_bundle(app)
++    info = _json((app / "Contents/Resources/build-info.json").read_bytes())
++    if info.get("gitSha") != sha or info.get("version") != version:
++        raise ValueError("mounted app identity mismatch")
++    snapshot = snapshot_directory(bundle, arch)
++    if snapshot != snapshot_zip(archive, arch):
++        raise ValueError("DMG and updater ZIP helpers differ")
++    signature = _signatures(bundle, snapshot)
++    sources, dmg_record, archive_record = source_hashes(), _payload(dmg), _payload(archive)
++    evidence_dir.mkdir(parents=True, exist_ok=True)
++    proof_path = evidence_dir / "employee-leaf.json"
++    junit, log = evidence_dir / "employee-leaf-junit.xml", evidence_dir / "employee-leaf.log"
++    if any(path.exists() or path.is_symlink() for path in (proof_path, junit, log)):
++        raise ValueError("leaf evidence destination must be fresh")
++    env = {
++        key: value
++        for key, value in os.environ.items()
++        if key in {"HOME", "PATH", "TMPDIR", "LANG", "LC_ALL"}
++    }
++    packages = [
++        "xcagi_langgraph_core",
++        "xcagi_langgraph_checkpoint",
++        "xcagi_langgraph_prebuilt",
++        "xcagi_langgraph_sdk",
++        "xcagi_langgraph_checkpoint_backends/checkpoint-sqlite",
++        "xcagi_langgraph_checkpoint_backends/checkpoint-postgres",
++    ]
++    env.update(
++        XCAGI_TEST_EMPLOYEE_LEAF=str(bundle / HELPER),
++        PYTHONPATH=os.pathsep.join(
++            [str(ROOT), *(str(ROOT / "packages" / name) for name in packages)]
++        ),
++        PYTHONDONTWRITEBYTECODE="1",
++        PYTEST_DISABLE_PLUGIN_AUTOLOAD="1",
++    )
++    command = [
++        sys.executable,
++        "-m",
++        "pytest",
++        "-p",
++        "pytest_asyncio.plugin",
++        "--import-mode=importlib",
++        "-oaddopts=",
++        "-o",
++        "junit_family=xunit1",
++        "-q",
++        TEST_FILE,
++        "--junitxml=" + str(junit),
++    ]
++    with log.open("xb") as stream:
++        subprocess.run(
++            command,
++            cwd=ROOT,
++            env=env,
++            stdout=stream,
++            stderr=subprocess.STDOUT,
++            check=True,
++            timeout=180,
++        )
++    summary = junit_summary(junit.read_bytes(), snapshot)
++    if (
++        sources != source_hashes()
++        or dmg_record != _payload(dmg)
++        or archive_record != _payload(archive)
++        or snapshot != snapshot_directory(_mounted_bundle(app), arch)
++    ):
++        raise ValueError("tested source or package changed")
++    proof = {
++        "schema": SCHEMA,
++        "source_sha": sha,
++        "version": version,
++        "architecture": arch,
++        "run_id": int(run_id),
++        "run_attempt": int(attempt),
++        "job": os.environ["GITHUB_JOB"],
++        "os_build": os.uname().release,
++        "source_hashes": sources,
++        "dmg": dmg_record,
++        "archive": archive_record,
++        "bundle": snapshot,
++        "signature": signature,
++        "pytest": summary,
++        "junit_sha256": file_digest(junit),
++        "log_sha256": file_digest(log),
++    }
++    with proof_path.open("x") as stream:
++        stream.write(json.dumps(proof, indent=2) + "\n")
++    return proof
++
++
++if __name__ == "__main__":
++    parser = argparse.ArgumentParser(description=__doc__)
++    for name in ("app", "dmg", "archive", "evidence-dir"):
++        parser.add_argument("--" + name, type=Path, required=True)
++    for name in ("sha", "version", "arch"):
++        parser.add_argument("--" + name, required=True)
++    args = parser.parse_args()
++    produce(
++        args.app.absolute(),
++        args.dmg.resolve(),
++        args.archive.resolve(),
++        args.evidence_dir.resolve(),
++        sha=args.sha,
++        version=args.version,
++        arch=args.arch,
++    )
+diff --git a/FHD/scripts/release/prepare_mac_candidate_pair.py b/FHD/scripts/release/prepare_mac_candidate_pair.py
+index d70052a56c..0eb80a1d55 100644
+--- a/FHD/scripts/release/prepare_mac_candidate_pair.py
++++ b/FHD/scripts/release/prepare_mac_candidate_pair.py
+@@ -10,6 +10,7 @@ import json
+ import os
+ import plistlib
+ import re
++import runpy
+ import shutil
+ import struct
+ import zipfile
+@@ -18,6 +19,10 @@ from pathlib import Path
+ from cryptography.hazmat.primitives import serialization
+ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+ 
++verify_candidate_evidence = runpy.run_path(
++    str(Path(__file__).resolve().parents[1] / "package/verify_employee_leaf_evidence.py")
++)["verify_candidate_evidence"]
++
+ STEPS = (
+     "Lock checkout and acceptance candidate to main",
+     "Notarize and staple macOS enterprise DMG",
+@@ -203,11 +208,21 @@ def prepare(root: Path, output: Path, sha: str, version: str, key_pem: str) -> d
+             or startup.get("systemIntegration") is not True
+         ):
+             raise ValueError(f"{arch}: original installed startup identity mismatch")
++        leaf = verify_candidate_evidence(
++            archive,
++            dmg,
++            archive.parent / "acceptance-evidence",
++            sha=sha,
++            version=version,
++            arch=arch,
++            run=run,
++        )
+         row = {
+             "architecture": arch,
+             "run_id": run["id"],
+             "artifact_id": artifact["id"],
+             "artifact_digest": artifact["digest"],
++            "employee_leaf": leaf,
+             "files": [],
+         }
+         for path in (archive, dmg, archive.with_name(archive.name + ".blockmap")):
+diff --git a/FHD/tests/release_gate/test_mac_frozen_pair.py b/FHD/tests/release_gate/test_mac_frozen_pair.py
+index 2c639c967d..aaa6a044c9 100644
+--- a/FHD/tests/release_gate/test_mac_frozen_pair.py
++++ b/FHD/tests/release_gate/test_mac_frozen_pair.py
+@@ -9,6 +9,7 @@ import os
+ import plistlib
+ import struct
+ import subprocess
++import xml.etree.ElementTree as ET
+ import zipfile
+ from pathlib import Path
+ 
+@@ -24,12 +25,102 @@ spec = importlib.util.spec_from_file_location(
+ )
+ pair = importlib.util.module_from_spec(spec)
+ spec.loader.exec_module(pair)
++leaf_spec = importlib.util.spec_from_file_location(
++    "leaf_evidence", FHD / "scripts/package/verify_employee_leaf_evidence.py"
++)
++leaf_evidence = importlib.util.module_from_spec(leaf_spec)
++leaf_spec.loader.exec_module(leaf_evidence)
+ SHA, VERSION = (
+     "a" * 40,
+     json.loads((FHD / "config/download_release.json").read_text())["version_lock"],
+ )
+ 
+ 
++def synthetic_leaf_evidence(archive, dmg, arch, run_id, fault):
++    """Exercise proof validation with synthetic bytes, without claiming a native run."""
++    bundle = leaf_evidence.snapshot_zip(archive, arch)
++    suite = ET.Element("testsuite", tests="16", failures="0", errors="0", skipped="0")
++    for name in sorted(leaf_evidence.EXPECTED_CASES):
++        case = ET.SubElement(
++            suite,
++            "testcase",
++            name=name,
++            classname="tests.test_packaged_employee_leaf",
++            file=leaf_evidence.TEST_FILE,
++            time="0",
++        )
++        properties = ET.SubElement(case, "properties")
++        candidate = (
++            "frozen_candidate_sha256" if name.startswith("test_actual_") else "frozen_helper_sha256"
++        )
++        values = {candidate: bundle["helper_sha256"]}
++        if not name.startswith("test_actual_"):
++            values["frozen_sdk_sha256"] = json.dumps(bundle["sdk"], sort_keys=True)
++        if name != "test_frozen_sdk_staging_reads_bundle_without_host_source":
++            values["profile_sha256"] = hashlib.sha256(
++                ("SYNTHETIC PROFILE " + name).encode()
++            ).hexdigest()
++        for key, value in values.items():
++            ET.SubElement(properties, "property", name=key, value=value)
++    junit = ET.tostring(suite, encoding="utf-8", xml_declaration=True)
++    log = b"Synthetic pair-unit fixture only; no runtime execution or signing.\n"
++    proof = {
++        "schema": leaf_evidence.SCHEMA,
++        "source_sha": SHA,
++        "version": VERSION,
++        "architecture": arch,
++        "run_id": run_id,
++        "run_attempt": 1,
++        "job": "macos-ota",
++        "os_build": "25.3.0",
++        "source_hashes": leaf_evidence.source_hashes(),
++        "dmg": {"name": dmg.name, "sha256": pair.digest(dmg), "size": dmg.stat().st_size},
++        "archive": {
++            "name": archive.name,
++            "sha256": pair.digest(archive),
++            "size": archive.stat().st_size,
++        },
++        "bundle": bundle,
++        "signature": {
++            "team_id": leaf_evidence.TEAM,
++            "adhoc": False,
++            "hardened_runtime": True,
++            "entitlements": plistlib.loads(
++                (FHD / "desktop/build/entitlements.mac.plist").read_bytes()
++            ),
++        },
++        "pytest": leaf_evidence.junit_summary(junit, bundle),
++        "log_sha256": hashlib.sha256(log).hexdigest(),
++    }
++    if arch == "x64":
++        if fault == "leaf-skipped":
++            ET.SubElement(suite.find("testcase"), "skipped", message="synthetic skipped probe")
++        elif fault == "leaf-partial":
++            suite.remove(suite.find("testcase"))
++        elif fault == "leaf-wrong-run":
++            proof["run_id"] += 100
++        elif fault == "leaf-wrong-sha":
++            proof["source_sha"] = "b" * 40
++        elif fault == "leaf-wrong-arch":
++            proof["architecture"] = "arm64"
++        elif fault in {"leaf-wrong-dmg", "leaf-wrong-zip"}:
++            proof["dmg" if fault == "leaf-wrong-dmg" else "archive"]["sha256"] = "0" * 64
++        elif fault == "leaf-wrong-helper":
++            proof["bundle"]["helper_sha256"] = "0" * 64
++        elif fault == "leaf-wrong-bundle":
++            proof["bundle"]["sha256"] = "0" * 64
++        elif fault == "leaf-wrong-sdk":
++            proof["bundle"]["sdk"][next(iter(leaf_evidence.SDK_SOURCES))] = "0" * 64
++        elif fault == "leaf-wrong-test-source":
++            proof["source_hashes"][leaf_evidence.TEST_FILE] = "0" * 64
++        junit = ET.tostring(suite, encoding="utf-8", xml_declaration=True)
++    proof["junit_sha256"] = hashlib.sha256(junit).hexdigest()
++    files = {"employee-leaf-junit.xml": junit, "employee-leaf.log": log}
++    if not (arch == "x64" and fault == "leaf-missing"):
++        files["employee-leaf.json"] = json.dumps(proof).encode()
++    return files
++
++
+ def fixture(root, key, fault=None):
+     for arch, cpu, runner in (
+         ("arm64", 0x100000C, "macos-latest"),
+@@ -37,6 +128,7 @@ def fixture(root, key, fault=None):
+     ):
+         d = root / arch
+         d.mkdir()
++        run_id = 11 if arch == "arm64" else 12
+         stem = f"XCAGI-Enterprise-{VERSION}-mac-{arch}"
+         app = io.BytesIO()
+         with zipfile.ZipFile(app, "w") as z:
+@@ -61,7 +153,27 @@ def fixture(root, key, fault=None):
+                     0x100000C if fault == "architecture" and arch == "x64" else cpu,
+                 ),
+             )
++            # Minimal thin Mach-O headers are an explicit unit boundary, not runnable binaries.
++            for name, file_type in (
++                (leaf_evidence.HELPER, 2),
++                ("_internal/libpython3.11.dylib", 6),
++            ):
++                member = zipfile.ZipInfo(leaf_evidence.PREFIX + name)
++                member.create_system = 3
++                member.external_attr = 0o100755 << 16
++                z.writestr(
++                    member, struct.pack("<IIIIIIII", 0xFEEDFACF, cpu, 0, file_type, 0, 0, 0, 0)
++                )
++            for target, source in leaf_evidence.SDK_SOURCES.items():
++                member = zipfile.ZipInfo(leaf_evidence.PREFIX + "_internal/leaf_sdk/" + target)
++                member.create_system = 3
++                member.external_attr = 0o100644 << 16
++                z.writestr(member, (FHD / source).read_bytes())
+         data = app.getvalue()
++        archive, dmg = d / (stem + ".zip"), d / (stem + ".dmg")
++        archive.write_bytes(data)
++        dmg.write_bytes(b"SYNTHETIC DMG")
++        leaf_files = synthetic_leaf_evidence(archive, dmg, arch, run_id, fault)
+         body = f"buildSha: {SHA}\nproductVersion: {VERSION}\nfiles:\n  - url: {stem}.zip\n    sha512: {base64.b64encode(hashlib.sha512(data).digest()).decode()}\n    size: {len(data)}"
+         signature = base64.b64encode(key.sign(body.encode())).decode()
+         with zipfile.ZipFile(d / "artifact.zip", "w") as z:
+@@ -81,11 +193,13 @@ def fixture(root, key, fault=None):
+                     }
+                 ),
+             )
+-        run_id = 11 if arch == "arm64" else 12
++            for name, contents in leaf_files.items():
++                z.writestr("acceptance-evidence/" + name, contents)
+         (d / "run.json").write_text(
+             json.dumps(
+                 {
+                     "id": run_id,
++                    "run_attempt": 1,
+                     "name": "Release Desktop macOS OTA",
+                     "path": ".github/workflows/fhd-release-desktop-mac-ota.yml",
+                     "head_sha": SHA,
+@@ -134,6 +248,18 @@ def fixture(root, key, fault=None):
+         "signature",
+         "architecture",
+         "publish-without-authorization",
++        "leaf-missing",
++        "leaf-skipped",
++        "leaf-partial",
++        "leaf-wrong-run",
++        "leaf-wrong-sha",
++        "leaf-wrong-arch",
++        "leaf-wrong-dmg",
++        "leaf-wrong-zip",
++        "leaf-wrong-helper",
++        "leaf-wrong-bundle",
++        "leaf-wrong-sdk",
++        "leaf-wrong-test-source",
+     ],
+ )
+ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
+@@ -220,6 +346,25 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
+         assert "Verification complete; public metadata may have been read" in result.stdout
+ 
+ 
++def test_frozen_pair_records_original_leaf_proof_and_bundle_digests(tmp_path):
++    key = Ed25519PrivateKey.generate()
++    public = key.public_key().public_bytes(
++        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
++    )
++    fixture(tmp_path, key)
++    review = pair.prepare(tmp_path, tmp_path / "output", SHA, VERSION, public.decode())
++    for row in review["architectures"]:
++        payload = tmp_path / row["architecture"] / "payload"
++        evidence = payload / "acceptance-evidence"
++        proof = json.loads((evidence / "employee-leaf.json").read_bytes())
++        assert row["employee_leaf"] == {
++            "proof_sha256": pair.digest(evidence / "employee-leaf.json"),
++            "junit_sha256": pair.digest(evidence / "employee-leaf-junit.xml"),
++            "bundle_sha256": proof["bundle"]["sha256"],
++            "helper_sha256": proof["bundle"]["helper_sha256"],
++        }
++
++
+ @pytest.mark.parametrize(
+     "guard", ["approved", "disabled", "wrong-owner-sha", "failed-check", "not-on-main"]
+ )
+diff --git a/FHD/tests/test_packaged_employee_leaf_evidence.py b/FHD/tests/test_packaged_employee_leaf_evidence.py
+new file mode 100644
+index 0000000000..1b7f4a94d3
+--- /dev/null
++++ b/FHD/tests/test_packaged_employee_leaf_evidence.py
+@@ -0,0 +1,649 @@
++"""Evidence/parser contracts use synthetic Mach-O headers, never signing receipts."""
++
++import hashlib
++import json
++import os
++import plistlib
++import runpy
++import stat
++import struct
++import subprocess
++import sys
++import xml.etree.ElementTree as ET
++import zipfile
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++from scripts.package import verify_employee_leaf_evidence as gate
++
++
++def _junit(bundle):
++    root = ET.Element("testsuites")
++    suite = ET.SubElement(root, "testsuite")
++    for name in sorted(gate.EXPECTED_CASES):
++        case = ET.SubElement(
++            suite,
++            "testcase",
++            name=name,
++            classname="tests.test_packaged_employee_leaf",
++            file=gate.TEST_FILE,
++        )
++        properties = ET.SubElement(case, "properties")
++        for key, value in {
++            "frozen_helper_sha256": bundle["helper_sha256"],
++            "frozen_sdk_sha256": json.dumps(bundle["sdk"]),
++            "profile_sha256": "f" * 64,
++        }.items():
++            ET.SubElement(properties, "property", name=key, value=value)
++    return ET.tostring(root)
++
++
++@pytest.fixture
++def candidate(tmp_path):
++    bundle = tmp_path / "XCAGI.app/Contents/Resources/backend/employee-leaf"
++    files = {name: (gate.ROOT / source).read_bytes() for name, source in gate.SDK_SOURCES.items()}
++    for name, content in files.items():
++        path = bundle / "_internal/leaf_sdk" / name
++        path.parent.mkdir(parents=True, exist_ok=True)
++        path.write_bytes(content)
++        path.chmod(0o644)
++    for name in (gate.HELPER, "_internal/libpython3.11.dylib"):
++        path = bundle / name
++        path.write_bytes(struct.pack("<II", 0xFEEDFACF, 0x100000C) + b"SYNTHETIC UNIT HEADER")
++        path.chmod(0o755)
++    archive = tmp_path / "candidate.zip"
++    with zipfile.ZipFile(archive, "w") as package:
++        for path in bundle.rglob("*"):
++            if path.is_file():
++                package.write(path, gate.PREFIX + path.relative_to(bundle).as_posix())
++    dmg = tmp_path / "candidate.dmg"
++    dmg.write_bytes(b"SYNTHETIC UNIT DMG, not signed")
++    evidence = tmp_path / "acceptance-evidence"
++    evidence.mkdir()
++    snapshot = gate.snapshot_directory(bundle, "arm64")
++    assert snapshot == gate.snapshot_zip(archive, "arm64")
++    junit = _junit(snapshot)
++    (evidence / "employee-leaf-junit.xml").write_bytes(junit)
++    (evidence / "employee-leaf.log").write_text(
++        "Synthetic proof unit fixture; no runtime/signing PASS"
++    )
++    proof = {
++        "schema": gate.SCHEMA,
++        "source_sha": "a" * 40,
++        "version": "1.0.0.6",
++        "architecture": "arm64",
++        "run_id": 11,
++        "run_attempt": 1,
++        "job": "macos-ota",
++        "os_build": "25.3.0",
++        "source_hashes": gate.source_hashes(),
++        "dmg": gate._payload(dmg),
++        "archive": gate._payload(archive),
++        "bundle": snapshot,
++        "signature": {
++            "team_id": gate.TEAM,
++            "adhoc": False,
++            "hardened_runtime": True,
++            "entitlements": plistlib.loads(
++                (gate.ROOT / "desktop/build/entitlements.mac.plist").read_bytes()
++            ),
++        },
++        "pytest": gate.junit_summary(junit, snapshot),
++        "junit_sha256": gate.file_digest(evidence / "employee-leaf-junit.xml"),
++        "log_sha256": gate.file_digest(evidence / "employee-leaf.log"),
++    }
++    (evidence / "employee-leaf.json").write_text(json.dumps(proof))
++    return bundle, archive, dmg, evidence, proof
++
++
++def test_original_evidence_is_bound_to_all_files_and_source(candidate):
++    _, archive, dmg, evidence, proof = candidate
++    result = gate.verify_candidate_evidence(
++        archive,
++        dmg,
++        evidence,
++        sha="a" * 40,
++        version="1.0.0.6",
++        arch="arm64",
++        run={"id": 11, "run_attempt": 1},
++    )
++    assert result["proof_sha256"] == gate.file_digest(evidence / "employee-leaf.json")
++    assert result["bundle_sha256"] == proof["bundle"]["sha256"]
++    assert result["helper_sha256"] == proof["bundle"]["helper_sha256"]
++
++
++@pytest.mark.parametrize(
++    "fault",
++    [
++        "failure",
++        "error",
++        "skipped",
++        "partial",
++        "duplicate",
++        "class",
++        "file",
++        "profile",
++        "candidate",
++        "sdk",
++        "properties",
++    ],
++)
++def test_success_exit_or_edited_counters_cannot_hide_bad_junit(candidate, fault):
++    _, _, _, _, proof = candidate
++    root = ET.fromstring(_junit(proof["bundle"]))
++    suite = root.find("testsuite")
++    case = suite.find("testcase")
++    if fault in {"failure", "error", "skipped"}:
++        ET.SubElement(case, fault)
++    elif fault == "partial":
++        suite.remove(case)
++    elif fault == "duplicate":
++        suite.append(ET.fromstring(ET.tostring(case)))
++    elif fault in {"class", "file"}:
++        case.set("classname" if fault == "class" else "file", "other_test.py")
++    else:
++        properties = case.find("properties")
++        name = {
++            "profile": "profile_sha256",
++            "candidate": "frozen_helper_sha256",
++            "sdk": "frozen_sdk_sha256",
++            "properties": "profile_sha256",
++        }[fault]
++        field = next(p for p in properties if p.get("name") == name)
++        if fault == "properties":
++            properties.append(ET.fromstring(ET.tostring(field)))
++        else:
++            field.set("value", "{}" if fault == "sdk" else "wrong")
++    with pytest.raises(ValueError):
++        gate.junit_summary(ET.tostring(root), proof["bundle"])
++
++
++@pytest.mark.parametrize(
++    "fault",
++    [
++        "attempt",
++        "run_bool",
++        "adhoc",
++        "team",
++        "runtime",
++        "entitlements",
++        "os",
++        "testsource",
++        "counter_type",
++        "log",
++        "duplicate_json",
++    ],
++)
++def test_authenticated_wrapper_still_requires_exact_leaf_evidence(candidate, fault):
++    _, archive, dmg, evidence, proof = candidate
++    if fault == "attempt":
++        proof["run_attempt"] = 2
++    elif fault == "run_bool":
++        proof["run_id"] = True
++    elif fault in {"adhoc", "team", "runtime", "entitlements"}:
++        if fault == "adhoc":
++            proof["signature"]["adhoc"] = True
++        elif fault == "team":
++            proof["signature"]["team_id"] = "FOREIGN"
++        elif fault == "runtime":
++            proof["signature"]["hardened_runtime"] = 1
++        else:
++            proof["signature"]["entitlements"]["com.apple.security.network.server"] = False
++    elif fault == "os":
++        proof["os_build"] = ""
++    elif fault == "testsource":
++        proof["source_hashes"][gate.TEST_FILE] = "0" * 64
++    elif fault == "counter_type":
++        proof["pytest"]["failed"] = False
++    elif fault == "log":
++        (evidence / "employee-leaf.log").write_text("changed")
++    raw = json.dumps(proof)
++    if fault == "duplicate_json":
++        raw = raw.replace('"schema":', '"schema":"forged", "schema":', 1)
++    (evidence / "employee-leaf.json").write_text(raw)
++    with pytest.raises(ValueError):
++        gate.verify_candidate_evidence(
++            archive,
++            dmg,
++            evidence,
++            sha="a" * 40,
++            version="1.0.0.6",
++            arch="arm64",
++            run={"id": 11, "run_attempt": 1},
++        )
++
++
++@pytest.mark.parametrize("fault", ["symlink", "hardlink", "architecture", "sdk"])
++def test_bundle_cannot_substitute_links_foreign_native_or_unreviewed_sdk(candidate, fault):
++    bundle, _, _, _, _ = candidate
++    path = bundle / gate.HELPER
++    if fault in {"symlink", "hardlink"}:
++        original = bundle.parent / "outside"
++        path.rename(original)
++        path.symlink_to(original) if fault == "symlink" else os.link(original, path)
++    elif fault == "architecture":
++        path.write_bytes(struct.pack("<II", 0xFEEDFACF, 0x1000007))
++    else:
++        (bundle / "_internal/leaf_sdk" / next(iter(gate.SDK_SOURCES))).write_text("unreviewed")
++    with pytest.raises(ValueError):
++        gate.snapshot_directory(bundle, "arm64")
++
++
++def _zip_bundle(bundle, archive):
++    with zipfile.ZipFile(archive, "w") as package:
++        for path in sorted(bundle.rglob("*")):
++            name = gate.PREFIX + path.relative_to(bundle).as_posix()
++            if path.is_symlink():
++                item = zipfile.ZipInfo(name)
++                item.create_system = 3
++                item.external_attr = path.lstat().st_mode << 16
++                package.writestr(item, os.readlink(path).encode())
++            elif path.is_file():
++                package.write(path, name)
++
++
++@pytest.fixture
++def framework_candidate(candidate):
++    bundle, archive, _, _, _ = candidate
++    binary = bundle / gate.FRAMEWORK_BINARY
++    binary.parent.mkdir(parents=True)
++    (bundle / "_internal/libpython3.11.dylib").rename(binary)
++    resources = binary.parent / "Resources"
++    resources.mkdir()
++    (resources / "Info.plist").write_bytes(plistlib.dumps({"CFBundleName": "Python"}))
++    for name, target in gate.FRAMEWORK_LINKS.items():
++        (bundle / name).symlink_to(target)
++    _zip_bundle(bundle, archive)
++    return candidate
++
++
++@pytest.mark.parametrize("arch,cpu", [("arm64", 0x100000C), ("x64", 0x1000007)])
++def test_python_org_framework_preserves_four_exact_links_and_original_binary(
++    framework_candidate, arch, cpu
++):
++    bundle, archive, dmg, evidence, proof = framework_candidate
++    for name in (gate.HELPER, gate.FRAMEWORK_BINARY):
++        (bundle / name).write_bytes(struct.pack("<II", 0xFEEDFACF, cpu) + b"SYNTHETIC UNIT")
++    _zip_bundle(bundle, archive)
++    snapshot = gate.snapshot_directory(bundle, arch)
++    assert snapshot == gate.snapshot_zip(archive, arch)
++    assert set(snapshot["native_paths"]) == {gate.HELPER, gate.FRAMEWORK_BINARY}
++    assert {
++        row["path"]: row["link"] for row in snapshot["files"] if row.get("type") == "symlink"
++    } == gate.FRAMEWORK_LINKS
++    for row in snapshot["files"]:
++        if row.get("type") == "symlink":
++            assert row["sha256"] == hashlib.sha256(row["link"].encode()).hexdigest()
++            assert (bundle / row["path"]).resolve().is_relative_to(bundle)
++    proof.update(architecture=arch, bundle=snapshot, archive=gate._payload(archive))
++    junit = _junit(snapshot)
++    (evidence / "employee-leaf-junit.xml").write_bytes(junit)
++    proof.update(
++        pytest=gate.junit_summary(junit, snapshot),
++        junit_sha256=gate.file_digest(evidence / "employee-leaf-junit.xml"),
++    )
++    (evidence / "employee-leaf.json").write_text(json.dumps(proof))
++    assert (
++        gate.verify_candidate_evidence(
++            archive,
++            dmg,
++            evidence,
++            sha="a" * 40,
++            version="1.0.0.6",
++            arch=arch,
++            run={"id": 11, "run_attempt": 1},
++        )["bundle_sha256"]
++        == snapshot["sha256"]
++    )
++
++
++@pytest.mark.parametrize(
++    "fault",
++    [
++        "absolute",
++        "escape",
++        "unexpected_target",
++        "extra_alias",
++        "missing_alias",
++        "missing_info",
++        "missing_binary",
++        "foreign_cpu",
++        "dual_layout",
++        "regular_alias",
++    ],
++)
++def test_framework_layout_rejects_unapproved_links_and_missing_original_bytes(
++    framework_candidate, fault
++):
++    bundle, archive, _, _, _ = framework_candidate
++    alias, binary = bundle / "_internal/Python", bundle / gate.FRAMEWORK_BINARY
++    if fault in {"absolute", "escape", "unexpected_target"}:
++        alias.unlink()
++        alias.symlink_to(
++            {
++                "absolute": str(binary),
++                "escape": "../../outside",
++                "unexpected_target": "Python.framework/Versions/3.11/Resources/Info.plist",
++            }[fault]
++        )
++    elif fault == "extra_alias":
++        (bundle / "_internal/unknown-alias").symlink_to("Python.framework/Versions/3.11/Python")
++    elif fault == "missing_alias":
++        alias.unlink()
++    elif fault == "missing_info":
++        (binary.parent / "Resources/Info.plist").unlink()
++    elif fault == "missing_binary":
++        binary.unlink()
++    elif fault == "foreign_cpu":
++        binary.write_bytes(struct.pack("<II", 0xFEEDFACF, 0x1000007))
++    elif fault == "dual_layout":
++        (bundle / "_internal/libpython3.11.dylib").write_bytes(binary.read_bytes())
++    elif fault == "regular_alias":
++        alias.unlink()
++        alias.write_text(gate.FRAMEWORK_LINKS["_internal/Python"])
++    with pytest.raises(ValueError):
++        gate.snapshot_directory(bundle, "arm64")
++    _zip_bundle(bundle, archive)
++    with pytest.raises(ValueError):
++        gate.snapshot_zip(archive, "arm64")
++
++
++def test_zip_cannot_put_new_files_under_a_framework_directory_alias(framework_candidate):
++    _, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        package.writestr(gate.PREFIX + "_internal/Python.framework/Versions/Current/extra", b"x")
++    with pytest.raises(ValueError, match="aliases"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++@pytest.mark.parametrize(
++    "mode,data", [(stat.S_IFLNK, b"/etc"), (stat.S_IFREG, b""), (stat.S_IFDIR, b"x")]
++)
++def test_zip_cannot_hide_links_or_file_payloads_as_directories(framework_candidate, mode, data):
++    _, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(gate.PREFIX + "_internal/unknown-directory/")
++        item.create_system = 3
++        item.external_attr = (mode | 0o755) << 16
++        package.writestr(item, data)
++    with pytest.raises(ValueError, match="directory member"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++@pytest.mark.parametrize(
++    "name",
++    [
++        "_internal/Python.framework/Versions/Current/",
++        "_internal/Python.framework/Versions/Current/extra/",
++        gate.HELPER + "/",
++    ],
++)
++def test_zip_directory_nodes_cannot_shadow_bundle_files(framework_candidate, name):
++    _, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(gate.PREFIX + name)
++        item.create_system = 3
++        item.external_attr = (stat.S_IFDIR | 0o755) << 16
++        package.writestr(item, b"")
++    with pytest.raises(ValueError, match="aliases"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++@pytest.mark.parametrize(
++    "name", ["_internal/Python.framework/Versions/./Current/extra", "_internal//extra"]
++)
++def test_zip_member_names_must_be_canonical(framework_candidate, name):
++    _, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        package.writestr(gate.PREFIX + name, b"x")
++    with pytest.raises(ValueError, match="unsafe"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++def test_zip_file_nodes_cannot_be_children_of_an_existing_file(framework_candidate):
++    _, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        package.writestr(gate.PREFIX + gate.FRAMEWORK_BINARY + "/extra", b"x")
++    with pytest.raises(ValueError, match="aliases"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++@pytest.mark.parametrize("mode", [0, stat.S_IFDIR])
++def test_framework_zip_accepts_plain_empty_directory_entries(framework_candidate, mode):
++    bundle, archive, _, _, _ = framework_candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(gate.PREFIX + "_internal/Python.framework/Versions/3.11/")
++        item.create_system = 3
++        item.external_attr = (mode | 0o755) << 16
++        package.writestr(item, b"")
++    assert gate.snapshot_zip(archive, "arm64") == gate.snapshot_directory(bundle, "arm64")
++
++
++def test_adhoc_signature_cannot_reach_pytest(candidate, monkeypatch):
++    bundle, _, _, _, proof = candidate
++    calls = []
++
++    def codesign(command, **kwargs):
++        calls.append(command)
++        return subprocess.CompletedProcess(
++            command,
++            0,
++            "",
++            "Signature=adhoc\nTeamIdentifier=" + gate.TEAM + "\nflags=0x10000(runtime)",
++        )
++
++    monkeypatch.setattr(gate.subprocess, "run", codesign)
++    with pytest.raises(ValueError, match="Developer ID"):
++        gate._signatures(bundle, proof["bundle"])
++    assert all(command[0] == "codesign" for command in calls)
++
++
++def test_producer_unit_binds_real_command_outputs_and_sanitizes_test_environment(
++    candidate, monkeypatch
++):
++    bundle, archive, dmg, evidence, proof = candidate
++    for path in evidence.iterdir():
++        path.unlink()
++    app = bundle.parents[3]
++    (app / "Contents/Resources/build-info.json").write_text(
++        json.dumps({"gitSha": "a" * 40, "version": "1.0.0.6"})
++    )
++    monkeypatch.setattr(gate.sys, "platform", "darwin")
++    monkeypatch.setattr(gate.platform, "machine", lambda: "arm64")
++    monkeypatch.setattr(gate.os, "uname", lambda: SimpleNamespace(release="25.3.0"), raising=False)
++    monkeypatch.setattr(gate.subprocess, "check_output", lambda *a, **kw: "a" * 40 + "\n")
++    monkeypatch.setattr(gate, "_signatures", lambda *a: proof["signature"])
++    for key, value in {
++        "GITHUB_RUN_ID": "11",
++        "GITHUB_RUN_ATTEMPT": "1",
++        "GITHUB_JOB": "macos-ota",
++        "DATABASE_URL": "SYNTHETIC_MUST_NOT_INHERIT",
++        "APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64": "SYNTHETIC_SECRET",
++    }.items():
++        monkeypatch.setenv(key, value)
++
++    def pytest_command(command, **kwargs):
++        assert command[:3] == [sys.executable, "-m", "pytest"]
++        assert "DATABASE_URL" not in kwargs["env"]
++        assert "APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64" not in kwargs["env"]
++        assert kwargs["env"]["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
++        assert "pytest_asyncio.plugin" in command
++        Path(
++            next(arg.split("=", 1)[1] for arg in command if arg.startswith("--junitxml="))
++        ).write_bytes(_junit(proof["bundle"]))
++        kwargs["stdout"].write(b"Synthetic producer orchestration unit only")
++        return subprocess.CompletedProcess(command, 0)
++
++    monkeypatch.setattr(gate.subprocess, "run", pytest_command)
++    produced = gate.produce(
++        app, dmg, archive, evidence, sha="a" * 40, version="1.0.0.6", arch="arm64"
++    )
++    assert produced["pytest"]["passed"] == 16
++    assert produced["os_build"] == "25.3.0"
++    assert produced["bundle"]["helper_sha256"] == proof["bundle"]["helper_sha256"]
++    assert gate.verify_candidate_evidence(
++        archive,
++        dmg,
++        evidence,
++        sha="a" * 40,
++        version="1.0.0.6",
++        arch="arm64",
++        run={"id": 11, "run_attempt": 1},
++    )
++    with pytest.raises(ValueError, match="fresh"):
++        gate.produce(app, dmg, archive, evidence, sha="a" * 40, version="1.0.0.6", arch="arm64")
++
++
++@pytest.mark.parametrize("ancestor", sorted(gate.PREFIX_ANCESTORS))
++@pytest.mark.parametrize(
++    "fault", ["no_tail_dir", "regular", "regular_dir", "symlink", "symlink_dir", "fifo", "payload"]
++)
++def test_zip_helper_ancestors_must_be_plain_empty_directories(candidate, ancestor, fault):
++    _, archive, _, _, _ = candidate
++    mode = {
++        "no_tail_dir": stat.S_IFDIR,
++        "regular": stat.S_IFREG,
++        "regular_dir": stat.S_IFREG,
++        "symlink": stat.S_IFLNK,
++        "symlink_dir": stat.S_IFLNK,
++        "fifo": stat.S_IFIFO,
++        "payload": stat.S_IFDIR,
++    }[fault]
++    name = ancestor + ("/" if fault in {"regular_dir", "symlink_dir", "fifo", "payload"} else "")
++    data = b"/outside" if fault.startswith("symlink") else b"x" if fault == "payload" else b""
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(name)
++        item.create_system = 3
++        item.external_attr = (mode | 0o755) << 16
++        package.writestr(item, data)
++    with pytest.raises(ValueError, match="ancestor"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++@pytest.mark.parametrize("ancestor", sorted(gate.PREFIX_ANCESTORS))
++@pytest.mark.parametrize("mode", [0, stat.S_IFDIR])
++def test_zip_helper_ancestors_allow_normal_empty_directory_entries(candidate, ancestor, mode):
++    bundle, archive, _, _, _ = candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(ancestor + "/")
++        item.create_system = 3
++        item.external_attr = (mode | 0o755) << 16
++        package.writestr(item, b"")
++    assert gate.snapshot_zip(archive, "arm64") == gate.snapshot_directory(bundle, "arm64")
++
++
++@pytest.mark.parametrize("ancestor", sorted(gate.PREFIX_ANCESTORS))
++def test_zip_case_aliases_cannot_replace_helper_ancestors(candidate, ancestor):
++    _, archive, _, _, _ = candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(ancestor.swapcase())
++        item.create_system = 3
++        item.external_attr = (stat.S_IFLNK | 0o755) << 16
++        package.writestr(item, b"/outside")
++    with pytest.raises(ValueError, match="noncanonical helper prefix"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++def test_zip_case_alias_cannot_hide_files_under_the_helper_prefix(candidate):
++    _, archive, _, _, _ = candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        package.writestr(gate.PREFIX.swapcase() + "extra", b"x")
++    with pytest.raises(ValueError, match="noncanonical helper prefix"):
++        gate.snapshot_zip(archive, "arm64")
++
++
++def test_zip_keeps_unrelated_electron_framework_links_outside_helper_scope(candidate):
++    bundle, archive, _, _, _ = candidate
++    with zipfile.ZipFile(archive, "a") as package:
++        item = zipfile.ZipInfo(
++            "XCAGI.app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
++        )
++        item.create_system = 3
++        item.external_attr = (stat.S_IFLNK | 0o755) << 16
++        package.writestr(item, b"Versions/Current/Electron Framework")
++    assert gate.snapshot_zip(archive, "arm64") == gate.snapshot_directory(bundle, "arm64")
++
++
++def _native_producer_job(monkeypatch):
++    monkeypatch.setattr(gate.sys, "platform", "darwin")
++    monkeypatch.setattr(gate.platform, "machine", lambda: "arm64")
++    monkeypatch.setattr(gate.subprocess, "check_output", lambda *a, **kw: "a" * 40 + "\n")
++    for key, value in {
++        "GITHUB_RUN_ID": "11",
++        "GITHUB_RUN_ATTEMPT": "1",
++        "GITHUB_JOB": "macos-ota",
++    }.items():
++        monkeypatch.setenv(key, value)
++
++
++@pytest.mark.parametrize("depth", range(5))
++@pytest.mark.parametrize("fault", ["symlink", "regular", "missing"])
++def test_producer_rejects_each_untrusted_directory_before_reading_app(
++    candidate, monkeypatch, tmp_path, depth, fault
++):
++    bundle, archive, dmg, evidence, _ = candidate
++    app = bundle.parents[3]
++    parts = ("Contents", "Resources", "backend", "employee-leaf")
++    target = app.joinpath(*parts[:depth])
++    (app / "Contents/Resources/build-info.json").write_text(
++        json.dumps({"gitSha": "a" * 40, "version": "1.0.0.6"})
++    )
++    outside = tmp_path / "outside-original-directory"
++    target.rename(outside)
++    if fault == "symlink":
++        target.symlink_to(outside, target_is_directory=True)
++    elif fault == "regular":
++        target.write_text("SYNTHETIC NOT A DIRECTORY")
++    _native_producer_job(monkeypatch)
++
++    def unexpected(*args, **kwargs):
++        pytest.fail("App content or executable checks must not run before directory validation")
++
++    monkeypatch.setattr(gate, "_json", unexpected)
++    monkeypatch.setattr(gate, "snapshot_directory", unexpected)
++    monkeypatch.setattr(gate, "_signatures", unexpected)
++    with pytest.raises(ValueError, match="real directories"):
++        gate.produce(app, dmg, archive, evidence, sha="a" * 40, version="1.0.0.6", arch="arm64")
++
++
++def test_snapshot_directory_rejects_a_symbolic_bundle_root(candidate):
++    bundle, _, _, _, _ = candidate
++    link = bundle.parent / "linked-helper-root"
++    link.symlink_to(bundle, target_is_directory=True)
++    with pytest.raises(ValueError, match="root must be a real directory"):
++        gate.snapshot_directory(link, "arm64")
++
++
++def test_cli_preserves_app_symlink_until_the_directory_guard(candidate, monkeypatch):
++    bundle, archive, dmg, evidence, _ = candidate
++    app = bundle.parents[3]
++    link = app.parent / "linked-XCAGI.app"
++    link.symlink_to(app, target_is_directory=True)
++    _native_producer_job(monkeypatch)
++    monkeypatch.setattr(
++        sys,
++        "argv",
++        [
++            str(gate.ROOT / "scripts/package/verify_employee_leaf_evidence.py"),
++            "--app",
++            str(link),
++            "--archive",
++            str(archive),
++            "--dmg",
++            str(dmg),
++            "--evidence-dir",
++            str(evidence),
++            "--sha",
++            "a" * 40,
++            "--version",
++            "1.0.0.6",
++            "--arch",
++            "arm64",
++        ],
++    )
++    with pytest.raises(ValueError, match="real directories"):
++        runpy.run_path(
++            str(gate.ROOT / "scripts/package/verify_employee_leaf_evidence.py"), run_name="__main__"
++        )
+-- 
+2.50.1 (Apple Git-155)
+

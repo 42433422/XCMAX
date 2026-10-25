@@ -1,0 +1,9 @@
+{
+  "ref": "origin/main",
+  "sha": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "canonical_committed_lines": 2330002,
+  "baseline": 2330609,
+  "main_delta": -607,
+  "inventory": "NUL-delimited gitls-tree and exact counted/banner rules",
+  "baseline_unchanged": true
+}

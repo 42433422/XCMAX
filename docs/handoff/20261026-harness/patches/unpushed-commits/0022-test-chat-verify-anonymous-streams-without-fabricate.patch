@@ -1,0 +1,101 @@
+From 1017998ccefc6769e9b946db3505708bdc80db22 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 23:16:52 +0800
+Subject: [PATCH 22/43] test(chat): verify anonymous streams without fabricated
+ task identity
+
+
+diff --git a/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py b/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
+index 764992f879..5c1c328315 100644
+--- a/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
++++ b/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
+@@ -35,6 +35,18 @@ import pytest
+ 
+ from app.fastapi_routes import xcagi_compat_chat_helpers as ch
+ 
++
++def _anonymous_sse_events(chunks, kinds):
++    events = [json.loads(chunk.removeprefix(b"data: ").strip()) for chunk in chunks]
++    assert [event["type"] for event in events] == kinds
++    for event in events:
++        assert "run_id" not in event and "agent_run_id" not in event
++        result = event.get("result", {})
++        assert "run_id" not in result and "agent_run_id" not in result
++        assert "run_id" not in result.get("data", {})
++    return events
++
++
+ # ---------------------------------------------------------------------------
+ # _chat_request_subject — client.host fallback
+ # ---------------------------------------------------------------------------
+@@ -922,7 +934,8 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert len(results) == 3
++        _anonymous_sse_events(results, ["token", "error"])
++        assert len(results) == 2
+         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert last_data["type"] == "error"
+         assert "没有返回可显示的正文" in last_data["message"]
+@@ -962,7 +975,8 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert len(results) == 4
++        _anonymous_sse_events(results, ["token", "token", "done"])
++        assert len(results) == 3
+         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert last_data["type"] == "done"
+         assert last_data["result"]["success"] is True
+@@ -1002,7 +1016,8 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert len(results) == 3
++        _anonymous_sse_events(results, ["token", "error"])
++        assert len(results) == 2
+         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert last_data["type"] == "error"
+         assert last_data["message"] == "stream error"
+@@ -1041,10 +1056,14 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert planner.call_args.kwargs["runtime_context"]["message"] == body.message
++        assert planner.call_args.args[0] is body
++        assert planner.call_args.args[0].message == body.message
++        context = planner.call_args.kwargs["runtime_context"]
++        assert not context.get("run_id") and not context.get("agent_run_id")
+         started = json.loads(results[0].replace(b"data: ", b"").strip())
+-        assert started["type"] == "tool_progress" and started["run_id"].startswith("run_")
+-        assert len(results) == 3
++        assert started["type"] == "token" and started["text"] == "partial"
++        _anonymous_sse_events(results, ["token", "requires_token"])
++        assert len(results) == 2
+         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert last_data["type"] == "requires_token"
+ 
+@@ -1151,7 +1170,8 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert len(results) == 2
++        _anonymous_sse_events(results, ["error"])
++        assert len(results) == 1
+         data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert data["type"] == "error"
+ 
+@@ -1189,7 +1209,8 @@ class TestXcagiPlannerStreamBytesAdditional:
+             ),
+         ):
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+-        assert len(results) == 4
++        _anonymous_sse_events(results, ["token", "token", "done"])
++        assert len(results) == 3
+         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
+         assert last_data["type"] == "done"
+         assert last_data["result"]["response"] == "real"
+-- 
+2.50.1 (Apple Git-155)
+

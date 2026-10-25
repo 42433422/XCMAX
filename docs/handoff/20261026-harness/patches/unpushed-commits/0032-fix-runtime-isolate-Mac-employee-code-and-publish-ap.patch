@@ -1,0 +1,921 @@
+From 4ee0825e23b3ae17764e2a22294944d58c5d0490 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 01:11:25 +0800
+Subject: [PATCH 32/43] fix(runtime): isolate Mac employee code and publish
+ approved artifacts
+
+
+diff --git a/FHD/app/application/agent_orchestrator/tool_process.py b/FHD/app/application/agent_orchestrator/tool_process.py
+index f1028d49b9..d16a14738a 100644
+--- a/FHD/app/application/agent_orchestrator/tool_process.py
++++ b/FHD/app/application/agent_orchestrator/tool_process.py
+@@ -10,6 +10,7 @@ import shutil
+ import tempfile
+ import time
+ from contextlib import nullcontext
++from contextvars import ContextVar
+ from datetime import date, datetime
+ from decimal import Decimal
+ from pathlib import Path
+@@ -19,6 +20,13 @@ import psutil
+ 
+ from app.utils.operational_errors import BOUNDARY_ERRORS
+ 
++_WORKSPACE: ContextVar[Path | None] = ContextVar("tool_worker_workspace", default=None)
++
++
++def current_tool_worker_workspace() -> Path | None:
++    """Trusted parent-owned tree, removed after the tool and descendants are reaped."""
++    return _WORKSPACE.get()
++
+ 
+ def _json_scalar(value):
+     # Match API numeric/date encoding; never stringify arbitrary service objects.
+@@ -43,6 +51,7 @@ def _worker(
+     ready.set()
+     if not start.wait(max(0, deadline - time.monotonic())):
+         return
++    workspace_token = _WORKSPACE.set(Path(folder))
+     try:
+         data = json.loads(payload)
+         with (
+@@ -83,6 +92,7 @@ def _worker(
+         )
+         done.set()
+     finally:
++        _WORKSPACE.reset(workspace_token)
+         # Keep ancestry intact until the parent has reaped tool-created children.
+         start.clear()
+         start.wait()
+diff --git a/FHD/app/application/employee_runtime/executor.py b/FHD/app/application/employee_runtime/executor.py
+index 9978cc94ab..024f0f66dd 100644
+--- a/FHD/app/application/employee_runtime/executor.py
++++ b/FHD/app/application/employee_runtime/executor.py
+@@ -7,6 +7,7 @@ import inspect
+ import json
+ import logging
+ import os
++import sys
+ import uuid
+ from pathlib import Path
+ from typing import Any
+@@ -438,8 +439,14 @@ def _actions_fhd(
+                 )
+                 outputs.append(
+                     trust_error
+-                    or _action_direct_python_module(
+-                        pack_root, employee_id, actions_cfg, reasoning, task, workspace_root
++                    or (
++                        _action_mac_leaf(
++                            pack_root, employee_id, actions_cfg, reasoning, task, runtime_context
++                        )
++                        if sys.platform == "darwin"
++                        else _action_direct_python_module(
++                            pack_root, employee_id, actions_cfg, reasoning, task, workspace_root
++                        )
+                     )
+                 )
+         elif handler == "agent":
+@@ -499,6 +506,14 @@ def _handlers_execution_ok(result: dict[str, Any]) -> bool:
+     return not execution_result_error(result)
+ 
+ 
++def _action_mac_leaf(pack_root, employee_id, actions_cfg, reasoning, task, context):
++    from app.application.employee_runtime.leaf_action import execute_mac_employee_leaf
++
++    payload = dict((reasoning or {}).get("input") or {})
++    payload.setdefault("task", task)
++    return execute_mac_employee_leaf(pack_root, employee_id, actions_cfg, payload, context or {})
++
++
+ def execute_employee_task_local(
+     employee_id: str,
+     task: str,
+@@ -555,6 +570,7 @@ def execute_controlled_employee_action(
+     try:
+         if "direct_python" in manifest_actions_handlers(pack["manifest"]):
+             snapshot = validate_employee_execution_snapshot(employee_id, params, context)
++            context["_employee_action_params"] = params
+             context["workspace_root"] = snapshot["workspace_root"]
+             payload.update(
+                 workspace_root=snapshot["workspace_root"],
+diff --git a/FHD/app/application/employee_runtime/leaf_action.py b/FHD/app/application/employee_runtime/leaf_action.py
+new file mode 100644
+index 0000000000..f3802918fe
+--- /dev/null
++++ b/FHD/app/application/employee_runtime/leaf_action.py
+@@ -0,0 +1,262 @@
++"""Trusted Mac employee admission and publication around the credential-free leaf."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import re
++import stat
++import tempfile
++import time
++import uuid
++from pathlib import Path
++
++from app.application.employee_runtime.leaf_process import (
++    MAX_STAGE,
++    LeafUnavailable,
++    _pinned_bytes,
++    spawn_leaf,
++    stage_employee,
++    stage_sdk,
++)
++from app.utils.async_bridge import run_async
++from app.utils.operational_errors import RECOVERABLE_ERRORS
++
++
++def _model_complete(messages, max_tokens, temperature):
++    from app.infrastructure.llm.client import _scoped_client
++    from app.mod_sdk.mod_employee_llm import mod_employee_complete
++
++    if _scoped_client.get() is None:
++        return {"success": False, "outcome": "failure", "content": ""}
++    return run_async(
++        mod_employee_complete(messages, max_tokens=max_tokens, temperature=temperature)
++    )
++
++
++def _publish_outputs(stage, body, result, *, deadline):
++    """A returned path is a claim, never authority to read or overwrite a host file."""
++    from app.application.shipment_excel_etl_security import (
++        _open_directory_under_root,
++        open_etl_output_file,
++    )
++
++    output_root = stage / "work/outputs"
++    sidecars = Path(body["workspace_root"]) / "outputs" / ("leaf-" + uuid.uuid4().hex)
++    approved = {Path(item["path"]).name: Path(item["path"]) for item in body["outputs"]}
++    if len(approved) != len(body["outputs"]):
++        raise ValueError("employee output names collide")
++    files, mapping, directories, total = {}, {}, [], 0
++    for source in sorted(output_root.rglob("*")):
++        if time.monotonic() >= deadline:
++            raise TimeoutError("employee publication deadline")
++        mode = source.lstat().st_mode
++        if stat.S_ISDIR(mode):
++            target = sidecars / source.relative_to(output_root)
++            directories.append(target)
++            mapping[str(source)] = str(target)
++            continue
++        if not stat.S_ISREG(mode):
++            raise ValueError("employee artifact is linked or not regular")
++        relative = source.relative_to(output_root)
++        target = (approved.get(relative.name) if len(relative.parts) == 1 else None) or (
++            sidecars / relative
++        )
++        files[source] = _pinned_bytes(source)
++        total += len(files[source])
++        if total > MAX_STAGE:
++            raise ValueError("employee artifact budget exceeded")
++        mapping[str(source)] = str(target)
++    if body["output_kind"] != "structured_result" and not set(approved.values()).issubset(
++        {Path(value) for value in mapping.values()}
++    ):
++        raise ValueError("employee approved output missing")
++    output_paths = {str(source) for source in files}
++    mapping[str(output_root)] = str(Path(body["workspace_root"]) / "outputs")
++    mapping.update(
++        {
++            str(stage / "inputs" / str(i) / Path(item["path"]).name): item["path"]
++            for i, item in enumerate(body["inputs"])
++        }
++    )
++    embedded_path = re.compile(
++        "(?:"
++        + "|".join(re.escape(path) for path in sorted(mapping, key=len, reverse=True))
++        + r""")(?=$|[\s"'<>),;:\]}])"""
++    )
++
++    def rewrite(
++        value,
++        *,
++        source_parent=output_root,
++        target_parent=Path(body["output_path"]).parent,
++        field="",
++    ):
++        if isinstance(value, dict):
++            if any(
++                key.endswith("output_path")
++                and (not isinstance(item, str) or item not in output_paths)
++                for key, item in value.items()
++            ):
++                raise ValueError("employee returned an unapproved artifact claim")
++            keys = [
++                rewrite(key, source_parent=source_parent, target_parent=target_parent)
++                for key in value
++            ]
++            if len(set(keys)) != len(keys):
++                raise ValueError("employee metadata keys collide after publication")
++            return {
++                key: rewrite(
++                    item, source_parent=source_parent, target_parent=target_parent, field=original
++                )
++                for key, original, item in zip(keys, value, value.values())
++            }
++        if isinstance(value, list):
++            return [
++                rewrite(item, source_parent=source_parent, target_parent=target_parent, field=field)
++                for item in value
++            ]
++        if isinstance(value, str):
++            if value in mapping:
++                return mapping[value]
++            if value == str(stage / "work"):
++                return body["workspace_root"]
++            if (
++                field in {"relpath", "path", "src", "file", "image_path", "image_relpath"}
++                and not Path(value).is_absolute()
++            ):
++                original = os.path.normpath(str(source_parent / value))
++                if original in output_paths:
++                    return os.path.relpath(mapping[original], target_parent)
++            # Worker summaries often contain encoded JSON. Reconcile their
++            # path claims with the same map as the actual artifact metadata.
++            if value.lstrip().startswith(("{", "[")):
++                try:
++                    parsed = json.loads(value)
++                except ValueError:
++                    pass
++                else:
++                    if isinstance(parsed, (dict, list)):
++                        return json.dumps(
++                            rewrite(
++                                parsed, source_parent=source_parent, target_parent=target_parent
++                            ),
++                            ensure_ascii=False,
++                            allow_nan=False,
++                        )
++            value = embedded_path.sub(lambda match: mapping[match[0]], value)
++            if str(stage) in value:
++                raise ValueError("employee returned unpublished private path")
++        return value
++
++    rewritten = rewrite(result)
++    prepared = []
++    for source, data in files.items():
++        if time.monotonic() >= deadline:
++            raise TimeoutError("employee publication deadline")
++        if source.suffix.lower() == ".json":
++            data = json.dumps(
++                rewrite(
++                    json.loads(data),
++                    source_parent=source.parent,
++                    target_parent=Path(mapping[str(source)]).parent,
++                ),
++                ensure_ascii=False,
++                allow_nan=False,
++            ).encode()
++        prepared.append((Path(mapping[str(source)]), data))
++    for directory in directories:
++        descriptor = _open_directory_under_root(
++            Path(body["workspace_root"]), directory, create=True
++        )
++        os.close(descriptor)
++    artifacts = []
++    for target, data in prepared:
++        if time.monotonic() >= deadline:
++            raise TimeoutError("employee publication deadline")
++        with open_etl_output_file(target, workspace_root=body["workspace_root"]) as stream:
++            stream.write(data)
++        if _pinned_bytes(target) != data:
++            raise ValueError("employee artifact readback changed")
++        artifacts.append(
++            {
++                "path": str(target),
++                "sha256": hashlib.sha256(data).hexdigest(),
++                "size_bytes": len(data),
++            }
++        )
++    return rewritten, artifacts
++
++
++def execute_mac_employee_leaf(pack_root, employee_id, actions, payload, context):
++    from app.application.agent_orchestrator.tool_executor import registered_dispatch_is_controlled
++    from app.application.agent_orchestrator.tool_process import current_tool_worker_workspace
++    from app.application.employee_runtime.executor import _handler_output
++    from app.application.employee_runtime.loader import validate_employee_execution_snapshot
++    from app.application.tool_execution_deadline import _DEADLINE
++
++    launched = False
++    try:
++        if not registered_dispatch_is_controlled(employee_id, "execute"):
++            raise LeafUnavailable("employee_tool_control_required")
++        params = context.get("_employee_action_params")
++        if not isinstance(params, dict):
++            raise LeafUnavailable("employee_execution_snapshot_required")
++        body = validate_employee_execution_snapshot(employee_id, params, context)
++        direct = actions.get("direct_python") or {}
++        module = str(direct.get("module") or "worker").strip()
++        if not module.isidentifier():
++            raise LeafUnavailable("employee_module_invalid")
++        module = "backend/employees/" + module + ".py"
++        if not (pack_root / module).is_file():
++            candidates = sorted((pack_root / "backend/employees").glob("*.py"))
++            module = next(
++                (
++                    p.relative_to(pack_root).as_posix()
++                    for p in candidates
++                    if not p.name.startswith("_")
++                ),
++                module,
++            )
++        budget = _DEADLINE.get()
++        deadline = min(time.monotonic() + 60, budget.deadline) if budget else time.monotonic() + 60
++        if deadline <= time.monotonic():
++            raise LeafUnavailable("employee_deadline_expired")
++        with tempfile.TemporaryDirectory(
++            prefix="xcagi-employee-leaf-", dir=current_tool_worker_workspace()
++        ) as temporary:
++            stage = Path(temporary).resolve()
++            staged = stage_employee(pack_root, body, payload, stage)
++            config = {
++                "sdk_root": str(stage_sdk(stage)),
++                "pack_root": str(stage / "pack"),
++                "workspace_root": str(stage / "work"),
++                "payload": staged,
++                "employee_id": employee_id,
++                "module": module,
++            }
++            launched = True
++            result, audit = spawn_leaf(
++                config, stage, deadline=deadline, model_callback=_model_complete
++            )
++            output = _handler_output("direct_python", result)
++            if output["ok"]:
++                validate_employee_execution_snapshot(employee_id, params, context)
++                output["output"], artifacts = _publish_outputs(
++                    stage, body, result, deadline=deadline
++                )
++                output["isolation"] = {**audit, "artifacts": artifacts}
++            return output
++    except RECOVERABLE_ERRORS:
++        return {
++            "handler": "direct_python",
++            "ok": False,
++            "outcome": "unknown" if launched else "failure",
++            "error_code": "employee_leaf_incomplete" if launched else "employee_leaf_unavailable",
++            "error": "员工执行未获确认，请核对原任务"
++            if launched
++            else "员工隔离环境或已审阅快照不可用",
++            "retryable": False,
++            "reconciliation_required": launched,
++        }
+diff --git a/FHD/app/application/employee_runtime/leaf_process.py b/FHD/app/application/employee_runtime/leaf_process.py
+index f938558b1e..daafc9c484 100644
+--- a/FHD/app/application/employee_runtime/leaf_process.py
++++ b/FHD/app/application/employee_runtime/leaf_process.py
+@@ -120,7 +120,12 @@ def stage_sdk(stage: Path) -> Path:
+     for target, source in projection.items():
+         dest = root / target
+         dest.parent.mkdir(parents=True, exist_ok=True)
+-        dest.write_bytes(_pinned_bytes(host / source))
++        origin = (
++            Path(sys.executable).parent / "employee-leaf/_internal/leaf_sdk" / target
++            if getattr(sys, "frozen", False)
++            else host / source
++        )
++        dest.write_bytes(_pinned_bytes(origin))
+         dest.chmod(0o400)
+     return root
+ 
+@@ -186,6 +191,11 @@ def _profile(command, read_roots, stage):
+             )
+             + ' (literal "/dev/urandom"))',
+             '(allow file-read-data (literal "/"))',
++            "(allow file-read-data "
++            + " ".join(
++                rule("literal", p) for p in sorted({p.parent for p in read_roots if p.is_dir()})
++            )
++            + ")",
+             "(allow file-read* file-write* "
+             + " ".join(rule("subpath", stage / name) for name in ("work", "tmp", "home"))
+             + ' (literal "/dev/null"))',
+diff --git a/FHD/app/application/employee_runtime/loader.py b/FHD/app/application/employee_runtime/loader.py
+index e35455dd39..ba1d14e1b4 100644
+--- a/FHD/app/application/employee_runtime/loader.py
++++ b/FHD/app/application/employee_runtime/loader.py
+@@ -214,8 +214,14 @@ def verify_direct_python_pack_trust(pack_dir: Path | str) -> tuple[bool, str]:
+     """Trust bundled/source packs, or verify signed-install receipt + current hash."""
+     pdir = Path(pack_dir).resolve()
+     try:
++        from app.infrastructure.mods.artifact_package import employee_host_dependency_error
+         from app.infrastructure.mods.install_receipts import read_verified_install
+ 
++        manifest = json.loads((pdir / "manifest.json").read_text())
++        if not isinstance(manifest, dict):
++            return False, "invalid_employee_manifest"
++        if employee_host_dependency_error(manifest):
++            return False, "employee_host_dependency_incompatible"
+         # An installation into the source/default root is still an installation.
+         # Invalid or unsigned retained state must never fall back to bundled trust.
+         state = pdir.parent / ".install-receipts" / pdir.name
+diff --git a/FHD/app/mod_sdk/employee_leaf.py b/FHD/app/mod_sdk/employee_leaf.py
+index e02e25b2d8..e0a121b137 100644
+--- a/FHD/app/mod_sdk/employee_leaf.py
++++ b/FHD/app/mod_sdk/employee_leaf.py
+@@ -162,11 +162,11 @@ def _run(config, send, receive):
+         converter = next((p for p in converters if "vendor" in p.parts), None)
+         if converter is None:
+             raise ValueError("employee converter missing")
+-        src = Path(str(payload.get("file_path") or payload.get("path") or workspace / "input.json"))
++        src = Path(str(payload.get("file_path") or payload.get("path") or workspace / "input.txt"))
+         if not src.is_file():
+             if not generate:
+                 raise ValueError("employee input missing")
+-            src.write_text("{}", encoding="utf-8")
++            src.write_text(str(payload.get("user_request") or ""), encoding="utf-8")
+         fn = _load(converter, "_employee_converter").convert_file
+         rules = pack / "rule_spec.json"
+         rules = json.loads(rules.read_bytes()) if rules.is_file() else {}
+diff --git a/FHD/tests/fixtures/backend_ci_isolation.py b/FHD/tests/fixtures/backend_ci_isolation.py
+index d72bf695e4..4ff866e446 100644
+--- a/FHD/tests/fixtures/backend_ci_isolation.py
++++ b/FHD/tests/fixtures/backend_ci_isolation.py
+@@ -167,6 +167,16 @@ def approved_tool_context(monkeypatch):
+     return approve
+ 
+ 
++def candidate_employee_host_worker(*args, **kwargs):
++    """Explicit candidate1.0.0.7 fixture in a real spawn; never a production override."""
++    from unittest.mock import patch
++
++    from app.application.agent_orchestrator.tool_process import _worker
++
++    with patch("app.infrastructure.mods.manifest.host_xcagi_version", return_value="1.0.0.7"):
++        return _worker(*args, **kwargs)
++
++
+ @pytest.fixture
+ def reviewed_agent_http(tmp_path, monkeypatch):
+     """Real HTTP approval and durable queue execution, retaining uncertain write receipts."""
+diff --git a/FHD/tests/test_application/test_employee_leaf_process.py b/FHD/tests/test_application/test_employee_leaf_process.py
+index bc85105dc8..a3c784428d 100644
+--- a/FHD/tests/test_application/test_employee_leaf_process.py
++++ b/FHD/tests/test_application/test_employee_leaf_process.py
+@@ -1,6 +1,7 @@
+ """Actual local macOS leaf boundary; signed product/approval acceptance is separate."""
+ 
+ import hashlib
++import importlib.util
+ import json
+ import os
+ import sys
+@@ -400,3 +401,40 @@ def run(payload, ctx):
+     with pytest.raises(ValueError):
+         spawn_leaf(config, stage, deadline=time.monotonic() + 2)
+     assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++@pytest.mark.parametrize("name", ["httpx", "sqlalchemy", "fastapi", "cryptography"])
++def test_literal_dependency_directory_listing_never_grants_neighbor_bytes(prepare, name):
++    origin = importlib.util.find_spec(name).origin
++    source = f"""
++def run(payload, ctx):
++    import importlib
++    checks={{}}
++    try:
++        open({origin!r}, 'rb').read(1)
++    except PermissionError:
++        checks['file_denied']=True
++    else:
++        checks['file_denied']=False
++    try:
++        importlib.import_module({name!r})
++    except (ImportError, PermissionError):
++        checks['import_denied']=True
++    else:
++        checks['import_denied']=False
++    return {{'ok':True, 'checks':checks}}
++"""
++    config, stage, _, _ = prepare(source)
++    result, _ = spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++    assert result["checks"] == {"file_denied": True, "import_denied": True}
++
++
++def test_whitelisted_office_dependencies_import_in_actual_source_leaf(prepare):
++    source = """
++def run(payload, ctx):
++    import openpyxl, pypdf, pptx
++    return {'ok':True, 'imports':['openpyxl','pypdf','pptx']}
++"""
++    config, stage, _, _ = prepare(source)
++    result, _ = spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++    assert result["imports"] == ["openpyxl", "pypdf", "pptx"]
+diff --git a/FHD/tests/test_application/test_employee_python_governed.py b/FHD/tests/test_application/test_employee_python_governed.py
+index 1b665c2814..358425b431 100644
+--- a/FHD/tests/test_application/test_employee_python_governed.py
++++ b/FHD/tests/test_application/test_employee_python_governed.py
+@@ -1,6 +1,7 @@
+ """Real signed-pack admission, durable approval, spawn and owner-scoped artifacts."""
+ 
+ import json
++import sys
+ from pathlib import Path
+ from types import SimpleNamespace
+ 
+@@ -15,11 +16,19 @@ from tests.test_infrastructure.test_employee_signed_archive import (
+ 
+ 
+ @pytest.fixture
+-def employee_http(tmp_path, monkeypatch, signed_employee_pack, trusted_actor, reviewed_agent_http):
++def employee_http(
++    tmp_path, monkeypatch, signed_employee_pack, trusted_actor, reviewed_agent_http, request
++):
+     from app.application.tools.workflow import invalidate_workflow_tool_registry
+     from app.mod_sdk.employee_pack_runtime import build_employee_pack
++    from tests.fixtures.backend_ci_isolation import candidate_employee_host_worker
++
++    monkeypatch.setattr(
++        "app.application.agent_orchestrator.tool_process._worker", candidate_employee_host_worker
++    )
+ 
+-    pack = signed_employee_pack()
++    source = getattr(request, "param", None)
++    pack = signed_employee_pack(worker_source=source(tmp_path) if source else None)
+     actor = trusted_actor(mod_id=pack.pack_id)
+     workspace = tmp_path / "workspace"
+     workspace.mkdir()
+@@ -104,6 +113,89 @@ def _start(case, uploaded=None):
+     return run
+ 
+ 
++def _denial_worker(root):
++    secret = str(root.resolve() / "host-secret.txt")
++    return f"""
++import json, os, socket, subprocess
++try:
++    open({secret!r}, "w").write("changed during import")
++except PermissionError:
++    import_denied = True
++else:
++    import_denied = False
++def run(payload, ctx):
++    checks = {{"import": import_denied, "credential": os.getenv("SYNTHETIC_HOST_API_KEY") is None}}
++    for name, operation in (
++        ("read", lambda: open({secret!r}).read()),
++        ("network", lambda: socket.create_connection(("127.0.0.1", 9))),
++        ("shell", lambda: subprocess.run(["/bin/sh", "-c", "true"])),
++    ):
++        try:
++            operation()
++        except PermissionError:
++            checks[name] = True
++        else:
++            checks[name] = False
++    with open(payload["output_path"], "w") as output:
++        json.dump({{"checks": checks, "input": payload["file_path"]}}, output)
++    return {{"success": True, "output_path": payload["output_path"]}}
++"""
++
++
++def _forged_artifact_worker(root):
++    return f"""
++def run(payload, ctx):
++    open(payload["output_path"], "w").write('{{"value":"private-stage-only"}}')
++    return {{"success": True, "output_path": {str(root.resolve() / "host-secret.txt")!r}}}
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_denial_worker], indirect=True)
++def test_formally_approved_signed_code_is_isolated_before_import(
++    employee_http, tmp_path, monkeypatch
++):
++    case = employee_http
++    secret = tmp_path / "host-secret.txt"
++    secret.write_text("SYNTHETIC_HOST_DATA")
++    monkeypatch.setenv("SYNTHETIC_HOST_API_KEY", "SYNTHETIC_CREDENTIAL")
++    uploaded = case.upload()
++    result = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": uploaded["file_path"], "user_request": "读取已审阅 CSV"},
++    )
++    assert result.run.status == "completed", result.output
++    evidence = result.output["business_verification"]
++    assert evidence["verified"] is True
++    actual = Path(evidence["artifacts"][0]["path"])
++    data = json.loads(actual.read_text())
++    assert data["checks"] == dict.fromkeys(
++        ("import", "credential", "read", "network", "shell"), True
++    )
++    assert data["input"] == str(case.workspace / uploaded["file_path"])
++    assert secret.read_text() == "SYNTHETIC_HOST_DATA"
++    handler = result.output["output"]["result"]["outputs"][0]
++    assert len(handler["isolation"]["profile_sha256"]) == 64
++    assert handler["isolation"]["artifacts"][0]["path"] == str(actual)
++    assert "SYNTHETIC_CREDENTIAL" not in json.dumps(result.output)
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_forged_artifact_worker], indirect=True)
++def test_leaf_cannot_make_host_publish_or_read_back_a_forged_artifact(employee_http, tmp_path):
++    case = employee_http
++    secret = tmp_path / "host-secret.txt"
++    secret.write_text("SYNTHETIC_HOST_DATA")
++    run = _start(case)
++    completed = _finish_review(case, run.run_id)
++    assert completed.status != "completed"
++    assert completed.steps[0].output["success"] is False
++    assert secret.read_text() == "SYNTHETIC_HOST_DATA"
++    assert not Path(run.steps[0].params["execution_snapshot"]["body"]["output_path"]).exists()
++    assert "SYNTHETIC_HOST_DATA" not in json.dumps(completed.steps[0].output)
++
++
+ def test_model_erp_employee_uses_original_snapshot_and_exact_receipt_replay(employee_http):
+     from app.application.agent_orchestrator.business_harness import ensure_business_harness_context
+     from app.application.agent_orchestrator.chat_trace import _run_service
+@@ -511,3 +603,192 @@ def test_conflicting_generic_employee_aliases_are_rejected_before_admission(empl
+     assert response.status_code == 400
+     assert "别名身份冲突" in response.text
+     assert not any(case.workspace.rglob("data.json"))
++
++
++def _private_key(root):
++    return """
++def run(payload, ctx):
++    import json
++    data = {'nested': {payload['output_path']: 'synthetic'}, 'ctx_keys': sorted(ctx)}
++    with open(payload['output_path'], 'w') as output:
++        json.dump(data, output)
++    return {'success': True, 'output_path': payload['output_path']}
++"""
++
++
++def _private_substring(root):
++    return """
++def run(payload, ctx):
++    import json
++    data = {'message': 'saved artifact at ' + payload['output_path']}
++    with open(payload['output_path'], 'w') as output:
++        json.dump(data, output)
++    return {'success': True, 'output_path': payload['output_path']}
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_private_key, _private_substring], indirect=True)
++def test_published_json_contains_no_deleted_leaf_path(employee_http):
++    case = employee_http
++    result = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": case.upload()["file_path"], "user_request": "synthetic read"},
++    )
++    assert result.run.status == "completed", result.output
++    output = Path(result.output["business_verification"]["artifacts"][0]["path"])
++    data = output.read_text()
++    assert "xcagi-employee-leaf-" not in data, data
++
++
++def _key_collision(root):
++    return """
++def run(payload, ctx):
++    import json
++    with open(payload['output_path'], 'w') as output:
++        json.dump({payload['output_path']: 'first', payload['shadow_path']: 'second'}, output)
++    return {'success':True, 'output_path':payload['output_path']}
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_key_collision], indirect=True)
++def test_rewritten_json_key_collision_is_rejected_before_publication(employee_http):
++    from app.application.employee_runtime.loader import employee_owner_workspace
++
++    case = employee_http
++    target = (
++        employee_owner_workspace(case.actor.context, case.pack.pack_id) / "collision-output.json"
++    )
++    response = case.http.client.post(
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={
++            "file_path": case.upload()["file_path"],
++            "user_request": "synthetic read",
++            "output_path": str(target),
++            "shadow_path": str(target),
++        },
++    )
++    assert response.status_code == 202, response.text
++    run = case.http.repository.get(response.json()["run_id"])
++    assert run.status == "waiting_user"
++    completed = _finish_review(case, run.run_id)
++    assert completed.status != "completed"
++    assert completed.steps[0].output["success"] is False
++    assert not target.exists()
++
++
++def _unmapped_substring(root):
++    return """
++def run(payload, ctx):
++    import json
++    with open(payload['output_path'], 'w') as output:
++        json.dump({'private':'prefix '+ctx['workspace_root']+'/unpublished'}, output)
++    return {'success':True,'output_path':payload['output_path']}
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_unmapped_substring], indirect=True)
++def test_unpublished_private_substring_is_rejected_before_publication(employee_http):
++    case = employee_http
++    run = _start(case)
++    completed = _finish_review(case, run.run_id)
++    assert completed.status != "completed"
++    assert not Path(run.steps[0].params["execution_snapshot"]["body"]["output_path"]).exists()
++
++
++def _encoded_summary(root):
++    return """
++def run(payload, ctx):
++    import json
++    data={'metadata':json.dumps({'file':payload['output_path']})}
++    with open(payload['output_path'],'w') as output:
++        json.dump(data,output)
++    return {'success':True,'output_path':payload['output_path'],'summary':json.dumps({'file':payload['output_path']})}
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_encoded_summary], indirect=True)
++def test_encoded_summary_uses_durable_published_path(employee_http):
++    case = employee_http
++    result = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": case.upload()["file_path"], "user_request": "synthetic read"},
++    )
++    assert result.run.status == "completed", result.output
++    actual = Path(result.output["business_verification"]["artifacts"][0]["path"])
++    assert json.loads(json.loads(actual.read_text())["metadata"])["file"] == str(actual)
++    handler = result.output["output"]["result"]["outputs"][0]
++    assert json.loads(handler["output"]["summary"])["file"] == str(actual)
++    assert "xcagi-employee-leaf-" not in json.dumps(result.output)
++
++
++def _hang_until_reaped(root):
++    return """
++def run(payload, ctx):
++    import json, os, time
++    with open(payload['output_path'], 'w') as output:
++        json.dump({'marker':'synthetic-unpublished-partial', 'pid':os.getpid()}, output)
++    while True:
++        time.sleep(0.01)
++"""
++
++
++@pytest.mark.skipif(sys.platform != "darwin", reason="actual Mac controlled isolation")
++@pytest.mark.parametrize("employee_http", [_hang_until_reaped], indirect=True)
++def test_outer_timeout_removes_entered_leaf_and_its_private_input_copies(
++    employee_http, monkeypatch
++):
++    import tempfile
++    import threading
++    import time
++
++    import psutil
++
++    from app.application.agent_orchestrator import tool_process
++
++    original_execute, original_temp = tool_process.execute_isolated, tempfile.mkdtemp
++    created, entered = [], []
++    stop = threading.Event()
++
++    def bounded(executor, step, context, deadline):
++        return original_execute(executor, step, context, min(deadline, time.monotonic() + 5))
++
++    def track(*args, **kwargs):
++        folder = original_temp(*args, **kwargs)
++        if kwargs.get("prefix") == "xcagi-tool-":
++            created.append(Path(folder))
++        return folder
++
++    def observe():
++        while not stop.wait(0.01):
++            for folder in tuple(created):
++                try:
++                    for path in folder.rglob("data.json"):
++                        data = json.loads(path.read_text())
++                        if data.get("marker") == "synthetic-unpublished-partial":
++                            entered.append(data["pid"])
++                            return
++                except (OSError, ValueError):
++                    pass
++
++    monkeypatch.setattr(tool_process, "execute_isolated", bounded)
++    monkeypatch.setattr(tempfile, "mkdtemp", track)
++    watcher = threading.Thread(target=observe)
++    watcher.start()
++    try:
++        run = _start(employee_http)
++        completed = _finish_review(employee_http, run.run_id)
++    finally:
++        stop.set()
++        watcher.join(timeout=2)
++    assert entered, "the real leaf must enter before the forced timeout"
++    assert created and all(not folder.exists() for folder in created)
++    assert not any(psutil.pid_exists(pid) for pid in entered)
++    assert completed.status != "completed"
++    assert completed.steps[0].output["success"] is False
++    assert not Path(run.steps[0].params["execution_snapshot"]["body"]["output_path"]).exists()
+diff --git a/FHD/tests/test_application/test_employee_runtime_orchestrator_branch_cov.py b/FHD/tests/test_application/test_employee_runtime_orchestrator_branch_cov.py
+index 3f9cbabee4..e20ce291e2 100644
+--- a/FHD/tests/test_application/test_employee_runtime_orchestrator_branch_cov.py
++++ b/FHD/tests/test_application/test_employee_runtime_orchestrator_branch_cov.py
+@@ -398,7 +398,7 @@ class TestEmployeeDispatcher:
+         assert captured["kw"]["workspace_root"] == "/ws"
+         assert captured["kw"]["session_id"] == "s1"
+ 
+-    def test_user_id_resolution_from_params(self) -> None:
++    def test_user_id_from_params_does_not_supply_runtime_identity(self) -> None:
+         captured: dict[str, Any] = {}
+ 
+         class _SpyAgent:
+@@ -414,7 +414,7 @@ class TestEmployeeDispatcher:
+             _SpyAgent,
+         ):
+             _employee_dispatcher(tool_id="emp", action="run", params={"task": "t", "user_id": 42})
+-        assert captured["kw"]["user_id"] == 42
++        assert captured["kw"]["user_id"] == 0
+ 
+     def test_user_id_resolution_from_ctx(self) -> None:
+         captured: dict[str, Any] = {}
+@@ -456,7 +456,7 @@ class TestEmployeeDispatcher:
+             _employee_dispatcher(tool_id="emp", action="run", params={"task": "t"})
+         assert captured["kw"]["user_id"] == 0
+ 
+-    def test_workspace_root_from_params(self) -> None:
++    def test_workspace_root_from_params_does_not_supply_runtime_authority(self) -> None:
+         captured: dict[str, Any] = {}
+ 
+         class _SpyAgent:
+@@ -476,7 +476,7 @@ class TestEmployeeDispatcher:
+                 action="run",
+                 params={"task": "t", "workspace_root": "/ws"},
+             )
+-        assert captured["kw"]["workspace_root"] == "/ws"
++        assert captured["kw"]["workspace_root"] is None
+ 
+     def test_session_id_from_ctx(self) -> None:
+         captured: dict[str, Any] = {}
+diff --git a/FHD/tests/test_infrastructure/test_employee_signed_archive.py b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+index c37b429fce..905c076998 100644
+--- a/FHD/tests/test_infrastructure/test_employee_signed_archive.py
++++ b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+@@ -66,6 +66,7 @@ def signed_employee_pack(tmp_path, monkeypatch):
+         *,
+         pack_id="csv-full-read-employee",
+         entry_source=None,
++        worker_source=None,
+         signed=True,
+         install=True,
+     ):
+@@ -80,6 +81,9 @@ def signed_employee_pack(tmp_path, monkeypatch):
+         if entry_source is not None:
+             manifest["backend"]["entry"] = "entry"
+             (source / "backend/entry.py").write_text(entry_source)
++        if worker_source is not None:
++            module = manifest["employee_config_v2"]["actions"]["direct_python"]["module"]
++            (source / "backend/employees" / (module + ".py")).write_text(worker_source)
+         (source / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False))
+         package = Path(
+             ModPackage(str(source)).create_package(
+@@ -150,6 +154,18 @@ def test_signed_employee_sdk_gate_rejects_before_installing(
+     assert pack.refresh_calls == []
+ 
+ 
++def test_direct_employee_trust_checks_current_host_before_execution(
++    signed_employee_pack, monkeypatch
++):
++    pack = signed_employee_pack()
++    assert verify_direct_python_pack_trust(pack.pack_dir)[0] is True
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.6")
++    assert verify_direct_python_pack_trust(pack.pack_dir) == (
++        False,
++        "employee_host_dependency_incompatible",
++    )
++
++
+ def test_signed_existing_employee_sdk_gate_denies_first_import(
+     signed_employee_pack, tmp_path, monkeypatch, caplog
+ ):
+@@ -366,7 +382,8 @@ def test_active_employee_upgrade_waits_for_new_process_and_retains_old_code(
+     )
+ 
+ 
+-def test_source_employee_remains_a_trusted_read_only_distribution():
++def test_source_employee_remains_a_trusted_read_only_distribution(monkeypatch):
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.7")
+     source = Path(__file__).resolve().parents[2] / "mods/_employees/csv-full-read-employee"
+     assert verify_direct_python_pack_trust(source) == (True, "host_catalog_bundled")
+ 
+-- 
+2.50.1 (Apple Git-155)
+

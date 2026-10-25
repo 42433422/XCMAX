@@ -1,0 +1,45 @@
+{
+  "scope": [
+    "FHD/app/application/business_db_write_verification.py",
+    "FHD/tests/test_application/test_business_action_ledger.py"
+  ],
+  "source_hashes": {
+    "FHD/app/application/business_db_write_verification.py": "2a20937b3af9b8c64f88499ae12026362bddfd413d9e060cf5c0d1bc5bb90c66",
+    "FHD/tests/test_application/test_business_action_ledger.py": "01117c0ad2a43dd2dda7760d5eafcda4b4af17f8542b580f8ec11e7fa3ee7600"
+  },
+  "production_change_exactly_two_material_field_aliases": true,
+  "old_test_source_bytes_preserved_as_prefix": true,
+  "all_original_module_nodes_ast_unchanged": true,
+  "original_assertions_unchanged": 57,
+  "new_test_functions": [
+    "test_real_material_create_verifies_normalized_aliases_after_commit",
+    "test_material_readback_rejects_alias_conflicts_wrong_values_targets_and_tenant"
+  ],
+  "red": {
+    "tests": 5,
+    "failed": [
+      "test_real_material_create_verifies_normalized_aliases_after_commit[http_min_quantity]",
+      "test_real_material_create_verifies_normalized_aliases_after_commit[http_zero_min_quantity]",
+      "test_real_material_create_verifies_normalized_aliases_after_commit[service_price]",
+      "test_real_material_create_verifies_normalized_aliases_after_commit[matching_price_alias]",
+      "test_material_readback_rejects_alias_conflicts_wrong_values_targets_and_tenant"
+    ],
+    "skipped": []
+  },
+  "green": {
+    "tests": 56,
+    "failed": [],
+    "skipped": []
+  },
+  "red_real_material_sql_databases": 5,
+  "green_real_material_sql_databases": 5,
+  "checks": {
+    "ruff": "pass",
+    "format": "pass",
+    "git_diff_check": "pass"
+  },
+  "staged_or_committed_by_this_subtask": false,
+  "provider_calls": "none; real SQL and approved AgentToolExecutor only",
+  "line_delta": 79,
+  "cleanup": "No global cleanup while arch agent is actively writing/testing; evidence retained outside repo as instructed by root."
+}

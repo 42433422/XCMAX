@@ -1,0 +1,39 @@
+{
+  "head": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+  "exit": 0,
+  "elapsed": 106.490957125,
+  "paths": [
+    "tests/test_application/test_workflow_engine.py",
+    "tests/test_application/test_workflow_engine_cov.py",
+    "tests/test_application/test_workflow_engine_components.py",
+    "tests/test_application/test_model_turn_runtime.py",
+    "tests/test_application/test_model_turn_review_regressions.py",
+    "tests/test_application/test_model_turn_lease.py",
+    "tests/test_application/test_model_turn_process_resume.py",
+    "tests/test_application/test_employee_model_turn.py",
+    "tests/test_application/test_legacy_durable_execution.py",
+    "tests/test_application/test_chat_employee_db_workflow_tools.py::test_agentic_loop_uses_action_name_and_disables_write_retry",
+    "tests/test_application/test_chat_employee_db_workflow_tools.py::test_ai_chat_agentic_excel_loop_returns_agent_run_trace"
+  ],
+  "command": [
+    "/Users/a4243342/.codex/worktrees/pr2519-ci-failure-fix/XCMAX/FHD/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-o",
+    "addopts=",
+    "--import-mode=importlib",
+    "tests/test_application/test_workflow_engine.py",
+    "tests/test_application/test_workflow_engine_cov.py",
+    "tests/test_application/test_workflow_engine_components.py",
+    "tests/test_application/test_model_turn_runtime.py",
+    "tests/test_application/test_model_turn_review_regressions.py",
+    "tests/test_application/test_model_turn_lease.py",
+    "tests/test_application/test_model_turn_process_resume.py",
+    "tests/test_application/test_employee_model_turn.py",
+    "tests/test_application/test_legacy_durable_execution.py",
+    "tests/test_application/test_chat_employee_db_workflow_tools.py::test_agentic_loop_uses_action_name_and_disables_write_retry",
+    "tests/test_application/test_chat_employee_db_workflow_tools.py::test_ai_chat_agentic_excel_loop_returns_agent_run_trace",
+    "-q",
+    "--junitxml=/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/architecture-runtime-plan-20261026/implementation-design-baseline.xml"
+  ]
+}

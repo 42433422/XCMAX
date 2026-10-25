@@ -1,0 +1,45 @@
+9950a393b557b75e23098057ef4b7f81075e0647 test(eval): verify material mutations with real approval and tenant readback
+7526f1000180c5477480e1e5f1a2fc76f4091621 test(eval): execute financial routes through real sessions grants and SQL readback
+a8c606781c96135f89cddfb46d28bd65785b45f7 fix(materials): verify persisted stock and price aliases without dropping inputs
+d69765d79207dbd5cab327f5a027163fa07e918d refactor(tests): parameterize equivalent group chat cases without coverage loss
+63dcee75434fab9177ce99ec6bf401bd77ee6884 build(mac): require complete final-package employee leaf evidence
+d354ec5180f6c4d79c3716de953cad536dd829b6 test(eval): exercise memory routes with real sessions and original approvals
+8103eeca02b3ec00399358d7b7f16517e60a5224 refactor: move governed workflow composition into application owners
+2c14fdfa455cfddbe37acb331cc99417ca147943 Merge current main and retain governed vector eval in its new body owner
+37822e91518b2b8c513b85913f5a73f4e4dada8e refactor: archive runners whose historical test targets no longer exist
+6e3b35d397ed7241c096f58a897bc74218ccdaca refactor: archive obsolete hardcoded reports and one-off PDF scripts
+a4263d54b39e015c1ea3adda5eb53bc6af2fe1c7 test(eval): verify vector ingestion through original approval and SQL readback
+68fe5688518609ed03196d61b0283098e1e38df5 build(mac): bundle a minimal employee leaf helper
+4ee0825e23b3ae17764e2a22294944d58c5d0490 fix(runtime): isolate Mac employee code and publish approved artifacts
+dd55618fd5f4c16177b1bb4197b55f985eac014f refactor: retain legacy imports through canonical domain definitions
+301b7d41dfc909718c50f0376baef5c582a76352 refactor(tests): share TopAssistant setup without losing assertions
+b42d9b9c2140313e1b89765e3c8db81aa70b0b03 fix(tools): return explicit receipts from workbook comparisons
+d339450d9919c7ffc398200445798a3b871faa29 refactor: retire orphan Flask assets and duplicate deployment guide
+300bebe22f5b813692dc28d578d904438705fa24 feat(runtime): prepare a bounded Mac employee leaf boundary
+9dab58819e430b59196fcfb511e1c9695bd0aacc fix(tools): bind vector inputs and document artifacts to approved tasks
+5bf10061a1851efecdd3ea52275c1b5f4ceabf9d refactor(tests): share planner stream transport fixtures
+aaf4e378ba164331ab9d5e6cb810127b9c2347c4 refactor(agent): persist shared model decisions and fence recovered execution
+dd804f3f6b48b1121d1996e84a0c079cf854f800 refactor(employees): share office workers and enforce host SDK compatibility
+1017998ccefc6769e9b946db3505708bdc80db22 test(chat): verify anonymous streams without fabricated task identity
+70c1bd70d9c2c6e9a1a743d1a1a3c25bc5c74b7f fix(vector): isolate Excel indexes and govern owner-scoped mutations
+0a29fc7d4a6435279eb264e2d5b85e5d689111ad fix(employees): keep dependency error returns consistently typed
+d5c73efb0c815db03b3c22da1ac0be53f542a7b5 fix(llm): keep employee completions inside the current model scope
+5d8e9b34406bc169e49c1aeff686e8fcd7bb2a9a fix(employees): reject malformed completion flags at host result boundaries
+0daaa9643526a8f0628bdb5153f5854951e2f169 fix(employees): preserve uncertain dependency receipts without false completion
+8cd4d76c5a386f7d02e5445928e7dc878e917896 fix(employees): redact dependency errors and reject malformed results
+37d73775b280e9b45d346a00cc134b0a83793cfc refactor(employees): share generated handlers without changing pack behavior
+bf2aac3713e76e31de256c09dced2ec342666930 fix(files): restrict office output reads to authenticated owners
+9efa2ea5dff553e3360c4e1f61a5ba33e84ce5bc merge(main): preserve harness remediation across canonical module moves
+6e6234829b74a514cb5139a35ae38f4d55f4af13 fix(employees): govern signed Python actions through durable approval
+54055c5217556dc8ebc670e7290d81b648e2ea57 fix(llm): bind model credentials to the verified host session
+07a2e3ca3be48a16a332e2adccb2bde742aac25f fix(mods): advance versions for changed employee and planner packages
+d57383a80bdd08c400d241703eeb093380e5647f fix(harness): redact batch failure logs and refresh stale parser tests
+bc9953da1dac56c132989426f4a134c5385e8948 fix(harness): preserve approved call receipts and verify product batches
+552bd7dbee1f27a08730d22ee4ad486ae87404db chore(evidence): refresh planner bridge source date
+62fa62efc5fd489ea5aca48c32a5b58b60a4dd22 wip(harness): persist legacy turns and review scoped business writes
+9b7936ea4750457f4b0537ff91cad05147811c4d test(memory): exercise authenticated queries and uncertain receipts
+0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3 wip(memory): enforce scoped ownership and reviewed durable updates
+dc1f3b39fbe63942ca430867f1e8b0fcb9a13862 chore(evidence): refresh current label implementation date
+f304414e6478fe4e0e6ab43c27aec5e288912267 fix(evidence): ignore runtime-only directories as implementation proof
+2d079eb3898b9d6f1e4079c1d4a859db035400d1 wip(harness): checkpoint authenticated execution and recovery safeguards
+621fb9602a6cdd03edd44951a68e4c6b96a5e578 wip(harness): preserve safety and runtime remediation before mainline port

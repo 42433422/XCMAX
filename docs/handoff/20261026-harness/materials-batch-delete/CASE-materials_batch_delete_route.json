@@ -1,0 +1,1030 @@
+{
+  "case_id": "materials_batch_delete_route_forces_agent_orchestrator",
+  "kind": "materials_route_agent",
+  "passed": false,
+  "original_operation": "materials batch delete route (eval fixture) — forces agent orchestrator path",
+  "target_record_identifiers": "synthetic fixture tenant/records only (no production customer IDs in this case dump); see failed_checks for actual/expected",
+  "execution_receipt": "see failed_checks/actual event stream",
+  "current_readback": "independent post-delete DB readback verifier not present for batch-delete; TOOL-06 still open",
+  "missing_independent_verification_step": "After batch delete success claim: query materials table under trusted Principal/tenant and assert target IDs absent (and non-target retained). Current failure is earlier in route/orchestrator/auth path — case did not reach a verified delete+readback closure.",
+  "full_case": {
+    "id": "materials_batch_delete_route_forces_agent_orchestrator",
+    "kind": "materials_route_agent",
+    "passed": false,
+    "failed_checks": [
+      {
+        "name": "payload.success",
+        "passed": false,
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "payload.agent_status",
+        "passed": false,
+        "actual": "blocked",
+        "expected": "completed"
+      },
+      {
+        "name": "run.status",
+        "passed": false,
+        "actual": "blocked",
+        "expected": "completed"
+      },
+      {
+        "name": "tool_calls[0].status",
+        "passed": false,
+        "actual": "failed",
+        "expected": "completed"
+      },
+      {
+        "name": "event_type:tool.completed",
+        "passed": false,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "tool.completed"
+      },
+      {
+        "name": "event_type:run.completed",
+        "passed": false,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "run.completed"
+      },
+      {
+        "name": "payload.deleted_count",
+        "passed": false,
+        "actual": null,
+        "expected": 2
+      },
+      {
+        "name": "business_verification.verified",
+        "passed": false,
+        "actual": null,
+        "expected": true
+      }
+    ],
+    "checks": [
+      {
+        "name": "initial.database_unchanged",
+        "passed": true,
+        "actual": [
+          {
+            "id": 1,
+            "tenant_id": 7,
+            "material_code": "R-001",
+            "name": "树脂",
+            "min_stock": 12.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          },
+          {
+            "id": 2,
+            "tenant_id": 7,
+            "material_code": "R-002",
+            "name": "树脂",
+            "min_stock": 12.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          },
+          {
+            "id": 9001,
+            "tenant_id": 8,
+            "material_code": "SENTINEL-8",
+            "name": "countertenant sentinel",
+            "min_stock": 42.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          }
+        ],
+        "expected": [
+          {
+            "id": 1,
+            "tenant_id": 7,
+            "material_code": "R-001",
+            "name": "树脂",
+            "min_stock": 12.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          },
+          {
+            "id": 2,
+            "tenant_id": 7,
+            "material_code": "R-002",
+            "name": "树脂",
+            "min_stock": 12.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          },
+          {
+            "id": 9001,
+            "tenant_id": 8,
+            "material_code": "SENTINEL-8",
+            "name": "countertenant sentinel",
+            "min_stock": 42.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          }
+        ]
+      },
+      {
+        "name": "initial.success",
+        "passed": true,
+        "actual": false,
+        "expected": false
+      },
+      {
+        "name": "initial.run_status",
+        "passed": true,
+        "actual": "waiting_user",
+        "expected": "waiting_user"
+      },
+      {
+        "name": "initial.tool_call_count",
+        "passed": true,
+        "actual": 0,
+        "expected": 0
+      },
+      {
+        "name": "review.status_code",
+        "passed": true,
+        "actual": 200,
+        "expected": 200
+      },
+      {
+        "name": "review.grant_present",
+        "passed": true,
+        "actual": true,
+        "expected": true
+      },
+      {
+        "name": "continue.status_code",
+        "passed": true,
+        "actual": 202,
+        "expected": 202
+      },
+      {
+        "name": "queue.original_run",
+        "passed": true,
+        "actual": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "expected": "run_11f7d050d1424beabc33bd8fb4c9341e"
+      },
+      {
+        "name": "reopen.run_id",
+        "passed": true,
+        "actual": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "expected": "run_11f7d050d1424beabc33bd8fb4c9341e"
+      },
+      {
+        "name": "approval_consumption_count",
+        "passed": true,
+        "actual": 1,
+        "expected": 1
+      },
+      {
+        "name": "step_id_unchanged",
+        "passed": true,
+        "actual": "step_09c0781430274d8184e7186c94f81601",
+        "expected": "step_09c0781430274d8184e7186c94f81601"
+      },
+      {
+        "name": "step_params_unchanged",
+        "passed": true,
+        "actual": {
+          "ids": [
+            1,
+            2
+          ]
+        },
+        "expected": {
+          "ids": [
+            1,
+            2
+          ]
+        }
+      },
+      {
+        "name": "run.user_id",
+        "passed": true,
+        "actual": "1",
+        "expected": "1"
+      },
+      {
+        "name": "approval_replay.status_code",
+        "passed": true,
+        "actual": 403,
+        "expected": 403
+      },
+      {
+        "name": "final_query.status_code",
+        "passed": true,
+        "actual": 200,
+        "expected": 200
+      },
+      {
+        "name": "final_query.original_run",
+        "passed": true,
+        "actual": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "expected": "run_11f7d050d1424beabc33bd8fb4c9341e"
+      },
+      {
+        "name": "status_code",
+        "passed": true,
+        "actual": 202,
+        "expected": 202
+      },
+      {
+        "name": "payload.success",
+        "passed": false,
+        "actual": false,
+        "expected": true
+      },
+      {
+        "name": "payload.agent_status",
+        "passed": false,
+        "actual": "blocked",
+        "expected": "completed"
+      },
+      {
+        "name": "payload.run_id_present",
+        "passed": true,
+        "actual": true,
+        "expected": true
+      },
+      {
+        "name": "run_attached",
+        "passed": true,
+        "actual": true,
+        "expected": true
+      },
+      {
+        "name": "run.status",
+        "passed": false,
+        "actual": "blocked",
+        "expected": "completed"
+      },
+      {
+        "name": "run.intent",
+        "passed": true,
+        "actual": "materials_batch_delete",
+        "expected": "materials_batch_delete"
+      },
+      {
+        "name": "tool_call_count",
+        "passed": true,
+        "actual": 1,
+        "expected": 1
+      },
+      {
+        "name": "tool_calls[0].tool_id",
+        "passed": true,
+        "actual": "materials",
+        "expected": "materials"
+      },
+      {
+        "name": "tool_calls[0].action",
+        "passed": true,
+        "actual": "batch_delete",
+        "expected": "batch_delete"
+      },
+      {
+        "name": "tool_calls[0].status",
+        "passed": false,
+        "actual": "failed",
+        "expected": "completed"
+      },
+      {
+        "name": "tool_calls[0].cost_units",
+        "passed": true,
+        "actual": 2,
+        "expected": 2
+      },
+      {
+        "name": "tool_calls[0].permission",
+        "passed": true,
+        "actual": "tool.materials.batch_delete",
+        "expected": "tool.materials.batch_delete"
+      },
+      {
+        "name": "event_type:step.waiting_user",
+        "passed": true,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "step.waiting_user"
+      },
+      {
+        "name": "event_type:step.approved",
+        "passed": true,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "step.approved"
+      },
+      {
+        "name": "event_type:tool.completed",
+        "passed": false,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "tool.completed"
+      },
+      {
+        "name": "event_type:run.completed",
+        "passed": false,
+        "actual": [
+          "run.created",
+          "planner.completed",
+          "step.waiting_user",
+          "step.approved",
+          "task.queued",
+          "task.dispatched",
+          "tool.started",
+          "billing.recorded",
+          "observation.recorded",
+          "tool.failed"
+        ],
+        "expected": "run.completed"
+      },
+      {
+        "name": "payload.deleted_count",
+        "passed": false,
+        "actual": null,
+        "expected": 2
+      },
+      {
+        "name": "readback.countertenant_unchanged",
+        "passed": true,
+        "actual": [
+          {
+            "id": 9001,
+            "tenant_id": 8,
+            "material_code": "SENTINEL-8",
+            "name": "countertenant sentinel",
+            "min_stock": 42.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          }
+        ],
+        "expected": [
+          {
+            "id": 9001,
+            "tenant_id": 8,
+            "material_code": "SENTINEL-8",
+            "name": "countertenant sentinel",
+            "min_stock": 42.0,
+            "is_active": 1,
+            "unit_price": "0.00"
+          }
+        ]
+      },
+      {
+        "name": "readback.active_count",
+        "passed": true,
+        "actual": 0,
+        "expected": 0
+      },
+      {
+        "name": "business_verification.verified",
+        "passed": false,
+        "actual": null,
+        "expected": true
+      }
+    ],
+    "details": {
+      "execution_mode": "actual_host_session_sqlite_and_original_approval",
+      "real_model_calls": 0,
+      "initial_response": {
+        "success": false,
+        "agent_status": "waiting_user",
+        "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "agent_run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "pending_approval": true,
+        "approval": {
+          "grant": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ4Y2FnaS1hZ2VudC1hcHByb3ZhbCIsImlzcyI6InhjYWdpLWFnZW50LXJ1bnRpbWUiLCJ0eXAiOiJhZ2VudF9hcHByb3ZhbCIsInN1YiI6IjEiLCJydW5faWQiOiJydW5fMTFmN2QwNTBkMTQyNGJlYWJjMzNiZDhmYjRjOTM0MWUiLCJzdGVwX2lkIjoic3RlcF8wOWMwNzgxNDMwMjc0ZDgxODRlNzE4NmM5NGY4MTYwMSIsIm5vZGVfaWQiOiJtYXRlcmlhbHNfYmF0Y2hfZGVsZXRlIiwidG9vbF9pZCI6Im1hdGVyaWFscyIsImFjdGlvbiI6ImJhdGNoX2RlbGV0ZSIsImJ1c2luZXNzX2FjdGlvbl9pZCI6InJ1bl8xMWY3ZDA1MGQxNDI0YmVhYmMzM2JkOGZiNGM5MzQxZTptYXRlcmlhbHNfYmF0Y2hfZGVsZXRlIiwicGFyYW1zX3NoYTI1NiI6ImVmZjlkZjIwMTNjMDhhMTNjZGQ3ZmZhYmZjZjk1MTRiNmY2NDExZTJhMGI1MmM1OTQ4YzcwMzZkM2Q0NDIyNTMiLCJvd25lcl9tb2RfaWQiOiIiLCJ0b29sX3ZlcnNpb24iOiIyIiwiYWN0b3Jfc2NvcGVfc2hhMjU2IjoiYTE1ZTgzZDBlMWY5ODExMDE4MDcxYzcyMmM1MmE1ZjIzMmFhOGMyZDkyN2JhMGFkNjVmOTYyNjU2MTc3YmNkOCIsImlhdCI6MTc5Mjk1NDkxMCwiZXhwIjoxNzkyOTU1MjEwLCJqdGkiOiI5MDQzZTJiNDNhNmZkOTlmZDI5ZWEyYmQ1NzU3MmUwMDRjMTA0NWFjMTRmMWI1YmE4MWNlMjIwNTczMjQzZWIzIn0.ktSPLQ0PnyRnBvpa1U9lizcy3VNUrTi_Gtx9PWq_tAU",
+          "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+          "step_id": "step_09c0781430274d8184e7186c94f81601",
+          "tool_id": "materials",
+          "action": "batch_delete",
+          "expires_at": 1792955210
+        }
+      },
+      "response": {
+        "success": false,
+        "outcome": "unknown",
+        "error_code": "business_action_reconciliation_required",
+        "retryable": false,
+        "reconciliation_required": true,
+        "message": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+        "reconciliation_evidence": {
+          "receipt": {
+            "success": true,
+            "message": "已删除 2 条记录",
+            "deleted_count": 2
+          },
+          "verification_receipt": {
+            "success": true,
+            "message": "已删除 2 条记录",
+            "deleted_count": 2
+          },
+          "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete"
+        },
+        "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete",
+        "agent_status": "blocked",
+        "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "agent_run_id": "run_11f7d050d1424beabc33bd8fb4c9341e"
+      },
+      "run": {
+        "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+        "user_id": "1",
+        "message": "materials batch_delete",
+        "status": "blocked",
+        "plan_id": "materials_batch_delete",
+        "intent": "materials_batch_delete",
+        "steps": [
+          {
+            "step_id": "step_09c0781430274d8184e7186c94f81601",
+            "node_id": "materials_batch_delete",
+            "tool_id": "materials",
+            "action": "batch_delete",
+            "params": {
+              "ids": [
+                1,
+                2
+              ]
+            },
+            "risk": "high",
+            "idempotent": false,
+            "description": "",
+            "depends_on": [],
+            "status": "failed",
+            "output": {
+              "success": false,
+              "outcome": "unknown",
+              "error_code": "business_action_reconciliation_required",
+              "retryable": false,
+              "reconciliation_required": true,
+              "message": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+              "reconciliation_evidence": {
+                "receipt": {
+                  "success": true,
+                  "message": "已删除 2 条记录",
+                  "deleted_count": 2
+                },
+                "verification_receipt": {
+                  "success": true,
+                  "message": "已删除 2 条记录",
+                  "deleted_count": 2
+                },
+                "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete"
+              },
+              "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete"
+            },
+            "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+            "started_at": "2026-10-25T19:01:50.328320+00:00",
+            "finished_at": "2026-10-25T19:01:50.393369+00:00",
+            "duration_ms": 76,
+            "attempt_count": 1,
+            "max_repair_attempts": 0,
+            "observations": [
+              {
+                "observation_id": "obs_call_c85fad7d2f5d4437a8534f6978357382",
+                "step_id": "step_09c0781430274d8184e7186c94f81601",
+                "node_id": "materials_batch_delete",
+                "tool_id": "materials",
+                "action": "batch_delete",
+                "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+                "attempt_count": 1,
+                "success": false,
+                "message": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+                "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+                "status": "unknown"
+              }
+            ],
+            "repair_history": []
+          }
+        ],
+        "tool_calls": [
+          {
+            "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+            "step_id": "step_09c0781430274d8184e7186c94f81601",
+            "node_id": "materials_batch_delete",
+            "tool_id": "materials",
+            "action": "batch_delete",
+            "params": {
+              "ids": [
+                1,
+                2
+              ]
+            },
+            "status": "failed",
+            "output": {
+              "success": false,
+              "outcome": "unknown",
+              "error_code": "business_action_reconciliation_required",
+              "retryable": false,
+              "reconciliation_required": true,
+              "message": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+              "reconciliation_evidence": {
+                "receipt": {
+                  "success": true,
+                  "message": "已删除 2 条记录",
+                  "deleted_count": 2
+                },
+                "verification_receipt": {
+                  "success": true,
+                  "message": "已删除 2 条记录",
+                  "deleted_count": 2
+                },
+                "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete"
+              },
+              "business_action_id": "run_11f7d050d1424beabc33bd8fb4c9341e:materials_batch_delete"
+            },
+            "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+            "cost_units": 2,
+            "permission": "tool.materials.batch_delete",
+            "started_at": "2026-10-25T19:01:50.328320+00:00",
+            "finished_at": "2026-10-25T19:01:50.393369+00:00",
+            "duration_ms": 76,
+            "metadata": {
+              "risk": "high",
+              "idempotent": false,
+              "timeout_seconds": 60,
+              "attempt_count": 1,
+              "idempotency_key": "agent:run_11f7d050d1424beabc33bd8fb4c9341e:step_09c0781430274d8184e7186c94f81601",
+              "usage_ledger": {
+                "usage_id": "usage_56020d9b969b48cbba6428bdd0fc57a1",
+                "usage_key": "run_11f7d050d1424beabc33bd8fb4c9341e:call_c85fad7d2f5d4437a8534f6978357382:tool_call",
+                "entry_type": "tool_call",
+                "status": "recorded"
+              },
+              "wallet_debit": {
+                "status": "audit_only",
+                "user_id": "1",
+                "cost_units": 2,
+                "reason": "wallet_backend_audit"
+              },
+              "billing_status": "metered",
+              "billing_source": "tool_usage_ledger"
+            }
+          }
+        ],
+        "llm_calls": [],
+        "retrieval_calls": [],
+        "memory_references": [],
+        "artifacts": [],
+        "events": [
+          {
+            "event_id": "evt_70fb067556904c56bb6a2ddb84bc82d0",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "run.created",
+            "message": "Agent run 已创建",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              }
+            },
+            "created_at": "2026-10-25T19:01:50.214666+00:00"
+          },
+          {
+            "event_id": "evt_65a192e9b876422799e9138993a90400",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "planner.completed",
+            "message": "Agent 计划已接管",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "plan_id": "materials_batch_delete",
+              "intent": "materials_batch_delete",
+              "nodes": 1,
+              "source": "provided_plan"
+            },
+            "created_at": "2026-10-25T19:01:50.214672+00:00"
+          },
+          {
+            "event_id": "evt_d7028d24497b4c119446a524e53c1c38",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "step.waiting_user",
+            "message": "步骤 materials_batch_delete 需要用户确认",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "tool_id": "materials",
+              "action": "batch_delete",
+              "risk": "high",
+              "idempotent": false
+            },
+            "created_at": "2026-10-25T19:01:50.230871+00:00"
+          },
+          {
+            "event_id": "evt_abdd19ba39ec4d69a71bd67ca0e40aab",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "step.approved",
+            "message": "步骤 materials_batch_delete 已确认继续",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "node_id": "materials_batch_delete",
+              "tool_id": "materials",
+              "action": "batch_delete",
+              "approved_by": "1"
+            },
+            "created_at": "2026-10-25T19:01:50.297978+00:00"
+          },
+          {
+            "event_id": "evt_bcaf6e51cd5742898782f6b5bb719163",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "task.queued",
+            "message": "任务已进入后台执行队列",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "node_id": "materials_batch_delete",
+              "approved_by": "1"
+            },
+            "created_at": "2026-10-25T19:01:50.297986+00:00"
+          },
+          {
+            "event_id": "evt_71a62f457b64446abe2ea8387764bc48",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "task.dispatched",
+            "message": "后台工作线程开始执行任务",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "recovered": false
+            },
+            "created_at": "2026-10-25T19:01:50.303047+00:00"
+          },
+          {
+            "event_id": "evt_ef90f35cafbd41edb2171de236888233",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "tool.started",
+            "message": "开始执行 materials.batch_delete",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "node_id": "materials_batch_delete",
+              "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+              "cost_units": 2,
+              "permission": "tool.materials.batch_delete",
+              "attempt_count": 1
+            },
+            "created_at": "2026-10-25T19:01:50.328365+00:00"
+          },
+          {
+            "event_id": "evt_af3f986be194468f96c3223a6823c5ab",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "billing.recorded",
+            "message": "工具调用用量已写入 AI 账本",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "usage_id": "usage_56020d9b969b48cbba6428bdd0fc57a1",
+              "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+              "tool_id": "materials",
+              "action": "batch_delete",
+              "cost_units": 2,
+              "billing_status": "metered",
+              "billing_source": "tool_usage_ledger",
+              "wallet_debit": {
+                "status": "audit_only",
+                "user_id": "1",
+                "cost_units": 2,
+                "reason": "wallet_backend_audit"
+              },
+              "source": "agent_orchestrator.tool_call"
+            },
+            "created_at": "2026-10-25T19:01:50.341652+00:00"
+          },
+          {
+            "event_id": "evt_81c5fdd921eb49f7800b5f92a90eb918",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "observation.recorded",
+            "message": "记录 materials_batch_delete 执行观察",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "observation_id": "obs_call_c85fad7d2f5d4437a8534f6978357382",
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "node_id": "materials_batch_delete",
+              "tool_id": "materials",
+              "action": "batch_delete",
+              "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+              "attempt_count": 1,
+              "success": false,
+              "message": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+              "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+              "status": "unknown"
+            },
+            "created_at": "2026-10-25T19:01:50.393411+00:00"
+          },
+          {
+            "event_id": "evt_ae6b3f19771b49e5a20a5d2b50e9f776",
+            "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "event_type": "tool.failed",
+            "message": "materials.batch_delete 执行失败",
+            "data": {
+              "harness": {
+                "protocol": "xcagi.business-harness.v1",
+                "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "turn_id": "",
+                "conversation_id": "",
+                "run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+                "attempt": 1
+              },
+              "step_id": "step_09c0781430274d8184e7186c94f81601",
+              "node_id": "materials_batch_delete",
+              "call_id": "call_c85fad7d2f5d4437a8534f6978357382",
+              "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+              "duration_ms": 76,
+              "cost_units": 2,
+              "attempt_count": 1,
+              "observation_id": "obs_call_c85fad7d2f5d4437a8534f6978357382"
+            },
+            "created_at": "2026-10-25T19:01:50.393424+00:00"
+          }
+        ],
+        "final_output": {},
+        "error": "原业务动作可能已提交，必须核对原回执；禁止再次执行",
+        "metadata": {
+          "persistence": {
+            "mode": "sqlalchemy",
+            "durable": true
+          },
+          "runtime_context": {
+            "service_source": "fastapi_materials_route",
+            "source": "materials_route",
+            "route": "/api/materials/batch-delete",
+            "request_path": "/api/materials/batch-delete",
+            "user_id": "1",
+            "actor_id": "1",
+            "tenant_id": "7",
+            "_mod_authorization": {
+              "session_row_id": 1,
+              "user_id": "1",
+              "mod_id": "sql-eval",
+              "account_tenant_id": "7",
+              "account_role": "user"
+            },
+            "mod_id": "sql-eval",
+            "_actor_authorization": {
+              "session_row_id": 1,
+              "user_id": "1",
+              "tenant_id": "7",
+              "execution_tenant_id": "7",
+              "role": "user",
+              "tier": "enterprise",
+              "mod_id": "sql-eval",
+              "proof": "44d9577377bc0bf803266d6d579592b484f78d9fb00e3a797b7989b39b80092c"
+            },
+            "node_id": "materials_batch_delete"
+          },
+          "task_context": {
+            "task_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "title": "materials batch_delete",
+            "conversation_id": "",
+            "root_run_id": "run_11f7d050d1424beabc33bd8fb4c9341e",
+            "parent_run_id": "",
+            "attempt": 1,
+            "workspace_id": "sql-eval",
+            "workspace_path": "",
+            "isolation": "business_workspace"
+          },
+          "plan": {
+            "plan_id": "materials_batch_delete",
+            "intent": "materials_batch_delete",
+            "todo_steps": [
+              "执行 materials.batch_delete"
+            ],
+            "risk_level": "high",
+            "metadata": {
+              "source": "materials_route",
+              "route": "/api/materials/batch-delete"
+            },
+            "nodes": [
+              {
+                "node_id": "materials_batch_delete",
+                "tool_id": "materials",
+                "action": "batch_delete",
+                "params": {
+                  "ids": [
+                    1,
+                    2
+                  ]
+                },
+                "risk": "high",
+                "idempotent": false,
+                "description": "",
+                "depends_on": [],
+                "next": null,
+                "branches": []
+              }
+            ]
+          },
+          "artifact_count": 0,
+          "execution": {
+            "state": "idle",
+            "started_at": "2026-10-25T19:01:50.228733+00:00",
+            "updated_at": "2026-10-25T19:01:50.395315+00:00",
+            "finished_at": "2026-10-25T19:01:50.395315+00:00"
+          },
+          "_tool_approval_grants": {
+            "step_09c0781430274d8184e7186c94f81601": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJ4Y2FnaS1hZ2VudC1hcHByb3ZhbCIsImlzcyI6InhjYWdpLWFnZW50LXJ1bnRpbWUiLCJ0eXAiOiJhZ2VudF9hcHByb3ZhbCIsInN1YiI6IjEiLCJydW5faWQiOiJydW5fMTFmN2QwNTBkMTQyNGJlYWJjMzNiZDhmYjRjOTM0MWUiLCJzdGVwX2lkIjoic3RlcF8wOWMwNzgxNDMwMjc0ZDgxODRlNzE4NmM5NGY4MTYwMSIsIm5vZGVfaWQiOiJtYXRlcmlhbHNfYmF0Y2hfZGVsZXRlIiwidG9vbF9pZCI6Im1hdGVyaWFscyIsImFjdGlvbiI6ImJhdGNoX2RlbGV0ZSIsImJ1c2luZXNzX2FjdGlvbl9pZCI6InJ1bl8xMWY3ZDA1MGQxNDI0YmVhYmMzM2JkOGZiNGM5MzQxZTptYXRlcmlhbHNfYmF0Y2hfZGVsZXRlIiwicGFyYW1zX3NoYTI1NiI6ImVmZjlkZjIwMTNjMDhhMTNjZGQ3ZmZhYmZjZjk1MTRiNmY2NDExZTJhMGI1MmM1OTQ4YzcwMzZkM2Q0NDIyNTMiLCJvd25lcl9tb2RfaWQiOiIiLCJ0b29sX3ZlcnNpb24iOiIyIiwiYWN0b3Jfc2NvcGVfc2hhMjU2IjoiYTE1ZTgzZDBlMWY5ODExMDE4MDcxYzcyMmM1MmE1ZjIzMmFhOGMyZDkyN2JhMGFkNjVmOTYyNjU2MTc3YmNkOCIsImlhdCI6MTc5Mjk1NDkxMCwiZXhwIjoxNzkyOTU1MjEwLCJqdGkiOiI5MDQzZTJiNDNhNmZkOTlmZDI5ZWEyYmQ1NzU3MmUwMDRjMTA0NWFjMTRmMWI1YmE4MWNlMjIwNTczMjQzZWIzIn0.ktSPLQ0PnyRnBvpa1U9lizcy3VNUrTi_Gtx9PWq_tAU"
+          },
+          "dispatch": {
+            "state": "blocked",
+            "approved_step_id": "step_09c0781430274d8184e7186c94f81601",
+            "approved_by": "1",
+            "queued_at": "2026-10-25T19:01:50.297952+00:00",
+            "started_at": "2026-10-25T19:01:50.303026+00:00",
+            "finished_at": "2026-10-25T19:01:50.396656+00:00"
+          },
+          "tool_call_count": 1,
+          "cost_units_total": 2,
+          "ai_cost_units_total": 2,
+          "tool_usage_entry_count": 1,
+          "tool_usage_cost_units_total": 2,
+          "tool_usage_ledger_status": "recorded",
+          "non_retryable": true,
+          "recovery": {
+            "state": "manual_reconciliation_required",
+            "outcome": "unknown",
+            "error_code": "business_action_reconciliation_required",
+            "step_ids": [
+              "step_09c0781430274d8184e7186c94f81601"
+            ],
+            "idempotency_key": "agent:run_11f7d050d1424beabc33bd8fb4c9341e:step_09c0781430274d8184e7186c94f81601"
+          },
+          "observation_count": 1
+        },
+        "created_at": "2026-10-25T19:01:50.214640+00:00",
+        "updated_at": "2026-10-25T19:01:50.396664+00:00"
+      },
+      "principal_user_id": "1",
+      "readback_before": [
+        {
+          "id": 1,
+          "tenant_id": 7,
+          "material_code": "R-001",
+          "name": "树脂",
+          "min_stock": 12.0,
+          "is_active": 1,
+          "unit_price": "0.00"
+        },
+        {
+          "id": 2,
+          "tenant_id": 7,
+          "material_code": "R-002",
+          "name": "树脂",
+          "min_stock": 12.0,
+          "is_active": 1,
+          "unit_price": "0.00"
+        },
+        {
+          "id": 9001,
+          "tenant_id": 8,
+          "material_code": "SENTINEL-8",
+          "name": "countertenant sentinel",
+          "min_stock": 42.0,
+          "is_active": 1,
+          "unit_price": "0.00"
+        }
+      ],
+      "readback_after": [
+        {
+          "id": 1,
+          "tenant_id": 7,
+          "material_code": "R-001",
+          "name": "树脂",
+          "min_stock": 12.0,
+          "is_active": 0,
+          "unit_price": "0.00"
+        },
+        {
+          "id": 2,
+          "tenant_id": 7,
+          "material_code": "R-002",
+          "name": "树脂",
+          "min_stock": 12.0,
+          "is_active": 0,
+          "unit_price": "0.00"
+        },
+        {
+          "id": 9001,
+          "tenant_id": 8,
+          "material_code": "SENTINEL-8",
+          "name": "countertenant sentinel",
+          "min_stock": 42.0,
+          "is_active": 1,
+          "unit_price": "0.00"
+        }
+      ],
+      "approval_consumption_count": 1,
+      "step_params_unchanged": true
+    }
+  }
+}

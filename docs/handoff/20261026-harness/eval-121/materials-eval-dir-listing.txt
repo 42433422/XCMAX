@@ -1,0 +1,24 @@
+total 18416
+drwxr-xr-x@ 23 a4243342  staff      736 Oct 26 03:03 .
+drwxr-xr-x@ 28 a4243342  staff      896 Oct 26 02:59 ..
+-rw-r--r--@  1 a4243342  staff    84424 Oct 26 02:59 agent_tasks.jsonl.before
+-rw-r--r--@  1 a4243342  staff      416 Oct 26 02:59 before-manifest.json
+-rw-r--r--@  1 a4243342  staff        2 Oct 26 03:03 final-canonical-assembly-ruff.json
+-rw-r--r--@  1 a4243342  staff   520152 Oct 26 03:00 first-selected.log
+-rw-r--r--@  1 a4243342  staff  1534980 Oct 26 03:01 full-after-result.json
+-rw-r--r--@  1 a4243342  staff   487719 Oct 26 03:01 full-after-sourcefreeze.json
+-rw-r--r--@  1 a4243342  staff  2471506 Oct 26 03:01 full-after.log
+-rw-r--r--@  1 a4243342  staff     1061 Oct 26 03:02 full-baseline-parity.json
+-rw-r--r--@  1 a4243342  staff  1374125 Oct 26 03:01 full-before-result.json
+-rw-r--r--@  1 a4243342  staff   487719 Oct 26 03:01 full-before-sourcefreeze.json
+-rw-r--r--@  1 a4243342  staff  1957343 Oct 26 03:01 full-before.log
+-rw-r--r--@  1 a4243342  staff     6018 Oct 26 02:59 implementation.py
+-rw-r--r--@  1 a4243342  staff     2480 Oct 26 03:00 materials-cases.jsonl
+-rw-r--r--@  1 a4243342  staff   169263 Oct 26 03:00 materials-result.json
+-rw-r--r--@  1 a4243342  staff     2181 Oct 26 03:04 root-checkpoint.json
+-rw-r--r--@  1 a4243342  staff     1358 Oct 26 03:01 run-full-pair.py
+-rw-r--r--@  1 a4243342  staff      582 Oct 26 03:00 run-selected.py
+-rw-r--r--@  1 a4243342  staff   113148 Oct 26 02:59 run_agent_eval_body_2.py.before
+-rw-r--r--@  1 a4243342  staff      792 Oct 26 03:00 selected.log
+-rw-r--r--@  1 a4243342  staff     2813 Oct 26 03:00 selected.xml
+-rw-r--r--@  1 a4243342  staff     8413 Oct 26 02:59 test_agent_eval_harness.py.before

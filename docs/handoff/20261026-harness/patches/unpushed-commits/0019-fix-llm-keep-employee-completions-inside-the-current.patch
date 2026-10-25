@@ -1,0 +1,229 @@
+From d5c73efb0c815db03b3c22da1ac0be53f542a7b5 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:42:17 +0800
+Subject: [PATCH 19/43] fix(llm): keep employee completions inside the current
+ model scope
+
+
+diff --git a/FHD/app/mod_sdk/mod_employee_llm.py b/FHD/app/mod_sdk/mod_employee_llm.py
+index 6a6b58a8f4..aac380a911 100644
+--- a/FHD/app/mod_sdk/mod_employee_llm.py
++++ b/FHD/app/mod_sdk/mod_employee_llm.py
+@@ -5,6 +5,7 @@ Mod 员工脚本用的窄 LLM 入口（经 ``app.mod_sdk`` 暴露）。
+ 避免 Mod 代码直接依赖 ``app.services.*`` 或 ``modstore_server``。
+ 
+ 支持 OpenAI 兼容 Chat Completions：
++- 已绑定会话的调用复用宿主当前 client/model，失败时保留未知状态并禁止全局回退。
+ - 默认委托 ``AIConversationService.call_deepseek_api`` 兼容别名（实际走宿主统一 LLM Provider）。
+ - 可选：设置 ``XCAGI_LLM_PROVIDER`` + ``{PROVIDER}_API_KEY`` + ``{PROVIDER}_BASE_URL``（或内置默认 URL）
+   时，对该 URL 直接发起 ``httpx`` 请求（真正切换供应商，而非仅改文案）。
+@@ -142,7 +143,9 @@ def _resolve_fallback_overrides(exclude_provider: str = "") -> list[dict[str, An
+     return out
+ 
+ 
+-def _meter_direct_completion(raw: dict[str, Any], *, cand: dict[str, Any]) -> None:
++def _meter_direct_completion(
++    raw: dict[str, Any], *, cand: dict[str, Any], channel: str = "mod_direct"
++) -> None:
+     """统一 Agent Runtime 计量接缝：mod 直连通道 LLM 用量入账（best-effort）。
+ 
+     直连 httpx 请求绕过宿主 ``chat_completion``，必须在此显式计量；
+@@ -160,12 +163,12 @@ def _meter_direct_completion(raw: dict[str, Any], *, cand: dict[str, Any]) -> No
+             usage=usage,
+             provider=str(cand.get("provider") or ""),
+             metadata={
+-                "channel": "mod_direct",
++                "channel": channel,
+                 "vlm_preferred": bool(cand.get("vlm_preferred")),
+             },
+         )
+     except RECOVERABLE_ERRORS:
+-        logger.debug("mod direct LLM metering skipped", exc_info=True)
++        logger.debug("mod LLM metering skipped")
+ 
+ 
+ async def _call_openai_compatible_chat(
+@@ -292,6 +295,39 @@ async def mod_employee_complete(
+     if not isinstance(messages, list) or not messages:
+         return {"success": False, "content": "", "error": "messages 必须为非空列表"}
+ 
++    from app.infrastructure.llm.client import _scoped_client, resolve_chat_model
++
++    if _scoped_client.get() is not None:
++        try:
++            from app.infrastructure.llm.providers.registry import get_active_provider
++
++            provider = get_active_provider()
++            if provider is None:
++                raise RuntimeError("scoped model unavailable")
++            kwargs = {"response_format": response_format} if response_format is not None else {}
++            raw = await provider.chat_completion(
++                messages, max_tokens=max_tokens, temperature=temperature, **kwargs
++            )
++            if isinstance(raw, dict):
++                parsed = _parse_chat_completions_response(raw)
++                if parsed.get("success") is True:
++                    _meter_direct_completion(
++                        raw,
++                        cand={"provider": provider.provider_id, "model": resolve_chat_model()},
++                        channel="mod_scoped",
++                    )
++                    return parsed
++        except RECOVERABLE_ERRORS + (TypeError, ValueError, AttributeError):
++            logger.warning("mod_employee_complete: 当前会话模型调用未成功完成")
++        return {
++            "success": False,
++            "content": "",
++            "error": "当前会话模型服务不可用，请核对原任务后重试",
++            "outcome": "unknown",
++            "reconciliation_required": True,
++            "retryable": False,
++        }
++
+     override = _resolve_provider_override()
+     if override.get("error"):
+         return {"success": False, "content": "", "error": str(override["error"])[:500]}
+diff --git a/FHD/tests/test_phase6_p5_backend.py b/FHD/tests/test_phase6_p5_backend.py
+index 10ee1d0641..1e465fda7d 100644
+--- a/FHD/tests/test_phase6_p5_backend.py
++++ b/FHD/tests/test_phase6_p5_backend.py
+@@ -14,6 +14,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ from pathlib import Path
++from types import SimpleNamespace
+ from unittest.mock import AsyncMock, MagicMock, patch
+ 
+ import pytest
+@@ -21,6 +22,128 @@ import pytest
+ from app.infrastructure.db import sync_engine
+ from app.mod_sdk import mod_employee_llm
+ 
++
++@pytest.mark.parametrize("lazy", [False, True])
++@pytest.mark.parametrize("reply", ["ok", "empty", "exception", "malformed"])
++@pytest.mark.asyncio
++async def test_employee_completion_keeps_scoped_model_without_global_fallback(
++    monkeypatch, lazy, reply, caplog
++):
++    from app.infrastructure.llm.client import llm_client_factory_scope, llm_client_scope
++
++    secret = "SYNTHETIC-OWNER-CLIENT-PRIVATE-TOKEN"
++    calls, global_calls = [], []
++    monkeypatch.setenv("XCAGI_LLM_PROVIDER", "deepseek")
++    monkeypatch.setenv("DEEPSEEK_API_KEY", "synthetic-global-key")
++    monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://global.example.invalid/v1")
++
++    async def unowned(*_args, **kwargs):
++        global_calls.append(kwargs)
++        return {"choices": [{"message": {"content": "UNOWNED"}}]}
++
++    def owned(**kwargs):
++        calls.append(kwargs)
++        if reply == "exception":
++            raise OSError(secret)
++        return {
++            "ok": {"choices": [{"message": {"content": "OWNER"}}]},
++            "empty": None,
++            "malformed": [],
++        }[reply]
++
++    monkeypatch.setattr(mod_employee_llm, "_call_openai_compatible_chat", unowned)
++    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=owned)))
++    scope = (
++        llm_client_factory_scope(lambda: (client, "owner/model"))
++        if lazy
++        else llm_client_scope(client, "owner/model")
++    )
++    messages = [
++        {
++            "role": "user",
++            "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,eA=="}}],
++        }
++    ]
++    with scope:
++        result = await mod_employee_llm.mod_employee_complete(
++            messages, max_tokens=17, temperature=0, response_format={"type": "json_object"}
++        )
++    assert global_calls == []
++    assert len(calls) == 1
++    assert calls[0] == {
++        "messages": messages,
++        "model": "owner/model",
++        "max_tokens": 17,
++        "temperature": 0,
++        "response_format": {"type": "json_object"},
++    }
++    assert result["success"] is (reply == "ok")
++    if reply == "ok":
++        assert result["content"] == "OWNER"
++    else:
++        assert result["outcome"] == "unknown" and result["retryable"] is False
++    assert secret not in str(result) and secret not in caplog.text
++
++
++@pytest.mark.asyncio
++async def test_employee_unavailable_scoped_client_never_uses_environment(monkeypatch):
++    from app.infrastructure.llm.client import llm_client_factory_scope
++
++    calls = []
++
++    def unavailable():
++        raise RuntimeError("SYNTHETIC-PRIVATE-CREDENTIAL")
++
++    def environment():
++        calls.append("environment")
++        raise AssertionError("scope must not fall back")
++
++    monkeypatch.setattr(mod_employee_llm, "_resolve_provider_override", environment)
++    with llm_client_factory_scope(unavailable):
++        result = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "x"}])
++    assert calls == [] and result["success"] is False
++    assert result["outcome"] == "unknown" and result["retryable"] is False
++    assert "SYNTHETIC-PRIVATE-CREDENTIAL" not in str(result)
++
++
++@pytest.mark.parametrize("usage,meter_failure", [(True, False), (False, False), (True, True)])
++@pytest.mark.asyncio
++async def test_scoped_completion_meters_exact_usage_without_disclosing_meter_errors(
++    monkeypatch, caplog, usage, meter_failure
++):
++    from app.infrastructure.llm.client import llm_client_scope
++
++    secret = "SYNTHETIC-LEDGER-PRIVATE-ERROR"
++    raw = {"choices": [{"message": {"content": "ok"}}]}
++    if usage:
++        raw["usage"] = {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}
++    records = []
++
++    def meter(**kwargs):
++        records.append(kwargs)
++        if meter_failure:
++            raise OSError(secret)
++
++    monkeypatch.setattr("app.application.agent_runtime.pipeline.meter_llm_call", meter)
++    caplog.set_level("DEBUG", logger=mod_employee_llm.__name__)
++    client = SimpleNamespace(
++        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: raw))
++    )
++    with llm_client_scope(client, "owner/model"):
++        result = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "x"}])
++    assert result["success"] is True
++    assert len(records) == int(usage)
++    if usage:
++        assert records[0] == {
++            "source": "employee_mod_llm",
++            "model": "owner/model",
++            "provider": "openai_sdk",
++            "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10},
++            "metadata": {"channel": "mod_scoped", "vlm_preferred": False},
++        }
++    assert secret not in caplog.text
++
++
+ # ===========================================================================
+ # 1. mod_employee_llm — _resolve_provider_override
+ # ===========================================================================
+-- 
+2.50.1 (Apple Git-155)
+

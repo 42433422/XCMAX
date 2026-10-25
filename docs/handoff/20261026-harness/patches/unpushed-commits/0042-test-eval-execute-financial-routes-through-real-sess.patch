@@ -1,0 +1,422 @@
+From 7526f1000180c5477480e1e5f1a2fc76f4091621 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 02:58:00 +0800
+Subject: [PATCH 42/43] test(eval): execute financial routes through real
+ sessions grants and SQL readback
+
+
+diff --git a/FHD/evals/agent_tasks.jsonl b/FHD/evals/agent_tasks.jsonl
+index cd484792db..2b36b6080d 100644
+--- a/FHD/evals/agent_tasks.jsonl
++++ b/FHD/evals/agent_tasks.jsonl
+@@ -89,9 +89,9 @@
+ {"id":"purchase_approve_order_route_forces_agent_orchestrator","kind":"purchase_route_agent","route_action":"approve_order","user_id":"tenant-a","approver":"manager","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"purchase_approve_order","tool_call_count":1,"tool_calls":[{"tool_id":"purchase","action":"approve_order","status":"completed","cost_units":2,"permission":"tool.purchase.approve_order"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"purchase_cancel_order_route_forces_agent_orchestrator","kind":"purchase_route_agent","route_action":"cancel_order","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"purchase_cancel_order","tool_call_count":1,"tool_calls":[{"tool_id":"purchase","action":"cancel_order","status":"completed","cost_units":2,"permission":"tool.purchase.cancel_order"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"purchase_create_inbound_route_forces_agent_orchestrator","kind":"purchase_route_agent","route_action":"create_inbound","user_id":"tenant-a","body":{"order_id":9},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"purchase_create_inbound","tool_call_count":1,"tool_calls":[{"tool_id":"purchase","action":"create_inbound","status":"completed","cost_units":2,"permission":"tool.purchase.create_inbound"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"finance_create_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"create_transaction","user_id":"tenant-a","body":{"transaction_type":"expense","amount":128.5,"description":"运费"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_create_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"create_transaction","status":"completed","cost_units":2,"permission":"tool.finance.create_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"finance_update_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"update_transaction","user_id":"tenant-a","body":{"status":"paid"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_update_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"update_transaction","status":"completed","cost_units":2,"permission":"tool.finance.update_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"finance_delete_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"delete_transaction","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_delete_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"delete_transaction","status":"completed","cost_units":2,"permission":"tool.finance.delete_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"finance_create_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"create_transaction","user_id":"tenant-a","body":{"transaction_type":"expense","amount":128.5,"description":"运费"},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_create_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"create_transaction","status":"completed","cost_units":2,"permission":"tool.finance.create_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"finance_update_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"update_transaction","user_id":"tenant-a","body":{"status":"paid"},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_update_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"update_transaction","status":"completed","cost_units":2,"permission":"tool.finance.update_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"finance_delete_transaction_route_forces_agent_orchestrator","kind":"finance_route_agent","route_action":"delete_transaction","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"finance_delete_transaction","tool_call_count":1,"tool_calls":[{"tool_id":"finance","action":"delete_transaction","status":"completed","cost_units":2,"permission":"tool.finance.delete_transaction"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"products_batch_create_route_forces_agent_orchestrator","kind":"products_route_agent","route_action":"batch_create","user_id":"tenant-a","body":{"products":[{"name":"5003","unit_price":12.5}]},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"products_batch_create","tool_call_count":1,"tool_calls":[{"tool_id":"products","action":"batch_create","status":"completed","cost_units":2,"permission":"tool.products.batch_create"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"products_update_route_forces_agent_orchestrator","kind":"products_route_agent","route_action":"update","user_id":"tenant-a","body":{"name":"5003 v2"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"products_update","tool_call_count":1,"tool_calls":[{"tool_id":"products","action":"update","status":"completed","cost_units":2,"permission":"tool.products.update"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"products_delete_route_forces_agent_orchestrator","kind":"products_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"products_delete","tool_call_count":1,"tool_calls":[{"tool_id":"products","action":"delete","status":"completed","cost_units":2,"permission":"tool.products.delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+diff --git a/FHD/evals/run_agent_eval_body_2.py b/FHD/evals/run_agent_eval_body_2.py
+index c85eec0150..28a8dda65a 100644
+--- a/FHD/evals/run_agent_eval_body_2.py
++++ b/FHD/evals/run_agent_eval_body_2.py
+@@ -1025,83 +1025,249 @@ def _run_purchase_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+     )
+ 
+ 
++@contextmanager
++def _sql_eval_host(task, folder, permissions):
++    """Bind ORM/raw SQL to one actual isolated database and restore every binding."""
++    from app.db import session as db_session
++    from app.infrastructure.db import sync_engine
++
++    with ExitStack() as stack:
++        host = stack.enter_context(
++            _authenticated_eval_host(task, folder, permissions, mod_id="sql-eval")
++        )
++        with host.factory() as db:
++            engine = db.get_bind()
++        stack.enter_context(
++            patch.dict(
++                os.environ,
++                {
++                    "XCAGI_DESKTOP_MODE": "0",
++                    "XCAGI_MOD_DATABASE_URLS": json.dumps({"sql-eval": str(engine.url)}),
++                    "XCAGI_NEURO_INTENT": "0",
++                },
++                clear=False,
++            )
++        )
++        stack.enter_context(patch.object(db_session, "SessionLocal", host.factory))
++        for name, value in (
++            ("_engine", engine),
++            ("_bound_engine_url", str(engine.url)),
++            ("_read_engine", engine),
++            ("_bound_read_engine_url", str(engine.url)),
++        ):
++            stack.enter_context(patch.object(sync_engine, name, value))
++        (folder / "workspace").mkdir(exist_ok=True)
++        yield host
++
++
++def _continue_eval_sql_route(host, client, response, checks):
++    """Consume the original HTTP grant and execute its original SQL queue row."""
++    from app.application.agent_orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
++    from app.db.models.agent_approval import AgentApprovalConsumption
++    from app.fastapi_routes.domains.agent.route_support import agent_node_output
++
++    initial = response.json()
++    run_id = str(initial.get("run_id") or initial.get("agent_run_id") or "")
++    run = host.repo.get(run_id) if run_id else None
++    _check_equal(checks, "initial.success", initial.get("success"), False)
++    _check_equal(checks, "initial.run_status", run.status if run else None, "waiting_user")
++    _check_equal(checks, "initial.tool_call_count", len(run.tool_calls) if run else None, 0)
++    if run is None or run.status != "waiting_user" or len(run.steps) != 1:
++        return initial, run, {}
++    step_id, params = run.steps[0].step_id, copy.deepcopy(run.steps[0].params)
++    review = client.get(f"/api/agent/runs/{run_id}")
++    _check_equal(checks, "review.status_code", review.status_code, 200)
++    grant = review.json().get("approval", {}).get("grant")
++    _check_equal(checks, "review.grant_present", bool(grant), True)
++    if review.status_code != 200 or not grant:
++        return initial, run, {}
++    accepted = client.post(f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant})
++    _check_equal(checks, "continue.status_code", accepted.status_code, 202)
++    if accepted.status_code != 202:
++        return initial, run, {}
++    claim = host.queue.claim("sql-route-eval", lease_seconds=60)
++    _check_equal(checks, "queue.original_run", claim.run_id if claim else None, run_id)
++    if claim is None or claim.run_id != run_id:
++        return initial, run, {}
++    run = AgentOrchestrator().execute_dispatched_run(run_id)
++    host.queue.finish(
++        run_id, "sql-route-eval", "completed" if run.status == "completed" else "blocked"
++    )
++    # Reopen the actual stored run instead of accepting an in-memory worker result.
++    reopened = SQLAlchemyAgentRunRepository(session_factory=host.factory, auto_create=False).get(
++        run_id
++    )
++    _check_equal(checks, "reopen.run_id", reopened.run_id if reopened else None, run_id)
++    if reopened is None:
++        return initial, run, {}
++    run = reopened
++    with host.factory() as db:
++        consumed = (
++            db.query(AgentApprovalConsumption).filter_by(run_id=run_id, step_id=step_id).count()
++        )
++    _check_equal(checks, "approval_consumption_count", consumed, 1)
++    _check_equal(checks, "step_id_unchanged", run.steps[0].step_id, step_id)
++    _check_equal(checks, "step_params_unchanged", run.steps[0].params, params)
++    _check_equal(checks, "run.user_id", run.user_id, host.principal.user_id)
++    replay = client.post(f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant})
++    _check_equal(checks, "approval_replay.status_code", replay.status_code, 403)
++    final_query = client.get(f"/api/agent/runs/{run_id}")
++    _check_equal(checks, "final_query.status_code", final_query.status_code, 200)
++    _check_equal(
++        checks, "final_query.original_run", final_query.json().get("data", {}).get("run_id"), run_id
++    )
++    return (
++        agent_node_output(run, run.steps[0].node_id),
++        run,
++        {
++            "approval_consumption_count": consumed,
++            "step_params_unchanged": run.steps[0].params == params,
++        },
++    )
++
++
+ def _run_finance_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
++    from decimal import Decimal
++
+     from fastapi import FastAPI
+     from fastapi.testclient import TestClient
+ 
+-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
++    from app.db.models.finance import FinancialTransaction
+     from app.fastapi_routes import finance as finance_routes
++    from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
+ 
+-    expected = dict(task.get("expected") or {})
+     action = str(task.get("route_action") or "create_transaction").strip().lower()
+-    body = dict(task.get("body") or {})
+-    user_id = str(task.get("user_id") or "eval-finance-user")
+-    repo = InMemoryAgentRunRepository()
+-    service = Mock()
+-    service.create_transaction.return_value = {
+-        "success": True,
+-        "data": {"id": 31, "transaction_type": "expense"},
+-    }
+-    service.update_transaction.return_value = {"success": True, "data": {"id": 31}}
+-    service.delete_transaction.return_value = {"success": True, "message": "凭证已删除"}
+-
+-    method = "POST"
+-    path = "/api/finance/transactions"
++    if action not in {"create_transaction", "update_transaction", "delete_transaction"}:
++        return _failed(task, f"unsupported finance route action: {action}")
++    expected, body = dict(task.get("expected") or {}), dict(task.get("body") or {})
+     if action == "create_transaction":
+-        path = "/api/finance/transactions"
+         body.setdefault("transaction_type", "expense")
+         body.setdefault("amount", 128.5)
+     elif action == "update_transaction":
+-        method = "PUT"
+-        path = f"/api/finance/transactions/{int(task.get('transaction_id') or 31)}"
+         body.setdefault("status", "paid")
+-    elif action == "delete_transaction":
+-        method = "DELETE"
+-        path = f"/api/finance/transactions/{int(task.get('transaction_id') or 31)}"
+-    else:
+-        return _failed(task, f"unsupported finance route action: {action}")
+-
+-    app = FastAPI()
+-    app.include_router(finance_routes.router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-
+-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+-        env_patch = {
+-            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+-            "MODEL_USAGE_WALLET_BACKEND": "audit",
+-            "MODEL_USAGE_WALLET_REQUIRED": "",
+-        }
+-        with ExitStack() as stack:
+-            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+-            stack.enter_context(
+-                patch(
+-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-                    return_value=repo,
++    target_id = int(task.get("transaction_id") or 31)
++    method = {
++        "create_transaction": "POST",
++        "update_transaction": "PUT",
++        "delete_transaction": "DELETE",
++    }[action]
++    path = "/api/finance/transactions" + ("" if method == "POST" else f"/{target_id}")
++    checks: list[dict[str, Any]] = []
++    with tempfile.TemporaryDirectory(prefix="xcagi-finance-eval-") as tmp_dir, ExitStack() as stack:
++        folder = Path(tmp_dir).resolve()
++        host = stack.enter_context(_sql_eval_host(task, folder, (f"tool.finance.{action}",)))
++        with host.factory.begin() as db:
++            db.add(
++                FinancialTransaction(
++                    id=9001,
++                    tenant_id=8,
++                    transaction_type="expense",
++                    amount=42,
++                    description="countertenant sentinel",
+                 )
+             )
+-            stack.enter_context(patch.object(finance_routes, "_svc", lambda: service))
+-            headers = {"X-User-Id": user_id}
+-            if method == "DELETE":
+-                response = client.delete(path, headers=headers)
+-            elif method == "PUT":
+-                response = client.put(path, json=body, headers=headers)
+-            else:
+-                response = client.post(path, json=body, headers=headers)
++            if action != "create_transaction":
++                db.add(
++                    FinancialTransaction(
++                        id=target_id,
++                        tenant_id=7,
++                        transaction_type="expense",
++                        amount=128.5,
++                        description="运费",
++                    )
++                )
+ 
+-    payload, run, checks = _route_agent_checks(response, expected, repo)
+-    return _result(
+-        task,
+-        checks,
+-        {
+-            "response": payload,
+-            "run": run.to_dict() if run is not None else None,
+-            "service_calls": {
+-                "create_transaction": service.create_transaction.call_count,
+-                "update_transaction": service.update_transaction.call_count,
+-                "delete_transaction": service.delete_transaction.call_count,
++        def readback():
++            with host.factory() as db:
++                rows = db.execute(
++                    FinancialTransaction.__table__.select().order_by(FinancialTransaction.id)
++                ).mappings()
++                return [
++                    {
++                        **{
++                            key: row[key]
++                            for key in (
++                                "id",
++                                "tenant_id",
++                                "transaction_type",
++                                "currency",
++                                "description",
++                                "status",
++                            )
++                        },
++                        "amount": str(row["amount"]),
++                    }
++                    for row in rows
++                ]
++
++        before = readback()
++        app = FastAPI()
++        app.include_router(agent_router)
++        app.include_router(finance_routes.router)
++        client = stack.enter_context(TestClient(app, raise_server_exceptions=False))
++        client.headers.update(host.headers)
++        response = client.request(method, path, **({"json": body} if method != "DELETE" else {}))
++        _check_equal(checks, "initial.database_unchanged", readback(), before)
++        payload, run, approval = _continue_eval_sql_route(host, client, response, checks)
++        _, run, original_checks = _route_agent_checks(
++            response, expected, host.repo, payload=payload
++        )
++        checks.extend(original_checks)
++        after = readback()
++        _check_equal(
++            checks,
++            "readback.countertenant_unchanged",
++            [x for x in after if x["tenant_id"] == 8],
++            [x for x in before if x["tenant_id"] == 8],
++        )
++        owned = [x for x in after if x["tenant_id"] == 7]
++        _check_equal(checks, "readback.row_count", len(owned), 0 if method == "DELETE" else 1)
++        if method != "DELETE" and owned:
++            row = owned[0]
++            _check_equal(
++                checks,
++                "readback.amount",
++                row["amount"],
++                str(Decimal(str(body.get("amount", 128.5))).quantize(Decimal("0.01"))),
++            )
++            _check_equal(
++                checks,
++                "readback.description",
++                row["description"],
++                body.get("description", "运费" if method == "PUT" else None),
++            )
++            _check_equal(
++                checks,
++                "readback.transaction_type",
++                row["transaction_type"],
++                body.get("transaction_type", "expense"),
++            )
++            _check_equal(checks, "readback.status", row["status"], body.get("status", "pending"))
++            _check_equal(checks, "readback.record_id", row["id"], payload.get("data", {}).get("id"))
++            if method == "PUT":
++                _check_equal(checks, "readback.original_target", row["id"], target_id)
++        _check_equal(
++            checks,
++            "business_verification.verified",
++            payload.get("business_verification", {}).get("verified"),
++            True,
++        )
++        return _result(
++            task,
++            checks,
++            {
++                "execution_mode": "actual_host_session_sqlite_and_original_approval",
++                "real_model_calls": 0,
++                "initial_response": response.json(),
++                "response": payload,
++                "run": run.to_dict() if run else None,
++                "principal_user_id": host.principal.user_id,
++                "readback_before": before,
++                "readback_after": after,
++                **approval,
+             },
+-        },
+-    )
++        )
+ 
+ 
+ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+@@ -1399,8 +1565,9 @@ def _run_customers_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+     )
+ 
+ 
+-def _route_agent_checks(response, expected, repo):
+-    payload = response.json()
++def _route_agent_checks(response, expected, repo, *, payload=None):
++    # Mutations acknowledge approval first; business assertions use that same run's receipt.
++    payload = response.json() if payload is None else payload
+     run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+     checks: list[dict[str, Any]] = []
+     _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index dd52b0850c..f0869d345b 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -136,3 +136,63 @@ def test_memory_route_eval_uses_original_grant_and_reopened_owner_record(tmp_pat
+         memory_mod.UserMemoryService._instance,
+         memory_mod.UserMemoryStore._instance,
+     ) == original_singletons
++
++
++@pytest.mark.parametrize(
++    "action", ["create_transaction", "update_transaction", "delete_transaction"]
++)
++def test_finance_route_eval_uses_original_approval_and_actual_tenant_sql(tmp_path, action):
++    from app import db as host_db
++    from app.db import session as db_session
++    from app.infrastructure.db import sync_engine
++
++    original = (host_db.HostSessionLocal, db_session.SessionLocal, sync_engine._engine)
++    task = next(
++        row
++        for row in eval_module.load_tasks()
++        if row["kind"] == "finance_route_agent" and row["route_action"] == action
++    )
++    path = tmp_path / "finance.jsonl"
++    path.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
++    result = run_eval(path)
++    item = result["results"][0]
++    assert result["passed"] == 1 and result["failed"] == 0, item
++    details = item["details"]
++    assert details["execution_mode"] == "actual_host_session_sqlite_and_original_approval"
++    assert details["real_model_calls"] == 0
++    assert details["initial_response"]["success"] is False
++    assert details["initial_response"]["agent_status"] == "waiting_user"
++    assert details["run"]["run_id"] == details["initial_response"]["run_id"]
++    assert details["run"]["user_id"] == details["principal_user_id"] != task["user_id"]
++    assert details["run"]["status"] == "completed"
++    assert details["approval_consumption_count"] == 1 and details["step_params_unchanged"] is True
++    assert details["response"]["business_verification"]["verified"] is True
++    before, after = details["readback_before"], details["readback_after"]
++    assert [row for row in after if row["tenant_id"] == 8] == [
++        row for row in before if row["tenant_id"] == 8
++    ]
++    assert len([row for row in after if row["tenant_id"] == 7]) == (
++        0 if action == "delete_transaction" else 1
++    )
++    assert (host_db.HostSessionLocal, db_session.SessionLocal, sync_engine._engine) == original
++
++
++def test_sql_eval_host_restores_database_bindings_after_exception(tmp_path):
++    import os
++
++    from app import db as host_db
++    from app.db import session as db_session
++    from app.infrastructure.db import sync_engine
++
++    names = ("_engine", "_bound_engine_url", "_read_engine", "_bound_read_engine_url")
++    original = (host_db.HostSessionLocal, db_session.SessionLocal)
++    engines = tuple(getattr(sync_engine, name) for name in names)
++    environment = dict(os.environ)
++    with pytest.raises(RuntimeError, match="fixture restoration probe"):
++        with eval_module._sql_eval_host({}, tmp_path, ("tool.finance.create_transaction",)) as host:
++            assert db_session.SessionLocal is host.factory
++            assert host.principal.is_admin is False
++            raise RuntimeError("fixture restoration probe")
++    assert (host_db.HostSessionLocal, db_session.SessionLocal) == original
++    assert tuple(getattr(sync_engine, name) for name in names) == engines
++    assert dict(os.environ) == environment
+-- 
+2.50.1 (Apple Git-155)
+

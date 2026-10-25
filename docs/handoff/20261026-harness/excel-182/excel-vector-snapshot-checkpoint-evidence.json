@@ -1,0 +1,87 @@
+{
+  "scope": "Excel vector reviewed-byte snapshot safety; source candidate only",
+  "source_frozen": true,
+  "head_during_final_run": "5bf10061a1851efecdd3ea52275c1b5f4ceabf9d",
+  "owned_manifest": "final-owned-manifest.json",
+  "owned_path_count": 16,
+  "source_copy_verified": true,
+  "coauthored_paths": [
+    "FHD/app/application/agent_orchestrator/tool_executor.py",
+    "FHD/app/domain/shared_services/tools_workflow_excel_ocr.py"
+  ],
+  "final_bucket_dependencies_checked": 2083,
+  "source_change_exception": {
+    "path": "FHD/app/mod_sdk/employee_leaf.py",
+    "owner": "root/security",
+    "status": "new primitive not yet connected to the validated current Employee runtime"
+  },
+  "all_other_2082_dependency_hashes_unchanged": true,
+  "all_12_owned_production_plus_fixture_and_snapshot_test_unchanged": true,
+  "two_prior_bucket_test_files_only_final_hash_recorded": [
+    "FHD/tests/test_application/test_excel_vector_scope.py",
+    "FHD/tests/test_application/test_workflow_tools_ext3.py"
+  ],
+  "DAG_dependencies_during_final_94": {
+    "FHD/app/application/agent_orchestrator/tool_executor.py": "78692899ccb498b8ae1b6cff120ee3e34d55630f1efc36be986366874fa0f6fe",
+    "FHD/app/domain/shared_services/tools_workflow_excel_ocr.py": "eba50a657c2d149579b1bc06ccd07f3ce488e52335514376a90dc301bd2f56b1",
+    "FHD/app/domain/shared_services/kitten_ai_document/pickup.py": "e7dc3702987a18c4176da90fc02619066708023ff61534506289de4123b88b5f",
+    "FHD/app/application/agent_orchestrator/business_action_verification.py": "20d7314d2162970c18f6548a473ea7ffac7da50da52c3210187175d1b68d7ec7",
+    "FHD/app/fastapi_routes/ai_kitten.py": "a87b25037d29fbae77bc895b8134f8326b79f7499c75cf4f289189ba27af4ce8",
+    "FHD/tests/test_services/test_kitten_ai_document_pickup.py": "9e0655a25aa1d92c0e8f892b6bc26898f0c34f82efaaef662bccd05a39f5e3ee",
+    "FHD/tests/test_application/test_agent_orchestrator.py": "0e3304a75c127b5700d689f5129e214ce47a2e4cf8f0235403ed7021c2da8267"
+  },
+  "DAG_later_revision": "Root reports independent document P1, now only pickup.py and its test are being fixed. This 94-case certificate is an intermediate checkpoint for those two dependencies. Re-run final narrow DAG/pickup smoke separately; do not claim all94 ran against later revision.",
+  "validation": [
+    {
+      "log": "final-shared-bucket.log",
+      "result": "94 passed",
+      "seconds": 109.43,
+      "detail": "snapshot32, Legacy20, planner16, Employee governed22, Employee model3, four-process claim/winner crash1"
+    },
+    {
+      "log": "green-probe.log",
+      "result": "1 passed",
+      "seconds": 3.35,
+      "detail": "real synthetic SQL/XLSX, actual Principal, formal grant consumed before source replacement, independent readback contains only original reviewed content"
+    },
+    {
+      "log": "snapshot-and-compat.log",
+      "result": "686 passed,4 historical skipped",
+      "seconds": 135.12,
+      "note": "Earlier expanded bucket; includes31 snapshot tests before the added unknown case. No full dependency immutability certificate because DAG source was still freezing."
+    },
+    {
+      "result": "Ruff check, Ruff format --check for16owned paths and git diff --check passed"
+    }
+  ],
+  "implemented": [
+    "HTTP, registered, model, Legacy Trace, DAG and unified task reuse existing host prepare hook and one signed server-owned byte snapshot",
+    "Seal binds authenticated tenant/actor/Mod, original persisted task/node, canonical business params, source path and content SHA; protected server copy uses pinned exclusive creation, fsync and0400",
+    "Prepared vector params persist into provided_plan; retry retains original task/node/seal with fresh formal grant",
+    "Existing reviewed snapshot validates only. Missing, corrupt, symlink or hardlink copies never rebuild from original after approval",
+    "Digest-validated byte object is parsed via BytesIO, while independent owner-store readback compares expected rows to the sealed content",
+    "Completed original receipt and unknown unresolved receipt precede physical input reads; no duplicate write on replay"
+  ],
+  "boundaries": [
+    "Restart requires persistent Host SECRET_KEY as already required for formal approval signing. The development process-random fallback cannot preserve seals across independent host restarts; not claimed.",
+    "Historical completed/unknown without snapshots remain readable through original task GET or Trace original receipt. Raw central redispatch without seal is refused, including caller step.status=completed.",
+    "Existing waiting/approved/queued missing seal cannot refresh on resume; an unrecoverable input needs a new reviewed task.",
+    "Snapshot garbage collection/quota are not implemented in this chunk; recovery copies stay in protected app-data storage.",
+    "No installed/signed Mac package, actual PostgreSQL, remote paid model/embedding or semantic task quality acceptance was performed."
+  ],
+  "maintained_lines": {
+    "added": 868,
+    "deleted": 33,
+    "net": 835
+  },
+  "line_note": "16-file delta versus aaf4e378ba includes the two coauthored DAG hook files. Net +835 is explicit safety work; baseline unchanged.",
+  "cleanup": {
+    "global_script_run": false,
+    "reason": "parallel root/security work active; global runtime/cache cleanup deferred to root coordinator to preserve live work",
+    "new_worktree_created": false,
+    "durable_artifacts_retained": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/excel-vector-snapshot-20261025",
+    "disk_available_GiB": 64
+  },
+  "red_evidence": "../excel-vector-isolation-20261025/approval-input-mutation-open-gap.json",
+  "green_evidence": "approval-input-mutation-green.json"
+}

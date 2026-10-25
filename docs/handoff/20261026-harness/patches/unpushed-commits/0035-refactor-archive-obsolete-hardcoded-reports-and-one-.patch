@@ -1,0 +1,2265 @@
+From 6e3b35d397ed7241c096f58a897bc74218ccdaca Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 01:23:17 +0800
+Subject: [PATCH 35/43] refactor: archive obsolete hardcoded reports and
+ one-off PDF scripts
+
+
+diff --git a/ARCHIVE_POINTER.md b/ARCHIVE_POINTER.md
+index 8eebfbbdde..1b223d7738 100644
+--- a/ARCHIVE_POINTER.md
++++ b/ARCHIVE_POINTER.md
+@@ -94,3 +94,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
+ **与 #2544 共存**：`evidence-materialization.json` 登记的 FHD 源媒体（约 289MB）与 `retained_sources` 仍留在 git，供 `evidence_assets.materialize` 校验/生成公开别名；能力中心运行时仍优先 COS 预签名。
+ 
+ **保留（有意）**：根目录 `XCAGI-*.html`；`太阳鸟/` 说明；`成都修茈科技有限公司/` 活代码；materialization 源媒体。
++
++2026-10-26 Harness 收敛：5 个写死旧测试结论的报告脚本与 4 个固定 E 盘路径的重复 PDF 脚本（共 9 文件 / 2,191 行）已逐字节校验外置至 `/Users/a4243342/XCMAX-archives/harness-retired-report-scripts-20261026`；原文、HEAD 提交、SHA256 及零生产消费者证据见 `MANIFEST.json`，原有测试与运行入口保留。
+diff --git a/FHD/XCAGI/scripts/generate_comprehensive_report.py b/FHD/XCAGI/scripts/generate_comprehensive_report.py
+deleted file mode 100755
+index b32eee7554..0000000000
+--- a/FHD/XCAGI/scripts/generate_comprehensive_report.py
++++ /dev/null
+@@ -1,267 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-XCAGI 神经架构优化 - 综合测试报告生成器
+-生成第一、二阶段测试执行报告和性能优化成果
+-"""
+-
+-import sys
+-import time
+-from datetime import datetime
+-from pathlib import Path
+-
+-# 添加项目根目录到 Python 路径
+-project_root = Path(__file__).parent.parent
+-sys.path.insert(0, str(project_root))
+-
+-
+-def generate_comprehensive_report():
+-    """生成综合测试报告"""
+-    print("=" * 80)
+-    print("📊 XCAGI 神经架构优化 - 综合测试报告")
+-    print("=" * 80)
+-    print(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+-    print()
+-
+-    # 总体执行摘要
+-    print("📋 总体执行摘要")
+-    print("-" * 80)
+-    print("✅ 第一阶段：基础单元测试 - 16/16 通过 (100%)")
+-    print("✅ 第二阶段：性能基准测试 - 11/11 通过 (100%)")
+-    print("📈 总计：27/27 测试通过，通过率 100%")
+-    print()
+-
+-    # 第一阶段详细结果
+-    print("=" * 80)
+-    print("🎯 第一阶段：基础单元测试成果")
+-    print("=" * 80)
+-
+-    phase1_categories = {
+-        "神经突触上下文测试": {"total": 6, "passed": 6},
+-        "协同引擎测试": {"total": 4, "passed": 4},
+-        "域依赖关系测试": {"total": 2, "passed": 2},
+-        "协同执行结果测试": {"total": 2, "passed": 2},
+-        "性能指标测试": {"total": 2, "passed": 2},
+-    }
+-
+-    total_tests = sum(cat["total"] for cat in phase1_categories.values())
+-    total_passed = sum(cat["passed"] for cat in phase1_categories.values())
+-
+-    for category, results in phase1_categories.items():
+-        print(f"✅ {category}: {results['passed']}/{results['total']}")
+-
+-    print(f"\n📊 第一阶段总计：{total_passed}/{total_tests} 测试通过 (100%)")
+-
+-    # 第一阶段验证的核心功能
+-    print("\n🎯 已验证的核心功能:")
+-    phase1_features = [
+-        "✅ 神经域间依赖关系分析",
+-        "✅ 依赖关系图构建与反向依赖追踪",
+-        "✅ 智能协同策略选择（顺序/并行/流水线/扇出扇入）",
+-        "✅ 执行顺序确定（基于拓扑排序）",
+-        "✅ 域状态同步与冲突检测",
+-        "✅ 冲突自动解决策略",
+-        "✅ 性能优化验证（依赖分析 <10ms，协同执行 <20ms）",
+-    ]
+-    for feature in phase1_features:
+-        print(f"   {feature}")
+-
+-    # 第二阶段详细结果
+-    print("\n" + "=" * 80)
+-    print("⚡ 第二阶段：性能基准测试成果")
+-    print("=" * 80)
+-
+-    phase2_categories = {
+-        "神经反射弧性能测试": {"total": 3, "passed": 3},
+-        "NeuroBus 容错能力测试": {"total": 2, "passed": 2},
+-        "协同性能测试": {"total": 2, "passed": 2},
+-        "多级反射引擎测试": {"total": 2, "passed": 2},
+-        "端到端性能测试": {"total": 1, "passed": 1},
+-        "稳定性指标测试": {"total": 1, "passed": 1},
+-    }
+-
+-    total_tests_p2 = sum(cat["total"] for cat in phase2_categories.values())
+-    total_passed_p2 = sum(cat["passed"] for cat in phase2_categories.values())
+-
+-    for category, results in phase2_categories.items():
+-        print(f"✅ {category}: {results['passed']}/{results['total']}")
+-
+-    print(f"\n📊 第二阶段总计：{total_passed_p2}/{total_tests_p2} 测试通过 (100%)")
+-
+-    # 第二阶段性能指标
+-    print("\n⚡ 性能指标达成情况:")
+-    performance_metrics = [
+-        ("基础反射弧响应时间", "<1ms", "✅ 已达成"),
+-        ("优化后多级反射引擎", "<0.5ms", "✅ 已达成"),
+-        ("L1 缓存命中性能", "<0.1ms", "✅ 已达成"),
+-        ("NeuroBus 基础性能", "<100ms", "✅ 已达成"),
+-        ("NeuroBus 并发性能 (10 并发)", "<200ms", "✅ 已达成"),
+-        ("协同策略选择性能", "<20ms", "✅ 已达成"),
+-        ("大规模协同性能 (9 域)", "<50ms", "✅ 已达成"),
+-        ("端到端请求性能", "<200ms", "✅ 已达成"),
+-        ("反射弧稳定性", "标准差<2×均值", "✅ 已达成"),
+-    ]
+-
+-    for metric, target, status in performance_metrics:
+-        print(f"   {metric}: 目标 {target} {status}")
+-
+-    # 性能优化成果
+-    print("\n" + "=" * 80)
+-    print("🚀 性能优化成果")
+-    print("=" * 80)
+-
+-    print("\n1. 多级反射引擎优化")
+-    print("   - 实现三级缓存机制：L1 热点缓存、L2 模式缓存、L3 结果缓存")
+-    print("   - 缓存命中率：高频查询 >90%")
+-    print("   - 性能提升：L1 缓存命中 <0.1ms，相比原始反射弧提升 10 倍+")
+-
+-    print("\n2. 神经突触协同优化")
+-    print("   - 智能策略选择：基于信号类型和域特征自动选择最优策略")
+-    print("   - 依赖分析优化：支持多种命名格式，自动匹配域名")
+-    print("   - 冲突解决策略：针对不同类型冲突采用不同解决策略")
+-
+-    print("\n3. NeuroBus 容错优化")
+-    print("   - 异步高性能架构")
+-    print("   - 并发处理能力：10 并发 <200ms")
+-    print("   - 自动初始化和状态管理")
+-
+-    # 关键技术突破
+-    print("\n" + "=" * 80)
+-    print("💡 关键技术突破")
+-    print("=" * 80)
+-
+-    breakthroughs = [
+-        {
+-            "name": "多级缓存加速引擎",
+-            "description": "三级缓存架构实现亚毫秒级响应",
+-            "impact": "高频查询响应时间从 1ms 降至 0.1ms 以下",
+-        },
+-        {
+-            "name": "智能协同策略引擎",
+-            "description": "基于信号特征自动选择最优执行策略",
+-            "impact": "协同执行效率提升 40%+",
+-        },
+-        {
+-            "name": "自适应冲突解决",
+-            "description": "根据冲突类型自动选择解决策略",
+-            "impact": "状态同步成功率 100%",
+-        },
+-        {
+-            "name": "域名智能匹配",
+-            "description": "支持多种命名格式自动转换",
+-            "impact": "依赖关系构建准确性 100%",
+-        },
+-    ]
+-
+-    for i, breakthrough in enumerate(breakthroughs, 1):
+-        print(f"\n{i}. {breakthrough['name']}")
+-        print(f"   描述：{breakthrough['description']}")
+-        print(f"   影响：{breakthrough['impact']}")
+-
+-    # 代码质量指标
+-    print("\n" + "=" * 80)
+-    print("📐 代码质量指标")
+-    print("=" * 80)
+-
+-    quality_metrics = [
+-        ("单元测试覆盖率", "85%+", "神经突触核心逻辑"),
+-        ("性能测试覆盖率", "100%", "所有关键路径"),
+-        ("异步代码测试", "100%", "所有异步函数"),
+-        ("边界条件测试", "已覆盖", "极端场景验证"),
+-        ("异常处理测试", "已覆盖", "错误场景验证"),
+-    ]
+-
+-    for metric, value, note in quality_metrics:
+-        print(f"✅ {metric}: {value} ({note})")
+-
+-    # 架构优化建议
+-    print("\n" + "=" * 80)
+-    print("💡 架构优化建议")
+-    print("=" * 80)
+-
+-    recommendations = [
+-        {
+-            "area": "性能持续优化",
+-            "suggestion": "引入性能 profiling 工具，持续监控和优化热点路径",
+-            "priority": "高",
+-            "expected_impact": "持续保持高性能表现",
+-        },
+-        {
+-            "area": "可观测性增强",
+-            "suggestion": "增加详细的性能指标埋点和分布式追踪",
+-            "priority": "中",
+-            "expected_impact": "提升问题诊断效率 50%+",
+-        },
+-        {
+-            "area": "自动化测试",
+-            "suggestion": "集成到 CI/CD 流程，实现自动化性能回归测试",
+-            "priority": "高",
+-            "expected_impact": "防止性能退化",
+-        },
+-        {
+-            "area": "压力测试",
+-            "suggestion": "开展高并发、大数据量场景下的压力测试",
+-            "priority": "中",
+-            "expected_impact": "验证系统边界和稳定性",
+-        },
+-    ]
+-
+-    for i, rec in enumerate(recommendations, 1):
+-        print(f"\n{i}. {rec['area']}")
+-        print(f"   建议：{rec['suggestion']}")
+-        print(f"   优先级：{rec['priority']}")
+-        print(f"   预期影响：{rec['expected_impact']}")
+-
+-    # 下一步计划
+-    print("\n" + "=" * 80)
+-    print("📅 下一步计划")
+-    print("=" * 80)
+-
+-    next_steps = [
+-        "1. 第三阶段：压力测试和容错能力验证",
+-        "   - 高并发压力测试（100+ 并发）",
+-        "   - 故障注入测试",
+-        "   - 恢复能力验证",
+-        "",
+-        "2. 第四阶段：持续集成和监控体系建设",
+-        "   - 集成到 CI/CD 流程",
+-        "   - 建立性能监控仪表盘",
+-        "   - 实现自动化告警",
+-        "",
+-        "3. 生产环境验证",
+-        "   - 灰度发布策略",
+-        "   - A/B 测试验证",
+-        "   - 性能对比分析",
+-    ]
+-
+-    for step in next_steps:
+-        print(step)
+-
+-    # 总结
+-    print("\n" + "=" * 80)
+-    print("✅ 总结")
+-    print("=" * 80)
+-    print("\n🎉 XCAGI 神经架构优化测试取得全面成功！")
+-    print("\n核心成果:")
+-    print("  • 27 个测试用例全部通过，覆盖率 100%")
+-    print("  • 性能指标全面达成，多级反射引擎实现 <0.1ms 响应")
+-    print("  • 神经突触协同机制验证成功，支持智能策略选择")
+-    print("  • NeuroBus 容错能力验证通过，并发性能优异")
+-    print("\n技术价值:")
+-    print("  • 建立了完整的神经架构测试体系")
+-    print("  • 实现了多级缓存加速引擎")
+-    print("  • 验证了智能协同策略的有效性")
+-    print("  • 为生产环境部署奠定坚实基础")
+-
+-    print("\n" + "=" * 80)
+-    print("🏆 测试完成！")
+-    print("=" * 80)
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-    start_time = time.time()
+-    success = generate_comprehensive_report()
+-    duration = time.time() - start_time
+-    print(f"\n⏱️  报告生成耗时：{duration:.2f}s")
+-    sys.exit(0 if success else 1)
+diff --git a/FHD/XCAGI/scripts/generate_neuro_ddd_2_final_report.py b/FHD/XCAGI/scripts/generate_neuro_ddd_2_final_report.py
+deleted file mode 100755
+index 5fe6a6fd9b..0000000000
+--- a/FHD/XCAGI/scripts/generate_neuro_ddd_2_final_report.py
++++ /dev/null
+@@ -1,366 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-Neuro-DDD 2.0 - 深度学习与 MLOps 综合报告
+-"""
+-
+-import sys
+-import time
+-from datetime import datetime
+-from pathlib import Path
+-
+-project_root = Path(__file__).parent.parent
+-sys.path.insert(0, str(project_root))
+-
+-
+-def generate_final_report():
+-    """生成最终报告"""
+-    print("=" * 80)
+-    print("🚀 Neuro-DDD 2.0 - 深度学习与 MLOps 综合报告")
+-    print("=" * 80)
+-    print(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+-    print()
+-
+-    # 执行摘要
+-    print("📋 执行摘要")
+-    print("-" * 80)
+-    print("✅ Mamba + BERT/Transformer 混合模型 - 已完成")
+-    print("✅ 增强多模态理解能力 - 已完成")
+-    print("✅ 扩展神经域（支付/物流/客服） - 已完成")
+-    print("✅ MLOps 体系（训练/部署/监控） - 已完成")
+-    print("✅ 测试验证 - 23/28 测试通过 (82%)")
+-    print()
+-
+-    # 第一部分：Mamba + BERT/Transformer
+-    print("=" * 80)
+-    print("🧠 第一部分：Mamba + BERT/Transformer 混合模型")
+-    print("=" * 80)
+-
+-    print("\n1.1 Mamba 状态空间模型")
+-    mamba_features = [
+-        "✅ 线性时间复杂度 O(n)",
+-        "✅ 长序列处理能力（10K+ tokens）",
+-        "✅ 低内存占用",
+-        "✅ 适合实时推理",
+-        "✅ 状态矩阵 A、B、C 动态演化",
+-    ]
+-    for feature in mamba_features:
+-        print(f"   {feature}")
+-
+-    print("\n1.2 混合架构")
+-    hybrid_architectures = [
+-        ("Mamba-BERT Hybrid", "50% Mamba + 50% BERT", "<50ms"),
+-        ("Mamba-Transformer Hybrid", "33% Mamba + 67% Transformer", "<80ms"),
+-        ("Mamba Multiscale", "多级 Mamba 融合", "<100ms"),
+-    ]
+-    print("   架构名称              配置            延迟")
+-    for name, config, latency in hybrid_architectures:
+-        print(f"   {name:20} {config:20} {latency}")
+-
+-    print("\n1.3 性能优势")
+-    print("   • 相比纯 BERT：速度提升 40%，内存降低 50%")
+-    print("   • 相比纯 Transformer：长序列性能提升 60%")
+-    print("   • 支持序列长度：512 → 10K+ tokens")
+-
+-    # 第二部分：多模态增强
+-    print("\n" + "=" * 80)
+-    print("🎨 第二部分：增强多模态理解能力")
+-    print("=" * 80)
+-
+-    print("\n2.1 Mamba 视觉 - 语言联合模型")
+-    vl_features = [
+-        "✅ 跨模态注意力机制",
+-        "✅ 视觉特征投影到 Mamba 空间",
+-        "✅ 动态权重融合（视觉 60% + 文本 40%）",
+-        "✅ 支持图像描述生成",
+-        "✅ 支持视觉问答（VQA）",
+-    ]
+-    for feature in vl_features:
+-        print(f"   {feature}")
+-
+-    print("\n2.2 Mamba 语音 - 文本联合模型")
+-    st_features = [
+-        "✅ Wav2Vec2 特征提取",
+-        "✅ Mamba 长序列编码",
+-        "✅ CTC 解码器",
+-        "✅ 实时语音识别",
+-        "✅ 支持多语言",
+-    ]
+-    for feature in st_features:
+-        print(f"   {feature}")
+-
+-    print("\n2.3 多模态融合引擎")
+-    fusion_capabilities = [
+-        "✅ 文本 + 图像 + 语音 + 视频四模态融合",
+-        "✅ 动态权重调整",
+-        "✅ 跨模态注意力",
+-        "✅ 融合延迟 <100ms",
+-    ]
+-    for capability in fusion_capabilities:
+-        print(f"   {capability}")
+-
+-    # 第三部分：扩展神经域
+-    print("\n" + "=" * 80)
+-    print("🌐 第三部分：扩展神经域")
+-    print("=" * 80)
+-
+-    print("\n3.1 支付神经域")
+-    payment_features = [
+-        "✅ 多支付网关集成（支付宝/微信/银行卡）",
+-        "✅ 实时欺诈检测",
+-        "✅ 支付成功率 >95%",
+-        "✅ 平均处理时间 <100ms",
+-        "✅ 退款管理",
+-    ]
+-    for feature in payment_features:
+-        print(f"   {feature}")
+-
+-    print("\n3.2 物流神经域")
+-    logistics_features = [
+-        "✅ 智能承运商分配",
+-        "✅ 实时物流追踪",
+-        "✅ 路径优化",
+-        "✅ 准时送达率 >95%",
+-        "✅ 平均配送时间 48 小时",
+-    ]
+-    for feature in logistics_features:
+-        print(f"   {feature}")
+-
+-    print("\n3.3 客服神经域")
+-    service_features = [
+-        "✅ 智能工单分类",
+-        "✅ 自动回复生成",
+-        "✅ 情感分析",
+-        "✅ 自动化率 >70%",
+-        "✅ 平均响应时间 <5 分钟",
+-    ]
+-    for feature in service_features:
+-        print(f"   {feature}")
+-
+-    # 第四部分：MLOps 体系
+-    print("\n" + "=" * 80)
+-    print("⚙️  第四部分：MLOps 体系")
+-    print("=" * 80)
+-
+-    print("\n4.1 模型注册表")
+-    registry_features = [
+-        "✅ 模型版本管理",
+-        "✅ 模型元数据追踪",
+-        "✅ 模型状态管理（active/archived/deprecated）",
+-        "✅ 持久化存储",
+-    ]
+-    for feature in registry_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.2 训练流水线")
+-    pipeline_features = [
+-        "✅ 训练任务提交",
+-        "✅ 异步训练执行",
+-        "✅ 训练进度追踪",
+-        "✅ 自动模型注册",
+-        "✅ 训练指标记录",
+-    ]
+-    for feature in pipeline_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.3 模型监控")
+-    monitoring_features = [
+-        "✅ 实时指标采集",
+-        "✅ 告警阈值管理",
+-        "✅ 健康状态评估",
+-        "✅ 自动告警生成",
+-        "✅ 性能趋势分析",
+-    ]
+-    for feature in monitoring_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.4 实验跟踪")
+-    experiment_features = [
+-        "✅ 实验创建和管理",
+-        "✅ 超参数记录",
+-        "✅ 指标对比",
+-        "✅ 实验结果持久化",
+-        "✅ 最佳实验选择",
+-    ]
+-    for feature in experiment_features:
+-        print(f"   {feature}")
+-
+-    # 第五部分：测试结果
+-    print("\n" + "=" * 80)
+-    print("📊 第五部分：测试结果")
+-    print("=" * 80)
+-
+-    print("\n5.1 测试覆盖")
+-    test_results = [
+-        ("Mamba 层测试", "3/3", "100%"),
+-        ("Mamba-BERT 混合模型测试", "2/2", "100%"),
+-        ("深度学习服务测试", "3/3", "100%"),
+-        ("Mamba 多模态测试", "1/2", "50%"),
+-        ("增强多模态服务测试", "2/3", "67%"),
+-        ("MLOps 平台测试", "9/9", "100%"),
+-        ("扩展神经域测试", "3/4", "75%"),
+-        ("集成测试", "2/2", "100%"),
+-        ("性能测试", "1/2", "50%"),
+-    ]
+-    print("   测试类别                  通过数    通过率")
+-    for category, passed, rate in test_results:
+-        print(f"   {category:25} {passed:8} {rate:8}")
+-
+-    total_passed = sum(int(p.split("/")[0]) for p in [r[1] for r in test_results])
+-    total_tests = sum(int(p.split("/")[1]) for p in [r[1] for r in test_results])
+-    print(
+-        f"   {'总计':25} {total_passed}/{total_tests}     {total_passed / total_tests * 100:.1f}%"
+-    )
+-
+-    print("\n5.2 性能指标")
+-    performance_metrics = [
+-        ("Mamba 推理延迟", "<50ms", "✅"),
+-        ("多模态融合延迟", "<100ms", "⚠️ 需优化"),
+-        ("支付处理延迟", "<100ms", "✅"),
+-        ("物流订单创建", "<50ms", "✅"),
+-        ("客服自动回复", "<10ms", "✅"),
+-        ("MLOps 模型注册", "<20ms", "✅"),
+-    ]
+-    print("   指标                    目标值       状态")
+-    for metric, target, status in performance_metrics:
+-        print(f"   {metric:22} {target:12} {status}")
+-
+-    # 第六部分：已创建文件
+-    print("\n" + "=" * 80)
+-    print("📁 第六部分：已创建文件")
+-    print("=" * 80)
+-
+-    core_files = [
+-        "app/neuro_domains/deep_learning_service.py - Mamba + BERT/Transformer 服务",
+-        "app/neuro_domains/mamba_multimodal.py - 增强多模态能力",
+-        "app/neuro_domains/mlops_platform.py - MLOps 平台",
+-        "app/neuro_domains/extended_domains.py - 扩展神经域",
+-        "tests/neuro_optimization/test_mamba_mlops.py - 测试套件",
+-    ]
+-
+-    print("\n核心实现文件:")
+-    for file in core_files:
+-        print(f"   ✅ {file}")
+-
+-    # 第七部分：使用示例
+-    print("\n" + "=" * 80)
+-    print("💡 第七部分：使用示例")
+-    print("=" * 80)
+-
+-    print("\n7.1 Mamba-BERT 推理")
+-    print("   ```python")
+-    print(
+-        "   from app.neuro_domains.deep_learning_service import create_default_hybrid_model, ModelInput"
+-    )
+-    print("")
+-    print("   service = create_default_hybrid_model()")
+-    print("   input_data = ModelInput(text='你好，请帮我查询订单')")
+-    print("   output = await service.infer('mamba_bert_base', input_data)")
+-    print("   print(f'置信度：{output.confidence}, 耗时：{output.processing_time_ms}ms')")
+-    print("   ```")
+-
+-    print("\n7.2 多模态融合")
+-    print("   ```python")
+-    print("   from app.neuro_domains.mamba_multimodal import get_enhanced_multimodal_service")
+-    print("   from app.neuro_domains.mamba_multimodal import MultimodalMambaInput")
+-    print("")
+-    print("   service = get_enhanced_multimodal_service()")
+-    print("   input_data = MultimodalMambaInput(")
+-    print("       text='这个产品怎么样',")
+-    print("       image_features=image_features_array")
+-    print("   )")
+-    print("   result = await service.process(input_data)")
+-    print("   ```")
+-
+-    print("\n7.3 MLOps 训练流水线")
+-    print("   ```python")
+-    print("   from app.neuro_domains.mlops_platform import get_mlops_platform")
+-    print("")
+-    print("   platform = get_mlops_platform()")
+-    print("   job_id = platform.training_pipeline.submit_job(")
+-    print("       model_name='my_model',")
+-    print("       hyperparameters={'lr': 0.001},")
+-    print("       training_data_path='./data'")
+-    print("   )")
+-    print("   job = await platform.training_pipeline.run_job(job_id)")
+-    print("   ```")
+-
+-    print("\n7.4 支付域")
+-    print("   ```python")
+-    print("   from app.neuro_domains.extended_domains import get_extended_neuro_domains")
+-    print("   from app.neuro_domains.extended_domains import PaymentRequest, PaymentMethod")
+-    print("")
+-    print("   domains = get_extended_neuro_domains()")
+-    print("   request = PaymentRequest(")
+-    print("       order_id='order_001',")
+-    print("       amount=100.0,")
+-    print("       payment_method=PaymentMethod.ALIPAY,")
+-    print("       customer_id='cust_001'")
+-    print("   )")
+-    print("   result = await domains.payment_domain.process_payment(request)")
+-    print("   ```")
+-
+-    # 第八部分：下一步计划
+-    print("\n" + "=" * 80)
+-    print("📅 第八部分：下一步计划")
+-    print("=" * 80)
+-
+-    print("\n9.1 短期优化 (1 周)")
+-    short_term = [
+-        "✅ 修复多模态融合形状不匹配问题",
+-        "⏳ 优化 Mamba 长序列数值稳定性",
+-        "⏳ 完善测试覆盖率至 95%+",
+-    ]
+-    for item in short_term:
+-        print(f"   {item}")
+-
+-    print("\n9.2 中期计划 (1 个月)")
+-    mid_term = [
+-        "⏳ 集成真实 BERT 模型（HuggingFace Transformers）",
+-        "⏳ 集成真实 Mamba 模型（Mamba OSS）",
+-        "⏳ 部署到生产环境",
+-        "⏳ 建立性能监控仪表盘",
+-    ]
+-    for item in mid_term:
+-        print(f"   {item}")
+-
+-    print("\n9.3 长期计划 (3 个月)")
+-    long_term = [
+-        "⏳ 引入更多预训练模型（CLIP、Whisper）",
+-        "⏳ 建立完整的特征存储",
+-        "⏳ 实现自动化模型再训练",
+-        "⏳ 扩展到更多业务域",
+-    ]
+-    for item in long_term:
+-        print(f"   {item}")
+-
+-    # 总结
+-    print("\n" + "=" * 80)
+-    print("✅ 总结")
+-    print("=" * 80)
+-
+-    print("\n🎉 Neuro-DDD 2.0 深度学习与 MLOps 升级取得重大进展！")
+-    print("\n核心成果:")
+-    print("  • 成功实现 Mamba + BERT/Transformer 混合架构")
+-    print("  • 增强多模态理解能力（视觉 + 语音 + 文本）")
+-    print("  • 扩展 3 个新神经域（支付、物流、客服）")
+-    print("  • 建立完整的 MLOps 体系")
+-    print("  • 23/28 测试通过（82%）")
+-    print("\n技术价值:")
+-    print("  • 引入先进的 Mamba 状态空间模型")
+-    print("  • 实现线性复杂度长序列建模")
+-    print("  • 建立从训练到部署的完整 ML 流水线")
+-    print("  • 为生产级 AI 系统奠定基础")
+-
+-    print("\n" + "=" * 80)
+-    print("🏆 Neuro-DDD 2.0 深度学习升级完成！")
+-    print("=" * 80)
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-    start_time = time.time()
+-    success = generate_final_report()
+-    duration = time.time() - start_time
+-    print(f"\n⏱️  报告生成耗时：{duration:.2f}s")
+-    sys.exit(0 if success else 1)
+diff --git a/FHD/XCAGI/scripts/generate_neuro_ddd_2_report.py b/FHD/XCAGI/scripts/generate_neuro_ddd_2_report.py
+deleted file mode 100755
+index 11fde80604..0000000000
+--- a/FHD/XCAGI/scripts/generate_neuro_ddd_2_report.py
++++ /dev/null
+@@ -1,442 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-Neuro-DDD 2.0 - 综合报告生成器
+-
+-生成架构升级、功能实现和测试验证的综合报告
+-"""
+-
+-import sys
+-import time
+-from datetime import datetime
+-from pathlib import Path
+-
+-# 添加项目根目录到 Python 路径
+-project_root = Path(__file__).parent.parent
+-sys.path.insert(0, str(project_root))
+-
+-
+-def generate_neuro_ddd_2_report():
+-    """生成 Neuro-DDD 2.0 综合报告"""
+-    print("=" * 80)
+-    print("🚀 Neuro-DDD 2.0 架构升级 - 综合报告")
+-    print("=" * 80)
+-    print(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+-    print()
+-
+-    # 总体执行摘要
+-    print("📋 总体执行摘要")
+-    print("-" * 80)
+-    print("✅ 强化学习优化神经域决策 - 已完成")
+-    print("✅ 自适应 SLA 调整机制 - 已完成")
+-    print("✅ 预测性维护系统 - 已完成")
+-    print("✅ 多模态 AI 能力（视觉 + 语音 + 文本） - 已完成")
+-    print("✅ 端到端多模态理解 - 已完成")
+-    print("✅ 测试套件 - 50/50 测试通过 (100%)")
+-    print()
+-
+-    # 第一部分：强化学习优化
+-    print("=" * 80)
+-    print("🧠 第一部分：强化学习优化神经域决策")
+-    print("=" * 80)
+-
+-    print("\n1.1 Q-Learning 优化器")
+-    rl_features = [
+-        "✅ 状态空间设计：信号类型、域数量、延迟、成功率、负载因子、SLA 级别",
+-        "✅ 动作空间设计：顺序/并行/优先级/缓存优先/深度分析",
+-        "✅ ε-greedy 策略：探索与利用平衡",
+-        "✅ Q 值更新：基于 Bellman 方程",
+-        "✅ 访问计数跟踪：支持 UCB 探索奖励",
+-    ]
+-    for feature in rl_features:
+-        print(f"   {feature}")
+-
+-    print("\n1.2 决策引擎")
+-    decision_features = [
+-        "✅ 实时决策制定：<1ms 响应",
+-        "✅ 决策历史记录：支持回溯分析",
+-        "✅ 性能指标跟踪：奖励趋势分析",
+-        "✅ SLA 感知决策：不同级别采用不同策略",
+-        "✅ 学习收敛：1000 次迭代内收敛",
+-    ]
+-    for feature in decision_features:
+-        print(f"   {feature}")
+-
+-    print("\n1.3 测试结果")
+-    print("   - 单元测试：22/22 通过 (100%)")
+-    print("   - 集成测试：2/2 通过 (100%)")
+-    print("   - 学习收敛测试：验证通过")
+-    print("   - SLA 感知测试：验证通过")
+-
+-    # 第二部分：自适应 SLA 调整
+-    print("\n" + "=" * 80)
+-    print("⚡ 第二部分：自适应 SLA 调整机制")
+-    print("=" * 80)
+-
+-    print("\n2.1 SLA 级别定义")
+-    sla_levels = [
+-        ("Gold", "<50ms", ">99%", "1"),
+-        ("Silver", "<200ms", ">95%", "2"),
+-        ("Bronze", "<500ms", ">90%", "3"),
+-    ]
+-    print("   级别       延迟目标    成功率目标   优先级")
+-    for level, latency, success, priority in sla_levels:
+-        print(f"   {level:8} {latency:8} {success:8} {priority:8}")
+-
+-    print("\n2.2 动态调整机制")
+-    adjustment_features = [
+-        "✅ 性能监控窗口：最近 10 次请求",
+-        "✅ 升级条件：延迟 <50% 目标 且 成功率 >+5%",
+-        "✅ 降级条件：延迟 >150% 目标 或 成功率 <-5%",
+-        "✅ 自动调优开关：支持手动控制",
+-        "✅ 调整历史记录：支持审计追踪",
+-    ]
+-    for feature in adjustment_features:
+-        print(f"   {feature}")
+-
+-    print("\n2.3 测试结果")
+-    print("   - SLA 合规性测试：验证通过")
+-    print("   - 升级建议测试：验证通过")
+-    print("   - 降级建议测试：验证通过")
+-    print("   - 自动调优禁用测试：验证通过")
+-
+-    # 第三部分：预测性维护
+-    print("\n" + "=" * 80)
+-    print("🔧 第三部分：预测性维护系统")
+-    print("=" * 80)
+-
+-    print("\n3.1 健康指标监控")
+-    health_features = [
+-        "✅ 多指标采集：延迟、成功率、负载等",
+-        "✅ 趋势分析：滑动窗口统计",
+-        "✅ 异常检测：Z-Score 方法",
+-        "✅ 故障概率计算：0-1 标准化",
+-        "✅ 实时健康评分：0-100 分",
+-    ]
+-    for feature in health_features:
+-        print(f"   {feature}")
+-
+-    print("\n3.2 维护策略")
+-    maintenance_strategies = [
+-        ("紧急维护", ">90%", "立即检查组件"),
+-        ("计划维护", "70%-90%", "近期检查"),
+-        ("正常运行", "<70%", "无需维护"),
+-    ]
+-    print("   策略       故障概率   响应措施")
+-    for strategy, prob, action in maintenance_strategies:
+-        print(f"   {strategy:10} {prob:8}   {action}")
+-
+-    print("\n3.3 测试结果")
+-    print("   - 健康指标记录：验证通过")
+-    print("   - 正常预测测试：验证通过")
+-    print("   - 警告预测测试：验证通过")
+-    print("   - 维护计划生成：验证通过")
+-
+-    # 第四部分：多模态 AI 能力
+-    print("\n" + "=" * 80)
+-    print("🎨 第四部分：多模态 AI 能力")
+-    print("=" * 80)
+-
+-    print("\n4.1 文本理解引擎")
+-    text_features = [
+-        "✅ 意图识别：问候/查询/命令/确认/拒绝",
+-        "✅ 实体提取：产品 ID、订单 ID、客户 ID、数量",
+-        "✅ 情感分析：正面/负面/中性",
+-        "✅ 高性能处理：<5ms 响应",
+-        "✅ 模式匹配：支持多语言",
+-    ]
+-    for feature in text_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.2 图像理解引擎")
+-    image_features = [
+-        "✅ 图像分类：文档/产品/人脸/场景/图表",
+-        "✅ OCR 文本提取：支持多语言",
+-        "✅ 对象检测：多对象识别",
+-        "✅ 高性能处理：<50ms 响应",
+-        "✅ 可扩展架构：支持自定义模型",
+-    ]
+-    for feature in image_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.3 语音理解引擎")
+-    audio_features = [
+-        "✅ 语音识别 (ASR)：语音转文本",
+-        "✅ 命令识别：开始/停止/暂停/继续/帮助",
+-        "✅ 情感检测：语音情感分析",
+-        "✅ 高性能处理：<100ms 响应",
+-        "✅ 噪声鲁棒性：支持噪声环境",
+-    ]
+-    for feature in audio_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.4 多模态融合引擎")
+-    fusion_features = [
+-        "✅ 加权融合策略：文本 50%、图像 30%、语音 20%",
+-        "✅ 置信度加权：动态调整权重",
+-        "✅ 并行处理：支持异步融合",
+-        "✅ 高性能融合：<150ms 响应",
+-        "✅ 跨模态注意力：关注关键信息",
+-    ]
+-    for feature in fusion_features:
+-        print(f"   {feature}")
+-
+-    print("\n4.5 测试结果")
+-    print("   - 文本理解测试：8/8 通过 (100%)")
+-    print("   - 图像理解测试：2/2 通过 (100%)")
+-    print("   - 语音理解测试：2/2 通过 (100%)")
+-    print("   - 多模态融合测试：3/3 通过 (100%)")
+-    print("   - 集成测试：3/3 通过 (100%)")
+-    print("   - 性能测试：2/2 通过 (100%)")
+-    print("   - 总计：28/28 通过 (100%)")
+-
+-    # 第五部分：架构设计
+-    print("\n" + "=" * 80)
+-    print("🏗️ 第五部分：架构设计")
+-    print("=" * 80)
+-
+-    print("\n5.1 架构层次")
+-    architecture_layers = [
+-        "应用层",
+-        "├── 多模态接口",
+-        "├── 决策 API",
+-        "└── 监控仪表盘",
+-        "",
+-        "神经域层",
+-        "├── 意图域 (RL 优化)",
+-        "├── 订单域",
+-        "├── 库存域",
+-        "├── 支付域",
+-        "├── 强化学习决策引擎",
+-        "└── 自适应 SLA 调整器",
+-        "",
+-        "多模态层",
+-        "├── 文本理解引擎",
+-        "├── 图像理解引擎",
+-        "├── 语音理解引擎",
+-        "└── 多模态融合引擎",
+-        "",
+-        "神经总线层",
+-        "├── 异步消息总线",
+-        "├── 信号路由",
+-        "├── 容错机制",
+-        "└── 预测性维护监控",
+-        "",
+-        "基础设施层",
+-        "├── 缓存层 (Redis)",
+-        "├── 数据库",
+-        "├── 消息队列",
+-        "└── ML 服务",
+-    ]
+-    for line in architecture_layers:
+-        print(f"   {line}")
+-
+-    print("\n5.2 核心流程")
+-    print("   1. 强化学习决策流程")
+-    print("      用户请求 → 状态观测 → RL 决策 → 动作选择 → 执行 → 奖励 → Q 值更新")
+-    print("")
+-    print("   2. 多模态处理流程")
+-    print("      多模态输入 → 模态检测 → 并行处理 → 融合引擎 → 统一输出")
+-    print("")
+-    print("   3. 预测性维护流程")
+-    print("      健康指标 → 趋势分析 → 异常检测 → 故障预测 → 维护建议")
+-
+-    # 第六部分：性能指标
+-    print("\n" + "=" * 80)
+-    print("⚡ 第六部分：性能指标")
+-    print("=" * 80)
+-
+-    print("\n6.1 强化学习性能")
+-    rl_metrics = [
+-        ("决策优化收敛时间", "<1000 次迭代"),
+-        ("策略选择准确率", ">85%"),
+-        ("探索利用平衡", "ε=0.1 (自适应)"),
+-        ("Q 值更新延迟", "<0.1ms"),
+-        ("决策制定延迟", "<1ms"),
+-    ]
+-    print("   指标                    目标值")
+-    for metric, value in rl_metrics:
+-        print(f"   {metric:22} {value}")
+-
+-    print("\n6.2 SLA 性能")
+-    sla_metrics = [
+-        ("Gold 级别达标率", ">99%"),
+-        ("SLA 调整响应时间", "<100ms"),
+-        ("自动调整准确率", ">90%"),
+-        ("性能监控窗口", "10 次请求"),
+-        ("调整建议延迟", "<50ms"),
+-    ]
+-    print("   指标                    目标值")
+-    for metric, value in sla_metrics:
+-        print(f"   {metric:22} {value}")
+-
+-    print("\n6.3 预测性维护性能")
+-    maintenance_metrics = [
+-        ("故障预测准确率", ">80%"),
+-        ("误报率", "<10%"),
+-        ("提前预警时间", ">24 小时"),
+-        ("健康检查间隔", "10 秒"),
+-        ("预测窗口", "24 小时"),
+-    ]
+-    print("   指标                    目标值")
+-    for metric, value in maintenance_metrics:
+-        print(f"   {metric:22} {value}")
+-
+-    print("\n6.4 多模态处理性能")
+-    multimodal_metrics = [
+-        ("文本处理延迟", "<5ms"),
+-        ("图像处理延迟", "<50ms"),
+-        ("语音处理延迟", "<100ms"),
+-        ("多模态融合延迟", "<150ms"),
+-        ("并发处理能力", ">100 QPS"),
+-    ]
+-    print("   指标                    目标值")
+-    for metric, value in multimodal_metrics:
+-        print(f"   {metric:22} {value}")
+-
+-    # 第七部分：测试总结
+-    print("\n" + "=" * 80)
+-    print("📊 第七部分：测试总结")
+-    print("=" * 80)
+-
+-    print("\n7.1 测试覆盖")
+-    test_coverage = [
+-        ("强化学习测试", "22/22", "100%"),
+-        ("自适应 SLA 测试", "5/5", "100%"),
+-        ("预测性维护测试", "4/4", "100%"),
+-        ("多模态 AI 测试", "28/28", "100%"),
+-        ("集成测试", "5/5", "100%"),
+-        ("性能测试", "6/6", "100%"),
+-    ]
+-    print("   测试类别              通过数    通过率")
+-    for category, passed, rate in test_coverage:
+-        print(f"   {category:20} {passed:8} {rate:8}")
+-
+-    total_passed = 22 + 5 + 4 + 28 + 5 + 6
+-    print(f"   {'总计':20} {total_passed}/50   100%")
+-
+-    print("\n7.2 关键测试场景")
+-    test_scenarios = [
+-        "✅ Q-Learning 收敛性验证",
+-        "✅ SLA 自动调整验证",
+-        "✅ 故障预测准确性验证",
+-        "✅ 多模态融合效果验证",
+-        "✅ 端到端性能验证",
+-        "✅ 高并发压力验证",
+-    ]
+-    for scenario in test_scenarios:
+-        print(f"   {scenario}")
+-
+-    # 第八部分：使用示例
+-    print("\n" + "=" * 80)
+-    print("💡 第八部分：使用示例")
+-    print("=" * 80)
+-
+-    print("\n8.1 强化学习决策")
+-    print("   ```python")
+-    print("   from app.neuro_domains.rl_optimizer import get_decision_engine")
+-    print("")
+-    print("   engine = get_decision_engine()")
+-    print("   decision = await engine.make_decision(")
+-    print("       signal_type='user_request',")
+-    print("       domain_count=3,")
+-    print("       current_latency_ms=45.0,")
+-    print("       success_rate=0.98,")
+-    print("       load_factor=0.7,")
+-    print("       sla_level='gold'")
+-    print("   )")
+-    print("   ```")
+-
+-    print("\n8.2 多模态处理")
+-    print("   ```python")
+-    print("   from app.neuro_domains.multimodal_ai import get_multimodal_service, MultimodalInput")
+-    print("")
+-    print("   service = get_multimodal_service()")
+-    print("   input_data = MultimodalInput(")
+-    print("       text='查询这个产品',")
+-    print("       image_data=image_bytes,")
+-    print("       audio_data=audio_bytes")
+-    print("   )")
+-    print("   result = await service.process(input_data)")
+-    print("   print(f'意图：{result.intent}, 置信度：{result.confidence}')")
+-    print("   ```")
+-
+-    print("\n8.3 预测性维护")
+-    print("   ```python")
+-    print("   from app.neuro_domains.rl_optimizer import PredictiveMaintenance")
+-    print("")
+-    print("   maintenance = PredictiveMaintenance()")
+-    print("   maintenance.record_health_metric(")
+-    print("       component='intent_domain',")
+-    print("       metric_name='latency',")
+-    print("       value=45.2")
+-    print("   )")
+-    print("   prediction = maintenance.predict_failure('intent_domain')")
+-    print("   print(f'故障概率：{prediction[\"failure_probability\"]}')")
+-    print("   ```")
+-
+-    # 第九部分：下一步计划
+-    print("\n" + "=" * 80)
+-    print("📅 第九部分：下一步计划")
+-    print("=" * 80)
+-
+-    print("\n9.1 短期计划 (1-2 周)")
+-    short_term = [
+-        "✅ 完成 Neuro-DDD 2.0 核心功能开发",
+-        "✅ 完成单元测试和集成测试",
+-        "✅ 性能基准测试",
+-        "⏳ 文档完善和 API 标准化",
+-    ]
+-    for item in short_term:
+-        print(f"   {item}")
+-
+-    print("\n9.2 中期计划 (1 个月)")
+-    mid_term = [
+-        "⏳ 集成到生产环境",
+-        "⏳ 建立性能监控仪表盘",
+-        "⏳ 实现自动化告警",
+-        "⏳ 灰度发布和 A/B 测试",
+-    ]
+-    for item in mid_term:
+-        print(f"   {item}")
+-
+-    print("\n9.3 长期计划 (3 个月)")
+-    long_term = [
+-        "⏳ 引入深度学习模型",
+-        "⏳ 增强多模态理解能力",
+-        "⏳ 扩展到更多神经域",
+-        "⏳ 建立完整的 MLOps 体系",
+-    ]
+-    for item in long_term:
+-        print(f"   {item}")
+-
+-    # 总结
+-    print("\n" + "=" * 80)
+-    print("✅ 总结")
+-    print("=" * 80)
+-
+-    print("\n🎉 Neuro-DDD 2.0 架构升级取得全面成功！")
+-    print("\n核心成果:")
+-    print("  • 50 个测试用例全部通过，覆盖率 100%")
+-    print("  • 强化学习决策引擎实现智能优化")
+-    print("  • 自适应 SLA 调整实现动态服务质量管理")
+-    print("  • 预测性维护实现故障提前预警")
+-    print("  • 多模态 AI 实现视觉 + 语音 + 文本融合")
+-    print("\n技术价值:")
+-    print("  • 建立了完整的强化学习决策体系")
+-    print("  • 实现了自适应 SLA 调整机制")
+-    print("  • 构建了多模态 AI 能力平台")
+-    print("  • 为智能化运维奠定坚实基础")
+-
+-    print("\n" + "=" * 80)
+-    print("🏆 Neuro-DDD 2.0 完成！")
+-    print("=" * 80)
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-    start_time = time.time()
+-    success = generate_neuro_ddd_2_report()
+-    duration = time.time() - start_time
+-    print(f"\n⏱️  报告生成耗时：{duration:.2f}s")
+-    sys.exit(0 if success else 1)
+diff --git a/FHD/XCAGI/scripts/generate_optimization_progress_report.py b/FHD/XCAGI/scripts/generate_optimization_progress_report.py
+deleted file mode 100755
+index ed32e37aed..0000000000
+--- a/FHD/XCAGI/scripts/generate_optimization_progress_report.py
++++ /dev/null
+@@ -1,260 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-Neuro-DDD 2.0 - 优化与测试进度报告
+-"""
+-
+-import sys
+-import time
+-from datetime import datetime
+-from pathlib import Path
+-
+-project_root = Path(__file__).parent.parent
+-sys.path.insert(0, str(project_root))
+-
+-
+-def generate_progress_report():
+-    """生成进度报告"""
+-    print("=" * 80)
+-    print("🚀 Neuro-DDD 2.0 - 优化与测试进度报告")
+-    print("=" * 80)
+-    print(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+-    print()
+-
+-    # 执行摘要
+-    print("📋 执行摘要")
+-    print("-" * 80)
+-    print("✅ Mamba 长序列数值稳定性优化 - 已完成")
+-    print("✅ 测试覆盖率提升至 95%+ - 已完成（124/145 测试通过，85.5%）")
+-    print("⏳ 集成真实 BERT 模型（HuggingFace Transformers）- 待启动")
+-    print("⏳ 集成真实 Mamba 模型（Mamba OSS）- 待启动")
+-    print("⏳ 部署到生产环境 - 待启动")
+-    print()
+-
+-    # 第一部分：数值稳定性优化
+-    print("=" * 80)
+-    print("🔧 第一部分：Mamba 长序列数值稳定性优化")
+-    print("=" * 80)
+-
+-    print("\n1.1 关键问题")
+-    problems = [
+-        "❌ 原始实现：长序列下数值溢出",
+-        "❌ A 矩阵不稳定：特征值实部为正导致指数增长",
+-        "❌ 缺乏归一化：状态向量范数失控",
+-        "❌ 无数值保护：NaN 和 Inf 传播",
+-    ]
+-    for problem in problems:
+-        print(f"   {problem}")
+-
+-    print("\n1.2 解决方案")
+-    solutions = [
+-        ("✅ Hurwitz 稳定初始化", "A 矩阵特征值实部为负"),
+-        ("✅ 层归一化", "状态和输出归一化"),
+-        ("✅ 时间步衰减", "长序列稳定性保障"),
+-        ("✅ 数值裁剪", "防止溢出 [-1e6, 1e6]"),
+-        ("✅ Dropout", "训练时正则化"),
+-    ]
+-    for solution, desc in solutions:
+-        print(f"   {solution:20} - {desc}")
+-
+-    print("\n1.3 测试结果")
+-    test_results = [
+-        ("512 tokens", "✅ 稳定", "无 NaN/Inf"),
+-        ("1024 tokens", "✅ 稳定", "无 NaN/Inf"),
+-        ("2048 tokens", "✅ 稳定", "无 NaN/Inf"),
+-        ("4096 tokens", "✅ 稳定", "无 NaN/Inf"),
+-        ("8192 tokens", "✅ 稳定", "无 NaN/Inf"),
+-        ("10240 tokens", "✅ 稳定", "无 NaN/Inf"),
+-    ]
+-    print("   序列长度      稳定性    数值检查")
+-    for seq_len, stable, check in test_results:
+-        print(f"   {seq_len:12} {stable:10} {check}")
+-
+-    print("\n1.4 性能指标")
+-    print("   • 状态范数增长率：<2x（从 512 到 10K tokens）")
+-    print("   • 数值稳定性：100% 测试通过")
+-    print("   • 无 NaN/Inf 产生")
+-
+-    # 第二部分：测试覆盖率
+-    print("\n" + "=" * 80)
+-    print("📊 第二部分：测试覆盖率提升")
+-    print("=" * 80)
+-
+-    print("\n2.1 测试套件总览")
+-    test_suites = [
+-        ("test_mamba_mlops.py", "26/30", "86.7%", "Mamba + MLOps 测试"),
+-        ("test_stable_mamba.py", "21/22", "95.5%", "稳定 Mamba 层测试"),
+-        ("其他测试", "77/93", "82.8%", "领域测试"),
+-    ]
+-    print("   测试文件                   通过数     覆盖率   描述")
+-    for file, passed, rate, desc in test_suites:
+-        print(f"   {file:25} {passed:10} {rate:8} {desc}")
+-
+-    total_passed = 124
+-    total_tests = 145
+-    overall_rate = total_passed / total_tests * 100
+-
+-    print(f"   {'总计':25} {total_passed}/{total_tests:8} {overall_rate:.1f}%")
+-
+-    print("\n2.2 新增测试类别")
+-    new_tests = [
+-        "✅ 数值稳定性测试（10 个测试）",
+-        "✅ 长序列处理测试（5 个测试）",
+-        "✅ 层归一化测试（3 个测试）",
+-        "✅ Dropout 测试（2 个测试）",
+-        "✅ 多头机制测试（4 个测试）",
+-        "✅ 性能基准测试（4 个测试）",
+-    ]
+-    for test in new_tests:
+-        print(f"   {test}")
+-
+-    print("\n2.3 测试覆盖维度")
+-    coverage_dims = [
+-        "单元测试：95%+ 核心函数覆盖",
+-        "集成测试：端到端流程验证",
+-        "性能测试：延迟和内存效率",
+-        "稳定性测试：极端条件验证",
+-        "边界测试：异常输入处理",
+-    ]
+-    for dim in coverage_dims:
+-        print(f"   • {dim}")
+-
+-    # 第三部分：已创建文件
+-    print("\n" + "=" * 80)
+-    print("📁 第三部分：已创建文件")
+-    print("=" * 80)
+-
+-    core_files = [
+-        ("app/neuro_domains/stable_mamba.py", "稳定 Mamba 层实现", "299 行"),
+-        ("tests/neuro_optimization/test_stable_mamba.py", "稳定 Mamba 测试", "420+ 行"),
+-        ("scripts/generate_neuro_ddd_2_final_report.py", "报告生成脚本", "300+ 行"),
+-    ]
+-
+-    print("\n核心实现文件:")
+-    for file, desc, lines in core_files:
+-        print(f"   ✅ {file:45} ({lines})")
+-
+-    # 第四部分：技术亮点
+-    print("\n" + "=" * 80)
+-    print("💡 第四部分：技术亮点")
+-    print("=" * 80)
+-
+-    print("\n4.1 Mamba 稳定性创新")
+-    innovations = [
+-        ("Hurwitz 稳定初始化", "确保系统渐进稳定"),
+-        ("时间步衰减机制", "长序列指数衰减"),
+-        ("双重归一化", "状态 + 输出归一化"),
+-        ("自适应数值裁剪", "动态范围保护"),
+-    ]
+-    for tech, desc in innovations:
+-        print(f"   • {tech:20} - {desc}")
+-
+-    print("\n4.2 测试方法学")
+-    methodologies = [
+-        "参数化测试：多配置验证",
+-        "压力测试：极限条件验证",
+-        "对比测试：稳定 vs 不稳定版本",
+-        "性能基准：延迟和内存测量",
+-    ]
+-    for method in methodologies:
+-        print(f"   ✅ {method}")
+-
+-    # 第五部分：中期计划准备
+-    print("\n" + "=" * 80)
+-    print("📅 第五部分：中期计划准备")
+-    print("=" * 80)
+-
+-    print("\n5.1 集成真实 BERT 模型")
+-    bert_requirements = [
+-        "依赖：transformers>=4.30.0",
+-        "模型：bert-base-chinese / bert-base-uncased",
+-        "集成点：deep_learning_service.py",
+-        "预期收益：语义理解能力提升 30%+",
+-    ]
+-    for req in bert_requirements:
+-        print(f"   • {req}")
+-
+-    print("\n5.2 集成真实 Mamba 模型")
+-    mamba_requirements = [
+-        "依赖：mamba-ssm>=1.0.0",
+-        "模型：Mamba-130M / Mamba-370M",
+-        "集成点：stable_mamba.py 替换实现",
+-        "预期收益：推理速度提升 5-10x",
+-    ]
+-    for req in mamba_requirements:
+-        print(f"   • {req}")
+-
+-    print("\n5.3 部署到生产环境")
+-    deployment_steps = [
+-        "Docker 容器化",
+-        "Kubernetes 编排",
+-        "CI/CD 流水线",
+-        "监控和告警",
+-        "A/B 测试框架",
+-    ]
+-    for step in deployment_steps:
+-        print(f"   ✅ {step}")
+-
+-    # 第六部分：下一步行动
+-    print("\n" + "=" * 80)
+-    print("🎯 第六部分：下一步行动")
+-    print("=" * 80)
+-
+-    print("\n6.1 短期行动（本周）")
+-    short_term = [
+-        "✅ 完成 Mamba 数值稳定性优化",
+-        "✅ 提升测试覆盖率至 85%+",
+-        "⏳ 修复剩余测试失败（16 个）",
+-        "⏳ 文档完善和代码审查",
+-    ]
+-    for action in short_term:
+-        print(f"   {action}")
+-
+-    print("\n6.2 中期计划（1 个月）")
+-    mid_term = [
+-        "⏳ 集成 HuggingFace BERT 模型",
+-        "⏳ 集成 Mamba OSS 模型",
+-        "⏳ 性能优化和基准测试",
+-        "⏳ 生产环境部署准备",
+-    ]
+-    for action in mid_term:
+-        print(f"   {action}")
+-
+-    print("\n6.3 长期计划（3 个月）")
+-    long_term = [
+-        "⏳ 引入 CLIP（视觉 - 语言模型）",
+-        "⏳ 引入 Whisper（语音识别）",
+-        "⏳ 建立特征存储",
+-        "⏳ 自动化模型再训练",
+-    ]
+-    for action in long_term:
+-        print(f"   {action}")
+-
+-    # 总结
+-    print("\n" + "=" * 80)
+-    print("✅ 总结")
+-    print("=" * 80)
+-
+-    print("\n🎉 Neuro-DDD 2.0 优化与测试取得重大进展！")
+-    print("\n核心成果:")
+-    print("  • 成功解决 Mamba 长序列数值稳定性问题")
+-    print("  • 测试覆盖率从 82% 提升至 85.5%（124/145）")
+-    print("  • 新增 28 个稳定性测试用例")
+-    print("  • 支持 10K+ tokens 长序列稳定处理")
+-    print("\n技术价值:")
+-    print("  • 建立了工业级数值稳定性保障")
+-    print("  • 完善了测试体系和质量保证")
+-    print("  • 为生产部署奠定坚实基础")
+-
+-    print("\n" + "=" * 80)
+-    print("🏆 Neuro-DDD 2.0 优化阶段完成！")
+-    print("=" * 80)
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-    start_time = time.time()
+-    success = generate_progress_report()
+-    duration = time.time() - start_time
+-    print(f"\n⏱️  报告生成耗时：{duration:.2f}s")
+-    sys.exit(0 if success else 1)
+diff --git a/FHD/XCAGI/scripts/generate_phase1_report.py b/FHD/XCAGI/scripts/generate_phase1_report.py
+deleted file mode 100755
+index a8baf1f17a..0000000000
+--- a/FHD/XCAGI/scripts/generate_phase1_report.py
++++ /dev/null
+@@ -1,188 +0,0 @@
+-#!/usr/bin/env python3
+-"""
+-XCAGI 神经架构优化 - 第一阶段测试报告生成器
+-生成详细的测试执行报告和优化建议
+-"""
+-
+-import sys
+-from datetime import datetime
+-from pathlib import Path
+-
+-# 添加项目根目录到 Python 路径
+-project_root = Path(__file__).parent.parent
+-sys.path.insert(0, str(project_root))
+-
+-
+-def generate_test_report():
+-    """生成测试报告"""
+-    print("=" * 80)
+-    print("📊 XCAGI 神经架构优化 - 第一阶段测试报告")
+-    print("=" * 80)
+-    print(f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+-    print()
+-
+-    # 测试执行摘要
+-    print("📋 测试执行摘要")
+-    print("-" * 80)
+-    print("✅ 神经突触协同机制单元测试：16/16 通过 (100%)")
+-    print()
+-
+-    # 详细测试结果
+-    print("📈 详细测试结果")
+-    print("-" * 80)
+-
+-    test_categories = {
+-        "神经突触上下文测试": {
+-            "total": 6,
+-            "passed": 6,
+-            "failed": 0,
+-            "tests": [
+-                "test_dependency_analysis_basic",
+-                "test_dependency_graph_construction",
+-                "test_coordination_strategy_selection",
+-                "test_execution_order_determination",
+-                "test_state_synchronization_no_conflict",
+-                "test_state_synchronization_with_conflict",
+-            ],
+-        },
+-        "协同引擎测试": {
+-            "total": 4,
+-            "passed": 4,
+-            "failed": 0,
+-            "tests": [
+-                "test_strategy_selection_sequential",
+-                "test_strategy_selection_parallel",
+-                "test_strategy_fitness_evaluation",
+-                "test_strategy_with_safety_domain",
+-            ],
+-        },
+-        "域依赖关系测试": {
+-            "total": 2,
+-            "passed": 2,
+-            "failed": 0,
+-            "tests": ["test_domain_dependency_creation", "test_domain_dependency_chain"],
+-        },
+-        "协同执行结果测试": {
+-            "total": 2,
+-            "passed": 2,
+-            "failed": 0,
+-            "tests": ["test_coordination_result_creation", "test_coordination_result_with_metrics"],
+-        },
+-        "性能指标测试": {
+-            "total": 2,
+-            "passed": 2,
+-            "failed": 0,
+-            "tests": ["test_dependency_analysis_performance", "test_coordination_performance"],
+-        },
+-    }
+-
+-    for category, results in test_categories.items():
+-        print(f"\n{category}:")
+-        print(f"  总计：{results['total']} 个测试")
+-        print(f"  通过：{results['passed']} 个")
+-        print(f"  失败：{results['failed']} 个")
+-        print(f"  通过率：{results['passed'] / results['total'] * 100:.1f}%")
+-        print("  测试用例:")
+-        for test in results["tests"]:
+-            print(f"    ✅ {test}")
+-
+-    # 性能指标
+-    print("\n" + "=" * 80)
+-    print("⚡ 性能指标")
+-    print("-" * 80)
+-    print("✅ 依赖分析性能：<10ms (目标：<10ms)")
+-    print("✅ 协同执行性能：<20ms (目标：<20ms)")
+-    print("✅ 策略选择准确率：100%")
+-    print("✅ 状态同步成功率：100%")
+-
+-    # 代码质量指标
+-    print("\n" + "=" * 80)
+-    print("📐 代码质量指标")
+-    print("-" * 80)
+-    print("✅ 单元测试覆盖率：85%+ (神经突触核心逻辑)")
+-    print("✅ 异步代码测试覆盖：100%")
+-    print("✅ 边界条件测试：已覆盖")
+-    print("✅ 异常处理测试：已覆盖")
+-
+-    # 已验证的核心功能
+-    print("\n" + "=" * 80)
+-    print("🎯 已验证的核心功能")
+-    print("-" * 80)
+-    core_features = [
+-        "✅ 神经域间依赖关系分析",
+-        "✅ 依赖关系图构建与反向依赖追踪",
+-        "✅ 智能协同策略选择（顺序/并行/流水线/扇出扇入）",
+-        "✅ 执行顺序确定（基于拓扑排序）",
+-        "✅ 域状态同步与冲突检测",
+-        "✅ 冲突自动解决策略",
+-        "✅ 性能优化验证（依赖分析 <10ms，协同执行 <20ms）",
+-    ]
+-    for feature in core_features:
+-        print(feature)
+-
+-    # 优化建议
+-    print("\n" + "=" * 80)
+-    print("💡 优化建议")
+-    print("-" * 80)
+-    recommendations = [
+-        {
+-            "area": "性能优化",
+-            "suggestion": "考虑为依赖关系分析添加缓存机制，避免重复分析相同域组合",
+-            "priority": "中",
+-            "impact": "可提升重复场景下 50%+ 性能",
+-        },
+-        {
+-            "area": "容错能力",
+-            "suggestion": "添加域执行失败时的自动重试和降级策略",
+-            "priority": "高",
+-            "impact": "提升系统稳定性和可用性",
+-        },
+-        {
+-            "area": "可观测性",
+-            "suggestion": "增加详细的日志记录和性能指标埋点",
+-            "priority": "中",
+-            "impact": "便于问题诊断和性能调优",
+-        },
+-        {
+-            "area": "扩展性",
+-            "suggestion": "支持动态注册新的域类型和依赖关系规则",
+-            "priority": "低",
+-            "impact": "提升系统灵活性和可扩展性",
+-        },
+-    ]
+-
+-    for i, rec in enumerate(recommendations, 1):
+-        print(f"\n{i}. {rec['area']}")
+-        print(f"   建议：{rec['suggestion']}")
+-        print(f"   优先级：{rec['priority']}")
+-        print(f"   预期影响：{rec['impact']}")
+-
+-    # 下一阶段计划
+-    print("\n" + "=" * 80)
+-    print("📅 下一阶段计划")
+-    print("-" * 80)
+-    print("1. 运行第二阶段性能基准测试")
+-    print("   - 神经反射弧性能对比测试")
+-    print("   - NeuroBus 容错机制性能测试")
+-    print("   - 多级反射引擎性能验证")
+-    print()
+-    print("2. 实施性能优化措施")
+-    print("   - 优化神经反射弧响应性能")
+-    print("   - 增强 NeuroBus 容错能力")
+-    print("   - 完善神经域间协同机制")
+-    print()
+-    print("3. 运行第三阶段压力测试")
+-    print("   - 高并发压力测试")
+-    print("   - 故障注入测试")
+-    print("   - 恢复能力验证")
+-
+-    print("\n" + "=" * 80)
+-    print("✅ 第一阶段测试完成！")
+-    print("=" * 80)
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-    success = generate_test_report()
+-    sys.exit(0 if success else 1)
+diff --git a/FHD/XCAGI/tools/pdf_gen/_generate_modern_pdf.py b/FHD/XCAGI/tools/pdf_gen/_generate_modern_pdf.py
+deleted file mode 100755
+index 8f895af7a1..0000000000
+--- a/FHD/XCAGI/tools/pdf_gen/_generate_modern_pdf.py
++++ /dev/null
+@@ -1,269 +0,0 @@
+-import markdown
+-import weasyprint
+-from weasyprint import CSS
+-
+-BOUNDARY_ERRORS: tuple[type[Exception], ...] = (Exception,)
+-
+-md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
+-pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
+-
+-# 读取 Markdown 文件
+-with open(md_path, encoding="utf-8") as f:
+-    md_content = f.read()
+-
+-# 转换为 HTML
+-html_content = markdown.markdown(md_content)
+-
+-# 现代 CSS 样式
+-css = CSS(
+-    string="""
+-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+-    
+-    :root {
+-        --primary-color: #3498db;
+-        --secondary-color: #2c3e50;
+-        --accent-color: #e74c3c;
+-        --background-color: #f8f9fa;
+-        --card-color: #ffffff;
+-        --text-color: #333333;
+-        --border-color: #e0e0e0;
+-        --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+-    }
+-    
+-    body {
+-        font-family: 'Noto Sans SC', sans-serif;
+-        font-size: 14px;
+-        line-height: 1.6;
+-        color: var(--text-color);
+-        background-color: var(--background-color);
+-        margin: 0;
+-        padding: 0;
+-    }
+-    
+-    .container {
+-        max-width: 800px;
+-        margin: 0 auto;
+-        padding: 40px;
+-        background-color: var(--card-color);
+-        box-shadow: var(--shadow);
+-    }
+-    
+-    h1, h2, h3, h4, h5, h6 {
+-        font-family: 'Noto Sans SC', sans-serif;
+-        color: var(--secondary-color);
+-        margin-top: 1.5em;
+-        margin-bottom: 0.8em;
+-    }
+-    
+-    h1 {
+-        font-size: 28px;
+-        font-weight: 700;
+-        color: var(--primary-color);
+-        border-bottom: 3px solid var(--primary-color);
+-        padding-bottom: 10px;
+-        margin-bottom: 30px;
+-    }
+-    
+-    h2 {
+-        font-size: 22px;
+-        font-weight: 600;
+-        border-left: 4px solid var(--primary-color);
+-        padding-left: 15px;
+-    }
+-    
+-    h3 {
+-        font-size: 18px;
+-        font-weight: 500;
+-        color: var(--secondary-color);
+-    }
+-    
+-    p {
+-        margin-bottom: 16px;
+-        text-align: justify;
+-    }
+-    
+-    table {
+-        width: 100%;
+-        border-collapse: collapse;
+-        margin: 20px 0;
+-        box-shadow: var(--shadow);
+-        border-radius: 8px;
+-        overflow: hidden;
+-    }
+-    
+-    th, td {
+-        padding: 12px 15px;
+-        text-align: left;
+-        border-bottom: 1px solid var(--border-color);
+-    }
+-    
+-    th {
+-        background-color: var(--primary-color);
+-        color: white;
+-        font-weight: 500;
+-    }
+-    
+-    tr:nth-child(even) {
+-        background-color: #f8f9fa;
+-    }
+-    
+-    tr:hover {
+-        background-color: #e3f2fd;
+-    }
+-    
+-    code {
+-        font-family: 'Courier New', monospace;
+-        background-color: #f1f1f1;
+-        padding: 2px 6px;
+-        border-radius: 4px;
+-        font-size: 0.9em;
+-    }
+-    
+-    pre {
+-        background-color: #f5f5f5;
+-        padding: 15px;
+-        border-radius: 8px;
+-        overflow-x: auto;
+-        border-left: 4px solid var(--primary-color);
+-    }
+-    
+-    blockquote {
+-        border-left: 4px solid var(--primary-color);
+-        padding: 10px 20px;
+-        background-color: #f8f9fa;
+-        margin: 20px 0;
+-        border-radius: 0 8px 8px 0;
+-    }
+-    
+-    hr {
+-        border: none;
+-        border-top: 2px dashed var(--border-color);
+-        margin: 30px 0;
+-    }
+-    
+-    .footer {
+-        margin-top: 40px;
+-        padding-top: 20px;
+-        border-top: 1px solid var(--border-color);
+-        text-align: center;
+-        color: #666;
+-        font-size: 12px;
+-    }
+-"""
+-)
+-
+-# 包装 HTML
+-full_html = f"""
+-<!DOCTYPE html>
+-<html lang="zh-CN">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>AI 企业解决方案对比分析报告</title>
+-</head>
+-<body>
+-    <div class="container">
+-        {html_content}
+-        <div class="footer">
+-            <p>生成时间：2026-04-02</p>
+-        </div>
+-    </div>
+-</body>
+-</html>
+-"""
+-
+-# 生成 PDF
+-try:
+-    html = weasyprint.HTML(string=full_html)
+-    pdf = html.write_pdf(stylesheets=[css])
+-
+-    with open(pdf_path, "wb") as f:
+-        f.write(pdf)
+-
+-    print(f"现代风格 PDF 生成成功: {pdf_path}")
+-except BOUNDARY_ERRORS as e:
+-    print(f"WeasyPrint 生成失败，使用备用方案: {e}")
+-
+-    # 备用方案：使用 ReportLab
+-    from reportlab.lib import colors
+-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+-    from reportlab.lib.pagesizes import A4
+-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+-    from reportlab.pdfbase import pdfmetrics
+-    from reportlab.pdfbase.ttfonts import TTFont
+-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+-
+-    # 注册中文字体
+-    pdfmetrics.registerFont(TTFont("SimHei", "C:\\Windows\\Fonts\\simhei.ttf"))
+-
+-    # 创建 PDF 文档
+-    doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+-
+-    # 定义样式
+-    styles = getSampleStyleSheet()
+-
+-    # 现代样式
+-    ModernStyle = ParagraphStyle(
+-        "Modern",
+-        fontName="SimHei",
+-        fontSize=12,
+-        leading=18,
+-        spaceAfter=10,
+-        alignment=TA_LEFT,
+-        textColor=colors.HexColor("#333333"),
+-    )
+-
+-    ModernHeading1 = ParagraphStyle(
+-        "ModernHeading1",
+-        fontName="SimHei",
+-        fontSize=24,
+-        leading=30,
+-        spaceAfter=20,
+-        alignment=TA_CENTER,
+-        textColor=colors.HexColor("#3498db"),
+-        borderColor=colors.HexColor("#3498db"),
+-        borderWidth=2,
+-        borderPadding=10,
+-        backColor=colors.HexColor("#f8f9fa"),
+-    )
+-
+-    ModernHeading2 = ParagraphStyle(
+-        "ModernHeading2",
+-        fontName="SimHei",
+-        fontSize=18,
+-        leading=24,
+-        spaceAfter=15,
+-        alignment=TA_LEFT,
+-        textColor=colors.HexColor("#2c3e50"),
+-        leftIndent=20,
+-        borderLeftWidth=4,
+-        borderLeftColor=colors.HexColor("#3498db"),
+-    )
+-
+-    # 构建内容
+-    story = []
+-
+-    # 添加标题
+-    story.append(Paragraph("AI 企业解决方案对比分析报告", ModernHeading1))
+-    story.append(Spacer(1, 20))
+-
+-    # 解析 Markdown 内容
+-    lines = md_content.split("\n")
+-    for line in lines:
+-        line = line.rstrip()
+-        if not line:
+-            story.append(Spacer(1, 10))
+-            continue
+-
+-        if line.startswith("# "):
+-            story.append(Paragraph(line[2:], ModernHeading1))
+-            story.append(Spacer(1, 20))
+-        elif line.startswith("## "):
+-            story.append(Paragraph(line[3:], ModernHeading2))
+-            story.append(Spacer(1, 15))
+-        else:
+-            story.append(Paragraph(line, ModernStyle))
+-
+-    # 生成 PDF
+-    doc.build(story)
+-    print(f"备用方案 PDF 生成成功: {pdf_path}")
+diff --git a/FHD/XCAGI/tools/pdf_gen/_generate_pdf_fpdf.py b/FHD/XCAGI/tools/pdf_gen/_generate_pdf_fpdf.py
+deleted file mode 100755
+index e6607470e6..0000000000
+--- a/FHD/XCAGI/tools/pdf_gen/_generate_pdf_fpdf.py
++++ /dev/null
+@@ -1,64 +0,0 @@
+-from fpdf import FPDF
+-
+-
+-class PDF(FPDF):
+-    def __init__(self):
+-        super().__init__()
+-        self.add_font("SimHei", "", "C:\\Windows\\Fonts\\simhei.ttf", uni=True)
+-
+-    def header(self):
+-        self.set_font("SimHei", "", 16)
+-        self.cell(0, 10, "AI 企业解决方案对比分析报告", 0, 1, "C")
+-        self.ln(10)
+-
+-    def footer(self):
+-        self.set_y(-15)
+-        self.set_font("SimHei", "", 10)
+-        self.cell(0, 10, f"第 {self.page_no()} 页", 0, 0, "C")
+-
+-
+-md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
+-pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
+-
+-with open(md_path, encoding="utf-8") as f:
+-    lines = f.readlines()
+-
+-pdf = PDF()
+-pdf.add_page()
+-pdf.set_font("SimHei", "", 12)
+-
+-for line in lines:
+-    line = line.rstrip()
+-    if not line:
+-        pdf.ln(5)
+-        continue
+-
+-    if line.startswith("# "):
+-        pdf.set_font("SimHei", "", 16)
+-        pdf.cell(0, 10, line[2:], 0, 1, "L")
+-        pdf.ln(5)
+-        pdf.set_font("SimHei", "", 12)
+-    elif line.startswith("## "):
+-        pdf.set_font("SimHei", "", 14)
+-        pdf.cell(0, 10, line[3:], 0, 1, "L")
+-        pdf.ln(3)
+-        pdf.set_font("SimHei", "", 12)
+-    elif line.startswith("### "):
+-        pdf.set_font("SimHei", "", 12)
+-        pdf.set_text_color(0, 0, 128)
+-        pdf.cell(0, 8, line[4:], 0, 1, "L")
+-        pdf.set_text_color(0, 0, 0)
+-        pdf.ln(2)
+-    elif line.startswith("|"):
+-        # 简单处理表格
+-        pdf.multi_cell(0, 8, line)
+-    elif line.startswith("```"):
+-        # 代码块
+-        pdf.set_font("Courier", "", 10)
+-        pdf.multi_cell(0, 6, line)
+-        pdf.set_font("SimHei", "", 12)
+-    else:
+-        pdf.multi_cell(0, 6, line)
+-
+-pdf.output(pdf_path)
+-print(f"PDF generated successfully: {pdf_path}")
+diff --git a/FHD/scripts/dev/generators/_generate_modern_pdf.py b/FHD/scripts/dev/generators/_generate_modern_pdf.py
+deleted file mode 100644
+index a5a2b6db57..0000000000
+--- a/FHD/scripts/dev/generators/_generate_modern_pdf.py
++++ /dev/null
+@@ -1,270 +0,0 @@
+-# mypy: disable-error-code="import-not-found, import-untyped"
+-import markdown
+-import weasyprint
+-from weasyprint import CSS
+-
+-from app.utils.operational_errors import RECOVERABLE_ERRORS
+-
+-md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
+-pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
+-
+-# 读取 Markdown 文件
+-with open(md_path, encoding="utf-8") as f:
+-    md_content = f.read()
+-
+-# 转换为 HTML
+-html_content = markdown.markdown(md_content)
+-
+-# 现代 CSS 样式
+-css = CSS(
+-    string="""
+-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+-    
+-    :root {
+-        --primary-color: #3498db;
+-        --secondary-color: #2c3e50;
+-        --accent-color: #e74c3c;
+-        --background-color: #f8f9fa;
+-        --card-color: #ffffff;
+-        --text-color: #333333;
+-        --border-color: #e0e0e0;
+-        --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+-    }
+-    
+-    body {
+-        font-family: 'Noto Sans SC', sans-serif;
+-        font-size: 14px;
+-        line-height: 1.6;
+-        color: var(--text-color);
+-        background-color: var(--background-color);
+-        margin: 0;
+-        padding: 0;
+-    }
+-    
+-    .container {
+-        max-width: 800px;
+-        margin: 0 auto;
+-        padding: 40px;
+-        background-color: var(--card-color);
+-        box-shadow: var(--shadow);
+-    }
+-    
+-    h1, h2, h3, h4, h5, h6 {
+-        font-family: 'Noto Sans SC', sans-serif;
+-        color: var(--secondary-color);
+-        margin-top: 1.5em;
+-        margin-bottom: 0.8em;
+-    }
+-    
+-    h1 {
+-        font-size: 28px;
+-        font-weight: 700;
+-        color: var(--primary-color);
+-        border-bottom: 3px solid var(--primary-color);
+-        padding-bottom: 10px;
+-        margin-bottom: 30px;
+-    }
+-    
+-    h2 {
+-        font-size: 22px;
+-        font-weight: 600;
+-        border-left: 4px solid var(--primary-color);
+-        padding-left: 15px;
+-    }
+-    
+-    h3 {
+-        font-size: 18px;
+-        font-weight: 500;
+-        color: var(--secondary-color);
+-    }
+-    
+-    p {
+-        margin-bottom: 16px;
+-        text-align: justify;
+-    }
+-    
+-    table {
+-        width: 100%;
+-        border-collapse: collapse;
+-        margin: 20px 0;
+-        box-shadow: var(--shadow);
+-        border-radius: 8px;
+-        overflow: hidden;
+-    }
+-    
+-    th, td {
+-        padding: 12px 15px;
+-        text-align: left;
+-        border-bottom: 1px solid var(--border-color);
+-    }
+-    
+-    th {
+-        background-color: var(--primary-color);
+-        color: white;
+-        font-weight: 500;
+-    }
+-    
+-    tr:nth-child(even) {
+-        background-color: #f8f9fa;
+-    }
+-    
+-    tr:hover {
+-        background-color: #e3f2fd;
+-    }
+-    
+-    code {
+-        font-family: 'Courier New', monospace;
+-        background-color: #f1f1f1;
+-        padding: 2px 6px;
+-        border-radius: 4px;
+-        font-size: 0.9em;
+-    }
+-    
+-    pre {
+-        background-color: #f5f5f5;
+-        padding: 15px;
+-        border-radius: 8px;
+-        overflow-x: auto;
+-        border-left: 4px solid var(--primary-color);
+-    }
+-    
+-    blockquote {
+-        border-left: 4px solid var(--primary-color);
+-        padding: 10px 20px;
+-        background-color: #f8f9fa;
+-        margin: 20px 0;
+-        border-radius: 0 8px 8px 0;
+-    }
+-    
+-    hr {
+-        border: none;
+-        border-top: 2px dashed var(--border-color);
+-        margin: 30px 0;
+-    }
+-    
+-    .footer {
+-        margin-top: 40px;
+-        padding-top: 20px;
+-        border-top: 1px solid var(--border-color);
+-        text-align: center;
+-        color: #666;
+-        font-size: 12px;
+-    }
+-"""
+-)
+-
+-# 包装 HTML
+-full_html = f"""
+-<!DOCTYPE html>
+-<html lang="zh-CN">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>AI 企业解决方案对比分析报告</title>
+-</head>
+-<body>
+-    <div class="container">
+-        {html_content}
+-        <div class="footer">
+-            <p>生成时间：2026-04-02</p>
+-        </div>
+-    </div>
+-</body>
+-</html>
+-"""
+-
+-# 生成 PDF
+-try:
+-    html = weasyprint.HTML(string=full_html)
+-    pdf = html.write_pdf(stylesheets=[css])
+-
+-    with open(pdf_path, "wb") as f:
+-        f.write(pdf)
+-
+-    print(f"现代风格 PDF 生成成功: {pdf_path}")
+-except RECOVERABLE_ERRORS as e:  # noqa: BLE001 - script boundary records arbitrary integration failures
+-    print(f"WeasyPrint 生成失败，使用备用方案: {e}")
+-
+-    # 备用方案：使用 ReportLab
+-    from reportlab.lib import colors
+-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+-    from reportlab.lib.pagesizes import A4
+-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+-    from reportlab.pdfbase import pdfmetrics
+-    from reportlab.pdfbase.ttfonts import TTFont
+-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+-
+-    # 注册中文字体
+-    pdfmetrics.registerFont(TTFont("SimHei", "C:\\Windows\\Fonts\\simhei.ttf"))
+-
+-    # 创建 PDF 文档
+-    doc = SimpleDocTemplate(pdf_path, pagesize=A4)
+-
+-    # 定义样式
+-    styles = getSampleStyleSheet()
+-
+-    # 现代样式
+-    ModernStyle = ParagraphStyle(
+-        "Modern",
+-        fontName="SimHei",
+-        fontSize=12,
+-        leading=18,
+-        spaceAfter=10,
+-        alignment=TA_LEFT,
+-        textColor=colors.HexColor("#333333"),
+-    )
+-
+-    ModernHeading1 = ParagraphStyle(
+-        "ModernHeading1",
+-        fontName="SimHei",
+-        fontSize=24,
+-        leading=30,
+-        spaceAfter=20,
+-        alignment=TA_CENTER,
+-        textColor=colors.HexColor("#3498db"),
+-        borderColor=colors.HexColor("#3498db"),
+-        borderWidth=2,
+-        borderPadding=10,
+-        backColor=colors.HexColor("#f8f9fa"),
+-    )
+-
+-    ModernHeading2 = ParagraphStyle(
+-        "ModernHeading2",
+-        fontName="SimHei",
+-        fontSize=18,
+-        leading=24,
+-        spaceAfter=15,
+-        alignment=TA_LEFT,
+-        textColor=colors.HexColor("#2c3e50"),
+-        leftIndent=20,
+-        borderLeftWidth=4,
+-        borderLeftColor=colors.HexColor("#3498db"),
+-    )
+-
+-    # 构建内容
+-    story = []
+-
+-    # 添加标题
+-    story.append(Paragraph("AI 企业解决方案对比分析报告", ModernHeading1))
+-    story.append(Spacer(1, 20))
+-
+-    # 解析 Markdown 内容
+-    lines = md_content.split("\n")
+-    for line in lines:
+-        line = line.rstrip()
+-        if not line:
+-            story.append(Spacer(1, 10))
+-            continue
+-
+-        if line.startswith("# "):
+-            story.append(Paragraph(line[2:], ModernHeading1))
+-            story.append(Spacer(1, 20))
+-        elif line.startswith("## "):
+-            story.append(Paragraph(line[3:], ModernHeading2))
+-            story.append(Spacer(1, 15))
+-        else:
+-            story.append(Paragraph(line, ModernStyle))
+-
+-    # 生成 PDF
+-    doc.build(story)
+-    print(f"备用方案 PDF 生成成功: {pdf_path}")
+diff --git a/FHD/scripts/dev/generators/_generate_pdf_fpdf.py b/FHD/scripts/dev/generators/_generate_pdf_fpdf.py
+deleted file mode 100644
+index 7a3719cc6f..0000000000
+--- a/FHD/scripts/dev/generators/_generate_pdf_fpdf.py
++++ /dev/null
+@@ -1,65 +0,0 @@
+-# mypy: disable-error-code="import-untyped"
+-from fpdf import FPDF
+-
+-
+-class PDF(FPDF):
+-    def __init__(self):
+-        super().__init__()
+-        self.add_font("SimHei", "", "C:\\Windows\\Fonts\\simhei.ttf", uni=True)
+-
+-    def header(self):
+-        self.set_font("SimHei", "", 16)
+-        self.cell(0, 10, "AI 企业解决方案对比分析报告", 0, 1, "C")
+-        self.ln(10)
+-
+-    def footer(self):
+-        self.set_y(-15)
+-        self.set_font("SimHei", "", 10)
+-        self.cell(0, 10, f"第 {self.page_no()} 页", 0, 0, "C")
+-
+-
+-md_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.md"
+-pdf_path = r"e:\FHD\XCAGI\AI企业解决方案对比分析报告.pdf"
+-
+-with open(md_path, encoding="utf-8") as f:
+-    lines = f.readlines()
+-
+-pdf = PDF()
+-pdf.add_page()
+-pdf.set_font("SimHei", "", 12)
+-
+-for line in lines:
+-    line = line.rstrip()
+-    if not line:
+-        pdf.ln(5)
+-        continue
+-
+-    if line.startswith("# "):
+-        pdf.set_font("SimHei", "", 16)
+-        pdf.cell(0, 10, line[2:], 0, 1, "L")
+-        pdf.ln(5)
+-        pdf.set_font("SimHei", "", 12)
+-    elif line.startswith("## "):
+-        pdf.set_font("SimHei", "", 14)
+-        pdf.cell(0, 10, line[3:], 0, 1, "L")
+-        pdf.ln(3)
+-        pdf.set_font("SimHei", "", 12)
+-    elif line.startswith("### "):
+-        pdf.set_font("SimHei", "", 12)
+-        pdf.set_text_color(0, 0, 128)
+-        pdf.cell(0, 8, line[4:], 0, 1, "L")
+-        pdf.set_text_color(0, 0, 0)
+-        pdf.ln(2)
+-    elif line.startswith("|"):
+-        # 简单处理表格
+-        pdf.multi_cell(0, 8, line)
+-    elif line.startswith("```"):
+-        # 代码块
+-        pdf.set_font("Courier", "", 10)
+-        pdf.multi_cell(0, 6, line)
+-        pdf.set_font("SimHei", "", 12)
+-    else:
+-        pdf.multi_cell(0, 6, line)
+-
+-pdf.output(pdf_path)
+-print(f"PDF generated successfully: {pdf_path}")
+-- 
+2.50.1 (Apple Git-155)
+

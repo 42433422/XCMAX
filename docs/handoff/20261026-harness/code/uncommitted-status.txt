@@ -1,0 +1,24 @@
+ M FHD/app/application/agent_orchestrator/business_action_verification.py
+ M FHD/app/application/agent_orchestrator/model_turn_runtime.py
+ M FHD/app/application/agent_orchestrator/tool_executor.py
+ M FHD/app/application/agent_orchestrator/trace_runs.py
+ M FHD/app/application/ai_chat/agent_workflow_bridge.py
+ M FHD/app/application/ai_chat/planned_workflow_dispatch.py
+ M FHD/app/application/ai_chat_app_service.py
+ M FHD/app/application/workflow/agent_loop.py
+ M FHD/app/application/workflow/engine.py
+ M FHD/app/application/workflow/engine_decisions.py
+ M FHD/app/domain/shared_services/tools_workflow_erp_master.py
+ M FHD/app/fastapi_routes/materials.py
+ M FHD/tests/test_application/test_agent_eval_harness.py
+ M FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+ M FHD/tests/test_application/test_business_action_ledger.py
+ M FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+ M FHD/tests/test_application/test_workflow_engine.py
+ M FHD/tests/test_application/test_workflow_engine_cov.py
+ M FHD/tests/test_services/test_tools_workflow_registered.py
+ M FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+?? FHD/app/application/workflow/agentic_model_policy.py
+?? FHD/tests/test_application/test_workflow_model_turn.py
+?? FHD/tests/test_application/test_workflow_model_turn_durable.py
+?? FHD/tests/test_application/test_workflow_model_turn_process_resume.py

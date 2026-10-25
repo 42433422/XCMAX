@@ -1,0 +1,2441 @@
+From 70c1bd70d9c2c6e9a1a743d1a1a3c25bc5c74b7f Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 23:04:06 +0800
+Subject: [PATCH 21/43] fix(vector): isolate Excel indexes and govern
+ owner-scoped mutations
+
+
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index c14e23b29e..f4a67b7a30 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -15,6 +15,10 @@ def verify_action_result(
+ ) -> tuple[dict, bool]:
+     if tool_receipt_outcome(result) != "success":
+         return result, False
++    if spec.tool_id == "excel_vector_index":
++        from app.application.excel_vector_app_service import verify_excel_vector_result
++
++        return verify_excel_vector_result(spec.action, params, result, runtime_context or {})
+     if spec.tool_id == "memory_v2":
+         return _verify_memory_v2(spec.action, params, result, runtime_context or {})
+     if spec.tool_id == "persy_memory":
+diff --git a/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py b/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
+index 3147eb26d9..cfbcf93b5a 100644
+--- a/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
++++ b/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
+@@ -1072,9 +1072,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+         "properties": {
+             "index_id": {"type": "string"},
+             "query": {"type": "string"},
+-            "top_k": {"type": "integer"},
++            "top_k": {"type": "integer", "minimum": 1, "maximum": 100},
+         },
+     },
++    ("excel_vector_index", "list"): {"type": "object", "properties": {}},
++    ("excel_vector_index", "delete"): {
++        "type": "object",
++        "required": ["index_id"],
++        "properties": {"index_id": {"type": "string"}},
++    },
+     ("ocr", "recognize"): deepcopy(_OCR_FILE_INPUT_SCHEMA),
+     ("ocr", "request"): {
+         "type": "object",
+diff --git a/FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py b/FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py
+index 5049ae78b7..6c04ea2a90 100644
+--- a/FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py
++++ b/FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py
+@@ -274,6 +274,8 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+             "error": {"type": "string"},
+         },
+     ),
++    ("excel_vector_index", "list"): _output_schema({"indexes": {"type": "array"}}),
++    ("excel_vector_index", "delete"): _output_schema({"index_id": {"type": "string"}}),
+     ("ocr", "recognize"): _output_schema(
+         {
+             "text": {"type": "string"},
+diff --git a/FHD/app/application/ai_chat/context_enrichment.py b/FHD/app/application/ai_chat/context_enrichment.py
+index ecbd5a8ca7..ecef6ebf0d 100644
+--- a/FHD/app/application/ai_chat/context_enrichment.py
++++ b/FHD/app/application/ai_chat/context_enrichment.py
+@@ -31,6 +31,8 @@ def inject_excel_vector_context(
+     """
+     if not isinstance(context, dict):
+         return {}
++    if "excel_vector_context" in context:
++        context = {key: value for key, value in context.items() if key != "excel_vector_context"}
+     excel_index_id = str(
+         context.get("excel_index_id") or context.get("excel_vector_index_id") or ""
+     ).strip()
+@@ -45,7 +47,7 @@ def inject_excel_vector_context(
+         if search_service is None:
+             from app.application import get_excel_vector_search_app_service
+ 
+-            search_service = get_excel_vector_search_app_service()
++            search_service = get_excel_vector_search_app_service(runtime_context=context)
+         result = search_service.query(index_id=excel_index_id, query_text=message, top_k=top_k)
+         if result.get("success"):
+             enriched = dict(context)
+@@ -55,8 +57,8 @@ def inject_excel_vector_context(
+                 "hits": result.get("hits", []),
+             }
+             return enriched
+-    except RECOVERABLE_ERRORS as err:
+-        logger.warning("注入 Excel 向量上下文失败: %s", err, exc_info=True)
++    except RECOVERABLE_ERRORS:
++        logger.warning("Excel vector context unavailable")
+     return context
+ 
+ 
+diff --git a/FHD/app/application/excel_vector_app_service.py b/FHD/app/application/excel_vector_app_service.py
+index d6c7a38248..f464ebeb80 100644
+--- a/FHD/app/application/excel_vector_app_service.py
++++ b/FHD/app/application/excel_vector_app_service.py
+@@ -1,8 +1,14 @@
+ from __future__ import annotations
+ 
++import hashlib
++import json
+ import os
++import re
+ import uuid
++from copy import deepcopy
+ from dataclasses import dataclass
++from functools import wraps
++from io import BytesIO
+ from pathlib import Path
+ from typing import Any, cast
+ 
+@@ -26,6 +32,113 @@ class ExcelVectorChunk:
+     metadata: dict[str, Any]
+ 
+ 
++def _owner_context(runtime_context):
++    return deepcopy(
++        {
++            key: value
++            for key, value in (runtime_context or {}).items()
++            if key
++            in {
++                "user_id",
++                "actor_id",
++                "tenant_id",
++                "mod_id",
++                "active_mod_id",
++                "_actor_authorization",
++                "_mod_authorization",
++            }
++        }
++    )
++
++
++class ScopedExcelVectorStore(VectorStorePort):
++    """Project a verified actor's namespace over the existing storage port."""
++
++    def __init__(self, store: VectorStorePort, runtime_context: dict[str, Any]) -> None:
++        self._store = store
++        self._context = _owner_context(runtime_context)
++        self._prefix = self._scope_prefix()
++
++    def _scope_prefix(self) -> str:
++        from app.infrastructure.auth.agent_mod_scope import _bound_actor
++
++        _bound_actor(self._context)
++        actor = self._context["_actor_authorization"]
++        scope = [actor["execution_tenant_id"], actor["user_id"], actor["mod_id"]]
++        return "excel-owner-v1:" + hashlib.sha256(json.dumps(scope).encode()).hexdigest() + ":"
++
++    def _authorize(self, action: str) -> None:
++        from app.infrastructure.auth.agent_mod_scope import (
++            AgentModAuthorizationError,
++            authorize_agent_tool,
++        )
++
++        if self._scope_prefix() != self._prefix or authorize_agent_tool(
++            "excel_vector_index", action, {}, self._context
++        ):
++            raise AgentModAuthorizationError("Excel vector authorization unavailable")
++
++    def _key(self, index_id: str, action: str = "query") -> str:
++        self._authorize(action)
++        if not isinstance(index_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", index_id):
++            raise ValueError("invalid Excel vector index id")
++        return self._prefix + index_id
++
++    def create_or_update_index(self, index_id: str, name: str, source_file: str) -> None:
++        self._store.create_or_update_index(self._key(index_id, "execute"), name, source_file)
++
++    def upsert_chunks(self, index_id: str, chunks: list[dict[str, Any]]) -> int:
++        key = self._key(index_id, "execute")
++        return self._store.upsert_chunks(
++            key, [{**chunk, "chunk_id": key + ":" + str(chunk["chunk_id"])} for chunk in chunks]
++        )
++
++    def query(self, index_id, query_vector, top_k=5, filters=None):
++        key = self._key(index_id)
++        return [
++            {**hit, "chunk_id": hit["chunk_id"][len(key) + 1 :]}
++            for hit in self._store.query(key, query_vector, top_k=top_k, filters=filters)
++            if str(hit.get("chunk_id") or "").startswith(key + ":")
++        ]
++
++    def list_indexes(self):
++        self._authorize("list")
++        return [
++            {**row, "index_id": row["index_id"][len(self._prefix) :]}
++            for row in self._store.list_indexes()
++            if str(row.get("index_id") or "").startswith(self._prefix)
++        ]
++
++    def delete_index(self, index_id):
++        return self._store.delete_index(self._key(index_id, "delete"))
++
++
++MAX_EXCEL_VECTOR_BYTES = 32 * 1024 * 1024
++
++
++def read_owned_excel_bytes(file_path: str, runtime_context: dict[str, Any]) -> bytes:
++    from app.application.employee_runtime.loader import employee_owner_workspace
++    from app.application.office_parse_app_service import _read_pinned_output
++    from app.infrastructure.workspace import workspace_root
++
++    base = workspace_root()
++    owner_parts = employee_owner_workspace(runtime_context).parent.relative_to(base).parts
++    raw = str(file_path).replace("\\", "/")
++    base_text = base.as_posix().rstrip("/") + "/"
++    if raw.startswith(base_text):
++        raw = raw[len(base_text) :]
++    parts = raw.split("/")
++    if (
++        any(part in {"", ".", ".."} for part in parts)
++        or tuple(parts[: len(owner_parts)]) != owner_parts
++    ):
++        raise ValueError("Excel input must belong to the authenticated owner")
++    blob = _read_pinned_output(base, base.joinpath(*parts), max_bytes=MAX_EXCEL_VECTOR_BYTES + 1)
++    if len(blob) > MAX_EXCEL_VECTOR_BYTES:
++        raise ValueError("Excel vector input exceeds size limit")
++    return blob
++
++
+ def _get_default_embedder() -> EmbedderPort:
+     """优先用真实 EmbeddingService（local/remote），不可用时回退到 HashEmbedder。
+ 
+@@ -43,17 +156,48 @@ def _get_default_embedder() -> EmbedderPort:
+     return HashEmbedder()
+ 
+ 
++class ExcelVectorUnavailableError(RuntimeError):
++    error_code = "excel_vector_exception"
++    http_status_code = 503
++
++
++def _safe_vector_errors(operation):
++    @wraps(operation)
++    def call(*args, **kwargs):
++        from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
++
++        try:
++            return operation(*args, **kwargs)
++        except AgentModAuthorizationError:
++            raise
++        except ValueError:
++            raise ValueError("Invalid Excel vector input") from None
++        except RECOVERABLE_ERRORS:
++            # Application instrumentation publishes exception strings; keep payloads out of it.
++            raise ExcelVectorUnavailableError("Excel vector service unavailable") from None
++
++    return call
++
++
+ class ExcelVectorIngestApplicationService:
+     def __init__(
+         self,
+         vector_store: VectorStorePort | None = None,
+         embedder: EmbedderPort | None = None,
+         chunk_window_size: int = 20,
++        *,
++        runtime_context: dict[str, Any] | None = None,
+     ) -> None:
+-        self._vector_store = vector_store or get_vector_store()
++        self._runtime_context = (
++            _owner_context(runtime_context) if runtime_context is not None else None
++        )
++        self._vector_store = (
++            vector_store if vector_store is not None else get_vector_store(runtime_context)
++        )
+         self._embedder = embedder or _get_default_embedder()
+         self._chunk_window_size = max(5, int(chunk_window_size))
+ 
++    @_safe_vector_errors
+     def ingest_excel(
+         self,
+         file_path: str,
+@@ -61,19 +205,30 @@ class ExcelVectorIngestApplicationService:
+         index_id: str | None = None,
+     ) -> dict[str, Any]:
+         path = Path(file_path)
+-        if not path.exists():
++        if self._runtime_context is None and not path.exists():
+             return {"success": False, "message": f"文件不存在: {file_path}"}
+ 
+         target_index_id = index_id or uuid.uuid4().hex
++        if isinstance(self._vector_store, ScopedExcelVectorStore):
++            self._vector_store._key(target_index_id, "execute")
+         name = (index_name or path.stem or target_index_id).strip()
+ 
+-        sheets = pd.read_excel(file_path, sheet_name=None)
++        source = (
++            BytesIO(read_owned_excel_bytes(file_path, self._runtime_context))
++            if self._runtime_context is not None
++            else file_path
++        )
++        sheets = pd.read_excel(source, sheet_name=None)
+         chunks = self._build_chunks(sheets, source_file=path.name)
+         if not chunks:
+             return {"success": False, "message": "Excel 中没有可索引的有效数据"}
+ 
+         texts = [chunk.content for chunk in chunks]
++        if isinstance(self._vector_store, ScopedExcelVectorStore):
++            self._vector_store._key(target_index_id, "execute")
+         embeddings = self._embedder.embed_texts(texts)
++        if len(embeddings) != len(chunks):
++            raise ValueError("incomplete Excel embeddings")
+         store_payload: list[dict[str, Any]] = []
+         for chunk, embedding in zip(chunks, embeddings):
+             store_payload.append(
+@@ -184,15 +339,23 @@ class ExcelVectorSearchApplicationService:
+         self,
+         vector_store: VectorStorePort | None = None,
+         embedder: EmbedderPort | None = None,
++        *,
++        runtime_context: dict[str, Any] | None = None,
+     ) -> None:
+-        self._vector_store = vector_store or get_vector_store()
++        self._vector_store = (
++            vector_store if vector_store is not None else get_vector_store(runtime_context)
++        )
+         self._embedder = embedder or _get_default_embedder()
+ 
++    @_safe_vector_errors
+     def query(self, index_id: str, query_text: str, top_k: int = 5) -> dict[str, Any]:
++        if isinstance(self._vector_store, ScopedExcelVectorStore):
++            self._vector_store._key(index_id)
+         if not index_id:
+             return {"success": False, "message": "缺少 index_id"}
+         if not query_text:
+             return {"success": False, "message": "缺少 query"}
++        top_k = max(1, min(100, int(top_k)))
+ 
+         query_vector = self._embedder.embed_query(query_text)
+         hits = self._vector_store.query(index_id=index_id, query_vector=query_vector, top_k=top_k)
+@@ -204,9 +367,11 @@ class ExcelVectorSearchApplicationService:
+             "hits": hits,
+         }
+ 
++    @_safe_vector_errors
+     def list_indexes(self) -> dict[str, Any]:
+         return {"success": True, "indexes": self._vector_store.list_indexes()}
+ 
++    @_safe_vector_errors
+     def delete_index(self, index_id: str) -> dict[str, Any]:
+         deleted = self._vector_store.delete_index(index_id)
+         return {"success": deleted, "index_id": index_id}
+@@ -232,8 +397,6 @@ instrument_application_service_class(ExcelVectorSearchApplicationService)
+ _sqlite_vector_store_instance: SQLiteVectorStore | None = None
+ _pg_vector_store_instance: PgVectorStore | None = None
+ _vector_store_instance: VectorStorePort | None = None
+-_excel_vector_ingest_service_instance: ExcelVectorIngestApplicationService | None = None
+-_excel_vector_search_service_instance: ExcelVectorSearchApplicationService | None = None
+ 
+ 
+ def get_sqlite_vector_store() -> SQLiteVectorStore:
+@@ -253,7 +416,15 @@ def get_pg_vector_store() -> PgVectorStore:
+     return _pg_vector_store_instance
+ 
+ 
+-def get_vector_store() -> VectorStorePort:
++def get_vector_store(runtime_context: dict[str, Any] | None = None) -> VectorStorePort:
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++
++    context = dict(runtime_context or {})
++    _bound_actor(context)
++    return ScopedExcelVectorStore(_get_raw_vector_store(), context)
++
++
++def _get_raw_vector_store() -> VectorStorePort:
+     global _vector_store_instance
+     if _vector_store_instance is not None:
+         return _vector_store_instance
+@@ -272,15 +443,66 @@ def get_vector_store() -> VectorStorePort:
+     return _vector_store_instance
+ 
+ 
+-def get_excel_vector_ingest_app_service() -> ExcelVectorIngestApplicationService:
+-    global _excel_vector_ingest_service_instance
+-    if _excel_vector_ingest_service_instance is None:
+-        _excel_vector_ingest_service_instance = ExcelVectorIngestApplicationService()
+-    return _excel_vector_ingest_service_instance
++def get_excel_vector_ingest_app_service(
++    runtime_context=None,
++) -> ExcelVectorIngestApplicationService:
++    return ExcelVectorIngestApplicationService(runtime_context=runtime_context)
+ 
+ 
+-def get_excel_vector_search_app_service() -> ExcelVectorSearchApplicationService:
+-    global _excel_vector_search_service_instance
+-    if _excel_vector_search_service_instance is None:
+-        _excel_vector_search_service_instance = ExcelVectorSearchApplicationService()
+-    return _excel_vector_search_service_instance
++def get_excel_vector_search_app_service(
++    runtime_context=None,
++) -> ExcelVectorSearchApplicationService:
++    return ExcelVectorSearchApplicationService(runtime_context=runtime_context)
++
++
++def verify_excel_vector_result(action, params, result, runtime_context) -> tuple[dict, bool]:
++    """Reopen the scoped store and original pinned workbook; ignore caller success proofs."""
++    verified = False
++    try:
++        index_id = result.get("index_id")
++        store = get_vector_store(runtime_context)
++        key = store._key(index_id, action)
++        # A write's technical readback requires its write grant, not an unrelated read permission.
++        row = next((item for item in store._store.list_indexes() if item["index_id"] == key), None)
++        if action == "delete":
++            verified = index_id == params.get("index_id") and row is None
++        elif action == "execute" and row:
++            file_path = params["file_path"]
++            blob = read_owned_excel_bytes(file_path, runtime_context)
++            parser = ExcelVectorIngestApplicationService(
++                vector_store=store, embedder=HashEmbedder()
++            )
++            expected = parser._build_chunks(
++                pd.read_excel(BytesIO(blob), sheet_name=None), Path(file_path).name
++            )
++            hits = store._store.query(key, [0.0] * 256, top_k=len(expected) + 1)
++
++            def contents(items):
++                return sorted(
++                    json.dumps({"content": item.content, "metadata": item.metadata}, sort_keys=True)
++                    for item in items
++                )
++
++            actual = sorted(
++                json.dumps({"content": hit["content"], "metadata": hit["metadata"]}, sort_keys=True)
++                for hit in hits
++            )
++            verified = (
++                bool(expected)
++                and (not params.get("index_id") or params["index_id"] == index_id)
++                and result.get("chunk_count") == row["chunk_count"] == len(expected)
++                and row["source_file"] == Path(file_path).name
++                and row["name"] == (params.get("index_name") or Path(file_path).stem).strip()
++                and all(str(hit.get("chunk_id") or "").startswith(key + ":") for hit in hits)
++                and contents(expected) == actual
++            )
++    except RECOVERABLE_ERRORS:
++        verified = False
++    return {
++        **result,
++        "business_verification": {
++            "verified": bool(verified),
++            "method": "excel_vector_owner_readback",
++            "index_id": result.get("index_id"),
++        },
++    }, bool(verified)
+diff --git a/FHD/app/application/smart_search_app_service.py b/FHD/app/application/smart_search_app_service.py
+index 8509bc5ed4..84c6302bcf 100644
+--- a/FHD/app/application/smart_search_app_service.py
++++ b/FHD/app/application/smart_search_app_service.py
+@@ -31,10 +31,12 @@ class SmartSearchApplicationService:
+             per_page=per_page,
+         )
+ 
+-    def search_excel_vector(self, keyword: str, *, top_k: int = 5) -> dict[str, Any]:
++    def search_excel_vector(
++        self, keyword: str, *, top_k: int = 5, runtime_context=None
++    ) -> dict[str, Any]:
+         from app.application.excel_vector_app_service import get_excel_vector_search_app_service
+ 
+-        svc = get_excel_vector_search_app_service()
++        svc = get_excel_vector_search_app_service(runtime_context=runtime_context)
+         indexes = svc.list_indexes()
+         index_rows = (indexes.get("indexes") or []) if isinstance(indexes, dict) else []
+         if not index_rows:
+@@ -45,9 +47,9 @@ class SmartSearchApplicationService:
+             return {"success": True, "query": keyword, "hits": [], "index_id": None}
+         try:
+             return svc.query(index_id=index_id, query_text=keyword, top_k=top_k)
+-        except RECOVERABLE_ERRORS as exc:
+-            logger.exception("search_excel_vector")
+-            return {"success": False, "message": str(exc), "hits": [], "index_id": index_id}
++        except RECOVERABLE_ERRORS:
++            logger.warning("Excel vector search unavailable")
++            return {"success": False, "message": "向量索引不可用", "hits": [], "index_id": index_id}
+ 
+     def search(
+         self,
+@@ -55,6 +57,7 @@ class SmartSearchApplicationService:
+         *,
+         scope: Scope = "products",
+         per_page: int = 20,
++        runtime_context=None,
+     ) -> dict[str, Any]:
+         q = (keyword or "").strip()
+         out: dict[str, Any] = {
+@@ -80,10 +83,16 @@ class SmartSearchApplicationService:
+ 
+         if scope in ("excel", "all"):
+             try:
+-                out["results"]["excel_vector"] = self.search_excel_vector(q, top_k=5)
+-            except RECOVERABLE_ERRORS as exc:
+-                logger.exception("smart_search excel")
+-                out["results"]["excel_vector"] = {"success": False, "message": str(exc), "hits": []}
++                out["results"]["excel_vector"] = self.search_excel_vector(
++                    q, top_k=5, runtime_context=runtime_context
++                )
++            except RECOVERABLE_ERRORS:
++                logger.warning("Excel vector search unavailable")
++                out["results"]["excel_vector"] = {
++                    "success": False,
++                    "message": "向量索引不可用",
++                    "hits": [],
++                }
+ 
+         blocks = out["results"].values()
+         any_ok = any(isinstance(block, dict) and block.get("success") for block in blocks)
+diff --git a/FHD/app/application/tools/workflow.py b/FHD/app/application/tools/workflow.py
+index 260788940a..7cdb054dc5 100644
+--- a/FHD/app/application/tools/workflow.py
++++ b/FHD/app/application/tools/workflow.py
+@@ -304,7 +304,9 @@ def _execute_workflow_tool_raw(
+         ),
+         "products_bulk_import": _json_tool(lambda call: adapters.bulk_import(call.args)),
+         "excel_vector_index": _json_tool(
+-            lambda call: workbooks.vector_index(call.args, call.workspace_root)
++            lambda call: workbooks.vector_index(
++                call.args, call.workspace_root, call.runtime_context
++            )
+         ),
+         "import_excel_to_database": lambda call: _handle_import_excel_to_database(
+             call.args, workspace_root=call.workspace_root, db_write_token=call.db_write_token
+diff --git a/FHD/app/application/tools/workflow_tools/adapters.py b/FHD/app/application/tools/workflow_tools/adapters.py
+index d0bb0ea1e5..6d72871e73 100644
+--- a/FHD/app/application/tools/workflow_tools/adapters.py
++++ b/FHD/app/application/tools/workflow_tools/adapters.py
+@@ -167,10 +167,12 @@ def bulk_import(args: Payload) -> Payload:
+     return run_bulk_import(args)
+ 
+ 
+-def ingest_vector(*, file_path: str, index_name: str | None, index_id: str | None) -> Payload:
++def ingest_vector(
++    *, file_path: str, index_name: str | None, index_id: str | None, runtime_context=None
++) -> Payload:
+     from app.application import get_excel_vector_ingest_app_service
+ 
+-    return get_excel_vector_ingest_app_service().ingest_excel(
++    return get_excel_vector_ingest_app_service(runtime_context=runtime_context).ingest_excel(
+         file_path=file_path, index_name=index_name, index_id=index_id
+     )
+ 
+diff --git a/FHD/app/application/tools/workflow_tools/contracts.py b/FHD/app/application/tools/workflow_tools/contracts.py
+index d44f9c668d..8bb3bf45f2 100644
+--- a/FHD/app/application/tools/workflow_tools/contracts.py
++++ b/FHD/app/application/tools/workflow_tools/contracts.py
+@@ -36,7 +36,12 @@ class WorkbookSchema(Protocol):
+ 
+ class VectorIngest(Protocol):
+     def __call__(
+-        self, *, file_path: str, index_name: str | None, index_id: str | None
++        self,
++        *,
++        file_path: str,
++        index_name: str | None,
++        index_id: str | None,
++        runtime_context: Payload | None = None,
+     ) -> Payload: ...
+ 
+ 
+diff --git a/FHD/app/application/tools/workflow_tools/excel_operations.py b/FHD/app/application/tools/workflow_tools/excel_operations.py
+index 42e14e4b1d..6c9d768d5a 100644
+--- a/FHD/app/application/tools/workflow_tools/excel_operations.py
++++ b/FHD/app/application/tools/workflow_tools/excel_operations.py
+@@ -126,22 +126,17 @@ class WorkbookOperations:
+         df = self.io.read(path, sheet_name=sheet, header_row_1based=header)
+         return self.schema_factory().understand_dataframe(df, file_path=file_path)
+ 
+-    def vector_index(self, args: Payload, workspace_root: str | None) -> Payload:
++    def vector_index(
++        self, args: Payload, workspace_root: str | None, runtime_context=None
++    ) -> Payload:
+         file_path = str(args.get("file_path") or "").strip()
+         if not file_path:
+             return {"success": False, "error": "file_path is required"}
+-        path = self.io.resolve(workspace_root or str(Path.cwd()), file_path)
+-        if not path.exists():
+-            return {
+-                "success": False,
+-                "error": "file_not_found",
+-                "file_path": file_path,
+-                "resolved_path": str(path),
+-            }
+         result = self.ingest(
+-            file_path=str(path),
++            file_path=file_path,
+             index_name=str(args.get("index_name") or "").strip() or None,
+             index_id=str(args.get("index_id") or "").strip() or None,
++            runtime_context=runtime_context,
+         )
+         if isinstance(result, dict) and result.get("success") and result.get("index_id"):
+             result["excel_vector_index_id"] = result.get("index_id")
+diff --git a/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py b/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
+index 30d0efc6cc..75610307fa 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
++++ b/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
+@@ -142,47 +142,73 @@ def _registered_router_generate_office_document(
+ def _registered_router_excel_vector_index(
+     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
+ ) -> dict:
+-    if action == "execute":
+-        file_path = str(params.get("file_path") or "").strip()
+-        if not file_path:
+-            return {"success": False, "message": "缺少 file_path"}
+-        index_name = str(params.get("index_name") or "").strip() or None
+-        index_id = str(params.get("index_id") or "").strip() or None
+-        try:
+-            from app.fastapi_routes.excel_vector import get_excel_vector_ingest_app_service
++    from app.application.excel_vector_app_service import (
++        get_excel_vector_ingest_app_service,
++        get_excel_vector_search_app_service,
++    )
++    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
+ 
+-            result = get_excel_vector_ingest_app_service().ingest_excel(
+-                file_path=file_path, index_name=index_name, index_id=index_id
++    try:
++        if action == "execute":
++            file_path = str(params.get("file_path") or "").strip()
++            if not file_path:
++                return {"success": False, "message": "缺少 file_path"}
++            result = get_excel_vector_ingest_app_service(
++                runtime_context=runtime_context
++            ).ingest_excel(
++                file_path=file_path,
++                index_name=str(params.get("index_name") or "").strip() or None,
++                index_id=str(params.get("index_id") or "").strip() or None,
+             )
+-        except RECOVERABLE_ERRORS as err:
+-            logger.error("excel_vector_index 执行失败: %s", err, exc_info=True)
+-            return {"success": False, "message": str(err), "error_code": "excel_vector_exception"}
+-        payload = dict(result or {})
+-        if payload.get("success") and payload.get("index_id"):
+-            payload["excel_vector_index_id"] = payload.get("index_id")
+-            payload["excel_index_id"] = payload.get("index_id")
+-        return payload
+-    if action == "query":
+-        index_id = str(params.get("index_id") or "").strip()
+-        query_text = str(params.get("query") or params.get("query_text") or "").strip()
+-        if not index_id:
+-            return {"success": False, "message": "缺少 index_id"}
+-        if not query_text:
+-            return {"success": False, "message": "缺少 query"}
+-        try:
+-            top_k = int(params.get("top_k", 5))
+-        except (TypeError, ValueError):
+-            top_k = 5
+-        try:
+-            from app.fastapi_routes.excel_vector import get_excel_vector_search_app_service
+-
++            payload = dict(result or {})
++            if payload.get("success") and payload.get("index_id"):
++                payload["excel_vector_index_id"] = payload["index_id"]
++                payload["excel_index_id"] = payload["index_id"]
++            return payload
++        if action == "query":
++            index_id = str(params.get("index_id") or "").strip()
++            query_text = str(params.get("query") or params.get("query_text") or "").strip()
++            if not index_id:
++                return {"success": False, "message": "缺少 index_id"}
++            if not query_text:
++                return {"success": False, "message": "缺少 query"}
++            try:
++                top_k = int(params.get("top_k", 5))
++            except (TypeError, ValueError):
++                top_k = 5
+             return dict(
+-                get_excel_vector_search_app_service().query(
++                get_excel_vector_search_app_service(runtime_context=runtime_context).query(
+                     index_id=index_id, query_text=query_text, top_k=top_k
+                 )
+                 or {}
+             )
+-        except RECOVERABLE_ERRORS as err:
+-            logger.error("excel_vector_index query 失败: %s", err, exc_info=True)
+-            return {"success": False, "message": str(err), "error_code": "excel_vector_exception"}
+-    return {"success": False, "message": f"未知 excel_vector_index action: {action}"}
++        if action in {"list", "delete"}:
++            service = get_excel_vector_search_app_service(runtime_context=runtime_context)
++            return (
++                service.list_indexes()
++                if action == "list"
++                else service.delete_index(params["index_id"])
++            )
++        return {"success": False, "message": f"未知 excel_vector_index action: {action}"}
++    except AgentModAuthorizationError:
++        return {
++            "success": False,
++            "error_code": "tool_permission_denied",
++            "message": "向量索引未授权",
++            "http_status_code": 403,
++        }
++    except ValueError:
++        return {
++            "success": False,
++            "error_code": "excel_vector_input_invalid",
++            "message": "向量索引参数或文件无效",
++            "http_status_code": 400,
++        }
++    except RECOVERABLE_ERRORS:
++        logger.warning("Excel vector service unavailable")
++        return {
++            "success": False,
++            "error_code": "excel_vector_exception",
++            "message": "向量索引服务不可用",
++            "http_status_code": 503,
++        }
+diff --git a/FHD/app/fastapi_routes/excel_vector.py b/FHD/app/fastapi_routes/excel_vector.py
+index 30d6d61e37..bf893f0be4 100755
+--- a/FHD/app/fastapi_routes/excel_vector.py
++++ b/FHD/app/fastapi_routes/excel_vector.py
+@@ -1,238 +1,133 @@
+-"""Excel 向量索引 API（自归档 excel_vector 蓝图迁移）。"""
++"""Owner-scoped Excel vector actions through the reviewed Agent runtime."""
+ 
+ from __future__ import annotations
+ 
+ import logging
++import os
+ from pathlib import Path
+-from typing import Any, cast
++from typing import Any
+ from uuid import uuid4
+ 
+-from fastapi import APIRouter, Body, Request, UploadFile
++from fastapi import APIRouter, Body, HTTPException, Request
+ from fastapi.responses import JSONResponse
+ 
+-from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
++from app.fastapi_routes.domains.agent.route_support import (
++    agent_http_status,
++    agent_node_output,
++    request_runtime_context,
++    start_registered_http_action,
++)
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+-from app.utils.path_io.path_utils import get_upload_dir
+ 
+ logger = logging.getLogger(__name__)
+-_EXCEL_VECTOR_UNAVAILABLE = "Excel 向量服务暂时不可用，请稍后重试"
+-
+ router = APIRouter(prefix="/api/excel/vector", tags=["excel-vector"])
+ 
+-__all__ = [
+-    "get_excel_vector_ingest_app_service",
+-    "get_excel_vector_search_app_service",
+-    "router",
+-]
+-
+-
+-def _excel_vector_user_id(request: Request | None) -> str:
+-    if request is None:
+-        return "excel-vector-route"
+-    return str(
+-        request.headers.get("X-User-Id")
+-        or request.headers.get("X-User-ID")
+-        or request.headers.get("X-Workspace-Id")
+-        or "excel-vector-route"
+-    ).strip()
+-
+-
+-def _run_excel_vector_agent(
+-    *,
+-    request: Request | None,
+-    action: str,
+-    node_id: str,
+-    message: str,
+-    params: dict[str, Any],
+-) -> Any:
+-    from app.application.agent_orchestrator import AgentOrchestrator
+-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+-
+-    plan = PlanGraph(
+-        plan_id=f"excel_vector_{action}",
+-        intent=f"excel_vector_{action}",
+-        todo_steps=["通过 AgentOrchestrator 执行 Excel 向量工具"],
+-        nodes=[
+-            WorkflowNode(
+-                node_id=node_id,
+-                tool_id="excel_vector_index",
+-                action=action,
+-                params=dict(params or {}),
+-                risk="low",
+-                idempotent=True,
+-                description="Execute Excel vector indexing/query through the unified Agent runtime.",
+-            )
+-        ],
+-        risk_level="low",
+-        metadata={
+-            "source": "excel_vector_route",
+-            "route": "/api/excel/vector",
+-        },
+-    )
+-    return AgentOrchestrator().start_run_from_plan(
+-        user_id=_excel_vector_user_id(request),
++
++def _run_excel_vector_agent(*, request, action, node_id, message, params):
++    run, _ = start_registered_http_action(
++        request=request,
++        tool_id="excel_vector_index",
++        action=action,
++        params=params,
++        source="excel_vector_route",
++        route_path="/api/excel/vector",
++        node_id=node_id,
+         message=message,
+-        plan=plan,
+-        runtime_context={
+-            "source": "excel_vector_route",
+-            "route_action": action,
+-            "request_path": str(getattr(getattr(request, "url", None), "path", "") or ""),
+-        },
+     )
++    return run
+ 
+ 
+-def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
+-    final_output = getattr(run, "final_output", None)
+-    node_outputs = dict((final_output or {}).get("node_outputs") or {})
+-    output = dict(node_outputs.get(node_id) or {})
+-    if not output:
+-        for step in getattr(run, "steps", []) or []:
+-            if str(getattr(step, "node_id", "")) == node_id:
+-                output = dict(getattr(step, "output", {}) or {})
+-                break
+-    if not output:
+-        output = {"success": getattr(run, "status", "") == "completed"}
+-    if not output.get("success") and getattr(run, "error", False) and not output.get("message"):
+-        output["message"] = getattr(run, "error", False)
+-    run_id = str(getattr(run, "run_id", "") or "")
+-    if run_id:
+-        output["run_id"] = run_id
+-        output["agent_run_id"] = run_id
+-    output["agent_status"] = str(getattr(run, "status", "") or "")
+-    return output
+-
+-
+-def _excel_vector_status(payload: dict[str, Any]) -> int:
+-    if payload.get("success"):
+-        return 200
+-    if str(payload.get("error_code") or "") == "excel_vector_exception":
+-        return 500
+-    return 400
++def _response(request, action, params):
++    node_id = "excel_vector_" + action
++    run = _run_excel_vector_agent(
++        request=request,
++        action=action,
++        node_id=node_id,
++        message="Excel vector " + action,
++        params=params,
++    )
++    output = agent_node_output(run, node_id)
++    return JSONResponse(output, status_code=agent_http_status(output))
+ 
+ 
+ @router.post("/ingest")
+ async def ingest_excel_vector(request: Request):
+-    upload_file: UploadFile | None = None
+-    file_path = ""
+-    cleanup_path: Path | None = None
++    from app.application.employee_runtime.loader import employee_owner_workspace
++    from app.application.excel_vector_app_service import (
++        MAX_EXCEL_VECTOR_BYTES,
++        read_owned_excel_bytes,
++    )
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++    from app.infrastructure.auth.agent_mod_scope import authorize_agent_tool
++    from app.infrastructure.workspace import workspace_root
++
++    context = request_runtime_context(request)
++    if denied := authorize_agent_tool("excel_vector_index", "execute", {}, context):
++        raise HTTPException(403, denied)
++    upload = None
+     try:
+-        payload: dict[str, Any] = {}
+-
+-        ct = (request.headers.get("content-type") or "").lower()
+-        if "multipart/form-data" in ct:
++        if "multipart/form-data" in (request.headers.get("content-type") or "").lower():
+             form = await request.form()
+             upload = form.get("excel_file")
+-            if upload is not None and hasattr(upload, "filename") and upload.filename:
+-                upload_file = cast("UploadFile", upload)
+-                if not str(upload_file.filename).lower().endswith((".xlsx", ".xls")):
+-                    return JSONResponse(
+-                        {"success": False, "message": "只支持 .xlsx/.xls 文件"}, status_code=400
+-                    )
+-                suffix = ".xls" if str(upload_file.filename).lower().endswith(".xls") else ".xlsx"
+-                cleanup_path = Path(get_upload_dir()).resolve() / f"vector_{uuid4().hex}{suffix}"
+-                file_path = str(cleanup_path)
+-                body = await upload_file.read()
+-                with cleanup_path.open("wb") as f:
+-                    f.write(body)
+-                payload = {
+-                    k: v for k, v in form.items() if k != "excel_file" and isinstance(v, str)
+-                }
+-            else:
+-                return JSONResponse(
+-                    {"success": False, "message": "请选择 Excel 文件"}, status_code=400
++            filename = str(getattr(upload, "filename", "") or "")
++            suffix = Path(filename).suffix.lower()
++            if suffix not in {".xlsx", ".xls"}:
++                raise HTTPException(400, "请选择 .xlsx/.xls 文件")
++            blob = await upload.read(MAX_EXCEL_VECTOR_BYTES + 1)
++            if len(blob) > MAX_EXCEL_VECTOR_BYTES:
++                raise HTTPException(413, "Excel 文件过大")
++            folder = employee_owner_workspace(context)
++            parent = _open_directory_under_root(workspace_root(), folder, create=True)
++            name = f"vector-{uuid4().hex}{suffix}"
++            try:
++                descriptor = os.open(
++                    name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent
+                 )
++                with os.fdopen(descriptor, "wb") as stream:
++                    stream.write(blob)
++            finally:
++                os.close(parent)
++            payload = {key: value for key, value in form.items() if isinstance(value, str)}
++            file_path = str(folder / name)
+         else:
+-            try:
+-                payload = await request.json()
+-            except RECOVERABLE_ERRORS:
+-                payload = {}
++            payload = await request.json()
++            if not isinstance(payload, dict):
++                raise HTTPException(400, "请求须为对象")
+             file_path = str(payload.get("file_path") or "").strip()
+-            if not file_path:
+-                return JSONResponse(
+-                    {"success": False, "message": "请提供 file_path 或上传 excel_file"},
+-                    status_code=400,
+-                )
+-
+-        index_name = str(payload.get("index_name") or "").strip() or None
+-        index_id = str(payload.get("index_id") or "").strip() or None
+-
+-        run = _run_excel_vector_agent(
+-            request=request,
+-            action="execute",
+-            node_id="excel_vector_ingest",
+-            message=f"Excel vector ingest: {index_name or index_id or file_path}",
+-            params={
++        if not file_path:
++            raise HTTPException(400, "请提供 file_path 或上传 excel_file")
++        read_owned_excel_bytes(file_path, context)
++        return _response(
++            request,
++            "execute",
++            {
+                 "file_path": file_path,
+-                "index_name": index_name or "",
+-                "index_id": index_id or "",
++                "index_name": str(payload.get("index_name") or ""),
++                "index_id": str(payload.get("index_id") or ""),
+             },
+         )
+-        result = _agent_node_output(run, "excel_vector_ingest")
+-        status = _excel_vector_status(result)
+-        return JSONResponse(result, status_code=status)
++    except HTTPException:
++        raise
++    except (ValueError, OSError):
++        raise HTTPException(403, "Excel 文件不可用或不属于当前账号") from None
+     except RECOVERABLE_ERRORS:
+-        logger.exception("Excel 向量化 ingest 失败")
+-        return JSONResponse(
+-            {"success": False, "message": "Excel 向量化服务暂时不可用，请稍后重试"},
+-            status_code=500,
+-        )
++        logger.warning("Excel vector request failed")
++        raise HTTPException(503, "Excel 向量服务暂时不可用") from None
+     finally:
+-        if cleanup_path is not None:
+-            try:
+-                cleanup_path.unlink(missing_ok=True)
+-            except OSError:
+-                logger.warning("清理 Excel 向量上传临时文件失败")
+-        if upload_file is not None:
+-            try:
+-                await upload_file.close()
+-            except RECOVERABLE_ERRORS:
+-                logger.warning("关闭 Excel 向量上传文件失败", exc_info=True)
++        if upload is not None and hasattr(upload, "close"):
++            await upload.close()
+ 
+ 
+ @router.post("/query")
+ def query_excel_vector(request: Request, data: dict[str, Any] = Body(default_factory=dict)):
+-    try:
+-        index_id = str(data.get("index_id") or "").strip()
+-        query_text = str(data.get("query") or "").strip()
+-        top_k = int(data.get("top_k", 5))
+-        run = _run_excel_vector_agent(
+-            request=request,
+-            action="query",
+-            node_id="excel_vector_query",
+-            message=f"Excel vector query: {query_text}",
+-            params={"index_id": index_id, "query": query_text, "top_k": top_k},
+-        )
+-        result = _agent_node_output(run, "excel_vector_query")
+-        status = _excel_vector_status(result)
+-        return JSONResponse(result, status_code=status)
+-    except RECOVERABLE_ERRORS:
+-        logger.exception("Excel 向量 query 失败")
+-        return JSONResponse(
+-            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+-        )
++    return _response(request, "query", data)
+ 
+ 
+ @router.get("/indexes")
+-def list_excel_vector_indexes():
+-    try:
+-        search_service = get_excel_vector_search_app_service()
+-        return JSONResponse(search_service.list_indexes())
+-    except RECOVERABLE_ERRORS:
+-        logger.exception("获取向量索引失败")
+-        return JSONResponse(
+-            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+-        )
++def list_excel_vector_indexes(request: Request):
++    return _response(request, "list", {})
+ 
+ 
+ @router.delete("/indexes/{index_id}")
+-def delete_excel_vector_index(index_id: str):
+-    try:
+-        search_service = get_excel_vector_search_app_service()
+-        result = search_service.delete_index(index_id=index_id)
+-        status = 200 if result.get("success") else 404
+-        return JSONResponse(result, status_code=status)
+-    except RECOVERABLE_ERRORS:
+-        logger.exception("删除向量索引失败")
+-        return JSONResponse(
+-            {"success": False, "message": _EXCEL_VECTOR_UNAVAILABLE}, status_code=500
+-        )
++def delete_excel_vector_index(request: Request, index_id: str):
++    return _response(request, "delete", {"index_id": index_id})
+diff --git a/FHD/config/risk_actions.registry.json b/FHD/config/risk_actions.registry.json
+index 0ed48d2702..1feac5aa9b 100644
+--- a/FHD/config/risk_actions.registry.json
++++ b/FHD/config/risk_actions.registry.json
+@@ -949,13 +949,14 @@
+       "availability": "shared",
+       "actions": {
+         "execute": {
+-          "risk": "low",
+-          "idempotent": true,
++          "risk": "high",
++          "idempotent": false,
+           "required_params": [
+             "file_path"
+           ],
+           "availability": "shared",
+-          "timeout_seconds": 120
++          "timeout_seconds": 120,
++          "read_only": false
+         },
+         "query": {
+           "risk": "low",
+@@ -964,6 +965,23 @@
+             "index_id",
+             "query"
+           ],
++          "availability": "shared",
++          "read_only": true
++        },
++        "list": {
++          "risk": "low",
++          "idempotent": true,
++          "read_only": true,
++          "required_params": [],
++          "availability": "shared"
++        },
++        "delete": {
++          "risk": "high",
++          "idempotent": false,
++          "read_only": false,
++          "required_params": [
++            "index_id"
++          ],
+           "availability": "shared"
+         }
+       }
+diff --git a/FHD/tests/fixtures/excel_vector.py b/FHD/tests/fixtures/excel_vector.py
+new file mode 100644
+index 0000000000..19449a0330
+--- /dev/null
++++ b/FHD/tests/fixtures/excel_vector.py
+@@ -0,0 +1,55 @@
++"""Real owner-scoped SQLite/XLSX/Principal fixture; embedding transport stays local."""
++
++from types import SimpleNamespace
++
++import pandas as pd
++import pytest
++
++from app.application import excel_vector_app_service as vector
++from app.application.employee_runtime.loader import employee_owner_workspace
++from app.fastapi_routes.excel_vector import router
++from tests.fixtures.backend_ci_isolation import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++
++
++@pytest.fixture
++def excel_vector_case(tmp_path, monkeypatch, trusted_actor, reviewed_agent_http):
++    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path / "workspace"))
++    monkeypatch.setenv("EXCEL_VECTOR_DB_PATH", str(tmp_path / "vectors.sqlite"))
++    monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "1")
++    monkeypatch.setenv("FHD_EMBEDDING_MODE", "disabled")
++    for name in (
++        "_vector_store_instance",
++        "_sqlite_vector_store_instance",
++        "_pg_vector_store_instance",
++    ):
++        monkeypatch.setattr(vector, name, None)
++    embedder = vector.HashEmbedder()
++    monkeypatch.setattr(vector, "_get_default_embedder", lambda: embedder)
++    owner = trusted_actor(user_id=41, mod_id="vector-a")
++    same_tenant = trusted_actor(user_id=42, mod_id="vector-a")
++    other_tenant = trusted_actor(user_id=43, tenant_id=99, mod_id="vector-a")
++    other_mod = trusted_actor(user_id=41, mod_id="vector-b")
++    http = reviewed_agent_http(owner, router)
++
++    def workbook(actor=owner, text="OWNER_A_PRIVATE_ROW"):
++        folder = employee_owner_workspace(actor.context)
++        folder.mkdir(parents=True, exist_ok=True)
++        path = folder / "private.xlsx"
++        pd.DataFrame({"model": [text], "quantity": [17]}).to_excel(path, index=False)
++        return path
++
++    def seed(actor=owner, index_id="known-index", text="OWNER_A_PRIVATE_ROW"):
++        return vector.get_excel_vector_ingest_app_service(actor.context).ingest_excel(
++            str(workbook(actor, text)), index_id=index_id
++        )
++
++    return SimpleNamespace(
++        owner=owner,
++        others=[same_tenant, other_tenant, other_mod],
++        http=http,
++        workbook=workbook,
++        seed=seed,
++        root=tmp_path,
++        embedder=embedder,
++    )
+diff --git a/FHD/tests/test_application/test_excel_vector_agent_route.py b/FHD/tests/test_application/test_excel_vector_agent_route.py
+index 8cd7dae116..cb37363c5a 100644
+--- a/FHD/tests/test_application/test_excel_vector_agent_route.py
++++ b/FHD/tests/test_application/test_excel_vector_agent_route.py
+@@ -1,116 +1,59 @@
+ from __future__ import annotations
+ 
+-from unittest.mock import Mock, patch
++from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
++from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.excel_vector import trusted_actor as trusted_actor
+ 
+-from fastapi import FastAPI
+-from fastapi.testclient import TestClient
+ 
+-from app.application.agent_orchestrator import InMemoryAgentRunRepository
+-
+-
+-def _client() -> TestClient:
+-    from app.fastapi_routes.excel_vector import router
+-
+-    app = FastAPI()
+-    app.include_router(router)
+-    return TestClient(app, raise_server_exceptions=False)
+-
+-
+-def test_excel_vector_ingest_route_executes_through_agent_orchestrator(
+-    tmp_path, monkeypatch, local_tools
+-) -> None:
+-    from app.application.dataset_rag_app_service import reset_dataset_rag_app_service_for_tests
+-
+-    repo = InMemoryAgentRunRepository()
+-    ingest_service = Mock()
+-    ingest_service.ingest_excel.return_value = {
+-        "success": True,
+-        "index_id": "idx-agent",
+-        "chunk_count": 2,
+-        "row_count": 8,
+-    }
+-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+-    reset_dataset_rag_app_service_for_tests()
+-
+-    with (
+-        patch(
+-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-            return_value=repo,
+-        ),
+-        patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=ingest_service,
+-        ),
+-    ):
+-        response = _client().post(
+-            "/api/excel/vector/ingest",
+-            json={"file_path": "/tmp/products.xlsx", "index_name": "products"},
+-            headers={"X-User-Id": "tenant-a"},
+-        )
+-
+-    assert response.status_code == 200
+-    payload = response.json()
++def _assert_trace(run, actor, action):
++    assert run is not None
++    assert run.user_id == str(actor.user_id)
++    assert run.status == "completed"
++    assert run.intent == "excel_vector_" + action
++    call = run.tool_calls[0]
++    assert call.tool_id == "excel_vector_index"
++    assert call.action == action
++    assert call.permission == "tool.excel_vector_index." + action
++    assert call.cost_units == (2 if action == "execute" else 1)
++
++
++def test_excel_vector_ingest_route_executes_through_agent_orchestrator(excel_vector_case) -> None:
++    response = excel_vector_case.http.request(
++        "POST",
++        "/api/excel/vector/ingest",
++        json={
++            "file_path": str(excel_vector_case.workbook()),
++            "index_name": "products",
++            "index_id": "idx-agent",
++        },
++    )
++    assert response.response.status_code == 202
++    payload = response.receipt
+     assert payload["success"] is True
+     assert payload["index_id"] == "idx-agent"
+     assert payload["excel_vector_index_id"] == "idx-agent"
++    assert payload["business_verification"]["verified"] is True
++    assert response.response.json()["agent_run_id"] == response.response.json()["run_id"]
++    _assert_trace(response.run, excel_vector_case.owner, "execute")
++    assert response.run.tool_calls[0].params["index_name"] == "products"
++
++
++def test_excel_vector_query_route_executes_through_agent_orchestrator(excel_vector_case) -> None:
++    excel_vector_case.seed(index_id="idx-agent", text="5003")
++    response = excel_vector_case.http.request(
++        "POST",
++        "/api/excel/vector/query",
++        json={"index_id": "idx-agent", "query": "5003", "top_k": 3},
++    )
++    assert response.response.status_code == 200
++    payload = response.output
++    assert payload["success"] is True
++    assert "5003" in payload["hits"][0]["content"]
+     assert payload["agent_run_id"] == payload["run_id"]
+-
+-    run = repo.get(payload["run_id"])
+-    assert run is not None
+-    assert run.user_id == "tenant-a"
+-    assert run.status == "completed"
+-    assert run.intent == "excel_vector_execute"
+-    assert run.tool_calls[0].tool_id == "excel_vector_index"
+-    assert run.tool_calls[0].action == "execute"
+-    assert run.tool_calls[0].permission == "tool.excel_vector_index.execute"
+-    assert run.tool_calls[0].cost_units == 1
+-
+-
+-def test_excel_vector_query_route_executes_through_agent_orchestrator(
+-    tmp_path, monkeypatch, local_tools
+-) -> None:
+-    repo = InMemoryAgentRunRepository()
+-    search_service = Mock()
+-    search_service.query.return_value = {
+-        "success": True,
++    assert payload["index_id"] == "idx-agent" and payload["top_k"] == 3
++    _assert_trace(response.run, excel_vector_case.owner, "query")
++    assert response.run.tool_calls[0].params == {
+         "index_id": "idx-agent",
+         "query": "5003",
+-        "hits": [{"score": 0.91, "row": {"model_number": "5003"}}],
++        "top_k": 3,
+     }
+-    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
+-    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+-    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
+-
+-    with (
+-        patch(
+-            "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-            return_value=repo,
+-        ),
+-        patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=search_service,
+-        ),
+-    ):
+-        response = _client().post(
+-            "/api/excel/vector/query",
+-            json={"index_id": "idx-agent", "query": "5003", "top_k": 3},
+-            headers={"X-User-Id": "tenant-a"},
+-        )
+-
+-    assert response.status_code == 200
+-    payload = response.json()
+-    assert payload["success"] is True
+-    assert payload["hits"][0]["row"]["model_number"] == "5003"
+-    assert payload["agent_run_id"] == payload["run_id"]
+-    search_service.query.assert_called_once_with(index_id="idx-agent", query_text="5003", top_k=3)
+-
+-    run = repo.get(payload["run_id"])
+-    assert run is not None
+-    assert run.status == "completed"
+-    assert run.intent == "excel_vector_query"
+-    assert run.tool_calls[0].tool_id == "excel_vector_index"
+-    assert run.tool_calls[0].action == "query"
+-    assert run.tool_calls[0].permission == "tool.excel_vector_index.query"
+-    assert run.tool_calls[0].cost_units == 1
+diff --git a/FHD/tests/test_application/test_excel_vector_app_service_branch_cov.py b/FHD/tests/test_application/test_excel_vector_app_service_branch_cov.py
+index c223d65f6d..ea4e0ac4c0 100644
+--- a/FHD/tests/test_application/test_excel_vector_app_service_branch_cov.py
++++ b/FHD/tests/test_application/test_excel_vector_app_service_branch_cov.py
+@@ -49,11 +49,11 @@ from app.application.excel_vector_app_service import (
+     ExcelVectorSearchApplicationService,
+     HashEmbedder,
+     _default_vector_db_path,
++    _get_raw_vector_store,
+     get_excel_vector_ingest_app_service,
+     get_excel_vector_search_app_service,
+     get_pg_vector_store,
+     get_sqlite_vector_store,
+-    get_vector_store,
+ )
+ 
+ # ---------------------------------------------------------------------------
+@@ -642,7 +642,7 @@ class TestVectorStoreFactoryBranches:
+     def test_get_vector_store_returns_existing_instance(self):
+         mock_store = MagicMock()
+         with patch.object(evas_mod, "_vector_store_instance", mock_store):
+-            result = get_vector_store()
++            result = _get_raw_vector_store()
+         assert result is mock_store
+ 
+     def test_get_vector_store_sqlite_fallback_enabled(self, monkeypatch):
+@@ -652,7 +652,7 @@ class TestVectorStoreFactoryBranches:
+             patch.object(evas_mod, "_vector_store_instance", None),
+             patch.object(evas_mod, "get_sqlite_vector_store", return_value=mock_sqlite),
+         ):
+-            result = get_vector_store()
++            result = _get_raw_vector_store()
+         assert result is mock_sqlite
+ 
+     def test_get_vector_store_sqlite_fallback_disabled(self, monkeypatch):
+@@ -664,7 +664,7 @@ class TestVectorStoreFactoryBranches:
+             patch.object(evas_mod, "_vector_store_instance", None),
+             patch.object(evas_mod, "get_pg_vector_store", return_value=mock_pg),
+         ):
+-            result = get_vector_store()
++            result = _get_raw_vector_store()
+         assert result is mock_pg
+ 
+     def test_get_vector_store_sqlite_fallback_empty_string(self, monkeypatch):
+@@ -677,7 +677,7 @@ class TestVectorStoreFactoryBranches:
+             patch.object(evas_mod, "_vector_store_instance", None),
+             patch.object(evas_mod, "get_pg_vector_store", return_value=mock_pg),
+         ):
+-            result = get_vector_store()
++            result = _get_raw_vector_store()
+         assert result is mock_pg
+ 
+     def test_get_vector_store_sqlite_url_auto_downgrades(self, monkeypatch):
+@@ -691,7 +691,7 @@ class TestVectorStoreFactoryBranches:
+             patch.object(evas_mod, "get_sqlite_vector_store", return_value=mock_sqlite),
+             patch.object(evas_mod, "get_pg_vector_store", side_effect=AssertionError("不该走 PG")),
+         ):
+-            result = get_vector_store()
++            result = _get_raw_vector_store()
+         assert result is mock_sqlite
+ 
+     def test_get_pg_vector_store_no_url_raises(self, monkeypatch):
+@@ -746,30 +746,33 @@ class TestVectorStoreFactoryBranches:
+ 
+ class TestAppServiceSingletonBranches:
+     def test_get_ingest_service_creates_instance(self):
+-        with patch.object(evas_mod, "_excel_vector_ingest_service_instance", None):
+-            with patch.object(evas_mod, "get_vector_store", return_value=MagicMock()):
+-                svc = get_excel_vector_ingest_app_service()
+-                assert svc is not None
+-                assert isinstance(svc, ExcelVectorIngestApplicationService)
++        with patch.object(evas_mod, "get_vector_store", return_value=MagicMock()) as store:
++            svc = get_excel_vector_ingest_app_service({"user_id": "a"})
++        assert isinstance(svc, ExcelVectorIngestApplicationService)
++        store.assert_called_once_with({"user_id": "a"})
++        assert svc._runtime_context == {"user_id": "a"}
+ 
+     def test_get_ingest_service_returns_existing(self):
+-        mock_svc = MagicMock()
+-        with patch.object(evas_mod, "_excel_vector_ingest_service_instance", mock_svc):
+-            result = get_excel_vector_ingest_app_service()
+-            assert result is mock_svc
++        # Service state must never be reused across actors; only the raw storage connection is shared.
++        with patch.object(evas_mod, "get_vector_store", side_effect=[MagicMock(), MagicMock()]):
++            first = get_excel_vector_ingest_app_service({"user_id": "a"})
++            second = get_excel_vector_ingest_app_service({"user_id": "b"})
++        assert first is not second
++        assert first._vector_store is not second._vector_store
++        assert second._runtime_context == {"user_id": "b"}
+ 
+     def test_get_search_service_creates_instance(self):
+-        with patch.object(evas_mod, "_excel_vector_search_service_instance", None):
+-            with patch.object(evas_mod, "get_vector_store", return_value=MagicMock()):
+-                svc = get_excel_vector_search_app_service()
+-                assert svc is not None
+-                assert isinstance(svc, ExcelVectorSearchApplicationService)
++        with patch.object(evas_mod, "get_vector_store", return_value=MagicMock()) as store:
++            svc = get_excel_vector_search_app_service({"user_id": "a"})
++        assert isinstance(svc, ExcelVectorSearchApplicationService)
++        store.assert_called_once_with({"user_id": "a"})
+ 
+     def test_get_search_service_returns_existing(self):
+-        mock_svc = MagicMock()
+-        with patch.object(evas_mod, "_excel_vector_search_service_instance", mock_svc):
+-            result = get_excel_vector_search_app_service()
+-            assert result is mock_svc
++        with patch.object(evas_mod, "get_vector_store", side_effect=[MagicMock(), MagicMock()]):
++            first = get_excel_vector_search_app_service({"user_id": "a"})
++            second = get_excel_vector_search_app_service({"user_id": "b"})
++        assert first is not second
++        assert first._vector_store is not second._vector_store
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/FHD/tests/test_application/test_excel_vector_scope.py b/FHD/tests/test_application/test_excel_vector_scope.py
+new file mode 100644
+index 0000000000..d6b813e824
+--- /dev/null
++++ b/FHD/tests/test_application/test_excel_vector_scope.py
+@@ -0,0 +1,485 @@
++"""Real SQLite/XLSX ownership, HTTP approval and synthetic embedding transport."""
++
++import json
++import os
++import subprocess
++import sys
++from io import BytesIO
++from pathlib import Path
++
++import pandas as pd
++import pytest
++
++from app.application import excel_vector_app_service as vector
++from app.application.ai_chat.context_enrichment import inject_excel_vector_context
++from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
++from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.excel_vector import trusted_actor as trusted_actor
++
++
++@pytest.mark.parametrize(
++    "method,path,payload",
++    [
++        ("GET", "/api/excel/vector/indexes", None),
++        ("DELETE", "/api/excel/vector/indexes/known-index", None),
++        ("POST", "/api/excel/vector/query", {"index_id": "known-index", "query": "private"}),
++        ("POST", "/api/excel/vector/ingest", {"file_path": "/tmp/private.xlsx"}),
++    ],
++)
++def test_unsigned_http_never_lists_reads_deletes_or_uploads(
++    excel_vector_case, method, path, payload
++):
++    excel_vector_case.seed()
++    response = excel_vector_case.http.client.request(
++        method, path, json=payload, headers={"X-User-Id": "41", "X-Session-ID": ""}
++    )
++    assert response.status_code in {401, 403}, response.text
++    assert "OWNER_A_PRIVATE_ROW" not in response.text
++    assert (
++        len(
++            vector.get_excel_vector_search_app_service(
++                excel_vector_case.owner.context
++            ).list_indexes()["indexes"]
++        )
++        == 1
++    )
++
++
++@pytest.mark.parametrize("other", [0, 1, 2])
++def test_known_id_http_chat_and_delete_do_not_cross_actor_tenant_or_mod(excel_vector_case, other):
++    excel_vector_case.seed()
++    actor = excel_vector_case.others[other]
++    headers = {**actor.headers, "X-User-Id": str(excel_vector_case.owner.user_id)}
++    indexes = excel_vector_case.http.client.get("/api/excel/vector/indexes", headers=headers)
++    assert indexes.status_code == 200, indexes.text
++    assert indexes.json()["indexes"] == []
++    queried = excel_vector_case.http.client.post(
++        "/api/excel/vector/query",
++        json={"index_id": "known-index", "query": "private"},
++        headers=headers,
++    )
++    assert queried.status_code == 200, queried.text
++    assert queried.json()["hits"] == []
++    context = inject_excel_vector_context(
++        "private",
++        {
++            **actor.context,
++            "excel_index_id": "known-index",
++            "excel_vector_context": {"hits": ["stale-owner-data"]},
++        },
++    )
++    assert context["excel_vector_context"]["hits"] == []
++    deleted = excel_vector_case.http.request(
++        "DELETE", "/api/excel/vector/indexes/known-index", headers=headers
++    )
++    assert deleted.response.status_code == 202, deleted.response.text
++    assert deleted.receipt["success"] is False
++    own = excel_vector_case.http.client.post(
++        "/api/excel/vector/query", json={"index_id": "known-index", "query": "private"}
++    )
++    assert "OWNER_A_PRIVATE_ROW" in own.text
++    assert "excel-owner-v1:" not in own.text
++    assert "proof" not in own.text and "_actor_authorization" not in own.text
++
++
++def test_real_uploaded_xlsx_waits_for_formal_grant_then_independent_readback(excel_vector_case):
++    blob = BytesIO()
++    pd.DataFrame({"product": ["SYNTHETIC_XLSX"], "quantity": [9]}).to_excel(blob, index=False)
++    pending = excel_vector_case.http.client.post(
++        "/api/excel/vector/ingest",
++        files={"excel_file": ("input.xlsx", blob.getvalue())},
++        data={"index_id": "reviewed-index"},
++    )
++    assert pending.status_code == 202, pending.text
++    run_id = pending.json()["run_id"]
++    run = excel_vector_case.http.repository.get(run_id)
++    assert run.status == "waiting_user"
++    assert Path(run.steps[0].params["file_path"]).is_file()
++    assert (
++        vector.get_excel_vector_search_app_service(excel_vector_case.owner.context).list_indexes()[
++            "indexes"
++        ]
++        == []
++    )
++    review = excel_vector_case.http.client.get(f"/api/agent/runs/{run_id}")
++    resumed = excel_vector_case.http.client.post(
++        f"/api/agent/runs/{run_id}/continue",
++        json={"approval_grant": review.json()["approval"]["grant"]},
++    )
++    assert resumed.status_code == 202, resumed.text
++    claim = excel_vector_case.http.queue.claim("vector-test", lease_seconds=60)
++    assert claim.run_id == run_id
++    from app.application.agent_orchestrator import AgentOrchestrator
++
++    completed = AgentOrchestrator().execute_dispatched_run(run_id)
++    assert completed.status == "completed", completed.to_dict()
++    output = completed.steps[0].output
++    assert output["business_verification"]["verified"] is True
++    assert output["index_id"] == "reviewed-index"
++    queried = excel_vector_case.http.client.post(
++        "/api/excel/vector/query", json={"index_id": "reviewed-index", "query": "SYNTHETIC_XLSX"}
++    )
++    assert queried.status_code == 200 and "SYNTHETIC_XLSX" in queried.text
++    store = vector.get_sqlite_vector_store()
++    with store._get_conn() as db:
++        assert (
++            db.execute("SELECT count(*) FROM excel_vector_chunks").fetchone()[0]
++            == output["chunk_count"]
++        )
++    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
++
++    step = completed.steps[0]
++    context = {
++        **completed.metadata["runtime_context"],
++        "run_id": run_id,
++        "step_id": step.step_id,
++        "node_id": step.node_id,
++    }
++    before = store.list_indexes()
++    replayed = AgentToolExecutor().execute(step, runtime_context=context)
++    assert replayed["success"] is True and replayed["index_id"] == "reviewed-index"
++    assert store.list_indexes() == before
++
++
++@pytest.mark.parametrize(
++    "kind", ["traversal", "symlink", "parent-symlink", "hardlink", "other-owner"]
++)
++def test_ingest_pins_only_owner_regular_inputs(excel_vector_case, kind):
++    owned = excel_vector_case.workbook()
++    other = excel_vector_case.workbook(excel_vector_case.others[0], "OTHER_PRIVATE")
++    if kind == "traversal":
++        path = str(owned.parent) + "/../../" + other.relative_to(other.parents[2]).as_posix()
++    elif kind == "symlink":
++        path = owned.parent / "linked.xlsx"
++        path.symlink_to(other)
++    elif kind == "parent-symlink":
++        directory = owned.parent / "other-folder"
++        directory.symlink_to(other.parent, target_is_directory=True)
++        path = directory / other.name
++    elif kind == "hardlink":
++        path = owned.parent / "linked.xlsx"
++        os.link(other, path)
++    else:
++        path = other
++    response = excel_vector_case.http.client.post(
++        "/api/excel/vector/ingest", json={"file_path": str(path)}
++    )
++    assert response.status_code == 403, response.text
++    assert (
++        vector.get_excel_vector_search_app_service(excel_vector_case.owner.context).list_indexes()[
++            "indexes"
++        ]
++        == []
++    )
++
++
++@pytest.mark.parametrize("revocation", ["expiry", "account", "tenant", "mod", "permission"])
++def test_retained_service_rechecks_real_session_and_permissions_before_embedding(
++    excel_vector_case, revocation, monkeypatch
++):
++    from datetime import timedelta
++
++    from app.db.models.permission import Role
++    from app.db.models.user import Session as UserSession
++    from app.db.models.user import User
++    from app.infrastructure.auth.agent_mod_scope import AgentModAuthorizationError
++    from app.utils.time import utc_now_naive
++
++    excel_vector_case.seed()
++    retained = vector.get_excel_vector_search_app_service(excel_vector_case.owner.context)
++    calls = []
++    monkeypatch.setattr(excel_vector_case.embedder, "embed_query", lambda text: calls.append(text))
++    with excel_vector_case.owner.factory.begin() as db:
++        if revocation == "expiry":
++            db.get(UserSession, excel_vector_case.owner.session_row_id).expires_at = (
++                utc_now_naive() - timedelta(seconds=1)
++            )
++        elif revocation == "account":
++            db.get(User, excel_vector_case.owner.user_id).is_active = False
++        elif revocation == "tenant":
++            db.get(User, excel_vector_case.owner.user_id).tenant_id = 99
++        elif revocation == "mod":
++            db.get(UserSession, excel_vector_case.owner.session_row_id).entitled_mod_ids_json = "[]"
++        else:
++            role = db.query(Role).filter_by(name="user").one()
++            role.permissions = [p for p in role.permissions if p.code != "etl.read"]
++    with pytest.raises(AgentModAuthorizationError):
++        retained.query("known-index", "private")
++    assert calls == []
++    response = excel_vector_case.http.client.get("/api/excel/vector/indexes")
++    if revocation == "tenant":
++        # A fresh Principal can enter the account's new tenant; it cannot adopt the old namespace.
++        assert response.status_code == 200 and response.json()["indexes"] == []
++    else:
++        assert response.status_code in {401, 403}
++
++
++def test_restart_keeps_namespace_and_never_adopts_legacy_global_data(
++    excel_vector_case, monkeypatch
++):
++    excel_vector_case.seed()
++    raw = vector.get_sqlite_vector_store()
++    raw.create_or_update_index("legacy-global", "UNOWNED_LEGACY", "legacy.xlsx")
++    vector._vector_store_instance = vector._sqlite_vector_store_instance = None
++    own = vector.get_excel_vector_search_app_service(excel_vector_case.owner.context)
++    assert [row["index_id"] for row in own.list_indexes()["indexes"]] == ["known-index"]
++    assert own.query("legacy-global", "private")["hits"] == []
++    program = """import json,sys
++from app.application.excel_vector_app_service import get_excel_vector_search_app_service,HashEmbedder
++import app.application.excel_vector_app_service as v
++v._get_default_embedder=lambda:HashEmbedder()
++s=get_excel_vector_search_app_service(json.loads(sys.argv[1]))
++print(json.dumps(s.query('known-index','private'),ensure_ascii=False))
++"""
++    result = subprocess.run(
++        [sys.executable, "-c", program, json.dumps(excel_vector_case.owner.context)],
++        cwd=Path(__file__).resolve().parents[2],
++        env={**os.environ, "XCAGI_DESKTOP_MODE": "0"},
++        capture_output=True,
++        text=True,
++        timeout=30,
++    )
++    assert result.returncode == 0, result.stderr
++    assert "OWNER_A_PRIVATE_ROW" in json.loads(result.stdout)["hits"][0]["content"]
++    assert any(
++        row["index_id"] == "legacy-global"
++        for row in vector.get_sqlite_vector_store().list_indexes()
++    )
++
++
++def test_owner_delete_is_reviewed_and_verified_without_touching_other_namespace(excel_vector_case):
++    excel_vector_case.seed()
++    excel_vector_case.seed(excel_vector_case.others[0], text="OTHER_PRIVATE")
++    result = excel_vector_case.http.request("DELETE", "/api/excel/vector/indexes/known-index")
++    assert result.response.status_code == 202
++    assert result.run.status == "completed"
++    assert result.receipt["success"] is True
++    assert result.receipt["business_verification"]["verified"] is True
++    assert (
++        vector.get_excel_vector_search_app_service(excel_vector_case.owner.context).list_indexes()[
++            "indexes"
++        ]
++        == []
++    )
++    other = vector.get_excel_vector_search_app_service(excel_vector_case.others[0].context).query(
++        "known-index", "private"
++    )
++    assert "OTHER_PRIVATE" in other["hits"][0]["content"]
++
++
++@pytest.mark.parametrize(
++    "corruption", ["content", "metadata", "source", "name", "chunk_id", "count", "other-scope"]
++)
++def test_independent_readback_rejects_forged_success_and_mismatched_rows(
++    excel_vector_case, corruption
++):
++    output = excel_vector_case.seed()
++    params = {"file_path": str(excel_vector_case.workbook()), "index_id": "known-index"}
++    scoped = vector.get_vector_store(excel_vector_case.owner.context)
++    key = scoped._key("known-index")
++    with vector.get_sqlite_vector_store()._get_conn() as db:
++        if corruption == "chunk_id":
++            db.execute(
++                "UPDATE excel_vector_chunks SET chunk_id = 'FORGED:' || chunk_id WHERE index_id = ?",
++                (key,),
++            )
++        elif corruption in {"content", "metadata"}:
++            db.execute(
++                f"UPDATE excel_vector_chunks SET {corruption} = ? WHERE index_id = ?",
++                ("{}" if corruption == "metadata" else "FORGED", key),
++            )
++        elif corruption in {"source", "name"}:
++            db.execute(
++                f"UPDATE excel_vector_indexes SET {'source_file' if corruption == 'source' else 'name'} = ? WHERE index_id = ?",
++                ("FORGED", key),
++            )
++        db.commit()
++    if corruption == "count":
++        output["chunk_count"] += 1
++    context = (
++        excel_vector_case.others[0].context
++        if corruption == "other-scope"
++        else excel_vector_case.owner.context
++    )
++    output["business_verification"] = {"verified": True, "method": "caller_flag"}
++    checked, verified = vector.verify_excel_vector_result("execute", params, output, context)
++    assert verified is False
++    assert checked["business_verification"] == {
++        "verified": False,
++        "method": "excel_vector_owner_readback",
++        "index_id": "known-index",
++    }
++
++
++def test_write_only_actor_can_complete_technical_readback_without_read_permission(
++    excel_vector_case,
++):
++    from app.db.models.permission import Role
++
++    with excel_vector_case.owner.factory.begin() as db:
++        role = db.query(Role).filter_by(name="user").one()
++        role.permissions = [p for p in role.permissions if p.code != "etl.read"]
++    result = excel_vector_case.http.request(
++        "POST",
++        "/api/excel/vector/ingest",
++        json={"file_path": str(excel_vector_case.workbook()), "index_id": "write-only"},
++    )
++    assert result.run.status == "completed", result.output
++    assert result.receipt["business_verification"]["verified"] is True
++    assert excel_vector_case.http.client.get("/api/excel/vector/indexes").status_code == 403
++
++
++def test_revocation_after_approval_prevents_background_dispatch(excel_vector_case, monkeypatch):
++    from app.application.agent_orchestrator import AgentOrchestrator
++    from app.db.models.user import Session as UserSession
++
++    pending = excel_vector_case.http.client.post(
++        "/api/excel/vector/ingest",
++        json={"file_path": str(excel_vector_case.workbook()), "index_id": "revoked"},
++    )
++    run_id = pending.json()["run_id"]
++    grant = excel_vector_case.http.client.get(f"/api/agent/runs/{run_id}").json()["approval"][
++        "grant"
++    ]
++    continued = excel_vector_case.http.client.post(
++        f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
++    )
++    assert continued.status_code == 202
++    with excel_vector_case.owner.factory.begin() as db:
++        db.get(UserSession, excel_vector_case.owner.session_row_id).entitled_mod_ids_json = "[]"
++    calls = []
++    monkeypatch.setattr(
++        excel_vector_case.embedder, "embed_texts", lambda texts: calls.append(texts)
++    )
++    claim = excel_vector_case.http.queue.claim("vector-revoked", lease_seconds=60)
++    assert claim.run_id == run_id
++    run = AgentOrchestrator().execute_dispatched_run(run_id)
++    assert run.status != "completed"
++    assert calls == []
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++
++
++def test_internal_keys_and_untrusted_context_fail_before_embedding(
++    excel_vector_case, monkeypatch, caplog
++):
++    excel_vector_case.seed()
++    calls = []
++    monkeypatch.setattr(excel_vector_case.embedder, "embed_query", lambda text: calls.append(text))
++    scoped = vector.get_vector_store(excel_vector_case.owner.context)
++    internal = scoped._prefix + "known-index"
++    response = excel_vector_case.http.client.post(
++        "/api/excel/vector/query", json={"index_id": internal, "query": "private"}
++    )
++    assert response.json()["success"] is False
++    context = inject_excel_vector_context(
++        "private",
++        {
++            "excel_index_id": "known-index",
++            "excel_vector_context": {"hits": ["OWNER_A_PRIVATE_ROW"]},
++        },
++    )
++    assert "excel_vector_context" not in context
++    assert calls == []
++    assert "OWNER_A_PRIVATE_ROW" not in caplog.text
++    assert excel_vector_case.owner.context["_actor_authorization"]["proof"] not in caplog.text
++
++
++def test_runtime_events_are_not_copied_or_used_as_ownership(excel_vector_case):
++    from threading import Event
++
++    excel_vector_case.seed()
++    context = {**excel_vector_case.owner.context, "_cancel_event": Event()}
++    service = vector.get_excel_vector_search_app_service(context)
++    assert "OWNER_A_PRIVATE_ROW" in service.query("known-index", "private")["hits"][0]["content"]
++    assert "_cancel_event" not in service._vector_store._context
++
++
++def test_provider_failure_is_safe_in_public_receipt_and_application_trace(
++    excel_vector_case, monkeypatch, caplog
++):
++    from app.domain.shared_services.tools_workflow_excel_ocr import (
++        _registered_router_excel_vector_index,
++    )
++    from app.neuro_bus import neuro_application_instrumentation as instrumentation
++
++    excel_vector_case.seed()
++    secret = "PRIVATE_QUERY_" + excel_vector_case.owner.context["_actor_authorization"]["proof"]
++
++    def fail(_):
++        raise RuntimeError(secret)
++
++    monkeypatch.setattr(excel_vector_case.embedder, "embed_query", fail)
++    traces = []
++    monkeypatch.setattr("app.neuro_bus.neuro_trace_config.should_sample_app_service", lambda: True)
++    monkeypatch.setattr(
++        instrumentation,
++        "neuro_trace_app_service_call",
++        lambda *args, **kwargs: traces.append((args, kwargs)),
++    )
++    result = _registered_router_excel_vector_index(
++        "query",
++        {"index_id": "known-index", "query": "private"},
++        excel_vector_case.owner.context,
++        "admin",
++        "",
++    )
++    assert result["success"] is False
++    assert result["error_code"] == "excel_vector_exception" and result["http_status_code"] == 503
++    assert any(args[2] == "error" for args, _ in traces)
++    assert secret not in json.dumps(traces) + json.dumps(result) + caplog.text
++
++
++def test_cached_connection_and_mutated_caller_context_never_change_service_owner(excel_vector_case):
++    excel_vector_case.seed()
++    context = {**excel_vector_case.owner.context}
++    retained = vector.get_excel_vector_search_app_service(context)
++    context.clear()
++    context.update(excel_vector_case.others[0].context)
++    other = vector.get_excel_vector_search_app_service(context)
++    assert retained is not other
++    assert other.query("known-index", "private")["hits"] == []
++    assert "OWNER_A_PRIVATE_ROW" in retained.query("known-index", "private")["hits"][0]["content"]
++    raw = vector.get_sqlite_vector_store()
++    with raw._get_conn() as db:
++        persisted = " ".join(
++            str(tuple(row))
++            for row in db.execute("SELECT content,metadata FROM excel_vector_chunks")
++        )
++    assert excel_vector_case.owner.context["_actor_authorization"]["proof"] not in persisted
++    assert excel_vector_case.owner.session_id not in persisted
++
++
++@pytest.mark.parametrize(
++    "field,value", [("user_id", "42"), ("tenant_id", "99"), ("actor_id", "42")]
++)
++def test_http_body_identity_cannot_override_principal(excel_vector_case, field, value):
++    excel_vector_case.seed()
++    response = excel_vector_case.http.client.post(
++        "/api/excel/vector/query",
++        json={"index_id": "known-index", "query": "private", field: value},
++    )
++    assert response.status_code == 403, response.text
++    assert "OWNER_A_PRIVATE_ROW" not in response.text
++
++
++def test_multipart_parent_link_race_creates_no_outside_directories(excel_vector_case, monkeypatch):
++    from app.application.employee_runtime import loader
++
++    original = loader.employee_owner_workspace
++    outside = excel_vector_case.root / "outside"
++    outside.mkdir()
++
++    def replace_parent_after_validation(context):
++        folder = original(context)
++        folder.parent.parent.mkdir(parents=True, exist_ok=True)
++        folder.parent.symlink_to(outside, target_is_directory=True)
++        return folder
++
++    monkeypatch.setattr(loader, "employee_owner_workspace", replace_parent_after_validation)
++    response = excel_vector_case.http.client.post(
++        "/api/excel/vector/ingest",
++        files={"excel_file": ("input.xlsx", b"synthetic-workbook-bytes")},
++    )
++    assert response.status_code == 403, response.text
++    assert list(outside.iterdir()) == []
++    assert vector.get_sqlite_vector_store().list_indexes() == []
+diff --git a/FHD/tests/test_application/test_tool_spec_v2.py b/FHD/tests/test_application/test_tool_spec_v2.py
+index a488ace63e..a626c2a42b 100644
+--- a/FHD/tests/test_application/test_tool_spec_v2.py
++++ b/FHD/tests/test_application/test_tool_spec_v2.py
+@@ -493,8 +493,9 @@ def test_build_tool_specs_v2_exposes_excel_vector_contract() -> None:
+     assert template_delete_spec.test_fixtures[0]["output"]["deleted"]["id"] == "db:1"
+ 
+     index_spec = specs[("excel_vector_index", "execute")]
+-    assert index_spec.risk == "low"
+-    assert index_spec.idempotent is True
++    assert index_spec.risk == "high"
++    assert index_spec.idempotent is False
++    assert index_spec.read_only is False
+     assert index_spec.required_params == ["file_path"]
+     assert index_spec.permission == "tool.excel_vector_index.execute"
+     assert index_spec.input_schema["required"] == ["file_path"]
+diff --git a/FHD/tests/test_application/test_workflow_tools_ext3.py b/FHD/tests/test_application/test_workflow_tools_ext3.py
+index 934f845514..b170233328 100644
+--- a/FHD/tests/test_application/test_workflow_tools_ext3.py
++++ b/FHD/tests/test_application/test_workflow_tools_ext3.py
+@@ -17,6 +17,11 @@ from unittest.mock import MagicMock, Mock, patch
+ 
+ import pytest
+ 
++from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
++from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
++from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.excel_vector import trusted_actor as trusted_actor
++
+ # ========================= _read_excel_dataframe engine selection ===========
+ 
+ 
+@@ -232,23 +237,23 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         parsed = json.loads(result)
+         assert parsed["success"] is False
+ 
+-    def test_excel_vector_index(self):
++    def test_excel_vector_index(self, excel_vector_case, approved_tool_context):
++        from app.application.agent_orchestrator.run_models import AgentStep
+         from app.application.tools.workflow import execute_workflow_tool
+ 
+-        with patch("app.application.get_excel_vector_ingest_app_service") as mock_get:
+-            mock_svc = Mock()
+-            mock_svc.ingest_excel.return_value = {"success": True, "index_id": "idx1"}
+-            mock_get.return_value = mock_svc
+-            with patch(
+-                "app.application.tools.workflow.resolve_safe_excel_path",
+-                return_value=Path("/test.xlsx"),
+-            ):
+-                with patch.object(Path, "exists", return_value=True):
+-                    result = execute_workflow_tool(
+-                        "excel_vector_index", {"file_path": "/test.xlsx"}
+-                    )
++        params = {"file_path": str(excel_vector_case.workbook()), "index_id": "idx1"}
++        step = AgentStep(
++            node_id="excel_vector_index",
++            tool_id="excel_vector_index",
++            action="execute",
++            params=params,
++        )
++        context = approved_tool_context(excel_vector_case.owner, step)
++        result = execute_workflow_tool("excel_vector_index", params, runtime_context=context)
+         parsed = json.loads(result)
+         assert parsed["success"] is True
++        assert parsed["index_id"] == "idx1"
++        assert parsed["business_verification"]["verified"] is True
+ 
+     def test_excel_join_compare_diff(self, tmp_path):
+         import pandas as pd
+diff --git a/FHD/tests/test_phase6_p19_backend.py b/FHD/tests/test_phase6_p19_backend.py
+index 6044fdf4d8..8619fd9d30 100644
+--- a/FHD/tests/test_phase6_p19_backend.py
++++ b/FHD/tests/test_phase6_p19_backend.py
+@@ -32,6 +32,7 @@ os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
+ import json
+ import shutil
+ import tempfile
++from contextlib import contextmanager
+ from pathlib import Path
+ from types import SimpleNamespace
+ from typing import Any
+@@ -44,6 +45,9 @@ from fastapi.testclient import TestClient
+ from app.infrastructure.db import mod_database_url as mod_db_url_mod
+ from app.shell import xcagi_mods_discover as discover_mod
+ from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
++from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
++from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.excel_vector import trusted_actor as trusted_actor
+ 
+ # ===========================================================================
+ # Shared helpers / fixtures
+@@ -1014,225 +1018,162 @@ class TestOptimizedServiceDecorator:
+ # ===========================================================================
+ 
+ 
+-def _excel_vector_client() -> TestClient:
+-    """Build a minimal FastAPI app with only the excel_vector router (no LAN guard)."""
+-    from app.fastapi_routes.excel_vector import router
+-
+-    app = FastAPI()
+-    app.include_router(router)
+-    return TestClient(app, raise_server_exceptions=False)
++@contextmanager
++def _unavailable_vector_database(case):
++    case.seed(index_id="idx1")
++    path = Path(os.environ["EXCEL_VECTOR_DB_PATH"])
++    before = path.read_bytes()
++    try:
++        path.write_bytes(b"synthetic invalid SQLite database")
++        yield
++    finally:
++        path.write_bytes(before)
+ 
+ 
+ class TestExcelVectorIngest:
+-    """Cover ``ingest_excel_vector`` route."""
+-
+-    def test_ingest_json_no_file_path_returns_400(self):
+-        mock_svc = MagicMock()
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post("/api/excel/vector/ingest", json={})
+-        assert r.status_code == 400
+-        assert "file_path" in r.json()["message"]
+-
+-    def test_ingest_json_empty_file_path_returns_400(self):
+-        mock_svc = MagicMock()
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post("/api/excel/vector/ingest", json={"file_path": ""})
+-        assert r.status_code == 400
+-
+-    def test_ingest_json_valid_file_path(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.ingest_excel.return_value = {"success": True, "index_id": "abc"}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/ingest",
+-                json={"file_path": "/tmp/test.xlsx", "index_name": "test"},
+-            )
+-        assert r.status_code == 200
+-        assert r.json()["success"] is True
+-
+-    def test_ingest_json_ingest_fails_returns_400(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.ingest_excel.return_value = {"success": False, "message": "bad file"}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/ingest",
+-                json={"file_path": "/tmp/bad.xlsx"},
+-            )
+-        assert r.status_code == 400
+-
+-    def test_ingest_json_exception_returns_500(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.ingest_excel.side_effect = RuntimeError("crash")
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/ingest",
+-                json={"file_path": "/tmp/crash.xlsx"},
+-            )
+-        assert r.status_code == 500
+-
+-    def test_ingest_multipart_wrong_extension_returns_400(self, tmp_dir):
+-        mock_svc = MagicMock()
+-        with (
+-            patch(
+-                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-                return_value=mock_svc,
+-            ),
+-            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/ingest",
+-                files={"excel_file": ("test.txt", b"hello", "text/plain")},
+-            )
+-        assert r.status_code == 400
++    def test_ingest_json_no_file_path_returns_400(self, excel_vector_case):
++        response = excel_vector_case.http.client.post("/api/excel/vector/ingest", json={})
++        assert response.status_code == 400
++        assert "file_path" in response.json()["detail"]
++
++    def test_ingest_json_empty_file_path_returns_400(self, excel_vector_case):
++        response = excel_vector_case.http.client.post(
++            "/api/excel/vector/ingest", json={"file_path": ""}
++        )
++        assert response.status_code == 400
++
++    def test_ingest_json_valid_file_path(self, excel_vector_case):
++        case = excel_vector_case
++        result = case.http.request(
++            "POST",
++            "/api/excel/vector/ingest",
++            json={"file_path": str(case.workbook()), "index_name": "test", "index_id": "abc"},
++        )
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is True
++        assert result.receipt["index_id"] == "abc" and result.receipt["index_name"] == "test"
++        assert result.receipt["business_verification"]["verified"] is True
++
++    def test_ingest_json_ingest_fails_without_valid_rows(self, excel_vector_case):
++        import pandas as pd
++
++        path = excel_vector_case.workbook()
++        pd.DataFrame().to_excel(path, index=False)
++        result = excel_vector_case.http.request(
++            "POST", "/api/excel/vector/ingest", json={"file_path": str(path)}
++        )
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is False
++        assert result.run.status != "completed"
++        assert "有效数据" in str(result.receipt)
++
++    def test_ingest_json_exception_does_not_report_completion(self, excel_vector_case):
++        path = excel_vector_case.workbook()
++        path.write_bytes(b"invalid Excel container")
++        result = excel_vector_case.http.request(
++            "POST", "/api/excel/vector/ingest", json={"file_path": str(path)}
++        )
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is False
++        assert result.run.status != "completed"
+ 
+-    def test_ingest_multipart_valid_file(self, tmp_dir, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.ingest_excel.return_value = {"success": True, "index_id": "x"}
+-        with (
+-            patch(
+-                "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-                return_value=mock_svc,
+-            ),
+-            patch("app.fastapi_routes.excel_vector.get_upload_dir", return_value=tmp_dir),
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/ingest",
+-                files={
+-                    "excel_file": (
+-                        "test.xlsx",
+-                        b"hello",
+-                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+-                    )
+-                },
+-            )
+-        assert r.status_code == 200
++    def test_ingest_multipart_wrong_extension_returns_400(self, excel_vector_case):
++        response = excel_vector_case.http.client.post(
++            "/api/excel/vector/ingest", files={"excel_file": ("test.txt", b"hello", "text/plain")}
++        )
++        assert response.status_code == 400
++
++    def test_ingest_multipart_valid_file(self, excel_vector_case):
++        path = excel_vector_case.workbook()
++        result = excel_vector_case.http.request(
++            "POST",
++            "/api/excel/vector/ingest",
++            files={
++                "excel_file": (
++                    "test.xlsx",
++                    path.read_bytes(),
++                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
++                )
++            },
++            data={"index_id": "uploaded"},
++        )
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is True and result.receipt["index_id"] == "uploaded"
++        assert result.receipt["business_verification"]["verified"] is True
+ 
+ 
+ class TestExcelVectorQuery:
+-    """Cover ``query_excel_vector`` route."""
+-
+-    def test_query_success(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.query.return_value = {"success": True, "hits": []}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/query",
+-                json={"index_id": "idx1", "query": "test", "top_k": 3},
+-            )
+-        assert r.status_code == 200
+-
+-    def test_query_failure_returns_400(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.query.return_value = {"success": False, "message": "not found"}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/query",
+-                json={"index_id": "bad", "query": "x"},
+-            )
+-        assert r.status_code == 400
++    def test_query_success(self, excel_vector_case):
++        excel_vector_case.seed(index_id="idx1", text="test private rows")
++        response = excel_vector_case.http.client.post(
++            "/api/excel/vector/query", json={"index_id": "idx1", "query": "test", "top_k": 3}
++        )
++        assert response.status_code == 200
++        result = response.json()
++        assert result["success"] is True and result["top_k"] == 3
++        assert result["index_id"] == "idx1" and "private rows" in str(result["hits"])
++
++    def test_query_failure_returns_400(self, excel_vector_case):
++        missing = excel_vector_case.http.client.post(
++            "/api/excel/vector/query", json={"index_id": "bad", "query": "x"}
++        )
++        assert missing.status_code == 200 and missing.json()["hits"] == []
++        response = excel_vector_case.http.client.post(
++            "/api/excel/vector/query", json={"index_id": "bad", "query": ""}
++        )
++        assert response.status_code == 400
++        assert response.json()["success"] is False
+ 
+-    def test_query_exception_returns_500(self, local_tools):
+-        mock_svc = MagicMock()
+-        mock_svc.query.side_effect = RuntimeError("db down")
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.post(
+-                "/api/excel/vector/query",
+-                json={"index_id": "x", "query": "y"},
++    def test_query_exception_returns_503(self, excel_vector_case):
++        with _unavailable_vector_database(excel_vector_case):
++            response = excel_vector_case.http.client.post(
++                "/api/excel/vector/query", json={"index_id": "idx1", "query": "y"}
+             )
+-        assert r.status_code == 500
++        assert response.status_code == 503
++        assert response.json()["success"] is False
++        assert response.json()["error_code"] == "excel_vector_exception"
+ 
+ 
+ class TestExcelVectorIndexes:
+-    """Cover ``list_excel_vector_indexes`` and ``delete_excel_vector_index``."""
+-
+-    def test_list_indexes_success(self):
+-        mock_svc = MagicMock()
+-        mock_svc.list_indexes.return_value = {"success": True, "indexes": []}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.get("/api/excel/vector/indexes")
+-        assert r.status_code == 200
+-
+-    def test_list_indexes_exception_returns_500(self):
+-        mock_svc = MagicMock()
+-        mock_svc.list_indexes.side_effect = RuntimeError("fail")
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.get("/api/excel/vector/indexes")
+-        assert r.status_code == 500
+-
+-    def test_delete_index_success(self):
+-        mock_svc = MagicMock()
+-        mock_svc.delete_index.return_value = {"success": True}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.delete("/api/excel/vector/indexes/idx1")
+-        assert r.status_code == 200
+-
+-    def test_delete_index_not_found(self):
+-        mock_svc = MagicMock()
+-        mock_svc.delete_index.return_value = {"success": False}
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.delete("/api/excel/vector/indexes/idx1")
+-        assert r.status_code == 404
++    def test_list_indexes_success(self, excel_vector_case):
++        excel_vector_case.seed(index_id="idx1")
++        response = excel_vector_case.http.client.get("/api/excel/vector/indexes")
++        assert response.status_code == 200
++        assert [row["index_id"] for row in response.json()["indexes"]] == ["idx1"]
++
++    def test_list_indexes_exception_returns_503(self, excel_vector_case):
++        with _unavailable_vector_database(excel_vector_case):
++            response = excel_vector_case.http.client.get("/api/excel/vector/indexes")
++        assert response.status_code == 503
++        assert response.json()["success"] is False
++        assert response.json()["error_code"] == "excel_vector_exception"
++
++    def test_delete_index_success(self, excel_vector_case):
++        excel_vector_case.seed(index_id="idx1")
++        result = excel_vector_case.http.request("DELETE", "/api/excel/vector/indexes/idx1")
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is True
++        assert result.receipt["business_verification"]["verified"] is True
++        assert (
++            excel_vector_case.http.client.get("/api/excel/vector/indexes").json()["indexes"] == []
++        )
+ 
+-    def test_delete_index_exception_returns_500(self):
+-        mock_svc = MagicMock()
+-        mock_svc.delete_index.side_effect = RuntimeError("fail")
+-        with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-            return_value=mock_svc,
+-        ):
+-            client = _excel_vector_client()
+-            r = client.delete("/api/excel/vector/indexes/idx1")
+-        assert r.status_code == 500
++    def test_delete_index_not_found(self, excel_vector_case):
++        result = excel_vector_case.http.request("DELETE", "/api/excel/vector/indexes/idx1")
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is False
++        assert result.run.status != "completed"
++
++    def test_delete_index_exception_does_not_report_completion(self, excel_vector_case):
++        from app.application import excel_vector_app_service as vector
++
++        store = vector.get_sqlite_vector_store()
++        with _unavailable_vector_database(excel_vector_case):
++            result = excel_vector_case.http.request("DELETE", "/api/excel/vector/indexes/idx1")
++        assert result.response.status_code == 202
++        assert result.receipt["success"] is False
++        assert result.run.status != "completed"
++        assert [row["index_id"] for row in store.list_indexes()] != []
+ 
+ 
+ # ===========================================================================
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py b/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
+index 96c09add13..397f4780d6 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered_branch_cov2.py
+@@ -1649,7 +1649,7 @@ class TestExcelVectorIndexRouter:
+ 
+     def test_execute_success(self):
+         with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service"
++            "app.application.excel_vector_app_service.get_excel_vector_ingest_app_service"
+         ) as mock_get:
+             mock_get.return_value.ingest_excel.return_value = {
+                 "success": True,
+@@ -1663,14 +1663,16 @@ class TestExcelVectorIndexRouter:
+ 
+     def test_execute_exception(self):
+         with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service"
++            "app.application.excel_vector_app_service.get_excel_vector_ingest_app_service"
+         ) as mock_get:
+             mock_get.return_value.ingest_excel.side_effect = RuntimeError("boom")
+             result = _registered_router_excel_vector_index(
+                 "execute", {"file_path": "/tmp/x.xlsx"}, {}, "admin", ""
+             )
+         assert result["success"] is False
+-        assert "boom" in result["message"]
++        assert "boom" not in result["message"]
++        assert result["error_code"] == "excel_vector_exception"
++        assert result["http_status_code"] == 503
+ 
+     def test_query_missing_index_id(self):
+         result = _registered_router_excel_vector_index("query", {}, {}, "admin", "")
+@@ -1684,7 +1686,7 @@ class TestExcelVectorIndexRouter:
+ 
+     def test_query_bad_top_k(self):
+         with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
++            "app.application.excel_vector_app_service.get_excel_vector_search_app_service"
+         ) as mock_get:
+             mock_get.return_value.query.return_value = {"success": True}
+             result = _registered_router_excel_vector_index(
+@@ -1698,7 +1700,7 @@ class TestExcelVectorIndexRouter:
+ 
+     def test_query_success(self):
+         with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
++            "app.application.excel_vector_app_service.get_excel_vector_search_app_service"
+         ) as mock_get:
+             mock_get.return_value.query.return_value = {"success": True, "results": []}
+             result = _registered_router_excel_vector_index(
+@@ -1712,7 +1714,7 @@ class TestExcelVectorIndexRouter:
+ 
+     def test_query_exception(self):
+         with patch(
+-            "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service"
++            "app.application.excel_vector_app_service.get_excel_vector_search_app_service"
+         ) as mock_get:
+             mock_get.return_value.query.side_effect = RuntimeError("fail")
+             result = _registered_router_excel_vector_index(
+-- 
+2.50.1 (Apple Git-155)
+

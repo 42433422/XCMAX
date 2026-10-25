@@ -1,0 +1,20 @@
+{
+  "gate_pass": false,
+  "baseline_lines": 2330609,
+  "current_tracked_lines": 2334186,
+  "current_untracked_lines": 1482,
+  "true_delta_with_untracked": 5059,
+  "main54_sha": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "main54_canonical_committed_lines": 2330002,
+  "main_delta_vs_baseline": -607,
+  "baseline_unchanged": true,
+  "do_not_modify_baseline": true,
+  "failure_summary_from_log": "净增了代码/文档行数。本迭代必须有净删除行数。",
+  "checklist_progress_note": "HEAD9950a393b5：完整离线121项33通过88失败；Excel原182通过，最新扩展576项566通过10失败待对照，迁移未提交；已提交口径净增5324失败；全部76项正式闭环仍open；只验收macOS，1.0.0.7未发布。",
+  "command_examples": [
+    "cd /Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD && python scripts/dev/check_net_deletion.py",
+    "See FHD/scripts/dev/check_net_deletion.py and push_preflight.py integration"
+  ],
+  "script_in_package": "net-deletion/check_net_deletion.py",
+  "baseline_do_not_modify": 2330609
+}

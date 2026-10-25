@@ -1,0 +1,58 @@
+{
+  "commit": "9950a393b557b75e23098057ef4b7f81075e0647",
+  "source_hashes": {
+    "FHD/evals/run_agent_eval_body_2.py": "be8ccea29686a5859e1cd252da096e80d3a7c77747990a3038b60341fe581247",
+    "FHD/evals/agent_tasks.jsonl": "d83b86b1edb94644c3312468e07441a4e212f783729c6568e8b6feb41e9f8efe",
+    "FHD/tests/test_application/test_agent_eval_harness.py": "d58cec013a68ee76e79ce5417a2f7d3c720ffddb12bc418aa82f00edbc5f0918"
+  },
+  "selected_tests_passed": 15,
+  "all_original_test_bytes_retained": true,
+  "original121cases_and_completion_gate_retained": true,
+  "changed_initial_http_status_only_ids": [
+    "materials_create_route_forces_agent_orchestrator",
+    "materials_update_route_forces_agent_orchestrator",
+    "materials_delete_route_forces_agent_orchestrator",
+    "materials_batch_delete_route_forces_agent_orchestrator"
+  ],
+  "full_eval": {
+    "before": [
+      30,
+      91
+    ],
+    "after": [
+      33,
+      88
+    ],
+    "other117_outcomes_and_failed_checks_exact_equal": true,
+    "source_sha256": "8f00778f501749592535453056967085927df2b15cc35bebfaa23e6dcb40cd5d",
+    "all_four_source_snapshots_equal": true,
+    "changes": [
+      {
+        "id": "materials_delete_route_forces_agent_orchestrator",
+        "before": false,
+        "after": true
+      },
+      {
+        "id": "materials_batch_delete_route_forces_agent_orchestrator",
+        "before": false,
+        "after": false
+      },
+      {
+        "id": "materials_create_route_forces_agent_orchestrator",
+        "before": false,
+        "after": true
+      },
+      {
+        "id": "materials_update_route_forces_agent_orchestrator",
+        "before": false,
+        "after": true
+      }
+    ],
+    "batch_completion_requirement_retained_and_still_failed": true,
+    "execution_process_note": "Fresh processes in separate temp databases; baseline process exceeded10s observation and overlapped the after process. No latency/performance claim; source sets equal and isolated fixtures verified."
+  },
+  "batch_actual_soft_deleted_rows": 2,
+  "batch_still_unknown_due_missing_product_verifier": true,
+  "real_model_or_installed_acceptance": false,
+  "other_harness_declarations_AST_unchanged": 26
+}

@@ -1,0 +1,222 @@
+From 8cd4d76c5a386f7d02e5445928e7dc878e917896 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:21:28 +0800
+Subject: [PATCH 16/43] fix(employees): redact dependency errors and reject
+ malformed results
+
+
+diff --git a/FHD/app/mod_sdk/generated_employee_worker.py b/FHD/app/mod_sdk/generated_employee_worker.py
+index 8833f3d37b..81342f0307 100644
+--- a/FHD/app/mod_sdk/generated_employee_worker.py
++++ b/FHD/app/mod_sdk/generated_employee_worker.py
+@@ -95,13 +95,16 @@ class GeneratedEmployeeWorker:
+         cog = v2.get("cognition") if isinstance(v2.get("cognition"), dict) else {}
+         agent = cog.get("agent") if isinstance(cog.get("agent"), dict) else {}
+         model = agent.get("model") if isinstance(agent.get("model"), dict) else {}
+-        return {
+-            "system_prompt": str(agent.get("system_prompt") or "").strip(),
+-            "max_tokens": int(model.get("max_tokens") or 4000),
+-            "temperature": float(
+-                model.get("temperature") if model.get("temperature") is not None else 0.2
+-            ),
+-        }
++        try:
++            return {
++                "system_prompt": str(agent.get("system_prompt") or "").strip(),
++                "max_tokens": int(model.get("max_tokens") or 4000),
++                "temperature": float(
++                    model.get("temperature") if model.get("temperature") is not None else 0.2
++                ),
++            }
++        except (TypeError, ValueError):
++            raise ValueError("员工模型参数无效") from None
+ 
+     def _actions(self, v2: Dict[str, Any]) -> Dict[str, Any]:
+         a = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+@@ -156,13 +159,11 @@ class GeneratedEmployeeWorker:
+             )
+         except TimeoutError:
+             return self._err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
+-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-            self.logger.exception("call_llm raised")
+-            return self._err("LLM 调用异常：" + str(e)[:300], meta={"handler": "llm_md"})
++        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
++            self.logger.warning("employee LLM failed (%s)", type(exc).__name__)
++            return self._err("LLM 调用异常", meta={"handler": "llm_md"})
+         if not isinstance(res, dict) or not res.get("ok"):
+-            return self._err(
+-                str((res or {}).get("error") or "LLM 调用失败")[:400], meta={"handler": "llm_md"}
+-            )
++            return self._err("LLM 调用失败", meta={"handler": "llm_md"})
+         content = str(res.get("content") or "").strip()
+         return self._ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+ 
+@@ -185,19 +186,15 @@ class GeneratedEmployeeWorker:
+         try:
+             r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+         except TimeoutError:
+-            return self._err("webhook 超时（30s）", meta={"handler": "webhook", "url": url})
+-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-            return self._err(
+-                "webhook 异常：" + str(e)[:300], meta={"handler": "webhook", "url": url}
+-            )
++            return self._err("webhook 超时（30s）", meta={"handler": "webhook"})
++        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
++            self.logger.warning("employee webhook failed (%s)", type(exc).__name__)
++            return self._err("webhook 异常", meta={"handler": "webhook"})
+         if not isinstance(r, dict) or not r.get("ok"):
+-            return self._err(
+-                str((r or {}).get("error") or f"HTTP {(r or {}).get('status')}"),
+-                meta={"handler": "webhook", "url": url},
+-            )
++            return self._err("webhook 调用失败", meta={"handler": "webhook"})
+         return self._ok(
+             {"status": r.get("status"), "text": r.get("text")},
+-            meta={"handler": "webhook", "url": url},
++            meta={"handler": "webhook"},
+         )
+ 
+     async def _handle_agent(
+@@ -223,13 +220,13 @@ class GeneratedEmployeeWorker:
+             )
+         except TimeoutError:
+             return self._err("agent 执行超时（300s）", meta={"handler": "agent"})
+-        except BOUNDARY_ERRORS as e:  # noqa: BLE001
+-            self.logger.exception("agent run raised")
+-            return self._err("agent 执行异常：" + str(e)[:300], meta={"handler": "agent"})
+-        if not result.get("ok"):
++        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
++            self.logger.warning("employee agent failed (%s)", type(exc).__name__)
++            return self._err("agent 执行异常", meta={"handler": "agent"})
++        if not isinstance(result, dict) or not result.get("ok"):
+             return self._err(
+-                str(result.get("error") or "agent 失败"),
+-                meta={"handler": "agent", "rounds": result.get("rounds", 0)},
++                "agent 执行失败",
++                meta={"handler": "agent"},
+             )
+         return self._ok(
+             result.get("summary") or "",
+@@ -241,9 +238,7 @@ class GeneratedEmployeeWorker:
+         )
+ 
+     async def run(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-        self.logger.info(
+-            "[employee:%s] run keys=%s", self.employee_id, list((payload or {}).keys())[:12]
+-        )
++        self.logger.info("[employee:%s] run field_count=%d", self.employee_id, len(payload or {}))
+         payload = payload or {}
+         ctx = ctx or {}
+         manifest = self._load_manifest()
+diff --git a/FHD/tests/test_mod_sdk/test_generated_employee_worker.py b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+index 2e02e0617c..8ed3e4b6d1 100644
+--- a/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
++++ b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+@@ -224,40 +224,28 @@ def test_handlers_results_failures_and_timeouts(worker, monkeypatch, handler, ki
+     v2["cognition"] = {
+         "agent": {"system_prompt": "## approved", "model": {"max_tokens": 17, "temperature": 0}}
+     }
+-    if kind == "list" or (handler == "agent" and kind == "none"):
+-        with pytest.raises(AttributeError) as exc:
+-            invoke(
+-                worker,
+-                handler,
+-                monkeypatch,
+-                payload={"handler": handler, "task": "task"},
+-                ctx=ctx,
+-                v2=v2,
+-            )
+-        out = {"exception": type(exc.value).__name__, "message": str(exc.value)}
+-    else:
+-        out = invoke(
+-            worker,
+-            handler,
+-            monkeypatch,
+-            payload={"handler": handler, "task": "task"},
+-            ctx=ctx,
+-            v2=v2,
+-        )
+-        assert out["ok"] is (kind == "ok")
+-        if kind == "ok":
+-            assert out["meta"]["chosen_handler"] == handler
+-            if handler == "llm_md":
+-                assert out["summary"] == "content" and calls[0][1] == {
+-                    "max_tokens": 17,
+-                    "temperature": 0.0,
+-                }
+-            elif handler == "agent":
+-                assert out["meta"]["tools_used"] == ["read"] and out["meta"]["rounds"] == 2
+-            else:
+-                assert out["items"] == [{"status": 201, "text": "body"}]
++    out = invoke(
++        worker,
++        handler,
++        monkeypatch,
++        payload={"handler": handler, "task": "task"},
++        ctx=ctx,
++        v2=v2,
++    )
++    assert out["ok"] is (kind == "ok")
++    if kind == "ok":
++        assert out["meta"]["chosen_handler"] == handler
++        if handler == "llm_md":
++            assert out["summary"] == "content" and calls[0][1] == {
++                "max_tokens": 17,
++                "temperature": 0.0,
++            }
++        elif handler == "agent":
++            assert out["meta"]["tools_used"] == ["read"] and out["meta"]["rounds"] == 2
+         else:
+-            assert out["error"]
++            assert out["items"] == [{"status": 201, "text": "body"}]
++    else:
++        assert out["error"]
+     assert timeouts == [{"llm_md": 120.0, "webhook": 30.0, "agent": 300.0}[handler]]
+     worker.record([out, calls, timeouts])
+ 
+@@ -359,3 +347,42 @@ def test_pack_instances_keep_prompts_and_dispatch_isolated(worker, monkeypatch):
+     assert prompts[1].startswith("second prompt") and results[0] != results[1]
+     assert worker.impl._DISPATCH is not other._DISPATCH
+     worker.record(results)
++
++
++@pytest.mark.parametrize("handler", ["llm_md", "webhook", "agent"])
++@pytest.mark.parametrize("failure", ["exception", "response"])
++def test_dependency_errors_never_expose_credentials_in_results_or_logs(
++    worker, monkeypatch, caplog, handler, failure
++):
++    import logging
++
++    secret = "SYNTHETIC-EMPLOYEE-PRIVATE-TOKEN"
++
++    async def callback(*_args, **_kwargs):
++        if failure == "exception":
++            raise OSError(secret)
++        return {"ok": False, "error": secret, "rounds": secret}
++
++    caplog.set_level(logging.INFO)
++    result = invoke(
++        worker,
++        handler,
++        monkeypatch,
++        payload={secret: "private", "task": "task"},
++        ctx={
++            "call_llm": callback,
++            "http_post": callback,
++            "agent_runner": SimpleNamespace(run=callback),
++        },
++        v2=config(handler, webhook={"url": "https://example.invalid/hook?token=" + secret}),
++    )
++    assert result["ok"] is False and result["error"]
++    assert secret not in str(result)
++    assert secret not in caplog.text
++
++
++def test_invalid_model_settings_do_not_echo_config_values(worker):
++    secret = "SYNTHETIC-INVALID-MODEL-SECRET"
++    with pytest.raises(ValueError, match="员工模型参数无效") as error:
++        worker.impl._agent_model({"cognition": {"agent": {"model": {"max_tokens": secret}}}})
++    assert secret not in str(error.value)
+-- 
+2.50.1 (Apple Git-155)
+

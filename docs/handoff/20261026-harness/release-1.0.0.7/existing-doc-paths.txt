@@ -1,0 +1,11 @@
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/MACOS_RELEASE_SSOT.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.1
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.2
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.3
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.4
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-8d50fe9d
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-aec61e7e
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-c8fb73c95
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-e3ac9f1049
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/macos-release-1.0.0.5-eb07dfcf

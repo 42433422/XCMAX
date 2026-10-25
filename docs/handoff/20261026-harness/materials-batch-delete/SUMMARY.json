@@ -1,0 +1,2150 @@
+{
+  "do_not_redelete": true,
+  "note": "No production customer batch-delete was re-executed for this handoff. Evidence below is from synthetic/fixture eval + unit verification. Customer PII redacted.",
+  "checklist_gaps": {
+    "TOOL-06": {
+      "id": "TOOL-06",
+      "title": "实现结果真实性核验",
+      "closure": "open",
+      "evidence_gap": "采购、仓库位置、部分批删/打印等缺完整独立核验，不能报成功。",
+      "candidate_status": "partial",
+      "candidate_progress": "部分SQL/JSON/Office文件有独立读回；a8c606781c修复材料stock/price别名，原输入冲突仍拒绝。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00",
+      "additional_source_checkpoint": "a8c606781c96135f89cddfb46d28bd65785b45f7"
+    },
+    "QA-02": {
+      "id": "QA-02",
+      "title": "真实业务读写回读",
+      "closure": "open",
+      "evidence_gap": "最终Mac真实账号、业务链路及所有缺verifier动作未闭环。",
+      "candidate_status": "partial",
+      "candidate_progress": "隔离实际SQLite/JSON、原签名审批/SQL队列有读回；材料新增56回归与root5复核通过。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00",
+      "additional_source_checkpoint": "a8c606781c96135f89cddfb46d28bd65785b45f7"
+    }
+  },
+  "related_eval_cases_from_121": [
+    {
+      "id": "memory_v2_candidate_confirm_correct_delete",
+      "kind": "memory_v2_lifecycle",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "candidate_created",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "duplicate_created",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "preference_before_confirmation",
+          "passed": true,
+          "actual": null,
+          "expected": null
+        },
+        {
+          "name": "confirmed_status",
+          "passed": true,
+          "actual": "active",
+          "expected": "active"
+        },
+        {
+          "name": "corrected_value",
+          "passed": true,
+          "actual": "ACME Trading",
+          "expected": "ACME Trading"
+        },
+        {
+          "name": "preference_after_correct",
+          "passed": true,
+          "actual": "ACME Trading",
+          "expected": "ACME Trading"
+        },
+        {
+          "name": "deleted_status",
+          "passed": true,
+          "actual": "deleted",
+          "expected": "deleted"
+        },
+        {
+          "name": "summary.total",
+          "passed": true,
+          "actual": 2,
+          "expected": 2
+        },
+        {
+          "name": "summary.by_status.active",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "summary.by_status.deleted",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "summary.by_type.preference",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "summary.by_type.entity",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "memory_summary.memory_v2_active_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "active_records",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "deleted_records",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "persisted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "database_backup_delete_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "document_template_delete_route_forces_agent_orchestrator",
+      "kind": "document_template_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "dataset_rag_delete_document_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "memory_v2_delete_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "initial.success",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "initial.run_status",
+          "passed": true,
+          "actual": "waiting_user",
+          "expected": "waiting_user"
+        },
+        {
+          "name": "initial.tool_call_count",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "initial.memory_unchanged",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "review.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "continue.status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "queue.original_run",
+          "passed": true,
+          "actual": "run_66eb3f76c41843d083a4140e24f05364",
+          "expected": "run_66eb3f76c41843d083a4140e24f05364"
+        },
+        {
+          "name": "approval_consumption_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "step_params_unchanged",
+          "passed": true,
+          "actual": {
+            "user_id": "1",
+            "memory_id": "mem_fd60dc9cb87b",
+            "reason": ""
+          },
+          "expected": {
+            "user_id": "1",
+            "memory_id": "mem_fd60dc9cb87b",
+            "reason": ""
+          }
+        },
+        {
+          "name": "run.user_id",
+          "passed": true,
+          "actual": "1",
+          "expected": "1"
+        },
+        {
+          "name": "readback.actual_record",
+          "passed": true,
+          "actual": {
+            "memory_id": "mem_fd60dc9cb87b",
+            "memory_type": "preference",
+            "key": "favorite_customer",
+            "value": "ACME Trading",
+            "status": "deleted",
+            "confidence": 0.9,
+            "source": "settings_ui",
+            "source_policy": "trusted_pending",
+            "source_trust": "trusted_user",
+            "source_evidence_required": false,
+            "requires_user_confirmation": true,
+            "auto_confirm_allowed": false,
+            "eligible_for_planner": true,
+            "governance_flags": [],
+            "evidence": [],
+            "fingerprint": "0e908cfc4d189dac",
+            "created_at": "2026-10-26T03:01:48.277294",
+            "updated_at": "2026-10-26T03:01:48.634092",
+            "confirmed_at": "2026-10-26T03:01:48.277862",
+            "deleted_at": "2026-10-26T03:01:48.634092"
+          },
+          "expected": {
+            "memory_id": "mem_fd60dc9cb87b",
+            "memory_type": "preference",
+            "key": "favorite_customer",
+            "value": "ACME Trading",
+            "status": "deleted",
+            "confidence": 0.9,
+            "source": "settings_ui",
+            "source_policy": "trusted_pending",
+            "source_trust": "trusted_user",
+            "source_evidence_required": false,
+            "requires_user_confirmation": true,
+            "auto_confirm_allowed": false,
+            "eligible_for_planner": true,
+            "governance_flags": [],
+            "evidence": [],
+            "fingerprint": "0e908cfc4d189dac",
+            "created_at": "2026-10-26T03:01:48.277294",
+            "updated_at": "2026-10-26T03:01:48.634092",
+            "confirmed_at": "2026-10-26T03:01:48.277862",
+            "deleted_at": "2026-10-26T03:01:48.634092"
+          }
+        },
+        {
+          "name": "readback.owner_keys",
+          "passed": true,
+          "actual": [
+            "governed:memory:v2:8e0e59e0f27642e4467ee4a7cdc53449ddecdd9fe1eaacfbd3325fef9db47c89"
+          ],
+          "expected": [
+            "governed:memory:v2:8e0e59e0f27642e4467ee4a7cdc53449ddecdd9fe1eaacfbd3325fef9db47c89"
+          ]
+        },
+        {
+          "name": "business_verification.verified",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "readback.http_status",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "readback.http_records",
+          "passed": true,
+          "actual": [
+            {
+              "memory_id": "mem_fd60dc9cb87b",
+              "memory_type": "preference",
+              "key": "favorite_customer",
+              "value": "ACME Trading",
+              "status": "deleted",
+              "confidence": 0.9,
+              "source": "settings_ui",
+              "source_policy": "trusted_pending",
+              "source_trust": "trusted_user",
+              "source_evidence_required": false,
+              "requires_user_confirmation": true,
+              "auto_confirm_allowed": false,
+              "eligible_for_planner": true,
+              "governance_flags": [],
+              "evidence": [],
+              "fingerprint": "0e908cfc4d189dac",
+              "created_at": "2026-10-26T03:01:48.277294",
+              "updated_at": "2026-10-26T03:01:48.634092",
+              "confirmed_at": "2026-10-26T03:01:48.277862",
+              "deleted_at": "2026-10-26T03:01:48.634092"
+            }
+          ],
+          "expected": [
+            {
+              "memory_id": "mem_fd60dc9cb87b",
+              "memory_type": "preference",
+              "key": "favorite_customer",
+              "value": "ACME Trading",
+              "status": "deleted",
+              "confidence": 0.9,
+              "source": "settings_ui",
+              "source_policy": "trusted_pending",
+              "source_trust": "trusted_user",
+              "source_evidence_required": false,
+              "requires_user_confirmation": true,
+              "auto_confirm_allowed": false,
+              "eligible_for_planner": true,
+              "governance_flags": [],
+              "evidence": [],
+              "fingerprint": "0e908cfc4d189dac",
+              "created_at": "2026-10-26T03:01:48.277294",
+              "updated_at": "2026-10-26T03:01:48.634092",
+              "confirmed_at": "2026-10-26T03:01:48.277862",
+              "deleted_at": "2026-10-26T03:01:48.634092"
+            }
+          ]
+        },
+        {
+          "name": "payload.success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": true,
+          "actual": "completed",
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.memory_status",
+          "passed": true,
+          "actual": "deleted",
+          "expected": "deleted"
+        }
+      ]
+    },
+    {
+      "id": "materials_create_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "initial.database_unchanged",
+          "passed": true,
+          "actual": [
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ],
+          "expected": [
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ]
+        },
+        {
+          "name": "initial.success",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "initial.run_status",
+          "passed": true,
+          "actual": "waiting_user",
+          "expected": "waiting_user"
+        },
+        {
+          "name": "initial.tool_call_count",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "review.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "review.grant_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "continue.status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "queue.original_run",
+          "passed": true,
+          "actual": "run_ef3f1f327542477789d9ff356409e2dc",
+          "expected": "run_ef3f1f327542477789d9ff356409e2dc"
+        },
+        {
+          "name": "reopen.run_id",
+          "passed": true,
+          "actual": "run_ef3f1f327542477789d9ff356409e2dc",
+          "expected": "run_ef3f1f327542477789d9ff356409e2dc"
+        },
+        {
+          "name": "approval_consumption_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "step_id_unchanged",
+          "passed": true,
+          "actual": "step_a49fc7038787406bba3f04dc516ee9f3",
+          "expected": "step_a49fc7038787406bba3f04dc516ee9f3"
+        },
+        {
+          "name": "step_params_unchanged",
+          "passed": true,
+          "actual": {
+            "name": "树脂",
+            "material_code": "R-001",
+            "min_quantity": 12,
+            "min_stock": 12
+          },
+          "expected": {
+            "name": "树脂",
+            "material_code": "R-001",
+            "min_quantity": 12,
+            "min_stock": 12
+          }
+        },
+        {
+          "name": "run.user_id",
+          "passed": true,
+          "actual": "1",
+          "expected": "1"
+        },
+        {
+          "name": "approval_replay.status_code",
+          "passed": true,
+          "actual": 403,
+          "expected": 403
+        },
+        {
+          "name": "final_query.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "final_query.original_run",
+          "passed": true,
+          "actual": "run_ef3f1f327542477789d9ff356409e2dc",
+          "expected": "run_ef3f1f327542477789d9ff356409e2dc"
+        },
+        {
+          "name": "status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "payload.success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": true,
+          "actual": "completed",
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "materials_update_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "initial.database_unchanged",
+          "passed": true,
+          "actual": [
+            {
+              "id": 1,
+              "tenant_id": 7,
+              "material_code": "R-001",
+              "name": "树脂",
+              "min_stock": 12.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ],
+          "expected": [
+            {
+              "id": 1,
+              "tenant_id": 7,
+              "material_code": "R-001",
+              "name": "树脂",
+              "min_stock": 12.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ]
+        },
+        {
+          "name": "initial.success",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "initial.run_status",
+          "passed": true,
+          "actual": "waiting_user",
+          "expected": "waiting_user"
+        },
+        {
+          "name": "initial.tool_call_count",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "review.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "review.grant_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "continue.status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "queue.original_run",
+          "passed": true,
+          "actual": "run_c07ee5fd67744e53992481eae614913c",
+          "expected": "run_c07ee5fd67744e53992481eae614913c"
+        },
+        {
+          "name": "reopen.run_id",
+          "passed": true,
+          "actual": "run_c07ee5fd67744e53992481eae614913c",
+          "expected": "run_c07ee5fd67744e53992481eae614913c"
+        },
+        {
+          "name": "approval_consumption_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "step_id_unchanged",
+          "passed": true,
+          "actual": "step_ed7b8ee4731c4de4acde900a4306f92a",
+          "expected": "step_ed7b8ee4731c4de4acde900a4306f92a"
+        },
+        {
+          "name": "step_params_unchanged",
+          "passed": true,
+          "actual": {
+            "id": 1,
+            "name": "树脂 v2"
+          },
+          "expected": {
+            "id": 1,
+            "name": "树脂 v2"
+          }
+        },
+        {
+          "name": "run.user_id",
+          "passed": true,
+          "actual": "1",
+          "expected": "1"
+        },
+        {
+          "name": "approval_replay.status_code",
+          "passed": true,
+          "actual": 403,
+          "expected": 403
+        },
+        {
+          "name": "final_query.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "final_query.original_run",
+          "passed": true,
+          "actual": "run_c07ee5fd67744e53992481eae614913c",
+          "expected": "run_c07ee5fd67744e53992481eae614913c"
+        },
+        {
+          "name": "status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "payload.success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": true,
+          "actual": "completed",
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "materials_delete_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "initial.database_unchanged",
+          "passed": true,
+          "actual": [
+            {
+              "id": 1,
+              "tenant_id": 7,
+              "material_code": "R-001",
+              "name": "树脂",
+              "min_stock": 12.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ],
+          "expected": [
+            {
+              "id": 1,
+              "tenant_id": 7,
+              "material_code": "R-001",
+              "name": "树脂",
+              "min_stock": 12.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "material_code": "SENTINEL-8",
+              "name": "countertenant sentinel",
+              "min_stock": 42.0,
+              "is_active": 1,
+              "unit_price": "0.00"
+            }
+          ]
+        },
+        {
+          "name": "initial.success",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "initial.run_status",
+          "passed": true,
+          "actual": "waiting_user",
+          "expected": "waiting_user"
+        },
+        {
+          "name": "initial.tool_call_count",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "review.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "review.grant_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "continue.status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "queue.original_run",
+          "passed": true,
+          "actual": "run_914c5b0af42c4f4fb204f8202f20b49d",
+          "expected": "run_914c5b0af42c4f4fb204f8202f20b49d"
+        },
+        {
+          "name": "reopen.run_id",
+          "passed": true,
+          "actual": "run_914c5b0af42c4f4fb204f8202f20b49d",
+          "expected": "run_914c5b0af42c4f4fb204f8202f20b49d"
+        },
+        {
+          "name": "approval_consumption_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "step_id_unchanged",
+          "passed": true,
+          "actual": "step_b37a9fb8ec5a482289a70e0d7784f0a2",
+          "expected": "step_b37a9fb8ec5a482289a70e0d7784f0a2"
+        },
+        {
+          "name": "step_params_unchanged",
+          "passed": true,
+          "actual": {
+            "id": 1
+          },
+          "expected": {
+            "id": 1
+          }
+        },
+        {
+          "name": "run.user_id",
+          "passed": true,
+          "actual": "1",
+          "expected": "1"
+        },
+        {
+          "name": "approval_replay.status_code",
+          "passed": true,
+          "actual": 403,
+          "expected": 403
+        },
+        {
+          "name": "final_query.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "final_query.original_run",
+          "passed": true,
+          "actual": "run_914c5b0af42c4f4fb204f8202f20b49d",
+          "expected": "run_914c5b0af42c4f4fb204f8202f20b49d"
+        },
+        {
+          "name": "status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "payload.success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": true,
+          "actual": "completed",
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "materials_batch_delete_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "run.status",
+          "passed": false,
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[0].status",
+          "passed": false,
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "passed": false,
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "passed": false,
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        },
+        {
+          "name": "payload.deleted_count",
+          "passed": false,
+          "actual": null,
+          "expected": 2
+        },
+        {
+          "name": "business_verification.verified",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "run.status",
+          "passed": false,
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[0].status",
+          "passed": false,
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "passed": false,
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "passed": false,
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        },
+        {
+          "name": "payload.deleted_count",
+          "passed": false,
+          "actual": null,
+          "expected": 2
+        },
+        {
+          "name": "business_verification.verified",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "inventory_delete_warehouse_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "purchase_delete_supplier_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "finance_delete_transaction_route_forces_agent_orchestrator",
+      "kind": "finance_route_agent",
+      "passed": true,
+      "failed_checks": [],
+      "checks_summary": [
+        {
+          "name": "initial.database_unchanged",
+          "passed": true,
+          "actual": [
+            {
+              "id": 31,
+              "tenant_id": 7,
+              "transaction_type": "expense",
+              "currency": "CNY",
+              "description": "运费",
+              "status": "pending",
+              "amount": "128.50"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "transaction_type": "expense",
+              "currency": "CNY",
+              "description": "countertenant sentinel",
+              "status": "pending",
+              "amount": "42.00"
+            }
+          ],
+          "expected": [
+            {
+              "id": 31,
+              "tenant_id": 7,
+              "transaction_type": "expense",
+              "currency": "CNY",
+              "description": "运费",
+              "status": "pending",
+              "amount": "128.50"
+            },
+            {
+              "id": 9001,
+              "tenant_id": 8,
+              "transaction_type": "expense",
+              "currency": "CNY",
+              "description": "countertenant sentinel",
+              "status": "pending",
+              "amount": "42.00"
+            }
+          ]
+        },
+        {
+          "name": "initial.success",
+          "passed": true,
+          "actual": false,
+          "expected": false
+        },
+        {
+          "name": "initial.run_status",
+          "passed": true,
+          "actual": "waiting_user",
+          "expected": "waiting_user"
+        },
+        {
+          "name": "initial.tool_call_count",
+          "passed": true,
+          "actual": 0,
+          "expected": 0
+        },
+        {
+          "name": "review.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "review.grant_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "continue.status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "queue.original_run",
+          "passed": true,
+          "actual": "run_c132206f5aa240f8a104f736a2168eb0",
+          "expected": "run_c132206f5aa240f8a104f736a2168eb0"
+        },
+        {
+          "name": "reopen.run_id",
+          "passed": true,
+          "actual": "run_c132206f5aa240f8a104f736a2168eb0",
+          "expected": "run_c132206f5aa240f8a104f736a2168eb0"
+        },
+        {
+          "name": "approval_consumption_count",
+          "passed": true,
+          "actual": 1,
+          "expected": 1
+        },
+        {
+          "name": "step_id_unchanged",
+          "passed": true,
+          "actual": "step_da7fee716d0f4b75b1ac5f077e1fbecc",
+          "expected": "step_da7fee716d0f4b75b1ac5f077e1fbecc"
+        },
+        {
+          "name": "step_params_unchanged",
+          "passed": true,
+          "actual": {
+            "transaction_id": 31
+          },
+          "expected": {
+            "transaction_id": 31
+          }
+        },
+        {
+          "name": "run.user_id",
+          "passed": true,
+          "actual": "1",
+          "expected": "1"
+        },
+        {
+          "name": "approval_replay.status_code",
+          "passed": true,
+          "actual": 403,
+          "expected": 403
+        },
+        {
+          "name": "final_query.status_code",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "final_query.original_run",
+          "passed": true,
+          "actual": "run_c132206f5aa240f8a104f736a2168eb0",
+          "expected": "run_c132206f5aa240f8a104f736a2168eb0"
+        },
+        {
+          "name": "status_code",
+          "passed": true,
+          "actual": 202,
+          "expected": 202
+        },
+        {
+          "name": "payload.success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": true,
+          "actual": "completed",
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "products_batch_create_route_forces_agent_orchestrator",
+      "kind": "products_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "products_delete_route_forces_agent_orchestrator",
+      "kind": "products_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "customers_delete_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "customers_batch_delete_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "shipment_records_delete_route_forces_agent_orchestrator",
+      "kind": "shipment_records_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "shipment_orders_generate_batch_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "shipment_orders_delete_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "products_compat_delete_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    },
+    {
+      "id": "products_compat_batch_delete_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "passed": false,
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "checks_summary": [
+        {
+          "name": "status_code",
+          "passed": false,
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "passed": false,
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "passed": false,
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "passed": false,
+          "actual": false,
+          "expected": true
+        }
+      ]
+    }
+  ],
+  "material_batch_verification_dir": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/material-batch-verification-20261026",
+  "materials_readback_alias_fix_dir": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/materials-readback-alias-fix-20261026",
+  "missing_independent_verification_step": "Checklist TOOL-06: 采购、仓库位置、部分批删/打印等缺完整独立核验，不能报成功。 Batch-delete lacks a separate post-delete DB readback verifier proving rows gone under trusted tenant Principal (create/alias readback exists; batch-delete closure does not)."
+}

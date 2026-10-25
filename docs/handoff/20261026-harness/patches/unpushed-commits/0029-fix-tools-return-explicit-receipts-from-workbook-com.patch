@@ -1,0 +1,428 @@
+From b42d9b9c2140313e1b89765e3c8db81aa70b0b03 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 00:38:10 +0800
+Subject: [PATCH 29/43] fix(tools): return explicit receipts from workbook
+ comparisons
+
+
+diff --git a/FHD/app/application/tools/workflow_tools/excel_operations.py b/FHD/app/application/tools/workflow_tools/excel_operations.py
+index c2bd141e69..87c10b3e50 100644
+--- a/FHD/app/application/tools/workflow_tools/excel_operations.py
++++ b/FHD/app/application/tools/workflow_tools/excel_operations.py
+@@ -84,9 +84,10 @@ class WorkbookOperations:
+         key_arg = "join_keys" if action == "join" else "key_columns"
+         keys = [str(value) for value in args.get(key_arg) or [] if str(value)]
+         if action == "diff":
+-            return compare_frames(a, b, keys)
++            return {"success": True, **compare_frames(a, b, keys)}
+         result = a.merge(b, on=keys, how=str(args.get("how") or "inner")) if keys else a
+         return {
++            "success": True,
+             "action": "join",
+             "row_count": len(result),
+             "columns": list(result.columns.astype(str)),
+diff --git a/FHD/mods/xcagi-planner-excel-tools/backend/tool_handlers.py b/FHD/mods/xcagi-planner-excel-tools/backend/tool_handlers.py
+index ee28d18091..28e7b2ad8f 100755
+--- a/FHD/mods/xcagi-planner-excel-tools/backend/tool_handlers.py
++++ b/FHD/mods/xcagi-planner-excel-tools/backend/tool_handlers.py
+@@ -153,6 +153,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
+             return json.dumps(
+                 _tag_source(
+                     {
++                        "success": True,
+                         "action": "join",
+                         "row_count": int(len(out_df)),
+                         "columns": list(out_df.columns.astype(str)),
+@@ -190,6 +191,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
+                 return json.dumps(
+                     _tag_source(
+                         {
++                            "success": True,
+                             "action": "diff",
+                             "only_in_left": {"count": len(only_l)},
+                             "only_in_right": {"count": len(only_r)},
+@@ -199,7 +201,7 @@ def _handle_excel_join_compare(args: dict[str, Any], workspace_root: str | None)
+                     ensure_ascii=False,
+                 )
+             return json.dumps(
+-                _tag_source({"action": "diff", "row_count": int(len(a))}),
++                _tag_source({"success": True, "action": "diff", "row_count": int(len(a))}),
+                 ensure_ascii=False,
+             )
+         return json.dumps(
+diff --git a/FHD/mods/xcagi-planner-excel-tools/manifest.json b/FHD/mods/xcagi-planner-excel-tools/manifest.json
+index 54a85fac04..de6497997a 100755
+--- a/FHD/mods/xcagi-planner-excel-tools/manifest.json
++++ b/FHD/mods/xcagi-planner-excel-tools/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "xcagi-planner-excel-tools",
+   "name": "Planner Excel 原生工具 Mod",
+-  "version": "1.0.0.0",
++  "version": "1.0.0.1",
+   "author": "成都修茈科技有限公司",
+   "description": "里程碑 F4：Planner 工作流工具集（8 项）均在 Mod backend 分派；向量/批量导入/DB 仍用宿主应用服务。",
+   "primary": false,
+diff --git a/FHD/tests/test_application/test_workflow_tools_ext3.py b/FHD/tests/test_application/test_workflow_tools_ext3.py
+index 3030e18476..7646c54a27 100644
+--- a/FHD/tests/test_application/test_workflow_tools_ext3.py
++++ b/FHD/tests/test_application/test_workflow_tools_ext3.py
+@@ -17,9 +17,13 @@ from unittest.mock import MagicMock, Mock, patch
+ 
+ import pytest
+ 
++from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
+ from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
+ from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
+ from tests.fixtures.excel_vector import trusted_actor as trusted_actor
++from tests.test_services.test_kitten_ai_document_pickup import (
++    owned_document_case as owned_document_case,
++)
+ 
+ # ========================= _read_excel_dataframe engine selection ===========
+ 
+@@ -252,7 +256,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         assert parsed["index_id"] == "idx1"
+         assert parsed["business_verification"]["verified"] is True
+ 
+-    def test_excel_join_compare_diff(self, tmp_path):
++    def test_excel_join_compare_diff(self, tmp_path, trusted_actor):
+         import pandas as pd
+ 
+         from app.application.tools.workflow import execute_workflow_tool
+@@ -260,24 +264,27 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         df = pd.DataFrame({"key": ["A", "B"], "val1": [1, 2]})
+         xlsx_path = str(tmp_path / "join.xlsx")
+         df.to_excel(xlsx_path, index=False)
+-
+-        with patch(
+-            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+-        ):
+-            result = execute_workflow_tool(
+-                "excel_join_compare",
+-                {
+-                    "file_path_a": xlsx_path,
+-                    "file_path_b": xlsx_path,
+-                    "action": "diff",
+-                    "key_columns": ["key"],
+-                },
+-            )
++        params = {
++            "file_path_a": xlsx_path,
++            "file_path_b": xlsx_path,
++            "action": "diff",
++            "key_columns": ["key"],
++        }
++        denied = json.loads(execute_workflow_tool("excel_join_compare", params))
++        assert denied["error_code"] == "tool_identity_required"
++        actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
++        result = execute_workflow_tool(
++            "excel_join_compare",
++            params,
++            workspace_root=str(tmp_path),
++            runtime_context=actor.context,
++        )
+         parsed = json.loads(result)
+         assert "action" in parsed
+-        assert parsed["action"] == "diff"
++        assert parsed["action"] == "diff", parsed
++        assert parsed["success"] is True
+ 
+-    def test_excel_join_compare_diff_no_keys(self, tmp_path):
++    def test_excel_join_compare_diff_no_keys(self, tmp_path, trusted_actor):
+         import pandas as pd
+ 
+         from app.application.tools.workflow import execute_workflow_tool
+@@ -285,20 +292,20 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         df = pd.DataFrame({"key": ["A", "B"], "val1": [1, 2]})
+         xlsx_path = str(tmp_path / "join.xlsx")
+         df.to_excel(xlsx_path, index=False)
+-
+-        with patch(
+-            "app.application.tools.workflow.resolve_safe_excel_path", return_value=Path(xlsx_path)
+-        ):
+-            result = execute_workflow_tool(
+-                "excel_join_compare",
+-                {
+-                    "file_path_a": xlsx_path,
+-                    "file_path_b": xlsx_path,
+-                    "action": "diff",
+-                },
+-            )
++        params = {"file_path_a": xlsx_path, "file_path_b": xlsx_path, "action": "diff"}
++        denied = json.loads(execute_workflow_tool("excel_join_compare", params))
++        assert denied["error_code"] == "tool_identity_required"
++        actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
++        result = execute_workflow_tool(
++            "excel_join_compare",
++            params,
++            workspace_root=str(tmp_path),
++            runtime_context=actor.context,
++        )
+         parsed = json.loads(result)
+         assert "action" in parsed
++        assert parsed["action"] == "diff", parsed
++        assert parsed["success"] is True
+ 
+     def test_excel_join_compare_unknown_action(self):
+         from app.application.tools.workflow import execute_workflow_tool
+@@ -315,41 +322,35 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+     def test_excel_prophet_with_file(self, tmp_path):
+         import pandas as pd
+ 
+-        from app.application.tools.workflow import execute_workflow_tool
++        from app.application.tools.workflow import _excel_io, execute_workflow_tool
++        from app.application.tools.workflow_tools.excel_operations import WorkbookOperations
+ 
+         df = pd.DataFrame({"date": pd.date_range("2024-01-01", periods=10), "value": range(10)})
+         xlsx_path = str(tmp_path / "prophet.xlsx")
+         df.to_excel(xlsx_path, index=False)
+-
+-        with (
+-            patch(
+-                "app.application.tools.workflow.resolve_safe_excel_path",
+-                return_value=Path(xlsx_path),
+-            ),
+-            patch("app.application.tools.workflow._read_excel_dataframe", return_value=df),
+-        ):
+-            result = execute_workflow_tool(
+-                "excel_prophet",
+-                {
+-                    "file_path": xlsx_path,
+-                    "value_column": "value",
+-                },
++        params = {"file_path": xlsx_path, "value_column": "value"}
++        denied = json.loads(execute_workflow_tool("excel_prophet", params))
++        assert denied["success"] is False
++        assert denied["error_code"] == "unknown_tool_action"
++        # This unregistered legacy handler is a pure forecast projection, not a public capability.
++        with patch("app.application.tools.workflow._read_excel_dataframe", return_value=df):
++            parsed = WorkbookOperations(_excel_io(), pd.read_excel, Mock(), Mock()).forecast(
++                params, str(tmp_path)
+             )
+-        parsed = json.loads(result)
+         assert "action" in parsed
+         assert parsed["action"] == "forecast"
+         assert "future_forecast" in parsed
+ 
+     def test_excel_prophet_no_file(self):
+-        from app.application.tools.workflow import execute_workflow_tool
+-
+-        result = execute_workflow_tool(
+-            "excel_prophet",
+-            {
+-                "value_column": "value",
+-            },
+-        )
+-        parsed = json.loads(result)
++        from app.application.tools.workflow import _excel_io, execute_workflow_tool
++        from app.application.tools.workflow_tools.excel_operations import WorkbookOperations
++
++        params = {"value_column": "value"}
++        denied = json.loads(execute_workflow_tool("excel_prophet", params))
++        assert denied["success"] is False
++        assert denied["error_code"] == "unknown_tool_action"
++        # No-input forecast projection is covered without authorizing an unregistered public tool.
++        parsed = WorkbookOperations(_excel_io(), Mock(), Mock(), Mock()).forecast(params, None)
+         assert "action" in parsed
+         assert parsed["action"] == "forecast"
+ 
+@@ -370,36 +371,50 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         # Returns snapshot with column info, not a "success" key
+         assert "snapshot" in parsed or "columns" in parsed or isinstance(parsed, dict)
+ 
+-    def test_generate_office_document(self):
++    def test_generate_office_document(self, owned_document_case, monkeypatch):
++        from io import BytesIO
++
++        from docx import Document
++
+         from app.application.tools.workflow import execute_workflow_tool
++        from app.domain.shared_services.kitten_ai_document import generate, pickup
++        from tests.test_services.test_kitten_ai_document_pickup import _verify_case
+ 
+-        with (
+-            patch(
+-                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
+-                return_value=(b"content", "test.docx"),
+-            ),
+-            patch(
+-                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
+-                return_value="pickup_tok",
+-            ),
+-            patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+-            patch(
+-                "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
+-                return_value=(None, None),
+-            ),
+-            patch(
+-                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
+-                return_value=None,
+-            ),
+-        ):
+-            result = execute_workflow_tool(
++        denied = json.loads(
++            execute_workflow_tool(
+                 "generate_office_document", {"user_request": "test doc", "output_format": "docx"}
+             )
+-        parsed = json.loads(result)
++        )
++        assert denied["success"] is False
++        assert denied["error_code"] == "tool_identity_required"
++        # The shared fixture uses real Principal, original waiting run, consumed SQL
++        # grant, guarded host executor, real renderer and disk readback. Drafting stays synthetic.
++        monkeypatch.setattr(
++            generate,
++            "draft_document_spec",
++            lambda *args: {"title": "test", "sections": [{"paragraphs": ["test doc"]}]},
++        )
++        case = owned_document_case()
++        parsed = case.result
+         assert parsed["success"] is True
+         assert parsed["artifacts"][0]["artifact_type"] == "office_document"
+         assert parsed["artifacts"][0]["name"] == "test.docx"
+-        assert parsed["artifacts"][0]["uri"] == "/api/ai/kitten/document/pickup/pickup_tok"
++        assert (
++            parsed["artifacts"][0]["uri"]
++            == "/api/ai/kitten/document/pickup/" + parsed["pickup_token"]
++        )
++        assert _verify_case(case)[1] is True
++        content, _, _ = pickup.pop_document_pickup(
++            parsed["pickup_token"], runtime_context=case.actor.context
++        )
++        assert [paragraph.text for paragraph in Document(BytesIO(content)).paragraphs] == [
++            "test",
++            "test doc",
++        ]
++        assert (
++            pickup.pop_document_pickup(parsed["pickup_token"], runtime_context=case.actor.context)
++            is None
++        )
+ 
+     def test_generate_office_document_missing_request(self):
+         from app.application.tools.workflow import execute_workflow_tool
+@@ -489,3 +504,75 @@ class TestImportOrdersPreviewOrExecute:
+         result = _import_orders_preview_or_execute(df, [], "公司A", False, 0)
+         parsed = json.loads(result)
+         assert parsed["success"] is True
++
++
++@pytest.mark.parametrize(
++    "action", ["join", "diff", "diff_no_keys", "missing_left", "missing_right", "bad_action"]
++)
++def test_comparison_host_projection_has_explicit_success_only_after_calculation(tmp_path, action):
++    import pandas as pd
++
++    from app.application.tools.workflow import _excel_io
++    from app.application.tools.workflow_tools.excel_operations import WorkbookOperations
++
++    first, second = tmp_path / "left.xlsx", tmp_path / "right.xlsx"
++    pd.DataFrame({"key": ["A", "B"], "value": [1, 2]}).to_excel(first, index=False)
++    pd.DataFrame({"key": ["A", "B"], "value": [1, 3]}).to_excel(second, index=False)
++    if action == "missing_left":
++        first = tmp_path / "missing.xlsx"
++    if action == "missing_right":
++        second = tmp_path / "missing.xlsx"
++    params = {
++        "action": "join" if action == "join" else "bad" if action == "bad_action" else "diff",
++        "file_paths": [str(first), str(second)],
++        "join_keys": ["key"],
++        "file_path_a": str(first),
++        "file_path_b": str(second),
++        "key_columns": [] if action == "diff_no_keys" else ["key"],
++    }
++    result = WorkbookOperations(_excel_io(), pd.read_excel, Mock(), Mock()).join_compare(
++        params, str(tmp_path)
++    )
++    if action in {"missing_left", "missing_right", "bad_action"}:
++        assert result["success"] is False
++        assert "error" in result
++    else:
++        assert result["success"] is True
++        assert result["action"] == params["action"]
++        if action == "join":
++            assert result["row_count"] == 2
++        elif action == "diff":
++            assert result["rows_with_value_changes"]["count"] == 1
++        else:
++            assert result["row_count"] == 2
++
++
++@pytest.mark.parametrize("missing", [False, True])
++def test_comparison_native_formal_join_and_failure(tmp_path, trusted_actor, missing):
++    import pandas as pd
++
++    from app.application.tools.workflow import execute_workflow_tool
++
++    first, second = tmp_path / "left.xlsx", tmp_path / "right.xlsx"
++    pd.DataFrame({"key": ["A", "B"], "left": [1, 2]}).to_excel(first, index=False)
++    pd.DataFrame({"key": ["A", "B"], "right": [3, 4]}).to_excel(second, index=False)
++    if missing:
++        second = tmp_path / "missing.xlsx"
++    actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
++    params = {"action": "join", "file_paths": [str(first), str(second)], "join_keys": ["key"]}
++    result = json.loads(
++        execute_workflow_tool(
++            "excel_join_compare",
++            params,
++            workspace_root=str(tmp_path),
++            runtime_context=actor.context,
++        )
++    )
++    assert result["source"] == "mod:xcagi-planner-excel-tools"
++    assert result["success"] is (not missing)
++    if missing:
++        assert "file not found" in result["error"]
++    else:
++        assert result["action"] == "join"
++        assert result["row_count"] == 2
++        assert set(result["columns"]) == {"key", "left", "right"}
+diff --git a/FHD/tests/test_application/test_workflow_tools_pure.py b/FHD/tests/test_application/test_workflow_tools_pure.py
+index 91e738a286..3a370fdf26 100644
+--- a/FHD/tests/test_application/test_workflow_tools_pure.py
++++ b/FHD/tests/test_application/test_workflow_tools_pure.py
+@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
+ 
+ import pytest
+ 
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++
+ 
+ class TestParseExcelHeaderRow1Based:
+     def test_valid_integer(self):
+@@ -212,17 +214,28 @@ class TestHandleExcelAnalysis:
+ 
+ class TestExecuteWorkflowTool:
+     def test_unknown_tool(self):
+-        from app.application.tools.workflow import execute_workflow_tool
++        from app.application.tools.workflow import _execute_workflow_tool_raw, execute_workflow_tool
+ 
+-        result = execute_workflow_tool("unknown_tool_xyz", {})
++        public = json.loads(execute_workflow_tool("unknown_tool_xyz", {}))
++        assert public["success"] is False
++        assert public["error_code"] == "unknown_tool_action"
++        # The internal unknown projection retains its legacy error shape; no tool dispatch occurs.
++        result = _execute_workflow_tool_raw("unknown_tool_xyz", {})
+         data = json.loads(result)
+         assert data["success"] is False
+         assert data.get("error") == "unknown_tool"
+ 
+-    def test_excel_chart_recommend(self):
++    def test_excel_chart_recommend(self, trusted_actor):
+         from app.application.tools.workflow import execute_workflow_tool
+ 
+-        result = execute_workflow_tool("excel_chart_recommend", {"file_path": "test.xlsx"})
++        params = {"file_path": "test.xlsx"}
++        denied = json.loads(execute_workflow_tool("excel_chart_recommend", params))
++        assert denied["success"] is False
++        assert denied["error_code"] == "tool_identity_required"
++        actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
++        result = execute_workflow_tool(
++            "excel_chart_recommend", params, runtime_context=actor.context
++        )
+         data = json.loads(result)
+         assert "suggestions" in data
+ 
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,13 @@
+[net-deletion] 代码+文档 当前 2335483 行 / 基线 2330609 行（差 +4874）
+[net-deletion] 其中文档 45613 行 / 代码 2289870 行
+[net-deletion] 失败：净增了代码/文档行数。本迭代必须有净删除行数。
+[net-deletion] 增量最大的顶层目录：
+    FHD                                       1545707 行
+    成都修茈科技有限公司                                 631688 行
+    packages                                   126078 行
+    docs                                        11764 行
+    scripts                                      8813 行
+    ops                                          6686 行
+    .github                                      3775 行
+    config                                        361 行
+[net-deletion] 处置：删除等量以上死代码/死文档，或（需评审可见）--update --force --reason。

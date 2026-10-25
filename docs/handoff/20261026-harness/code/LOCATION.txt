@@ -1,0 +1,10 @@
+worktree=/Users/a4243342/.codex/worktrees/b9cc/XCMAX
+branch=codex/harness-remediation-20261025
+HEAD=9950a393b557b75e23098057ef4b7f81075e0647
+origin_main=54d4541cbe4cd77e258163c75e3e9fc8c886b507
+merge_base_main=54d4541cbe4cd77e258163c75e3e9fc8c886b507
+ahead_of_origin_main=45
+remote_tracking=origin/main (branch NOT pushed as its own remote ref)
+has_uncommitted=yes
+draft_base_from_state=86c1a72060ba8014cb088089ff3fd0e9c355901e
+current_main_observed=54d4541cbe4cd77e258163c75e3e9fc8c886b507

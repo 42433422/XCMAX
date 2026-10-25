@@ -1,0 +1,49 @@
+[
+  [
+    ".tests_before_after",
+    {
+      "recorded_baseline": {
+        "head": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+        "tests": 182,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "pytest_time_seconds": "104.742",
+        "result": "182 passed",
+        "command_record": "implementation-design-baseline-result.json",
+        "xml": "implementation-design-baseline.xml",
+        "log": "implementation-design-baseline.log"
+      },
+      "required_additions": [
+        "Table-driven exact old prompt/catalog/history/order and canonical ID parity; done step1/10; execute step10; invalid-then-done retains failure.",
+        "Actual session RBAC/Mod denied and scope mismatch negatives; account/provider/model restoration; no anonymous tools.",
+        "Two read actions plus a real approved write and subsequent model decision, durable SQL reopen and independent readback.",
+        "Crash at every matrix boundary; actual two-process same-run lease and no duplicate side effect/usage.",
+        "NodeExecutionResult retries/times/params/errors and public callback/schema ordering; projection atomicity and no duplicate observed events.",
+        "Old observed snapshot remains read-only; no automatic migration of incomplete records.",
+        "Original182 tests stay green; all unique business/assertion coverage preserved. Existing fake-only anonymous execution assertions move to actual trusted fixtures, never to a bypass."
+      ],
+      "required_gates_after_implementation": [
+        "Sourcefreeze/hashes; original versus new decision/projection scenario comparison",
+        "Relevant182+new tests with all providers synthetic/offline",
+        "dev_guards including layer-ratchet/arch-fitness; ruff and full collection",
+        "Run net-deletion check honestly; do not raise/mask baseline to force acceptance."
+      ]
+    }
+  ],
+  [
+    ".tests_before_after.recorded_baseline",
+    {
+      "head": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+      "tests": 182,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "pytest_time_seconds": "104.742",
+      "result": "182 passed",
+      "command_record": "implementation-design-baseline-result.json",
+      "xml": "implementation-design-baseline.xml",
+      "log": "implementation-design-baseline.log"
+    }
+  ]
+]

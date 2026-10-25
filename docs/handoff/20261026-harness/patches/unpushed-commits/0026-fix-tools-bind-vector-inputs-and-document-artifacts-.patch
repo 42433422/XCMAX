@@ -1,0 +1,2843 @@
+From 9dab58819e430b59196fcfb511e1c9695bd0aacc Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 00:18:47 +0800
+Subject: [PATCH 26/43] fix(tools): bind vector inputs and document artifacts
+ to approved tasks
+
+
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index f4a67b7a30..1871bc999b 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -15,6 +15,24 @@ def verify_action_result(
+ ) -> tuple[dict, bool]:
+     if tool_receipt_outcome(result) != "success":
+         return result, False
++    if spec.tool_id == "generate_office_document" and spec.action == "execute":
++        from xml.etree.ElementTree import ParseError
++        from zipfile import BadZipFile
++
++        from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++        from app.domain.shared_services.kitten_ai_document.pickup import verify_document_pickup
++
++        evidence = {"verified": False, "method": "owned_document_hash_readback"}
++        try:
++            evidence = verify_document_pickup(
++                result,
++                {**(runtime_context or {}), "_controlled_params_sha256": canonical_hash(params)},
++            )
++            if evidence["format"] != str(params.get("output_format") or "docx").lower():
++                evidence["verified"] = False
++        except (BadZipFile, ParseError, KeyError, *RECOVERABLE_ERRORS):
++            pass
++        return {**result, "business_verification": evidence}, evidence["verified"] is True
+     if spec.tool_id == "excel_vector_index":
+         from app.application.excel_vector_app_service import verify_excel_vector_result
+ 
+diff --git a/FHD/app/application/agent_orchestrator/orchestrator.py b/FHD/app/application/agent_orchestrator/orchestrator.py
+index 3c50dd66c5..d969e56c86 100644
+--- a/FHD/app/application/agent_orchestrator/orchestrator.py
++++ b/FHD/app/application/agent_orchestrator/orchestrator.py
+@@ -242,6 +242,12 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
+             run.error = graph_error
+             run.add_event("planner.blocked", graph_error)
+             return
++        from app.application.agent_orchestrator.param_references import unresolved_placeholders
++        from app.application.excel_vector_app_service import prepare_excel_vector_step
++
++        for step in run.steps:
++            if not unresolved_placeholders(step.params):
++                prepare_excel_vector_step(run, step, allow_new=True, initial_plan=True)
+         self._apply_repair_policy(run, plan_metadata)
+         self._attach_artifacts_from_payload(run, plan_metadata, source="plan.metadata")
+         self._refresh_artifact_metadata(run)
+@@ -309,6 +315,26 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
+             if pause_for_clarification(run, step, node_outputs):
+                 return
+             step_is_approved = bool(approved and approved in {step.step_id, step.node_id})
++            from app.application.excel_vector_app_service import prepare_excel_vector_step
++
++            try:
++                prepare_excel_vector_step(run, step, allow_new=not step_is_approved)
++            except ValueError:
++                step.status, run.status = "failed", "failed"
++                step.error = run.error = "Excel 输入快照无效，需要重新审阅"
++                step.output = {
++                    "success": False,
++                    "error_code": "excel_vector_snapshot_invalid",
++                    "message": run.error,
++                    "retryable": False,
++                }
++                run.metadata["non_retryable"] = True
++                run.add_event(
++                    "step.failed",
++                    run.error,
++                    {"step_id": step.step_id, "error_code": "excel_vector_snapshot_invalid"},
++                )
++                return
+             if not self._can_auto_execute(step) and (not step_is_approved):
+                 step.status = "waiting_user"
+                 run.status = "waiting_user"
+diff --git a/FHD/app/application/agent_orchestrator/task_plan.py b/FHD/app/application/agent_orchestrator/task_plan.py
+index 6d4167d8ef..6502464249 100644
+--- a/FHD/app/application/agent_orchestrator/task_plan.py
++++ b/FHD/app/application/agent_orchestrator/task_plan.py
+@@ -126,6 +126,14 @@ class UnifiedTaskPlanMixin:
+             "evidence": "steps_tool_calls_events_artifacts",
+         }
+         run.metadata["provided_plan"] = self._plan_snapshot(plan)
++        prepared = {
++            item.node_id: item.params
++            for item in run.steps
++            if item.tool_id == "excel_vector_index" and item.action == "execute"
++        }
++        for node in run.metadata["provided_plan"]["nodes"]:
++            if node["node_id"] in prepared:
++                node["params"] = copy.deepcopy(prepared[node["node_id"]])
+         run.add_event(
+             "task.approval_required",
+             f"任务 {step.node_id} 等待审批",
+diff --git a/FHD/app/application/agent_orchestrator/tool_executor.py b/FHD/app/application/agent_orchestrator/tool_executor.py
+index 72aed4d0aa..e19cad88de 100644
+--- a/FHD/app/application/agent_orchestrator/tool_executor.py
++++ b/FHD/app/application/agent_orchestrator/tool_executor.py
+@@ -26,12 +26,21 @@ _REGISTERED_DISPATCH = ContextVar("controlled_registered_dispatch", default=None
+ 
+ 
+ def registered_dispatch_is_controlled(tool_id, action):
+-    return _REGISTERED_DISPATCH.get() == (tool_id, action)
++    value = _REGISTERED_DISPATCH.get()
++    return value is not None and value[:2] == (tool_id, action)
++
++
++def controlled_tool_context(tool_id, action):
++    """Host-only context installed after identity, approval and ledger admission."""
++    value = _REGISTERED_DISPATCH.get()
++    if value is None or value[:2] != (tool_id, action) or len(value) != 3:
++        return None
++    return dict(value[2])
+ 
+ 
+ @contextmanager
+-def _registered_dispatch_scope(tool_id, action):
+-    token = _REGISTERED_DISPATCH.set((tool_id, action))
++def _registered_dispatch_scope(tool_id, action, context=None):
++    token = _REGISTERED_DISPATCH.set((tool_id, action, dict(context or {})))
+     try:
+         yield
+     finally:
+@@ -136,6 +145,20 @@ class AgentToolExecutor:
+         denied = authorize_agent_tool(step.tool_id, action, params, runtime_context)
+         if denied:
+             return denied
++        if step.tool_id == "excel_vector_index" and action == "execute":
++            from app.application.excel_vector_app_service import validate_excel_vector_snapshot
++
++            try:
++                validate_excel_vector_snapshot(
++                    step.params, {**runtime_context, "node_id": step.node_id}
++                )
++            except RECOVERABLE_ERRORS:
++                return {
++                    "success": False,
++                    "error_code": "excel_vector_snapshot_invalid",
++                    "message": "Excel 输入未绑定原审批快照，请重新审阅",
++                    "retryable": False,
++                }
+         from app.application.agent_orchestrator.approval_grant import ensure_tool_approval
+ 
+         approval = ensure_tool_approval(step, validation.spec, runtime_context)
+@@ -165,9 +188,14 @@ class AgentToolExecutor:
+     def _dispatch(self, step, spec, action, params, runtime_context):
+         from app.application.agent_orchestrator.business_action_ledger import (
+             BusinessActionLedger,
++            canonical_hash,
+             unknown_action,
+         )
+ 
++        dispatch_context = {
++            **runtime_context,
++            "_controlled_params_sha256": canonical_hash(step.params),
++        }
+         claim, ledger = None, BusinessActionLedger()
+         if not spec.read_only:
+             try:
+@@ -186,7 +214,7 @@ class AgentToolExecutor:
+                 from app.application.tools.workflow import _execute_workflow_tool_raw
+                 from app.application.tools.workflow_tools.dispatch import parse_arguments
+ 
+-                with _registered_dispatch_scope(step.tool_id, action):
++                with _registered_dispatch_scope(step.tool_id, action, dispatch_context):
+                     raw = _execute_workflow_tool_raw(
+                         step.tool_id,
+                         step.params,
+@@ -201,7 +229,7 @@ class AgentToolExecutor:
+             else:
+                 from app.application.facades.tools_facade import execute_registered_workflow_tool
+ 
+-                with _registered_dispatch_scope(step.tool_id, action):
++                with _registered_dispatch_scope(step.tool_id, action, dispatch_context):
+                     result = execute_registered_workflow_tool(step.tool_id, action, params)
+             result = self._validate_output(step, action, result)
+             if claim is None:
+@@ -300,6 +328,8 @@ def execute_model_tool(
+     context.update(
+         _tool_dispatch_kind="model", workspace_root=workspace_root, _db_write_token=db_write_token
+     )
++    if name == "excel_vector_index":
++        context.setdefault("node_id", str(context.get("call_id") or name))
+     action = "execute"
+     from app.application.employee_runtime.loader import prepare_employee_tool_call
+ 
+@@ -349,6 +379,8 @@ def execute_registered_tool(tool_id, action, params):
+     business_params = dict(params or {})
+     context = dict(business_params.pop("_runtime_context", None) or {})
+     context["_tool_dispatch_kind"] = "registered"
++    if tool_id == "excel_vector_index":
++        context.setdefault("node_id", tool_id)
+     from app.application.employee_runtime.loader import prepare_employee_tool_call
+ 
+     try:
+diff --git a/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py b/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
+index cfbcf93b5a..55851457c6 100644
+--- a/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
++++ b/FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py
+@@ -1064,6 +1064,56 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
+             "file_path": {"type": "string"},
+             "index_name": {"type": "string"},
+             "index_id": {"type": "string"},
++            "execution_snapshot": {
++                "type": "object",
++                "required": ["body", "proof"],
++                "additionalProperties": False,
++                "properties": {
++                    "proof": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
++                    "body": {
++                        "type": "object",
++                        "required": [
++                            "version",
++                            "scope",
++                            "task_id",
++                            "node_id",
++                            "params_sha256",
++                            "params",
++                            "source_path",
++                            "content_sha256",
++                            "size_bytes",
++                            "snapshot_id",
++                        ],
++                        "additionalProperties": False,
++                        "properties": {
++                            "version": {"const": 1},
++                            "scope": {
++                                "type": "array",
++                                "items": {"type": "string"},
++                                "minItems": 3,
++                                "maxItems": 3,
++                            },
++                            "task_id": {"type": "string", "minLength": 1, "maxLength": 160},
++                            "node_id": {"type": "string", "minLength": 1, "maxLength": 160},
++                            "params_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
++                            "params": {
++                                "type": "object",
++                                "required": ["file_path"],
++                                "additionalProperties": False,
++                                "properties": {
++                                    "file_path": {"type": "string"},
++                                    "index_name": {"type": "string"},
++                                    "index_id": {"type": "string"},
++                                },
++                            },
++                            "source_path": {"type": "string"},
++                            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
++                            "size_bytes": {"type": "integer", "minimum": 1, "maximum": 33554432},
++                            "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
++                        },
++                    },
++                },
++            },
+         },
+     },
+     ("excel_vector_index", "query"): {
+diff --git a/FHD/app/application/agent_orchestrator/trace_runs.py b/FHD/app/application/agent_orchestrator/trace_runs.py
+index dc11dd35ff..6a524f4fb9 100644
+--- a/FHD/app/application/agent_orchestrator/trace_runs.py
++++ b/FHD/app/application/agent_orchestrator/trace_runs.py
+@@ -614,6 +614,10 @@ class TraceRunService:
+             from app.application.employee_runtime.loader import prepare_employee_tool_call
+ 
+             context["call_id"] = call_id
++            context["node_id"] = call_id
++            context["task_id"] = str(
++                (run.metadata.get("task_context") or {}).get("task_id") or run.run_id
++            )
+             tool_id, action, actual_params = prepare_employee_tool_call(
+                 tool_id, action, actual_params, context
+             )
+diff --git a/FHD/app/application/employee_runtime/loader.py b/FHD/app/application/employee_runtime/loader.py
+index 96c8b17ca8..e35455dd39 100644
+--- a/FHD/app/application/employee_runtime/loader.py
++++ b/FHD/app/application/employee_runtime/loader.py
+@@ -455,6 +455,10 @@ def prepare_employee_tool_call(
+     tool_id: str, action: str, params: dict, context: dict
+ ) -> tuple[str, str, dict]:
+     """Prepare once before durable approval; background dispatch only validates it."""
++    if tool_id == "excel_vector_index" and action == "execute":
++        from app.application.excel_vector_app_service import prepare_excel_vector_input
++
++        return tool_id, action, prepare_excel_vector_input(params, context)
+     from app.application.agent_orchestrator.approval_grant import _secret
+     from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+     from app.application.agent_orchestrator.business_harness import ensure_business_harness_context
+diff --git a/FHD/app/application/excel_vector_app_service.py b/FHD/app/application/excel_vector_app_service.py
+index f464ebeb80..3e2f033c6a 100644
+--- a/FHD/app/application/excel_vector_app_service.py
++++ b/FHD/app/application/excel_vector_app_service.py
+@@ -1,6 +1,7 @@
+ from __future__ import annotations
+ 
+ import hashlib
++import hmac
+ import json
+ import os
+ import re
+@@ -46,6 +47,8 @@ def _owner_context(runtime_context):
+                 "active_mod_id",
+                 "_actor_authorization",
+                 "_mod_authorization",
++                "task_id",
++                "node_id",
+             }
+         }
+     )
+@@ -139,6 +142,234 @@ def read_owned_excel_bytes(file_path: str, runtime_context: dict[str, Any]) -> b
+     return blob
+ 
+ 
++def _snapshot_proof(body: dict) -> str:
++    from app.application.agent_orchestrator.approval_grant import _secret
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    return hmac.new(
++        _secret().encode(),
++        ("excel.vector.input.v1:" + canonical_hash(body)).encode(),
++        hashlib.sha256,
++    ).hexdigest()
++
++
++def _snapshot_file(body: dict) -> tuple[Path, Path]:
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    base = Path(get_app_data_dir()) / "vectors" / "input-snapshots"
++    path = (
++        base
++        / canonical_hash(body["scope"])
++        / canonical_hash(body["task_id"])
++        / canonical_hash(body["node_id"])
++        / (body["snapshot_id"] + ".bin")
++    )
++    return base, path
++
++
++def validate_excel_vector_snapshot(params: dict, context: dict) -> dict:
++    """Validate sealed metadata without rereading input or shadowing a durable receipt."""
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++
++    _bound_actor(context)
++    snapshot = params.get("execution_snapshot")
++    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("body"), dict):
++        raise ValueError("Excel vector input needs a new reviewed snapshot")
++    body = snapshot["body"]
++    actor = context["_actor_authorization"]
++    raw = {key: value for key, value in params.items() if key != "execution_snapshot"}
++    if (
++        not hmac.compare_digest(_snapshot_proof(body), str(snapshot.get("proof") or ""))
++        or body.get("version") != 1
++        or body.get("scope") != [actor["execution_tenant_id"], actor["user_id"], actor["mod_id"]]
++        or not context.get("task_id")
++        or body.get("task_id") != context["task_id"]
++        or not context.get("node_id")
++        or body.get("node_id") != context["node_id"]
++        or body.get("params_sha256") != canonical_hash(raw)
++        or body.get("params") != raw
++        or body.get("source_path") != params.get("file_path")
++        or not re.fullmatch(r"[0-9a-f]{32}", str(body.get("snapshot_id") or ""))
++        or not re.fullmatch(r"[0-9a-f]{64}", str(body.get("content_sha256") or ""))
++        or type(body.get("size_bytes")) is not int
++        or not 0 < body["size_bytes"] <= MAX_EXCEL_VECTOR_BYTES
++    ):
++        raise ValueError("Excel vector snapshot does not match the original task and input")
++    return body
++
++
++def read_excel_vector_snapshot(params: dict, context: dict) -> bytes:
++    from app.application.office_parse_app_service import _read_pinned_output
++
++    body = validate_excel_vector_snapshot(params, context)
++    base, path = _snapshot_file(body)
++    blob = _read_pinned_output(base, path, max_bytes=MAX_EXCEL_VECTOR_BYTES + 1)
++    if (
++        len(blob) != body["size_bytes"]
++        or hashlib.sha256(blob).hexdigest() != body["content_sha256"]
++    ):
++        raise ValueError("Excel vector reviewed input is missing or changed")
++    return blob
++
++
++def prepare_excel_vector_input(params: dict, context: dict) -> dict:
++    """Freeze owner input once; resumed calls can only reuse their original sealed input."""
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.application.agent_orchestrator.business_harness import ensure_business_harness_context
++    from app.infrastructure.auth.agent_mod_scope import (
++        AgentModAuthorizationError,
++        authorize_agent_tool,
++    )
++
++    if authorize_agent_tool("excel_vector_index", "execute", {}, context):
++        raise AgentModAuthorizationError("Excel vector authorization unavailable")
++    raw = dict(params)
++    if set(raw) - {"file_path", "index_name", "index_id", "execution_snapshot"}:
++        raise ValueError("Excel vector input has unsupported parameters")
++    if any(not isinstance(value, str) for key, value in raw.items() if key != "execution_snapshot"):
++        raise ValueError("Excel vector input parameters must be strings")
++    if "execution_snapshot" not in raw:
++        raw = {key: str(value).strip() for key, value in raw.items()}
++    run_id, step_id = context.get("run_id"), context.get("step_id")
++    if run_id and step_id:
++        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++        from app.application.agent_orchestrator.unified_task import _assert_reused_run_scope
++
++        run = get_agent_run_repository().get(str(run_id))
++        if run is None:
++            raise ValueError("Excel vector original task is unavailable")
++        _assert_reused_run_scope(
++            run,
++            user_id=str(context["user_id"]),
++            tenant_id=str(context.get("tenant_id") or ""),
++            runtime_context=context,
++        )
++        stored = next((step for step in run.steps if step.step_id == str(step_id)), None)
++        if stored is None or (stored.tool_id, stored.action) != ("excel_vector_index", "execute"):
++            raise ValueError("Excel vector original call does not match")
++        context["task_id"] = str(
++            (run.metadata.get("task_context") or {}).get("task_id")
++            or (run.metadata.get("runtime_context") or {}).get("task_id")
++            or run.run_id
++        )
++        context["node_id"] = stored.node_id
++        saved = dict(stored.params)
++        if "execution_snapshot" not in saved:
++            raise ValueError("Excel vector input needs a new reviewed snapshot")
++        if canonical_hash(
++            {k: v for k, v in saved.items() if k != "execution_snapshot"}
++        ) != canonical_hash({k: v for k, v in raw.items() if k != "execution_snapshot"}):
++            raise ValueError("Excel vector parameters are bound to the original call")
++        if "execution_snapshot" in raw and canonical_hash(raw) != canonical_hash(saved):
++            raise ValueError("Excel vector snapshot cannot replace the original call")
++        raw = saved
++    if "execution_snapshot" in raw:
++        validate_excel_vector_snapshot(raw, context)
++        return raw
++    context.update(ensure_business_harness_context(context))
++    context.setdefault("node_id", str(context.get("call_id") or "excel_vector_execute"))
++    file_path = str(raw.get("file_path") or "")
++    blob = read_owned_excel_bytes(file_path, context)
++    actor = context["_actor_authorization"]
++    body = {
++        "version": 1,
++        "scope": [actor["execution_tenant_id"], actor["user_id"], actor["mod_id"]],
++        "task_id": context["task_id"],
++        "node_id": context["node_id"],
++        "params_sha256": canonical_hash(raw),
++        "params": raw,
++        "source_path": file_path,
++        "content_sha256": hashlib.sha256(blob).hexdigest(),
++        "size_bytes": len(blob),
++        "snapshot_id": uuid.uuid4().hex,
++    }
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++
++    base, path = _snapshot_file(body)
++    parent = _open_directory_under_root(base, path.parent, create=True)
++    try:
++        descriptor = os.open(
++            path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=parent
++        )
++        with os.fdopen(descriptor, "wb") as stream:
++            stream.write(blob)
++            stream.flush()
++            os.fsync(stream.fileno())
++            os.fchmod(stream.fileno(), 0o400)
++        os.fsync(parent)
++    finally:
++        os.close(parent)
++    return {**raw, "execution_snapshot": {"body": body, "proof": _snapshot_proof(body)}}
++
++
++def prepare_excel_vector_step(run, step, *, allow_new: bool, initial_plan: bool = False) -> None:
++    """Prepare a resolved host plan node before its first approval checkpoint."""
++    if (step.tool_id, step.action) != ("excel_vector_index", "execute"):
++        return
++    context = {
++        **(run.metadata.get("runtime_context") or {}),
++        "task_id": str(
++            (run.metadata.get("task_context") or {}).get("task_id")
++            or (run.metadata.get("runtime_context") or {}).get("task_id")
++            or run.run_id
++        ),
++        "node_id": step.node_id,
++    }
++    if "execution_snapshot" in step.params:
++        validate_excel_vector_snapshot(step.params, context)
++        return
++    parent_id = context.get("parent_run_id")
++    if parent_id:
++        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++        from app.application.agent_orchestrator.unified_task import _assert_reused_run_scope
++
++        parent = get_agent_run_repository().get(str(parent_id))
++        if parent is None:
++            raise ValueError("Excel vector original task is unavailable")
++        _assert_reused_run_scope(
++            parent,
++            user_id=str(context["user_id"]),
++            tenant_id=str(context.get("tenant_id") or ""),
++            runtime_context=context,
++        )
++        parent_task = str(
++            (parent.metadata.get("task_context") or {}).get("task_id") or parent.run_id
++        )
++        if parent_task != context["task_id"]:
++            raise ValueError("Excel vector retry must retain the original task")
++        original = next(
++            (
++                item
++                for item in parent.steps
++                if item.node_id == step.node_id
++                and item.tool_id == step.tool_id
++                and item.action == step.action
++            ),
++            None,
++        )
++        if original is not None:
++            step.params = prepare_excel_vector_input(
++                step.params, {**context, "run_id": parent.run_id, "step_id": original.step_id}
++            )
++            return
++    if (
++        not allow_new
++        or step.status != "pending"
++        or (run.status in {"waiting_user", "queued"} and not initial_plan)
++        or step.step_id in (run.metadata.get("_tool_approval_grants") or {})
++        or any(
++            event.event_type in {"step.waiting_user", "task.approval_required"}
++            and event.data.get("step_id") == step.step_id
++            for event in run.events
++        )
++    ):
++        raise ValueError("Excel vector input needs a new reviewed snapshot")
++    context.pop("run_id", None)
++    context.pop("step_id", None)
++    step.params = prepare_excel_vector_input(step.params, context)
++
++
+ def _get_default_embedder() -> EmbedderPort:
+     """优先用真实 EmbeddingService（local/remote），不可用时回退到 HashEmbedder。
+ 
+@@ -203,6 +434,7 @@ class ExcelVectorIngestApplicationService:
+         file_path: str,
+         index_name: str | None = None,
+         index_id: str | None = None,
++        execution_snapshot: dict | None = None,
+     ) -> dict[str, Any]:
+         path = Path(file_path)
+         if self._runtime_context is None and not path.exists():
+@@ -213,11 +445,18 @@ class ExcelVectorIngestApplicationService:
+             self._vector_store._key(target_index_id, "execute")
+         name = (index_name or path.stem or target_index_id).strip()
+ 
+-        source = (
+-            BytesIO(read_owned_excel_bytes(file_path, self._runtime_context))
+-            if self._runtime_context is not None
+-            else file_path
+-        )
++        source = file_path
++        if self._runtime_context is not None:
++            body = (execution_snapshot or {}).get("body") or {}
++            expected = body.get("params") or {}
++            if (file_path, index_name, index_id) != (
++                expected.get("file_path"),
++                expected.get("index_name") or None,
++                expected.get("index_id") or None,
++            ):
++                raise ValueError("Excel vector invocation differs from the reviewed parameters")
++            params = {**expected, "execution_snapshot": execution_snapshot}
++            source = BytesIO(read_excel_vector_snapshot(params, self._runtime_context))
+         sheets = pd.read_excel(source, sheet_name=None)
+         chunks = self._build_chunks(sheets, source_file=path.name)
+         if not chunks:
+@@ -468,7 +707,7 @@ def verify_excel_vector_result(action, params, result, runtime_context) -> tuple
+             verified = index_id == params.get("index_id") and row is None
+         elif action == "execute" and row:
+             file_path = params["file_path"]
+-            blob = read_owned_excel_bytes(file_path, runtime_context)
++            blob = read_excel_vector_snapshot(params, runtime_context)
+             parser = ExcelVectorIngestApplicationService(
+                 vector_store=store, embedder=HashEmbedder()
+             )
+diff --git a/FHD/app/application/tools/workflow_tools/adapters.py b/FHD/app/application/tools/workflow_tools/adapters.py
+index 6d72871e73..7d07f09366 100644
+--- a/FHD/app/application/tools/workflow_tools/adapters.py
++++ b/FHD/app/application/tools/workflow_tools/adapters.py
+@@ -168,12 +168,20 @@ def bulk_import(args: Payload) -> Payload:
+ 
+ 
+ def ingest_vector(
+-    *, file_path: str, index_name: str | None, index_id: str | None, runtime_context=None
++    *,
++    file_path: str,
++    index_name: str | None,
++    index_id: str | None,
++    runtime_context=None,
++    execution_snapshot=None,
+ ) -> Payload:
+     from app.application import get_excel_vector_ingest_app_service
+ 
+     return get_excel_vector_ingest_app_service(runtime_context=runtime_context).ingest_excel(
+-        file_path=file_path, index_name=index_name, index_id=index_id
++        file_path=file_path,
++        index_name=index_name,
++        index_id=index_id,
++        execution_snapshot=execution_snapshot,
+     )
+ 
+ 
+diff --git a/FHD/app/application/tools/workflow_tools/contracts.py b/FHD/app/application/tools/workflow_tools/contracts.py
+index 8bb3bf45f2..94de4a70a5 100644
+--- a/FHD/app/application/tools/workflow_tools/contracts.py
++++ b/FHD/app/application/tools/workflow_tools/contracts.py
+@@ -42,6 +42,7 @@ class VectorIngest(Protocol):
+         index_name: str | None,
+         index_id: str | None,
+         runtime_context: Payload | None = None,
++        execution_snapshot: Payload | None = None,
+     ) -> Payload: ...
+ 
+ 
+diff --git a/FHD/app/application/tools/workflow_tools/excel_operations.py b/FHD/app/application/tools/workflow_tools/excel_operations.py
+index 6c9d768d5a..c2bd141e69 100644
+--- a/FHD/app/application/tools/workflow_tools/excel_operations.py
++++ b/FHD/app/application/tools/workflow_tools/excel_operations.py
+@@ -137,6 +137,7 @@ class WorkbookOperations:
+             index_name=str(args.get("index_name") or "").strip() or None,
+             index_id=str(args.get("index_id") or "").strip() or None,
+             runtime_context=runtime_context,
++            execution_snapshot=args.get("execution_snapshot"),
+         )
+         if isinstance(result, dict) and result.get("success") and result.get("index_id"):
+             result["excel_vector_index_id"] = result.get("index_id")
+diff --git a/FHD/app/domain/shared_services/kitten_ai_document/pickup.py b/FHD/app/domain/shared_services/kitten_ai_document/pickup.py
+index 7475ea91ff..db475139cd 100755
+--- a/FHD/app/domain/shared_services/kitten_ai_document/pickup.py
++++ b/FHD/app/domain/shared_services/kitten_ai_document/pickup.py
+@@ -6,16 +6,20 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
++import hmac
+ import json
+ import logging
+ import os
+ import secrets
+-import shutil
++import stat
+ import tempfile
+ import threading
+ import time
+-import uuid
++from io import BytesIO
+ from pathlib import Path
++from xml.etree import ElementTree
++from zipfile import BadZipFile, ZipFile
+ 
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+@@ -24,6 +28,21 @@ logger = logging.getLogger(__name__)
+ _LOCK = threading.Lock()
+ _TTL_SEC = 86400
+ _MAX_ITEMS = 200
++_BOUND_PREFIX = "v1_"
++_BOUND_SCHEMA = "xcagi.document-pickup.v1"
++_MAX_BYTES = 32 * 1024 * 1024
++_SCOPE_KEYS = (
++    "user_id",
++    "tenant_id",
++    "mod_id",
++    "run_id",
++    "step_id",
++    "node_id",
++    "task_id",
++    "call_id",
++    "business_action_id",
++    "params_sha256",
++)
+ 
+ _CACHED_BASE: Path | None = None
+ 
+@@ -38,6 +57,15 @@ def _sanitize_token(raw: str) -> str | None:
+     return t
+ 
+ 
++def _secure_base_path(path: Path) -> Path:
++    path = Path(os.path.abspath(path))
++    if os.uname().sysname == "Darwin":
++        for alias in ("/var", "/tmp"):
++            if path == Path(alias) or Path(alias) in path.parents:
++                return Path(os.path.realpath(alias)) / path.relative_to(alias)
++    return path
++
++
+ def _pickup_base_dir() -> Path:
+     global _CACHED_BASE
+     if _CACHED_BASE is not None:
+@@ -55,10 +83,11 @@ def _pickup_base_dir() -> Path:
+     last_err: Exception | None = None
+     for p in candidates:
+         try:
+-            p.mkdir(parents=True, exist_ok=True)
+-            probe = p / ".write_probe"
+-            probe.write_text("1", encoding="utf-8")
+-            probe.unlink(missing_ok=True)
++            from app.application.shipment_excel_etl_security import _open_directory_under_root
++
++            safe = _secure_base_path(p)
++            descriptor = _open_directory_under_root(Path(safe.anchor), safe, create=True)
++            os.close(descriptor)
+             _CACHED_BASE = p
+             if p == candidates[-1] and wr and not env_dir:
+                 logger.info("kitten document pickup dir (fallback temp): %s", p)
+@@ -70,81 +99,459 @@ def _pickup_base_dir() -> Path:
+     raise RuntimeError(f"kitten pickup: no writable directory ({last_err!r})")
+ 
+ 
+-def _prune_disk(base: Path) -> None:
+-    now = time.time()
++def _prune_disk(base: Path, *, owner=None) -> None:
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++
++    parent = None
+     try:
+-        entries: list[tuple[float, Path]] = []
+-        for child in base.iterdir():
+-            if not child.is_dir() or child.name.startswith("."):
++        base = _secure_base_path(base)
++        parent = _open_directory_under_root(Path(base.anchor), base, create=False)
++        entries = []
++        for token in os.listdir(parent):
++            directory = descriptor = None
++            if not _sanitize_token(token) or token.startswith(_BOUND_PREFIX) != (owner is not None):
+                 continue
+-            meta_path = child / "meta.json"
+             try:
+-                ts = float(json.loads(meta_path.read_text(encoding="utf-8")).get("ts", 0))
+-            except RECOVERABLE_ERRORS:
+-                ts = 0.0
+-            if now - ts > _TTL_SEC:
+-                shutil.rmtree(child, ignore_errors=True)
++                directory = os.open(
++                    token, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
++                )
++                descriptor, raw = _private_bytes(directory, "meta.json", 32 * 1024)
++                meta = json.loads(raw)
++                if owner is not None and (
++                    not hmac.compare_digest(str(meta.get("seal") or ""), _seal(meta))
++                    or any(
++                        (meta.get("scope") or {}).get(key) != owner[key]
++                        for key in ("user_id", "tenant_id", "mod_id")
++                    )
++                ):
++                    continue
++                entries.append((float(meta.get("ts", 0)), token, hashlib.sha256(raw).hexdigest()))
++            except (KeyError, *RECOVERABLE_ERRORS):
++                continue
++            finally:
++                for fd in (descriptor, directory):
++                    if fd is not None:
++                        os.close(fd)
++        entries.sort()
++        for index, (timestamp, token, metadata_hash) in enumerate(entries):
++            if time.time() - timestamp <= _TTL_SEC and index >= len(entries) - _MAX_ITEMS:
+                 continue
+-            entries.append((ts, child))
++            directory = descriptor = None
++            try:
++                import fcntl
+ 
+-        overflow = len(entries) - _MAX_ITEMS
+-        if overflow > 0:
+-            entries.sort(key=lambda x: x[0])
+-            for _, path in entries[:overflow]:
+-                shutil.rmtree(path, ignore_errors=True)
++                directory = os.open(
++                    token, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent
++                )
++                descriptor, _ = _private_bytes(directory, "data.bin", _MAX_BYTES)
++                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
++                meta_fd, raw = _private_bytes(directory, "meta.json", 32 * 1024)
++                os.close(meta_fd)
++                if hashlib.sha256(raw).hexdigest() != metadata_hash:
++                    continue
++                for name in ("data.bin", "meta.json"):
++                    os.unlink(name, dir_fd=directory)
++                os.rmdir(token, dir_fd=parent)
++            except RECOVERABLE_ERRORS:
++                pass
++            finally:
++                for fd in (descriptor, directory):
++                    if fd is not None:
++                        os.close(fd)
+     except RECOVERABLE_ERRORS:
+-        logger.debug("kitten pickup prune skipped", exc_info=True)
++        logger.debug("kitten pickup prune skipped")
++    finally:
++        if parent is not None:
++            os.close(parent)
+ 
+ 
+-def store_document_pickup(content: bytes, file_name: str, mime: str) -> str:
+-    base = _pickup_base_dir()
+-    for _ in range(8):
+-        tok = secrets.token_urlsafe(18)
+-        dest = base / tok
++def _document_format(content: bytes, name: str, mime: str) -> str:
++    formats = {
++        "docx": (
++            "word/document.xml",
++            "document",
++            "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
++            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
++        ),
++        "xlsx": (
++            "xl/workbook.xml",
++            "workbook",
++            "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
++            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
++        ),
++    }
++    kind = Path(name).suffix.removeprefix(".").lower()
++    if (
++        kind not in formats
++        or not content
++        or len(content) > _MAX_BYTES
++        or Path(name).name != name
++        or "\\" in name
++        or any(c in name for c in "\r\n\x00")
++    ):
++        raise ValueError("invalid generated document")
++    member, root, namespace, expected_mime = formats[kind]
++    if mime != expected_mime:
++        raise ValueError("document format mismatch")
++    with ZipFile(BytesIO(content)) as archive:
++        infos = archive.infolist()
++        names = [info.filename for info in infos]
++        if (
++            len(infos) > 1024
++            or len(names) != len(set(names))
++            or sum(info.file_size for info in infos) > 64 * 1024 * 1024
++            or any(
++                info.file_size > _MAX_BYTES
++                or info.flag_bits & 1
++                or info.filename.startswith("/")
++                or ".." in Path(info.filename).parts
++                or "\\" in info.filename
++                for info in infos
++            )
++            or archive.testzip() is not None
++        ):
++            raise ValueError("invalid generated document archive")
++        ElementTree.fromstring(archive.read("[Content_Types].xml"))
++        ElementTree.fromstring(archive.read("_rels/.rels"))
++        if ElementTree.fromstring(archive.read(member)).tag != f"{{{namespace}}}{root}":
++            raise ValueError("document structure mismatch")
++    from docx.opc.exceptions import PackageNotFoundError
++    from lxml.etree import XMLSyntaxError
++    from openpyxl.utils.exceptions import InvalidFileException
++
++    try:
++        return _open_document(content, kind)
++    except (PackageNotFoundError, XMLSyntaxError, InvalidFileException) as exc:
++        raise ValueError("document cannot be opened") from exc
++
++
++def _open_document(content: bytes, kind: str) -> str:
++    if kind == "docx":
++        from docx import Document
++
++        document = Document(BytesIO(content))
++        if document.element.body is None:
++            raise ValueError("document body is missing")
+         try:
+-            dest.mkdir(parents=False, exist_ok=False)
+-        except FileExistsError:
+-            continue
++            for paragraph in document.paragraphs:
++                _ = paragraph.text
++            pending, seen = list(document.tables), set()
++            while pending:
++                table = pending.pop()
++                if table._tbl in seen:
++                    continue
++                seen.add(table._tbl)
++                _ = len(table.columns)
++                for row in table.rows:
++                    for cell in row.cells:
++                        _ = cell.text
++                        pending.extend(cell.tables)
++        except (AttributeError, IndexError, TypeError) as exc:
++            raise ValueError("document body cannot be read") from exc
++    else:
++        from openpyxl import load_workbook
++
++        workbook = load_workbook(BytesIO(content), read_only=False)
+         try:
+-            meta = {"ts": time.time(), "file_name": file_name, "mime": mime}
+-            (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
+-            (dest / "data.bin").write_bytes(content)
+-            with _LOCK:
+-                _prune_disk(base)
+-            return tok
+-        except RECOVERABLE_ERRORS:
+-            shutil.rmtree(dest, ignore_errors=True)
+-            raise
+-    raise RuntimeError("kitten pickup: token collision after retries")
+-
+-
+-def pop_document_pickup(token: str) -> tuple[bytes, str, str] | None:
++            if not workbook.worksheets:
++                raise ValueError("document contains no worksheet")
++        finally:
++            workbook.close()
++    return kind
++
++
++def _scope(context: dict) -> dict:
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++
++    _bound_actor(context)
++    result = {key: str(context.get(key) or "") for key in _SCOPE_KEYS}
++    result["mod_id"] = context["_actor_authorization"]["mod_id"]
++    result["params_sha256"] = str(context.get("_controlled_params_sha256") or "")
++    if any(not value or len(value) > 256 for key, value in result.items() if key != "mod_id"):
++        raise ValueError("document requires the original approved task")
++    return result
++
++
++def _seal(meta: dict) -> str:
++    from app.infrastructure.auth.agent_mod_scope import _actor_proof
++
++    return _actor_proof({key: value for key, value in meta.items() if key != "seal"})
++
++
++def _download_scope(meta: dict, context: dict, token: str) -> dict:
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++    from app.application.agent_orchestrator.task_background import task_execution_context
++    from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++
++    _bound_actor(context)
++    bound = meta["scope"]
++    owner = {
++        "user_id": str(context.get("user_id") or ""),
++        "tenant_id": str(context.get("tenant_id") or ""),
++        "mod_id": context["_actor_authorization"]["mod_id"],
++    }
++    if (
++        not owner["mod_id"]
++        and bound["mod_id"]
++        and all(bound[key] == owner[key] for key in ("user_id", "tenant_id"))
++    ):
++        # Browser download links carry the real login cookie but no Active-Mod
++        # header. Select only this sealed receipt's Mod and recheck its entitlement.
++        from app.db import HostSessionLocal
++        from app.db.models.user import Session as UserSession
++        from app.infrastructure.auth.agent_mod_scope import (
++            _actor_binding,
++            _check_row,
++            bind_agent_mod_scope,
++        )
++
++        with HostSessionLocal() as db:
++            row = db.get(UserSession, context["_actor_authorization"]["session_row_id"])
++            _check_row(row, user_id=owner["user_id"], mod_id=bound["mod_id"])
++            binding = bind_agent_mod_scope(
++                session_id=row.session_id, user_id=owner["user_id"], mod_id=bound["mod_id"]
++            )
++            context = {
++                **context,
++                "mod_id": bound["mod_id"],
++                "_mod_authorization": binding,
++                "_actor_authorization": _actor_binding(row, owner["tenant_id"], bound["mod_id"]),
++            }
++        owner["mod_id"] = bound["mod_id"]
++    if any(bound[key] != value for key, value in owner.items()):
++        raise ValueError("document owner mismatch")
++    run = get_agent_run_repository().get(bound["run_id"])
++    if run is None or run.status == "cancelled" or run.user_id != owner["user_id"]:
++        raise ValueError("original document run unavailable")
++    original = run.metadata.get("runtime_context") or {}
++    if (
++        str(original.get("tenant_id") or "") != owner["tenant_id"]
++        or (original.get("_actor_authorization") or {}).get("mod_id") != owner["mod_id"]
++    ):
++        raise ValueError("original document run scope mismatch")
++    step = next((item for item in run.steps if item.step_id == bound["step_id"]), None)
++    call = next((item for item in run.tool_calls if item.call_id == bound["call_id"]), None)
++    url = f"/api/ai/kitten/document/pickup/{token}"
++    if (
++        step is None
++        or call is None
++        or call.step_id != step.step_id
++        or call.node_id != step.node_id
++        or call.status != "completed"
++        or (call.tool_id, call.action) != ("generate_office_document", "execute")
++        or tool_receipt_outcome(call.output) != "success"
++        or call.output.get("pickup_token") != token
++        or call.output.get("download_url") != url
++        or canonical_hash(call.params) != canonical_hash(step.params)
++    ):
++        raise ValueError("original document receipt mismatch")
++    return _scope(
++        {
++            **context,
++            **task_execution_context(run, step),
++            "run_id": run.run_id,
++            "step_id": step.step_id,
++            "node_id": step.node_id,
++            "call_id": call.call_id,
++            "_controlled_params_sha256": canonical_hash(step.params),
++        }
++    )
++
++
++def _private_bytes(directory: int, name: str, limit: int) -> tuple[int, bytes]:
++    descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
++    try:
++        info = os.fstat(descriptor)
++        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > limit:
++            raise ValueError("document must be a bounded private regular file")
++        content = os.read(descriptor, limit + 1)
++        if len(content) != info.st_size or len(content) > limit:
++            raise ValueError("document size changed")
++        return descriptor, content
++    except BaseException:
++        os.close(descriptor)
++        raise
++
++
++def _read_pickup(token: str, *, context=None, consume=False, expected_result=None):
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++
+     key = _sanitize_token(token)
+     if not key:
+-        return None
++        raise ValueError("invalid document token")
++    base = _secure_base_path(_pickup_base_dir())
++    parent = _open_directory_under_root(Path(base.anchor), base, create=False)
++    directory = data_fd = meta_fd = None
++    try:
++        directory = os.open(key, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
++        data_fd, content = _private_bytes(directory, "data.bin", _MAX_BYTES)
++        if consume:
++            import fcntl
+ 
+-    base = _pickup_base_dir()
+-    src = base / key
+-    work = base / f".consume.{key}.{uuid.uuid4().hex}"
++            fcntl.flock(data_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
++            if os.fstat(data_fd).st_nlink != 1:
++                raise ValueError("document already consumed")
++        meta_fd, raw = _private_bytes(directory, "meta.json", 32 * 1024)
++        meta = json.loads(raw)
++        if (
++            not isinstance(meta, dict)
++            or not 0 <= time.time() - float(meta.get("ts", 0)) <= _TTL_SEC
++        ):
++            raise ValueError("document expired")
++        if key.startswith(_BOUND_PREFIX):
++            if (
++                meta.get("schema") != _BOUND_SCHEMA
++                or not isinstance(meta.get("seal"), str)
++                or not hmac.compare_digest(meta["seal"], _seal(meta))
++                or not isinstance(context, dict)
++            ):
++                raise ValueError("document binding invalid")
++            current = _download_scope(meta, context, key) if consume else _scope(context)
++            if current != meta.get("scope"):
++                raise ValueError("document task mismatch")
++            if len(content) != meta.get("size_bytes") or hashlib.sha256(
++                content
++            ).hexdigest() != meta.get("sha256"):
++                raise ValueError("document content mismatch")
++            if _document_format(content, meta["file_name"], meta["mime"]) != meta.get("format"):
++                raise ValueError("document format mismatch")
++            if expected_result is not None:
++                uri = f"/api/ai/kitten/document/pickup/{key}"
++                artifacts = expected_result.get("artifacts")
++                if (
++                    expected_result.get("file_name") != meta["file_name"]
++                    or expected_result.get("download_url") != uri
++                    or not isinstance(artifacts, list)
++                    or len(artifacts) != 1
++                    or any(
++                        artifacts[0].get(field) != value
++                        for field, value in {
++                            "artifact_type": "office_document",
++                            "name": meta["file_name"],
++                            "uri": uri,
++                            "mime_type": meta["mime"],
++                        }.items()
++                    )
++                ):
++                    raise ValueError("document result mismatch")
++        elif meta.get("schema") or meta.get("scope") or expected_result is not None:
++            # Legacy unbound records can still be downloaded; they never qualify a new task.
++            raise ValueError("unbound document cannot verify an approved action")
++        if consume:
++            for name, descriptor in (("data.bin", data_fd), ("meta.json", meta_fd)):
++                opened, current = (
++                    os.fstat(descriptor),
++                    os.stat(name, dir_fd=directory, follow_symlinks=False),
++                )
++                if (opened.st_dev, opened.st_ino) != (
++                    current.st_dev,
++                    current.st_ino,
++                ) or current.st_nlink != 1:
++                    raise ValueError("document record changed")
++            # The inode lock serializes consumers across processes. Directory-relative
++            # unlink touches only the pinned, validated record, even if its name moves.
++            os.unlink("data.bin", dir_fd=directory)
++            os.unlink("meta.json", dir_fd=directory)
++            try:
++                os.rmdir(key, dir_fd=parent)
++            except OSError:
++                pass
++        return (
++            content,
++            str(meta.get("file_name") or "download.bin"),
++            str(meta.get("mime") or "application/octet-stream"),
++            meta,
++        )
++    finally:
++        for descriptor in (meta_fd, data_fd, directory, parent):
++            if descriptor is not None:
++                os.close(descriptor)
+ 
+-    try:
+-        src.rename(work)
+-    except OSError:
+-        return None
+ 
++def store_document_pickup(content: bytes, file_name: str, mime: str) -> str:
++    from app.application.agent_orchestrator.tool_executor import controlled_tool_context
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++
++    context = controlled_tool_context("generate_office_document", "execute")
++    meta = {"ts": time.time(), "file_name": file_name, "mime": mime}
++    if context is not None:
++        try:
++            document_format = _document_format(content, file_name, mime)
++        except (BadZipFile, ElementTree.ParseError) as exc:
++            raise ValueError("invalid generated document") from exc
++        meta.update(
++            schema=_BOUND_SCHEMA,
++            scope=_scope(context),
++            format=document_format,
++            size_bytes=len(content),
++            sha256=hashlib.sha256(content).hexdigest(),
++        )
++        meta["seal"] = _seal(meta)
++    base = _secure_base_path(_pickup_base_dir())
++    parent = _open_directory_under_root(Path(base.anchor), base, create=False)
+     try:
+-        meta = json.loads((work / "meta.json").read_text(encoding="utf-8"))
+-        content = (work / "data.bin").read_bytes()
+-        ts = float(meta.get("ts", 0))
+-        if time.time() - ts > _TTL_SEC:
+-            return None
+-        fname = str(meta.get("file_name") or "download.bin")
+-        mime = str(meta.get("mime") or "application/octet-stream")
+-        return content, fname, mime
+-    except RECOVERABLE_ERRORS:
+-        logger.debug("kitten pickup read failed for token prefix=%s", key[:6], exc_info=True)
+-        return None
++        for _ in range(8):
++            token = (_BOUND_PREFIX if context is not None else "") + secrets.token_urlsafe(18)
++            if context is None and token.startswith(_BOUND_PREFIX):
++                continue
++            try:
++                os.mkdir(token, 0o700, dir_fd=parent)
++            except FileExistsError:
++                continue
++            directory = os.open(token, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
++            try:
++                for name, value in (
++                    ("data.bin", content),
++                    ("meta.json", json.dumps(meta, ensure_ascii=False).encode()),
++                ):
++                    descriptor = os.open(
++                        name,
++                        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
++                        0o600,
++                        dir_fd=directory,
++                    )
++                    with os.fdopen(descriptor, "wb") as stream:
++                        stream.write(value)
++                with _LOCK:
++                    _prune_disk(base, owner=meta.get("scope"))
++                return token
++            except BaseException:
++                for name in ("data.bin", "meta.json"):
++                    try:
++                        os.unlink(name, dir_fd=directory)
++                    except FileNotFoundError:
++                        pass
++                os.rmdir(token, dir_fd=parent)
++                raise
++            finally:
++                os.close(directory)
++        raise RuntimeError("kitten pickup: token collision after retries")
+     finally:
+-        shutil.rmtree(work, ignore_errors=True)
++        os.close(parent)
++
++
++def verify_document_pickup(result: dict, context: dict) -> dict:
++    token = result.get("pickup_token")
++    if not isinstance(token, str) or not token.startswith(_BOUND_PREFIX):
++        raise ValueError("bound document receipt required")
++    _, _, _, meta = _read_pickup(token, context=context, expected_result=result)
++    return {
++        "verified": True,
++        "method": "owned_document_hash_readback",
++        "sha256": meta["sha256"],
++        "size_bytes": meta["size_bytes"],
++        "format": meta["format"],
++        **meta["scope"],
++    }
++
++
++def pop_document_pickup(token: str, *, runtime_context=None) -> tuple[bytes, str, str] | None:
++    try:
++        content, name, mime, meta = _read_pickup(token, context=runtime_context, consume=True)
+         with _LOCK:
+-            _prune_disk(base)
++            _prune_disk(_pickup_base_dir(), owner=meta.get("scope"))
++        return content, name, mime
++    except (BadZipFile, ElementTree.ParseError, KeyError, *RECOVERABLE_ERRORS):
++        return None
+diff --git a/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py b/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
+index 75610307fa..f1b20d8c1b 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
++++ b/FHD/app/domain/shared_services/tools_workflow_excel_ocr.py
+@@ -125,12 +125,23 @@ def _registered_router_generate_office_document(
+     try:
+         import json
+ 
+-        from app.application.tools.workflow import execute_workflow_tool
++        from app.application.agent_orchestrator.tool_executor import (
++            registered_dispatch_is_controlled,
++        )
++        from app.application.tools.workflow import _execute_workflow_tool_raw
++
++        if not registered_dispatch_is_controlled("generate_office_document", action):
++            return {
++                "success": False,
++                "error_code": "controlled_document_dispatch_required",
++                "message": "文档生成需要原任务审批执行",
++            }
+ 
+-        raw = execute_workflow_tool(
++        raw = _execute_workflow_tool_raw(
+             "generate_office_document",
+             payload,
+             workspace_root=runtime_context.get("workspace_root"),
++            runtime_context=runtime_context,
+         )
+         parsed = json.loads(raw) if isinstance(raw, str) else raw
+         return parsed if isinstance(parsed, dict) else {"success": False, "message": str(raw)}
+@@ -159,6 +170,7 @@ def _registered_router_excel_vector_index(
+                 file_path=file_path,
+                 index_name=str(params.get("index_name") or "").strip() or None,
+                 index_id=str(params.get("index_id") or "").strip() or None,
++                execution_snapshot=params.get("execution_snapshot"),
+             )
+             payload = dict(result or {})
+             if payload.get("success") and payload.get("index_id"):
+diff --git a/FHD/app/fastapi_routes/ai_kitten.py b/FHD/app/fastapi_routes/ai_kitten.py
+index 4c50f4167c..7c69894edd 100644
+--- a/FHD/app/fastapi_routes/ai_kitten.py
++++ b/FHD/app/fastapi_routes/ai_kitten.py
+@@ -22,7 +22,7 @@ from io import BytesIO
+ from typing import Any, Literal, cast
+ from urllib.parse import quote
+ 
+-from fastapi import APIRouter, Body, Query
++from fastapi import APIRouter, Body, HTTPException, Query, Request
+ from fastapi.responses import JSONResponse, Response, StreamingResponse
+ 
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+@@ -446,11 +446,23 @@ def kitten_document_generate(body: dict = Body(default_factory=dict)):
+ 
+ 
+ @router.get("/api/ai/kitten/document/pickup/{token}")
+-def kitten_document_pickup(token: str):
++def kitten_document_pickup(token: str, request: Request = None):
+     """一次性下载 Planner 工具 ``generate_office_document`` 生成的文档。"""
+     from app.application.facades.kitten_facade import pop_document_pickup
+ 
+-    item = pop_document_pickup(token)
++    context = None
++    if token.startswith("v1_"):
++        from app.fastapi_routes.domains.agent.route_support import request_runtime_context
++
++        try:
++            context = request_runtime_context(request)
++        except (HTTPException, *RECOVERABLE_ERRORS):
++            return JSONResponse({"success": False, "message": "链接无效或已过期"}, status_code=404)
++    item = (
++        pop_document_pickup(token, runtime_context=context)
++        if context is not None
++        else pop_document_pickup(token)
++    )
+     if not item:
+         return JSONResponse({"success": False, "message": "链接无效或已过期"}, status_code=404)
+     content, file_name, mime = item
+diff --git a/FHD/app/fastapi_routes/domains/agent/route_support.py b/FHD/app/fastapi_routes/domains/agent/route_support.py
+index eaaf4d54cc..2060625202 100644
+--- a/FHD/app/fastapi_routes/domains/agent/route_support.py
++++ b/FHD/app/fastapi_routes/domains/agent/route_support.py
+@@ -107,6 +107,8 @@ def start_registered_http_action(
+         raise HTTPException(status_code=403, detail={"code": "TOOL_SCOPE_MISMATCH"})
+     from app.application.employee_runtime.loader import prepare_employee_tool_call
+ 
++    node_id = node_id or f"{tool_id}_{spec.action}"
++    trusted["node_id"] = node_id
+     try:
+         tool_id, action, params = prepare_employee_tool_call(tool_id, action, params, trusted)
+     except ValueError as exc:
+@@ -117,7 +119,6 @@ def start_registered_http_action(
+     denied = authorize_agent_tool(tool_id, spec.action, params, trusted)
+     if denied:
+         raise HTTPException(status_code=403, detail=denied)
+-    node_id = node_id or f"{tool_id}_{spec.action}"
+     plan = PlanGraph(
+         plan_id=intent or node_id,
+         intent=intent or node_id,
+diff --git a/FHD/tests/fixtures/excel_vector.py b/FHD/tests/fixtures/excel_vector.py
+index 19449a0330..b82c66129c 100644
+--- a/FHD/tests/fixtures/excel_vector.py
++++ b/FHD/tests/fixtures/excel_vector.py
+@@ -16,6 +16,8 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+ def excel_vector_case(tmp_path, monkeypatch, trusted_actor, reviewed_agent_http):
+     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path / "workspace"))
+     monkeypatch.setenv("EXCEL_VECTOR_DB_PATH", str(tmp_path / "vectors.sqlite"))
++    monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "server-data"))
++    monkeypatch.setenv("SECRET_KEY", "vector-snapshot-test-host-key-only-20261025")
+     monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "1")
+     monkeypatch.setenv("FHD_EMBEDDING_MODE", "disabled")
+     for name in (
+@@ -40,11 +42,34 @@ def excel_vector_case(tmp_path, monkeypatch, trusted_actor, reviewed_agent_http)
+         return path
+ 
+     def seed(actor=owner, index_id="known-index", text="OWNER_A_PRIVATE_ROW"):
+-        return vector.get_excel_vector_ingest_app_service(actor.context).ingest_excel(
+-            str(workbook(actor, text)), index_id=index_id
++        context = dict(actor.context)
++        params = vector.prepare_excel_vector_input(
++            {"file_path": str(workbook(actor, text)), "index_id": index_id}, context
+         )
++        result.last_params, result.last_context = params, context
++        return vector.get_excel_vector_ingest_app_service(context).ingest_excel(**params)
+ 
+-    return SimpleNamespace(
++    def approve(run_id, *, before_dispatch=None):
++        from app.application.agent_orchestrator import AgentOrchestrator
++
++        review = http.client.get(f"/api/agent/runs/{run_id}")
++        assert review.status_code == 200, review.text
++        continued = http.client.post(
++            f"/api/agent/runs/{run_id}/continue",
++            json={"approval_grant": review.json()["approval"]["grant"]},
++        )
++        assert continued.status_code == 202, continued.text
++        if before_dispatch is not None:
++            before_dispatch()
++        claim = http.queue.claim("vector-snapshot-test", lease_seconds=60)
++        assert claim and claim.run_id == run_id
++        run = AgentOrchestrator().execute_dispatched_run(run_id)
++        http.queue.finish(
++            run_id, "vector-snapshot-test", "completed" if run.status == "completed" else "blocked"
++        )
++        return run
++
++    result = SimpleNamespace(
+         owner=owner,
+         others=[same_tenant, other_tenant, other_mod],
+         http=http,
+@@ -52,4 +77,6 @@ def excel_vector_case(tmp_path, monkeypatch, trusted_actor, reviewed_agent_http)
+         seed=seed,
+         root=tmp_path,
+         embedder=embedder,
++        approve=approve,
+     )
++    return result
+diff --git a/FHD/tests/test_application/test_agent_orchestrator.py b/FHD/tests/test_application/test_agent_orchestrator.py
+index 224d1c73f0..993eaabeb7 100644
+--- a/FHD/tests/test_application/test_agent_orchestrator.py
++++ b/FHD/tests/test_application/test_agent_orchestrator.py
+@@ -5,6 +5,49 @@ from unittest.mock import patch
+ 
+ import pytest
+ 
++from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++
++
++@pytest.fixture
++def actor(trusted_actor, monkeypatch):
++    from app.db.models.permission import DEFAULT_ROLES
++
++    permissions = next(role["permissions"] for role in DEFAULT_ROLES if role["name"] == "user")
++    value = trusted_actor(permissions=[*permissions, "tool.generate_office_document.execute"])
++    # The business adapter and the independent verifier reopen this isolated database.
++    monkeypatch.setattr("app.db.session.SessionLocal", value.factory)
++    return value
++
++
++def _approve_original_run(run, repository, actor, monkeypatch):
++    from app.application.agent_orchestrator.approval_grant import (
++        consume_approval_grant,
++        issue_approval_grant,
++    )
++
++    monkeypatch.setattr(
++        "app.application.agent_orchestrator.run_repository._agent_run_repository", repository
++    )
++    grant = issue_approval_grant(run, principal_id=str(actor.user_id))
++    assert grant is not None
++    consume_approval_grant(grant["grant"], run=run, principal_id=str(actor.user_id))
++    repository.save(run)
++
++
++def _commit_customer(actor, params):
++    from app.db.models.purchase_unit import PurchaseUnit
++
++    with actor.factory.begin() as db:
++        payload = dict(params["payload"])
++        if "customer_name" in payload:
++            payload["unit_name"] = payload.pop("customer_name")
++        row = PurchaseUnit(tenant_id=actor.tenant_id, **payload)
++        db.add(row)
++        db.flush()
++        record_id = row.id
++    return {"success": True, "message": "客户已写入", "data": {"id": record_id}}
++
+ 
+ @pytest.fixture(autouse=True)
+ def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
+@@ -62,7 +105,7 @@ def test_agent_orchestrator_persists_stable_error_codes_not_exception_details():
+     assert run.events[-1].data["harness"]["protocol"] == "xcagi.business-harness.v1"
+ 
+ 
+-def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
++def test_agent_orchestrator_executes_low_risk_tool_and_records_events(actor):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+ 
+@@ -79,9 +122,9 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
+         ) as mock_execute,
+     ):
+         run = AgentOrchestrator(repository=repo).start_run(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查数据库产品 XG-5003",
+-            runtime_context={"source": "test"},
++            runtime_context={**actor.context, "source": "test"},
+         )
+ 
+     assert run.status == "completed"
+@@ -119,7 +162,7 @@ def test_agent_orchestrator_executes_low_risk_tool_and_records_events():
+     assert completed_event.data["cost_units"] == 1
+ 
+ 
+-def test_agent_tool_executor_restores_durable_purchase_tenant_scope():
++def test_agent_tool_executor_restores_durable_purchase_tenant_scope(actor, approved_tool_context):
+     from app.application.agent_orchestrator.run_models import AgentStep
+     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+     from app.infrastructure.tenant_scope import current_tenant_id
+@@ -140,9 +183,13 @@ def test_agent_tool_executor_restores_durable_purchase_tenant_scope():
+         "app.application.facades.tools_facade.execute_registered_workflow_tool",
+         side_effect=_execute,
+     ) as mock_execute:
+-        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "7"})
++        result = AgentToolExecutor().execute(
++            step, runtime_context=approved_tool_context(actor, step)
++        )
+ 
+-    assert result["success"] is True
++    assert result["success"] is False
++    assert result["outcome"] == "unknown"
++    assert result["reconciliation_required"] is True
+     assert observed_tenant_ids == [7]
+     assert current_tenant_id() == 1
+     mock_execute.assert_called_once()
+@@ -170,7 +217,9 @@ def test_agent_tool_executor_rejects_invalid_runtime_tenant_scope(tenant_id):
+ 
+ 
+ @pytest.mark.parametrize("tenant_id", [7, "7", True, 1.5, "invalid"])
+-def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
++def test_inventory_tool_restores_and_validates_runtime_tenant(
++    tenant_id, actor, approved_tool_context
++):
+     from app.application.agent_orchestrator.run_models import AgentStep
+     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+     from app.infrastructure.tenant_scope import current_tenant_id
+@@ -178,8 +227,29 @@ def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
+     seen = []
+ 
+     def execute(*args):
++        from app.db.models.inventory import InventoryTransaction, Warehouse
++        from app.db.models.product import Product
++        from app.utils.time import utc_now_naive
++
+         seen.append(current_tenant_id())
+-        return {"success": True}
++        with actor.factory.begin() as db:
++            db.add(Product(id=1, tenant_id=current_tenant_id(), name="Tenant product"))
++            db.add(
++                Warehouse(id=2, tenant_id=current_tenant_id(), code="test", name="Tenant warehouse")
++            )
++            db.flush()
++            row = InventoryTransaction(
++                tenant_id=current_tenant_id(),
++                product_id=1,
++                warehouse_id=2,
++                quantity=50,
++                transaction_type="in",
++                transaction_date=utc_now_naive(),
++            )
++            db.add(row)
++            db.flush()
++            transaction_id = row.id
++        return {"success": True, "data": {"transaction_id": transaction_id}}
+ 
+     step = AgentStep(
+         node_id="in",
+@@ -190,14 +260,16 @@ def test_inventory_tool_restores_and_validates_runtime_tenant(tenant_id):
+     with patch(
+         "app.application.facades.tools_facade.execute_registered_workflow_tool", side_effect=execute
+     ):
+-        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": tenant_id})
++        context = approved_tool_context(actor, step)
++        context["tenant_id"] = tenant_id
++        result = AgentToolExecutor().execute(step, runtime_context=context)
+     valid = tenant_id in (7, "7")
+     assert result["success"] is valid
+     assert seen == ([7] if valid else [])
+     assert current_tenant_id() == 1
+ 
+ 
+-def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
++def test_agent_tool_executor_preserves_opaque_dataset_tenant_key(actor):
+     from app.application.agent_orchestrator.run_models import AgentStep
+     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
+ 
+@@ -219,7 +291,18 @@ def test_agent_tool_executor_preserves_opaque_dataset_tenant_key():
+         "app.application.facades.tools_facade.execute_registered_workflow_tool",
+         return_value=output,
+     ) as mock_execute:
+-        result = AgentToolExecutor().execute(step, runtime_context={"tenant_id": "tenant-a"})
++        from app.infrastructure.auth.agent_mod_scope import bind_agent_actor_scope
++
++        context = {
++            **actor.context,
++            "tenant_id": "tenant-a",
++            "_actor_authorization": bind_agent_actor_scope(
++                session_id=actor.session_id,
++                user_id=str(actor.user_id),
++                execution_tenant_id="tenant-a",
++            ),
++        }
++        result = AgentToolExecutor().execute(step, runtime_context=context)
+ 
+     assert result == output
+     assert mock_execute.call_args.args[2]["_runtime_context"]["tenant_id"] == "tenant-a"
+@@ -254,7 +337,7 @@ def test_agent_orchestrator_waits_for_user_on_medium_risk_step():
+     assert "step.waiting_user" in [event.event_type for event in run.events]
+ 
+ 
+-def test_agent_orchestrator_continues_waiting_run_after_approval():
++def test_agent_orchestrator_continues_waiting_run_after_approval(actor, monkeypatch):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+ 
+@@ -271,12 +354,13 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
+     ):
+         orchestrator = AgentOrchestrator(repository=repo)
+         waiting = orchestrator.start_run(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="请把客户 星光贸易 写入数据库",
+-            runtime_context={"source": "approval-test"},
++            runtime_context={**actor.context, "source": "approval-test"},
+         )
+         mock_execute.assert_not_called()
+-        mock_execute.return_value = {"success": True, "message": "客户已写入"}
++        mock_execute.side_effect = lambda _tool, _action, params: _commit_customer(actor, params)
++        _approve_original_run(waiting, repo, actor, monkeypatch)
+         completed = orchestrator.continue_run(waiting.run_id, approved_by="tester")
+ 
+     assert completed is not None
+@@ -296,7 +380,7 @@ def test_agent_orchestrator_continues_waiting_run_after_approval():
+     assert params["_runtime_context"]["source"] == "approval-test"
+ 
+ 
+-def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot():
++def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot(actor, monkeypatch):
+     """Route confirmation survives a SQL-style pending snapshot race."""
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+@@ -310,11 +394,16 @@ def test_agent_orchestrator_resumes_exact_pending_step_after_durable_snapshot():
+         patches[3],
+         patch(
+             "app.application.facades.tools_facade.execute_registered_workflow_tool",
+-            return_value={"success": True, "message": "客户已写入"},
++            side_effect=lambda _tool, _action, params: _commit_customer(actor, params),
+         ) as mock_execute,
+     ):
+         orchestrator = AgentOrchestrator(repository=repo)
+-        waiting = orchestrator.start_run(user_id="u1", message="请把客户 星光贸易 写入数据库")
++        waiting = orchestrator.start_run(
++            user_id=str(actor.user_id),
++            message="请把客户 星光贸易 写入数据库",
++            runtime_context=actor.context,
++        )
++        _approve_original_run(waiting, repo, actor, monkeypatch)
+         waiting.status = "running"
+         waiting.steps[0].status = "pending"
+         repo.save(waiting)
+@@ -450,14 +539,14 @@ def test_agent_orchestrator_blocks_tool_execution_when_wallet_insufficient(monke
+     mock_execute.assert_not_called()
+ 
+ 
+-def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeypatch):
++def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeypatch, actor):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+     from app.infrastructure.billing.model_usage import get_model_wallet, set_model_wallet_balance
+ 
+     monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "local")
+-    set_model_wallet_balance("u1", 3, reason="tool-refund-test")
++    set_model_wallet_balance(str(actor.user_id), 3, reason="tool-refund-test")
+     repo = InMemoryAgentRunRepository()
+     plan = PlanGraph(
+         plan_id="p-tool-refund",
+@@ -479,10 +568,10 @@ def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeyp
+         return_value={"success": False, "message": "temporary database error"},
+     ) as mock_execute:
+         run = AgentOrchestrator(repository=repo).start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查数据库产品 5003",
+             plan=plan,
+-            runtime_context={"source": "tool-refund-test"},
++            runtime_context={**actor.context, "source": "tool-refund-test"},
+         )
+ 
+     assert run.status == "failed"
+@@ -497,7 +586,7 @@ def test_agent_orchestrator_refunds_local_wallet_when_charged_tool_fails(monkeyp
+     assert run.metadata["tool_usage_refund_status"] == "refunded"
+     assert run.metadata["model_wallet_balance_units"] == 3
+     assert run.final_output["tool_usage_refund_count"] == 1
+-    assert get_model_wallet("u1")["balance_units"] == 3
++    assert get_model_wallet(str(actor.user_id))["balance_units"] == 3
+     event_types = [event.event_type for event in run.events]
+     assert "billing.debited" in event_types
+     assert "billing.refunded" in event_types
+@@ -634,7 +723,7 @@ def test_agent_orchestrator_uses_tool_spec_risk_over_planner_claim():
+     assert step.idempotent is False
+ 
+ 
+-def test_agent_orchestrator_starts_from_existing_plan():
++def test_agent_orchestrator_starts_from_existing_plan(actor):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+@@ -670,10 +759,10 @@ def test_agent_orchestrator_starts_from_existing_plan():
+         return_value={"success": True, "data": [{"model_number": "5003"}]},
+     ):
+         run = AgentOrchestrator(repository=repo).start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查数据库产品 5003",
+             plan=plan,
+-            runtime_context={"source": "test"},
++            runtime_context={**actor.context, "source": "test"},
+         )
+ 
+     assert run.status == "completed"
+@@ -686,7 +775,7 @@ def test_agent_orchestrator_starts_from_existing_plan():
+     assert "artifact.attached" in [event.event_type for event in run.events]
+ 
+ 
+-def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step():
++def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step(actor):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+@@ -720,10 +809,10 @@ def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step(
+         return_value={"success": True, "data": [{"model_number": "5003"}]},
+     ) as mock_execute:
+         run = AgentOrchestrator(repository=repo).start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查数据库产品 5003",
+             plan=plan,
+-            runtime_context={"source": "repair-test"},
++            runtime_context={**actor.context, "source": "repair-test"},
+         )
+ 
+     assert run.status == "completed"
+@@ -748,7 +837,7 @@ def test_agent_orchestrator_applies_controlled_repair_and_retries_low_risk_step(
+     assert "run.completed" in event_types
+ 
+ 
+-def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
++def test_agent_orchestrator_continues_multistep_run_after_second_step_repair(actor):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+@@ -800,10 +889,10 @@ def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
+         side_effect=fake_execute,
+     ) as mock_execute:
+         run = AgentOrchestrator(repository=repo).start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="先查产品 5003，再查 PVC 材料",
+             plan=plan,
+-            runtime_context={"source": "multistep-repair-test"},
++            runtime_context={**actor.context, "source": "multistep-repair-test"},
+         )
+ 
+     assert run.status == "completed"
+@@ -830,7 +919,7 @@ def test_agent_orchestrator_continues_multistep_run_after_second_step_repair():
+     assert "run.completed" in event_types
+ 
+ 
+-def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
++def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation(actor, monkeypatch):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+@@ -890,7 +979,23 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
+                 ],
+             }
+         assert outputs["find_product"]["data"][0]["product_id"] == 20
+-        return {"success": True, "data": {"shipment_id": 30}}
++        from app.db.models.shipment import ShipmentRecord
++
++        with actor.factory.begin() as db:
++            db.add(
++                ShipmentRecord(
++                    id=30,
++                    tenant_id=actor.tenant_id,
++                    purchase_unit="新手演示客户",
++                    product_name="新手演示商品",
++                    quantity_tins=1,
++                    quantity_kg=1,
++                    tin_spec=1,
++                    unit_price=99,
++                    amount=99,
++                )
++            )
++        return {"success": True, "data": {"id": 30, "shipment_id": 30}}
+ 
+     with patch(
+         "app.application.facades.tools_facade.execute_registered_workflow_tool",
+@@ -899,10 +1004,10 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
+         repository = InMemoryAgentRunRepository()
+         orchestrator = AgentOrchestrator(repository=repository)
+         waiting = orchestrator.start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查询演示客户和商品，然后创建第一张演示出货单",
+             plan=plan,
+-            runtime_context={"source": "first-order-acceptance"},
++            runtime_context={**actor.context, "source": "first-order-acceptance"},
+         )
+         assert waiting.status == "waiting_user"
+         payload = waiting.steps[-1].params["payload"]
+@@ -910,6 +1015,7 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
+         assert payload["products"][0]["tin_spec"] == 1
+         assert payload["products"][0]["unit_price"] == 99
+         assert [call.node_id for call in waiting.tool_calls] == ["find_customer", "find_product"]
++        _approve_original_run(waiting, repository, actor, monkeypatch)
+         run = orchestrator.continue_run(waiting.run_id, approved_by="u1")
+ 
+     assert run is not None
+@@ -923,7 +1029,9 @@ def test_agent_orchestrator_executes_three_ordered_tools_in_one_conversation():
+     assert run.final_output["node_outputs"]["create_first_order"]["data"]["shipment_id"] == 30
+ 
+ 
+-def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_path, monkeypatch):
++def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(
++    tmp_path, monkeypatch, actor
++):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_models import LLMCall
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+@@ -979,10 +1087,10 @@ def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_pat
+         ) as mock_execute,
+     ):
+         run = AgentOrchestrator(repository=repo).start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="查数据库产品 5003",
+             plan=plan,
+-            runtime_context={"source": "llm-repair-test"},
++            runtime_context={**actor.context, "source": "llm-repair-test"},
+         )
+ 
+     assert run.status == "completed"
+@@ -1008,11 +1116,17 @@ def test_agent_orchestrator_uses_llm_repair_for_low_risk_idempotent_step(tmp_pat
+     assert mock_execute.call_args.args[2]["entity"] == "products"
+ 
+ 
+-def test_agent_orchestrator_generates_office_document_as_artifact_after_approval():
++def test_agent_orchestrator_generates_office_document_as_artifact_after_approval(
++    actor, trusted_actor, monkeypatch, tmp_path
++):
+     from app.application.agent_orchestrator import AgentOrchestrator
+     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++    from app.domain.shared_services.kitten_ai_document import pickup
+ 
++    monkeypatch.setenv("KITTEN_PICKUP_DIR", str(tmp_path / "pickup"))
++    monkeypatch.setattr(pickup, "_CACHED_BASE", None)
++    actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
+     repo = InMemoryAgentRunRepository()
+     plan = PlanGraph(
+         plan_id="p-doc",
+@@ -1035,12 +1149,11 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
+             return_value="pro_default",
+         ),
+         patch(
+-            "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
+-            return_value=(b"content", "contract.docx"),
+-        ),
+-        patch(
+-            "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
+-            return_value="doc-token",
++            "app.domain.shared_services.kitten_ai_document.generate.draft_document_spec",
++            return_value={
++                "title": "contract",
++                "sections": [{"heading": "测试合同", "paragraphs": ["隔离验收样本"]}],
++            },
+         ),
+         patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
+         patch(
+@@ -1054,21 +1167,46 @@ def test_agent_orchestrator_generates_office_document_as_artifact_after_approval
+     ):
+         orchestrator = AgentOrchestrator(repository=repo)
+         waiting = orchestrator.start_run_from_plan(
+-            user_id="u1",
++            user_id=str(actor.user_id),
+             message="生成测试合同",
+             plan=plan,
+-            runtime_context={"source": "test"},
++            runtime_context={**actor.context, "source": "test"},
+         )
++        _approve_original_run(waiting, repo, actor, monkeypatch)
+         run = orchestrator.continue_run(waiting.run_id, approved_by="tester")
+ 
+     assert waiting.status == "waiting_user"
+     assert run is not None
+-    assert run.status == "completed"
++    assert run.status == "completed", (run.error, [call.to_dict() for call in run.tool_calls])
+     assert run.steps[0].risk == "medium"
+     assert run.steps[0].idempotent is False
+     assert run.artifacts[0].artifact_type == "office_document"
+     assert run.artifacts[0].name == "contract.docx"
+-    assert run.artifacts[0].uri == "/api/ai/kitten/document/pickup/doc-token"
++    assert run.artifacts[0].uri == (
++        "/api/ai/kitten/document/pickup/" + run.tool_calls[0].output["pickup_token"]
++    )
+     assert run.metadata["artifact_count"] == 1
+     assert run.final_output["artifacts"][0]["mime_type"].endswith("wordprocessingml.document")
+     assert "artifact.attached" in [event.event_type for event in run.events]
++
++    from io import BytesIO
++
++    from docx import Document
++    from fastapi import FastAPI
++    from fastapi.testclient import TestClient
++
++    from app.fastapi_routes.ai_kitten import router
++
++    app = FastAPI()
++    app.include_router(router)
++    with TestClient(app) as client:
++        assert client.get(run.artifacts[0].uri).status_code == 404
++        foreign = trusted_actor(mod_id="xcagi-planner-excel-tools")
++        assert client.get(run.artifacts[0].uri, headers=foreign.headers).status_code == 404
++        # The existing browser link supplies the login cookie without an Active-Mod header.
++        client.cookies.set("session_id", actor.session_id)
++        download = client.get(run.artifacts[0].uri)
++        assert download.status_code == 200
++        assert download.headers["content-type"].endswith("wordprocessingml.document")
++        assert "隔离验收样本" in [p.text for p in Document(BytesIO(download.content)).paragraphs]
++        assert client.get(run.artifacts[0].uri, headers=actor.headers).status_code == 404
+diff --git a/FHD/tests/test_application/test_excel_vector_scope.py b/FHD/tests/test_application/test_excel_vector_scope.py
+index d6b813e824..b971545fdb 100644
+--- a/FHD/tests/test_application/test_excel_vector_scope.py
++++ b/FHD/tests/test_application/test_excel_vector_scope.py
+@@ -274,7 +274,13 @@ def test_independent_readback_rejects_forged_success_and_mismatched_rows(
+     excel_vector_case, corruption
+ ):
+     output = excel_vector_case.seed()
+-    params = {"file_path": str(excel_vector_case.workbook()), "index_id": "known-index"}
++    params = excel_vector_case.last_params
++    assert (
++        vector.verify_excel_vector_result(
++            "execute", params, output, excel_vector_case.last_context
++        )[1]
++        is True
++    )
+     scoped = vector.get_vector_store(excel_vector_case.owner.context)
+     key = scoped._key("known-index")
+     with vector.get_sqlite_vector_store()._get_conn() as db:
+@@ -297,9 +303,9 @@ def test_independent_readback_rejects_forged_success_and_mismatched_rows(
+     if corruption == "count":
+         output["chunk_count"] += 1
+     context = (
+-        excel_vector_case.others[0].context
++        {**excel_vector_case.last_context, **excel_vector_case.others[0].context}
+         if corruption == "other-scope"
+-        else excel_vector_case.owner.context
++        else excel_vector_case.last_context
+     )
+     output["business_verification"] = {"verified": True, "method": "caller_flag"}
+     checked, verified = vector.verify_excel_vector_result("execute", params, output, context)
+diff --git a/FHD/tests/test_application/test_excel_vector_snapshot.py b/FHD/tests/test_application/test_excel_vector_snapshot.py
+new file mode 100644
+index 0000000000..7114a3cc16
+--- /dev/null
++++ b/FHD/tests/test_application/test_excel_vector_snapshot.py
+@@ -0,0 +1,419 @@
++"""Real reviewed XLSX bytes survive path changes, recovery and entrypoint differences."""
++
++import hashlib
++import json
++import os
++import subprocess
++import sys
++from copy import deepcopy
++from pathlib import Path
++from types import SimpleNamespace
++from unittest.mock import Mock
++
++import pytest
++
++from app.application import excel_vector_app_service as vector
++from app.application.agent_orchestrator import AgentOrchestrator
++from app.application.agent_orchestrator.tool_executor import (
++    AgentToolExecutor,
++    execute_registered_tool,
++)
++from app.application.tools.workflow import execute_workflow_tool
++from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
++from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.excel_vector import trusted_actor as trusted_actor
++
++
++def _plan(params):
++    return PlanGraph(
++        plan_id="vector-snapshot",
++        intent="vector-snapshot",
++        nodes=[
++            WorkflowNode(
++                node_id="vector-node", tool_id="excel_vector_index", action="execute", params=params
++            )
++        ],
++    )
++
++
++def _admit(case, entry):
++    params = {
++        "file_path": str(case.workbook(text="ORIGINAL_REVIEWED_BYTES")),
++        "index_id": "reviewed-index",
++    }
++    if entry == "http":
++        pending = case.http.client.post("/api/excel/vector/ingest", json=params)
++        assert pending.status_code == 202, pending.text
++        run_id = pending.json()["run_id"]
++    elif entry == "model":
++        pending = json.loads(
++            execute_workflow_tool("excel_vector_index", params, runtime_context=case.owner.context)
++        )
++        assert pending["outcome"] == "waiting_approval", pending
++        run_id = pending["run_id"]
++    elif entry == "registered":
++        pending = execute_registered_tool(
++            "excel_vector_index", "execute", {**params, "_runtime_context": case.owner.context}
++        )
++        assert pending["outcome"] == "waiting_approval", pending
++        run_id = pending["run_id"]
++    elif entry == "trace":
++        from app.application.agent_orchestrator import chat_trace
++        from app.application.agent_orchestrator.trace_runs import legacy_execution_context
++        from app.legacy.chat.legacy_chat_adapter import append_tool_messages
++
++        run = chat_trace.start_legacy_chat_run(
++            message="索引当前文件",
++            runtime_context={
++                **case.owner.context,
++                "conversation_id": "vector-snapshot",
++                "turn_id": "turn-1",
++            },
++        )
++        context = legacy_execution_context(run)
++        call = SimpleNamespace(
++            id="vector-call",
++            function=SimpleNamespace(name="excel_vector_index", arguments=json.dumps(params)),
++        )
++        append_tool_messages(
++            [],
++            [call],
++            workspace_root=None,
++            runtime_context=context,
++            execute_tool=execute_workflow_tool,
++        )
++        run_id = run.run_id
++    else:
++        runtime = AgentOrchestrator()
++        run = (
++            runtime.start_task_from_plan if entry == "unified-task" else runtime.start_run_from_plan
++        )(
++            user_id=str(case.owner.user_id),
++            message="索引当前文件",
++            plan=_plan(params),
++            runtime_context=case.owner.context,
++        )
++        assert run.status == "waiting_user", run.to_dict()
++        run_id = run.run_id
++    run = case.http.repository.get(run_id)
++    assert run.status == "waiting_user"
++    snapshot = run.steps[0].params["execution_snapshot"]
++    assert (
++        snapshot["body"]["content_sha256"]
++        == hashlib.sha256(Path(params["file_path"]).read_bytes()).hexdigest()
++    )
++    assert snapshot["body"]["task_id"] == (
++        (run.metadata.get("task_context") or {}).get("task_id")
++        or run.metadata["runtime_context"].get("task_id")
++        or run.run_id
++    )
++    assert snapshot["body"]["node_id"] == run.steps[0].node_id
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++    return run
++
++
++@pytest.mark.parametrize("entry", ["http", "model", "registered", "trace", "dag", "unified-task"])
++@pytest.mark.parametrize("mutation", ["replace", "remove"])
++def test_all_entrypoints_execute_the_original_approved_bytes(excel_vector_case, entry, mutation):
++    case = excel_vector_case
++    waiting = _admit(case, entry)
++    snapshot = deepcopy(waiting.steps[0].params["execution_snapshot"])
++
++    def mutate():
++        if mutation == "replace":
++            case.workbook(text="REPLACED_AFTER_APPROVAL")
++        else:
++            Path(waiting.steps[0].params["file_path"]).unlink()
++
++    run = case.approve(waiting.run_id, before_dispatch=mutate)
++    assert run.status == "completed", run.to_dict()
++    assert run.steps[0].params["execution_snapshot"] == snapshot
++    assert run.steps[0].output["business_verification"]["verified"] is True
++    hits = vector.get_excel_vector_search_app_service(case.owner.context).query(
++        "reviewed-index", "bytes"
++    )["hits"]
++    assert "ORIGINAL_REVIEWED_BYTES" in json.dumps(hits)
++    assert "REPLACED_AFTER_APPROVAL" not in json.dumps(hits)
++
++
++@pytest.mark.parametrize("mutation", ["missing", "corrupt", "hardlink", "symlink"])
++def test_approved_snapshot_never_rebuilds_from_the_mutable_original(excel_vector_case, mutation):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    snapshot = waiting.steps[0].params["execution_snapshot"]
++    _, copied = vector._snapshot_file(snapshot["body"])
++
++    def mutate():
++        case.workbook(text="REPLACEMENT_MUST_NOT_BE_COPIED")
++        if mutation == "missing":
++            copied.unlink()
++        elif mutation == "corrupt":
++            copied.chmod(0o600)
++            copied.write_bytes(b"corrupted-copy")
++        elif mutation == "hardlink":
++            os.link(copied, copied.with_suffix(".linked"))
++        else:
++            copied.unlink()
++            copied.symlink_to(waiting.steps[0].params["file_path"])
++
++    run = case.approve(waiting.run_id, before_dispatch=mutate)
++    assert run.status != "completed"
++    assert run.steps[0].output["success"] is False
++    assert run.steps[0].params["execution_snapshot"] == snapshot
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++
++
++@pytest.mark.parametrize("change", ["task", "node", "actor", "tenant", "mod", "params", "proof"])
++def test_sealed_snapshot_cannot_move_to_another_task_call_or_owner(excel_vector_case, change):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    params = deepcopy(waiting.steps[0].params)
++    context = {
++        **waiting.metadata["runtime_context"],
++        "task_id": params["execution_snapshot"]["body"]["task_id"],
++        "node_id": waiting.steps[0].node_id,
++    }
++    if change in {"task", "node"}:
++        context[change + "_id"] = "different"
++    elif change in {"actor", "tenant", "mod"}:
++        context.update(case.others[{"actor": 0, "tenant": 1, "mod": 2}[change]].context)
++    elif change == "params":
++        params["index_id"] = "different"
++    else:
++        params["execution_snapshot"]["proof"] = "0" * 64
++    with pytest.raises(ValueError):
++        vector.prepare_excel_vector_input(params, context)
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++
++
++@pytest.mark.parametrize("ledger_state", ["completed", "unknown"])
++def test_completed_receipt_precedes_snapshot_file_read_on_replay(excel_vector_case, ledger_state):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    run = case.approve(waiting.run_id)
++    assert run.status == "completed"
++    _, copied = vector._snapshot_file(run.steps[0].params["execution_snapshot"]["body"])
++    copied.unlink()
++    Path(run.steps[0].params["file_path"]).unlink()
++    step = run.steps[0]
++    if ledger_state == "unknown":
++        from app.db.models.agent import AgentBusinessActionRecord
++
++        # Preserve an unresolved durable claim after a side effect; receipt existence is not completion.
++        with case.owner.factory.begin() as db:
++            row = db.query(AgentBusinessActionRecord).filter_by(run_id=run.run_id).one()
++            row.state = "unknown"
++    context = {
++        **run.metadata["runtime_context"],
++        "run_id": run.run_id,
++        "step_id": step.step_id,
++        "task_id": run.metadata["task_context"]["task_id"],
++        "node_id": step.node_id,
++    }
++    store = vector.get_sqlite_vector_store()
++    before = store.list_indexes()
++    original = step.output
++    replayed = AgentToolExecutor().execute(step, runtime_context=context)
++    if ledger_state == "completed":
++        assert replayed.pop("business_action_replayed") is True
++        assert replayed == original
++    else:
++        assert replayed["success"] is False and replayed["outcome"] == "unknown"
++        assert replayed["retryable"] is False
++        assert replayed["reconciliation_evidence"]["receipt"] == original
++    assert store.list_indexes() == before
++
++
++def test_old_waiting_without_snapshot_cannot_refresh_after_approval(excel_vector_case):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    waiting.steps[0].params.pop("execution_snapshot")
++    case.http.repository.save(waiting)
++    case.workbook(text="NEW_INPUT")
++    run = case.approve(waiting.run_id)
++    assert run.status != "completed"
++    assert "execution_snapshot" not in run.steps[0].params
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++
++
++def _consume(case, run_id):
++    review = case.http.client.get(f"/api/agent/runs/{run_id}")
++    assert review.status_code == 200, review.text
++    token = review.json()["approval"]["grant"]
++    continued = case.http.client.post(
++        f"/api/agent/runs/{run_id}/continue", json={"approval_grant": token}
++    )
++    assert continued.status_code == 202, continued.text
++    return token
++
++
++def test_restart_executes_persisted_snapshot_without_reading_original_path(excel_vector_case):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    _consume(case, waiting.run_id)
++    Path(waiting.steps[0].params["file_path"]).unlink()
++    program = """import json,sys
++from app.application.agent_orchestrator import AgentOrchestrator
++from app.application.agent_orchestrator.task_execution_repository import get_task_execution_repository
++queue=get_task_execution_repository()
++claim=queue.claim('snapshot-restart',lease_seconds=60)
++assert claim.run_id==sys.argv[1]
++run=AgentOrchestrator().execute_dispatched_run(sys.argv[1])
++print(json.dumps({'status':run.status,'output':run.steps[0].output}))
++"""
++    child = subprocess.run(
++        [sys.executable, "-c", program, waiting.run_id],
++        cwd=Path(__file__).resolve().parents[2],
++        env={**os.environ, "XCAGI_DESKTOP_MODE": "0"},
++        capture_output=True,
++        text=True,
++        timeout=40,
++    )
++    assert child.returncode == 0, child.stderr
++    result = json.loads(child.stdout)
++    assert result["status"] == "completed", result
++    assert result["output"]["business_verification"]["verified"] is True
++    stored = case.http.repository.get(waiting.run_id)
++    assert stored.steps[0].params == waiting.steps[0].params
++    hits = vector.get_excel_vector_search_app_service(case.owner.context).query(
++        "reviewed-index", "bytes"
++    )["hits"]
++    assert "ORIGINAL_REVIEWED_BYTES" in json.dumps(hits)
++
++
++def test_retry_keeps_original_task_node_and_snapshot_with_a_new_formal_grant(excel_vector_case):
++    case = excel_vector_case
++    waiting = _admit(case, "unified-task")
++    snapshot = waiting.steps[0].params["execution_snapshot"]
++    original_grant = _consume(case, waiting.run_id)
++    cancelled_response = case.http.client.post(f"/api/agent/runs/{waiting.run_id}/cancel")
++    assert cancelled_response.status_code == 200, cancelled_response.text
++    cancelled = case.http.repository.get(waiting.run_id)
++    assert cancelled.status == "cancelled" and cancelled.tool_calls == []
++    case.workbook(text="NEW_FILE_MUST_NOT_REFRESH_RETRY")
++    retry_response = case.http.client.post(f"/api/agent/runs/{waiting.run_id}/retry")
++    assert retry_response.status_code == 200, retry_response.text
++    retried = case.http.repository.get(retry_response.json()["data"]["run_id"])
++    assert retried.run_id != waiting.run_id and retried.status == "waiting_user"
++    assert (
++        retried.metadata["task_context"]["task_id"] == waiting.metadata["task_context"]["task_id"]
++    )
++    assert retried.steps[0].node_id == waiting.steps[0].node_id
++    assert retried.steps[0].params["execution_snapshot"] == snapshot
++    denied = case.http.client.post(
++        f"/api/agent/runs/{retried.run_id}/continue", json={"approval_grant": original_grant}
++    )
++    assert denied.status_code == 403, denied.text
++    completed = case.approve(retried.run_id)
++    assert completed.status == "completed", completed.to_dict()
++    assert completed.steps[0].params["execution_snapshot"] == snapshot
++    hits = vector.get_excel_vector_search_app_service(case.owner.context).query(
++        "reviewed-index", "bytes"
++    )["hits"]
++    assert "ORIGINAL_REVIEWED_BYTES" in json.dumps(hits)
++    assert "NEW_FILE_MUST_NOT_REFRESH_RETRY" not in json.dumps(hits)
++
++
++def test_trace_replay_returns_exact_original_receipt_after_snapshot_deletion(excel_vector_case):
++    from app.application.agent_orchestrator.trace_runs import legacy_execution_context
++    from app.legacy.chat.legacy_chat_adapter import append_tool_messages
++
++    case = excel_vector_case
++    waiting = _admit(case, "trace")
++    original_call = waiting.tool_calls[0]
++    params = original_call.metadata["model_params"]
++    completed = case.approve(waiting.run_id)
++    assert completed.status == "completed", completed.to_dict()
++    _, copied = vector._snapshot_file(completed.steps[0].params["execution_snapshot"]["body"])
++    copied.unlink()
++    Path(params["file_path"]).unlink()
++    dispatch = Mock(side_effect=AssertionError("completed receipt must not dispatch"))
++    tc = SimpleNamespace(
++        id=original_call.call_id,
++        function=SimpleNamespace(name="excel_vector_index", arguments=json.dumps(params)),
++    )
++    append_tool_messages(
++        [],
++        [tc],
++        workspace_root=None,
++        runtime_context=legacy_execution_context(completed),
++        execute_tool=dispatch,
++    )
++    dispatch.assert_not_called()
++    saved = case.http.repository.get(waiting.run_id)
++    assert len(saved.tool_calls) == 1
++    assert saved.tool_calls[0].output == completed.tool_calls[0].output
++
++
++def test_central_executor_does_not_create_snapshot_after_a_grant(excel_vector_case):
++    from app.application.agent_orchestrator.run_models import AgentStep
++
++    case = excel_vector_case
++    step = AgentStep(
++        node_id="raw-call",
++        tool_id="excel_vector_index",
++        action="execute",
++        params={"file_path": str(case.workbook())},
++    )
++    result = AgentToolExecutor().execute(step, runtime_context=case.owner.context)
++    assert result["error_code"] == "excel_vector_snapshot_invalid"
++    assert result["success"] is False and result["retryable"] is False
++    assert vector.get_sqlite_vector_store().list_indexes() == []
++    assert not list((case.root / "server-data").rglob("*.bin"))
++
++
++def test_digest_checked_bytes_are_the_same_bytes_parsed(excel_vector_case, monkeypatch):
++    from app.application import office_parse_app_service
++
++    case = excel_vector_case
++    context = dict(case.owner.context)
++    params = vector.prepare_excel_vector_input(
++        {"file_path": str(case.workbook(text="PINNED_ORIGINAL")), "index_id": "same-bytes"}, context
++    )
++    _, copied = vector._snapshot_file(params["execution_snapshot"]["body"])
++    replacement = case.workbook(text="REOPENED_REPLACEMENT").read_bytes()
++    read = office_parse_app_service._read_pinned_output
++    calls = []
++
++    def replace_after_pinned_read(base, path, **kwargs):
++        blob = read(base, path, **kwargs)
++        calls.append(path)
++        copied.chmod(0o600)
++        copied.write_bytes(replacement)
++        return blob
++
++    monkeypatch.setattr(office_parse_app_service, "_read_pinned_output", replace_after_pinned_read)
++    output = vector.get_excel_vector_ingest_app_service(context).ingest_excel(**params)
++    assert output["success"] is True
++    assert calls == [copied]
++    hits = vector.get_excel_vector_search_app_service(case.owner.context).query(
++        "same-bytes", "bytes"
++    )["hits"]
++    assert "PINNED_ORIGINAL" in json.dumps(hits)
++    assert "REOPENED_REPLACEMENT" not in json.dumps(hits)
++
++
++def test_legacy_completed_receipt_remains_readable_without_raw_redispatch(excel_vector_case):
++    case = excel_vector_case
++    waiting = _admit(case, "http")
++    completed = case.approve(waiting.run_id)
++    assert completed.status == "completed"
++    original = deepcopy(completed.steps[0].output)
++    # Project the historical persisted shape: no input seal, with an existing receipt.
++    completed.steps[0].params.pop("execution_snapshot")
++    for call in completed.tool_calls:
++        call.params.pop("execution_snapshot", None)
++    case.http.repository.save(completed)
++    public = case.http.client.get(f"/api/agent/runs/{completed.run_id}")
++    assert public.status_code == 200
++    assert public.json()["data"]["steps"][0]["output"] == original
++    before = vector.get_sqlite_vector_store().list_indexes()
++    context = {
++        **completed.metadata["runtime_context"],
++        "run_id": completed.run_id,
++        "step_id": completed.steps[0].step_id,
++    }
++    rejected = AgentToolExecutor().execute(completed.steps[0], runtime_context=context)
++    assert rejected["error_code"] == "excel_vector_snapshot_invalid"
++    assert vector.get_sqlite_vector_store().list_indexes() == before
+diff --git a/FHD/tests/test_application/test_workflow_tools_ext3.py b/FHD/tests/test_application/test_workflow_tools_ext3.py
+index b170233328..3030e18476 100644
+--- a/FHD/tests/test_application/test_workflow_tools_ext3.py
++++ b/FHD/tests/test_application/test_workflow_tools_ext3.py
+@@ -17,7 +17,6 @@ from unittest.mock import MagicMock, Mock, patch
+ 
+ import pytest
+ 
+-from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
+ from tests.fixtures.excel_vector import excel_vector_case as excel_vector_case
+ from tests.fixtures.excel_vector import reviewed_agent_http as reviewed_agent_http
+ from tests.fixtures.excel_vector import trusted_actor as trusted_actor
+@@ -237,20 +236,18 @@ class TestExecuteWorkflowToolAdditionalHandlers:
+         parsed = json.loads(result)
+         assert parsed["success"] is False
+ 
+-    def test_excel_vector_index(self, excel_vector_case, approved_tool_context):
+-        from app.application.agent_orchestrator.run_models import AgentStep
++    def test_excel_vector_index(self, excel_vector_case):
+         from app.application.tools.workflow import execute_workflow_tool
+ 
+         params = {"file_path": str(excel_vector_case.workbook()), "index_id": "idx1"}
+-        step = AgentStep(
+-            node_id="excel_vector_index",
+-            tool_id="excel_vector_index",
+-            action="execute",
+-            params=params,
++        pending = json.loads(
++            execute_workflow_tool(
++                "excel_vector_index", params, runtime_context=excel_vector_case.owner.context
++            )
+         )
+-        context = approved_tool_context(excel_vector_case.owner, step)
+-        result = execute_workflow_tool("excel_vector_index", params, runtime_context=context)
+-        parsed = json.loads(result)
++        assert pending["outcome"] == "waiting_approval"
++        completed = excel_vector_case.approve(pending["run_id"])
++        parsed = completed.steps[0].output
+         assert parsed["success"] is True
+         assert parsed["index_id"] == "idx1"
+         assert parsed["business_verification"]["verified"] is True
+diff --git a/FHD/tests/test_services/test_kitten_ai_document_pickup.py b/FHD/tests/test_services/test_kitten_ai_document_pickup.py
+index 447003de9b..65eb979b0b 100644
+--- a/FHD/tests/test_services/test_kitten_ai_document_pickup.py
++++ b/FHD/tests/test_services/test_kitten_ai_document_pickup.py
+@@ -201,3 +201,435 @@ class TestStoreAndPopDocumentPickup:
+                 assert len(result[0]) == 1024 * 100
+ 
+                 mod._CACHED_BASE = None
++
++
++from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++
++
++@pytest.fixture
++def owned_document_case(trusted_actor, approved_tool_context, tmp_path, monkeypatch):
++    """Real session, consumed grant, action ledger, renderer and independent disk readback."""
++    from types import SimpleNamespace
++
++    from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
++    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
++    from app.domain.shared_services.kitten_ai_document import generate, pickup
++
++    actor = trusted_actor(mod_id="xcagi-planner-excel-tools")
++    monkeypatch.setenv("KITTEN_PICKUP_DIR", str(tmp_path / "owned-pickup"))
++    monkeypatch.setattr(pickup, "_CACHED_BASE", None)
++    monkeypatch.setattr("app.db.session.SessionLocal", actor.factory)
++    monkeypatch.setattr(
++        "app.application.normal_chat_dispatch.resolve_tool_execution_profile",
++        lambda *args, **kw: "pro_default",
++    )
++    monkeypatch.setattr(
++        generate,
++        "draft_document_spec",
++        lambda prompt, fmt: {
++            "title": "contract",
++            "sections": [{"heading": "任务合同", "paragraphs": [prompt]}],
++            "sheets": [{"name": "任务数据", "headers": ["任务"], "rows": [[prompt]]}],
++        },
++    )
++
++    def create(fmt="docx", owner=None):
++        selected = owner or actor
++        step = AgentStep(
++            node_id="make_document",
++            tool_id="generate_office_document",
++            action="execute",
++            params={"user_request": "隔离验收样本", "output_format": fmt},
++        )
++        context = approved_tool_context(selected, step)
++        repository = get_agent_run_repository()
++        run = repository.get(context["run_id"])
++        call = ToolCall(
++            step_id=step.step_id,
++            node_id=step.node_id,
++            tool_id=step.tool_id,
++            action=step.action,
++            params=step.params,
++            status="running",
++        )
++        run.tool_calls.append(call)
++        repository.save(run)
++        context.update(task_id=run.run_id, call_id=call.call_id)
++        result = AgentToolExecutor().execute(step, runtime_context=context)
++        call.output, call.status = (
++            result,
++            "completed" if result.get("success") is True else "blocked",
++        )
++        run.status = step.status = call.status
++        run.steps[0] = step
++        repository.save(run)
++        return SimpleNamespace(
++            actor=selected,
++            context=context,
++            run=run,
++            result=result,
++            step=step,
++            base=tmp_path / "owned-pickup",
++            create=create,
++        )
++
++    return create
++
++
++def _verify_case(case, *, result=None, context=None):
++    from app.application.agent_orchestrator.business_action_verification import verify_action_result
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++
++    return verify_action_result(
++        get_tool_action_spec("generate_office_document", "execute"),
++        case.step.params,
++        result or case.result,
++        runtime_context=case.context if context is None else context,
++    )
++
++
++@pytest.mark.parametrize("fmt", ["docx", "xlsx"])
++def test_owned_document_readback_keeps_real_download_once(owned_document_case, fmt):
++    from io import BytesIO
++
++    from docx import Document
++    from openpyxl import load_workbook
++
++    case = owned_document_case(fmt)
++    assert case.result["success"] is True, case.result
++    assert case.result["business_verification"]["verified"] is True
++    token = case.result["pickup_token"]
++    assert token.startswith("v1_")
++    assert _verify_case(case)[1] is True
++    assert _verify_case(case)[1] is True  # Verification never consumes the customer download.
++    item = pop_document_pickup(token, runtime_context=case.actor.context)
++    assert item is not None
++    content, name, mime = item
++    assert name == f"contract.{fmt}"
++    if fmt == "docx":
++        assert "隔离验收样本" in [p.text for p in Document(BytesIO(content)).paragraphs]
++    else:
++        assert load_workbook(BytesIO(content)).active["A2"].value == "隔离验收样本"
++    assert mime == case.result["artifacts"][0]["mime_type"]
++    assert pop_document_pickup(token, runtime_context=case.actor.context) is None
++
++
++@pytest.mark.parametrize("scope", ["owner", "tenant", "mod", "task", "call", "action"])
++def test_owned_document_rejects_wrong_scope_without_consuming(
++    owned_document_case, trusted_actor, scope
++):
++    case = owned_document_case()
++    assert case.result["success"] is True, case.result
++    context = dict(case.context)
++    if scope in {"owner", "tenant", "mod"}:
++        foreign = trusted_actor(
++            user_id=case.actor.user_id if scope == "mod" else None,
++            tenant_id=8 if scope == "tenant" else 7,
++            mod_id="other-mod" if scope == "mod" else "xcagi-planner-excel-tools",
++        )
++        context = {**context, **foreign.context}
++        assert (
++            pop_document_pickup(case.result["pickup_token"], runtime_context=foreign.context)
++            is None
++        )
++    else:
++        context[{"task": "task_id", "call": "call_id", "action": "business_action_id"}[scope]] += (
++            "-other"
++        )
++    assert _verify_case(case, context=context)[1] is False
++    assert _verify_case(case)[1] is True
++    assert (
++        pop_document_pickup(case.result["pickup_token"], runtime_context=case.actor.context)
++        is not None
++    )
++
++
++def test_owned_document_old_receipt_cannot_complete_another_approved_task(owned_document_case):
++    old = owned_document_case()
++    new = owned_document_case()
++    assert old.result["success"] is new.result["success"] is True
++    assert _verify_case(new, result=old.result)[1] is False
++    assert _verify_case(old)[1] is True
++    assert _verify_case(new)[1] is True
++
++
++@pytest.mark.parametrize(
++    "change", ["hash", "metadata", "strip_binding", "result_name", "result_uri", "result_mime"]
++)
++def test_owned_document_rejects_tampered_content_and_receipt(owned_document_case, change):
++    from copy import deepcopy
++
++    from app.domain.shared_services.kitten_ai_document.generate import build_docx_bytes
++
++    case = owned_document_case()
++    assert case.result["success"] is True, case.result
++    record = case.base / case.result["pickup_token"]
++    result = deepcopy(case.result)
++    if change == "hash":
++        (record / "data.bin").write_bytes(
++            build_docx_bytes({"title": "contract", "sections": []})[0]
++        )
++    elif change in {"metadata", "strip_binding"}:
++        meta = json.loads((record / "meta.json").read_text())
++        if change == "metadata":
++            meta["file_name"] = "changed.docx"
++        else:
++            meta = {key: meta[key] for key in ("ts", "file_name", "mime")}
++        (record / "meta.json").write_text(json.dumps(meta))
++    elif change == "result_name":
++        result["file_name"] = "other.docx"
++    elif change == "result_uri":
++        result["download_url"] += "-other"
++    else:
++        result["artifacts"][0]["mime_type"] = "text/plain"
++    assert _verify_case(case, result=result)[1] is False
++    assert (record / "data.bin").exists()
++    if change in {"hash", "metadata", "strip_binding"}:
++        assert (
++            pop_document_pickup(case.result["pickup_token"], runtime_context=case.actor.context)
++            is None
++        )
++        assert (record / "data.bin").exists()
++
++
++@pytest.mark.parametrize("link", ["file_symlink", "hardlink", "directory_symlink", "base_symlink"])
++def test_owned_document_rejects_links_without_touching_target(owned_document_case, tmp_path, link):
++    case = owned_document_case()
++    assert case.result["success"] is True, case.result
++    record = case.base / case.result["pickup_token"]
++    original = (record / "data.bin").read_bytes()
++    target = tmp_path / "outside.bin"
++    target.write_bytes(original)
++    if link == "file_symlink":
++        (record / "data.bin").unlink()
++        (record / "data.bin").symlink_to(target)
++    elif link == "hardlink":
++        (record / "data.bin").unlink()
++        os.link(target, record / "data.bin")
++    elif link == "directory_symlink":
++        outside = tmp_path / "outside-record"
++        record.rename(outside)
++        record.symlink_to(outside, target_is_directory=True)
++    else:
++        outside = tmp_path / "outside-base"
++        case.base.rename(outside)
++        case.base.symlink_to(outside, target_is_directory=True)
++    assert _verify_case(case)[1] is False
++    assert (
++        pop_document_pickup(case.result["pickup_token"], runtime_context=case.actor.context) is None
++    )
++    assert target.read_bytes() == original
++
++
++@pytest.mark.parametrize("expired", ["document", "session"])
++def test_owned_document_expiry_does_not_consume_record(owned_document_case, monkeypatch, expired):
++    from datetime import timedelta
++    from types import SimpleNamespace
++
++    from app.db.models.user import Session as UserSession
++    from app.domain.shared_services.kitten_ai_document import pickup
++    from app.utils.time import utc_now_naive
++
++    case = owned_document_case()
++    assert case.result["success"] is True, case.result
++    if expired == "document":
++        now = time.time()
++        monkeypatch.setattr(pickup, "time", SimpleNamespace(time=lambda: now + 86401))
++    else:
++        with case.actor.factory.begin() as db:
++            db.get(UserSession, case.actor.session_row_id).expires_at = utc_now_naive() - timedelta(
++                seconds=1
++            )
++    assert _verify_case(case)[1] is False
++    assert (
++        pop_document_pickup(case.result["pickup_token"], runtime_context=case.actor.context) is None
++    )
++    assert (case.base / case.result["pickup_token"] / "data.bin").is_file()
++
++
++@pytest.mark.parametrize("fmt", ["docx", "xlsx"])
++def test_owned_document_invalid_opc_never_completes(owned_document_case, monkeypatch, fmt):
++    from io import BytesIO
++    from zipfile import ZipFile
++
++    from app.domain.shared_services.kitten_ai_document import generate
++
++    output = BytesIO()
++    with ZipFile(output, "w") as archive:
++        archive.writestr("[Content_Types].xml", "<not_content_types/>")
++        archive.writestr("_rels/.rels", "<not_relationships/>")
++        path, root, namespace = (
++            ("word/document.xml", "document", "wordprocessingml")
++            if fmt == "docx"
++            else ("xl/workbook.xml", "workbook", "spreadsheetml")
++        )
++        archive.writestr(
++            path, f'<{root} xmlns="http://schemas.openxmlformats.org/{namespace}/2006/main"/>'
++        )
++    monkeypatch.setattr(
++        generate, "generate_office_file", lambda *args: (output.getvalue(), f"contract.{fmt}")
++    )
++    case = owned_document_case(fmt)
++    assert case.result["success"] is False
++    assert case.result["outcome"] == "unknown"
++    assert case.result["retryable"] is False
++    assert "artifacts" not in case.result
++
++
++def test_owned_document_pruning_does_not_evict_another_owner(
++    owned_document_case, trusted_actor, monkeypatch
++):
++    from app.domain.shared_services.kitten_ai_document import pickup
++
++    monkeypatch.setattr(pickup, "_MAX_ITEMS", 1)
++    first = owned_document_case()
++    other = owned_document_case(owner=trusted_actor(mod_id="xcagi-planner-excel-tools"))
++    second = owned_document_case()
++    assert first.result["success"] is other.result["success"] is second.result["success"] is True
++    assert not (first.base / first.result["pickup_token"]).exists()
++    assert _verify_case(other)[1] is True
++    assert _verify_case(second)[1] is True
++
++
++def test_owned_document_download_rejects_changed_original_step(owned_document_case):
++    from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++
++    case = owned_document_case()
++    assert case.result["success"] is True
++    repository = get_agent_run_repository()
++    original = repository.get(case.run.run_id)
++    original.steps[0].params = {
++        **original.steps[0].params,
++        "user_request": "changed after execution",
++    }
++    repository.save(original)
++    assert (
++        pop_document_pickup(case.result["pickup_token"], runtime_context=case.actor.context) is None
++    )
++    assert (case.base / case.result["pickup_token"] / "data.bin").is_file()
++
++
++def test_owned_document_two_processes_consume_one_original_receipt(owned_document_case, tmp_path):
++    import subprocess
++    import sys
++
++    case = owned_document_case()
++    assert case.result["success"] is True
++    script = """
++import json, sys, time
++from pathlib import Path
++from app.domain.shared_services.kitten_ai_document.pickup import pop_document_pickup
++body = json.loads(sys.stdin.read())
++ready, gate = Path(sys.argv[1]), Path(sys.argv[2])
++ready.touch()
++deadline = time.monotonic() + 20
++while not gate.exists():
++    if time.monotonic() > deadline:
++        raise RuntimeError("test barrier timed out")
++    time.sleep(.01)
++item = pop_document_pickup(body["token"], runtime_context=body["context"])
++print(json.dumps({"downloaded": item is not None, "size": len(item[0]) if item else 0}))
++"""
++    gate = tmp_path / "consume-go"
++    environment = {**os.environ, "XCAGI_AGENT_RUN_REQUIRE_DURABLE": "1"}
++    workers = []
++    try:
++        for index in range(2):
++            worker = subprocess.Popen(
++                [sys.executable, "-c", script, str(tmp_path / f"ready-{index}"), str(gate)],
++                stdin=subprocess.PIPE,
++                stdout=subprocess.PIPE,
++                stderr=subprocess.PIPE,
++                text=True,
++                env=environment,
++            )
++            worker.stdin.write(
++                json.dumps({"token": case.result["pickup_token"], "context": case.actor.context})
++            )
++            worker.stdin.close()
++            worker.stdin = None
++            workers.append(worker)
++        deadline = time.monotonic() + 20
++        while not all((tmp_path / f"ready-{index}").exists() for index in range(2)):
++            assert time.monotonic() < deadline, "pickup consumers did not reach the barrier"
++            time.sleep(0.01)
++        gate.touch()
++        receipts = []
++        for worker in workers:
++            output, error = worker.communicate(timeout=20)
++            assert worker.returncode == 0, error
++            receipts.append(json.loads(output.splitlines()[-1]))
++        assert sorted(item["downloaded"] for item in receipts) == [False, True]
++        assert sum(item["size"] > 0 for item in receipts) == 1
++    finally:
++        for worker in workers:
++            if worker.poll() is None:
++                worker.kill()
++                worker.communicate(timeout=5)
++
++
++@pytest.mark.parametrize(
++    "shape", ["missing_body", "missing_table_grid", "empty_body", "text_and_table"]
++)
++def test_owned_docx_requires_readable_body_and_tables(owned_document_case, monkeypatch, shape):
++    from io import BytesIO
++    from xml.etree import ElementTree
++    from zipfile import ZipFile
++
++    from docx import Document
++
++    from app.domain.shared_services.kitten_ai_document import generate
++
++    document = Document()
++    document.add_paragraph("可读段落")
++    document.add_table(rows=1, cols=1).cell(0, 0).text = "可读表格"
++    original = BytesIO()
++    document.save(original)
++    output = BytesIO()
++    with ZipFile(BytesIO(original.getvalue())) as source, ZipFile(output, "w") as destination:
++        for member in source.infolist():
++            content = source.read(member.filename)
++            if member.filename == "word/document.xml":
++                root = ElementTree.fromstring(content)
++                body = root.find(
++                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}body"
++                )
++                if shape == "missing_body":
++                    root.remove(body)
++                elif shape == "empty_body":
++                    body.clear()
++                elif shape == "missing_table_grid":
++                    table = body.find(
++                        "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tbl"
++                    )
++                    table.remove(
++                        table.find(
++                            "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}tblGrid"
++                        )
++                    )
++                content = ElementTree.tostring(root)
++            destination.writestr(member, content)
++    monkeypatch.setattr(
++        generate, "generate_office_file", lambda *args: (output.getvalue(), "contract.docx")
++    )
++    case = owned_document_case()
++    if shape.startswith("missing"):
++        assert case.result["success"] is False
++        assert case.result["outcome"] == "unknown"
++        assert case.result["retryable"] is False
++        assert "artifacts" not in case.result
++    else:
++        assert case.result["success"] is True
++        assert _verify_case(case)[1] is True
++        content, _, _ = pop_document_pickup(
++            case.result["pickup_token"], runtime_context=case.actor.context
++        )
++        opened = Document(BytesIO(content))
++        if shape == "empty_body":
++            assert opened.paragraphs == []
++            assert opened.tables == []
++        else:
++            assert [paragraph.text for paragraph in opened.paragraphs] == ["可读段落"]
++            assert opened.tables[0].rows[0].cells[0].text == "可读表格"
+-- 
+2.50.1 (Apple Git-155)
+

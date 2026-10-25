@@ -1,0 +1,15 @@
+latest_progress_note: HEAD9950a393b5：完整离线121项33通过88失败；Excel原182通过，最新扩展576项566通过10失败待对照，迁移未提交；已提交口径净增5324失败；全部76项正式闭环仍open；只验收macOS，1.0.0.7未发布。
+
+ARCH-02: {
+  "id": "ARCH-02",
+  "title": "统一 Agent Runtime",
+  "closure": "open",
+  "evidence_gap": "Excel共享执行内核迁移尚未提交；原182回归已通过。最新扩展576项566通过10失败，正在与干净HEAD对照，另有审批恢复轨迹投影及20秒模型超时语义待修复复核。",
+  "candidate_status": "partial",
+  "candidate_progress": "员工共享模型游标、原工具回执、审批和持久任务；Excel迁移中。",
+  "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3",
+  "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+}
+
+STATE_SNIPPET:
+cy spec13/13. Formal native signed DMG/real CI/installed acceptance pending.", "Excel_kernel_migration": "WIP uncommitted:original182 passed; latest extended576=566pass10fail, cleanHEAD original538 comparison pending; approval projection reconstruction and explicit20s SDK timeout semantics under bounded correction; no installed acceptance."}, "retained_active_paths": [{"path": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX", "reason": "active76-item goal candidate worktree;sour

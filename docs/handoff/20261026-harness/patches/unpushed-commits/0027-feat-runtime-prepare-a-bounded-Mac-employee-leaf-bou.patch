@@ -1,0 +1,1200 @@
+From 300bebe22f5b813692dc28d578d904438705fa24 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 00:25:17 +0800
+Subject: [PATCH 27/43] feat(runtime): prepare a bounded Mac employee leaf
+ boundary
+
+
+diff --git a/FHD/app/application/employee_runtime/leaf_process.py b/FHD/app/application/employee_runtime/leaf_process.py
+new file mode 100644
+index 0000000000..f938558b1e
+--- /dev/null
++++ b/FHD/app/application/employee_runtime/leaf_process.py
+@@ -0,0 +1,540 @@
++"""Trusted staging and deny-default macOS launch for credential-free employee code."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import importlib.util
++import json
++import math
++import os
++import re
++import selectors
++import signal
++import stat
++import subprocess
++import sys
++import tempfile
++import time
++from concurrent.futures import ThreadPoolExecutor
++from contextlib import contextmanager, suppress
++from contextvars import copy_context
++from pathlib import Path
++
++import psutil
++
++MAX_MESSAGE = 8 * 1024 * 1024
++MAX_FILE = 64 * 1024 * 1024
++MAX_STAGE = 256 * 1024 * 1024
++DEPENDENCIES = (
++    "docx",
++    "openpyxl",
++    "pptx",
++    "xlsxwriter",
++    "pypdf",
++    "reportlab",
++    "PIL",
++    "lxml",
++    "numpy",
++    "et_xmlfile",
++    "charset_normalizer",
++    "chardet",
++    "defusedxml",
++    "typing_extensions",
++)
++
++
++class LeafUnavailable(ValueError):
++    """No employee code was launched; there is no unsandboxed fallback."""
++
++
++def _pinned_bytes(path: Path, *, limit=MAX_FILE) -> bytes:
++    from app.application.office_parse_app_service import _read_pinned_output
++
++    try:
++        data = _read_pinned_output(Path(path.anchor), path, max_bytes=limit + 1)
++    except OSError as error:
++        raise LeafUnavailable("employee stage file is unavailable or linked") from error
++    if len(data) > limit:
++        raise LeafUnavailable("employee stage file exceeds limit")
++    return data
++
++
++def stage_employee(pack: Path, snapshot: dict, payload: dict, stage: Path) -> dict:
++    """Copy only reviewed bytes; never grant an original code/input directory."""
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    code, total = {}, 0
++    for source in sorted(pack.rglob("*")):
++        rel = source.relative_to(pack)
++        if "__pycache__" in rel.parts or any(p.startswith(".") for p in rel.parts):
++            continue
++        if source.is_symlink():
++            raise LeafUnavailable("employee stage contains a link")
++        if source.is_dir():
++            continue
++        data = _pinned_bytes(source)
++        total += len(data)
++        if total > MAX_STAGE:
++            raise LeafUnavailable("employee stage exceeds limit")
++        code[rel.as_posix()] = hashlib.sha256(data).hexdigest()
++        dest = stage / "pack" / rel
++        dest.parent.mkdir(parents=True, exist_ok=True)
++        dest.write_bytes(data)
++        dest.chmod(0o400)
++    if canonical_hash(code) != snapshot["code_sha256"]:
++        raise LeafUnavailable("employee code changed after approval")
++    rewritten = dict(payload)
++    for index, item in enumerate(snapshot["inputs"]):
++        data = _pinned_bytes(Path(item["path"]))
++        total += len(data)
++        if total > MAX_STAGE or hashlib.sha256(data).hexdigest() != item["sha256"]:
++            raise LeafUnavailable("employee input changed after approval")
++        if len(data) != item["size_bytes"]:
++            raise LeafUnavailable("employee input size changed after approval")
++        dest = stage / "inputs" / str(index) / Path(item["path"]).name
++        dest.parent.mkdir(parents=True, exist_ok=True)
++        dest.write_bytes(data)
++        dest.chmod(0o400)
++        rewritten[item["parameter"]] = str(dest)
++    for name in ("work", "work/outputs", "tmp", "home"):
++        (stage / name).mkdir(parents=True, exist_ok=True)
++    rewritten.update(
++        workspace_root=str(stage / "work"),
++        output_path=str(stage / "work/outputs" / Path(snapshot["output_path"]).name),
++    )
++    rewritten["output_relpath"] = rewritten["output_path"]
++    return rewritten
++
++
++def stage_sdk(stage: Path) -> Path:
++    """Explicit portable projections; do not expose the dynamic host SDK facade."""
++    host = Path(__file__).resolve().parents[3]
++    projection = {
++        "app/mod_sdk/office_employee_worker.py": "app/mod_sdk/office_employee_worker.py",
++        "app/mod_sdk/generated_employee_worker.py": "app/mod_sdk/generated_employee_worker.py",
++        "app/mod_sdk/host_services.py": "app/application/office_plaintext_generate.py",
++        "app/application/agent_orchestrator/tool_receipt.py": "app/application/agent_orchestrator/tool_receipt.py",
++    }
++    root = stage / "sdk"
++    for target, source in projection.items():
++        dest = root / target
++        dest.parent.mkdir(parents=True, exist_ok=True)
++        dest.write_bytes(_pinned_bytes(host / source))
++        dest.chmod(0o400)
++    return root
++
++
++def _runtime():
++    if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
++        raise LeafUnavailable("tool_os_isolation_unavailable")
++    if getattr(sys, "frozen", False):
++        helper = Path(sys.executable).parent / "employee-leaf/xcagi-employee-leaf"
++        if not helper.is_file() or helper.is_symlink():
++            raise LeafUnavailable("packaged_employee_leaf_missing")
++        return [str(helper)], [helper.parent], []
++    interpreter = Path(sys.executable).resolve()
++    bootstrap = Path(__file__).resolve().parents[2] / "mod_sdk/employee_leaf.py"
++    roots, search = [Path(sys.base_prefix).resolve(), bootstrap], set()
++    for name in DEPENDENCIES:
++        spec = importlib.util.find_spec(name)
++        if spec is None or spec.origin is None:
++            continue
++        path = Path(spec.origin).resolve()
++        root = path.parent if spec.submodule_search_locations else path
++        roots.append(root)
++        search.add(str(path.parent.parent if spec.submodule_search_locations else path.parent))
++    return [str(interpreter), "-I", "-S", str(bootstrap)], roots, sorted(search)
++
++
++def _profile(command, read_roots, stage):
++    def rule(kind, path):
++        return f"({kind} {json.dumps(str(path))})"
++
++    ancestors = {parent for path in [*read_roots, stage] for parent in path.parents}
++    return "\n".join(
++        [
++            "(version 1)",
++            "(deny default)",
++            f"(allow process-exec {rule('literal', command[0])})",
++            "(allow sysctl-read "
++            + " ".join(
++                rule("sysctl-name", name)
++                for name in (
++                    "kern.ostype",
++                    "kern.osrelease",
++                    "kern.version",
++                    "kern.hostname",
++                    "hw.machine",
++                )
++            )
++            + ")",
++            "(allow file-read-metadata "
++            + " ".join(rule("literal", p) for p in sorted(ancestors))
++            + ")",
++            "(allow file-read* "
++            + " ".join(
++                rule("subpath" if p.is_dir() else "literal", p)
++                for p in [
++                    Path("/System/Library"),
++                    Path("/usr/lib"),
++                    *read_roots,
++                    stage / "pack",
++                    stage / "inputs",
++                    stage / "sdk",
++                ]
++            )
++            + ' (literal "/dev/urandom"))',
++            '(allow file-read-data (literal "/"))',
++            "(allow file-read* file-write* "
++            + " ".join(rule("subpath", stage / name) for name in ("work", "tmp", "home"))
++            + ' (literal "/dev/null"))',
++        ]
++    )
++
++
++def _frame(value):
++    encoded = json.dumps(value, ensure_ascii=False, allow_nan=False).encode() + b"\n"
++    if len(encoded) > MAX_MESSAGE:
++        raise LeafUnavailable("employee_leaf_message_limit")
++    return encoded
++
++
++def _unique_object(pairs):
++    value = dict(pairs)
++    if len(value) != len(pairs):
++        raise ValueError("duplicate leaf JSON key")
++    return value
++
++
++def _model_request(frame, call_number, callback):
++    if set(frame) != {"type", "id", "messages", "max_tokens", "temperature"}:
++        raise ValueError("invalid leaf model request")
++    if type(frame["id"]) is not int or frame["id"] != call_number or call_number > 8:
++        raise ValueError("leaf model budget exceeded")
++    if type(frame["max_tokens"]) is not int or not 1 <= frame["max_tokens"] <= 4000:
++        raise ValueError("invalid leaf model token budget")
++    temperature = frame["temperature"]
++    if (
++        type(temperature) not in (int, float)
++        or not math.isfinite(temperature)
++        or not 0 <= temperature <= 2
++    ):
++        raise ValueError("invalid leaf temperature")
++    messages = frame["messages"]
++    if not isinstance(messages, list) or not 1 <= len(messages) <= 64 or callback is None:
++        raise ValueError("leaf model capability unavailable")
++    text_bytes = image_bytes = 0
++    for message in messages:
++        if (
++            not isinstance(message, dict)
++            or set(message) != {"role", "content"}
++            or not isinstance(message["role"], str)
++            or message["role"] not in {"system", "user", "assistant"}
++        ):
++            raise ValueError("invalid leaf model message")
++        content = message["content"]
++        parts = [{"type": "text", "text": content}] if isinstance(content, str) else content
++        if not isinstance(parts, list) or len(parts) > 64:
++            raise ValueError("invalid leaf model content")
++        for part in parts:
++            if not isinstance(part, dict):
++                raise ValueError("invalid leaf model content")
++            if (
++                set(part) == {"type", "text"}
++                and part["type"] == "text"
++                and isinstance(part["text"], str)
++            ):
++                text_bytes += len(part["text"].encode("utf-8"))
++            elif set(part) == {"type", "image_url"} and part["type"] == "image_url":
++                image = part["image_url"]
++                if (
++                    not isinstance(image, dict)
++                    or set(image) != {"url"}
++                    or not isinstance(image["url"], str)
++                ):
++                    raise ValueError("invalid leaf model image")
++                encoded = re.fullmatch(
++                    r"data:image/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})", image["url"]
++                )
++                if encoded is None:
++                    raise ValueError("invalid leaf model image")
++                image_bytes += len(base64.b64decode(encoded[1], validate=True))
++            else:
++                raise ValueError("invalid leaf model content")
++            if text_bytes > 256 * 1024 or image_bytes > 4 * 1024 * 1024:
++                raise ValueError("leaf model input budget exceeded")
++    reply = callback(messages, frame["max_tokens"], temperature)
++    if (
++        not isinstance(reply, dict)
++        or type(reply.get("success", reply.get("ok"))) is not bool
++        or any(type(reply[key]) is not bool for key in ("success", "ok") if key in reply)
++        or ("success" in reply and "ok" in reply and reply["success"] != reply["ok"])
++        or not isinstance(reply.get("content", ""), str)
++    ):
++        raise ValueError("invalid leaf model reply")
++    from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
++
++    outcome = tool_receipt_outcome({**reply, "success": reply.get("success", reply.get("ok"))})
++    return {
++        "success": outcome == "success",
++        "ok": outcome == "success",
++        "content": reply.get("content", "") if outcome == "success" else "",
++        "outcome": outcome,
++        "retryable": False,
++        "reconciliation_required": outcome == "unknown",
++    }
++
++
++@contextmanager
++def _pin_output_roots(stage: Path):
++    from app.application.shipment_excel_etl_security import _open_directory_under_root
++
++    stage_fd = _open_directory_under_root(
++        Path(stage.anchor), stage, create=False, list_directory=True
++    )
++    roots = {}
++    try:
++        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
++        for name in ("work", "tmp", "home"):
++            roots[name] = os.open(name, flags, dir_fd=stage_fd)
++        yield stage_fd, roots
++    finally:
++        for descriptor in (*roots.values(), stage_fd):
++            with suppress(OSError):
++                os.close(descriptor)
++
++
++def _scan_output_roots(pinned, deadline):
++    stage_fd, roots = pinned
++    size = entries = 0
++
++    def current_roots():
++        for name, descriptor in roots.items():
++            held = os.fstat(descriptor)
++            named = os.stat(name, dir_fd=stage_fd, follow_symlinks=False)
++            if not stat.S_ISDIR(named.st_mode) or (named.st_dev, named.st_ino) != (
++                held.st_dev,
++                held.st_ino,
++            ):
++                raise ValueError("employee_leaf_output_root_changed")
++
++    def walk(descriptor, depth):
++        nonlocal size, entries
++        with os.scandir(descriptor) as children:
++            for child in children:
++                if time.monotonic() >= deadline:
++                    raise TimeoutError("employee_leaf_deadline")
++                entries += 1
++                if entries > 10000:
++                    raise ValueError("employee_leaf_output_count")
++                try:
++                    entry = os.stat(child.name, dir_fd=descriptor, follow_symlinks=False)
++                except FileNotFoundError:
++                    continue  # A converter may remove its own transient files.
++                if stat.S_ISREG(entry.st_mode):
++                    if entry.st_nlink != 1:
++                        raise ValueError("employee_leaf_output_link")
++                    size += entry.st_size
++                    if size > MAX_STAGE:
++                        raise ValueError("employee_leaf_disk_limit")
++                elif stat.S_ISDIR(entry.st_mode):
++                    if depth >= 64:
++                        raise ValueError("employee_leaf_output_depth")
++                    try:
++                        nested = os.open(
++                            child.name,
++                            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
++                            dir_fd=descriptor,
++                        )
++                    except FileNotFoundError:
++                        continue
++                    try:
++                        opened = os.fstat(nested)
++                        if (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino):
++                            raise ValueError("employee_leaf_output_directory_changed")
++                        walk(nested, depth + 1)
++                    finally:
++                        os.close(nested)
++                else:
++                    raise ValueError("employee_leaf_output_type")
++
++    if time.monotonic() >= deadline:
++        raise TimeoutError("employee_leaf_deadline")
++    current_roots()
++    for descriptor in roots.values():
++        walk(descriptor, 0)
++    current_roots()
++    return {"entries": entries, "bytes": size}
++
++
++def spawn_leaf(config, stage: Path, *, deadline: float, model_callback=None):
++    """Only protocol pipes survive launch. The trusted parent retains all credentials."""
++    runtime = _runtime()
++    with _pin_output_roots(stage) as pinned:
++        _scan_output_roots(pinned, deadline)
++        return _spawn_leaf(
++            config,
++            stage,
++            deadline=deadline,
++            model_callback=model_callback,
++            runtime=runtime,
++            pinned=pinned,
++        )
++
++
++def _spawn_leaf(config, stage, *, deadline, model_callback, runtime, pinned):
++    command, roots, search = runtime
++    config = {**config, "dependency_roots": search, "model_broker": model_callback is not None}
++    policy = _profile(command, roots, stage)
++    env = {
++        "HOME": str(stage / "home"),
++        "TMPDIR": str(stage / "tmp"),
++        "LANG": "en_US.UTF-8",
++        "PATH": "/usr/bin:/bin",
++        "PYTHONDONTWRITEBYTECODE": "1",
++    }
++    _frame(config)  # Reject malformed or oversized inputs before allocating a process or canary.
++    descriptor, denial_canary = tempfile.mkstemp(prefix="xcagi-leaf-deny-", dir=stage.parent)
++    os.close(descriptor)
++    config["denial_canary"] = denial_canary
++    broker = None
++    try:
++        sending = _frame(config)
++        broker = ThreadPoolExecutor(max_workers=1)
++        process = subprocess.Popen(
++            ["/usr/bin/sandbox-exec", "-p", policy, *command],
++            cwd=stage / "work",
++            env=env,
++            stdin=subprocess.PIPE,
++            stdout=subprocess.PIPE,
++            stderr=subprocess.PIPE,
++            close_fds=True,
++            start_new_session=True,
++        )
++    except BaseException:
++        if broker is not None:
++            broker.shutdown(wait=False, cancel_futures=True)
++        Path(denial_canary).unlink()
++        raise
++    buffers, stderr_bytes, received, calls, ready = {"out": b""}, 0, None, 0, False
++    pending = None
++    try:
++        with selectors.DefaultSelector() as selector:
++            os.set_blocking(process.stdin.fileno(), False)
++            selector.register(process.stdin, selectors.EVENT_WRITE, "in")
++            for stream, name in ((process.stdout, "out"), (process.stderr, "err")):
++                os.set_blocking(stream.fileno(), False)
++                selector.register(stream, selectors.EVENT_READ, name)
++            monitor = psutil.Process(process.pid)
++            while selector.get_map():
++                if time.monotonic() >= deadline:
++                    raise TimeoutError("employee_leaf_deadline")
++                if pending is not None and pending.done():
++                    sending = _frame(
++                        {"type": "model.reply", "id": calls, "result": pending.result()}
++                    )
++                    pending = None
++                    selector.register(process.stdin, selectors.EVENT_WRITE, "in")
++                try:
++                    if monitor.memory_info().rss > 512 * 1024 * 1024:
++                        raise ValueError("employee_leaf_memory_limit")
++                except psutil.NoSuchProcess:
++                    pass
++                _scan_output_roots(pinned, deadline)
++                for key, _mask in selector.select(min(0.1, max(0, deadline - time.monotonic()))):
++                    if key.data == "in":
++                        try:
++                            sending = sending[os.write(key.fileobj.fileno(), sending[:65536]) :]
++                        except BlockingIOError:
++                            continue
++                        if not sending:
++                            selector.unregister(key.fileobj)
++                        continue
++                    chunk = os.read(key.fileobj.fileno(), 65536)
++                    if not chunk:
++                        selector.unregister(key.fileobj)
++                        continue
++                    if key.data == "err":
++                        stderr_bytes += len(chunk)
++                        if stderr_bytes > 65536:
++                            raise ValueError("employee_leaf_diagnostic_limit")
++                        continue  # Pack diagnostics never become a public raw error.
++                    buffers["out"] += chunk
++                    if len(buffers["out"]) > MAX_MESSAGE:
++                        raise ValueError("employee_leaf_reply_limit")
++                    while b"\n" in buffers["out"]:
++                        line, buffers["out"] = buffers["out"].split(b"\n", 1)
++                        message = json.loads(line, object_pairs_hook=_unique_object)
++                        _frame(message)  # A malicious worker must not inject NaN/Infinity.
++                        if not isinstance(message, dict) or received is not None:
++                            raise ValueError("employee_leaf_protocol_invalid")
++                        if not ready:
++                            if message != {
++                                "type": "ready",
++                                "checks": ["file", "native_file", "network", "process"],
++                            }:
++                                if message.get(
++                                    "exception_type"
++                                ) == "IsolationUnavailable" and message.get("isolation_check") in {
++                                    "file",
++                                    "native_file",
++                                    "native_errno",
++                                    "network",
++                                    "process_exec",
++                                    "process_fork",
++                                }:
++                                    raise ValueError(
++                                        "employee_leaf_isolation_not_proven:"
++                                        + message["isolation_check"]
++                                    )
++                                raise ValueError("employee_leaf_isolation_not_proven")
++                            ready = True
++                        elif message.get("type") == "model.complete":
++                            if pending is not None or sending:
++                                raise ValueError("employee_leaf_model_request_overlap")
++                            calls += 1
++                            pending = broker.submit(
++                                copy_context().run, _model_request, message, calls, model_callback
++                            )
++                        elif message.get("type") in {"result", "error"}:
++                            if pending is not None or sending:
++                                raise ValueError("employee_leaf_model_result_unresolved")
++                            received = message
++                        else:
++                            raise ValueError("employee_leaf_protocol_invalid")
++        process.wait(timeout=max(0.01, deadline - time.monotonic()))
++        _scan_output_roots(pinned, deadline)
++        if (
++            buffers["out"]
++            or received is None
++            or process.returncode != 0
++            or received.get("type") != "result"
++        ):
++            raise ValueError("employee_leaf_incomplete")
++        return received["result"], {
++            "profile_sha256": hashlib.sha256(policy.encode()).hexdigest(),
++            "model_calls": calls,
++            "os_build": os.uname().release,
++            "helper": command[0],
++        }
++    finally:
++        # Provider cancellation is not proven. The enclosing trusted tool worker
++        # must retain its unknown receipt and be reaped by its existing boundary.
++        try:
++            if pending is not None:
++                pending.cancel()
++            broker.shutdown(wait=False, cancel_futures=True)
++        finally:
++            try:
++                if process.poll() is None:
++                    with suppress(ProcessLookupError):
++                        os.killpg(process.pid, signal.SIGKILL)
++            finally:
++                try:
++                    process.wait()
++                finally:
++                    for stream in (process.stdin, process.stdout, process.stderr):
++                        with suppress(OSError):
++                            stream.close()
++                    Path(denial_canary).unlink(missing_ok=True)
+diff --git a/FHD/app/mod_sdk/employee_leaf.py b/FHD/app/mod_sdk/employee_leaf.py
+new file mode 100644
+index 0000000000..e02e25b2d8
+--- /dev/null
++++ b/FHD/app/mod_sdk/employee_leaf.py
+@@ -0,0 +1,230 @@
++"""Credential-free worker entrypoint; launched before importing any employee code."""
++
++from __future__ import annotations
++
++import asyncio
++import contextlib
++import importlib.util
++import inspect
++import json
++import logging
++import os
++import resource
++import socket
++import subprocess
++import sys
++import types
++from pathlib import Path
++
++MAX_MESSAGE = 8 * 1024 * 1024
++BOUNDARY_ERRORS = (Exception,)
++
++
++class IsolationUnavailable(RuntimeError):
++    pass
++
++
++def _unique_object(pairs):
++    value = dict(pairs)
++    if len(value) != len(pairs):
++        raise ValueError("duplicate leaf JSON key")
++    return value
++
++
++def _read(stream):
++    line = stream.readline(MAX_MESSAGE + 1)
++    if not line or len(line) > MAX_MESSAGE or not line.endswith(b"\n"):
++        raise ValueError("invalid leaf frame")
++    value = json.loads(line, object_pairs_hook=_unique_object)
++    json.dumps(value, allow_nan=False)
++    return value
++
++
++def _write(stream, value):
++    data = json.dumps(value, ensure_ascii=False, allow_nan=False).encode() + b"\n"
++    if len(data) > MAX_MESSAGE:
++        raise ValueError("leaf frame limit")
++    stream.write(data)
++    stream.flush()
++
++
++def _load(path, label):
++    spec = importlib.util.spec_from_file_location(label, path)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    return module
++
++
++def _sdk(root):
++    # Never import the host app/__init__, DB, HTTP/model clients or host_services.
++    for name in ("app", "app.mod_sdk", "app.application", "app.application.agent_orchestrator"):
++        module = types.ModuleType(name)
++        module.__path__ = [str(Path(root).joinpath(*name.split(".")))]
++        sys.modules[name] = module
++    errors = types.ModuleType("app.mod_sdk.errors")
++    errors.BOUNDARY_ERRORS = (Exception,)
++    errors.RECOVERABLE_ERRORS = (OSError, ValueError, RuntimeError, ImportError, LookupError)
++    sys.modules[errors.__name__] = errors
++
++
++def _assert_isolation(config):
++    config["bootstrap_check"] = "native_runtime"
++    import ctypes
++
++    config["bootstrap_check"] = "file"
++    try:
++        with open(config["denial_canary"], "rb"):
++            pass
++    except PermissionError:
++        pass
++    else:
++        raise IsolationUnavailable("file")
++    config["bootstrap_check"] = "native_file"
++    library = ctypes.CDLL(None, use_errno=True)
++    descriptor = library.open(os.fsencode(config["denial_canary"]), 0)
++    if descriptor >= 0:
++        os.close(descriptor)
++        raise IsolationUnavailable("native_file")
++    if ctypes.get_errno() not in {1, 13}:
++        raise IsolationUnavailable("native_errno")
++    config["bootstrap_check"] = "network"
++    try:
++        with socket.socket() as client:
++            client.connect(("127.0.0.1", 9))
++    except PermissionError:
++        pass
++    else:
++        raise IsolationUnavailable("network")
++    config["bootstrap_check"] = "process_exec"
++    try:
++        subprocess.run(["/bin/echo", "isolation-canary"], check=True, capture_output=True)
++    except PermissionError:
++        pass
++    else:
++        raise IsolationUnavailable("process_exec")
++    config["bootstrap_check"] = "process_fork"
++    try:
++        child = os.fork()
++    except PermissionError:
++        pass
++    else:
++        if child == 0:
++            os._exit(0)
++        os.waitpid(child, 0)
++        raise IsolationUnavailable("process_fork")
++
++
++def _run(config, send, receive):
++    config["bootstrap_check"] = "limits"
++    for kind, limit in (
++        (resource.RLIMIT_CPU, 60),
++        (resource.RLIMIT_FSIZE, 64 * 1024 * 1024),
++        (resource.RLIMIT_NOFILE, 64),
++        (resource.RLIMIT_CORE, 0),
++    ):
++        resource.setrlimit(kind, (limit, limit))
++    _assert_isolation(config)
++    config["bootstrap_check"] = "sdk"
++    _write(send, {"type": "ready", "checks": ["file", "native_file", "network", "process"]})
++    _sdk(config["sdk_root"])
++    sys.path.extend(config["dependency_roots"])
++    payload = config["payload"]
++    pack = Path(config["pack_root"])
++    workspace = Path(config["workspace_root"])
++    ctx = {"employee_id": config["employee_id"], "workspace_root": str(workspace)}
++    if config["model_broker"]:
++        calls = 0
++
++        async def complete(messages, max_tokens=4000, temperature=0.7):
++            nonlocal calls
++            calls += 1
++            _write(
++                send,
++                {
++                    "type": "model.complete",
++                    "id": calls,
++                    "messages": messages,
++                    "max_tokens": max_tokens,
++                    "temperature": temperature,
++                },
++            )
++            reply = _read(receive)
++            if reply.get("type") != "model.reply" or reply.get("id") != calls:
++                raise ValueError("invalid model broker reply")
++            return reply["result"]
++
++        ctx["call_llm"] = complete
++    module_path = pack / config["module"]
++    generate = "generate" in config["employee_id"].lower()
++    has_file = bool(str(payload.get("file_path") or payload.get("path") or "").strip())
++    if (generate and not has_file and payload.get("user_request")) or not module_path.is_file():
++        converters = sorted((pack / "backend").rglob("convert.py"))
++        converter = next((p for p in converters if "vendor" in p.parts), None)
++        if converter is None:
++            raise ValueError("employee converter missing")
++        src = Path(str(payload.get("file_path") or payload.get("path") or workspace / "input.json"))
++        if not src.is_file():
++            if not generate:
++                raise ValueError("employee input missing")
++            src.write_text("{}", encoding="utf-8")
++        fn = _load(converter, "_employee_converter").convert_file
++        rules = pack / "rule_spec.json"
++        rules = json.loads(rules.read_bytes()) if rules.is_file() else {}
++        result = fn(
++            src,
++            Path(payload["output_path"]),
++            template_path=None,
++            payload=payload,
++            ctx=ctx,
++            rule_spec=rules,
++        )
++        result = asyncio.run(result) if inspect.isawaitable(result) else result
++        return {"ok": True, "output": result, "output_path": payload["output_path"]}
++    else:
++        fn = _load(module_path, "_employee_worker").run
++        result = fn(payload, ctx)
++    return asyncio.run(result) if inspect.isawaitable(result) else result
++
++
++def main():
++    send, receive = sys.stdout.buffer, sys.stdin.buffer
++    config = {}
++    try:
++        config = _read(receive)
++        # Library/pack print() is diagnostic data, never a protocol message.
++        with contextlib.redirect_stdout(sys.stderr):
++            result = _run(config, send, receive)
++        _write(send, {"type": "result", "result": result})
++        return 0
++    except (
++        BOUNDARY_ERRORS
++    ) as error:  # Process boundary; never expose raw exceptions or credentials.
++        logging.disable(logging.CRITICAL)
++        _write(
++            send,
++            {
++                "type": "error",
++                "error_code": "employee_leaf_failed",
++                "exception_type": type(error).__name__,
++                "isolation_check": (
++                    config.get("bootstrap_check", "")
++                    if config.get("bootstrap_check")
++                    in {
++                        "native_runtime",
++                        "file",
++                        "native_file",
++                        "network",
++                        "process_exec",
++                        "process_fork",
++                        "limits",
++                        "sdk",
++                    }
++                    else ""
++                ),
++            },
++        )
++        return 1
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/FHD/tests/test_application/test_employee_leaf_process.py b/FHD/tests/test_application/test_employee_leaf_process.py
+new file mode 100644
+index 0000000000..bc85105dc8
+--- /dev/null
++++ b/FHD/tests/test_application/test_employee_leaf_process.py
+@@ -0,0 +1,402 @@
++"""Actual local macOS leaf boundary; signed product/approval acceptance is separate."""
++
++import hashlib
++import json
++import os
++import sys
++import threading
++import time
++from pathlib import Path
++
++import psutil
++import pytest
++
++from app.application.employee_runtime.leaf_process import (
++    LeafUnavailable,
++    spawn_leaf,
++    stage_employee,
++    stage_sdk,
++)
++
++pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="macOS OS policy")
++
++
++@pytest.fixture
++def prepare(tmp_path):
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    root = tmp_path.resolve()
++
++    def build(source, *, inputs=()):
++        pack = root / "original-pack"
++        module = pack / "backend/employees/probe.py"
++        module.parent.mkdir(parents=True, exist_ok=True)
++        module.write_text(source)
++        stage = root / "private-stage"
++        stage.mkdir(mode=0o700)
++        reviewed = {
++            "code_sha256": canonical_hash(
++                {"backend/employees/probe.py": hashlib.sha256(module.read_bytes()).hexdigest()}
++            ),
++            "inputs": list(inputs),
++            "output_path": str(root / "approved-output.json"),
++        }
++        payload = stage_employee(pack, reviewed, {}, stage)
++        config = {
++            "sdk_root": str(stage_sdk(stage)),
++            "pack_root": str(stage / "pack"),
++            "workspace_root": str(stage / "work"),
++            "payload": payload,
++            "employee_id": "probe",
++            "module": "backend/employees/probe.py",
++        }
++        return config, stage, pack, reviewed
++
++    return build
++
++
++def test_real_leaf_denies_host_files_network_and_processes_and_removes_credentials(
++    prepare, tmp_path, monkeypatch
++):
++    forbidden = tmp_path.resolve() / "host-secret.txt"
++    forbidden.write_text("SYNTHETIC_HOST_DATA")
++    monkeypatch.setenv("SYNTHETIC_HOST_API_KEY", "SYNTHETIC_CREDENTIAL")
++    source = f"""
++def run(payload, ctx):
++    import os, socket, subprocess
++    checks = {{}}
++    for name, operation in (
++        ("read", lambda: open({str(forbidden)!r}).read()),
++        ("write", lambda: open({str(forbidden)!r}, "w").write("changed")),
++        ("network", lambda: socket.create_connection(("127.0.0.1", 9))),
++        ("shell", lambda: subprocess.run(["/bin/sh", "-c", "true"])),
++    ):
++        try:
++            operation()
++        except PermissionError:
++            checks[name] = True
++        else:
++            checks[name] = False
++    checks["credential_absent"] = os.getenv("SYNTHETIC_HOST_API_KEY") is None
++    checks["no_host_import"] = not any(k.startswith("app.db") for k in __import__("sys").modules)
++    return {{"ok": True, "checks": checks}}
++"""
++    config, stage, _, _ = prepare(source)
++    result, audit = spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++    assert result["ok"] is True
++    assert result["checks"] == dict.fromkeys(
++        ("read", "write", "network", "shell", "credential_absent", "no_host_import"), True
++    )
++    assert forbidden.read_text() == "SYNTHETIC_HOST_DATA"
++    assert len(audit["profile_sha256"]) == 64
++    assert audit["model_calls"] == 0
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++@pytest.mark.parametrize("kind", ["symlink", "hardlink"])
++def test_reviewed_code_link_rejected_before_process(prepare, tmp_path, kind):
++    config, stage, pack, reviewed = prepare("def run(payload, ctx): return {'ok': True}\n")
++    target = pack / "backend/employees/probe.py"
++    link = pack / "extra.py"
++    link.symlink_to(target) if kind == "symlink" else os.link(target, link)
++    stage = stage.with_name("second-stage")
++    stage.mkdir(mode=0o700)
++    with pytest.raises((LeafUnavailable, ValueError)):
++        stage_employee(pack, reviewed, {}, stage)
++
++
++@pytest.mark.parametrize("kind", ["symlink", "hardlink", "changed"])
++def test_input_provenance_checked_before_import(prepare, tmp_path, kind):
++    original = tmp_path.resolve() / "input.json"
++    original.write_text('{"value":"approved"}')
++    item = {
++        "parameter": "file_path",
++        "path": str(original),
++        "sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
++        "size_bytes": original.stat().st_size,
++    }
++    config, stage, pack, reviewed = prepare("def run(payload, ctx): return {'ok': True}\n")
++    reviewed["inputs"] = [item]
++    if kind == "changed":
++        original.write_text('{"value":"replaced"}')
++    else:
++        other = original.with_name("other.json")
++        original.rename(other)
++        original.symlink_to(other) if kind == "symlink" else os.link(other, original)
++    stage = stage.with_name("second-stage")
++    stage.mkdir(mode=0o700)
++    with pytest.raises((LeafUnavailable, ValueError)):
++        stage_employee(pack, reviewed, {}, stage)
++
++
++def test_input_is_copied_and_code_cannot_write_it(prepare, tmp_path):
++    original = tmp_path.resolve() / "input.json"
++    original.write_text('{"value":"approved"}')
++    item = {
++        "parameter": "file_path",
++        "path": str(original),
++        "sha256": hashlib.sha256(original.read_bytes()).hexdigest(),
++        "size_bytes": original.stat().st_size,
++    }
++    config, stage, _, _ = prepare(
++        """
++def run(payload, ctx):
++    import json
++    with open(payload["file_path"]) as stream:
++        value = json.load(stream)
++    try:
++        open(payload["file_path"], "w").write("changed")
++    except PermissionError:
++        return {"ok": True, "value": value, "input_readonly": True}
++    return {"ok": False}
++""",
++        inputs=[item],
++    )
++    original.write_text('{"value":"later-change"}')
++    result, _ = spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++    assert result == {"ok": True, "value": {"value": "approved"}, "input_readonly": True}
++    assert json.loads(original.read_text()) == {"value": "later-change"}
++
++
++def test_leaf_model_broker_has_only_bounded_typed_request_and_no_identity(prepare):
++    config, stage, _, _ = prepare("""
++async def run(payload, ctx):
++    result = await ctx["call_llm"]([{"role": "user", "content": "synthetic"}], max_tokens=25)
++    return {"ok": result["success"], "content": result["content"], "context_keys": sorted(ctx)}
++""")
++    calls = []
++
++    def model(messages, tokens, temperature):
++        calls.append((messages, tokens, temperature))
++        return {"success": True, "content": "synthetic-reply"}
++
++    result, audit = spawn_leaf(config, stage, deadline=time.monotonic() + 15, model_callback=model)
++    assert calls == [([{"role": "user", "content": "synthetic"}], 25, 0.7)]
++    assert result == {
++        "ok": True,
++        "content": "synthetic-reply",
++        "context_keys": ["call_llm", "employee_id", "workspace_root"],
++    }
++    assert audit["model_calls"] == 1
++
++
++def test_leaf_deadline_kills_actual_process_and_removes_canary(prepare):
++    config, stage, _, _ = prepare("def run(payload, ctx):\n    while True: pass\n")
++    with pytest.raises(TimeoutError):
++        spawn_leaf(config, stage, deadline=time.monotonic() + 1)
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++def test_leaf_failure_does_not_return_exception_secret(prepare):
++    config, stage, _, _ = prepare(
++        "def run(payload, ctx): raise ValueError('SYNTHETIC_PRIVATE_ERROR')\n"
++    )
++    with pytest.raises(
++        ValueError, match="employee_leaf_isolation_not_proven|employee_leaf_incomplete"
++    ) as error:
++        spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++    assert "SYNTHETIC_PRIVATE_ERROR" not in str(error.value)
++
++
++def test_model_callback_cannot_suspend_deadline_monitor(prepare):
++    config, stage, _, _ = prepare("""
++async def run(payload, ctx):
++    await ctx["call_llm"]([{"role":"user", "content":"synthetic"}])
++    return {"ok": True}
++""")
++    started, release = threading.Event(), threading.Event()
++
++    def stalled(*args):
++        started.set()
++        release.wait(5)
++        return {"success": True, "content": "later"}
++
++    before = time.monotonic()
++    try:
++        with pytest.raises(TimeoutError):
++            spawn_leaf(config, stage, deadline=before + 0.75, model_callback=stalled)
++        assert started.is_set()
++        assert time.monotonic() - before < 2
++    finally:
++        release.set()
++
++
++def test_leaf_that_refuses_model_reply_cannot_block_parent_pipe(prepare):
++    config, stage, _, _ = prepare("""
++def run(payload, ctx):
++    import json, os, time
++    os.write(1, (json.dumps({"type":"model.complete", "id":1, "messages":[{"role":"user","content":"synthetic"}], "max_tokens":25, "temperature":0.7}) + "\\n").encode())
++    time.sleep(5)
++""")
++    before = time.monotonic()
++    with pytest.raises(TimeoutError):
++        spawn_leaf(
++            config,
++            stage,
++            deadline=before + 0.75,
++            model_callback=lambda *args: {"success": True, "content": "x" * (2 * 1024 * 1024)},
++        )
++    assert time.monotonic() - before < 2
++
++
++@pytest.mark.parametrize("kind", ["oversize", "nan", "set"])
++def test_malformed_or_oversized_config_never_creates_process_or_canary(prepare, kind):
++    config, stage, _, _ = prepare("def run(payload, ctx): return {'ok':True}\n")
++    config["payload"] = {
++        "oversize": lambda: "x" * (8 * 1024 * 1024),
++        "nan": lambda: float("nan"),
++        "set": lambda: {1, 2},
++    }[kind]()
++    before = {p.pid for p in psutil.Process().children()}
++    with pytest.raises((LeafUnavailable, ValueError, TypeError)):
++        spawn_leaf(config, stage, deadline=time.monotonic() + 2)
++    assert {p.pid for p in psutil.Process().children()} == before
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++def test_inheritable_host_descriptor_is_closed_in_actual_leaf(prepare, tmp_path):
++    import fcntl
++
++    secret = tmp_path.resolve() / "host-descriptor.txt"
++    secret.write_text("SYNTHETIC_DESCRIPTOR_SECRET")
++    with secret.open("rb") as stream:
++        descriptor = fcntl.fcntl(stream.fileno(), fcntl.F_DUPFD, 128)
++        try:
++            os.set_inheritable(descriptor, True)
++            config, stage, _, _ = prepare(f"""
++def run(payload, ctx):
++    import os, errno
++    try:
++        os.fstat({descriptor})
++    except OSError as error:
++        return {{"ok": True, "host_fd_closed": error.errno == errno.EBADF}}
++    return {{"ok":False, "host_fd_closed":False}}
++""")
++            result, _ = spawn_leaf(config, stage, deadline=time.monotonic() + 15)
++            assert result == {"ok": True, "host_fd_closed": True}
++        finally:
++            os.close(descriptor)
++
++
++def test_output_root_symlink_replacement_never_walks_outside(prepare, tmp_path, monkeypatch):
++    from app.application.employee_runtime.leaf_process import _pin_output_roots, _scan_output_roots
++
++    _, stage, _, _ = prepare("def run(payload, ctx): return {'ok':True}\n")
++    outside = tmp_path.resolve() / "outside"
++    outside.mkdir()
++    (outside / "synthetic-host.txt").write_text("SYNTHETIC_HOST_DATA")
++    inode = outside.stat().st_ino
++    scanned = []
++    scandir = os.scandir
++
++    def observed(fd):
++        assert isinstance(fd, int)
++        scanned.append(os.fstat(fd).st_ino)
++        assert scanned[-1] != inode, "parent followed untrusted output root"
++        return scandir(fd)
++
++    with _pin_output_roots(stage) as pins:
++        (stage / "work").rename(stage / "tmp/moved-work")
++        (stage / "work").symlink_to(outside, target_is_directory=True)
++        monkeypatch.setattr(os, "scandir", observed)
++        with pytest.raises(ValueError):
++            _scan_output_roots(pins, time.monotonic() + 1)
++    assert inode not in scanned
++
++
++def test_child_exit_race_does_not_replace_timeout_or_skip_cleanup(prepare, monkeypatch):
++    config, stage, _, _ = prepare("def run(payload, ctx):\n    while True: pass\n")
++    kill = os.killpg
++    before = {p.pid for p in psutil.Process().children()}
++
++    def just_exited(pid, signal):
++        kill(pid, signal)
++        raise ProcessLookupError("synthetic exit before second kill")
++
++    monkeypatch.setattr(os, "killpg", just_exited)
++    with pytest.raises(TimeoutError):
++        spawn_leaf(config, stage, deadline=time.monotonic() + 0.75)
++    assert {p.pid for p in psutil.Process().children()} == before
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
++
++
++@pytest.mark.parametrize("pack_id", ["quality-validator", "csv-full-read-employee"])
++def test_actual_bundled_worker_runs_from_fixed_source_and_input_only(tmp_path, pack_id):
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    # This qualifies the portable worker boundary. Signature, approval and final
++    # publication remain in the trusted caller and are not simulated by this test.
++    root = Path(__file__).resolve().parents[2]
++    pack = root / "mods/_employees" / pack_id
++    files = {
++        p.relative_to(pack).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
++        for p in pack.rglob("*")
++        if p.is_file()
++        and "__pycache__" not in p.relative_to(pack).parts
++        and not any(part.startswith(".") for part in p.relative_to(pack).parts)
++    }
++    stage = tmp_path.resolve() / "worker-stage"
++    stage.mkdir(mode=0o700)
++    snapshot = {
++        "code_sha256": canonical_hash(files),
++        "inputs": [],
++        "output_path": str(tmp_path.resolve() / "result.json"),
++    }
++    payload = {
++        "pack": {
++            "manifest": {
++                "id": "fixture",
++                "employee_config_v2": {"actions": {"handlers": ["direct_python"]}},
++            },
++            "files": ["manifest.json", "backend/employees/fixture.py"],
++        }
++    }
++    if pack_id == "csv-full-read-employee":
++        source = tmp_path.resolve() / "input.csv"
++        source.write_text("a,b\n1,2\n", encoding="utf-8")
++        snapshot["inputs"] = [
++            {
++                "parameter": "file_path",
++                "path": str(source),
++                "sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
++                "size_bytes": source.stat().st_size,
++            }
++        ]
++        payload = {}
++    payload = stage_employee(pack, snapshot, payload, stage)
++    result, _ = spawn_leaf(
++        {
++            "sdk_root": str(stage_sdk(stage)),
++            "pack_root": str(stage / "pack"),
++            "workspace_root": str(stage / "work"),
++            "payload": payload,
++            "employee_id": pack_id,
++            "module": f"backend/employees/{pack_id.replace('-', '_')}.py",
++        },
++        stage,
++        deadline=time.monotonic() + 15,
++    )
++    assert result["ok"] is True
++    if pack_id == "quality-validator":
++        assert result["valid"] is True
++        assert result["read_only"] is True
++        assert result["side_effects"] == []
++    else:
++        output = Path(result["items"][0]["output_path"])
++        assert output.is_relative_to(stage / "work/outputs")
++        assert json.loads(output.read_bytes())["rows"] == [{"a": "1", "b": "2"}]
++        assert source.read_text() == "a,b\n1,2\n"
++
++
++@pytest.mark.parametrize("raw", ['{"ok":true,"ok":false}', '{"ok":true,"value":NaN}'])
++def test_untrusted_worker_cannot_forge_ambiguous_or_non_json_result(prepare, raw):
++    reply = '{"type":"result","result":' + raw + "}\n"
++    config, stage, _, _ = prepare(f"""
++def run(payload, ctx):
++    import os, time
++    os.write(1, {reply.encode()!r})
++    time.sleep(5)
++""")
++    with pytest.raises(ValueError):
++        spawn_leaf(config, stage, deadline=time.monotonic() + 2)
++    assert not list(stage.parent.glob("xcagi-leaf-deny-*"))
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,319 @@
+From 9950a393b557b75e23098057ef4b7f81075e0647 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 03:03:34 +0800
+Subject: [PATCH 43/43] test(eval): verify material mutations with real
+ approval and tenant readback
+
+
+diff --git a/FHD/evals/agent_tasks.jsonl b/FHD/evals/agent_tasks.jsonl
+index 2b36b6080d..5d4a7e47ad 100644
+--- a/FHD/evals/agent_tasks.jsonl
++++ b/FHD/evals/agent_tasks.jsonl
+@@ -69,10 +69,10 @@
+ {"id":"memory_v2_reject_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"reject","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_reject","memory_status":"rejected","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"reject","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"memory_v2_correct_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"correct","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_correct","memory_status":"active","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"correct","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"memory_v2_delete_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_delete","memory_status":"deleted","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"delete","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"materials_create_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"create","user_id":"tenant-a","body":{"name":"树脂","material_code":"R-001","min_quantity":12},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_create","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"create","status":"completed","cost_units":2,"permission":"tool.materials.create"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"materials_update_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"update","user_id":"tenant-a","body":{"name":"树脂 v2"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_update","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"update","status":"completed","cost_units":2,"permission":"tool.materials.update"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"materials_delete_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_delete","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"delete","status":"completed","cost_units":2,"permission":"tool.materials.delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"materials_batch_delete_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"batch_delete","user_id":"tenant-a","body":{"ids":[1,2]},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_batch_delete","deleted_count":2,"tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"batch_delete","status":"completed","cost_units":2,"permission":"tool.materials.batch_delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"materials_create_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"create","user_id":"tenant-a","body":{"name":"树脂","material_code":"R-001","min_quantity":12},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_create","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"create","status":"completed","cost_units":2,"permission":"tool.materials.create"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"materials_update_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"update","user_id":"tenant-a","body":{"name":"树脂 v2"},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_update","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"update","status":"completed","cost_units":2,"permission":"tool.materials.update"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"materials_delete_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_delete","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"delete","status":"completed","cost_units":2,"permission":"tool.materials.delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"materials_batch_delete_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"batch_delete","user_id":"tenant-a","body":{"ids":[1,2]},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_batch_delete","deleted_count":2,"tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"batch_delete","status":"completed","cost_units":2,"permission":"tool.materials.batch_delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"inventory_create_location_route_forces_agent_orchestrator","kind":"inventory_route_agent","route_action":"create_storage_location","user_id":"tenant-a","body":{"code":"A-01"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"inventory_create_storage_location","tool_call_count":1,"tool_calls":[{"tool_id":"inventory","action":"create_storage_location","status":"completed","cost_units":2,"permission":"tool.inventory.create_storage_location"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"inventory_update_location_route_forces_agent_orchestrator","kind":"inventory_route_agent","route_action":"update_storage_location","user_id":"tenant-a","body":{"status":"full"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"inventory_update_storage_location","tool_call_count":1,"tool_calls":[{"tool_id":"inventory","action":"update_storage_location","status":"completed","cost_units":2,"permission":"tool.inventory.update_storage_location"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"inventory_create_warehouse_route_forces_agent_orchestrator","kind":"inventory_route_agent","route_action":"create_warehouse","user_id":"tenant-a","body":{"name":"主仓"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"inventory_create_warehouse","tool_call_count":1,"tool_calls":[{"tool_id":"inventory","action":"create_warehouse","status":"completed","cost_units":2,"permission":"tool.inventory.create_warehouse"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+diff --git a/FHD/evals/run_agent_eval_body_2.py b/FHD/evals/run_agent_eval_body_2.py
+index 28a8dda65a..a4026686fd 100644
+--- a/FHD/evals/run_agent_eval_body_2.py
++++ b/FHD/evals/run_agent_eval_body_2.py
+@@ -694,115 +694,151 @@ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+     from fastapi import FastAPI
+     from fastapi.testclient import TestClient
+ 
+-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
++    from app.db.models.material import Material
+     from app.fastapi_routes import materials as materials_routes
++    from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
+ 
+-    expected = dict(task.get("expected") or {})
+     action = str(task.get("route_action") or "create").strip().lower()
+-    body = dict(task.get("body") or {})
+-    user_id = str(task.get("user_id") or "eval-materials-user")
+-    repo = InMemoryAgentRunRepository()
+-    service = Mock()
+-    service.create_material.return_value = {"success": True, "data": {"id": 1, "name": "树脂"}}
+-    service.update_material.return_value = {"success": True, "data": {"id": 1}}
+-    service.delete_material.return_value = None
+-    service.batch_delete_materials.return_value = None
+-
+-    app = FastAPI()
+-    app.include_router(materials_routes.router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-    method = "POST"
++    if action not in {"create", "update", "delete", "batch_delete"}:
++        return _failed(task, f"unsupported materials route action: {action}")
++    expected, body = dict(task.get("expected") or {}), dict(task.get("body") or {})
++    target_id = int(task.get("material_id") or 1)
++    method = {"create": "POST", "update": "PUT", "delete": "DELETE", "batch_delete": "POST"}[action]
+     path = "/api/materials"
+     if action == "create":
+         body.setdefault("name", "树脂")
+         body.setdefault("material_code", "R-001")
+-    elif action == "update":
+-        method = "PUT"
+-        path = f"/api/materials/{int(task.get('material_id') or 1)}"
+-        body.setdefault("name", "树脂 v2")
+-    elif action == "delete":
+-        method = "DELETE"
+-        path = f"/api/materials/{int(task.get('material_id') or 1)}"
+     elif action == "batch_delete":
+-        path = "/api/materials/batch-delete"
++        path += "/batch-delete"
+         body.setdefault("ids", [1, 2])
+     else:
+-        return _failed(task, f"unsupported materials route action: {action}")
+-
+-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+-        env_patch = {
+-            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+-            "MODEL_USAGE_WALLET_BACKEND": "audit",
+-            "MODEL_USAGE_WALLET_REQUIRED": "",
+-        }
+-        with ExitStack() as stack:
+-            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+-            stack.enter_context(
+-                patch(
+-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-                    return_value=repo,
+-                )
+-            )
+-            stack.enter_context(
+-                patch.object(
+-                    materials_routes,
+-                    "get_material_application_service",
+-                    lambda: service,
++        path += f"/{target_id}"
++        if action == "update":
++            body.setdefault("name", "树脂 v2")
++    checks: list[dict[str, Any]] = []
++    with (
++        tempfile.TemporaryDirectory(prefix="xcagi-materials-eval-") as tmp_dir,
++        ExitStack() as stack,
++    ):
++        folder = Path(tmp_dir).resolve()
++        host = stack.enter_context(
++            _sql_eval_host(task, folder, (f"tool.materials.{action}", "material.edit"))
++        )
++        with host.factory.begin() as db:
++            db.add(
++                Material(
++                    id=9001,
++                    tenant_id=8,
++                    material_code="SENTINEL-8",
++                    name="countertenant sentinel",
++                    min_stock=42,
+                 )
+             )
+-            headers = {"X-User-Id": user_id}
+-            if method == "DELETE":
+-                response = client.delete(path, headers=headers)
+-            elif method == "PUT":
+-                response = client.put(path, json=body, headers=headers)
+-            else:
+-                response = client.post(path, json=body, headers=headers)
++            if action != "create":
++                for record_id in body["ids"] if action == "batch_delete" else [target_id]:
++                    db.add(
++                        Material(
++                            id=record_id,
++                            tenant_id=7,
++                            material_code=f"R-{record_id:03}",
++                            name="树脂",
++                            min_stock=12,
++                        )
++                    )
+ 
+-    payload = response.json()
+-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+-    checks: list[dict[str, Any]] = []
+-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+-    _check_equal(
+-        checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+-    )
+-    _check_equal(
+-        checks,
+-        "payload.run_id_present",
+-        bool(payload.get("run_id") and payload.get("agent_run_id")),
+-        expected.get("run_id_present"),
+-        skip_when_expected_missing=True,
+-    )
+-    _check_equal(
+-        checks,
+-        "payload.deleted_count",
+-        payload.get("deleted_count"),
+-        expected.get("deleted_count"),
+-        skip_when_expected_missing=True,
+-    )
+-    _check_equal(checks, "run_attached", run is not None, True)
+-    if run is not None:
+-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
+-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
++        def readback():
++            with host.factory() as db:
++                rows = db.execute(Material.__table__.select().order_by(Material.id)).mappings()
++                return [
++                    {
++                        **{
++                            key: row[key]
++                            for key in (
++                                "id",
++                                "tenant_id",
++                                "material_code",
++                                "name",
++                                "min_stock",
++                                "is_active",
++                            )
++                        },
++                        "unit_price": str(row["unit_price"]),
++                    }
++                    for row in rows
++                ]
++
++        before = readback()
++        app = FastAPI()
++        app.include_router(agent_router)
++        app.include_router(materials_routes.router)
++        client = stack.enter_context(TestClient(app, raise_server_exceptions=False))
++        client.headers.update(host.headers)
++        response = client.request(method, path, **({"json": body} if method != "DELETE" else {}))
++        _check_equal(checks, "initial.database_unchanged", readback(), before)
++        payload, run, approval = _continue_eval_sql_route(host, client, response, checks)
++        _, run, original_checks = _route_agent_checks(
++            response, expected, host.repo, payload=payload
++        )
++        checks.extend(original_checks)
+         _check_equal(
+-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
++            checks,
++            "payload.deleted_count",
++            payload.get("deleted_count"),
++            expected.get("deleted_count"),
++            skip_when_expected_missing=True,
+         )
+-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+-        _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+-    return _result(
+-        task,
+-        checks,
+-        {
+-            "response": payload,
+-            "run": run.to_dict() if run is not None else None,
+-            "service_calls": {
+-                "create": service.create_material.call_count,
+-                "update": service.update_material.call_count,
+-                "delete": service.delete_material.call_count,
+-                "batch_delete": service.batch_delete_materials.call_count,
++        after = readback()
++        _check_equal(
++            checks,
++            "readback.countertenant_unchanged",
++            [x for x in after if x["tenant_id"] == 8],
++            [x for x in before if x["tenant_id"] == 8],
++        )
++        active = [x for x in after if x["tenant_id"] == 7 and x["is_active"]]
++        _check_equal(
++            checks,
++            "readback.active_count",
++            len(active),
++            0 if action in {"delete", "batch_delete"} else 1,
++        )
++        if active and action in {"create", "update"}:
++            row = active[0]
++            _check_equal(checks, "readback.name", row["name"], body["name"])
++            _check_equal(
++                checks,
++                "readback.stock",
++                row["min_stock"],
++                body.get("min_stock", body.get("min_quantity", 0 if action == "create" else 12)),
++            )
++            _check_equal(
++                checks,
++                "readback.material_code",
++                row["material_code"],
++                body.get("material_code", f"R-{target_id:03}"),
++            )
++            _check_equal(checks, "readback.record_id", row["id"], payload.get("data", {}).get("id"))
++        # Keep the original completion requirement even when batch deletion lacks a verifier.
++        _check_equal(
++            checks,
++            "business_verification.verified",
++            payload.get("business_verification", {}).get("verified"),
++            True,
++        )
++        return _result(
++            task,
++            checks,
++            {
++                "execution_mode": "actual_host_session_sqlite_and_original_approval",
++                "real_model_calls": 0,
++                "initial_response": response.json(),
++                "response": payload,
++                "run": run.to_dict() if run else None,
++                "principal_user_id": host.principal.user_id,
++                "readback_before": before,
++                "readback_after": after,
++                **approval,
+             },
+-        },
+-    )
++        )
+ 
+ 
+ def _run_inventory_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index f0869d345b..82dd4b0217 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -196,3 +196,36 @@ def test_sql_eval_host_restores_database_bindings_after_exception(tmp_path):
+     assert (host_db.HostSessionLocal, db_session.SessionLocal) == original
+     assert tuple(getattr(sync_engine, name) for name in names) == engines
+     assert dict(os.environ) == environment
++
++
++@pytest.mark.parametrize("action", ["create", "update", "delete", "batch_delete"])
++def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failure(
++    tmp_path, action
++):
++    task = next(
++        row
++        for row in eval_module.load_tasks()
++        if row["kind"] == "materials_route_agent" and row["route_action"] == action
++    )
++    path = tmp_path / "materials.jsonl"
++    path.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
++    result = run_eval(path)
++    item = result["results"][0]
++    assert item["passed"] is (action != "batch_delete"), item
++    details = item["details"]
++    assert details["run"]["run_id"] == details["initial_response"]["run_id"]
++    assert details["approval_consumption_count"] == 1 and details["step_params_unchanged"] is True
++    before, after = details["readback_before"], details["readback_after"]
++    assert [row for row in after if row["tenant_id"] == 8] == [
++        row for row in before if row["tenant_id"] == 8
++    ]
++    if action == "batch_delete":
++        assert details["run"]["status"] == "blocked"
++        assert details["response"]["success"] is False
++        assert details["response"]["outcome"] == "unknown"
++        assert not any(row["is_active"] for row in after if row["tenant_id"] == 7)
++        assert any(check["name"] == "run.status" for check in item["failed_checks"])
++        assert task["expected"]["run_status"] == "completed"
++    else:
++        assert details["run"]["status"] == "completed"
++        assert details["response"]["business_verification"]["verified"] is True
+-- 
+2.50.1 (Apple Git-155)
+

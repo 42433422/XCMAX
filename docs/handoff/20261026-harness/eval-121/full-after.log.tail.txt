@@ -1,0 +1,40 @@
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-customer-service-bridge, name: 客服业务页桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-model-payment-bridge, name: 模型付费桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-approval-bridge, name: 审批中心门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: lan-gate-ai-employee, name: 局域网授权 AI 员工
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-workflow-visualization-bridge, name: 工作流可视化
+WARNING:app.fastapi_routes.domains.agent.agent_routes:agent run run_c132206f5aa240f8a104f736a2168eb0 approval refused: approval_grant 与当前待审批步骤不匹配
+INFO:httpx2:HTTP Request: POST http://testserver/api/agent/runs/run_c132206f5aa240f8a104f736a2168eb0/continue "HTTP/1.1 403 Forbidden"
+INFO:httpx2:HTTP Request: GET http://testserver/api/agent/runs/run_c132206f5aa240f8a104f736a2168eb0 "HTTP/1.1 200 OK"
+INFO:httpx2:HTTP Request: POST http://testserver/api/products/batch "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: PUT http://testserver/api/products/7 "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: DELETE http://testserver/api/products/7 "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/customers "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: PUT http://testserver/customers/7 "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: DELETE http://testserver/customers/7 "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/customers/batch-delete "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/shipment-records/record "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: PATCH http://testserver/api/shipment/shipment-records/record "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: DELETE http://testserver/api/shipment/shipment-records/record "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/generate "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/generate-batch "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/print "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/orders/clear-shipment "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/orders/set-sequence "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/shipment/orders/reset-sequence "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: DELETE http://testserver/api/orders/clear-all "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: DELETE http://testserver/api/shipment/orders/7 "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: PUT http://testserver/api/print/printer-selection "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/print/document "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/print/label "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/print/test "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/api/print/workflow/label-print/dispatch "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/products/add "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/products/update "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/products/delete "HTTP/1.1 401 Unauthorized"
+INFO:httpx2:HTTP Request: POST http://testserver/products/batch-delete "HTTP/1.1 401 Unauthorized"
+{"mode": "after", "total": 121, "passed": 33, "failed": 88, "source_before_after_equal": true, "source_sha256": "8f00778f501749592535453056967085927df2b15cc35bebfaa23e6dcb40cd5d"}

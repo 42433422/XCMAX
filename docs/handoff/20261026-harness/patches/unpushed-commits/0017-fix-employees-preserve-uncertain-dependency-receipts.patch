@@ -1,0 +1,180 @@
+From 0daaa9643526a8f0628bdb5153f5854951e2f169 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:31:00 +0800
+Subject: [PATCH 17/43] fix(employees): preserve uncertain dependency receipts
+ without false completion
+
+
+diff --git a/FHD/app/mod_sdk/generated_employee_worker.py b/FHD/app/mod_sdk/generated_employee_worker.py
+index 81342f0307..e188346efd 100644
+--- a/FHD/app/mod_sdk/generated_employee_worker.py
++++ b/FHD/app/mod_sdk/generated_employee_worker.py
+@@ -8,6 +8,7 @@ import logging
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional
+ 
++from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
+ from app.mod_sdk.errors import BOUNDARY_ERRORS
+ 
+ DEFAULT_README_SECTIONS = "## 用途\n## 输入\n## 输出\n## 示例\n## 异常与边界\n"
+@@ -75,6 +76,32 @@ class GeneratedEmployeeWorker:
+                 return cand
+         return None
+ 
++    def _dependency_error(
++        self, result: Any, handler: str, message: str = "员工依赖未成功完成"
++    ) -> Optional[Dict[str, Any]]:
++        receipt = (
++            {
++                **result,
++                "success": result.get("success", result.get("ok")),
++                "reconciliation_required": result.get("reconciliation_required")
++                or result.get("requires_reconciliation"),
++            }
++            if isinstance(result, dict)
++            else None
++        )
++        outcome = tool_receipt_outcome(receipt)
++        if outcome == "success":
++            return None
++        return {
++            **self._err(message, meta={"handler": handler}),
++            "outcome": outcome,
++            "retryable": False,
++            "reconciliation_required": outcome == "unknown",
++            "pending": outcome == "pending",
++            "pending_approval": outcome == "waiting_approval",
++            "cancelled": outcome == "cancelled",
++        }
++
+     def _load_manifest(self) -> Optional[Dict[str, Any]]:
+         mp = self._manifest_path()
+         if not mp:
+@@ -158,12 +185,12 @@ class GeneratedEmployeeWorker:
+                 timeout=120.0,
+             )
+         except TimeoutError:
+-            return self._err("LLM 调用超时（120s）", meta={"handler": "llm_md"})
++            return self._dependency_error(None, "llm_md", "LLM 调用超时（120s）")
+         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+             self.logger.warning("employee LLM failed (%s)", type(exc).__name__)
+-            return self._err("LLM 调用异常", meta={"handler": "llm_md"})
+-        if not isinstance(res, dict) or not res.get("ok"):
+-            return self._err("LLM 调用失败", meta={"handler": "llm_md"})
++            return self._dependency_error(None, "llm_md", "LLM 调用异常")
++        if error := self._dependency_error(res, "llm_md"):
++            return error
+         content = str(res.get("content") or "").strip()
+         return self._ok(content, meta={"handler": "llm_md", "max_tokens": cfg["max_tokens"]})
+ 
+@@ -186,12 +213,12 @@ class GeneratedEmployeeWorker:
+         try:
+             r = await asyncio.wait_for(http_post(url, json_body=payload or {}), timeout=30.0)
+         except TimeoutError:
+-            return self._err("webhook 超时（30s）", meta={"handler": "webhook"})
++            return self._dependency_error(None, "webhook", "webhook 超时（30s）")
+         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+             self.logger.warning("employee webhook failed (%s)", type(exc).__name__)
+-            return self._err("webhook 异常", meta={"handler": "webhook"})
+-        if not isinstance(r, dict) or not r.get("ok"):
+-            return self._err("webhook 调用失败", meta={"handler": "webhook"})
++            return self._dependency_error(None, "webhook", "webhook 异常")
++        if error := self._dependency_error(r, "webhook"):
++            return error
+         return self._ok(
+             {"status": r.get("status"), "text": r.get("text")},
+             meta={"handler": "webhook"},
+@@ -219,15 +246,12 @@ class GeneratedEmployeeWorker:
+                 timeout=300.0,
+             )
+         except TimeoutError:
+-            return self._err("agent 执行超时（300s）", meta={"handler": "agent"})
++            return self._dependency_error(None, "agent", "agent 执行超时（300s）")
+         except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+             self.logger.warning("employee agent failed (%s)", type(exc).__name__)
+-            return self._err("agent 执行异常", meta={"handler": "agent"})
+-        if not isinstance(result, dict) or not result.get("ok"):
+-            return self._err(
+-                "agent 执行失败",
+-                meta={"handler": "agent"},
+-            )
++            return self._dependency_error(None, "agent", "agent 执行异常")
++        if error := self._dependency_error(result, "agent"):
++            return error
+         return self._ok(
+             result.get("summary") or "",
+             meta={
+diff --git a/FHD/tests/test_mod_sdk/test_generated_employee_worker.py b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+index 8ed3e4b6d1..acdc9a8894 100644
+--- a/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
++++ b/FHD/tests/test_mod_sdk/test_generated_employee_worker.py
+@@ -177,7 +177,26 @@ def test_dispatch_metadata_and_requested_selection(worker, monkeypatch, returned
+ 
+ 
+ @pytest.mark.parametrize(
+-    "kind", ["ok", "empty", "failed", "unknown", "none", "list", "timeout", "exception"]
++    "kind",
++    [
++        "ok",
++        "empty",
++        "failed",
++        "unknown",
++        "none",
++        "list",
++        "timeout",
++        "exception",
++        "truthy_string",
++        "numeric_ok",
++        "contradictory",
++        "pending",
++        "approval",
++        "cancelled",
++        "error_with_ok",
++        "reconciliation",
++        "requires_reconciliation",
++    ],
+ )
+ @pytest.mark.parametrize("handler", ["llm_md", "webhook", "agent"])
+ def test_handlers_results_failures_and_timeouts(worker, monkeypatch, handler, kind):
+@@ -197,6 +216,15 @@ def test_handlers_results_failures_and_timeouts(worker, monkeypatch, handler, ki
+         "unknown": {"ok": False, "outcome": "unknown", "error": "核对原任务", "retryable": False},
+         "none": None,
+         "list": [1],
++        "truthy_string": {**result, "ok": "false"},
++        "numeric_ok": {**result, "ok": 1},
++        "contradictory": {**result, "success": False},
++        "pending": {**result, "outcome": "pending"},
++        "approval": {**result, "pending_approval": True},
++        "cancelled": {**result, "cancelled": True},
++        "error_with_ok": {**result, "error": "upstream failure"},
++        "reconciliation": {**result, "reconciliation_required": True},
++        "requires_reconciliation": {**result, "requires_reconciliation": True},
+     }.get(kind, result)
+ 
+     async def callback(*args, **kwargs):
+@@ -246,6 +274,22 @@ def test_handlers_results_failures_and_timeouts(worker, monkeypatch, handler, ki
+             assert out["items"] == [{"status": 201, "text": "body"}]
+     else:
+         assert out["error"]
++        outcome = {
++            "failed": "failure",
++            "contradictory": "failure",
++            "error_with_ok": "failure",
++            "pending": "pending",
++            "approval": "waiting_approval",
++            "cancelled": "cancelled",
++        }.get(kind, "unknown")
++        assert out["outcome"] == outcome
++        assert out["retryable"] is False
++        if outcome == "unknown":
++            assert out["reconciliation_required"] is True
++        if outcome == "pending":
++            assert out["pending"] is True
++        if outcome == "waiting_approval":
++            assert out["pending_approval"] is True
+     assert timeouts == [{"llm_md": 120.0, "webhook": 30.0, "agent": 300.0}[handler]]
+     worker.record([out, calls, timeouts])
+ 
+-- 
+2.50.1 (Apple Git-155)
+

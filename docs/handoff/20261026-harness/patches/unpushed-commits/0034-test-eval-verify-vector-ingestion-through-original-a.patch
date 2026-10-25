@@ -1,0 +1,477 @@
+From a4263d54b39e015c1ea3adda5eb53bc6af2fe1c7 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 01:23:00 +0800
+Subject: [PATCH 34/43] test(eval): verify vector ingestion through original
+ approval and SQL readback
+
+
+diff --git a/FHD/evals/agent_tasks.jsonl b/FHD/evals/agent_tasks.jsonl
+index e41ce59ae7..8df18a1c02 100644
+--- a/FHD/evals/agent_tasks.jsonl
++++ b/FHD/evals/agent_tasks.jsonl
+@@ -33,7 +33,7 @@
+ {"id":"multimodal_ocr_artifact_autonomous_plan","kind":"multimodal_autonomous_plan","message":"Which model should the AI route use?","user_id":"tenant-a","runtime_context":{"dataset_id":"multimodal-plan-eval","tenant_id":"tenant-a","ocr_result":{"success":true,"text":"OCR evidence says AI routes should use the server platform XCauto model and keep citations.","confidence":0.94,"file_path":"/tmp/route-policy.png","structured_data":{"policy":"server platform model","model":"XCauto"}}},"expected":{"final_status":"completed","intent":"multimodal_artifact_rag","plan_source":"multimodal_autonomous_planner","artifact_count":1,"dataset_ingest_count":1,"dataset_ids":["multimodal-plan-eval"],"tool_call_count":1,"tool_calls":[{"tool_id":"dataset_rag","action":"query","status":"completed","cost_units":1,"permission":"dataset.read"}],"tool_answer_contains":"XCauto","dataset_query":"Which model should the AI route use?","dataset_top_k":2,"dataset_id":"multimodal-plan-eval","tenant_id":"tenant-a","dataset_answer_contains":"XCauto","dataset_reload_answer_contains":"XCauto","event_types":["planner.completed","artifact.attached","dataset.ingested","tool.completed","run.completed"]}}
+ {"id":"multimodal_excel_artifact_autonomous_import_plan","kind":"multimodal_autonomous_plan","message":"把这个 Excel 加入数据库","user_id":"tenant-a","runtime_context":{"dataset_id":"excel-import-plan-eval","tenant_id":"tenant-a","excel_analysis":{"summary":"Excel 产品清单","fields":[{"label":"客户"},{"label":"产品名称"},{"label":"型号"},{"label":"单价"}],"preview_data":{"filename":"products.xlsx","grid_preview":{"rows":[["客户","产品名称","型号","单价"],["甲公司","清漆","5003","120"]]}}}},"expected":{"initial_status":"waiting_user","final_status":"completed","continue_after_approval":true,"intent":"multimodal_excel_import_to_db","plan_source":"multimodal_autonomous_planner","artifact_count":1,"dataset_ingest_count":1,"dataset_ids":["excel-import-plan-eval"],"excel_import_record_count":1,"tool_call_count":1,"tool_calls":[{"tool_id":"excel_import","action":"import_records","status":"completed","cost_units":2,"permission":"tool.excel_import.import_records"}],"final_step_params":{"import_excel_records":{"records":[{"unit_name":"甲公司","product_name":"清漆","model_number":"5003","unit_price":120.0}],"source":"multimodal_autonomous_planner"}},"final_node_outputs":{"import_excel_records":{"success":true,"imported_count":1}},"event_types":["planner.completed","artifact.attached","dataset.ingested","step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"multimodal_pdf_artifact_autonomous_document_export_plan","kind":"multimodal_autonomous_plan","message":"根据这个 PDF 生成一份 Word 风险摘要报告","user_id":"tenant-a","runtime_context":{"dataset_id":"pdf-export-plan-eval","tenant_id":"tenant-a","multimodal_attachments":[{"name":"risk-policy.pdf","file_path":"/tmp/risk-policy.pdf","mime_type":"application/pdf","text":"PDF evidence says refund approvals require human review and tenant scoped citations.","summary":"Risk policy PDF"}]},"mock_office_document":{"file_name":"risk-summary.docx","pickup_token":"eval-doc-token"},"expected":{"initial_status":"waiting_user","final_status":"completed","continue_after_approval":true,"intent":"multimodal_document_export","plan_source":"multimodal_autonomous_planner","artifact_count":2,"dataset_ingest_count":2,"dataset_ids":["pdf-export-plan-eval"],"tool_call_count":1,"tool_calls":[{"tool_id":"generate_office_document","action":"execute","status":"completed","cost_units":2,"permission":"tool.generate_office_document.execute"}],"final_step_params":{"generate_document_from_artifacts":{"output_format":"docx"}},"final_node_outputs":{"generate_document_from_artifacts":{"success":true,"file_name":"risk-summary.docx","download_url":"/api/ai/kitten/document/pickup/eval-doc-token"}},"event_types":["planner.completed","artifact.attached","dataset.ingested","step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"excel_vector_ingest_route_forces_agent_orchestrator","kind":"excel_vector_route_agent","route_action":"ingest","user_id":"tenant-a","body":{"file_path":"/tmp/products.xlsx","index_name":"products"},"mock_ingest_result":{"success":true,"index_id":"idx-eval","chunk_count":2,"row_count":8},"expected":{"status_code":200,"success":true,"run_id_present":true,"run_status":"completed","intent":"excel_vector_execute","tool_call_count":1,"tool_calls":[{"tool_id":"excel_vector_index","action":"execute","status":"completed","cost_units":1,"permission":"tool.excel_vector_index.execute"}]}}
++{"id":"excel_vector_ingest_route_forces_agent_orchestrator","kind":"excel_vector_route_agent","route_action":"ingest","user_id":"tenant-a","body":{"file_path":"products.xlsx","index_name":"products","index_id":"idx-eval"},"expected":{"status_code":202,"success":true,"run_id_present":true,"run_status":"completed","intent":"excel_vector_execute","tool_call_count":1,"tool_calls":[{"tool_id":"excel_vector_index","action":"execute","status":"completed","cost_units":2,"permission":"tool.excel_vector_index.execute"}],"chunk_count":10,"row_count":8},"workbook_sheets":{"products":[{"model_number":"5003","quantity":8},{"model_number":"SKU-6001","quantity":3},{"model_number":"SKU-6002","quantity":5},{"model_number":"SKU-6003","quantity":9}],"stock":[{"model_number":"STOCK-5003","quantity":17},{"model_number":"SKU-7001","quantity":2},{"model_number":"SKU-7002","quantity":6},{"model_number":"SKU-7003","quantity":4}]}}
+ {"id":"ocr_recognize_route_forces_agent_orchestrator","kind":"ocr_route_agent","route_action":"recognize","user_id":"tenant-a","form":{"file_path":"/tmp/label.png"},"mock_recognize_result":{"success":true,"message":"识别成功","text":"购货单位：ACME Trading","file_path":"/tmp/label.png"},"expected":{"status_code":200,"success":true,"run_id_present":true,"run_status":"completed","intent":"ocr_recognize","artifact_count":1,"tool_call_count":1,"tool_calls":[{"tool_id":"ocr","action":"recognize","status":"completed","cost_units":1,"permission":"tool.ocr.recognize"}]}}
+ {"id":"business_ocr_route_forces_agent_orchestrator","kind":"business_ocr_route_agent","user_id":"tenant-a","body":{"request_id":"ocr-req-eval","image_url":"https://example.invalid/label.png","ocr_type":"invoice","user_id":"tenant-a"},"expected":{"status_code":200,"success":true,"event":"ocr.requested","published":true,"run_id_present":true,"run_status":"completed","intent":"business_ocr_request","tool_call_count":1,"tool_calls":[{"tool_id":"ocr","action":"request","status":"completed","cost_units":1,"permission":"tool.ocr.request"}]}}
+ {"id":"business_print_label_route_forces_agent_orchestrator","kind":"business_event_route_agent","route_action":"print_label","user_id":"tenant-a","body":{"job_id":"print-job-eval","document_name":"发货标签.pdf","printer_id":"default","copies":1},"expected":{"status_code":200,"success":true,"event":"print.job.submitted","run_id_present":true,"run_status":"completed","intent":"business_event_print_label","tool_call_count":1,"tool_calls":[{"tool_id":"business_event","action":"print_label","status":"completed","cost_units":2,"permission":"tool.business_event.print_label"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+diff --git a/FHD/evals/run_agent_eval.py b/FHD/evals/run_agent_eval.py
+index 9fdb9e4f8c..c42d8f9df2 100644
+--- a/FHD/evals/run_agent_eval.py
++++ b/FHD/evals/run_agent_eval.py
+@@ -2239,114 +2239,289 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
+ 
+ 
+ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
++    """Actual reviewed XLSX/SQLite path; hash embeddings are synthetic transport."""
++    import hashlib
++    from datetime import timedelta
++    from uuid import uuid4
++
++    import pandas as pd
+     from fastapi import FastAPI
+     from fastapi.testclient import TestClient
+-
+-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+-    from app.fastapi_routes.excel_vector import router
++    from sqlalchemy import create_engine
++    from sqlalchemy.orm import sessionmaker
++    from starlette.requests import Request
+ 
+     expected = dict(task.get("expected") or {})
+     action = str(task.get("route_action") or "ingest").strip().lower()
+-    repo = InMemoryAgentRunRepository()
+-    app = FastAPI()
+-    app.include_router(router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-
+-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
++    checks: list[dict[str, Any]] = []
++    details: dict[str, Any] = {"embedding_transport": "synthetic_hash", "real_model_calls": 0}
++    with tempfile.TemporaryDirectory(prefix="xcagi-vector-eval-") as tmp_dir, ExitStack() as stack:
++        folder = Path(tmp_dir).resolve()
+         env_patch = {
+-            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
++            "DATABASE_URL": f"sqlite:///{folder / 'host.sqlite'}",
++            "WORKSPACE_ROOT": str(folder / "workspace"),
++            "XCAGI_DATA_DIR": str(folder / "data"),
++            "XCAGI_DESKTOP_DATA_DIR": str(folder / "data"),
++            "EXCEL_VECTOR_DB_PATH": str(folder / "vectors.sqlite"),
++            "ENABLE_SQLITE_VECTOR_FALLBACK": "1",
++            "FHD_EMBEDDING_MODE": "disabled",
++            "SECRET_KEY": "synthetic-vector-eval-host-key-only",
++            "MODEL_USAGE_LEDGER_PATH": str(folder / "usage.json"),
+             "MODEL_USAGE_WALLET_BACKEND": "audit",
+             "MODEL_USAGE_WALLET_REQUIRED": "",
+         }
+-        with ExitStack() as stack:
+-            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+-            stack.enter_context(
+-                patch(
+-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-                    return_value=repo,
+-                )
++        stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
++        from app import db as host_db
++        from app.application import excel_vector_app_service as vector
++        from app.application.agent_orchestrator import AgentOrchestrator
++        from app.application.agent_orchestrator.run_sql_repository import (
++            SQLAlchemyAgentRunRepository,
++        )
++        from app.application.agent_orchestrator.task_execution_sql_repository import (
++            SQLAlchemyTaskExecutionRepository,
++        )
++        from app.application.employee_runtime.loader import employee_owner_workspace
++        from app.db.db_base import Base
++        from app.db.models.agent_approval import AgentApprovalConsumption
++        from app.db.models.permission import Permission, Role
++        from app.db.models.user import Session as UserSession
++        from app.db.models.user import User
++        from app.domain.shared_services.session_service import SessionService
++        from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
++        from app.fastapi_routes.domains.agent.route_support import (
++            agent_node_output,
++            authenticated_runtime_context,
++        )
++        from app.fastapi_routes.excel_vector import router
++        from app.infrastructure.auth.agent_principal import require_agent_principal
++        from app.infrastructure.llm.embedding_service import EmbeddingService
++        from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
++        from app.utils.time import utc_now_naive
++
++        engine = create_engine(env_patch["DATABASE_URL"])
++        stack.callback(engine.dispose)
++        Base.metadata.create_all(engine)
++        factory = sessionmaker(bind=engine)
++        stack.enter_context(patch.object(host_db, "HostSessionLocal", factory))
++        stack.enter_context(
++            patch("app.application.facades.session_facade.get_session_service", SessionService)
++        )
++        for name in (
++            "_vector_store_instance",
++            "_sqlite_vector_store_instance",
++            "_pg_vector_store_instance",
++        ):
++            stack.enter_context(patch.object(vector, name, None))
++        stack.enter_context(patch.object(EmbeddingService, "_singleton", None))
++        repo = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
++        queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
++        stack.enter_context(
++            patch("app.application.agent_orchestrator.run_repository._agent_run_repository", repo)
++        )
++        stack.enter_context(
++            patch(
++                "app.application.agent_orchestrator.task_execution_repository._task_execution_repository",
++                queue,
+             )
+-            if action == "query":
+-                service = Mock()
+-                service.query.return_value = dict(
+-                    task.get("mock_query_result")
+-                    or {
+-                        "success": True,
+-                        "index_id": "idx-eval",
+-                        "query": "5003",
+-                        "hits": [{"score": 0.91, "row": {"model_number": "5003"}}],
+-                    }
+-                )
+-                stack.enter_context(
+-                    patch(
+-                        "app.fastapi_routes.excel_vector.get_excel_vector_search_app_service",
+-                        return_value=service,
+-                    )
+-                )
+-                response = client.post(
+-                    "/api/excel/vector/query",
+-                    json=dict(
+-                        task.get("body") or {"index_id": "idx-eval", "query": "5003", "top_k": 3}
+-                    ),
+-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
+-                )
+-            else:
+-                service = Mock()
+-                service.ingest_excel.return_value = dict(
+-                    task.get("mock_ingest_result")
+-                    or {
+-                        "success": True,
+-                        "index_id": "idx-eval",
+-                        "chunk_count": 2,
+-                        "row_count": 8,
+-                    }
+-                )
+-                stack.enter_context(
+-                    patch(
+-                        "app.fastapi_routes.excel_vector.get_excel_vector_ingest_app_service",
+-                        return_value=service,
+-                    )
+-                )
+-                response = client.post(
+-                    "/api/excel/vector/ingest",
+-                    json=dict(
+-                        task.get("body")
+-                        or {
+-                            "file_path": "/tmp/products.xlsx",
+-                            "index_name": "products",
+-                        }
+-                    ),
+-                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
++        )
++        stack.enter_context(
++            patch("app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher")
++        )
++        session_id, mod_id = uuid4().hex, "vector-eval"
++        with factory.begin() as db:
++            role = Role(name="user")
++            role.permissions = [
++                Permission(code=code, name=code) for code in ("etl.read", "etl.execute")
++            ]
++            db.add(role)
++            # The dataset's historical user_id is a fixture label, never authority.
++            user = User(
++                username=str(task.get("user_id") or "vector-eval"),
++                password="unused",
++                tenant_id=7,
++                role="user",
++                tier="enterprise",
++            )
++            db.add(user)
++            db.flush()
++            user_id = str(user.id)
++            db.add(
++                UserSession(
++                    session_id=session_id,
++                    user_id=user.id,
++                    expires_at=utc_now_naive() + timedelta(hours=1),
++                    entitled_mod_ids_json=json.dumps([mod_id]),
+                 )
+-
+-    payload = response.json()
+-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+-    checks: list[dict[str, Any]] = []
+-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+-    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+-    _check_equal(
+-        checks,
+-        "payload.run_id_present",
+-        bool(payload.get("run_id") and payload.get("agent_run_id")),
+-        expected.get("run_id_present"),
+-        skip_when_expected_missing=True,
+-    )
+-    _check_equal(checks, "run_attached", run is not None, True)
+-    if run is not None:
+-        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
+-        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
++            )
++        headers = {"X-Session-ID": session_id, "X-XCAGI-Active-Mod-Id": mod_id}
++        principal = require_agent_principal(
++            Request(
++                {
++                    "type": "http",
++                    "method": "POST",
++                    "path": "/api/excel/vector/ingest",
++                    "headers": [
++                        (key.lower().encode(), value.encode()) for key, value in headers.items()
++                    ],
++                }
++            ),
++            x_user_id=None,
++        )
++        context = authenticated_runtime_context({}, principal)
++        # Resolve the dataset's synthetic filename inside this newly-created owner.
++        workbook = (
++            employee_owner_workspace(context)
++            / Path(task.get("body", {}).get("file_path") or "products.xlsx").name
++        )
++        workbook.parent.mkdir(parents=True, exist_ok=True)
++        sheets = task.get("workbook_sheets") or {
++            "products": [{"model_number": "5003", "quantity": 8}]
++        }
++        with pd.ExcelWriter(workbook) as writer:
++            for sheet, rows in sheets.items():
++                pd.DataFrame(rows).to_excel(writer, sheet_name=sheet, index=False)
++        params = {
++            "file_path": str(workbook),
++            "index_name": str(task.get("body", {}).get("index_name") or "products"),
++            "index_id": str(task.get("body", {}).get("index_id") or "idx-eval"),
++        }
++        app = FastAPI()
++        app.include_router(agent_router)
++        app.include_router(router)
++        client = stack.enter_context(TestClient(app, raise_server_exceptions=False))
++        client.headers.update(headers)
++        response = client.post("/api/excel/vector/ingest", json=params)
++        initial = response.json()
++        details["initial_response"] = initial
+         _check_equal(
+-            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
++            checks,
++            "status_code",
++            response.status_code,
++            expected.get("status_code") if action == "ingest" else 202,
+         )
+-        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+-    return _result(
+-        task,
+-        checks,
+-        {
+-            "response": payload,
+-            "run": run.to_dict() if run is not None else None,
+-        },
+-    )
++        _check_equal(checks, "initial.success", initial.get("success"), False)
++        run = repo.get(str(initial.get("run_id") or ""))
++        _check_equal(checks, "initial.run_status", run.status if run else None, "waiting_user")
++        _check_equal(checks, "initial.tool_call_count", len(run.tool_calls) if run else None, 0)
++        _check_equal(
++            checks, "initial.index_count", len(vector.get_sqlite_vector_store().list_indexes()), 0
++        )
++        if response.status_code != 202 or run is None or run.status != "waiting_user":
++            return _result(task, checks, details)
++        run_id = run.run_id
++        snapshot = copy.deepcopy(run.steps[0].params.get("execution_snapshot"))
++        review = client.get(f"/api/agent/runs/{run_id}")
++        _check_equal(checks, "review.status_code", review.status_code, 200)
++        grant = review.json().get("approval", {}).get("grant")
++        if not grant:
++            _check_equal(checks, "review.grant_present", bool(grant), True)
++            return _result(task, checks, details)
++        continued = client.post(
++            f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
++        )
++        _check_equal(checks, "continue.status_code", continued.status_code, 202)
++        claim = queue.claim("vector-eval", lease_seconds=60)
++        _check_equal(checks, "queue.original_run", claim.run_id if claim else None, run_id)
++        if claim is None or claim.run_id != run_id:
++            return _result(task, checks, details)
++        run = AgentOrchestrator().execute_dispatched_run(run_id)
++        queue.finish(run_id, "vector-eval", "completed" if run.status == "completed" else "blocked")
++        with factory() as db:
++            consumed = (
++                db.query(AgentApprovalConsumption)
++                .filter_by(run_id=run_id, step_id=run.steps[0].step_id)
++                .count()
++            )
++        _check_equal(checks, "approval_consumption_count", consumed, 1)
++        _check_equal(
++            checks, "snapshot_unchanged", run.steps[0].params.get("execution_snapshot"), snapshot
++        )
++        _check_equal(
++            checks,
++            "snapshot.source_sha256",
++            (snapshot or {}).get("body", {}).get("content_sha256"),
++            hashlib.sha256(workbook.read_bytes()).hexdigest(),
++        )
++        _check_equal(checks, "run.user_id", run.user_id, user_id)
++        payload = agent_node_output(run, run.steps[0].node_id)
++        raw = SQLiteVectorStore(env_patch["EXCEL_VECTOR_DB_PATH"])
++        key = vector.get_vector_store(context)._key(params["index_id"])
++        persisted = [row for row in raw.list_indexes() if row["index_id"] == key]
++        hits = raw.query(key, [0.0] * 256, top_k=100)
++        row_hits = {
++            (hit["metadata"].get("sheet"), hit["metadata"].get("row_index")): hit["content"]
++            for hit in hits
++            if hit["metadata"].get("chunk_type") == "row"
++        }
++        rows_match = all(
++            all(
++                f"{column}: {value}" in row_hits.get((sheet, index), "")
++                for column, value in row.items()
++            )
++            for sheet, rows in sheets.items()
++            for index, row in enumerate(rows, start=1)
++        )
++        readback = {
++            "index_count": len(persisted),
++            "chunk_count": len(hits),
++            "row_count": len(row_hits),
++            "rows_match": rows_match,
++        }
++        details.update(
++            readback=readback,
++            approval_consumption_count=consumed,
++            snapshot_unchanged=run.steps[0].params.get("execution_snapshot") == snapshot,
++            principal_user_id=principal.user_id,
++            source_sha256=hashlib.sha256(workbook.read_bytes()).hexdigest(),
++        )
++        _check_equal(checks, "readback.index_count", len(persisted), 1)
++        _check_equal(
++            checks,
++            "readback.chunk_count",
++            len(hits),
++            expected.get("chunk_count"),
++            skip_when_expected_missing=True,
++        )
++        _check_equal(
++            checks,
++            "readback.row_count",
++            len(row_hits),
++            expected.get("row_count"),
++            skip_when_expected_missing=True,
++        )
++        _check_equal(checks, "readback.rows_match", rows_match, True)
++        _check_equal(
++            checks,
++            "business_verification.verified",
++            payload.get("business_verification", {}).get("verified"),
++            True,
++        )
++        if action == "query":
++            response = client.post(
++                "/api/excel/vector/query",
++                json={**dict(task.get("body") or {}), "index_id": params["index_id"]},
++            )
++            payload = response.json()
++            run = repo.get(str(payload.get("run_id") or ""))
++            _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
++        _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
++        _check_equal(
++            checks,
++            "payload.run_id_present",
++            bool(payload.get("run_id") and payload.get("agent_run_id")),
++            expected.get("run_id_present"),
++            skip_when_expected_missing=True,
++        )
++        _check_equal(checks, "run_attached", run is not None, True)
++        if run is not None:
++            _check_equal(checks, "run.status", run.status, expected.get("run_status"))
++            _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
++            _check_equal(
++                checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
++            )
++            _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
++        details.update(response=payload, run=run.to_dict() if run else None)
++        return _result(task, checks, details)
+ 
+ 
+ def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+@@ -4844,7 +5019,8 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
+             return_value="full",
+         ),
+         patch(
+-            "app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory_service
++            "app.domain.shared_services.user_memory_service.get_user_memory_service",
++            return_value=memory_service,
+         ),
+     ):
+         planner = LLMWorkflowPlanner()
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index 44fcb75345..ac4db53b7b 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -6,6 +6,50 @@ from evals import run_agent_eval as eval_module
+ from evals.run_agent_eval import DEFAULT_TASKS_PATH, run_eval
+ 
+ 
++def test_vector_route_eval_uses_consumed_grant_and_actual_sqlite_readback(tmp_path) -> None:
++    from app import db as host_db
++    from app.application import excel_vector_app_service as vector
++
++    original_factory = host_db.HostSessionLocal
++    original_store = vector._vector_store_instance
++    task = next(
++        row
++        for row in eval_module.load_tasks()
++        if row["id"] == "excel_vector_ingest_route_forces_agent_orchestrator"
++    )
++    single_case = tmp_path / "vector.jsonl"
++    single_case.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
++    result = run_eval(single_case)
++
++    assert result["failed"] == 0, (
++        result["results"][0]["failed_checks"],
++        result["results"][0]["details"],
++    )
++    assert result["passed"] == 1 and result["score"] == 1.0
++    details = result["results"][0]["details"]
++    assert details["embedding_transport"] == "synthetic_hash"
++    assert details["real_model_calls"] == 0
++    assert details["initial_response"]["success"] is False
++    assert details["initial_response"]["agent_status"] == "waiting_user"
++    assert details["approval_consumption_count"] == 1
++    assert details["snapshot_unchanged"] is True
++    assert details["run"]["run_id"] == details["initial_response"]["run_id"]
++    assert details["run"]["status"] == "completed"
++    assert details["response"]["business_verification"] == {
++        "verified": True,
++        "method": "excel_vector_owner_readback",
++        "index_id": "idx-eval",
++    }
++    assert details["readback"] == {
++        "index_count": 1,
++        "chunk_count": 10,
++        "row_count": 8,
++        "rows_match": True,
++    }
++    assert host_db.HostSessionLocal is original_factory
++    assert vector._vector_store_instance is original_store
++
++
+ def test_agent_eval_harness_baseline_passes() -> None:
+     from app.application.agent_orchestrator import orchestrator
+ 
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,398 @@
+{
+  "created_utc": "2026-10-25T18:32:21.986128+00:00",
+  "mode": "implementation_design_only_no_source_edits",
+  "head": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+  "already_integrated": "aaf4e378ba owns the only shared loop; do not rewrite it or recopy the former Legacy/Employee loops. This design adds a policy and bounded extension hooks only.",
+  "exact_scope": {
+    "seven_existing_product_owners": {
+      "FHD/app/application/workflow/agent_loop.py": "Replace only the while/round scheduler with run_model_turn + WorkflowAgenticModelPolicy assembly and WorkflowRunResult reconstruction. Keep run_agentic_loop signature and AgentLoopEngine hooks.",
+      "FHD/app/application/workflow/engine_decisions.py": "Extract exact ordered prompt/history builder and response parser. Retain AgentDecisionClient constructor/decide and direct single-decision compatibility API. Add context-local bound model transport so the default engine hook uses the captured model account inside the shared driver; no independent production model loop.",
+      "FHD/app/application/workflow/engine.py": "Preserve run/_run_agentic_loop/_llm_decide_next_step/_run_single_tool and late-bound hooks. Pass existing engine/context/state schema into the new policy. Keep batch/DAG/resume/checkpoint behavior unchanged.",
+      "FHD/app/application/ai_chat/agent_workflow_bridge.py": "Add governed admission and canonical-run projection paths; retain observed legacy start/record API until its separate deprecation gate. New production path must never manufacture ToolCall/AgentStep/event success from WorkflowRunResult.",
+      "FHD/app/application/ai_chat/planned_workflow_dispatch.py": "Keep excel_analysis.file_path dynamic branch. Replace best-effort observed pre-run with mandatory governed admission before model; replay original runs and format the actual saved run. Remove admission-error fallthrough and do not use static plan as replacement.",
+      "FHD/app/application/ai_chat_app_service.py": "Wire existing agentic callbacks to governed admission and saved-run projection. Preserve request context, risk/clarification selection, response formatting, conversation persistence and other fast paths.",
+      "FHD/app/application/agent_orchestrator/model_turn_runtime.py": "Register explicit workflow_agentic policy restore/projection. Add narrowly typed no-call transition and policy result-key selection; keep version1 durable structure and every legacy/employee validation/lease/cursor/receipt rule. No copy of drive loop."
+    },
+    "necessary_additional_existing_owner": {
+      "FHD/app/application/agent_orchestrator/trace_runs.py": "Necessary eighth existing owner: reuse/factor admission without changing legacy fingerprint defaults; add non-JSON WorkflowAgenticExecutionLease capability checked against execution_kernel; allow trusted receipt-metadata callback to commit NodeExecutionResult metrics with the original call receipt. Existing auth/spec/intent/conflict/verification behavior remains mandatory."
+    },
+    "new_policy": {
+      "FHD/app/application/workflow/agentic_model_policy.py": "WorkflowAgenticModelPolicy; no while/round loop; all scheduling through ModelTurnDriver"
+    },
+    "necessary_existing_test_files": [
+      "FHD/tests/test_application/test_workflow_engine.py",
+      "FHD/tests/test_application/test_workflow_engine_cov.py",
+      "FHD/tests/test_application/test_workflow_engine_components.py",
+      "FHD/tests/test_application/test_chat_employee_db_workflow_tools.py",
+      "FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py",
+      "FHD/tests/test_application/test_chat_component_boundaries.py"
+    ],
+    "necessary_new_test_files": {
+      "FHD/tests/test_application/test_workflow_model_turn.py": "Exact JSON protocol/prompt/last8/10-step/no-call transitions; call identity; live public hook/callback/state/result projection; catalog drift and unsupported hook/schema cases.",
+      "FHD/tests/test_application/test_workflow_model_turn_durable.py": "Actual temporary HostDB/UserSession/RBAC/Mod, SQL repositories and JSON decision transport; original HTTP grant, original call/step IDs, actual business readback, cost/event/metadata and projection crash boundaries.",
+      "FHD/tests/test_application/test_workflow_model_turn_process_resume.py": "Two-process original-run claim/fencing, model-inflight ambiguity, receipt-before-cursor and approved-intent crashes, exact-model account restoration and scope/credential negatives."
+    },
+    "reuse_unchanged_test_fixtures": [
+      "FHD/tests/fixtures/legacy_transport.py",
+      "FHD/tests/fixtures/employee_transport.py",
+      "existing trusted_actor/approved_tool_context/HTTP grant fixtures"
+    ],
+    "unchanged_shared_regression_files": [
+      "FHD/tests/test_application/test_model_turn_runtime.py",
+      "FHD/tests/test_application/test_model_turn_review_regressions.py",
+      "FHD/tests/test_application/test_model_turn_lease.py",
+      "FHD/tests/test_application/test_model_turn_process_resume.py",
+      "FHD/tests/test_application/test_employee_model_turn.py",
+      "FHD/tests/test_application/test_legacy_durable_execution.py"
+    ],
+    "not_authorized_by_this_plan": [
+      "No source edits until root scope authorization",
+      "No permission/approval/ledger/worker SQL schema changes",
+      "No main/metric baseline/guard/exclusion/CI/release changes",
+      "No real provider invocation",
+      "No static-plan fallback or removed live Excel capability"
+    ]
+  },
+  "current_semantics_replacement_map": [
+    {
+      "current": "One JSON decision per step; action done or tool_id/action_name/tool_action/action fallback",
+      "replacement": "engine_decisions pure parser + WorkflowAgenticModelPolicy.transport; one canonical batch entry at most",
+      "contract": "Preserve done normalization and real action precedence; never treat placeholder execute as a real action."
+    },
+    {
+      "current": "10-step loop; done on step10 succeeds if no prior errors; tool on step10 executes then fails at limit",
+      "replacement": "shared limits.rounds=10; no-call done terminal before next-round limit; no second loop",
+      "contract": "A step means a model decision including done/invalid/none; calls cap is10 or a stricter server cap, never caller-increased."
+    },
+    {
+      "current": "last8 history entries, assistant reasoning[:80], System content[:200], first-step literal; full Excel file path",
+      "replacement": "exact prompt builder in engine_decisions; policy reconstructs history from saved assistant decisions + delivered original receipts",
+      "contract": "Truncate provider prompt previews exactly as before; never truncate persisted decisions or full receipt authority. Preserve ordered tool/actions rows rather than sorting the source catalog."
+    },
+    {
+      "current": "Prompt rules/user_message/excel_context/recent_history/catalog/output_schema; temperature0.1/max_tokens600",
+      "replacement": "immutable policy snapshot protocol=workflow-json-v1 + request parameters; request() builds the identical messages",
+      "contract": "tools=None/tool_choice=None in persisted request view; transport omits null SDK fields and applies the immutable0.1/600 parameters. Prompt JSON/key/order parity tests required."
+    },
+    {
+      "current": "Default get_ai_conversation_service api_key/api_url/model + reusable direct HTTP client",
+      "replacement": "resolve request-scoped client/model before initialize; capture_durable_model_reference and restore via resolve_durable_model_client",
+      "contract": "Same authenticated user/tenant/Mod and same provider/endpoint/model. No fallback to global alternate provider or settings. Legacy raw settings/temporary arbitrary provider is not a durable model reference."
+    },
+    {
+      "current": "Observed pre-run save can fail and execution continues",
+      "replacement": "TraceRunService governed claim before model transport; actual actor validation, canonical task+turn scope/fingerprint, replay original run",
+      "contract": "Admission/storage failure has zero model/tool calls; no best-effort fallthrough, no second task or run. Existing request run_id pointing to observed/incomplete task is read-only until explicitly new turn."
+    },
+    {
+      "current": "tool_id/action/params dispatched through _run_single_tool",
+      "replacement": "canonical name=execute_erp_capability; params={tool_id,action,params}; existing resolver, real spec/RBAC/approval/executor retained",
+      "contract": "Catalog membership checked against original ordered catalog and current action authorization. Wrapper call metadata retains original model params; actual ToolCall has resolved tool/action/business params."
+    },
+    {
+      "current": "Custom NodeExecutor idempotent retry and agentic parameter policy",
+      "replacement": "policy.dispatch -> original _run_single_tool hook under original trace call and exact lease; NodeExecutor remains the low-level retry owner",
+      "contract": "Do not add model-level tool retries. Preserve max_retries and agentic-vs-DAG parameter preparation. Non-idempotent/unknown/pending/approval states never retry."
+    },
+    {
+      "current": "node result -> append trace -> merge schema -> node_outputs[agent_step_N] -> emit update",
+      "replacement": "policy observation/projection using same engine hooks and saved receipt metrics",
+      "contract": "Same inline hook order and public aliases; canonical call/step/node IDs remain unique and must not be replaced by repeating display aliases."
+    },
+    {
+      "current": "all failed node results and invalid decisions make final success false even after done",
+      "replacement": "no_call_transition(done) computes final outcome from persisted decision records + actual original receipts",
+      "contract": "Failed historical call is not erased by later success. Corrected invalid decision still makes the workflow failure, matching current behavior."
+    },
+    {
+      "current": "NodeExecutionResult params/error/retries/retryable/times/duration/attempts/recovery_hint",
+      "replacement": "trusted receipt_metadata callback in trace_runs commits exact serialized node metrics + receipt digest with the same ToolCall save",
+      "contract": "No separate post-hoc invented ToolCall. Projection failure saves the actual receipt plus explicit projection error and blocks the model cursor; never redispatch to obtain metrics."
+    },
+    {
+      "current": "AgentWorkflowBridge reconstructs tool count/cost/artifacts/events after execution",
+      "replacement": "canonical real run supplies ToolCalls/events/artifacts; policy result provides WorkflowRunResult projection; service formats original run",
+      "contract": "Counts/cost sums from actual original calls; provider usage owner unchanged, no additional wallet charge, no observed events pretending to be actual execution."
+    }
+  ],
+  "policy_method_contracts": {
+    "__init__/snapshot/restore": "Snapshot contains version1/protocol, ordered registry entries and action entries, original serialized PlanGraph, portable StateSchema tokens, max_retries, limits and hook_profile. No callables, credentials, live clients or authorization context in policy snapshot. Runtime context remains under the existing protected run owner.",
+    "validate_saved": "Verify kernel=workflow_agentic, immutable snapshot/catalog/plan/schema/hook profile, current actor/Mod and exact durable model reference. Bind saved state for reconstruction. Any drift blocks the original run; no automatic policy substitution.",
+    "request(messages,state)": "Reconstruct original agent_history in decision order from saved assistant envelopes and validated delivered receipts; use last8 builder; produce exact original JSON-only prompt, not an SDK tool catalog prompt.",
+    "transport(request)": "Call the existing late-bound engine._llm_decide_next_step under a context-local bound model transport. Default AgentDecisionClient uses the captured client/model and common model_transport once; raw HTTP compatibility API remains standalone single-decision only. Normalize complete decisions, never partial text.",
+    "prepare_arguments": "Use strict parse_arguments for canonical wrapper JSON; no malformed/non-object/duplicate-field conversion to empty object.",
+    "validate_call": "Verify one-step policy/catalog/current canonical spec, action params, actor/Mod/RBAC and restorable write profile before dispatch. Existing AgentToolExecutor, approval grant and write ledger remain final authority.",
+    "dispatch": "Use the new WorkflowAgenticExecutionLease capability on the admitted original run. RunTraceService.dispatch_tool resolves existing ERP wrapper to real tool/action/params; callback calls the original _run_single_tool with dynamic trusted context. Trusted metrics callback commits exact result projection with original receipt.",
+    "observe": "Validate call identity/output digest/projection metadata. Reconstruct public node results and final_context; live callbacks only for newly observed transitions, not replayed historical transitions. On approved continuation derive a new projection revision from actual StepExecution fields on the same call; unrelated digest changes fail.",
+    "no_call_transition": "Optional shared-driver hook with strict result schema and zero calls only: continue -> ready_model; done -> terminal success/failure; none -> terminal failure. Only phase/outcome/final_text/exit_status changes allowed. Cannot change limits, request_id, batch/cursor, references or identity. Existing policies keep old default no-call behavior.",
+    "result": "Return JSON-safe serialized WorkflowRunResult under result_key=workflow_result; outer WorkflowEngine reconstructs dataclass and service formats actual AgentRun. No static PlanGraph execution and no second scheduler."
+  },
+  "canonical_json_batch_identity": {
+    "decision_envelope": "Persist assistant.content as exact_json({kind: execute|done|invalid|none, decision: normalized_original_decision}); batch contains zero or one call. The internal JSON reasoning is never emitted as streamed user text.",
+    "call_id_formula": "wfa_ + canonical_hash([run_id, persisted request_id, 0, tool_id, normalized_action, exact_business_params])[:48]. The single-entry index is0. Persist before any intent; resume uses saved ID without recalculation/new provider request.",
+    "deduplication": "Do not dedupe by params: two legitimate later decisions with identical params have distinct persisted request_id/call_id. Admission dedup is by original task/turn fingerprint; original repeated call ID cannot bind different params.",
+    "empty_decisions": "done/none/invalid have no synthetic tool, no ToolCall placeholders and no business intent. Invalid hook decisions retain the old assistant+System invalid-decision history and count toward10; final done cannot erase decision_errors.",
+    "strict_difference": "The old direct parser params-not-object -> {} behavior is unsafe for governed execution and has no equivalent safe mapping. Standalone single-decision compatibility can remain for API stability; the new governed policy rejects before intent. Explicit tests and authorization of this safety correction are required."
+  },
+  "run_admission_and_execution": {
+    "server_scope": "Reuse existing claim_first_task_run and scope [tenant,user,actor.mod_id,conversation,turn/task hint]. Preserve supplied authoritative original task identity; never create a new ID merely to escape an existing run. Include plan+ordered catalog+portable schema/options in workflow request fingerprint.",
+    "implementation": "TraceRunService adds/factors claim_model_turn internally with defaults preserving legacy admission hashes. workflow_agentic calls require actual actor scope, execution_kernel and WorkflowAgenticExecutionLease; existing LegacyExecutionLease remains unchanged for legacy.",
+    "canonical_task": "Apply task_context, root_run_id=original run, plan_id/intent/source and runtime scope before the first model. Existing same fingerprint returns that same run; different content/scope conflicts. A runtime/server capability cannot be constructed from JSON.",
+    "lease": "run_model_turn obtains existing exact-run SQL queue claim/heartbeat/fencing via model_turn_lease_scope; worker resume reuses ClaimedRunRepository, never claims another task. No SQL schema or worker/approval implementation changes proposed.",
+    "budget": "rounds10, calls at most10/stricter server cap, repeat0 matching the old loop, active seconds300 or stricter existing server deadline. Approval waiting time excluded; the active counter persists and is checked before model and every tool.",
+    "approval": "Actual pending receipt stops the cursor. GET original run issues its existing bound grant; POST continue uses original run/step/call/params and queue claim. resume_model_turn restores new policy and execute_approved reuses StepExecution and original usage identity. No grant refresh, replan or new task.",
+    "safety_behavior_change": "The old loop continued asking the model after an unresolved tool failure. The migration must stop on unknown/pending/waiting_approval rather than reproduce unsafe continuation; this explicit safety correction is required by the shared kernel and must be validated, not hidden as exact behavior parity."
+  },
+  "projection_contract": {
+    "authorities": "Original ToolCall.output and business verification stay authoritative. Serialized workflow projection is secondary and digest-bound to call_id/output; never use it as authorization or completion evidence.",
+    "atomic_metrics": "receipt_metadata() returns only serializable NodeExecutionResult fields; trace_runs stores them with receipt/output digest in the same fenced save. If metrics serialization fails, commit actual safe receipt plus projection_error and suspend without another side effect.",
+    "approved_revision": "If and only if the same original call changed from waiting_approval through proven formal StepExecution, reconstruct updated metrics from that actual step/call/attempt and persist a new projection revision. A changed digest without this exact transition is corruption.",
+    "public_shape": "Keep WorkflowRunResult(plan_id,success,node_results,final_context,message). Keep public node_results.node_id aliases returned by original hooks and final_context.node_outputs agent_step_N keys. Canonical durable step/node/call IDs use unique original call ID; do not overwrite them with duplicate display aliases.",
+    "state": "Preserve existing append/merge/output/emit order inline, StateEvents callback scopes, max_retries, agentic-vs-DAG params, schema errors and summary text. Reconstruct final_context from original context + validated projection records in model decision order.",
+    "waiting_status": "New actual wait/unknown states project success=False and truthful workflow_status waiting_user/blocked/pending; do not call them completed or run.failed solely because an approval is pending. This is an explicit safety repair of the old observed workflow result.",
+    "events": "Actual tool/approval/model events are written once by canonical owners; state.update publication occurs for new live projection transitions only. On reconnect/replay use durable events and cursors. Do not append old observed tool.started/completed copies.",
+    "callback_limits": "Arbitrary Python callbacks have no durable acknowledgment protocol, so exactly-once callback invocation across an OS crash cannot be promised. Preserve inline order/isolation; never replay historical arbitrary callbacks automatically after restart. Durable event records remain the recoverable authority.",
+    "cost": "Keep provider billing at its existing owner and do not add a second charge in policy.meter. Preserve displayed tool cost_units/permission/tool count/artifact count from actual original calls. Approval continuation must retain the call/billing ID and charge once."
+  },
+  "old_APIs_without_full_equivalent": [
+    {
+      "api": "Arbitrary patched/subclass _llm_decide_next_step, _run_single_tool/_dispatch, state hooks or callable StateSchema predicates",
+      "supported": "Invoke the same live hooks inline; portable default profile restores from existing composition. Primitive schema tokens None/bool/int/float/str/list/dict and set/append/merge_dict are durable.",
+      "cannot_guarantee": "Arbitrary Python closure/class/predicate identity after process loss; never pickle or silently restore default hooks.",
+      "boundary": "Persist ephemeral/nonrestorable hook profile. Nonportable write/approval paths fail before side effects; interrupted nonportable reads block original run with explicit workflow_hook_not_restorable. Default production profile has full recovery."
+    },
+    {
+      "api": "Anonymous WorkflowEngine with custom tool dispatcher",
+      "supported": "Pure done/no-tool decision/result computations remain possible; trusted fake dispatch tests may use actual authenticated temporary runs.",
+      "cannot_guarantee": "Executing governed product tools without a real actor/run.",
+      "boundary": "No test-mode bypass or unrestricted repository=None dispatch. Old anonymous tool execution is explicitly rejected; existing business assertions move to real fixtures rather than being removed."
+    },
+    {
+      "api": "Temporary provider/client without existing durable account reference",
+      "supported": "Standalone AgentDecisionClient one-decision API keeps its injected factories; no tools execute through it.",
+      "cannot_guarantee": "Resume raw api_key/api_url credentials safely or use another account/provider.",
+      "boundary": "New governed runtime rejects before first request; never persist secrets or fall back to defaults."
+    },
+    {
+      "api": "WorkflowEngine.resume_run(plan, checkpoint_id, checkpointer) for DAG checkpoints",
+      "supported": "Leave DAG API and behavior unchanged.",
+      "cannot_guarantee": "Treating an observed or DAG checkpoint as shared model decision state.",
+      "boundary": "Workflow model continuation uses original Agent API run/grant and exact model state; never reinterpret an old checkpoint as a new model cursor."
+    },
+    {
+      "api": "Repeated public display node_id agent_tool_action",
+      "supported": "Keep public result aliases and step-number node_outputs for compatibility.",
+      "cannot_guarantee": "Using that repeating label as unique durable side-effect identity.",
+      "boundary": "Only new canonical call IDs authorize/replay business; old observed IDs remain historical."
+    }
+  ],
+  "failure_recovery_matrix": [
+    {
+      "trigger": "admission/storage failure",
+      "durable_boundary": "before first model",
+      "next_state": "fail/return original conflict",
+      "effect_constraint": "0 model,0 intent; never fallback"
+    },
+    {
+      "trigger": "same turn/same fingerprint",
+      "durable_boundary": "existing original run",
+      "next_state": "read/replay same original state",
+      "effect_constraint": "no new provider request or tool"
+    },
+    {
+      "trigger": "same turn/different plan/catalog/scope",
+      "durable_boundary": "admission conflict",
+      "next_state": "reject",
+      "effect_constraint": "no replacement task/run"
+    },
+    {
+      "trigger": "confirmed JSON done on step1 or10",
+      "durable_boundary": "accepted decision checkpoint",
+      "next_state": "terminal computed from original errors/receipts",
+      "effect_constraint": "0 synthetic tool calls"
+    },
+    {
+      "trigger": "10th execute/10 invalid decisions",
+      "durable_boundary": "after tenth decision/call",
+      "next_state": "terminal failure on next ready-model boundary",
+      "effect_constraint": "never an11th request"
+    },
+    {
+      "trigger": "hook missing tool_id/real action",
+      "durable_boundary": "zero-call invalid assistant checkpoint",
+      "next_state": "ready_model with error history/count",
+      "effect_constraint": "no intent; later done remains failure"
+    },
+    {
+      "trigger": "malformed JSON/nonobject/duplicate fields",
+      "durable_boundary": "complete model response before batch",
+      "next_state": "reject/suspend original run as explicit invalid decision",
+      "effect_constraint": "never convert to empty params or execute"
+    },
+    {
+      "trigger": "model timeout/incomplete finish/OS loss during model_inflight",
+      "durable_boundary": "model request checkpoint",
+      "next_state": "unknown/reconciliation original run",
+      "effect_constraint": "no automatic provider retry/new request"
+    },
+    {
+      "trigger": "complete decision committed before tool intent",
+      "durable_boundary": "tool_batch cursor",
+      "next_state": "recover same original call ID",
+      "effect_constraint": "no replacement decision"
+    },
+    {
+      "trigger": "write intent committed/no receipt",
+      "durable_boundary": "durable original ToolCall intent",
+      "next_state": "unknown/reconciliation",
+      "effect_constraint": "never retry an uncertain write"
+    },
+    {
+      "trigger": "receipt committed/cursor not advanced",
+      "durable_boundary": "original receipt + digest",
+      "next_state": "validate receipt and advance/deliver once",
+      "effect_constraint": "0 repeated business write or duplicate usage"
+    },
+    {
+      "trigger": "waiting_approval",
+      "durable_boundary": "original waiting call/cursor",
+      "next_state": "wait for original HTTP grant",
+      "effect_constraint": "no later call or model round"
+    },
+    {
+      "trigger": "continue queued/worker restarts",
+      "durable_boundary": "same approved step and SQL queue row",
+      "next_state": "restore exact policy/model then execute_approved",
+      "effect_constraint": "same run/call/step/params/grant consumption1"
+    },
+    {
+      "trigger": "approved step intent committed before crash",
+      "durable_boundary": "same original call now running with pending receipt",
+      "next_state": "unknown/reconciliation",
+      "effect_constraint": "no repeated approved write"
+    },
+    {
+      "trigger": "pending external work",
+      "durable_boundary": "original pending receipt",
+      "next_state": "blocked/pending",
+      "effect_constraint": "no automatic repeat or next model"
+    },
+    {
+      "trigger": "non-idempotent failure/exception",
+      "durable_boundary": "actual receipt/unknown marker",
+      "next_state": "terminal or reconciliation",
+      "effect_constraint": "no retry"
+    },
+    {
+      "trigger": "idempotent proven failure",
+      "durable_boundary": "same _run_single_tool NodeExecutor attempt loop",
+      "next_state": "at most original max_retries",
+      "effect_constraint": "no new model call ID for internal attempts"
+    },
+    {
+      "trigger": "pause/cancel/lease lost",
+      "durable_boundary": "canonical control/execution_count fence",
+      "next_state": "stop new model/tool/save",
+      "effect_constraint": "late old owner cannot commit"
+    },
+    {
+      "trigger": "active budget exhausted after grant",
+      "durable_boundary": "saved active_seconds before tool",
+      "next_state": "fail budget without dispatch",
+      "effect_constraint": "approval wait excluded; no budget reset"
+    },
+    {
+      "trigger": "catalog/plan/model/account/tenant/Mod drift",
+      "durable_boundary": "restore validation",
+      "next_state": "block original run",
+      "effect_constraint": "no fallback provider/default policy"
+    },
+    {
+      "trigger": "receipt/projection corruption",
+      "durable_boundary": "digest validation before next side effect",
+      "next_state": "block original run",
+      "effect_constraint": "no use of changed evidence or synthetic success"
+    },
+    {
+      "trigger": "projection metadata serialization failure",
+      "durable_boundary": "actual receipt + explicit projection_error commit",
+      "next_state": "suspend model cursor",
+      "effect_constraint": "do not redispatch to reconstruct metrics"
+    },
+    {
+      "trigger": "callback exception",
+      "durable_boundary": "canonical receipt/projection retained",
+      "next_state": "same existing callback error boundary",
+      "effect_constraint": "no tool rerun; no false callback delivery guarantee"
+    },
+    {
+      "trigger": "nonportable Python hook/schema after restart",
+      "durable_boundary": "saved explicit ephemeral profile",
+      "next_state": "workflow_hook_not_restorable",
+      "effect_constraint": "no silent default hook replacement"
+    },
+    {
+      "trigger": "historical observed run without model state",
+      "durable_boundary": "original observed record",
+      "next_state": "read-only historical projection",
+      "effect_constraint": "never backfill decisions/grants/cursor or enqueue as new model task"
+    }
+  ],
+  "observed_bridge_retirement": {
+    "phase1": "Remove new production calls to observed precreation/record_result. Keep API adapters as compatibility/historical projections; governed path always loads the actual admitted/saved run.",
+    "old_observed": "trace_mode=agentic_loop_bridge without STATE_KEY is historical evidence only. Completed/failed snapshots remain immutable. Running/incomplete records require reconciliation and cannot be auto-promoted, auto-replayed or assigned fabricated call IDs.",
+    "new_state": "execution_kernel=workflow_agentic + policy.version1 + valid STATE_KEY/model reference identifies resumable runs. Legacy/employee persisted version1 states remain byte/semantic compatible; unknown new kernel on an older binary must fail closed.",
+    "retirement_gate": [
+      "Actual consumer scan shows no new product request can call observed execution reconstruction.",
+      "Exact real-session read/read/write/approval/next-model scenarios and crash/fencing matrix pass on new kernel.",
+      "Public compatibility result/artifact/cost/permission/event projections come from actual original receipts and preserve expected fields.",
+      "Old observed-run detail/replay stays readable without reconstruction or mutation.",
+      "Every unique bridge test assertion is retained either as an old observed snapshot API regression or as a stronger actual-run assertion; no deletion of sole coverage to achieve line count.",
+      "A separate explicit API deprecation decision is needed before removing the remaining observed constructor/import API."
+    ],
+    "not_a_net_line_goal": "Do not count the entire248-line bridge as removable in phase1. New policy/recovery tests can outweigh deleted loop code; no baseline/exclusion/banner/compaction workaround."
+  },
+  "tests_before_after": {
+    "recorded_baseline": {
+      "head": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+      "tests": 182,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "pytest_time_seconds": "104.742",
+      "result": "182 passed",
+      "command_record": "implementation-design-baseline-result.json",
+      "xml": "implementation-design-baseline.xml",
+      "log": "implementation-design-baseline.log"
+    },
+    "required_additions": [
+      "Table-driven exact old prompt/catalog/history/order and canonical ID parity; done step1/10; execute step10; invalid-then-done retains failure.",
+      "Actual session RBAC/Mod denied and scope mismatch negatives; account/provider/model restoration; no anonymous tools.",
+      "Two read actions plus a real approved write and subsequent model decision, durable SQL reopen and independent readback.",
+      "Crash at every matrix boundary; actual two-process same-run lease and no duplicate side effect/usage.",
+      "NodeExecutionResult retries/times/params/errors and public callback/schema ordering; projection atomicity and no duplicate observed events.",
+      "Old observed snapshot remains read-only; no automatic migration of incomplete records.",
+      "Original182 tests stay green; all unique business/assertion coverage preserved. Existing fake-only anonymous execution assertions move to actual trusted fixtures, never to a bypass."
+    ],
+    "required_gates_after_implementation": [
+      "Sourcefreeze/hashes; original versus new decision/projection scenario comparison",
+      "Relevant182+new tests with all providers synthetic/offline",
+      "dev_guards including layer-ratchet/arch-fitness; ruff and full collection",
+      "Run net-deletion check honestly; do not raise/mask baseline to force acceptance."
+    ]
+  },
+  "sourcefreeze_file": "implementation-design-sourcefreeze.json",
+  "pending_root_authorization_points": [
+    "Exact8 existing owners +1 new policy + listed tests, including trace_runs expansion outside the original7.",
+    "Explicit safety corrections: stop unresolved receipts, reject malformed/nonobject/duplicate JSON instead of {}, reject anonymous product tools and nonportable write hooks.",
+    "No claim that arbitrary callbacks/subclass code can be restored or delivered exactly once across an OS crash.",
+    "Keep legacy observed API until separate retirement gates; the architecture change is not a3.6k deletion promise."
+  ],
+  "cleanup": {
+    "source_edits": [],
+    "temporary_source_trees_or_worktrees_created": [],
+    "durable_evidence_directory": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/architecture-runtime-plan-20261026",
+    "global_cleanup_by_parent": true,
+    "free_bytes": 62344933376
+  }
+}

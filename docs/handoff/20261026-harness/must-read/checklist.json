@@ -1,0 +1,608 @@
+{
+  "source_sha256": "b5888ab89ba3cd2017123b65e6e58c1419d306c4aaf8ce3a6b639729cae9dfe8",
+  "scope": "macos only per user",
+  "main_review_baseline": "335fc4e6ac53078aba7e72d41f461c85d431a711",
+  "candidate_worktree": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX",
+  "pr2631_is_prerequisite": true,
+  "items": [
+    {
+      "id": "SEC-01",
+      "title": "统一工具入口身份认证",
+      "closure": "open",
+      "evidence_gap": "服务主体/后台委托、剩余文件入口与最终Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "Persy、财务/产品/出货及legacy产品桥使用实际Principal；Legacy有签名actor/tenant/Mod admission。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db"
+    },
+    {
+      "id": "SEC-02",
+      "title": "统一客户租户隔离",
+      "closure": "open",
+      "evidence_gap": "文件所有权、所有入口及最终Mac仍待验证。",
+      "candidate_status": "partial",
+      "candidate_progress": "Persy private/tenant owner+目标摘要与独立JSON读回；财务、产品、出货actualSQLite双tenant隔离。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db"
+    },
+    {
+      "id": "SEC-03",
+      "title": "统一 Mod 权限校验",
+      "closure": "open",
+      "evidence_gap": "最终签名Mod安装回执及全入口端侧验证待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "每次工具调用重验签名Mod范围、授权和owner，发现目录按实际权限筛选。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "SEC-04",
+      "title": "统一 RBAC 权限控制",
+      "closure": "open",
+      "evidence_gap": "服务主体、全部角色/入口和真实Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "候选动作级权限与host工具目录权限筛选有隔离回归。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "SEC-05",
+      "title": "统一高风险操作审批",
+      "closure": "open",
+      "evidence_gap": "全入口OS隔离、服务主体及精确主线签名Mac验收待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "真实签名直接Python原任务grant→SQLqueue→spawn与HMAC快照已727项验证；模型消息续跑在实现。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5"
+    },
+    {
+      "id": "SEC-06",
+      "title": "审批凭证绑定原任务",
+      "closure": "open",
+      "evidence_gap": "服务主体、全入口及最终Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "直接Python绑定原task/call、审批参数/输入字节/代码及actor/tenant/Mod；复用原审批快照。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5"
+    },
+    {
+      "id": "SEC-07",
+      "title": "防止重复业务写入",
+      "closure": "open",
+      "evidence_gap": "确认orphan恢复、细资源冲突契约及端侧重启尚未闭环。",
+      "candidate_status": "partial",
+      "candidate_progress": "原业务动作跨run回放0写；动态审批复用原call_id并从停止/unknown状态读exactreceipt，严格JSON绑定参数；最终Mac重启/真实业务待。",
+      "source_checkpoint": "d57383a80bdd08c400d241703eeb093380e5647f"
+    },
+    {
+      "id": "SEC-08",
+      "title": "不可信内容与指令隔离",
+      "closure": "open",
+      "evidence_gap": "真实模型提示注入、文件/RAG所有链路仍待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "摘要/短期历史以未核实user材料输入；源内容不能把Persy pending自动确认。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "SEC-09",
+      "title": "危险工具默认拒绝",
+      "closure": "open",
+      "evidence_gap": "全部危险工具和精确主线签名Mac仍待验收。",
+      "candidate_progress": "Mac受控叶子进程已接入，文件/网络/执行负例有本地证据。",
+      "candidate_status": "partial",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "SEC-10",
+      "title": "工具调用审计与脱敏",
+      "closure": "open",
+      "evidence_gap": "全部日志/trace与真实模型/最终Mac尚待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "共享8员工依赖错误/日志脱敏；LLM callback错误不回传凭据，544+后续972项源域回归通过。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5"
+    },
+    {
+      "id": "ARCH-01",
+      "title": "统一 Chat Runtime",
+      "closure": "open",
+      "evidence_gap": "不得将共享包装函数或当前未提交迁移计为全部入口统一。",
+      "candidate_status": "partial",
+      "candidate_progress": "Legacy JSON/SSE与员工已共用ModelTurnDriver；普通入口与Excel接线仍未完成。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "ARCH-02",
+      "title": "统一 Agent Runtime",
+      "closure": "open",
+      "evidence_gap": "Excel共享执行内核迁移尚未提交；原182回归已通过。最新扩展576项566通过10失败，正在与干净HEAD对照，另有审批恢复轨迹投影及20秒模型超时语义待修复复核。",
+      "candidate_status": "partial",
+      "candidate_progress": "员工共享模型游标、原工具回执、审批和持久任务；Excel迁移中。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "ARCH-03",
+      "title": "逐步退役 Legacy Chat 执行逻辑",
+      "closure": "open",
+      "evidence_gap": "普通入口优先级和旧observed API退役门槛尚未完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "Legacy独立调度已收敛进共享driver，业务policy/API仍保留必要兼容。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "ARCH-04",
+      "title": "统一意图识别与业务路由",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ARCH-05",
+      "title": "统一工具注册来源",
+      "closure": "open",
+      "evidence_gap": "全入口真实模型工具目录一致性待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "复用现有ToolSpec/注册表，host保留目录发现，schema去重前后104输入/101输出exact相等。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "ARCH-06",
+      "title": "统一模型路由",
+      "closure": "open",
+      "evidence_gap": "Legacy unscoped helper及全部caller需继续审计；真实多账号模型和最终Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "HostSession/Principal模型绑定1035项回归；Mod单次completion保持当前scope/model、失败禁止全局回退141项通过。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5"
+    },
+    {
+      "id": "ARCH-07",
+      "title": "统一对话和任务上下文",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ARCH-08",
+      "title": "统一业务执行状态机",
+      "closure": "open",
+      "evidence_gap": "claimed崩溃恢复、pending/OCR异步结果、完整统一状态机仍待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "候选trace/前端保留unknown并阻止危险重试，注册HTTP不再用completed空标签猜成功。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "ARCH-09",
+      "title": "统一响应结果封装",
+      "closure": "open",
+      "evidence_gap": "所有流式和非流式入口结果封装仍需收敛。",
+      "candidate_status": "partial",
+      "candidate_progress": "Memory旧结果适配器退役复用注册HTTP回执，缺回执/unknown/pending不报success。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "ARCH-10",
+      "title": "兼容层可移除性",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "TOOL-01",
+      "title": "统一 ToolSpec V2",
+      "closure": "open",
+      "evidence_gap": "风险/成本/超时契约仍需逐工具校准。",
+      "candidate_status": "partial",
+      "candidate_progress": "ToolSpec V2严格JSON Schema与独立可变副本回归通过，所有展开schema保持exact等价。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "TOOL-02",
+      "title": "严格校验 JSON 参数",
+      "closure": "open",
+      "evidence_gap": "最终Mac真实模型坏参数待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "旧解析JSON失败→空对象继续执行分支已删除；重复key、非有限值拒绝。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "TOOL-03",
+      "title": "完善嵌套 Schema 校验",
+      "closure": "open",
+      "evidence_gap": "全部业务动作及最终端侧待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "Draft202012嵌套/items/enum/required/额外字段约束与真实广告schema二次验证。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "TOOL-04",
+      "title": "统一工具执行器",
+      "closure": "open",
+      "evidence_gap": "全入口统一与真实provider/最终Mac未验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "中央执行器与Mac直接Python受控路径已接入，Excel原入口迁移中。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "TOOL-05",
+      "title": "统一结果回执",
+      "closure": "open",
+      "evidence_gap": "所有工具/入口及正式Mac实际回执尚待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "共享canonical分类器贯通生成员工SDK与host包装；严格bool并保留unknown/pending/approval，760及972项回归。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5"
+    },
+    {
+      "id": "TOOL-06",
+      "title": "实现结果真实性核验",
+      "closure": "open",
+      "evidence_gap": "采购、仓库位置、部分批删/打印等缺完整独立核验，不能报成功。",
+      "candidate_status": "partial",
+      "candidate_progress": "部分SQL/JSON/Office文件有独立读回；a8c606781c修复材料stock/price别名，原输入冲突仍拒绝。",
+      "source_checkpoint": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00",
+      "additional_source_checkpoint": "a8c606781c96135f89cddfb46d28bd65785b45f7"
+    },
+    {
+      "id": "TOOL-07",
+      "title": "统一工具超时机制",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "TOOL-08",
+      "title": "统一重试策略",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "TOOL-09",
+      "title": "实现持久化幂等键",
+      "closure": "open",
+      "evidence_gap": "崩溃claim核对、入口幂等和最终Mac重启验收待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "ledger跨run/别名/owner/参数变更拒绝重写，原始dispatch回执先持久保存。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "TOOL-10",
+      "title": "安全并行工具调用",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "TOOL-11",
+      "title": "统一工具隔离机制",
+      "closure": "open",
+      "evidence_gap": "当前helper是本地adhoc样本；正式签名包、.doc外部转换与高级Office/VLM待验收。",
+      "candidate_progress": "Mac叶子OS边界已接host与最小helper；309host+独立16+冻结helper16有本地证据。",
+      "candidate_status": "partial",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "TOOL-12",
+      "title": "支持动态工具发现与选择",
+      "closure": "open",
+      "evidence_gap": "真实模型选择准确率与语义检索未测/未完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "实际权限、Mod、任务词法相关性与预算选择，受控发现+真实workbook preview夹具通过。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "RUN-01",
+      "title": "统一任务 ID",
+      "closure": "open",
+      "evidence_gap": "服务器消息admission、全流程与最终Mac待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "动态Legacy/Employee正式审批与后续回执保持原run/step/call/business ID，真实HTTPqueue/SQL验证。",
+      "source_checkpoint": "d57383a80bdd08c400d241703eeb093380e5647f"
+    },
+    {
+      "id": "RUN-02",
+      "title": "任务状态可靠持久化",
+      "closure": "open",
+      "evidence_gap": "orphan恢复/真实网络断线与最终Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "实际SQL step/call先于dispatch持久化，保存失败零模型/工具；重复turn在model前重放原run。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db"
+    },
+    {
+      "id": "RUN-03",
+      "title": "明确任务状态迁移",
+      "closure": "open",
+      "evidence_gap": "全部入口状态迁移仍需逐项验证。",
+      "candidate_status": "partial",
+      "candidate_progress": "unknown不会被晚到终结或重连/取消改成completed。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "RUN-04",
+      "title": "统一取消机制",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "RUN-05",
+      "title": "断点续跑",
+      "closure": "open",
+      "evidence_gap": "完整入口、真实中断重启、orphan核对及最终安装仍待。",
+      "candidate_status": "partial",
+      "candidate_progress": "Legacy/员工已有持久消息、批次、原回执和模型账号引用；Excel恢复路径在实现。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "RUN-06",
+      "title": "失败恢复与补偿",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "RUN-07",
+      "title": "工具依赖图执行",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "RUN-08",
+      "title": "任务资源预算",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "RUN-09",
+      "title": "执行结果独立验收",
+      "closure": "open",
+      "evidence_gap": "缺verifier工具和真实模型业务验收待完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "候选业务verifier独立于模型叙述，Memory写仅缓存或读回故障保持unknown。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "RUN-10",
+      "title": "任务完整生命周期查询",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-01",
+      "title": "真正的连续多轮对话",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-02",
+      "title": "统一会话身份与历史恢复",
+      "closure": "open",
+      "evidence_gap": "全部实际入口和最终Mac真实账号多轮待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "body.user_id由实际认证context规范，SQL历史owner不信body；sync/async/batch历史回载与turn去重有回归。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db"
+    },
+    {
+      "id": "CHAT-03",
+      "title": "长上下文管理",
+      "closure": "open",
+      "evidence_gap": "模型/图片感知tokenizer、Legacy全工具定义预算待补。",
+      "candidate_status": "partial",
+      "candidate_progress": "保留mandatory轮次、UTF8保守预算、untrusted摘要，异步bridge消除nested loop。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3"
+    },
+    {
+      "id": "CHAT-04",
+      "title": "业务实体记忆",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-05",
+      "title": "长期记忆可信度分级",
+      "closure": "open",
+      "evidence_gap": "真实模型记忆误确认/召回与最终Mac未验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "Memory v2/Persy原审批与独立所有者读回已有本地验证；5个Memory评测已迁真实会话/队列。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "CHAT-06",
+      "title": "多轮参数补齐",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-07",
+      "title": "自然语言多任务规划",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-08",
+      "title": "普通聊天与业务模式切换",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-09",
+      "title": "RAG 与工具结果证据关联",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "CHAT-10",
+      "title": "多模态对话一致性",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-01",
+      "title": "标准化流式事件",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-02",
+      "title": "真实工具执行进度",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-03",
+      "title": "执行过程可追踪",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-04",
+      "title": "执行成本明细",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-05",
+      "title": "错误分类与可恢复提示",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-06",
+      "title": "用户可控制任务",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-07",
+      "title": "并发与延迟优化",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "OBS-08",
+      "title": "前端与后端状态一致",
+      "closure": "open",
+      "evidence_gap": "所有真实UI和最终Mac待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "嵌套ERP成功不能覆盖外层失败/unknown/waiting，call verification仅最终success为true；端侧实测待。",
+      "source_checkpoint": "d57383a80bdd08c400d241703eeb093380e5647f"
+    },
+    {
+      "id": "ADV-01",
+      "title": "统一 Skills / MCP 接入",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-02",
+      "title": "工具能力语义检索",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-03",
+      "title": "按任务选择执行策略",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-04",
+      "title": "Planner / Executor / Verifier 分工",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-05",
+      "title": "多 Agent 协作调度",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-06",
+      "title": "工具调用策略自适应",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-07",
+      "title": "跨任务知识复用",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "ADV-08",
+      "title": "运行轨迹回放与对照评测",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "QA-01",
+      "title": "真实模型工具调用评测",
+      "closure": "open",
+      "evidence_gap": "真实provider选工具/解析参数/反馈评测尚未完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "最新离线121项33pass88fail；仅fixture真实认证/原审批/实际SQL读回，不是真实provider指标。",
+      "source_checkpoint": "0df802d26bdd9901ff4d7ab8c4b4b1d31f548ec3",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "QA-02",
+      "title": "真实业务读写回读",
+      "closure": "open",
+      "evidence_gap": "最终Mac真实账号、业务链路及所有缺verifier动作未闭环。",
+      "candidate_status": "partial",
+      "candidate_progress": "隔离实际SQLite/JSON、原签名审批/SQL队列有读回；材料新增56回归与root5复核通过。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00",
+      "additional_source_checkpoint": "a8c606781c96135f89cddfb46d28bd65785b45f7"
+    },
+    {
+      "id": "QA-03",
+      "title": "连续任务 E2E",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "QA-04",
+      "title": "安全攻击测试",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "QA-05",
+      "title": "故障注入测试",
+      "closure": "open",
+      "evidence_gap": "真实网络中断/重启业务effect与orphan/补偿待验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "持久保存失败、4进程竞争、unknown换ID/alias、JSON磁盘读错、两SSE实际owner故障注入有回归。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db"
+    },
+    {
+      "id": "QA-06",
+      "title": "Windows/macOS 安装包实测",
+      "closure": "open",
+      "evidence_gap": "1.0.0.7未构建为已合主线正式签名包，未安装验收。",
+      "candidate_status": "partial",
+      "candidate_progress": "仅macOS；已安装仍为1.0.0.6/7e2f0e29ffd4edbd8fac1ca77409aa95e07d2c80。",
+      "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+    },
+    {
+      "id": "QA-07",
+      "title": "真实评价指标",
+      "closure": "open",
+      "evidence_gap": "实现与真实Mac验收仍需逐项确认，通用回归不能单独作为闭环。"
+    },
+    {
+      "id": "QA-08",
+      "title": "CI 与发布门禁",
+      "closure": "open",
+      "evidence_gap": "9950a393b5提交口径净增5324FAIL；集成PR/主线合入/正式CI/签名Mac安装/真实模型指标仍未完成。",
+      "candidate_status": "partial",
+      "candidate_progress": "63dcee包证据门禁183+本地adhoc helper16通过；PR2631已合并。当前整改尚无集成PR。",
+      "source_checkpoint": "d57383a80bdd08c400d241703eeb093380e5647f",
+      "last_progress_review": "2026-10-25T18:51:26.585533+00:00",
+      "additional_source_checkpoint": "63dcee75434fab9177ce99ec6bf401bd77ee6884"
+    }
+  ],
+  "current_main": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "updated_at": "2026-10-25T19:08:35.517605+00:00",
+  "evidence_boundary": "Source and isolated regression only; no final Mac/real-model acceptance; all closure states remain open.",
+  "candidate_checkpoint": "9950a393b557b75e23098057ef4b7f81075e0647",
+  "current_main_observed": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "current_net_deletion_delta": 5324,
+  "latest_source_checkpoint": "9950a393b557b75e23098057ef4b7f81075e0647",
+  "latest_progress_note": "HEAD9950a393b5：完整离线121项33通过88失败；Excel原182通过，最新扩展576项566通过10失败待对照，迁移未提交；已提交口径净增5324失败；全部76项正式闭环仍open；只验收macOS，1.0.0.7未发布。",
+  "verified_origin_main": "54d4541cbe4cd77e258163c75e3e9fc8c886b507"
+}

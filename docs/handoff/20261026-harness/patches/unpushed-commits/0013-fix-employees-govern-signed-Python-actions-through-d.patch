@@ -1,0 +1,3343 @@
+From 6e6234829b74a514cb5139a35ae38f4d55f4af13 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 21:43:02 +0800
+Subject: [PATCH 13/43] fix(employees): govern signed Python actions through
+ durable approval
+
+
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index 7293b4d4b3..c14e23b29e 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -24,15 +24,7 @@ def verify_action_result(
+     if result.get("source") == f"employee_pack:{spec.tool_id}" and isinstance(
+         result.get("output"), dict
+     ):
+-        from app.mod_sdk.employee_tool_registry import _verify_office_artifact
+-
+-        evidence = _verify_office_artifact(
+-            spec.tool_id,
+-            result["output"],
+-            workspace_root=(runtime_context or {}).get("workspace_root"),
+-        )
+-        if evidence is not None:
+-            return {**result, "business_verification": evidence}, evidence.get("verified") is True
++        return _verify_employee_artifacts(spec.tool_id, params, result, runtime_context or {})
+     from app.application.business_db_write_verification import verify_business_db_write
+     from app.db.session import get_db
+     from app.infrastructure.tenant_scope import tenant_id_for_write
+@@ -239,6 +231,61 @@ def verify_action_result(
+         return result, False
+ 
+ 
++def _verify_employee_artifacts(pack_id, params, result, context):
++    from pathlib import Path
++
++    from app.application.employee_runtime.loader import (
++        _employee_file_snapshot,
++        validate_employee_execution_snapshot,
++    )
++    from app.mod_sdk.employee_tool_registry import _office_output_paths
++
++    evidence = {"verified": False, "method": "artifact_hash_readback"}
++    try:
++        body = validate_employee_execution_snapshot(pack_id, params, context, before=False)
++        paths = _office_output_paths(pack_id, result["output"])
++        expected = {item["path"] for item in body["outputs"]}
++        if not paths or not set(paths).issubset(expected):
++            return {**result, "business_verification": evidence}, False
++        artifacts = [
++            _employee_file_snapshot(Path(item["path"]), context) for item in body["outputs"]
++        ]
++        verified = all(
++            item["size_bytes"] > 0 and item != original["before"]
++            for item, original in zip(artifacts, body["outputs"])
++        )
++        if body.get("output_kind") == "structured_result":
++            from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++            from app.application.shipment_excel_etl_security import open_etl_input_file
++
++            outputs = [
++                item
++                for item in result["output"]["result"]["outputs"]
++                if item.get("handler") != "durable_result"
++            ]
++            expected_result = outputs[0].get("output", outputs[0]) if len(outputs) == 1 else outputs
++            with open_etl_input_file(
++                body["output_path"], workspace_root=body["workspace_root"]
++            ) as stream:
++                verified = verified and canonical_hash(json.load(stream)) == canonical_hash(
++                    expected_result
++                )
++            evidence["method"] = "structured_result_readback"
++        evidence.update(
++            verified=verified,
++            artifacts=artifacts,
++            paths=paths,
++            tenant_id=body["scope"][0],
++            actor_id=body["scope"][1],
++            mod_id=body["scope"][2],
++            pack_id=pack_id,
++            code_sha256=body["code_sha256"],
++        )
++    except RECOVERABLE_ERRORS:
++        pass
++    return {**result, "business_verification": evidence}, evidence["verified"] is True
++
++
+ def _verify_product_batch(params, result, context):
+     from sqlalchemy.exc import SQLAlchemyError
+ 
+diff --git a/FHD/app/application/agent_orchestrator/tool_executor.py b/FHD/app/application/agent_orchestrator/tool_executor.py
+index 6764ca2123..72aed4d0aa 100644
+--- a/FHD/app/application/agent_orchestrator/tool_executor.py
++++ b/FHD/app/application/agent_orchestrator/tool_executor.py
+@@ -186,13 +186,17 @@ class AgentToolExecutor:
+                 from app.application.tools.workflow import _execute_workflow_tool_raw
+                 from app.application.tools.workflow_tools.dispatch import parse_arguments
+ 
+-                raw = _execute_workflow_tool_raw(
+-                    step.tool_id,
+-                    step.params,
+-                    runtime_context.get("workspace_root"),
+-                    db_write_token=runtime_context.get("_db_write_token"),
+-                    runtime_context={**runtime_context, "_tool_native_owner": spec.owner_mod_id},
+-                )
++                with _registered_dispatch_scope(step.tool_id, action):
++                    raw = _execute_workflow_tool_raw(
++                        step.tool_id,
++                        step.params,
++                        runtime_context.get("workspace_root"),
++                        db_write_token=runtime_context.get("_db_write_token"),
++                        runtime_context={
++                            **runtime_context,
++                            "_tool_native_owner": spec.owner_mod_id,
++                        },
++                    )
+                 result = parse_arguments(raw)
+             else:
+                 from app.application.facades.tools_facade import execute_registered_workflow_tool
+@@ -297,6 +301,19 @@ def execute_model_tool(
+         _tool_dispatch_kind="model", workspace_root=workspace_root, _db_write_token=db_write_token
+     )
+     action = "execute"
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++    try:
++        name, action, params = prepare_employee_tool_call(name, action, params, context)
++    except ValueError as exc:
++        return {
++            "success": False,
++            "error_code": "employee_execution_prepare_failed",
++            "message": str(exc),
++        }
++    spec = get_tool_action_spec(name, action)
++    if spec is None:
++        return {"success": False, "error_code": "unknown_tool_action", "message": "员工工具未登记"}
+     if name in {"business_db_read", "business_db_write"}:
+         validation = validate_tool_call(name, action, params)
+         if not validation.ok:
+@@ -332,6 +349,18 @@ def execute_registered_tool(tool_id, action, params):
+     business_params = dict(params or {})
+     context = dict(business_params.pop("_runtime_context", None) or {})
+     context["_tool_dispatch_kind"] = "registered"
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++    try:
++        tool_id, action, business_params = prepare_employee_tool_call(
++            tool_id, action, business_params, context
++        )
++    except ValueError as exc:
++        return {
++            "success": False,
++            "error_code": "employee_execution_prepare_failed",
++            "message": str(exc),
++        }
+     spec = get_tool_action_spec(tool_id, action)
+     if spec is None:
+         return {
+diff --git a/FHD/app/application/agent_orchestrator/tool_spec.py b/FHD/app/application/agent_orchestrator/tool_spec.py
+index 2b004d1474..b81167909b 100644
+--- a/FHD/app/application/agent_orchestrator/tool_spec.py
++++ b/FHD/app/application/agent_orchestrator/tool_spec.py
+@@ -353,7 +353,14 @@ def _add_model_tool_specs(specs: dict[tuple[str, str], ToolActionSpecV2]) -> Non
+             if owner:
+                 specs[(name, "execute")] = replace(specs[(name, "execute")], owner_mod_id=owner)
+             continue
+-        schema = function.get("parameters") or {"type": "object"}
++        schema = deepcopy(function.get("parameters") or {"type": "object"})
++        if entry.get("owner_mod_id") == name:
++            schema.setdefault("properties", {})["execution_snapshot"] = {
++                "type": "object",
++                "required": ["body", "proof"],
++                "additionalProperties": False,
++                "properties": {"body": {"type": "object"}, "proof": {"type": "string"}},
++            }
+         risk = _risk_value(entry.get("risk_level") or ("low" if name in read_tools else "high"))
+         samples = _default_fixture(name, "execute", schema, _DEFAULT_OUTPUT_SCHEMA)
+         specs[(name, "execute")] = ToolActionSpecV2(
+diff --git a/FHD/app/application/agent_orchestrator/trace_runs.py b/FHD/app/application/agent_orchestrator/trace_runs.py
+index bb8ab6cad4..8ac677ad67 100644
+--- a/FHD/app/application/agent_orchestrator/trace_runs.py
++++ b/FHD/app/application/agent_orchestrator/trace_runs.py
+@@ -598,6 +598,12 @@ class TraceRunService:
+                 str(resolved.get("action") or "execute"),
+             )
+             actual_params = dict(resolved["params"])
++            from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++            context["call_id"] = call_id
++            tool_id, action, actual_params = prepare_employee_tool_call(
++                tool_id, action, actual_params, context
++            )
+             spec = self.recording.tool_spec(tool_id, action)
+             if spec is None:
+                 return {
+diff --git a/FHD/app/application/employee_runtime/agent.py b/FHD/app/application/employee_runtime/agent.py
+index 883f15b6e8..188f802e2f 100644
+--- a/FHD/app/application/employee_runtime/agent.py
++++ b/FHD/app/application/employee_runtime/agent.py
+@@ -285,6 +285,11 @@ class EmployeeAgent:
+                         "retryable": False,
+                     }
+                 stored = run.final_output.get("employee_result")
++                if not isinstance(stored, dict):
++                    stored = next(
++                        (step.output for step in run.steps if step.node_id == "employee_action"),
++                        None,
++                    )
+                 reply = (
+                     dict(stored)
+                     if isinstance(stored, dict)
+@@ -297,6 +302,93 @@ class EmployeeAgent:
+                 )
+                 return {**trace_reply_payload(run, reply), "task_id": context["task_id"]}
+             context = dict(run.metadata["runtime_context"])
++            from app.application.employee_runtime.loader import (
++                manifest_actions_handlers,
++                prepare_employee_tool_call,
++            )
++
++            pack = load_employee_pack_from_disk(self.employee_id)
++            if (
++                "direct_python" in manifest_actions_handlers(pack["manifest"])
++                and not is_interactive_chat_payload(input_data or {})
++                and not is_collaboration_context_payload(input_data or {})
++            ):
++                context["workspace_root"] = workspace_root or context.get("workspace_root")
++                payload = dict(input_data or {})
++                for key in (
++                    "_runtime_context",
++                    "runtime_context",
++                    "_actor_authorization",
++                    "_mod_authorization",
++                    "user_id",
++                    "actor_id",
++                    "tenant_id",
++                    "session_id",
++                    "mod_id",
++                ):
++                    payload.pop(key, None)
++                params = {
++                    key: payload.pop(key)
++                    for key in ("file_path", "user_request", "output_path")
++                    if key in payload
++                }
++                params.setdefault("user_request", task)
++                if payload:
++                    params["input"] = payload
++                try:
++                    _, _, params = prepare_employee_tool_call(
++                        self.employee_id, "execute", params, context
++                    )
++                except ValueError as exc:
++                    output = {
++                        "success": False,
++                        "error_code": "employee_execution_prepare_failed",
++                        "message": str(exc),
++                        "retryable": False,
++                    }
++                    run.status, run.error = "failed", str(exc)
++                    run.final_output["employee_result"] = output
++                    run.add_event("run.failed", str(exc), output)
++                    service.repository.save(run)
++                    return {**trace_reply_payload(run, output), "task_id": context["task_id"]}
++                from app.application.agent_orchestrator.run_models import AgentStep
++                from app.application.agent_orchestrator.tool_executor import (
++                    AgentToolExecutor,
++                    execute_with_tool_deadline,
++                )
++                from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++
++                spec = get_tool_action_spec(self.employee_id, "execute")
++
++                def dispatch(dynamic):
++                    return execute_with_tool_deadline(
++                        AgentToolExecutor(),
++                        AgentStep(
++                            "employee_action",
++                            self.employee_id,
++                            "execute",
++                            params=params,
++                            step_id=dynamic["step_id"],
++                        ),
++                        runtime_context=dynamic,
++                        timeout_seconds=spec.timeout_seconds,
++                    )
++
++                output = service.dispatch_tool(
++                    run.run_id,
++                    employee_id=self.employee_id,
++                    call_id="employee_action",
++                    tool_name=self.employee_id,
++                    params=params,
++                    runtime_context=context,
++                    dispatch=dispatch,
++                )
++                run = service.repository.get(run.run_id)
++                return {
++                    **trace_reply_payload(run, output),
++                    "task_id": context["task_id"],
++                    "employee_id": self.employee_id,
++                }
+         except RECOVERABLE_ERRORS:
+             logger.exception("employee trace unavailable; refused execution")
+             return {
+@@ -473,7 +565,21 @@ class EmployeeAgent:
+             handler_list = _ex._handler_list(actions_cfg)
+             upstream: dict[str, Any] | None = None
+ 
+-            gate = gate_action_or_block(employee_id, manifest, handler_list, payload)
++            from app.application.agent_orchestrator.tool_executor import (
++                registered_dispatch_is_controlled,
++            )
++
++            controlled_python = (
++                "direct_python" in handler_list
++                and registered_dispatch_is_controlled(employee_id, "execute")
++            )
++            gate = gate_action_or_block(
++                employee_id,
++                manifest,
++                handler_list,
++                payload,
++                **({"runtime_context": runtime_context} if controlled_python else {}),
++            )
+             if not gate.get("ok"):
+                 from app.application.employee_runtime.metrics import record_employee_run
+ 
+@@ -486,8 +592,10 @@ class EmployeeAgent:
+                 )
+                 return self._blocked_result(pack, task, handler_list, gate, t0)
+ 
+-            if not is_interactive_chat_payload(payload) and not is_collaboration_context_payload(
+-                payload
++            if (
++                not controlled_python
++                and not is_interactive_chat_payload(payload)
++                and not is_collaboration_context_payload(payload)
+             ):
+                 upstream = self._run_upstream_collaboration(
+                     task, payload, manifest, config, runtime_context
+@@ -511,7 +619,9 @@ class EmployeeAgent:
+ 
+             file_path_fast = str(payload.get("file_path") or payload.get("path") or "").strip()
+             direct_only = handler_list == ["direct_python"] and (
+-                bool(file_path_fast) or is_deterministic_office_worker(employee_id, handler_list)
++                controlled_python
++                or bool(file_path_fast)
++                or is_deterministic_office_worker(employee_id, handler_list)
+             )
+             if direct_only:
+                 reasoning: dict[str, Any] = {
+diff --git a/FHD/app/application/employee_runtime/executor.py b/FHD/app/application/employee_runtime/executor.py
+index a01b1a93af..e730bf5bcd 100644
+--- a/FHD/app/application/employee_runtime/executor.py
++++ b/FHD/app/application/employee_runtime/executor.py
+@@ -176,7 +176,7 @@ def _action_vendor_convert(
+     requested_root = str(workspace_root or get_app_data_dir()).strip()
+     try:
+         output_path = prepare_etl_output_path(
+-            str(Path(requested_root) / "outputs" / output_name),
++            str(payload.get("output_path") or Path(requested_root) / "outputs" / output_name),
+             workspace_root=workspace_root,
+         )
+     except ShipmentEtlPathError:
+@@ -374,6 +374,18 @@ def _actions_fhd(
+ ) -> dict[str, Any]:
+     actions_cfg = _normalize_actions_cfg(config)
+     handlers = _handler_list(actions_cfg)
++    if "direct_python" in handlers:
++        from app.application.agent_orchestrator.tool_executor import (
++            registered_dispatch_is_controlled,
++        )
++
++        if not registered_dispatch_is_controlled(employee_id, "execute"):
++            return {
++                "success": False,
++                "error": "员工 Python 必须经持久步骤和正式审批执行",
++                "error_code": "employee_tool_control_required",
++                "outputs": [],
++            }
+     # 专属工具拦截：input_data.handler=specialized 时直接走专属工具调度，
+     # 不受 manifest 声明的 handlers 限制（让 llm_md/echo 类员工也能用专属工具）
+     raw_input = reasoning.get("input") if isinstance(reasoning, dict) else None
+@@ -498,4 +510,83 @@ def execute_employee_task_local(
+     return result
+ 
+ 
++def execute_controlled_employee_action(
++    employee_id: str, task: str, params: dict, context: dict
++) -> dict:
++    """Private leaf of the registered executor; never re-admit an approved task."""
++    from app.application.agent_orchestrator.tool_executor import registered_dispatch_is_controlled
++    from app.application.employee_runtime.agent import EmployeeAgent
++    from app.application.employee_runtime.loader import (
++        load_employee_pack_from_disk,
++        manifest_actions_handlers,
++        validate_employee_execution_snapshot,
++    )
++
++    if not registered_dispatch_is_controlled(employee_id, "execute"):
++        return {
++            "success": False,
++            "error_code": "employee_tool_control_required",
++            "message": "员工动作必须经统一工具执行器",
++        }
++    pack = load_employee_pack_from_disk(employee_id)
++    payload = {
++        **dict(params.get("input") or {}),
++        **{
++            key: value
++            for key, value in params.items()
++            if key not in {"input", "execution_snapshot"}
++        },
++    }
++    context = dict(context)
++    snapshot = {}
++    try:
++        if "direct_python" in manifest_actions_handlers(pack["manifest"]):
++            snapshot = validate_employee_execution_snapshot(employee_id, params, context)
++            context["workspace_root"] = snapshot["workspace_root"]
++            payload.update(
++                workspace_root=snapshot["workspace_root"],
++                output_path=snapshot["output_path"],
++                output_relpath=snapshot["output_path"],
++            )
++            for item in snapshot["inputs"]:
++                payload[item["parameter"]] = item["path"]
++        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++
++        repository = get_agent_run_repository()
++        run = repository.get(str(context.get("run_id") or ""))
++        if run is None:
++            raise ValueError("员工执行缺少持久运行记录")
++        run.metadata["employee_id"] = employee_id
++        repository.save(run)
++        context["_employee_run_id"] = run.run_id
++        result = EmployeeAgent(employee_id)._run_authenticated(
++            task,
++            payload,
++            user_id=int(context["user_id"]),
++            workspace_root=context.get("workspace_root"),
++            session_id=context.get("session_id"),
++            runtime_context=context,
++        )
++        if snapshot.get("output_kind") == "structured_result" and result.get("success") is True:
++            from app.application.shipment_excel_etl_security import open_etl_output_file
++
++            outputs = result["result"]["outputs"]
++            saved = outputs[0].get("output", outputs[0]) if len(outputs) == 1 else outputs
++            with open_etl_output_file(
++                snapshot["output_path"], workspace_root=snapshot["workspace_root"]
++            ) as stream:
++                stream.write(
++                    json.dumps(saved, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
++                )
++            outputs.append({"handler": "durable_result", "output_path": snapshot["output_path"]})
++        return result
++    except ValueError as exc:
++        return {
++            "success": False,
++            "error_code": "employee_execution_snapshot_changed",
++            "message": str(exc),
++            "retryable": False,
++        }
++
++
+ __all__ = ["execute_employee_task_local"]
+diff --git a/FHD/app/application/employee_runtime/loader.py b/FHD/app/application/employee_runtime/loader.py
+index 60993f0436..96c8b17ca8 100644
+--- a/FHD/app/application/employee_runtime/loader.py
++++ b/FHD/app/application/employee_runtime/loader.py
+@@ -2,8 +2,11 @@
+ 
+ from __future__ import annotations
+ 
++import hashlib
++import hmac
+ import json
+ import logging
++import os
+ from collections.abc import Callable
+ from pathlib import Path
+ from typing import Any
+@@ -207,45 +210,60 @@ def pack_has_direct_python_runtime(pack_dir: Path | str) -> bool:
+     return False
+ 
+ 
+-def _is_within(path: Path, parent: Path) -> bool:
+-    try:
+-        path.resolve().relative_to(parent.resolve())
+-        return True
+-    except (OSError, ValueError):
+-        return False
+-
+-
+ def verify_direct_python_pack_trust(pack_dir: Path | str) -> tuple[bool, str]:
+     """Trust bundled/source packs, or verify signed-install receipt + current hash."""
+     pdir = Path(pack_dir).resolve()
+-    source_root = Path(__file__).resolve().parents[3] / "mods" / "_employees"
+-    if _is_within(pdir, source_root):
+-        return True, "source_bundled"
+-    try:
+-        from app.mod_sdk.edition_policy import bundled_mods_dir
+-
+-        bundled_root = bundled_mods_dir()
+-        if bundled_root is not None and _is_within(pdir, Path(bundled_root) / "_employees"):
+-            return True, "application_bundled"
+-    except RECOVERABLE_ERRORS:
+-        logger.debug("resolve bundled employee trust root failed", exc_info=True)
+-
+-    receipt_path = pdir / ".xcagi-install-receipt.json"
+     try:
+-        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+-        if not isinstance(receipt, dict) or receipt.get("signature_verified") is not True:
+-            return False, "missing_verified_install_receipt"
+-        from app.infrastructure.mods.package import compute_directory_hash
+-
+-        expected = str(receipt.get("content_sha256") or "")
+-        actual = compute_directory_hash(str(pdir))
+-        if not expected or actual != expected:
+-            return False, "installed_pack_content_hash_mismatch"
+-        return True, "signed_install_receipt"
++        from app.infrastructure.mods.install_receipts import read_verified_install
++
++        # An installation into the source/default root is still an installation.
++        # Invalid or unsigned retained state must never fall back to bundled trust.
++        state = pdir.parent / ".install-receipts" / pdir.name
++        if not state.exists() and _bundled_employee_identity(pdir):
++            return True, "host_catalog_bundled"
++        receipt = read_verified_install(pdir.name, mods_root=str(pdir.parent))
++        if (
++            receipt is not None
++            and not receipt.get("requires_restart")
++            and Path(receipt["installed_root"]).resolve() == pdir
++        ):
++            return True, "verified_signed_archive"
++        return False, "missing_verified_install_archive"
+     except (OSError, json.JSONDecodeError, ValueError):
+         return False, "missing_or_invalid_install_receipt"
+ 
+ 
++def _bundled_employee_identity(pdir: Path) -> bool:
++    import sys
++
++    from app.mod_sdk.duty_roster import _collect_ids_from_blocks
++
++    host = Path(__file__).resolve().parents[3]
++    roots = [(host / "mods", host / "config")]
++    if getattr(sys, "frozen", False):
++        bundle = Path(sys._MEIPASS).resolve()
++        roots.extend((bundle / rel, bundle / "config") for rel in ("mods", "XCAGI/mods"))
++    for root, config in roots:
++        if pdir.parent != root / "_employees":
++            continue
++        manifest = json.loads((pdir / "manifest.json").read_text())
++        if (
++            manifest.get("id") != pdir.name
++            or manifest.get("artifact") != "employee_pack"
++            or (manifest.get("employee") or {}).get("id") != pdir.name
++        ):
++            return False
++        roster = json.loads((config / "duty_roster.json").read_text())
++        registered = set(
++            _collect_ids_from_blocks(roster.get("departments") or roster.get("areas") or {})
++        )
++        catalog = root / "xcagi-office-employee-pack-bridge/config/office_pack_catalog.json"
++        if catalog.is_file():
++            registered.update(json.loads(catalog.read_text()).get("pack_ids") or [])
++        return pdir.name in registered
++    return False
++
++
+ def direct_python_pack_trust_error(
+     pack_dir: Path | str,
+     *,
+@@ -264,6 +282,275 @@ def direct_python_pack_trust_error(
+     }
+ 
+ 
++def employee_owner_workspace(context: dict[str, Any], pack_id: str = "employee-inputs") -> Path:
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++    from app.mod_sdk.owner_workspace import owner_workspace
++
++    _bound_actor(context)
++    actor = context["_actor_authorization"]
++    owner = json.dumps(
++        [actor["execution_tenant_id"], actor["user_id"], actor["mod_id"]],
++        separators=(",", ":"),
++    )
++    return owner_workspace(pack_id, owner_id=owner).root
++
++
++def _employee_file_snapshot(path: Path, context: dict[str, Any]) -> dict:
++    from app.application.shipment_excel_etl_security import open_etl_input_file
++
++    digest, size = hashlib.sha256(), 0
++    with open_etl_input_file(path, workspace_root=context.get("workspace_root")) as stream:
++        stat = os.fstat(stream.fileno())
++        while chunk := stream.read(1024 * 1024):
++            digest.update(chunk)
++            size += len(chunk)
++    return {
++        "path": str(path),
++        "sha256": digest.hexdigest(),
++        "size_bytes": size,
++        "mtime_ns": stat.st_mtime_ns,
++        "inode": stat.st_ino,
++    }
++
++
++def _employee_snapshot_body(pack_id: str, params: dict, context: dict, *, action_id=None) -> dict:
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.application.shipment_excel_etl_security import (
++        resolve_etl_output_path,
++        resolve_etl_path,
++    )
++    from app.infrastructure.auth.agent_mod_scope import _bound_actor
++    from app.infrastructure.workspace import workspace_root
++
++    context = {**context, "workspace_root": str(workspace_root())}
++    _bound_actor(context)
++    pack = load_employee_pack_from_disk(pack_id)
++    pdir = Path(pack["pack_dir"])
++    trusted, reason = verify_direct_python_pack_trust(pdir)
++    if not trusted:
++        raise ValueError(f"employee_python_pack_untrusted:{reason}")
++    files = {}
++    for path in sorted(pdir.rglob("*")):
++        relative = path.relative_to(pdir)
++        if "__pycache__" in relative.parts or any(part.startswith(".") for part in relative.parts):
++            continue
++        if path.is_symlink():
++            raise ValueError("员工代码快照不允许符号链接")
++        if path.is_file():
++            files[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
++    scope = context["_actor_authorization"]
++    task_id = str(context.get("task_id") or "")
++    if not task_id:
++        raise ValueError("员工动作缺少持久任务身份")
++    action_id = str(action_id or context.get("call_id") or "employee_action")
++    owner_root = employee_owner_workspace(context, pack_id)
++    workspace = (
++        owner_root
++        / ("task-" + canonical_hash(task_id)[:24])
++        / ("call-" + canonical_hash(action_id)[:24])
++    )
++    inputs = []
++    payload = {
++        **dict(params.get("input") or {}),
++        **{k: v for k, v in params.items() if k != "input"},
++    }
++    if payload.get("handler") or payload.get("code") or payload.get("python"):
++        raise ValueError("员工包动作不能选择任意 Python 或 specialized handler")
++    for key in ("file_path", "path", "excel_path", "template_path", "template_relpath"):
++        if not payload.get(key):
++            continue
++        path = resolve_etl_path(str(payload[key]), workspace_root=context.get("workspace_root"))
++        allowed = [employee_owner_workspace(context), owner_root]
++        if key.startswith("template"):
++            allowed.append(pdir)
++        if not any(path.is_relative_to(root) for root in allowed):
++            raise ValueError("员工输入文件不属于当前账号、租户和 Mod")
++        inputs.append({"parameter": key, **_employee_file_snapshot(path, context)})
++    rule_path = pdir / "rule_spec.json"
++    rules = json.loads(rule_path.read_text()) if rule_path.is_file() else {}
++    actions = parse_employee_config_v2(pack["manifest"]).get("actions") or {}
++    direct = (actions.get("actions") or actions).get("direct_python") or {}
++    structured = (
++        not rules
++        and direct.get("read_only") is True
++        and direct.get("execution_mode") == "deterministic"
++        and direct.get("implementation") == "employee_module"
++        and isinstance(direct.get("input_schema"), dict)
++    )
++    output_kind = "structured_result" if structured else "artifacts"
++    output_name = Path(
++        str(
++            rules.get("default_output_relpath")
++            or ("structured-result.json" if structured else "outputs/data.json")
++        )
++    ).name
++    requested = str(payload.get("output_path") or payload.get("output_relpath") or "")
++    output = (
++        Path(requested)
++        if requested and Path(requested).is_absolute()
++        else workspace / "outputs" / (requested or output_name)
++    )
++    output = resolve_etl_output_path(output, workspace_root=context.get("workspace_root"))
++    if not output.is_relative_to(owner_root):
++        raise ValueError("员工输出文件不属于当前账号、租户和 Mod")
++    outputs = [output]
++    for key, value in rules.items():
++        if key.endswith("output_relpath") and key != "default_output_relpath":
++            secondary = resolve_etl_output_path(
++                output.parent / Path(str(value)).name, workspace_root=context.get("workspace_root")
++            )
++            if secondary not in outputs:
++                outputs.append(secondary)
++    return {
++        "version": 1,
++        "pack_id": pack_id,
++        "pack_version": str(pack.get("version") or ""),
++        "code_sha256": canonical_hash(files),
++        "scope": [scope["execution_tenant_id"], scope["user_id"], scope["mod_id"]],
++        "task_id": task_id,
++        "action_id": action_id,
++        "params_sha256": canonical_hash(params),
++        "workspace_root": str(workspace),
++        "inputs": inputs,
++        "output_path": str(output),
++        "output_kind": output_kind,
++        "outputs": [
++            {
++                "path": str(path),
++                "before": _employee_file_snapshot(path, context) if path.is_file() else None,
++            }
++            for path in outputs
++        ],
++    }
++
++
++def validate_employee_execution_snapshot(
++    pack_id: str, params: dict, context: dict, *, before=True
++) -> dict:
++    from app.application.agent_orchestrator.approval_grant import _secret
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++
++    raw = dict(params)
++    snapshot = raw.pop("execution_snapshot", None)
++    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("body"), dict):
++        raise ValueError("员工动作缺少已审阅执行快照")
++    body = snapshot["body"]
++    proof = hmac.new(
++        _secret().encode(),
++        ("employee.execution.v1:" + canonical_hash(body)).encode(),
++        hashlib.sha256,
++    ).hexdigest()
++    if not hmac.compare_digest(proof, str(snapshot.get("proof") or "")):
++        raise ValueError("员工执行快照签名无效")
++    current = _employee_snapshot_body(pack_id, raw, context, action_id=body.get("action_id"))
++    if not before:
++        for current_output, original in zip(current["outputs"], body.get("outputs") or []):
++            current_output["before"] = original.get("before")
++    if current != body:
++        raise ValueError("员工代码、输入或目标已变化，需要重新审阅")
++    return body
++
++
++def prepare_employee_tool_call(
++    tool_id: str, action: str, params: dict, context: dict
++) -> tuple[str, str, dict]:
++    """Prepare once before durable approval; background dispatch only validates it."""
++    from app.application.agent_orchestrator.approval_grant import _secret
++    from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++    from app.application.agent_orchestrator.business_harness import ensure_business_harness_context
++    from app.mod_sdk.employee_tool_registry import resolve_tool_to_pack_id
++
++    raw = dict(params)
++    if action != "execute" or (tool_id != "employee" and resolve_pack_dir(tool_id) is None):
++        return tool_id, action, raw
++    if tool_id == "employee" and action == "execute":
++        pack_id = resolve_employee_call_pack_id(raw)
++        payload = dict(raw.get("input") or {})
++        payload.update(
++            {
++                k: v
++                for k, v in raw.items()
++                if k not in {"employee_id", "pack_id", "tool_name", "id", "input"}
++            }
++        )
++        task = str(payload.pop("task", None) or payload.get("user_request") or "执行员工")
++        raw = {
++            key: payload.pop(key)
++            for key in ("file_path", "user_request", "output_path")
++            if key in payload
++        }
++        raw.setdefault("user_request", task)
++        if payload:
++            raw["input"] = payload
++        tool_id = pack_id
++    pack_id = resolve_tool_to_pack_id(tool_id) if action == "execute" else None
++    if not pack_id or resolve_pack_dir(pack_id) is None:
++        return tool_id, action, raw
++    pack = load_employee_pack_from_disk(pack_id)
++    if "direct_python" not in manifest_actions_handlers(pack["manifest"]):
++        return pack_id, action, raw
++    from app.infrastructure.workspace import workspace_root
++
++    context["workspace_root"] = str(workspace_root())
++    if "execution_snapshot" not in raw and context.get("run_id") and context.get("step_id"):
++        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++        from app.application.agent_orchestrator.unified_task import _assert_reused_run_scope
++
++        run = get_agent_run_repository().get(str(context["run_id"]))
++        if run is not None:
++            _assert_reused_run_scope(
++                run,
++                user_id=str(context["user_id"]),
++                tenant_id=str(context.get("tenant_id") or ""),
++                runtime_context=context,
++            )
++            stored = next(
++                (step for step in run.steps if step.step_id == str(context["step_id"])), None
++            )
++            if (
++                stored is not None
++                and stored.tool_id == pack_id
++                and stored.action == action
++                and "execution_snapshot" in stored.params
++            ):
++                saved = dict(stored.params)
++                saved.pop("execution_snapshot")
++                if canonical_hash(saved) != canonical_hash(raw):
++                    raise ValueError("员工业务参数已绑定原持久步骤，不能替换")
++                context["task_id"] = str(
++                    (run.metadata.get("task_context") or {}).get("task_id")
++                    or context.get("task_id")
++                    or ""
++                )
++                validate_employee_execution_snapshot(pack_id, stored.params, context)
++                return pack_id, action, dict(stored.params)
++    if "execution_snapshot" in raw:
++        validate_employee_execution_snapshot(pack_id, raw, context)
++        return pack_id, action, raw
++    context.update(ensure_business_harness_context(context))
++    body = _employee_snapshot_body(pack_id, raw, context)
++    proof = hmac.new(
++        _secret().encode(),
++        ("employee.execution.v1:" + canonical_hash(body)).encode(),
++        hashlib.sha256,
++    ).hexdigest()
++    return pack_id, action, {**raw, "execution_snapshot": {"body": body, "proof": proof}}
++
++
++def resolve_employee_call_pack_id(params: dict) -> str:
++    """One host registry identity for authorization and prepared dispatch."""
++    from app.mod_sdk.employee_tool_registry import resolve_tool_to_pack_id
++
++    ids = [
++        resolve_tool_to_pack_id(str(params[key]))
++        for key in ("employee_id", "pack_id", "tool_name", "id")
++        if params.get(key)
++    ]
++    if not ids or not all(ids) or len(set(ids)) != 1 or ids[0] == "employee":
++        raise ValueError("员工包未注册或别名身份冲突")
++    return ids[0]
++
++
+ def build_employee_context(employee_id: str, input_data: dict[str, Any]) -> dict[str, Any]:
+     return {"employee_id": employee_id, "input_data": input_data or {}}
+ 
+diff --git a/FHD/app/application/employee_runtime/risk_gate.py b/FHD/app/application/employee_runtime/risk_gate.py
+index fe7ae79f8d..05f14789f5 100644
+--- a/FHD/app/application/employee_runtime/risk_gate.py
++++ b/FHD/app/application/employee_runtime/risk_gate.py
+@@ -17,13 +17,50 @@ def gate_action_or_block(
+     manifest: dict[str, Any],
+     handlers: Iterable[str],
+     input_data: dict[str, Any],
++    *,
++    runtime_context: dict[str, Any] | None = None,
+ ) -> dict[str, Any]:
+     payload = dict(input_data or {})
++    if runtime_context is not None:
++        from app.application.agent_orchestrator.approval_grant import ensure_tool_approval
++        from app.application.agent_orchestrator.run_repository import get_agent_run_repository
++        from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++
++        context = dict(runtime_context)
++        run = get_agent_run_repository().get(str(context.get("run_id") or ""))
++        step = (
++            next((s for s in run.steps if s.step_id == str(context.get("step_id") or "")), None)
++            if run
++            else None
++        )
++        spec = get_tool_action_spec(employee_id, "execute")
++        if (
++            step is None
++            or spec is None
++            or step.tool_id != employee_id
++            or ensure_tool_approval(step, spec, context) is not None
++        ):
++            return {"ok": False, "blocked": True, "reason": "员工风险门缺少已消费的正式审批"}
++        for key in (
++            "human_approved",
++            "approved_by",
++            "approver",
++            "allow_medium_risk",
++            "allow_high_risk_real_run",
++            "high_risk_gate_token",
++            "action_id",
++        ):
++            payload.pop(key, None)
++        payload.update(
++            human_approved=True, approved_by=run.user_id, action_id=context["business_action_id"]
++        )
+     level, inferred_reason = get_autonomy_guard().assess_employee_risk(
+         manifest or {}, handlers, payload
+     )
+     action_name = (
+-        "code_write"
++        "employee_execute"
++        if runtime_context is not None
++        else "code_write"
+         if payload.get("tool") in {"patch_file", "write_file"}
+         else "employee_read_only_observe"
+         if payload.get("burn_in") is True and payload.get("burn_in_read_only") is True
+diff --git a/FHD/app/domain/shared_services/tools_workflow_dispatch.py b/FHD/app/domain/shared_services/tools_workflow_dispatch.py
+index 591cb3f87d..9dc5970e4a 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_dispatch.py
++++ b/FHD/app/domain/shared_services/tools_workflow_dispatch.py
+@@ -154,7 +154,9 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
+             workspace_root = runtime_context.get("workspace_root")
+             raw = execute_employee_tool(
+                 tool_id,
+-                {**params, "task": params.get("task") or user_message},
++                dict(params)
++                if "execution_snapshot" in params
++                else {**params, "task": params.get("task") or user_message},
+                 str(workspace_root) if workspace_root else None,
+                 runtime_context=runtime_context,
+             )
+diff --git a/FHD/app/domain/shared_services/tools_workflow_workspace.py b/FHD/app/domain/shared_services/tools_workflow_workspace.py
+index 6cab93a936..3a5838009b 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_workspace.py
++++ b/FHD/app/domain/shared_services/tools_workflow_workspace.py
+@@ -434,6 +434,7 @@ def _registered_router_employee(
+         user_id=numeric_user_id,
+         workspace_root=workspace_root,
+         session_id=str(runtime_context.get("session_id") or params.get("session_id") or "") or None,
++        runtime_context=runtime_context,
+     )
+     ok = bool(result.get("success")) and (not bool(result.get("blocked_by_risk_gate")))
+     return {
+diff --git a/FHD/app/fastapi_routes/admin_control/employee_backend.py b/FHD/app/fastapi_routes/admin_control/employee_backend.py
+index 1fcab754ed..cb5722690c 100644
+--- a/FHD/app/fastapi_routes/admin_control/employee_backend.py
++++ b/FHD/app/fastapi_routes/admin_control/employee_backend.py
+@@ -12,7 +12,6 @@ from .employee_run import EmployeeWork
+ from .port_contracts import JsonObject
+ 
+ if TYPE_CHECKING:
+-    from app.application.agent_orchestrator.run_models import AgentStep
+     from app.db.models.user import User
+ 
+ 
+@@ -55,6 +54,34 @@ class CanonicalEmployeeBackend:
+         )
+ 
+     def execute(self, work: EmployeeWork, run_id: int) -> JsonObject:
++        from app.application.employee_runtime.loader import (
++            load_employee_pack_from_disk,
++            manifest_actions_handlers,
++            resolve_pack_dir,
++        )
++
++        if resolve_pack_dir(
++            work.employee_id
++        ) is not None and "direct_python" in manifest_actions_handlers(
++            load_employee_pack_from_disk(work.employee_id)["manifest"]
++        ):
++            from app.application.employee_runtime.executor import execute_employee_task_local
++
++            return execute_employee_task_local(
++                work.employee_id,
++                work.task,
++                work.payload,
++                user_id=work.user_id,
++                workspace_root=work.workspace_root,
++                session_id=work.session_id,
++                runtime_context={
++                    **work.runtime_context,
++                    "tenant_id": work.tenant_id,
++                    "user_id": work.user_id,
++                    "session_id": work.session_id,
++                },
++            )
++
+         from app.application.agent_orchestrator.run_models import AgentStep
+         from app.application.agent_orchestrator.tool_executor import execute_with_tool_deadline
+         from app.application.agent_orchestrator.tool_spec import (
+diff --git a/FHD/app/fastapi_routes/admin_control/employee_execution.py b/FHD/app/fastapi_routes/admin_control/employee_execution.py
+index cac586882f..ca6bb0600c 100644
+--- a/FHD/app/fastapi_routes/admin_control/employee_execution.py
++++ b/FHD/app/fastapi_routes/admin_control/employee_execution.py
+@@ -80,7 +80,7 @@ class EmployeeExecution:
+         payload.update(
+             user_id=user_id, session_id=sid, tenant_id=tenant_id, employee_id=pid, task=task
+         )
+-        return self._run(
++        result = self._run(
+             EmployeeWork(
+                 employee_id=pid,
+                 task=task,
+@@ -92,6 +92,9 @@ class EmployeeExecution:
+                 runtime_context=runtime_context,
+             )
+         )
++        from app.fastapi_routes.domains.agent.route_support import agent_http_status
++
++        return JSONResponse(result, status_code=agent_http_status(result))
+ 
+     async def local_employee_runs(self, request: Request, employee_id: str, limit: int = 50):
+         from app.application.employee_runtime.run_ledger import list_employee_run_logs
+diff --git a/FHD/app/fastapi_routes/admin_control/employee_run.py b/FHD/app/fastapi_routes/admin_control/employee_run.py
+index e9addbb05c..53b9e7ef21 100644
+--- a/FHD/app/fastapi_routes/admin_control/employee_run.py
++++ b/FHD/app/fastapi_routes/admin_control/employee_run.py
+@@ -82,10 +82,20 @@ class EmployeeRunner:
+         response: JsonObject = {
+             "success": success,
+             "source": "local",
+-            "run_id": run_id,
++            "local_run_id": run_id,
++            "run_id": result.get("run_id") or run_id,
+             "attempts": 1,
+             "data": result,
++            "outcome": {
++                "success": "success",
++                "failed": "failure",
++                "unknown": "unknown",
++                "awaiting_approval": "waiting_approval",
++            }[status],
+         }
++        for key in ("task_id", "agent_run_id", "outcome", "execution_state", "pending_approval"):
++            if key in result:
++                response[key] = result[key]
+         if not success:
+             response["message"] = error
+         return response
+diff --git a/FHD/app/fastapi_routes/domains/agent/route_support.py b/FHD/app/fastapi_routes/domains/agent/route_support.py
+index 3917496b47..98b3e4f39b 100644
+--- a/FHD/app/fastapi_routes/domains/agent/route_support.py
++++ b/FHD/app/fastapi_routes/domains/agent/route_support.py
+@@ -105,6 +105,15 @@ def start_registered_http_action(
+             raise HTTPException(status_code=403, detail={"code": "TOOL_SCOPE_MISMATCH"})
+     if {"_runtime_context", "_actor_authorization", "_mod_authorization"}.intersection(params):
+         raise HTTPException(status_code=403, detail={"code": "TOOL_SCOPE_MISMATCH"})
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++    try:
++        tool_id, action, params = prepare_employee_tool_call(tool_id, action, params, trusted)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++    spec = get_tool_action_spec(tool_id, action)
++    if spec is None:
++        raise HTTPException(status_code=400, detail="员工工具未注册")
+     denied = authorize_agent_tool(tool_id, spec.action, params, trusted)
+     if denied:
+         raise HTTPException(status_code=403, detail=denied)
+diff --git a/FHD/app/fastapi_routes/platform_shell_routes.py b/FHD/app/fastapi_routes/platform_shell_routes.py
+index 3493d1c866..0a7faba84a 100644
+--- a/FHD/app/fastapi_routes/platform_shell_routes.py
++++ b/FHD/app/fastapi_routes/platform_shell_routes.py
+@@ -137,7 +137,9 @@ def _office_upload_suffixes() -> set[str]:
+     return set(OFFICE_UPLOAD_SUFFIXES)
+ 
+ 
+-async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, str]:
++async def _save_workspace_upload(
++    file: UploadFile, *, subdir: str, runtime_context: dict | None = None
++) -> dict[str, str]:
+     import os
+     import uuid
+     from pathlib import Path
+@@ -155,13 +157,21 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str,
+         )
+ 
+     workspace_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd())).resolve()
+-    upload_dir = workspace_root / "uploads" / subdir
+-    upload_dir.mkdir(parents=True, exist_ok=True)
++    if subdir == "chat":
++        from app.application.employee_runtime.loader import employee_owner_workspace
++
++        upload_dir = employee_owner_workspace(runtime_context or {})
++    else:
++        upload_dir = workspace_root / "uploads" / subdir
+     safe = secure_filename(name) or f"upload{suffix}"
+     if not safe.lower().endswith(suffix):
+         safe = f"{safe}{suffix}"
+     dest = upload_dir / f"{uuid.uuid4().hex[:12]}-{safe}"
+-    dest.write_bytes(await file.read())
++    from app.application.shipment_excel_etl_security import open_etl_output_file
++
++    with open_etl_output_file(dest, workspace_root=workspace_root) as output:
++        while chunk := await file.read(1024 * 1024):
++            output.write(chunk)
+     try:
+         rel = dest.relative_to(workspace_root).as_posix()
+     except ValueError:
+@@ -308,12 +318,11 @@ async def platform_shell_chat_office_file_upload(
+     file: UploadFile = File(...),
+ ):
+     """对话「解析办公文件」：保存到 workspace/uploads/chat，返回相对 workspace_root 的路径。"""
+-    from app.infrastructure.auth.dependencies import resolve_session_user
++    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+ 
+-    user = resolve_session_user(request)
+-    if user is None:
+-        raise HTTPException(status_code=401, detail="请先登录")
+-    data = await _save_workspace_upload(file, subdir="chat")
++    data = await _save_workspace_upload(
++        file, subdir="chat", runtime_context=request_runtime_context(request)
++    )
+     return {"success": True, "data": data}
+ 
+ 
+diff --git a/FHD/app/fastapi_routes/tools_execute.py b/FHD/app/fastapi_routes/tools_execute.py
+index 8fabdd8763..3407ad4cd5 100644
+--- a/FHD/app/fastapi_routes/tools_execute.py
++++ b/FHD/app/fastapi_routes/tools_execute.py
+@@ -116,6 +116,15 @@ def run_tools_execute_agent(
+             raise HTTPException(status_code=403, detail={"code": "TOOL_SCOPE_MISMATCH"})
+     if {"_runtime_context", "_actor_authorization", "_mod_authorization"} & params.keys():
+         raise HTTPException(status_code=403, detail={"code": "TOOL_SCOPE_MISMATCH"})
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++    try:
++        tool_id, action, params = prepare_employee_tool_call(tool_id, action, params, context)
++    except ValueError as exc:
++        raise HTTPException(status_code=400, detail=str(exc)) from exc
++    spec = get_tool_action_spec(tool_id, action)
++    if spec is None:
++        raise HTTPException(status_code=400, detail={"code": "UNKNOWN_TOOL_ACTION"})
+     denied = authorize_agent_tool(tool_id, action, params, context)
+     if denied:
+         return denied, 403
+diff --git a/FHD/app/infrastructure/auth/agent_mod_scope.py b/FHD/app/infrastructure/auth/agent_mod_scope.py
+index 135f470bea..c536f0901b 100644
+--- a/FHD/app/infrastructure/auth/agent_mod_scope.py
++++ b/FHD/app/infrastructure/auth/agent_mod_scope.py
+@@ -214,6 +214,12 @@ def authorize_agent_tool(
+             return denied
+         if tool_id == "query_tool_catalog" and action == "execute" and spec.read_only:
+             return None
++        if tool_id == "employee" and action == "execute":
++            from app.application.employee_runtime.loader import resolve_employee_call_pack_id
++
++            return authorize_agent_tool(
++                resolve_employee_call_pack_id(params), action, params, runtime_context
++            )
+         if tool_id == "execute_erp_capability":
+             from app.application.tools.registered_capabilities import (
+                 resolve_registered_capability_call,
+diff --git a/FHD/app/infrastructure/mods/employee_registry.py b/FHD/app/infrastructure/mods/employee_registry.py
+index 7f7906fc46..d203639fd3 100644
+--- a/FHD/app/infrastructure/mods/employee_registry.py
++++ b/FHD/app/infrastructure/mods/employee_registry.py
+@@ -7,8 +7,6 @@ import logging
+ import os
+ import shutil
+ import tempfile
+-import zipfile
+-from datetime import UTC, datetime
+ from typing import Any
+ 
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+@@ -20,7 +18,6 @@ from .package import (
+     ModPackage,
+     ModPackageError,
+     ModSignatureError,
+-    compute_directory_hash,
+ )
+ 
+ logger = logging.getLogger(__name__)
+@@ -133,13 +130,6 @@ class EmployeeRegistry:
+                 extract_path, manifest = ModPackage.extract_package(
+                     package_path, temp_dir, verify_signature=verify_signature
+                 )
+-                signature_verified = False
+-                if verify_signature:
+-                    with zipfile.ZipFile(package_path, "r") as package_zip:
+-                        if "META-INF/signature.json" in package_zip.namelist():
+-                            signature_verified = ModPackage._verify_package_signature(
+-                                temp_dir, package_zip
+-                            )
+                 if normalize_artifact(manifest) != ARTIFACT_EMPLOYEE_PACK:
+                     return False, "非 employee_pack 包"
+                 ve = validate_employee_pack_manifest(manifest)
+@@ -163,26 +153,25 @@ class EmployeeRegistry:
+                 if root is None:
+                     return False, "员工包目录无效"
+                 dest = os.path.join(root, pack_id)
+-                if os.path.lexists(dest):
+-                    if trusted_child_path(root, pack_id, directory=True) is None:
+-                        return False, "员工包目标不是本地目录"
+-                    shutil.rmtree(dest)
+-                shutil.copytree(extract_path, dest)
+-                receipt = {
+-                    "schema_version": 1,
+-                    "pack_id": pack_id,
+-                    "version": str(manifest.get("version") or ""),
+-                    "signature_verified": bool(signature_verified),
+-                    "content_sha256": compute_directory_hash(dest),
+-                    "installed_at": datetime.now(UTC).isoformat(),
+-                }
+-                with open(
+-                    os.path.join(dest, ".xcagi-install-receipt.json"),
+-                    "w",
+-                    encoding="utf-8",
+-                ) as receipt_file:
+-                    json.dump(receipt, receipt_file, ensure_ascii=False, sort_keys=True)
+-                logger.info("Installed employee_pack")
++                if (
++                    os.path.lexists(dest)
++                    and trusted_child_path(root, pack_id, directory=True) is None
++                ):
++                    return False, "员工包目标不是本地目录"
++                from app.infrastructure.mods.install_receipts import install_extracted
++                from app.infrastructure.mods.mod_manager import _employee_pack_routes_registered
++
++                restart = install_extracted(
++                    mods_root=root,
++                    extracted_root=extract_path,
++                    manifest=manifest,
++                    package_path=package_path,
++                    verify_signature=verify_signature,
++                    was_loaded=pack_id in _employee_pack_routes_registered,
++                )
++                logger.info("Installed employee_pack; restart_required=%s", restart)
++                if restart:
++                    return True, f"员工包 {pack_id} 已安装，重启后生效"
+                 cfg = manifest.get("config") if isinstance(manifest.get("config"), dict) else {}
+                 if not isinstance(cfg, dict):
+                     cfg = {}
+diff --git a/FHD/app/infrastructure/mods/management/http_routes.py b/FHD/app/infrastructure/mods/management/http_routes.py
+index b5aaf852e6..8b40b3302d 100644
+--- a/FHD/app/infrastructure/mods/management/http_routes.py
++++ b/FHD/app/infrastructure/mods/management/http_routes.py
+@@ -15,6 +15,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ from ..artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
+ from ..manifest import ModMetadata
+ from ..registry import ModRegistry
++from .paths import is_package_directory_name, trusted_child_path
+ from .ports import ImportBackend, MountRuntime, ParseManifest, RegisterModRoutes, RegisterRoutes
+ 
+ 
+@@ -44,13 +45,43 @@ class ModHttpRoutes:
+     ) -> bool:
+         """为单个 employee_pack 挂载 FastAPI 路由（安装后热加载）。"""
+         pid = (pack_id or "").strip()
+-        if not pid or self._ports.disabled():
++        if not is_package_directory_name(pid) or self._ports.disabled():
+             return False
+         if mod_manager is None:
+             mod_manager = self._ports.manager()
+         if not force and pid in self._ports.registered_employees:
+             return True
+-        pack_path = os.path.join(mod_manager.mods_root, "_employees", pid)
++        employee_root = trusted_child_path(mod_manager.mods_root, "_employees", directory=True)
++        pack_path = (
++            trusted_child_path(employee_root, pid, directory=True) if employee_root else None
++        )
++        if pack_path is None:
++            return False
++        from app.application.employee_runtime.loader import verify_direct_python_pack_trust
++        from app.infrastructure.mods.install_receipts import (
++            activate_pending_install,
++            mark_runtime_loaded,
++            read_verified_install,
++        )
++
++        try:
++            receipt = (
++                read_verified_install(pid, mods_root=employee_root)
++                if os.path.isfile(
++                    os.path.join(employee_root, ".install-receipts", pid, "receipt.json")
++                )
++                else None
++            )
++            if receipt and receipt.get("requires_restart"):
++                if not activate_pending_install(pid, mods_root=employee_root):
++                    return False
++            trusted, reason = verify_direct_python_pack_trust(pack_path)
++        except RECOVERABLE_ERRORS as exc:
++            self._ports.logger.warning("employee_pack trust verification failed %s: %s", pid, exc)
++            return False
++        if not trusted:
++            self._ports.logger.warning("employee_pack backend import denied %s: %s", pid, reason)
++            return False
+         mf = os.path.join(pack_path, "manifest.json")
+         if not os.path.isfile(mf):
+             return False
+@@ -73,7 +104,7 @@ class ModHttpRoutes:
+         entry = str(backend.get("entry") or "").strip()
+         if not entry:
+             return False
+-        if not resolved_id:
++        if resolved_id != pid:
+             return False
+         try:
+             module = self._ports.import_backend(pack_path, resolved_id, entry)
+@@ -81,6 +112,8 @@ class ModHttpRoutes:
+             if callable(reg):
+                 reg(app, resolved_id)
+                 self._ports.registered_employees.add(resolved_id)
++                if receipt is not None:
++                    mark_runtime_loaded(resolved_id, mods_root=employee_root, api_registered=True)
+                 self._ports.logger.info(
+                     "FastAPI routes registered for employee_pack: %s", resolved_id
+                 )
+diff --git a/FHD/app/mod_sdk/employee_pack_runtime.py b/FHD/app/mod_sdk/employee_pack_runtime.py
+index 32d62e0079..65196a98d6 100644
+--- a/FHD/app/mod_sdk/employee_pack_runtime.py
++++ b/FHD/app/mod_sdk/employee_pack_runtime.py
+@@ -1,303 +1,85 @@
+-"""Shared employee dispatch; runtime files belong in writable application data."""
++"""Generated Employee HTTP routes use the same reviewed tool execution boundary."""
+ 
+ from __future__ import annotations
+ 
+-import asyncio
+ import logging
+-import os
+-from typing import Any, Dict, Optional
++from typing import Any
+ 
+-from fastapi import APIRouter
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+-from app.utils.path_io.path_utils import get_app_data_dir
++from fastapi import APIRouter, Body, Request
++from fastapi.responses import JSONResponse
+ 
+ logger = logging.getLogger(__name__)
+ 
+ 
+-def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) -> Dict[str, Any]:
+-    """Build employee routes; backend_dir locates bundled code when registry lookup fails."""
+-    emp_id = mod_id
+-
+-    def _resolve_mod_path(mid: str) -> Optional[str]:
+-        try:
+-            from app.mod_sdk.host_services import get_mod_registry  # type: ignore
++def build_employee_pack(mod_id: str, stem: str, label: str, backend_dir: str) -> dict[str, Any]:
++    """Keep generated route identities; Python code is entered only by the kernel."""
+ 
+-            meta = get_mod_registry().get_mod_metadata(mid)
+-            mp = getattr(meta, "mod_path", "") or ""
+-            if mp and os.path.isdir(mp):
+-                return mp
+-        except RECOVERABLE_ERRORS:
+-            pass
+-        here = backend_dir
+-        guess = os.path.dirname(here)
+-        return guess if os.path.isdir(guess) else None
++    async def _dispatch_run(mid, eid, emp_stem, payload, *, runtime_context=None):
++        from app.application.agent_orchestrator.tool_executor import execute_registered_tool
+ 
+-    def _load_employee_module(mid: str, emp_stem: str):
+-        try:
+-            from app.mod_sdk.mods_bus import import_mod_backend_py  # type: ignore
+-        except ImportError:
+-            return None
+-        mod_path = _resolve_mod_path(mid)
+-        if not mod_path:
+-            return None
+-        try:
+-            return import_mod_backend_py(mod_path, mid, f"employees/{emp_stem}")
+-        except RECOVERABLE_ERRORS:
+-            logger.exception("load employee module failed stem=%s", emp_stem)
+-            return None
+-
+-    def _unified_err(msg: str, **meta):
+-        return {
+-            "success": False,
+-            "data": {
+-                "ok": False,
+-                "summary": msg[:400],
+-                "items": [],
+-                "warnings": [],
+-                "error": msg[:1000],
+-                "meta": meta,
+-            },
+-            "error": msg[:500],
++        body = dict(payload or {})
++        params = {
++            key: body.pop(key)
++            for key in ("file_path", "user_request", "output_path")
++            if key in body
+         }
+-
+-    async def _dispatch_run(mid: str, eid: str, emp_stem: str, payload: Optional[Dict[str, Any]]):
+-        module = _load_employee_module(mid, emp_stem)
+-        if module is None or not hasattr(module, "run"):
+-            return _unified_err(
+-                "employee module not loaded：请确认 backend/employees 下存在对应 .py 并实现 async def run",
+-                employee_id=eid,
+-                stem=emp_stem,
+-            )
+-        ctx: Dict[str, Any] = {
+-            "mod_id": mid,
+-            "employee_id": eid,
+-            "logger": logging.getLogger(f"mod.{mid}.emp.{eid}"),
+-            "call_llm": None,
+-            "http_get": None,
+-            "http_post": None,
+-            "secrets": None,
+-        }
+-        call_llm_available = False
+-        try:
+-            from app.mod_sdk.mod_employee_llm import mod_employee_complete  # type: ignore
+-
+-            async def _call_llm(
+-                messages, *, max_tokens=1024, temperature=0.2, response_format=None
+-            ):
+-                return await mod_employee_complete(
+-                    messages,
+-                    max_tokens=max_tokens,
+-                    temperature=temperature,
+-                    response_format=response_format,
+-                )
+-
+-            ctx["call_llm"] = _call_llm
+-            call_llm_available = True
+-        except RECOVERABLE_ERRORS as _e:
+-            logger.warning("mod_employee_complete 不可用，call_llm 将使用降级：%s", _e)
+-        if not call_llm_available:
+-
+-            async def _call_llm_disabled(messages, **kwargs):
+-                return {
+-                    "ok": False,
+-                    "content": "",
+-                    "error": "宿主 LLM 服务不可用（mod_employee_complete 导入失败），请检查 API Key 与 mod_employee_llm 配置",
+-                }
+-
+-            ctx["call_llm"] = _call_llm_disabled
+-        try:
+-            import httpx as _httpx
+-
+-            async def _http_get(url, *, headers=None, timeout=30):
+-                try:
+-                    async with _httpx.AsyncClient(timeout=float(timeout)) as _c:
+-                        r = await _c.get(url, headers=headers or {})
+-                        return {
+-                            "ok": r.status_code < 400,
+-                            "status": r.status_code,
+-                            "text": r.text,
+-                            "error": "",
+-                        }
+-                except RECOVERABLE_ERRORS as _e:
+-                    return {"ok": False, "status": 0, "text": "", "error": str(_e)[:500]}
+-
+-            async def _http_post(url, *, json_body=None, data=None, headers=None, timeout=30):
+-                try:
+-                    async with _httpx.AsyncClient(timeout=float(timeout)) as _c:
+-                        r = await _c.post(url, json=json_body, data=data, headers=headers or {})
+-                        return {
+-                            "ok": r.status_code < 400,
+-                            "status": r.status_code,
+-                            "text": r.text,
+-                            "error": "",
+-                        }
+-                except RECOVERABLE_ERRORS as _e:
+-                    return {"ok": False, "status": 0, "text": "", "error": str(_e)[:500]}
+-
+-            ctx["http_get"] = _http_get
+-            ctx["http_post"] = _http_post
+-        except ImportError:
+-            logger.warning("httpx 不可用，http_get/http_post 使用降级")
+-
+-            async def _http_disabled(url, **kwargs):
+-                return {
+-                    "ok": False,
+-                    "status": 0,
+-                    "text": "",
+-                    "error": "httpx 未安装，HTTP 请求不可用",
+-                }
+-
+-            ctx["http_get"] = _http_disabled
+-            ctx["http_post"] = _http_disabled
+-        _workspace_root = os.environ.get("EMPLOYEE_WORKSPACE_ROOT", "") or os.path.abspath(
+-            os.path.join(get_app_data_dir(), "mods", "_employees", "workspace")
++        params.setdefault("user_request", str(body.pop("task", None) or f"执行员工 {eid}"))
++        if body:
++            params["input"] = body
++        return execute_registered_tool(
++            eid, "execute", {**params, "_runtime_context": dict(runtime_context or {})}
+         )
+-        os.makedirs(_workspace_root, exist_ok=True)
+-        ctx["workspace_root"] = _workspace_root
+-
+-        def _guard(_p):
+-            resolved = os.path.normpath(os.path.join(_workspace_root, _p))
+-            if not resolved.startswith(
+-                os.path.abspath(_workspace_root) + os.sep
+-            ) and resolved != os.path.abspath(_workspace_root):
+-                return None
+-            return resolved
+-
+-        async def _read_workspace_file(path):
+-            r = _guard(path)
+-            if r is None:
+-                return {"ok": False, "error": "路径越界"}
+-            if not os.path.isfile(r):
+-                return {"ok": False, "error": f"文件不存在: {path!r}"}
+-            try:
+-                txt = open(r, encoding="utf-8", errors="replace").read()
+-                return {
+-                    "ok": True,
+-                    "path": path,
+-                    "content": txt[:8000],
+-                    "truncated": len(txt) > 8000,
+-                    "total_chars": len(txt),
+-                }
+-            except OSError as e:
+-                return {"ok": False, "error": str(e)[:300]}
+-
+-        async def _write_workspace_file(path, content):
+-            r = _guard(path)
+-            if r is None:
+-                return {"ok": False, "error": "路径越界"}
+-            try:
+-                os.makedirs(os.path.dirname(r) or ".", exist_ok=True)
+-                open(r, "w", encoding="utf-8").write(content or "")
+-                return {"ok": True, "path": path, "bytes_written": len((content or "").encode())}
+-            except OSError as e:
+-                return {"ok": False, "error": str(e)[:300]}
+-
+-        async def _list_workspace_dir(path="."):
+-            r = _guard(path)
+-            if r is None:
+-                return {"ok": False, "error": "路径越界"}
+-            if not os.path.isdir(r):
+-                return {"ok": False, "error": f"目录不存在: {path!r}"}
+-            skip = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
+-            entries = []
+-            for name in sorted(os.listdir(r))[:50]:
+-                if name in skip:
+-                    continue
+-                full = os.path.join(r, name)
+-                entries.append(
+-                    {
+-                        "name": name,
+-                        "type": "dir" if os.path.isdir(full) else "file",
+-                        "size": 0 if os.path.isdir(full) else os.path.getsize(full),
+-                    }
+-                )
+-            return {"ok": True, "path": path, "entries": entries}
+-
+-        import subprocess as _sp
+-
+-        async def _run_sandboxed_python(code, timeout=10.0):
+-            import re as _re
+-
+-            if _re.search(
+-                r"\b(import\s+subprocess|import\s+socket|open\s*\(|__import__|exec\s*\(|eval\s*\()\b",
+-                code,
+-            ):
+-                return {"ok": False, "error": "代码包含不允许的操作"}
+-            try:
+-                p = _sp.run(
+-                    ["python", "-c", code],
+-                    capture_output=True,
+-                    text=True,
+-                    timeout=float(timeout),
+-                    env={
+-                        k: v
+-                        for k, v in os.environ.items()
+-                        if k in ("PATH", "PYTHONPATH", "TEMP", "TMP")
+-                    },
+-                )
+-                return {
+-                    "ok": p.returncode == 0,
+-                    "stdout": p.stdout[:2000],
+-                    "stderr": p.stderr[:500],
+-                    "returncode": p.returncode,
+-                }
+-            except _sp.TimeoutExpired:
+-                return {"ok": False, "error": f"执行超时（{timeout:.0f}s）"}
+-            except RECOVERABLE_ERRORS as e:
+-                return {"ok": False, "error": str(e)[:300]}
+-
+-        ctx["read_workspace_file"] = _read_workspace_file
+-        ctx["write_workspace_file"] = _write_workspace_file
+-        ctx["list_workspace_dir"] = _list_workspace_dir
+-        ctx["run_sandboxed_python"] = _run_sandboxed_python
+-
+-        try:
+-            from modstore_server.mod_employee_agent_runner import build_agent_runner  # type: ignore
+-
+-            ctx["agent_runner"] = build_agent_runner(ctx)
+-        except RECOVERABLE_ERRORS as _ar_err:
+-            logger.warning("agent_runner 不可用：%s", _ar_err)
+-            ctx["agent_runner"] = None
+-
+-        try:
+-            run_fn = module.run
+-            out = run_fn(payload or {}, ctx)
+-            if asyncio.iscoroutine(out):
+-                out = await out
+-            return {"success": True, "data": out}
+-        except BOUNDARY_ERRORS as e:
+-            logger.exception("employee run failed")
+-            return _unified_err("employee run failed: " + str(e)[:300], employee_id=eid)
+ 
+     def register_fastapi_routes(app, mid: str) -> None:
+         router = APIRouter(prefix=f"/api/mod/{mid}", tags=[f"emp-pack-{mid}"])
+ 
+         @router.get("/employees")
+         async def list_employees():
+-            return {"success": True, "data": [{"id": emp_id, "label": label, "summary": ""}]}
++            return {"success": True, "data": [{"id": mod_id, "label": label, "summary": ""}]}
+ 
+-        @router.get("/employees/" + emp_id + "/status")
++        @router.get("/employees/" + mod_id + "/status")
+         async def emp_status():
+-            return {"success": True, "data": {"employee_id": emp_id, "status": "ready"}}
++            return {"success": True, "data": {"employee_id": mod_id, "status": "ready"}}
++
++        @router.post("/employees/" + mod_id + "/run")
++        async def emp_run(request: Request, payload: dict[str, Any] = Body(default_factory=dict)):
++            from app.fastapi_routes.domains.agent.route_support import (
++                agent_http_status,
++                agent_node_output,
++                start_registered_http_action,
++            )
+ 
+-        @router.post("/employees/" + emp_id + "/run")
+-        async def emp_run(payload: Dict[str, Any] | None = None):
+-            return await _dispatch_run(mid, emp_id, stem, payload)
++            body = dict(payload)
++            params = {
++                key: body.pop(key)
++                for key in ("file_path", "user_request", "output_path")
++                if key in body
++            }
++            task = str(body.pop("task", None) or params.get("user_request") or f"执行员工 {mod_id}")
++            params.setdefault("user_request", task)
++            if body:
++                params["input"] = body
++            run, node_id = start_registered_http_action(
++                request=request,
++                tool_id=mod_id,
++                action="execute",
++                params=params,
++                source="employee_pack_route",
++                route_path=f"/api/mod/{mid}/employees/{mod_id}/run",
++                message=task,
++            )
++            output = agent_node_output(run, node_id)
++            return JSONResponse(output, status_code=agent_http_status(output))
+ 
+         app.include_router(router)
+-        logger.info("employee_pack routes registered mod_id=%s emp=%s", mid, emp_id)
+ 
+     def mod_init() -> None:
+         logger.info("employee_pack backend init")
+ 
+     return {
+-        "EMPLOYEE_ID": emp_id,
++        "EMPLOYEE_ID": mod_id,
+         "STEM": stem,
+         "LABEL": label,
+-        "_resolve_mod_path": _resolve_mod_path,
+-        "_load_employee_module": _load_employee_module,
+-        "_unified_err": _unified_err,
+         "_dispatch_run": _dispatch_run,
+         "register_fastapi_routes": register_fastapi_routes,
+         "mod_init": mod_init,
+diff --git a/FHD/app/mod_sdk/employee_tool_registry.py b/FHD/app/mod_sdk/employee_tool_registry.py
+index 5473d44386..972e881d62 100644
+--- a/FHD/app/mod_sdk/employee_tool_registry.py
++++ b/FHD/app/mod_sdk/employee_tool_registry.py
+@@ -70,15 +70,28 @@ def _tool_parameters(manifest: dict[str, Any]) -> dict[str, Any]:
+             "description": "用户对本次员工任务的补充说明",
+         },
+         "output_path": {"type": "string", "description": "可选：输出文件路径（生成类员工）"},
++        "input": {"type": "object", "description": "员工业务输入，不提供身份或执行权限"},
+     }
+     handlers = manifest_actions_handlers(manifest)
+     pack_id = str(manifest.get("id") or "").lower()
+     required: list[str] = []
+-    if "direct_python" in handlers and "generate" in pack_id:
++    config = parse_employee_config_v2(manifest)
++    direct = (config.get("actions") or {}).get("direct_python") or {}
++    if "direct_python" in handlers and isinstance(direct.get("input_schema"), dict):
++        from copy import deepcopy
++
++        props["input"] = deepcopy(direct["input_schema"])
++        required = ["input"]
++    elif "direct_python" in handlers and "generate" in pack_id:
+         required = ["user_request"]
+     elif "direct_python" in handlers:
+         required = ["file_path"]
+-    return {"type": "object", "properties": props, "required": required}
++    return {
++        "type": "object",
++        "properties": props,
++        "required": required,
++        "additionalProperties": False,
++    }
+ 
+ 
+ @lru_cache(maxsize=1)
+@@ -290,7 +303,7 @@ def execute_employee_tool(
+     user_id: int = 0,
+     runtime_context: dict[str, Any] | None = None,
+ ) -> str:
+-    from app.application.employee_runtime.executor import execute_employee_task_local
++    from app.application.employee_runtime.executor import execute_controlled_employee_action
+     from app.application.employee_runtime.result_verifier import (
+         execution_result_awaits_approval,
+         execution_result_error,
+@@ -309,14 +322,19 @@ def execute_employee_tool(
+     if not pack_id:
+         return json.dumps({"success": False, "error": "unknown employee tool"}, ensure_ascii=False)
+     task = str(args.get("user_request") or args.get("task") or f"执行员工 {pack_id}")
+-    result = execute_employee_task_local(
+-        pack_id,
+-        task,
+-        args,
+-        user_id=user_id or int((runtime_context or {}).get("user_id") or 0),
+-        workspace_root=workspace_root,
+-        runtime_context=runtime_context,
++    from app.application.agent_orchestrator.tool_executor import (
++        execute_registered_tool,
++        registered_dispatch_is_controlled,
+     )
++
++    if not registered_dispatch_is_controlled(pack_id, "execute"):
++        return json.dumps(
++            execute_registered_tool(
++                pack_id, "execute", {**args, "_runtime_context": dict(runtime_context or {})}
++            ),
++            ensure_ascii=False,
++        )
++    result = execute_controlled_employee_action(pack_id, task, args, dict(runtime_context or {}))
+     ok = result.get("success") is True and not execution_result_error(result)
+     artifact = _verify_office_artifact(pack_id, result, workspace_root=workspace_root)
+     if artifact is not None and not artifact.get("verified"):
+diff --git a/FHD/mods/_employees/top-architect/backend/blueprints.py b/FHD/mods/_employees/top-architect/backend/blueprints.py
+index ab4eac03f5..70b02139af 100644
+--- a/FHD/mods/_employees/top-architect/backend/blueprints.py
++++ b/FHD/mods/_employees/top-architect/backend/blueprints.py
+@@ -15,15 +15,9 @@ _SPEC.loader.exec_module(_MOD)
+ register_fastapi_routes = _MOD.register_fastapi_routes
+ mod_init = _MOD.mod_init
+ _dispatch_run = _MOD._dispatch_run
+-_resolve_mod_path = _MOD._resolve_mod_path
+-_load_employee = _MOD._load_employee
+-_error = _MOD._error
+ 
+ __all__ = [
+     "register_fastapi_routes",
+     "mod_init",
+     "_dispatch_run",
+-    "_resolve_mod_path",
+-    "_load_employee",
+-    "_error",
+ ]
+diff --git a/FHD/mods/_employees/top-architect/backend/pack_surface.py b/FHD/mods/_employees/top-architect/backend/pack_surface.py
+index 316f847368..f0e627f41a 100644
+--- a/FHD/mods/_employees/top-architect/backend/pack_surface.py
++++ b/FHD/mods/_employees/top-architect/backend/pack_surface.py
+@@ -1,121 +1,11 @@
+-"""HTTP routes for the deterministic top-architect employee pack."""
++"""Architecture reviews enter the authenticated employee execution kernel."""
+ 
+-from __future__ import annotations
++from pathlib import Path
+ 
+-import asyncio
+-import logging
+-import os
+-from typing import Any
++from app.mod_sdk.employee_pack_runtime import build_employee_pack
+ 
+-from fastapi import APIRouter
+-
+-logger = logging.getLogger(__name__)
+-
+-EMPLOYEE_ID = "top-architect"
+-EMPLOYEE_STEM = "top_architect"
+-EMPLOYEE_LABEL = "顶级架构师员工"
+-
+-
+-def _resolve_mod_path(mod_id: str) -> str | None:
+-    """Resolve the installed pack path, with a source-tree fallback."""
+-    try:
+-        from app.mod_sdk.mods_bus import resolve_mod_directory
+-
+-        mod_path = str(resolve_mod_directory(mod_id) or "")
+-        if mod_path and os.path.isdir(mod_path):
+-            return mod_path
+-    except (AttributeError, ImportError, OSError, RuntimeError, ValueError):
+-        logger.debug("mod directory resolver unavailable for %s", mod_id, exc_info=True)
+-
+-    source_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+-    return source_path if os.path.isdir(source_path) else None
+-
+-
+-def _load_employee(mod_id: str) -> Any | None:
+-    """Load the employee implementation through the host's isolated MOD loader."""
+-    from app.mod_sdk.mods_bus import import_mod_backend_py
+-
+-    mod_path = _resolve_mod_path(mod_id)
+-    if not mod_path:
+-        return None
+-    return import_mod_backend_py(
+-        mod_path,
+-        mod_id,
+-        f"employees/{EMPLOYEE_STEM}",
++globals().update(
++    build_employee_pack(
++        "top-architect", "top_architect", "顶级架构师员工", str(Path(__file__).parent)
+     )
+-
+-
+-def _error(message: str) -> dict[str, Any]:
+-    return {
+-        "success": False,
+-        "data": {
+-            "ok": False,
+-            "status": "failed",
+-            "summary": message,
+-            "error_code": "employee_unavailable",
+-            "read_only": True,
+-            "side_effects": [],
+-        },
+-        "error": message,
+-    }
+-
+-
+-async def _dispatch_run(
+-    mod_id: str,
+-    _employee_id: str,
+-    _stem: str,
+-    payload: dict[str, Any] | None,
+-) -> dict[str, Any]:
+-    """Execute the deterministic reviewer and preserve the pack API envelope."""
+-    try:
+-        module = _load_employee(mod_id)
+-        run = getattr(module, "run", None)
+-        if run is None:
+-            return _error("top-architect employee implementation is unavailable")
+-        result = run(payload or {}, {"mod_id": mod_id, "employee_id": EMPLOYEE_ID})
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        return {"success": True, "data": result}
+-    except (FileNotFoundError, ImportError, RuntimeError, TypeError, ValueError) as exc:
+-        logger.exception("top-architect employee run failed")
+-        return _error(f"top-architect employee run failed: {str(exc)[:300]}")
+-
+-
+-def register_fastapi_routes(app: Any, mod_id: str) -> None:
+-    """Register discovery, execution, and health routes for the employee."""
+-    router = APIRouter(prefix=f"/api/mod/{mod_id}", tags=[f"emp-pack-{mod_id}"])
+-
+-    @router.get("/employees")
+-    async def list_employees() -> dict[str, Any]:
+-        """List the deterministic architecture reviewer exposed by this pack."""
+-        return {
+-            "success": True,
+-            "data": [
+-                {
+-                    "id": EMPLOYEE_ID,
+-                    "label": EMPLOYEE_LABEL,
+-                    "summary": "确定性、只读的架构依赖边界审查",
+-                }
+-            ],
+-        }
+-
+-    @router.post(f"/employees/{EMPLOYEE_ID}/run")
+-    async def employee_run(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+-        """Run a read-only architecture dependency review."""
+-        return await _dispatch_run(mod_id, EMPLOYEE_ID, EMPLOYEE_STEM, payload)
+-
+-    @router.get(f"/employees/{EMPLOYEE_ID}/status")
+-    async def employee_status() -> dict[str, Any]:
+-        """Report whether the stateless reviewer is ready."""
+-        return {
+-            "success": True,
+-            "data": {"employee_id": EMPLOYEE_ID, "status": "ready", "read_only": True},
+-        }
+-
+-    app.include_router(router)
+-    logger.info("top-architect routes registered mod_id=%s", mod_id)
+-
+-
+-def mod_init() -> None:
+-    """Initialize the stateless employee pack."""
+-    logger.info("top-architect employee pack initialized")
++)
+diff --git a/FHD/tests/application/test_employee_run_tenant_isolation.py b/FHD/tests/application/test_employee_run_tenant_isolation.py
+index 39505bae32..ec460ca4b0 100644
+--- a/FHD/tests/application/test_employee_run_tenant_isolation.py
++++ b/FHD/tests/application/test_employee_run_tenant_isolation.py
+@@ -151,7 +151,7 @@ def test_http_execution_does_not_replay_or_accept_body_identity(
+                 },
+             },
+         )
+-    assert response.status_code == 200
++    assert response.status_code == (400 if expected == "failed" else 202)
+     assert response.json()["attempts"] == 1
+     assert execute.call_count == 1
+     assert execute.call_args.kwargs["user_id"] == 7
+diff --git a/FHD/tests/application/test_employee_runtime.py b/FHD/tests/application/test_employee_runtime.py
+index c752bc6f8f..649debb21d 100644
+--- a/FHD/tests/application/test_employee_runtime.py
++++ b/FHD/tests/application/test_employee_runtime.py
+@@ -102,10 +102,10 @@ def test_loader_falls_back_to_bundled_employee_pack(employee_mods_root, tmp_path
+ @pytest.mark.parametrize(
+     ("receipt_kind", "changed", "use_bundle", "trusted"),
+     [
+-        (None, False, True, True),
++        (None, False, True, False),
+         (None, True, False, False),
+-        ("valid", False, False, True),
+-        ("valid", True, False, True),
++        ("valid", False, False, False),
++        ("valid", True, False, False),
+         ("tampered", True, False, False),
+         ("invalid", False, False, False),
+     ],
+@@ -133,7 +133,7 @@ def test_employee_override_trust(
+ 
+     user_pack = _write_csv_read_pack(employee_mods_root)
+     bundled_mods = tmp_path / "bundled-mods"
+-    bundled_pack = _write_csv_read_pack(bundled_mods)
++    _write_csv_read_pack(bundled_mods)
+     monkeypatch.setattr(edition_policy, "bundled_mods_dir", lambda: bundled_mods)
+     before = compute_directory_hash(str(user_pack))
+     if changed:
+@@ -154,26 +154,9 @@ def test_employee_override_trust(
+         )
+     pack = load_employee_pack_from_disk("csv-full-read-employee")
+     selected = Path(pack["pack_dir"])
+-    assert selected == (bundled_pack if use_bundle else user_pack).resolve()
++    assert selected == user_pack.resolve()
+     assert verify_direct_python_pack_trust(selected)[0] is trusted
+     assert user_pack.is_dir()
+-    from app.application.employee_runtime.executor import execute_employee_task_local
+-
+-    csv_file = tmp_path / "sample.csv"
+-    csv_file.write_text("a,b\n1,2\n", encoding="utf-8")
+-    result = execute_employee_task_local(
+-        "csv-full-read-employee",
+-        "读取 CSV",
+-        {"file_path": str(csv_file)},
+-        workspace_root=str(tmp_path),
+-        runtime_context=trusted_actor(mod_id="csv-full-read-employee").context,
+-    )
+-    assert result.get("success") is trusted
+-    if trusted:
+-        output = Path(result["result"]["outputs"][0]["output_path"])
+-        assert json.loads(output.read_text(encoding="utf-8"))["rows"] == [{"a": "1", "b": "2"}]
+-    else:
+-        assert result["result"]["outputs"][0]["error_code"] == "employee_python_pack_untrusted"
+ 
+ 
+ def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):
+@@ -206,9 +189,9 @@ def test_untrusted_writable_employee_python_is_blocked(employee_mods_root, tmp_p
+         runtime_context=trusted_actor(mod_id=pack_id).context,
+     )
+     assert result.get("success") is False
+-    outputs = result.get("result", {}).get("outputs") or []
+-    assert outputs and outputs[0].get("ok") is False
+-    assert outputs[0].get("error_code") == "employee_python_pack_untrusted"
++    assert result["error_code"] == "employee_execution_prepare_failed"
++    assert "employee_python_pack_untrusted" in result["message"]
++    assert not list(tmp_path.rglob("data.json"))
+ 
+ 
+ @pytest.mark.parametrize("conversation", [False, True])
+@@ -225,7 +208,10 @@ def test_employee_shared_run_deduplicates_task_without_claiming_unverified_busin
+     from app.application.employee_runtime.agent import EmployeeAgent
+ 
+     pack_id = "csv-full-read-employee"
+-    _write_csv_read_pack(employee_mods_root, pack_id)
++    pack = _write_csv_read_pack(employee_mods_root, pack_id)
++    manifest = json.loads((pack / "manifest.json").read_text())
++    manifest["employee_config_v2"]["actions"]["handlers"] = ["echo"]
++    (pack / "manifest.json").write_text(json.dumps(manifest))
+     actor = trusted_actor(mod_id=pack_id)
+     context = {**actor.context, "task_id": "persisted-employee-task"}
+     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+@@ -272,7 +258,10 @@ def test_concurrent_employee_requests_enter_body_once_after_database_claim(
+     from app.application.employee_runtime.agent import EmployeeAgent
+ 
+     pack_id = "csv-full-read-employee"
+-    _write_csv_read_pack(employee_mods_root, pack_id)
++    pack = _write_csv_read_pack(employee_mods_root, pack_id)
++    manifest = json.loads((pack / "manifest.json").read_text())
++    manifest["employee_config_v2"]["actions"]["handlers"] = ["echo"]
++    (pack / "manifest.json").write_text(json.dumps(manifest))
+     actor = trusted_actor(mod_id=pack_id)
+     repository = SQLAlchemyAgentRunRepository(session_factory=actor.factory)
+     service = TraceRunService(
+diff --git a/FHD/tests/test_application/test_employee_python_governed.py b/FHD/tests/test_application/test_employee_python_governed.py
+new file mode 100644
+index 0000000000..1b665c2814
+--- /dev/null
++++ b/FHD/tests/test_application/test_employee_python_governed.py
+@@ -0,0 +1,513 @@
++"""Real signed-pack admission, durable approval, spawn and owner-scoped artifacts."""
++
++import json
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++from app.fastapi_routes import platform_shell_routes, tools_execute
++from tests.fixtures.backend_ci_isolation import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++from tests.test_infrastructure.test_employee_signed_archive import (
++    signed_employee_pack as signed_employee_pack,
++)
++
++
++@pytest.fixture
++def employee_http(tmp_path, monkeypatch, signed_employee_pack, trusted_actor, reviewed_agent_http):
++    from app.application.tools.workflow import invalidate_workflow_tool_registry
++    from app.mod_sdk.employee_pack_runtime import build_employee_pack
++
++    pack = signed_employee_pack()
++    actor = trusted_actor(mod_id=pack.pack_id)
++    workspace = tmp_path / "workspace"
++    workspace.mkdir()
++    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
++    monkeypatch.setenv(
++        "XCAGI_MOD_DATABASE_URLS", json.dumps({pack.pack_id: str(actor.factory.kw["bind"].url)})
++    )
++    invalidate_workflow_tool_registry()
++    http = reviewed_agent_http(actor, platform_shell_routes.router, tools_execute.router)
++    build_employee_pack(
++        pack.pack_id, "csv_full_read_employee", "CSV", str(pack.pack_dir / "backend")
++    )["register_fastapi_routes"](http.client.app, pack.pack_id)
++
++    def upload(owner=actor, content=b"a,b\n1,2\n"):
++        result = http.client.post(
++            "/api/platform-shell/chat-office-file-upload",
++            headers=owner.headers,
++            files={"file": ("sample.csv", content, "text/csv")},
++        )
++        assert result.status_code == 200, result.text
++        return result.json()["data"]
++
++    return SimpleNamespace(pack=pack, actor=actor, http=http, upload=upload, workspace=workspace)
++
++
++def test_signed_employee_http_uses_fresh_grant_sql_queue_spawn_and_owner_readback(employee_http):
++    case = employee_http
++    uploaded = case.upload()
++    result = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": uploaded["file_path"], "user_request": "读取 CSV"},
++    )
++    assert result.response.status_code == 202, result.response.text
++    assert result.run.status == "completed", json.dumps(result.output, ensure_ascii=False)
++    evidence = result.output["business_verification"]
++    assert evidence["verified"] is True
++    assert evidence["tenant_id"] == str(case.actor.tenant_id)
++    assert evidence["actor_id"] == str(case.actor.user_id)
++    assert evidence["mod_id"] == case.pack.pack_id
++    assert len(result.run.steps) == 1
++    assert {"step.waiting_user", "step.approved"} <= {
++        event.event_type for event in result.run.events
++    }
++    actual = Path(evidence["artifacts"][0]["path"])
++    assert actual.is_relative_to(case.workspace / "mod-workspaces")
++    data = json.loads(actual.read_text())
++    assert data["rows"] == [{"a": "1", "b": "2"}]
++
++
++def _finish_review(case, run_id, *, before_dispatch=None):
++    from app.application.agent_orchestrator import AgentOrchestrator
++
++    review = case.http.client.get(f"/api/agent/runs/{run_id}")
++    assert review.status_code == 200, review.text
++    token = review.json()["approval"]["grant"]
++    if before_dispatch:
++        before_dispatch()
++    continued = case.http.client.post(
++        f"/api/agent/runs/{run_id}/continue", json={"approval_grant": token}
++    )
++    assert continued.status_code == 202, continued.text
++    claimed = case.http.queue.claim("employee-governed-test", lease_seconds=60)
++    assert claimed is not None and claimed.run_id == run_id
++    run = AgentOrchestrator().execute_dispatched_run(run_id)
++    case.http.queue.finish(
++        run_id, "employee-governed-test", "completed" if run.status == "completed" else "blocked"
++    )
++    return run
++
++
++def _start(case, uploaded=None):
++    uploaded = uploaded or case.upload()
++    response = case.http.client.post(
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": uploaded["file_path"], "user_request": "读取 CSV"},
++    )
++    assert response.status_code == 202, response.text
++    run = case.http.repository.get(response.json()["run_id"])
++    assert run.status == "waiting_user"
++    assert not any(case.workspace.rglob("data.json"))
++    return run
++
++
++def test_model_erp_employee_uses_original_snapshot_and_exact_receipt_replay(employee_http):
++    from app.application.agent_orchestrator.business_harness import ensure_business_harness_context
++    from app.application.agent_orchestrator.chat_trace import _run_service
++    from app.application.tools import execute_workflow_tool
++
++    case = employee_http
++    uploaded = case.upload()
++    context = ensure_business_harness_context(case.actor.context)
++    service = _run_service()
++    run, claimed = service.claim_employee_run(
++        message="读取CSV",
++        runtime_context=context,
++        employee_id=case.pack.pack_id,
++        fingerprint="erp-regression",
++        response_kind="business_action",
++    )
++    assert claimed
++    args = {
++        "tool_id": "employee",
++        "action": "execute",
++        "params": {
++            "employee_id": case.pack.pack_id,
++            "task": "读取 CSV",
++            "input": {"file_path": uploaded["file_path"]},
++        },
++    }
++    callbacks = []
++
++    def dispatch(ctx):
++        callbacks.append(ctx)
++        return execute_workflow_tool("execute_erp_capability", args, runtime_context=ctx)
++
++    output = service.dispatch_tool(
++        run.run_id,
++        employee_id=case.pack.pack_id,
++        call_id="model-call-1",
++        tool_name="execute_erp_capability",
++        params=args,
++        runtime_context=context,
++        dispatch=dispatch,
++    )
++    assert output["success"] is False
++    pending = case.http.repository.get(run.run_id)
++    assert pending.status == "waiting_user", output
++    assert len(pending.steps) == len(pending.tool_calls) == 1
++    saved = pending.steps[0]
++    assert saved.tool_id == case.pack.pack_id
++    assert saved.params["execution_snapshot"]["body"]["params_sha256"]
++    original_params = json.loads(json.dumps(saved.params))
++    completed = _finish_review(case, run.run_id)
++    assert completed.status == "completed", completed.steps[0].output
++    assert completed.steps[0].params == original_params
++    assert completed.steps[0].output["business_verification"]["verified"] is True
++    artifact = Path(completed.steps[0].output["business_verification"]["artifacts"][0]["path"])
++    before = artifact.stat().st_mtime_ns
++    # Replaying the original model call reads the exact receipt, even if current input changed.
++    (case.workspace / uploaded["file_path"]).write_bytes(b"a,b\n9,9\n")
++    replay = service.dispatch_tool(
++        run.run_id,
++        employee_id=case.pack.pack_id,
++        call_id="model-call-1",
++        tool_name="execute_erp_capability",
++        params=args,
++        runtime_context=context,
++        dispatch=dispatch,
++    )
++    assert replay == completed.tool_calls[0].output
++    assert len(callbacks) == 1
++    assert artifact.stat().st_mtime_ns == before
++
++
++@pytest.mark.parametrize("change", ["input", "code", "snapshot", "params", "output"])
++def test_reviewed_snapshot_changes_never_execute_employee_python(employee_http, change):
++    case = employee_http
++    uploaded = case.upload()
++    run = _start(case, uploaded)
++    step = run.steps[0]
++
++    def change_after_review():
++        if change == "input":
++            (case.workspace / uploaded["file_path"]).write_bytes(b"a,b\n9,9\n")
++        elif change == "code":
++            worker = next((case.pack.pack_dir / "backend" / "employees").glob("*.py"))
++            worker.write_text(worker.read_text() + "\n# changed after review\n")
++        else:
++            if change == "snapshot":
++                step.params["execution_snapshot"]["body"]["code_sha256"] = "0" * 64
++            elif change == "params":
++                step.params["user_request"] = "未经审阅替换"
++            else:
++                step.params["output_path"] = str(case.workspace / "unowned.json")
++            case.http.repository.save(run)
++
++    review = case.http.client.get(f"/api/agent/runs/{run.run_id}")
++    assert review.status_code == 200
++    if change in {"snapshot", "params", "output"}:
++        change_after_review()
++        response = case.http.client.post(
++            f"/api/agent/runs/{run.run_id}/continue",
++            json={"approval_grant": review.json()["approval"]["grant"]},
++        )
++        assert response.status_code == 403, response.text
++    else:
++        current = _finish_review(case, run.run_id, before_dispatch=change_after_review)
++        assert current.status != "completed"
++        assert current.steps[0].output["success"] is False
++    assert not any(case.workspace.rglob("data.json"))
++
++
++@pytest.mark.parametrize("scope", ["actor", "tenant", "mod"])
++def test_uploaded_file_cannot_cross_owner_scope(employee_http, trusted_actor, scope):
++    case = employee_http
++    if scope == "mod":
++        other = trusted_actor(
++            user_id=case.actor.user_id,
++            tenant_id=case.actor.tenant_id,
++            mod_id="xcagi-planner-excel-tools",
++        )
++    else:
++        other = trusted_actor(
++            tenant_id=case.actor.tenant_id if scope == "actor" else 99, mod_id=case.pack.pack_id
++        )
++    uploaded = case.upload(owner=other)
++    response = case.http.client.post(
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": uploaded["file_path"]},
++    )
++    assert response.status_code == 400, response.text
++    assert "不属于当前账号" in response.json()["detail"]
++    assert not any(case.workspace.rglob("data.json"))
++
++
++def test_generated_router_and_upload_require_actual_session(employee_http):
++    case = employee_http
++    case.http.client.headers.clear()
++    for endpoint, kwargs in [
++        (
++            f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++            {"json": {"file_path": "fake.csv", "approved": True}},
++        ),
++        (
++            "/api/platform-shell/chat-office-file-upload",
++            {"files": {"file": ("sample.csv", b"a\n1\n", "text/csv")}},
++        ),
++    ]:
++        response = case.http.client.post(
++            endpoint,
++            headers={
++                "X-User-ID": str(case.actor.user_id),
++                "X-Tenant-ID": str(case.actor.tenant_id),
++            },
++            **kwargs,
++        )
++        assert response.status_code == 401, response.text
++    assert not any(case.workspace.rglob("sample.csv"))
++
++
++def test_tools_http_generic_employee_alias_is_one_prepared_owner_action(employee_http):
++    case = employee_http
++    uploaded = case.upload()
++    result = case.http.request(
++        "POST",
++        "/api/tools/execute",
++        json={
++            "tool_id": "employee",
++            "action": "execute",
++            "params": {
++                "employee_id": case.pack.pack_id,
++                "task": "读取 CSV",
++                "input": {"file_path": uploaded["file_path"]},
++            },
++        },
++    )
++    assert result.response.status_code == 202, result.response.text
++    assert result.run.status == "completed", result.output
++    assert len(result.run.steps) == len(result.run.tool_calls) == 1
++    assert result.run.steps[0].tool_id == case.pack.pack_id
++    assert result.output["business_verification"]["verified"] is True
++
++
++def test_public_employee_runtime_waits_then_replays_original_completed_receipt(employee_http):
++    from app.application.employee_runtime.executor import execute_employee_task_local
++
++    case = employee_http
++    uploaded = case.upload()
++    context = {**case.actor.context, "task_id": "direct-runtime-task"}
++    params = {"file_path": uploaded["file_path"]}
++    pending = execute_employee_task_local(
++        case.pack.pack_id, "读取 CSV", params, runtime_context=context
++    )
++    assert pending["success"] is False
++    assert pending["outcome"] == "waiting_approval"
++    assert not any(case.workspace.rglob("data.json"))
++    run = _finish_review(case, pending["run_id"])
++    assert run.status == "completed", run.steps[0].output
++    path = Path(run.steps[0].output["business_verification"]["artifacts"][0]["path"])
++    before = path.stat().st_mtime_ns
++    replay = execute_employee_task_local(
++        case.pack.pack_id, "读取 CSV", params, runtime_context=context
++    )
++    assert replay["success"] is True, replay
++    assert replay["run_id"] == run.run_id
++    assert path.stat().st_mtime_ns == before
++
++
++def test_two_actual_tenants_read_only_their_uploaded_bytes(employee_http, trusted_actor):
++    case = employee_http
++    other = trusted_actor(tenant_id=99, mod_id=case.pack.pack_id)
++    outputs = []
++    for owner, value in [(case.actor, "first"), (other, "second")]:
++        upload = case.upload(owner=owner, content=f"owner\n{value}\n".encode())
++        result = case.http.request(
++            "POST",
++            f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++            headers=owner.headers,
++            json={"file_path": upload["file_path"]},
++        )
++        assert result.run.status == "completed", result.output
++        proof = result.output["business_verification"]
++        assert proof["verified"] is True and proof["tenant_id"] == str(owner.tenant_id)
++        path = Path(proof["artifacts"][0]["path"])
++        assert json.loads(path.read_text())["rows"] == [{"owner": value}]
++        outputs.append(path)
++    assert outputs[0] != outputs[1]
++
++
++def test_same_task_two_calls_keep_distinct_reviewed_artifacts(employee_http):
++    from app.application.agent_orchestrator import AgentOrchestrator
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++
++    case = employee_http
++    inputs = [case.upload(content=f"value\n{value}\n".encode()) for value in ("one", "two")]
++    context = {**case.actor.context, "task_id": "two-conversions-one-task"}
++    nodes = []
++    for i, upload in enumerate(inputs):
++        tool, action, params = prepare_employee_tool_call(
++            case.pack.pack_id,
++            "execute",
++            {"file_path": upload["file_path"], "user_request": "读取CSV"},
++            {**context, "call_id": f"model-call-{i}"},
++        )
++        nodes.append(
++            WorkflowNode(
++                node_id=f"model-call-{i}",
++                tool_id=tool,
++                action=action,
++                params=params,
++                risk="high",
++                idempotent=False,
++            )
++        )
++    run = AgentOrchestrator().start_run_from_plan(
++        user_id=str(case.actor.user_id),
++        message="读取两份CSV",
++        plan=PlanGraph(
++            plan_id="two-files",
++            intent="convert",
++            todo_steps=["one", "two"],
++            nodes=nodes,
++            risk_level="high",
++        ),
++        runtime_context=context,
++    )
++    assert run.status == "waiting_user"
++    run = _finish_review(case, run.run_id)
++    assert run.status == "waiting_user"
++    first = Path(run.steps[0].output["business_verification"]["artifacts"][0]["path"])
++    original = first.read_bytes()
++    run = _finish_review(case, run.run_id)
++    assert run.status == "completed", [step.output for step in run.steps]
++    second = Path(run.steps[1].output["business_verification"]["artifacts"][0]["path"])
++    assert first != second and first.read_bytes() == original
++    assert json.loads(original)["rows"] == [{"value": "one"}]
++    assert json.loads(second.read_text())["rows"] == [{"value": "two"}]
++
++
++@pytest.mark.parametrize("fault", ["missing_file", "wrong_target", "old_unchanged_output"])
++def test_independent_employee_readback_cannot_confirm_wrong_or_old_artifact(employee_http, fault):
++    from app.application.agent_orchestrator.business_action_verification import verify_action_result
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++    from app.application.employee_runtime.loader import prepare_employee_tool_call
++
++    case = employee_http
++    result = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": case.upload()["file_path"]},
++    )
++    assert result.run.status == "completed", result.output
++    step = result.run.steps[0]
++    context = {**result.run.metadata["runtime_context"], **result.run.metadata["task_context"]}
++    path = Path(result.output["business_verification"]["artifacts"][0]["path"])
++    output = json.loads(json.dumps(result.output))
++    if fault == "missing_file":
++        path.unlink()
++    elif fault == "wrong_target":
++        output["output"]["result"]["outputs"][0]["output"]["items"][0]["output_path"] = str(
++            case.workspace / "other.json"
++        )
++    else:
++        raw = {key: value for key, value in step.params.items() if key != "execution_snapshot"}
++        raw["output_path"] = str(path)
++        _, _, prepared = prepare_employee_tool_call(
++            case.pack.pack_id,
++            "execute",
++            raw,
++            {**case.actor.context, "task_id": "new-action-with-old-output"},
++        )
++        step.params, context = (
++            prepared,
++            {**case.actor.context, "task_id": "new-action-with-old-output"},
++        )
++    checked, verified = verify_action_result(
++        get_tool_action_spec(case.pack.pack_id, "execute"),
++        step.params,
++        output,
++        runtime_context=context,
++    )
++    assert verified is False
++    assert checked["business_verification"]["verified"] is False
++
++
++@pytest.mark.parametrize("boundary", ["manifest_blocked", "prohibited_employee_execute"])
++def test_formal_grant_never_overrides_employee_hard_risk_boundaries(
++    employee_http, monkeypatch, tmp_path, boundary
++):
++    from app.application.tools.workflow import invalidate_workflow_tool_registry
++    from app.infrastructure.mods.package import ModPackage
++
++    case = employee_http
++    if boundary == "manifest_blocked":
++        path = case.pack.source_dir / "manifest.json"
++        manifest = json.loads(path.read_text())
++        manifest["version"] = "2.0.0"
++        manifest["employee_config_v2"]["identity"]["version"] = "2.0.0"
++        manifest["employee_config_v2"]["risk_level"] = "blocked"
++        path.write_text(json.dumps(manifest))
++        package = ModPackage(str(case.pack.source_dir)).create_package(
++            str(tmp_path / "blocked-pack"),
++            include_signature=True,
++            private_key=str(case.pack.private_key_path),
++        )
++        with monkeypatch.context() as installation:
++            installation.setattr(
++                "app.mod_sdk.employee_runtime.refresh_employee_pack_runtime", lambda _pack_id: None
++            )
++            ok, message = case.pack.registry.install_from_package(package, verify_signature=True)
++        assert ok, message
++        invalidate_workflow_tool_registry()
++    else:
++        import yaml
++
++        boundaries = Path(__file__).parents[2] / "config/autonomy_boundaries.yaml"
++        configured = yaml.safe_load(boundaries.read_text())
++        configured["prohibited_actions"].append(
++            {"action": "employee_execute", "reason": "isolated hard prohibition"}
++        )
++        path = tmp_path / "boundaries.yaml"
++        path.write_text(yaml.safe_dump(configured))
++        monkeypatch.setenv("XCAGI_AUTONOMY_BOUNDARIES_PATH", str(path))
++    run = _start(case)
++    completed = _finish_review(case, run.run_id)
++    assert any(event.event_type == "step.approved" for event in completed.events)
++    assert completed.status != "completed"
++    assert completed.steps[0].output["success"] is False
++    assert not any(case.workspace.rglob("data.json"))
++
++
++def test_signed_employee_interactive_text_needs_no_business_grant_or_python_execution(
++    employee_http,
++):
++    from app.application.employee_runtime.executor import execute_employee_task_local
++
++    case = employee_http
++    reply = execute_employee_task_local(
++        case.pack.pack_id,
++        "你好",
++        {"invoke_mode": "interactive_chat", "source": "employee_im"},
++        runtime_context=case.actor.context,
++    )
++    assert reply["success"] is True, reply
++    assert reply["response_kind"] == "conversation"
++    assert reply["business_completed"] is False
++    assert reply["result"]["outputs"][0]["handler"] == "interactive_chat"
++    run = case.http.repository.get(reply["run_id"])
++    assert run.status == "completed" and not run.steps and not run.tool_calls
++    assert not any(case.workspace.rglob("data.json"))
++
++
++def test_conflicting_generic_employee_aliases_are_rejected_before_admission(employee_http):
++    case = employee_http
++    response = case.http.client.post(
++        "/api/tools/execute",
++        json={
++            "tool_id": "employee",
++            "action": "execute",
++            "params": {
++                "employee_id": case.pack.pack_id,
++                "pack_id": "unknown-pack",
++                "input": {"file_path": case.upload()["file_path"]},
++            },
++        },
++    )
++    assert response.status_code == 400
++    assert "别名身份冲突" in response.text
++    assert not any(case.workspace.rglob("data.json"))
+diff --git a/FHD/tests/test_application/test_employee_runtime_executor_deep2.py b/FHD/tests/test_application/test_employee_runtime_executor_deep2.py
+index 64d69bb61b..638e578e34 100644
+--- a/FHD/tests/test_application/test_employee_runtime_executor_deep2.py
++++ b/FHD/tests/test_application/test_employee_runtime_executor_deep2.py
+@@ -678,23 +678,24 @@ class TestActionsFhdDeep:
+             assert call_kwargs["gate"] == gate
+             assert call_kwargs["max_iterations"] == 5
+ 
+-    def test_direct_python_with_runtime(self, tmp_path) -> None:
++    def test_direct_python_with_runtime_still_requires_kernel(self, tmp_path) -> None:
+         employees = tmp_path / "backend" / "employees"
+         employees.mkdir(parents=True)
+-        (employees / "worker.py").write_text("def run(payload, ctx):\n    return {'ok': True}\n")
+-        with patch(
+-            "app.application.employee_runtime.executor.verify_direct_python_pack_trust",
+-            return_value=(True, "test"),
+-        ):
+-            out = exec_mod._actions_fhd(
+-                {"actions": {"handlers": ["direct_python"]}},
+-                {"input": {}},
+-                "task",
+-                "emp-1",
+-                tmp_path,
+-                None,
+-            )
+-        assert out["outputs"][0]["ok"] is True
++        marker = tmp_path / "must-not-execute"
++        (employees / "worker.py").write_text(
++            f"from pathlib import Path\ndef run(payload, ctx):\n    Path({str(marker)!r}).touch()\n    return {{'ok': True}}\n"
++        )
++        out = exec_mod._actions_fhd(
++            {"actions": {"handlers": ["direct_python"]}},
++            {"input": {}},
++            "task",
++            "emp-1",
++            tmp_path,
++            None,
++        )
++        assert out["error_code"] == "employee_tool_control_required"
++        assert out["outputs"] == []
++        assert not marker.exists()
+ 
+     def test_summary_includes_count(self) -> None:
+         out = exec_mod._actions_fhd(
+diff --git a/FHD/tests/test_application/test_employee_runtime_executor_ext2.py b/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
+index 2f8f37f3a6..e8d939270a 100644
+--- a/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
++++ b/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
+@@ -261,7 +261,7 @@ class TestActionVendorConvert:
+         assert out["error"] == "转换失败，请查看服务日志"
+         assert "boom" not in out["error"]
+ 
+-    def test_convert_ignores_explicit_output_path(self, tmp_path, monkeypatch):
++    def test_convert_honors_controlled_explicit_output_path(self, tmp_path, monkeypatch):
+         monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+         backend = tmp_path / "backend" / "vendor" / "csv"
+         backend.mkdir(parents=True)
+@@ -276,8 +276,7 @@ class TestActionVendorConvert:
+             tmp_path, "emp-1", {"file_path": str(src), "output_path": str(out_path)}, None
+         )
+         assert out["ok"] is True
+-        assert out["output_path"] == str(tmp_path / "outputs" / "data.json")
+-        assert out["output_path"] != str(out_path)
++        assert out["output_path"] == str(out_path)
+ 
+     def test_rejects_workspace_outside_the_trusted_sandbox(self, tmp_path, monkeypatch):
+         monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+@@ -475,7 +474,8 @@ class TestActionsFhd:
+             tmp_path,
+             None,
+         )
+-        assert out["outputs"][0]["ok"] is False
++        assert out["error_code"] == "employee_tool_control_required"
++        assert out["outputs"] == []
+ 
+     def test_llm_md_handler(self):
+         out = exec_mod._actions_fhd(
+diff --git a/FHD/tests/test_employee_planner_bridge.py b/FHD/tests/test_employee_planner_bridge.py
+index ac527493d3..36e099ef50 100644
+--- a/FHD/tests/test_employee_planner_bridge.py
++++ b/FHD/tests/test_employee_planner_bridge.py
+@@ -8,7 +8,11 @@ from pathlib import Path
+ 
+ import pytest
+ 
++from tests.fixtures.backend_ci_isolation import approved_tool_context as approved_tool_context
+ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++from tests.test_infrastructure.test_employee_signed_archive import (
++    signed_employee_pack as signed_employee_pack,
++)
+ 
+ 
+ def _write_csv_read_pack(root: Path, pack_id: str = "csv-full-read-employee") -> Path:
+@@ -60,14 +64,6 @@ def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx
+ """,
+         encoding="utf-8",
+     )
+-    from app.infrastructure.mods.package import compute_directory_hash
+-
+-    receipt = {
+-        "schema_version": 1,
+-        "signature_verified": True,
+-        "content_sha256": compute_directory_hash(str(pack_dir)),
+-    }
+-    (pack_dir / ".xcagi-install-receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+     return pack_dir
+ 
+ 
+@@ -106,65 +102,60 @@ def test_planner_registry_includes_installed_employee_pack(employee_mods_root):
+     assert pack_id in names
+ 
+ 
+-def test_execute_employee_csv_read_tool(employee_mods_root, tmp_path, monkeypatch, trusted_actor):
+-    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+-    pack_id = "csv-full-read-employee"
+-    _write_csv_read_pack(employee_mods_root, pack_id)
+-    csv_file = tmp_path / "sample.csv"
+-    csv_file.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
+-
+-    from app.mod_sdk.employee_tool_registry import (
+-        execute_employee_tool,
+-        invalidate_employee_tool_cache,
++def test_execute_employee_csv_read_tool(
++    signed_employee_pack, tmp_path, monkeypatch, trusted_actor, approved_tool_context
++):
++    from app.application.agent_orchestrator.run_models import AgentStep
++    from app.application.employee_runtime.loader import (
++        employee_owner_workspace,
++        prepare_employee_tool_call,
+     )
++    from app.application.tools.workflow import invalidate_workflow_tool_registry
++    from app.mod_sdk.employee_tool_registry import execute_employee_tool
+ 
+-    invalidate_employee_tool_cache()
+-    raw = execute_employee_tool(
+-        pack_id,
+-        {"file_path": str(csv_file)},
+-        str(tmp_path),
+-        runtime_context=trusted_actor(mod_id=pack_id).context,
++    pack = signed_employee_pack()
++    actor = trusted_actor(mod_id=pack.pack_id)
++    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
++    monkeypatch.setenv(
++        "XCAGI_MOD_DATABASE_URLS", json.dumps({pack.pack_id: str(actor.factory.kw["bind"].url)})
+     )
+-    data = json.loads(raw)
+-    assert data.get("success") is True
++    invalidate_workflow_tool_registry()
++    csv_file = employee_owner_workspace(actor.context) / "sample.csv"
++    csv_file.parent.mkdir(parents=True, exist_ok=True)
++    csv_file.write_text("a,b\n1,2\n3,4\n")
++    context = dict(actor.context)
++    _, _, params = prepare_employee_tool_call(
++        pack.pack_id, "execute", {"file_path": str(csv_file)}, context
++    )
++    actor.context.update(context)
++    approved = approved_tool_context(
++        actor, AgentStep("read", pack.pack_id, "execute", params=params)
++    )
++    data = json.loads(execute_employee_tool(pack.pack_id, params, runtime_context=approved))
++    assert data["success"] is True, data
++    assert data["business_verification"]["verified"] is True
++    output = Path(data["business_verification"]["artifacts"][0]["path"])
++    assert json.loads(output.read_text())["rows"] == [{"a": "1", "b": "2"}, {"a": "3", "b": "4"}]
+ 
+ 
+-def test_office_employee_never_reports_success_without_artifact(employee_mods_root, monkeypatch):
+-    """A direct Python return is insufficient when the promised output is absent."""
+-    pack_id = "csv-full-read-employee"
+-    _write_csv_read_pack(employee_mods_root, pack_id)
++def test_office_employee_never_reports_success_without_artifact(employee_mods_root):
++    from app.mod_sdk.employee_tool_registry import _verify_office_artifact
+ 
+-    from app.application.employee_runtime import executor
+-    from app.mod_sdk import employee_tool_registry as registry
+-    from app.mod_sdk.employee_pack_compat import list_office_pack_catalog
+-
+-    assert pack_id in list_office_pack_catalog()["pack_ids"]
+     missing_output = employee_mods_root / "missing-output.csv"
+     assert not missing_output.exists()
+-
+-    registry.invalidate_employee_tool_cache()
+-    monkeypatch.setattr(
+-        executor,
+-        "execute_employee_task_local",
+-        lambda *_args, **_kwargs: {
++    evidence = _verify_office_artifact(
++        "csv-full-read-employee",
++        {
+             "success": True,
+             "result": {
+                 "outputs": [
+-                    {
+-                        "handler": "direct_python",
+-                        "ok": True,
+-                        "output_path": str(missing_output),
+-                    }
++                    {"handler": "direct_python", "ok": True, "output_path": str(missing_output)}
+                 ]
+             },
+         },
+     )
+-
+-    data = json.loads(registry.execute_employee_tool(pack_id, {"file_path": "x.csv"}))
+-
+-    assert data["success"] is False
+-    assert data["artifact_postcondition"]["verified"] is False
+-    assert "输出文件" in data["error"]
++    assert evidence["verified"] is False
++    assert "输出文件" in evidence["reason"]
+ 
+ 
+ def test_get_planner_chat_tool_registry_merges_employee_tools(employee_mods_root):
+diff --git a/FHD/tests/test_infrastructure/test_employee_signed_archive.py b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+new file mode 100644
+index 0000000000..fb1a38b2f6
+--- /dev/null
++++ b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+@@ -0,0 +1,321 @@
++"""Employee code admission uses retained, cryptographically signed archives."""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import shutil
++import subprocess
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++from cryptography.hazmat.primitives import serialization
++from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
++from fastapi import FastAPI
++
++from app.application.employee_runtime.loader import verify_direct_python_pack_trust
++from app.infrastructure.mods import install_receipts as receipts
++from app.infrastructure.mods import mod_manager
++from app.infrastructure.mods.employee_registry import EmployeeRegistry
++from app.infrastructure.mods.package import ModPackage, compute_directory_hash
++
++
++@pytest.fixture
++def signed_employee_pack(tmp_path, monkeypatch):
++    """Factory installing the real CSV worker; the PEM environment survives spawn.
++
++    Call ``factory(version="1.0.0", pack_id="csv-full-read-employee", ... )``.
++    The result exposes mods_root, employee_root, pack_dir, source_dir, package_path,
++    private_key_path, public_key_path, registry, manifest and refresh_calls.
++    ``entry_source`` replaces only the HTTP entry, for import-boundary probes.
++    ``install=False`` leaves a package ready for a caller-controlled installation.
++    """
++    key = Ed25519PrivateKey.generate()
++    private_key = tmp_path / "employee-test-private.pem"
++    private_key.write_bytes(
++        key.private_bytes(
++            serialization.Encoding.PEM,
++            serialization.PrivateFormat.PKCS8,
++            serialization.NoEncryption(),
++        )
++    )
++    public_key = tmp_path / "employee-test-public.pem"
++    public_key.write_bytes(
++        key.public_key().public_bytes(
++            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
++        )
++    )
++    monkeypatch.setenv("XCAGI_MOD_PUBLIC_KEY", str(public_key))
++    monkeypatch.delenv("XCAGI_REQUIRE_SIGNED_MODS", raising=False)
++    monkeypatch.delenv("XCAGI_DISABLE_MODS", raising=False)
++    mods_root = tmp_path / "mods"
++    mods_root.mkdir()
++    monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
++    monkeypatch.setattr(mod_manager, "_employee_pack_routes_registered", set())
++    source_pack = Path(__file__).resolve().parents[2] / "mods/_employees/csv-full-read-employee"
++    sequence = 0
++
++    def factory(
++        version="1.0.0",
++        *,
++        pack_id="csv-full-read-employee",
++        entry_source=None,
++        signed=True,
++        install=True,
++    ):
++        nonlocal sequence
++        sequence += 1
++        source = tmp_path / f"source-{sequence}"
++        shutil.copytree(source_pack, source, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
++        manifest = json.loads((source / "manifest.json").read_text())
++        manifest.update(id=pack_id, version=version)
++        manifest["employee"]["id"] = pack_id
++        manifest["employee_config_v2"]["identity"].update(id=pack_id, version=version)
++        if entry_source is not None:
++            manifest["backend"]["entry"] = "entry"
++            (source / "backend/entry.py").write_text(entry_source)
++        (source / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False))
++        package = Path(
++            ModPackage(str(source)).create_package(
++                str(tmp_path / "packages"),
++                include_signature=signed,
++                private_key=str(private_key) if signed else None,
++            )
++        )
++        registry = EmployeeRegistry(str(mods_root))
++        refresh_calls = []
++        result = None
++        if install:
++            # Installation is real; importing application-wide routes is a separate probe.
++            with monkeypatch.context() as installation:
++                installation.setattr(
++                    "app.mod_sdk.employee_runtime.refresh_employee_pack_runtime",
++                    refresh_calls.append,
++                )
++                result = registry.install_from_package(str(package), verify_signature=signed)
++            assert result[0], result[1]
++        return SimpleNamespace(
++            mods_root=mods_root,
++            employee_root=mods_root / "_employees",
++            pack_dir=mods_root / "_employees" / pack_id,
++            source_dir=source,
++            pack_id=pack_id,
++            package_path=package,
++            private_key_path=private_key,
++            public_key_path=public_key,
++            registry=registry,
++            manifest=manifest,
++            refresh_calls=refresh_calls,
++            result=result,
++        )
++
++    return factory
++
++
++def _entry(marker: Path, value="executed"):
++    return (
++        "from pathlib import Path\n"
++        f"Path({str(marker)!r}).write_text({value!r})\n"
++        "def register_fastapi_routes(app, mod_id):\n"
++        f"    app.state.employee_version = {value!r}\n"
++    )
++
++
++def _register(pack):
++    app = FastAPI()
++    ok = mod_manager.register_employee_pack_routes(
++        app, mod_manager.ModManager(str(pack.mods_root)), pack.pack_id, force=True
++    )
++    return ok, app
++
++
++def test_formal_employee_install_reads_back_real_signed_archive_and_imports(
++    signed_employee_pack, tmp_path
++):
++    marker = tmp_path / "imported"
++    pack = signed_employee_pack(entry_source=_entry(marker))
++    row = receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root))
++    assert row["package_sha256"] == hashlib.sha256(pack.package_path.read_bytes()).hexdigest()
++    assert row["signature_verified"] is True
++    assert row["installed_root"] == str(pack.pack_dir)
++    assert not (pack.pack_dir / ".xcagi-install-receipt.json").exists()
++    assert verify_direct_python_pack_trust(pack.pack_dir) == (True, "verified_signed_archive")
++    assert pack.refresh_calls == [pack.pack_id]
++    assert not marker.exists()
++    ok, app = _register(pack)
++    assert ok and marker.read_text() == "executed"
++    assert app.state.employee_version == "executed"
++    assert (
++        receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root))[
++            "runtime_status"
++        ]
++        == "running"
++    )
++
++
++@pytest.mark.parametrize("tamper", ["installed", "archive", "extra_code"])
++def test_changed_employee_archive_or_code_is_rejected_before_first_import(
++    signed_employee_pack, tmp_path, tamper
++):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker))
++    row = receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root))
++    if tamper == "installed":
++        (pack.pack_dir / "backend/entry.py").write_text(_entry(marker, "tampered"))
++    elif tamper == "archive":
++        archive = (
++            pack.employee_root
++            / ".install-receipts"
++            / pack.pack_id
++            / (row["package_sha256"] + ".zip")
++        )
++        archive.write_bytes(archive.read_bytes() + b"altered archive")
++    else:
++        (pack.pack_dir / "backend/injected.py").write_text(_entry(marker))
++    assert receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root)) is None
++    assert not verify_direct_python_pack_trust(pack.pack_dir)[0]
++    assert _register(pack)[0] is False
++    assert not marker.exists()
++    assert [r["pack_id"] for r in pack.registry.list_packs()] == [pack.pack_id]
++
++
++def test_pack_self_declared_signature_never_authorizes_import(signed_employee_pack, tmp_path):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker), install=False)
++    shutil.copytree(pack.source_dir, pack.pack_dir)
++    (pack.pack_dir / ".xcagi-install-receipt.json").write_text(
++        json.dumps(
++            {
++                "pack_id": pack.pack_id,
++                "signature_verified": True,
++                "installed_content_hash": compute_directory_hash(str(pack.pack_dir)),
++            }
++        )
++    )
++    assert not verify_direct_python_pack_trust(pack.pack_dir)[0]
++    assert _register(pack)[0] is False
++    assert not marker.exists()
++    assert pack.registry.list_for_mods_api()[0]["id"] == pack.pack_id
++
++
++def test_unsigned_formal_install_remains_catalog_visible_without_python_trust(
++    signed_employee_pack, tmp_path
++):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker), signed=False)
++    assert pack.pack_dir.is_dir()
++    assert receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root)) is None
++    assert _register(pack)[0] is False
++    assert not marker.exists()
++    assert pack.registry.list_packs()[0]["id"] == pack.pack_id
++
++
++def test_forged_host_receipt_flag_cannot_replace_archive_signature(signed_employee_pack, tmp_path):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker), signed=False)
++    path = pack.employee_root / ".install-receipts" / pack.pack_id / "receipt.json"
++    row = json.loads(path.read_text())
++    row["signature_verified"] = True
++    path.write_text(json.dumps(row))
++    assert receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root)) is None
++    assert _register(pack)[0] is False
++    assert not marker.exists()
++
++
++def test_retained_employee_archive_must_still_have_a_trusted_signer(signed_employee_pack, tmp_path):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker))
++    replacement = Ed25519PrivateKey.generate().public_key()
++    pack.public_key_path.write_bytes(
++        replacement.public_bytes(
++            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
++        )
++    )
++    assert receipts.read_verified_install(pack.pack_id, mods_root=str(pack.employee_root)) is None
++    assert _register(pack)[0] is False
++    assert not marker.exists()
++
++
++def test_active_employee_upgrade_waits_for_new_process_and_retains_old_code(
++    signed_employee_pack, tmp_path
++):
++    marker = tmp_path / "imported-version"
++    old = signed_employee_pack(entry_source=_entry(marker, "old"))
++    assert _register(old)[0] is True
++    old_source = (old.pack_dir / "backend/entry.py").read_bytes()
++    new = signed_employee_pack("1.1.0", entry_source=_entry(marker, "new"))
++    assert new.refresh_calls == []
++    assert "重启后生效" in new.result[1]
++    assert (new.pack_dir / "backend/entry.py").read_bytes() == old_source
++    assert _register(new)[0] is False
++    row = receipts.read_verified_install(new.pack_id, mods_root=str(new.employee_root))
++    assert row["requires_restart"] is True
++    assert marker.read_text() == "old"
++    process = subprocess.run(
++        [
++            sys.executable,
++            "-c",
++            "import sys; from fastapi import FastAPI; "
++            "from app.infrastructure.mods.mod_manager import ModManager,register_employee_pack_routes; "
++            "app=FastAPI(); assert register_employee_pack_routes(app,ModManager(sys.argv[1]),sys.argv[2]); "
++            "assert app.state.employee_version == 'new'",
++            str(new.mods_root),
++            new.pack_id,
++        ],
++        capture_output=True,
++        text=True,
++        timeout=40,
++        check=False,
++    )
++    assert process.returncode == 0, process.stderr
++    assert marker.read_text() == "new"
++    active = receipts.read_verified_install(new.pack_id, mods_root=str(new.employee_root))
++    assert active["requires_restart"] is False
++    assert active["package_version"] == "1.1.0"
++    assert any(
++        path.read_bytes() == old_source
++        for path in (new.employee_root / ".install-receipts" / new.pack_id).glob(
++            "previous-*/backend/entry.py"
++        )
++    )
++
++
++def test_source_employee_remains_a_trusted_read_only_distribution():
++    source = Path(__file__).resolve().parents[2] / "mods/_employees/csv-full-read-employee"
++    assert verify_direct_python_pack_trust(source) == (True, "host_catalog_bundled")
++
++
++@pytest.mark.parametrize(
++    "scenario", ["unregistered", "identity_mismatch", "unsigned_install", "environment_bundle"]
++)
++def test_bundled_prefix_alone_never_trusts_employee_code(
++    signed_employee_pack, tmp_path, monkeypatch, scenario
++):
++    from app.application.employee_runtime import loader
++
++    pack = signed_employee_pack(signed=False, install=scenario == "unsigned_install")
++    if scenario != "unsigned_install":
++        shutil.copytree(pack.source_dir, pack.pack_dir)
++    fake_module = tmp_path / "app/application/employee_runtime/loader.py"
++    monkeypatch.setattr(loader, "__file__", str(fake_module))
++    config = tmp_path / "config"
++    config.mkdir()
++    (config / "duty_roster.json").write_text(json.dumps({"departments": {}}))
++    catalog = pack.mods_root / "xcagi-office-employee-pack-bridge/config/office_pack_catalog.json"
++    catalog.parent.mkdir(parents=True)
++    catalog.write_text(
++        json.dumps({"pack_ids": [] if scenario == "unregistered" else [pack.pack_id]})
++    )
++    if scenario == "identity_mismatch":
++        manifest = json.loads((pack.pack_dir / "manifest.json").read_text())
++        manifest["id"] = "other-pack"
++        (pack.pack_dir / "manifest.json").write_text(json.dumps(manifest))
++    elif scenario == "environment_bundle":
++        monkeypatch.setattr(
++            loader, "__file__", str(tmp_path / "other/app/application/employee_runtime/loader.py")
++        )
++        monkeypatch.setenv("XCAGI_BUNDLED_MODS_DIR", str(pack.mods_root))
++    assert verify_direct_python_pack_trust(pack.pack_dir)[0] is False
++    assert _register(pack)[0] is False
+diff --git a/FHD/tests/test_infrastructure/test_mod_manager_component_boundaries.py b/FHD/tests/test_infrastructure/test_mod_manager_component_boundaries.py
+index e5759ec3a3..c998b1578e 100644
+--- a/FHD/tests/test_infrastructure/test_mod_manager_component_boundaries.py
++++ b/FHD/tests/test_infrastructure/test_mod_manager_component_boundaries.py
+@@ -220,9 +220,14 @@ def test_employee_install_valid_archive_stays_in_selected_library(isolated_libra
+     assert ok, message
+     destination = root / "_employees" / "selected"
+     assert (destination / "logic.py").read_text() == "VALUE = 'new employee'\n"
+-    receipt = json.loads((destination / ".xcagi-install-receipt.json").read_text())
+-    assert receipt["pack_id"] == "selected"
++    receipt = json.loads((root / "_employees/.install-receipts/selected/receipt.json").read_text())
++    assert receipt["mod_id"] == "selected"
+     assert receipt["signature_verified"] is False
++    assert receipt["installed_root"] == str(destination)
++    assert not (destination / ".xcagi-install-receipt.json").exists()
++    from app.infrastructure.mods.install_receipts import read_verified_install
++
++    assert read_verified_install("selected", mods_root=str(root / "_employees")) is None
+     assert (root / "keep-mod" / "manifest.json").is_file()
+ 
+ 
+diff --git a/FHD/tests/test_mod_store_employee_reload.py b/FHD/tests/test_mod_store_employee_reload.py
+index b84439aad9..31d0172ea7 100644
+--- a/FHD/tests/test_mod_store_employee_reload.py
++++ b/FHD/tests/test_mod_store_employee_reload.py
+@@ -1,88 +1,43 @@
+-"""employee_pack 安装后热加载路由与 registry。"""
++"""Real signed employee installation refreshes routes and preserves duplicate guards."""
+ 
+-from __future__ import annotations
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
+ 
+-import json
+-import shutil
+-from pathlib import Path
+-from unittest.mock import MagicMock
++from tests.test_infrastructure.test_employee_signed_archive import (
++    signed_employee_pack as signed_employee_pack,
++)
+ 
+-import pytest
+ 
+-import app.infrastructure.mods.employee_registry  # force real module load before stub injection
+-import app.infrastructure.mods.mod_manager  # force real module load before stub injection
+-import app.mod_sdk.employee_runtime  # force real module load before stub injection
+-
+-
+-def _minimal_pack(parent: Path, pack_id: str) -> Path:
+-    pack_dir = parent / "_employees" / pack_id
+-    pack_dir.mkdir(parents=True)
+-    (pack_dir / "manifest.json").write_text(
+-        json.dumps(
+-            {
+-                "id": pack_id,
+-                "name": "Test Employee",
+-                "artifact": "employee_pack",
+-                "scope": "global",
+-                "backend": {"entry": "blueprints"},
+-            }
+-        ),
+-        encoding="utf-8",
++def _pack(signed_employee_pack):
++    return signed_employee_pack(
++        entry_source='def register_fastapi_routes(app, pack_id):\n    @app.get(f"/api/test-employee/{pack_id}/ping")\n    def ping():\n        return {"ok": True, "pack_id": pack_id}\n'
+     )
+-    backend = pack_dir / "backend"
+-    backend.mkdir()
+-    (backend / "blueprints.py").write_text(
+-        """def register_fastapi_routes(app, pack_id):
+-    @app.get(f"/api/test-employee/{pack_id}/ping")
+-    def _ping():
+-        return {"ok": True, "pack_id": pack_id}
+-""",
+-        encoding="utf-8",
+-    )
+-    return pack_dir
+-
+ 
+-@pytest.fixture()
+-def employee_mods_root(tmp_path, monkeypatch):
+-    mods_root = tmp_path / "mods"
+-    mods_root.mkdir()
+-    monkeypatch.setenv("XCAGI_MODS_ROOT", str(mods_root))
+-    from app.infrastructure.mods import employee_registry as er
+-    from app.infrastructure.mods import mod_manager as mm
+ 
+-    er._registry.clear()
+-    mm._mod_manager = None
+-    mm._employee_pack_routes_registered.clear()
+-    return mods_root
+-
+-
+-def test_refresh_after_install_registers_routes(employee_mods_root, monkeypatch):
+-    pack_id = "csv-full-read-employee"
+-    _minimal_pack(employee_mods_root, pack_id)
+-
+-    app = MagicMock()
++def test_refresh_after_install_registers_routes(signed_employee_pack, monkeypatch):
++    pack = _pack(signed_employee_pack)
++    app = FastAPI()
+     monkeypatch.setattr("app.fastapi_app.get_fastapi_app", lambda: app)
+-
+-    from app.infrastructure.mods import mod_manager as mm
+-
+-    mm._employee_pack_routes_registered.clear()
+-
++    from app.infrastructure.mods import mod_manager
+     from app.mod_sdk.employee_runtime import refresh_employee_pack_runtime
+ 
+-    refresh_employee_pack_runtime(pack_id)
+-    assert pack_id in mm._employee_pack_routes_registered
+-
+-
+-def test_register_employee_pack_routes_skips_duplicate(employee_mods_root, monkeypatch):
+-    pack_id = "csv-full-read-employee"
+-    _minimal_pack(employee_mods_root, pack_id)
+-    app = MagicMock()
+-    monkeypatch.setattr("app.fastapi_app.get_fastapi_app", lambda: app)
+-
+-    from app.infrastructure.mods import mod_manager as mm
+-    from app.infrastructure.mods.mod_manager import get_mod_manager, register_employee_pack_routes
+-
+-    mm._employee_pack_routes_registered.clear()
+-    assert register_employee_pack_routes(app, get_mod_manager(), pack_id) is True
+-    assert register_employee_pack_routes(app, get_mod_manager(), pack_id) is True
+-    assert app.mock_calls  # route registrar invoked at least once
++    monkeypatch.setattr(mod_manager, "_mod_manager", None)
++    refresh_employee_pack_runtime(pack.pack_id)
++    assert pack.pack_id in mod_manager._employee_pack_routes_registered
++    assert TestClient(app).get(f"/api/test-employee/{pack.pack_id}/ping").json() == {
++        "ok": True,
++        "pack_id": pack.pack_id,
++    }
++
++
++def test_register_employee_pack_routes_skips_duplicate(signed_employee_pack):
++    pack = _pack(signed_employee_pack)
++    app = FastAPI()
++    from app.infrastructure.mods.mod_manager import ModManager, register_employee_pack_routes
++
++    manager = ModManager(str(pack.mods_root))
++    assert register_employee_pack_routes(app, manager, pack.pack_id) is True
++    count = len(app.routes)
++    assert register_employee_pack_routes(app, manager, pack.pack_id) is True
++    assert len(app.routes) == count
++    assert TestClient(app).get(f"/api/test-employee/{pack.pack_id}/ping").status_code == 200
+diff --git a/FHD/tests/test_top_architect_blueprints.py b/FHD/tests/test_top_architect_blueprints.py
+index d1d5e4c7fd..369a601668 100644
+--- a/FHD/tests/test_top_architect_blueprints.py
++++ b/FHD/tests/test_top_architect_blueprints.py
+@@ -1,10 +1,18 @@
+ from __future__ import annotations
+ 
+-import asyncio
+ import importlib.util
++import json
+ from pathlib import Path
+ 
++import pytest
+ from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from tests.fixtures.backend_ci_isolation import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++from tests.test_infrastructure.test_employee_signed_archive import (
++    signed_employee_pack as signed_employee_pack,
++)
+ 
+ PACK_ROOT = Path(__file__).parents[1] / "mods" / "_employees" / "top-architect"
+ 
+@@ -24,7 +32,7 @@ def test_top_architect_manifest_backend_entry_exists() -> None:
+     assert (PACK_ROOT / "backend" / "blueprints.py").is_file()
+ 
+ 
+-def test_top_architect_routes_register_and_execute() -> None:
++def test_top_architect_routes_require_verified_actor() -> None:
+     module = _load_blueprints()
+     app = FastAPI()
+     module.register_fastapi_routes(app, "top-architect")
+@@ -33,20 +41,95 @@ def test_top_architect_routes_register_and_execute() -> None:
+     assert "/api/mod/top-architect/employees/top-architect/run" in paths
+     assert "/api/mod/top-architect/employees/top-architect/status" in paths
+ 
+-    result = asyncio.run(
+-        module._dispatch_run(
+-            "top-architect",
+-            "top-architect",
+-            "top_architect",
+-            {
+-                "architecture": {
+-                    "modules": [{"name": "api", "layer": "application"}],
+-                    "dependencies": [],
+-                    "allowed_dependencies": {"application": []},
+-                }
+-            },
++    with TestClient(app) as client:
++        result = client.post(
++            "/api/mod/top-architect/employees/top-architect/run",
++            json={"architecture": _architecture(), "approved": True},
++            headers={"X-User-ID": "1", "X-Tenant-ID": "1"},
+         )
++    assert result.status_code == 401, result.text
++
++
++def _architecture():
++    return {
++        "modules": [{"name": "api", "layer": "application"}],
++        "dependencies": [],
++        "allowed_dependencies": {"application": []},
++    }
++
++
++@pytest.mark.parametrize("violation", [False, True])
++def test_top_architect_signed_pack_uses_durable_review_and_real_result_readback(
++    signed_employee_pack, trusted_actor, reviewed_agent_http, tmp_path, monkeypatch, violation
++):
++    from app.application.tools.workflow import invalidate_workflow_tool_registry
++    from app.infrastructure.mods.package import ModPackage
++
++    seed = signed_employee_pack(install=False)
++    package = ModPackage(str(PACK_ROOT)).create_package(
++        str(tmp_path / "architect-packages"),
++        include_signature=True,
++        private_key=str(seed.private_key_path),
+     )
+-    assert result["success"] is True
+-    assert result["data"]["status"] == "approved"
+-    assert result["data"]["read_only"] is True
++    with monkeypatch.context() as installation:
++        installation.setattr(
++            "app.mod_sdk.employee_runtime.refresh_employee_pack_runtime", lambda _pack_id: None
++        )
++        installed, message = seed.registry.install_from_package(package, verify_signature=True)
++    assert installed, message
++    actor = trusted_actor(mod_id="top-architect")
++    workspace = tmp_path / "workspace"
++    workspace.mkdir()
++    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
++    monkeypatch.setenv(
++        "XCAGI_MOD_DATABASE_URLS", json.dumps({"top-architect": str(actor.factory.kw["bind"].url)})
++    )
++    invalidate_workflow_tool_registry()
++    http = reviewed_agent_http(actor)
++    _load_blueprints().register_fastapi_routes(http.client.app, "top-architect")
++    architecture = _architecture()
++    if violation:
++        architecture["dependencies"] = [{"source": "api", "target": "unknown"}]
++    actual = http.request(
++        "POST",
++        "/api/mod/top-architect/employees/top-architect/run",
++        json={"architecture": architecture},
++    )
++    assert actual.response.status_code == 202, actual.response.text
++    assert actual.run.status == "completed", actual.output
++    assert len(actual.run.steps) == len(actual.run.tool_calls) == 1
++    assert {"step.waiting_user", "step.approved"} <= {
++        event.event_type for event in actual.run.events
++    }
++    evidence = actual.output["business_verification"]
++    assert evidence["verified"] is True
++    assert evidence["method"] == "structured_result_readback"
++    assert evidence["actor_id"] == str(actor.user_id)
++    assert evidence["tenant_id"] == str(actor.tenant_id)
++    assert evidence["mod_id"] == "top-architect"
++    artifact = Path(evidence["artifacts"][0]["path"])
++    saved = json.loads(artifact.read_text())
++    assert saved["ok"] is True
++    assert saved["status"] == ("rejected" if violation else "approved")
++    assert saved["read_only"] is True
++    assert saved["side_effects"] == []
++    assert len(saved["violations"]) == int(violation)
++
++    from app.application.agent_orchestrator.business_action_verification import (
++        verify_action_result,
++    )
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++
++    context = dict(actual.run.metadata["runtime_context"])
++    context["task_id"] = actual.run.metadata["task_context"]["task_id"]
++    spec = get_tool_action_spec("top-architect", "execute")
++    step = actual.run.steps[0]
++    assert verify_action_result(spec, step.params, actual.output, runtime_context=context)[1]
++    for field in ("ok", "read_only"):
++        artifact.write_text(json.dumps({**saved, field: 1}))
++        checked, verified = verify_action_result(
++            spec, step.params, actual.output, runtime_context=context
++        )
++        assert verified is False
++        assert checked["business_verification"]["verified"] is False
++        artifact.write_text(json.dumps(saved))
+-- 
+2.50.1 (Apple Git-155)
+

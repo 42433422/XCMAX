@@ -1,0 +1,482 @@
+From d354ec5180f6c4d79c3716de953cad536dd829b6 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 02:06:25 +0800
+Subject: [PATCH 38/43] test(eval): exercise memory routes with real sessions
+ and original approvals
+
+
+diff --git a/FHD/evals/agent_tasks.jsonl b/FHD/evals/agent_tasks.jsonl
+index 8df18a1c02..cd484792db 100644
+--- a/FHD/evals/agent_tasks.jsonl
++++ b/FHD/evals/agent_tasks.jsonl
+@@ -64,11 +64,11 @@
+ {"id":"dataset_rag_rebuild_route_forces_agent_orchestrator","kind":"dataset_rag_route_agent","route_action":"rebuild_index","user_id":"tenant-a","body":{"tenant_id":"tenant-a","background":true},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"dataset_rag_rebuild_index","tool_call_count":1,"tool_calls":[{"tool_id":"dataset_rag","action":"rebuild_index","status":"completed","cost_units":2,"permission":"dataset.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"dataset_rag_cancel_rebuild_route_forces_agent_orchestrator","kind":"dataset_rag_route_agent","route_action":"cancel_rebuild","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"dataset_rag_cancel_rebuild","tool_call_count":1,"tool_calls":[{"tool_id":"dataset_rag","action":"cancel_rebuild","status":"completed","cost_units":2,"permission":"dataset.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"dataset_rag_delete_document_route_forces_agent_orchestrator","kind":"dataset_rag_route_agent","route_action":"delete_document","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"dataset_rag_delete_document","tool_call_count":1,"tool_calls":[{"tool_id":"dataset_rag","action":"delete_document","status":"completed","cost_units":2,"permission":"dataset.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"memory_v2_propose_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"propose_candidate","user_id":"tenant-a","body":{"memory_type":"preference","key":"favorite_customer","value":"ACME Trading","source":"settings_ui","confidence":0.9},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_propose_candidate","memory_status":"pending","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"propose_candidate","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"memory_v2_confirm_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"confirm","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_confirm","memory_status":"active","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"confirm","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"memory_v2_reject_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"reject","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_reject","memory_status":"rejected","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"reject","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"memory_v2_correct_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"correct","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_correct","memory_status":"active","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"correct","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+-{"id":"memory_v2_delete_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_delete","memory_status":"deleted","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"delete","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"memory_v2_propose_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"propose_candidate","user_id":"tenant-a","body":{"memory_type":"preference","key":"favorite_customer","value":"ACME Trading","source":"settings_ui","confidence":0.9},"expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_propose_candidate","memory_status":"pending","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"propose_candidate","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"memory_v2_confirm_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"confirm","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_confirm","memory_status":"active","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"confirm","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"memory_v2_reject_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"reject","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_reject","memory_status":"rejected","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"reject","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"memory_v2_correct_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"correct","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_correct","memory_status":"active","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"correct","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
++{"id":"memory_v2_delete_route_forces_agent_orchestrator","kind":"memory_v2_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":202,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"memory_v2_delete","memory_status":"deleted","tool_call_count":1,"tool_calls":[{"tool_id":"memory_v2","action":"delete","status":"completed","cost_units":2,"permission":"memory_v2.write"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"materials_create_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"create","user_id":"tenant-a","body":{"name":"树脂","material_code":"R-001","min_quantity":12},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_create","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"create","status":"completed","cost_units":2,"permission":"tool.materials.create"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"materials_update_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"update","user_id":"tenant-a","body":{"name":"树脂 v2"},"expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_update","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"update","status":"completed","cost_units":2,"permission":"tool.materials.update"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+ {"id":"materials_delete_route_forces_agent_orchestrator","kind":"materials_route_agent","route_action":"delete","user_id":"tenant-a","expected":{"status_code":200,"success":true,"agent_status":"completed","run_id_present":true,"run_status":"completed","intent":"materials_delete","tool_call_count":1,"tool_calls":[{"tool_id":"materials","action":"delete","status":"completed","cost_units":2,"permission":"tool.materials.delete"}],"event_types":["step.waiting_user","step.approved","tool.completed","run.completed"]}}
+diff --git a/FHD/evals/run_agent_eval_body_2.py b/FHD/evals/run_agent_eval_body_2.py
+index 3cc145a891..c85eec0150 100644
+--- a/FHD/evals/run_agent_eval_body_2.py
++++ b/FHD/evals/run_agent_eval_body_2.py
+@@ -383,110 +383,282 @@ def _run_dataset_rag_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+     )
+ 
+ 
++@contextmanager
++def _authenticated_eval_host(task, folder, permissions, *, mod_id):
++    """Create actual isolated host credentials; dataset identity labels grant nothing."""
++    from datetime import timedelta
++    from uuid import uuid4
++
++    from sqlalchemy import create_engine
++    from sqlalchemy.orm import sessionmaker
++    from starlette.requests import Request
++
++    from app import db as host_db
++    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
++    from app.application.agent_orchestrator.task_execution_sql_repository import (
++        SQLAlchemyTaskExecutionRepository,
++    )
++    from app.db.db_base import Base
++    from app.db.models.permission import Permission, Role
++    from app.db.models.user import Session as UserSession
++    from app.db.models.user import User
++    from app.domain.shared_services.session_service import SessionService
++    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
++    from app.infrastructure.auth.agent_principal import require_agent_principal
++    from app.utils.time import utc_now_naive
++
++    with ExitStack() as stack:
++        database_url = f"sqlite:///{folder / 'host.sqlite'}"
++        stack.enter_context(
++            patch.dict(
++                os.environ,
++                {
++                    "DATABASE_URL": database_url,
++                    "WORKSPACE_ROOT": str(folder / "workspace"),
++                    "XCAGI_DATA_DIR": str(folder / "data"),
++                    "XCAGI_DESKTOP_DATA_DIR": str(folder / "data"),
++                    "SECRET_KEY": "synthetic-offline-eval-host-key-only",
++                    "FHD_ALLOW_X_USER_ID_HEADER": "",
++                    "MODEL_USAGE_LEDGER_PATH": str(folder / "usage.json"),
++                    "MODEL_USAGE_WALLET_BACKEND": "audit",
++                    "MODEL_USAGE_WALLET_REQUIRED": "",
++                },
++                clear=False,
++            )
++        )
++        engine = create_engine(database_url)
++        stack.callback(engine.dispose)
++        Base.metadata.create_all(engine)
++        factory = sessionmaker(bind=engine)
++        stack.enter_context(patch.object(host_db, "HostSessionLocal", factory))
++        stack.enter_context(
++            patch("app.application.facades.session_facade.get_session_service", SessionService)
++        )
++        repo = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
++        queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
++        stack.enter_context(
++            patch("app.application.agent_orchestrator.run_repository._agent_run_repository", repo)
++        )
++        stack.enter_context(
++            patch(
++                "app.application.agent_orchestrator.task_execution_repository._task_execution_repository",
++                queue,
++            )
++        )
++        stack.enter_context(
++            patch("app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher")
++        )
++        session_id = uuid4().hex
++        with factory.begin() as db:
++            role = Role(name="user")
++            role.permissions = [Permission(code=code, name=code) for code in permissions]
++            db.add(role)
++            user = User(
++                username=str(task.get("user_id") or "offline-eval"),
++                password="unused",
++                tenant_id=7,
++                role="user",
++                tier="enterprise",
++            )
++            db.add(user)
++            db.flush()
++            db.add(
++                UserSession(
++                    session_id=session_id,
++                    user_id=user.id,
++                    expires_at=utc_now_naive() + timedelta(hours=1),
++                    entitled_mod_ids_json=json.dumps([mod_id]),
++                )
++            )
++        headers = {"X-Session-ID": session_id, "X-XCAGI-Active-Mod-Id": mod_id}
++        principal = require_agent_principal(
++            Request(
++                {
++                    "type": "http",
++                    "method": "POST",
++                    "path": "/api/agent/runs",
++                    "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
++                }
++            ),
++            x_user_id=None,
++        )
++        yield SimpleNamespace(
++            factory=factory,
++            repo=repo,
++            queue=queue,
++            principal=principal,
++            context=authenticated_runtime_context({}, principal),
++            headers=headers,
++        )
++
++
+ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
++    import hashlib
++
+     from fastapi import FastAPI
+     from fastapi.testclient import TestClient
+ 
+-    from app.application.agent_orchestrator import InMemoryAgentRunRepository
++    import app.domain.shared_services.user_memory_service as memory_mod
++    from app.application.agent_orchestrator import AgentOrchestrator
++    from app.application.memory_v2_facade import memory_v2_owner_id
++    from app.db.models.agent_approval import AgentApprovalConsumption
++    from app.fastapi_routes.domains.agent.agent_routes import router as agent_router
++    from app.fastapi_routes.domains.agent.route_support import agent_node_output
+     from app.fastapi_routes.domains.misc.misc_routes import router
+-    from app.services import user_memory_service as memory_mod
+ 
+     expected = dict(task.get("expected") or {})
+     action = str(task.get("route_action") or "propose_candidate").strip().lower()
+     body = dict(task.get("body") or {})
+-    user_id = str(task.get("user_id") or body.get("user_id") or "eval-memory-user")
+-    method = "POST"
+-    path = "/memory/v2/candidates"
+-
+-    repo = InMemoryAgentRunRepository()
+-    app = FastAPI()
+-    app.include_router(router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-
+-    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+-        tmp_path = Path(tmp_dir)
+-        memory_dir = tmp_path / "memory"
+-        env_patch = {
+-            "MODEL_USAGE_LEDGER_PATH": str(tmp_path / "usage.json"),
+-            "MODEL_USAGE_WALLET_BACKEND": "audit",
+-            "MODEL_USAGE_WALLET_REQUIRED": "",
+-        }
+-        with ExitStack() as stack:
+-            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+-            stack.enter_context(patch.object(memory_mod, "MEMORY_DIR", str(memory_dir)))
+-            stack.enter_context(
+-                patch.object(memory_mod, "JSON_MEMORY_PATH", str(memory_dir / "memory_store.json"))
++    method, path = "POST", "/memory/v2/candidates"
++    checks: list[dict[str, Any]] = []
++    details: dict[str, Any] = {"execution_mode": "actual_host_session_and_json_memory"}
++    with tempfile.TemporaryDirectory(prefix="xcagi-memory-eval-") as tmp_dir, ExitStack() as stack:
++        folder = Path(tmp_dir).resolve()
++        host = stack.enter_context(
++            _authenticated_eval_host(
++                task, folder, ("memory_v2.write", "dataset.read"), mod_id="memory-eval"
+             )
+-            stack.enter_context(
+-                patch(
+-                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+-                    return_value=repo,
+-                )
++        )
++        memory_path = folder / "memory" / "memory_store.json"
++        stack.enter_context(
++            patch.dict(
++                os.environ,
++                {
++                    "XCAGI_USER_MEMORY_DIR": str(memory_path.parent),
++                    "XCAGI_USER_MEMORY_JSON_PATH": str(memory_path),
++                },
++                clear=False,
+             )
+-            memory_mod.reset_user_memory_service()
+-            try:
+-                if action == "propose_candidate":
+-                    body.setdefault("user_id", user_id)
+-                    body.setdefault("memory_type", "preference")
+-                    body.setdefault("key", "favorite_customer")
+-                    body.setdefault("value", "ACME Trading")
+-                    body.setdefault("source", "settings_ui")
+-                    body.setdefault("confidence", 0.9)
+-                else:
+-                    service = memory_mod.get_user_memory_service()
+-                    seed = service.propose_memory_candidate(
+-                        user_id,
+-                        "preference",
+-                        "favorite_customer",
+-                        "ACME Trading",
+-                        source="settings_ui",
+-                        confidence=0.9,
+-                    )
+-                    memory_id = str((seed.get("candidate") or {}).get("memory_id") or "")
+-                    if action in {"correct", "delete"}:
+-                        service.confirm_memory_candidate(user_id, memory_id)
+-                    body.setdefault("user_id", user_id)
+-                    if action == "confirm":
+-                        path = f"/memory/v2/{memory_id}/confirm"
+-                    elif action == "reject":
+-                        path = f"/memory/v2/{memory_id}/reject"
+-                        body.setdefault("reason", "not useful")
+-                    elif action == "correct":
+-                        method = "PATCH"
+-                        path = f"/memory/v2/{memory_id}"
+-                        body.setdefault("value", "ACME Trading Ltd.")
+-                        body.setdefault("reason", "user corrected value")
+-                    elif action == "delete":
+-                        method = "DELETE"
+-                        path = f"/memory/v2/{memory_id}"
+-                    else:
+-                        path = f"/memory/v2/{memory_id}/confirm"
+-
+-                headers = {"X-User-Id": user_id}
+-                if method == "DELETE":
+-                    response = client.delete(
+-                        path,
+-                        params={
+-                            "user_id": user_id,
+-                            "reason": str(body.get("reason") or "user removed memory"),
+-                        },
+-                        headers=headers,
+-                    )
+-                elif method == "PATCH":
+-                    response = client.patch(path, json=body, headers=headers)
+-                else:
+-                    response = client.post(path, json=body, headers=headers)
+-            finally:
+-                memory_mod.reset_user_memory_service()
++        )
++        for obj, name in (
++            (memory_mod, "_user_memory_service"),
++            (memory_mod.UserMemoryService, "_instance"),
++            (memory_mod.UserMemoryStore, "_instance"),
++        ):
++            stack.enter_context(patch.object(obj, name, None))
++        service = memory_mod.get_user_memory_service()
++        owner = memory_v2_owner_id(host.context)
++        body.setdefault("user_id", host.principal.username)
++        if action == "propose_candidate":
++            body.setdefault("memory_type", "preference")
++            body.setdefault("key", "favorite_customer")
++            body.setdefault("value", "ACME Trading")
++            body.setdefault("source", "settings_ui")
++            body.setdefault("confidence", 0.9)
++        else:
++            # Preparation of the original case's precondition, under its actual owner.
++            seed = service.propose_memory_candidate(
++                owner,
++                "preference",
++                "favorite_customer",
++                "ACME Trading",
++                source="settings_ui",
++                confidence=0.9,
++            )
++            memory_id = str((seed.get("candidate") or {}).get("memory_id") or "")
++            if action in {"correct", "delete"}:
++                service.confirm_memory_candidate(owner, memory_id)
++            if action in {"confirm", "reject"}:
++                path = f"/memory/v2/{memory_id}/{action}"
++                if action == "reject":
++                    body.setdefault("reason", "not useful")
++            elif action == "correct":
++                method, path = "PATCH", f"/memory/v2/{memory_id}"
++                body.setdefault("value", "ACME Trading Ltd.")
++                body.setdefault("reason", "user corrected value")
++            elif action == "delete":
++                method, path = "DELETE", f"/memory/v2/{memory_id}"
++            else:
++                return _failed(task, f"unsupported memory route action: {action}")
++        before = memory_path.read_bytes() if memory_path.exists() else b""
++        app = FastAPI()
++        app.include_router(agent_router)
++        app.include_router(router)
++        client = stack.enter_context(TestClient(app, raise_server_exceptions=False))
++        client.headers.update(host.headers)
++        response = client.request(
++            method,
++            path,
++            **(
++                {"params": {"user_id": host.principal.username, "reason": body.get("reason", "")}}
++                if method == "DELETE"
++                else {"json": body}
++            ),
++        )
++        initial = response.json()
++        details["initial_response"] = initial
++        _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
++        run = host.repo.get(str(initial.get("run_id") or ""))
++        _check_equal(checks, "initial.success", initial.get("success"), False)
++        _check_equal(checks, "initial.run_status", run.status if run else None, "waiting_user")
++        _check_equal(checks, "initial.tool_call_count", len(run.tool_calls) if run else None, 0)
++        waiting_bytes = memory_path.read_bytes() if memory_path.exists() else b""
++        _check_equal(checks, "initial.memory_unchanged", waiting_bytes == before, True)
++        if response.status_code != 202 or run is None or run.status != "waiting_user":
++            return _result(task, checks, details)
++        run_id = run.run_id
++        params_before = copy.deepcopy(run.steps[0].params)
++        review = client.get(f"/api/agent/runs/{run_id}")
++        _check_equal(checks, "review.status_code", review.status_code, 200)
++        grant = review.json().get("approval", {}).get("grant")
++        if not grant:
++            _check_equal(checks, "review.grant_present", bool(grant), True)
++            return _result(task, checks, details)
++        confirmed = client.post(
++            f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
++        )
++        _check_equal(checks, "continue.status_code", confirmed.status_code, 202)
++        claim = host.queue.claim("memory-eval", lease_seconds=60)
++        _check_equal(checks, "queue.original_run", claim.run_id if claim else None, run_id)
++        if claim is None or claim.run_id != run_id:
++            return _result(task, checks, details)
++        run = AgentOrchestrator().execute_dispatched_run(run_id)
++        host.queue.finish(
++            run_id, "memory-eval", "completed" if run.status == "completed" else "blocked"
++        )
++        payload = agent_node_output(run, run.steps[0].node_id)
++        with host.factory() as db:
++            consumed = (
++                db.query(AgentApprovalConsumption)
++                .filter_by(run_id=run_id, step_id=run.steps[0].step_id)
++                .count()
++            )
++        _check_equal(checks, "approval_consumption_count", consumed, 1)
++        _check_equal(checks, "step_params_unchanged", run.steps[0].params, params_before)
++        _check_equal(checks, "run.user_id", run.user_id, host.principal.user_id)
++        raw = memory_path.read_bytes() if memory_path.exists() else b"{}"
++        persisted = json.loads(raw)
++        records = persisted.get(owner, {}).get("memory_v2_records", [])
++        returned = payload.get("candidate" if action == "propose_candidate" else "memory") or {}
++        readback = next(
++            (row for row in records if row.get("memory_id") == returned.get("memory_id")), None
++        )
++        _check_equal(checks, "readback.actual_record", readback, returned)
++        _check_equal(checks, "readback.owner_keys", sorted(persisted), [owner])
++        _check_equal(
++            checks,
++            "business_verification.verified",
++            payload.get("business_verification", {}).get("verified"),
++            True,
++        )
++        independent = client.get("/memory/v2")
++        _check_equal(checks, "readback.http_status", independent.status_code, 200)
++        _check_equal(checks, "readback.http_records", independent.json().get("memories"), records)
++        details.update(
++            response=payload,
++            run=run.to_dict(),
++            principal_user_id=host.principal.user_id,
++            owner_id=owner,
++            readback=readback,
++            memory_sha256=hashlib.sha256(raw).hexdigest(),
++            approval_consumption_count=consumed,
++            step_params_unchanged=run.steps[0].params == params_before,
++        )
+ 
+-    payload = response.json()
+-    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+     memory_payload = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
+     candidate_payload = (
+         payload.get("candidate") if isinstance(payload.get("candidate"), dict) else {}
+     )
+-    checks: list[dict[str, Any]] = []
+-    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+     _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+     _check_equal(
+         checks, "payload.agent_status", payload.get("agent_status"), expected.get("agent_status")
+@@ -514,14 +686,8 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+         )
+         _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+         _check_event_types(checks, run.events, list(expected.get("event_types") or []))
+-    return _result(
+-        task,
+-        checks,
+-        {
+-            "response": payload,
+-            "run": run.to_dict() if run is not None else None,
+-        },
+-    )
++    return _result(task, checks, details)
++
+ 
+ 
+ def _run_materials_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index ac4db53b7b..dd52b0850c 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -2,6 +2,8 @@ from __future__ import annotations
+ 
+ import json
+ 
++import pytest
++
+ from evals import run_agent_eval as eval_module
+ from evals.run_agent_eval import DEFAULT_TASKS_PATH, run_eval
+ 
+@@ -92,3 +94,45 @@ def test_agent_eval_cli_prints_only_public_summary(monkeypatch, capsys) -> None:
+         "score": 1.0,
+     }
+     assert "must-not-be-printed" not in output
++
++
++@pytest.mark.parametrize("action", ["propose", "confirm", "reject", "correct", "delete"])
++def test_memory_route_eval_uses_original_grant_and_reopened_owner_record(tmp_path, action):
++    import app.domain.shared_services.user_memory_service as memory_mod
++    from app import db as host_db
++
++    original_factory = host_db.HostSessionLocal
++    original_singletons = (
++        memory_mod._user_memory_service,
++        memory_mod.UserMemoryService._instance,
++        memory_mod.UserMemoryStore._instance,
++    )
++    task = next(
++        row
++        for row in eval_module.load_tasks()
++        if row["id"] == f"memory_v2_{action}_route_forces_agent_orchestrator"
++    )
++    path = tmp_path / "memory.jsonl"
++    path.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
++    result = run_eval(path)
++    item = result["results"][0]
++    assert result["total"] == result["passed"] == 1 and result["failed"] == 0, item
++    details = item["details"]
++    assert details["execution_mode"] == "actual_host_session_and_json_memory"
++    assert details["initial_response"]["success"] is False
++    assert details["initial_response"]["agent_status"] == "waiting_user"
++    assert details["run"]["run_id"] == details["initial_response"]["run_id"]
++    assert details["run"]["user_id"] == details["principal_user_id"] != task["user_id"]
++    assert details["owner_id"].startswith("governed:")
++    assert details["approval_consumption_count"] == 1 and details["step_params_unchanged"] is True
++    assert details["response"]["business_verification"]["verified"] is True
++    field = "candidate" if action == "propose" else "memory"
++    assert details["readback"] == details["response"][field]
++    assert details["readback"]["status"] == task["expected"]["memory_status"]
++    assert len(details["memory_sha256"]) == 64
++    assert host_db.HostSessionLocal is original_factory
++    assert (
++        memory_mod._user_memory_service,
++        memory_mod.UserMemoryService._instance,
++        memory_mod.UserMemoryStore._instance,
++    ) == original_singletons
+-- 
+2.50.1 (Apple Git-155)
+

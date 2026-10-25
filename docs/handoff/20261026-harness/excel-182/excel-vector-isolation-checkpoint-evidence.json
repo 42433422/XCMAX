@@ -1,0 +1,72 @@
+{
+  "scope": "Excel vector owner isolation candidate checkpoint; not P0 complete or installed acceptance",
+  "head": "0a29fc7d4a6435279eb264e2d5b85e5d689111ad",
+  "tests": [
+    {
+      "log": "final-regression-3.log",
+      "passed": 518,
+      "seconds": 64.99
+    },
+    {
+      "log": "chat-enrichment-2.log",
+      "passed": 25,
+      "deselected": 514,
+      "seconds": 0.79
+    },
+    {
+      "log": "parent-review-fix-and-open-gap.log",
+      "passed": 2,
+      "seconds": 3.12,
+      "meaning": "one no-follow race protection case plus a reproduction confirming the still-open approval-input gap"
+    },
+    {
+      "log": "final-format-regression.log",
+      "passed": 72,
+      "seconds": 4.61,
+      "meaning": "actual model tool -> formal approved run -> dispatch/readback plus workflow compatibility after the AST-identical formatting-only final byte change"
+    }
+  ],
+  "ruff": {
+    "check": {
+      "exit_code": 0,
+      "output": "All checks passed!\n"
+    },
+    "format --check": {
+      "exit_code": 0,
+      "output": "19 files already formatted\n"
+    }
+  },
+  "net_lines": {
+    "added": 1111,
+    "deleted": 429,
+    "net": 682
+  },
+  "proof_boundaries": [
+    "All model and embedding transport is synthetic/local HashEmbedder; actual SQLite and XLSX, real Principal/session, formal grant and queue/dispatch/readback were used.",
+    "Old global indexes remain physically present but are not auto-adopted into owner namespaces.",
+    "Retained service denies expired/revoked/changed-tenant binding; fresh Principal after a legitimate tenant move receives an empty new namespace.",
+    "Only owner input is allowed, dot segments rejected before normalization, pinned nofollow and nlink checks reused; symlink parent race creates no external file or directory.",
+    "Raw storage connections remain shared; exposed services and namespace adapters are per trusted context and revalidate current actor and RBAC."
+  ],
+  "open_items": [
+    {
+      "priority": "P0",
+      "evidence": "approval-input-mutation-open-gap.json",
+      "issue": "Approval currently binds file_path, not its bytes. Replacing an owned regular XLSX at the same approved path after grant consumption changes the actual indexed contents and the current readback accepts those replacement contents. Not repaired in this checkpoint by explicit parent scope instruction."
+    },
+    "Real PostgreSQL adapter integration not executed; only existing port/PG unit regressions passed.",
+    "Exact-main installer, running backend/UI identity and actual model quality acceptance remain pending.",
+    "Private staged uploads are retained for waiting/background execution; post-terminal lifecycle cleanup is not newly implemented here."
+  ],
+  "cleanup": {
+    "global_cleanup_script_run": false,
+    "reason": "Other agents and parent integration still active; the script purges shared caches/runtime logs and has no task-only scope. Coordinator must run after all work freezes.",
+    "task_runtime_evidence_retained": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/excel-vector-isolation-20261025",
+    "available_bytes": 69534670848
+  },
+  "final_byte_changes_after_518_run": [
+    "app/application/tools/workflow.py"
+  ],
+  "final_format_ast_equal": true,
+  "owned_source_unchanged_during_518_run": true
+}

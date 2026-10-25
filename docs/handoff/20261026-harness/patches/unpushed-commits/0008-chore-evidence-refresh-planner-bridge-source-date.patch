@@ -1,0 +1,22 @@
+From 552bd7dbee1f27a08730d22ee4ad486ae87404db Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 19:56:40 +0800
+Subject: [PATCH 08/43] chore(evidence): refresh planner bridge source date
+
+
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/ind-planner.html" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/ind-planner.html"
+index f8987cd400..954d589322 100644
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/ind-planner.html"
++++ "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/ind-planner.html"
+@@ -35,7 +35,7 @@
+       <div>
+         <span class="eyebrow">行业与客户定制 / 客户专属 Mod</span>
+         <h1>规划器桥接 Mod</h1>
+-        <div class="cap-feature-meta"><span class="cap-status st-verified">已验证</span><span class="cap-platform cap-platform--verified">Web · 已验证</span><span>代码更新于 2026-09-05</span></div>
++        <div class="cap-feature-meta"><span class="cap-status st-verified">已验证</span><span class="cap-platform cap-platform--verified">Web · 已验证</span><span>代码更新于 2026-10-25</span></div>
+         <p>规划器能力的桥接 Mod。</p>
+       </div>
+       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain=industry">返回 行业与客户定制</a></p></div>
+-- 
+2.50.1 (Apple Git-155)
+

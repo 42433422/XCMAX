@@ -1,0 +1,12 @@
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/push_preflight.py:        ("net-deletion", *check_net_deletion(base)),
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print(f"[net-deletion] 代码+文档 当前 {total} 行 / 基线 {limit} 行（差 {delta:+d}）")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print(f"[net-deletion] 其中文档 {doc_lines} 行 / 代码 {total - doc_lines} 行")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:        print(f"[net-deletion] OK：本迭代净删除 {-delta} 行（基线可下调 {total}）。")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print("[net-deletion] 失败：净增了代码/文档行数。本迭代必须有净删除行数。")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print("[net-deletion] 增量最大的顶层目录：")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print("[net-deletion] 处置：删除等量以上死代码/死文档，或（需评审可见）--update --force --reason。")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:        print(f"[net-deletion] 已建立基线：{total} 行")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:        print(f"[net-deletion] 基线下调：{base} → {total}（净删除 {base - total} 行）")
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:            f"[net-deletion] 拒绝抬升基线：当前 {total} > 基线 {base}（+{total - base} 行）。"
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:        print("[net-deletion] --force 抬升必须给出 --reason。", file=sys.stderr)
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py:    print(f"[net-deletion] 基线抬升：{base} → {total}（+{total - base} 行）；原因：{reason.strip()}")

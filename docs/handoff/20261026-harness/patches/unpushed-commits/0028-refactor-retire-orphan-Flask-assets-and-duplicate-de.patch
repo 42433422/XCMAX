@@ -1,0 +1,4913 @@
+From d339450d9919c7ffc398200445798a3b871faa29 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 00:31:12 +0800
+Subject: [PATCH 28/43] refactor: retire orphan Flask assets and duplicate
+ deployment guide
+
+
+diff --git a/ARCHIVE_POINTER.md b/ARCHIVE_POINTER.md
+index 1b2dc1755b..8eebfbbdde 100644
+--- a/ARCHIVE_POINTER.md
++++ b/ARCHIVE_POINTER.md
+@@ -1,5 +1,7 @@
+ # XCMAX 历史与大文件归档指针
+ 
++2026-10-26 Harness 收敛：未被当前静态路由或桌面打包收录的 `FHD/XCAGI/static/js/` 旧 Flask 副本（12 文件），以及与公司根现行同名文档逐字相同的 `成都修茈科技有限公司/docs/planning/腾讯云Pages部署指南.md`，已校验外置到 `~/XCMAX-archives/harness-retired-static-20261026/`（合计 4,813 行）。逐文件原文、SHA256、来源提交 `9dab58819e430b59196fcfb511e1c9695bd0aacc` 与调用证据见 `MANIFEST.json`；现行前端与兼容资产仍在 `FHD/frontend/`，公司根同名部署指南保留。
++
+ 2026-10-24 工单交付整理：未登记且已被 v10 指南替代的 `成都修茈科技有限公司/docs/modstore/MOD_AUTHORING_GUIDE.md`（942 行）逐字节校验外置到 `~/XCMAX-archives/docs-20261024-ticket-mod-authoring/`，原文与 SHA256 见 `MANIFEST.json`；现行入口为 `FHD/docs/guides/MOD_AUTHORING_GUIDE.md`。
+ 
+ 同轮未登记的六月修复快照 `docs/reports/FIXES.md` 与旧评分路线图 `docs/roadmap/AI_PLATFORM_9_SCORE_ROADMAP.md`（共 1,076 行）校验外置到 `~/XCMAX-archives/docs-20261024-ticket-history/`；完整原文、SHA256 及来源提交见 `MANIFEST.json`。归档保留历史未完事项，不构成修复完成声明；现行合同与评分口径以 SSOT 目录和 `FHD/config/audit_benchmark_ssot.json` 为准。
+diff --git a/FHD/XCAGI/static/js/comet_scanner.js b/FHD/XCAGI/static/js/comet_scanner.js
+deleted file mode 100755
+index cbbb7b60bb..0000000000
+--- a/FHD/XCAGI/static/js/comet_scanner.js
++++ /dev/null
+@@ -1,225 +0,0 @@
+-/**
+- * 科密CM500高拍仪JavaScript接口
+- * 用于前端调用本地扫描服务
+- */
+-
+-class CometScanner {
+-    constructor(serviceUrl = 'http://127.0.0.1:5001') {
+-        this.serviceUrl = serviceUrl;
+-        this.isConnected = false;
+-        this.deviceInfo = null;
+-    }
+-
+-    /**
+-     * 检查扫描服务是否可用
+-     */
+-    async checkService() {
+-        try {
+-            const response = await fetch(`${this.serviceUrl}/api/status`, {
+-                method: 'GET',
+-                headers: {
+-                    'Content-Type': 'application/json'
+-                }
+-            });
+-
+-            if (response.ok) {
+-                const data = await response.json();
+-                this.isConnected = true;
+-                this.deviceInfo = data.device_info;
+-                return {
+-                    success: true,
+-                    connected: true,
+-                    deviceInfo: data.device_info
+-                };
+-            } else {
+-                this.isConnected = false;
+-                return {
+-                    success: false,
+-                    connected: false,
+-                    error: '服务未响应'
+-                };
+-            }
+-        } catch (error) {
+-            this.isConnected = false;
+-            return {
+-                success: false,
+-                connected: false,
+-                error: error.message
+-            };
+-        }
+-    }
+-
+-    /**
+-     * 扫描图像
+-     * @param {string} resolution - 分辨率 (high/medium/low)
+-     * @returns {Promise<Object>} 扫描结果
+-     */
+-    async scan(resolution = 'high') {
+-        try {
+-            // 先检查服务状态
+-            const statusCheck = await this.checkService();
+-            if (!statusCheck.connected) {
+-                return {
+-                    success: false,
+-                    error: '扫描服务未启动，请先启动科密CM500服务'
+-                };
+-            }
+-
+-            const response = await fetch(`${this.serviceUrl}/api/scan`, {
+-                method: 'POST',
+-                headers: {
+-                    'Content-Type': 'application/json'
+-                },
+-                body: JSON.stringify({
+-                    resolution: resolution
+-                })
+-            });
+-
+-            const result = await response.json();
+-            
+-            if (result.success) {
+-                return {
+-                    success: true,
+-                    imageBase64: result.image_base64,
+-                    imageId: result.image_id,
+-                    filepath: result.filepath,
+-                    resolution: result.resolution,
+-                    width: result.width,
+-                    height: result.height,
+-                    mode: result.mode
+-                };
+-            } else {
+-                return {
+-                    success: false,
+-                    error: result.error || '扫描失败'
+-                };
+-            }
+-        } catch (error) {
+-            return {
+-                success: false,
+-                error: error.message
+-            };
+-        }
+-    }
+-
+-    /**
+-     * 获取扫描的图像文件
+-     * @param {string} imageId - 图像ID
+-     * @returns {Promise<string>} 图像URL
+-     */
+-    async getImageUrl(imageId) {
+-        return `${this.serviceUrl}/api/image/${imageId}`;
+-    }
+-
+-    /**
+-     * 显示扫描预览
+-     * @param {string} imageBase64 - base64编码的图像
+-     * @param {HTMLElement} container - 预览容器
+-     */
+-    showPreview(imageBase64, container) {
+-        if (!container) return;
+-
+-        container.innerHTML = `
+-            <div class="scanner-preview-container" style="
+-                position: relative;
+-                display: inline-block;
+-                border: 2px solid #4CAF50;
+-                border-radius: 8px;
+-                overflow: hidden;
+-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+-            ">
+-                <img src="${imageBase64}" style="
+-                    max-width: 100%;
+-                    max-height: 400px;
+-                    display: block;
+-                " alt="扫描预览">
+-                <div style="
+-                    position: absolute;
+-                    top: 10px;
+-                    right: 10px;
+-                    background: rgba(76, 175, 80, 0.9);
+-                    color: white;
+-                    padding: 5px 10px;
+-                    border-radius: 4px;
+-                    font-size: 12px;
+-                ">
+-                    <i class="fa fa-check-circle"></i> 扫描完成
+-                </div>
+-            </div>
+-        `;
+-    }
+-
+-    /**
+-     * 显示扫描中状态
+-     * @param {HTMLElement} container - 预览容器
+-     */
+-    showScanning(container) {
+-        if (!container) return;
+-
+-        container.innerHTML = `
+-            <div class="scanner-scanning-container" style="
+-                display: flex;
+-                flex-direction: column;
+-                align-items: center;
+-                justify-content: center;
+-                padding: 40px;
+-                background: #f5f5f5;
+-                border-radius: 8px;
+-                border: 2px dashed #ccc;
+-            ">
+-                <div style="
+-                    width: 50px;
+-                    height: 50px;
+-                    border: 4px solid #f3f3f3;
+-                    border-top: 4px solid #4CAF50;
+-                    border-radius: 50%;
+-                    animation: spin 1s linear infinite;
+-                "></div>
+-                <p style="margin-top: 15px; color: #666;">正在扫描...</p>
+-            </div>
+-            <style>
+-                @keyframes spin {
+-                    0% { transform: rotate(0deg); }
+-                    100% { transform: rotate(360deg); }
+-                }
+-            </style>
+-        `;
+-    }
+-
+-    /**
+-     * 显示错误信息
+-     * @param {string} message - 错误信息
+-     * @param {HTMLElement} container - 预览容器
+-     */
+-    showError(message, container) {
+-        if (!container) return;
+-
+-        container.innerHTML = `
+-            <div class="scanner-error-container" style="
+-                display: flex;
+-                flex-direction: column;
+-                align-items: center;
+-                justify-content: center;
+-                padding: 40px;
+-                background: #ffebee;
+-                border-radius: 8px;
+-                border: 2px solid #ef5350;
+-            ">
+-                <i class="fa fa-exclamation-circle" style="
+-                    font-size: 48px;
+-                    color: #ef5350;
+-                    margin-bottom: 10px;
+-                "></i>
+-                <p style="color: #c62828; text-align: center;">${message}</p>
+-            </div>
+-        `;
+-    }
+-}
+-
+-// 创建全局扫描仪实例
+-window.cometScanner = new CometScanner();
+-
+-// 导出模块
+-if (typeof module !== 'undefined' && module.exports) {
+-    module.exports = CometScanner;
+-}
+diff --git a/FHD/XCAGI/static/js/core/config.js b/FHD/XCAGI/static/js/core/config.js
+deleted file mode 100755
+index cd71a37625..0000000000
+--- a/FHD/XCAGI/static/js/core/config.js
++++ /dev/null
+@@ -1 +0,0 @@
+-const API_BASE = '';
+diff --git a/FHD/XCAGI/static/js/core/utils.js b/FHD/XCAGI/static/js/core/utils.js
+deleted file mode 100755
+index b6fd362be6..0000000000
+--- a/FHD/XCAGI/static/js/core/utils.js
++++ /dev/null
+@@ -1,22 +0,0 @@
+-let currentView = 'chat';
+-let currentSessionId = localStorage.getItem('ai_session_id') || generateSessionId();
+-let currentTask = null;
+-let currentJarvisTask = null;
+-let wechatStatusCheckInterval = null;
+-let isQRCodePopupOpen = false;
+-let cameraStream = null;
+-
+-function escapeHtml(value) {
+-    return String(value ?? '')
+-        .replace(/&/g, '&amp;')
+-        .replace(/</g, '&lt;')
+-        .replace(/>/g, '&gt;')
+-        .replace(/"/g, '&quot;')
+-        .replace(/'/g, '&#39;');
+-}
+-
+-window.escapeHtml = escapeHtml;
+-
+-function generateSessionId() {
+-    return 'session_' + crypto.randomUUID();
+-}
+diff --git a/FHD/XCAGI/static/js/modules/chat.js b/FHD/XCAGI/static/js/modules/chat.js
+deleted file mode 100755
+index ce06594a16..0000000000
+--- a/FHD/XCAGI/static/js/modules/chat.js
++++ /dev/null
+@@ -1,1485 +0,0 @@
+-function initConversation() {
+-    localStorage.setItem('ai_session_id', currentSessionId);
+-    bindChatControls();
+-    loadConversationHistory();
+-}
+-window.initConversation = initConversation;
+-
+-function isVueChatOwner() {
+-    return !!window.__VUE_CHAT_OWNS_INPUT__;
+-}
+-
+-let chatControlsBound = false;
+-function bindChatControls() {
+-    if (chatControlsBound) return;
+-    chatControlsBound = true;
+-
+-    if (isVueChatOwner()) {
+-        return;
+-    }
+-
+-    const newConversationBtn = document.getElementById('newConversationBtn');
+-    if (newConversationBtn) {
+-        newConversationBtn.addEventListener('click', newConversation);
+-    }
+-
+-    const historyPanelBtn = document.getElementById('historyPanelBtn');
+-    if (historyPanelBtn) {
+-        historyPanelBtn.addEventListener('click', loadHistoryPanel);
+-    }
+-
+-    const sendMessageBtn = document.getElementById('sendMessageBtn');
+-    if (sendMessageBtn) {
+-        sendMessageBtn.addEventListener('click', sendMessage);
+-    }
+-
+-    const messageInput = document.getElementById('messageInput');
+-    if (messageInput) {
+-        messageInput.addEventListener('keydown', handleKeyDown);
+-    }
+-
+-    document.querySelectorAll('.quick-btn[data-quick]').forEach(btn => {
+-        btn.addEventListener('click', () => sendQuick(btn.getAttribute('data-quick') || ''));
+-    });
+-
+-    // 客户导入成功后刷新右侧用户名单，使新增项立即可见
+-    window.addEventListener('customers-imported', function () {
+-        if (typeof loadCustomers === 'function') {
+-            setTimeout(function () { loadCustomers(); }, 100);
+-        }
+-    });
+-
+-    const previewBtn = document.querySelector('.quick-btn[data-action="test-preview"]');
+-    if (previewBtn) {
+-        previewBtn.addEventListener('click', testPreviewAnimation);
+-    }
+-}
+-
+-function loadConversationHistory() {
+-    fetch(API_BASE + '/api/conversations/' + currentSessionId)
+-        .then(r => {
+-            if (!r.ok) return { success: false, messages: [] };
+-            return r.json();
+-        })
+-        .then(data => {
+-            if (data.success && data.messages && data.messages.length > 0) {
+-                const container = document.getElementById('chatMessages');
+-                container.innerHTML = '';
+-                data.messages.forEach(msg => {
+-                    addMessage(msg.content, msg.role);
+-                });
+-            }
+-        })
+-        .catch(err => console.error('加载历史记录失败:', err));
+-}
+-
+-function saveMessage(role, content) {
+-    fetch(API_BASE + '/api/conversations/message', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify({
+-            session_id: currentSessionId,
+-            user_id: 'default',
+-            role: role,
+-            content: content
+-        })
+-    }).catch(err => console.error('保存消息失败:', err));
+-}
+-
+-function loadHistoryPanel() {
+-    fetch(API_BASE + '/api/conversations/sessions?limit=20')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success && data.sessions) {
+-                showHistoryPanel(data.sessions);
+-            }
+-        })
+-        .catch(err => console.error('加载历史失败:', err));
+-}
+-
+-function showHistoryPanel(sessions) {
+-    const panel = document.createElement('div');
+-    panel.className = 'history-panel';
+-    panel.id = 'historyPanel';
+-    panel.innerHTML = `
+-        <div class="history-header">
+-            <h3>历史对话</h3>
+-            <button id="closeHistoryPanelBtn">×</button>
+-        </div>
+-        <div class="history-list">
+-            ${sessions.map(s => `
+-                <div class="history-item" data-session-id="${escapeHtml(s.session_id)}">
+-                    <div class="history-title">${escapeHtml(s.title || '新会话')}</div>
+-                    <div class="history-meta">${Number(s.message_count || 0)} 条消息</div>
+-                </div>
+-            `).join('')}
+-        </div>
+-    `;
+-    document.body.appendChild(panel);
+-    panel.classList.add('show');
+-    const closeBtn = document.getElementById('closeHistoryPanelBtn');
+-    if (closeBtn) {
+-        closeBtn.addEventListener('click', closeHistoryPanel);
+-    }
+-    panel.querySelectorAll('.history-item[data-session-id]').forEach(item => {
+-        item.addEventListener('click', () => loadSession(item.getAttribute('data-session-id')));
+-    });
+-}
+-
+-function closeHistoryPanel() {
+-    const panel = document.getElementById('historyPanel');
+-    if (panel) panel.classList.remove('show');
+-}
+-
+-function loadSession(sessionId) {
+-    currentSessionId = sessionId;
+-    localStorage.setItem('ai_session_id', sessionId);
+-    loadConversationHistory();
+-    closeHistoryPanel();
+-}
+-
+-function newConversation() {
+-    currentSessionId = generateSessionId();
+-    localStorage.setItem('ai_session_id', currentSessionId);
+-    document.getElementById('chatMessages').innerHTML = '';
+-}
+-
+-function sendMessage() {
+-    const input = document.getElementById('messageInput');
+-    const message = input.value.trim();
+-    if (!message) return;
+-
+-    // 如果当前处于“客户产品列表库”的多轮确认阶段，优先走 sendChatMessage
+-    // （避免 __VUE_CHAT_SEND__ 绕过 pending 拦截逻辑）
+-    try {
+-        const storageKey = 'xcagiPendingUnitProductsImport';
+-        let pending = window && window.__xcagiPendingUnitProductsImport;
+-
+-        // If window state is lost (e.g. refresh), restore from localStorage.
+-        if (!pending) {
+-            try {
+-                const raw = localStorage.getItem(storageKey);
+-                if (raw) pending = JSON.parse(raw);
+-                if (pending && window) window.__xcagiPendingUnitProductsImport = pending;
+-            } catch (_) {}
+-        }
+-
+-        if (pending && pending.saved_name && pending.stage) {
+-            sendChatMessage(message);
+-            if (input) input.value = '';
+-            return;
+-        }
+-    } catch (_) {}
+-
+-    var _xcagiChat = window.__XCAGI_CHAT__;
+-    if (_xcagiChat && typeof _xcagiChat.send === 'function') {
+-        _xcagiChat.send(message);
+-        if (input) input.value = '';
+-        return;
+-    }
+-    if (typeof window.__VUE_CHAT_SEND__ === 'function') {
+-        window.__VUE_CHAT_SEND__(message);
+-        if (input) input.value = '';
+-        return;
+-    }
+-
+-    console.log('🔍 sendMessage 收到的消息:', message);
+-
+-    // 专业模式且为任务类消息时，走 Jarvis 流程（进入任务获取态、执行工具、右侧下载）
+-    if (document.body && document.body.classList.contains('pro-mode-active') &&
+-        typeof window.isProTaskAcquisitionMessage === 'function' && window.isProTaskAcquisitionMessage(message) &&
+-        typeof window.jarvisSendMessage === 'function') {
+-        window.jarvisSendMessage(message);
+-        if (input) input.value = '';
+-        return;
+-    }
+-
+-    sendChatMessage(message);
+-}
+-
+-function sendChatMessage(message, options = {}) {
+-    addMessage(message, 'user');
+-    saveMessage('user', message);
+-    document.getElementById('messageInput').value = '';
+-
+-    const loadingId = showLoading();
+-    
+-    if (options.thinkingId) {
+-        const thinkingMsg = document.querySelector(`[data-message-id="${options.thinkingId}"]`);
+-        if (thinkingMsg) {
+-            thinkingMsg.remove();
+-        }
+-    }
+-
+-    // 专业版模式切换指令本地优先，避免被后端上下文误判为业务意图。
+-    try {
+-        const isProModeActive = !!(document.body && document.body.classList.contains('pro-mode-active'));
+-        const compact = String(message || '').trim().toLowerCase().replace(/\s+/g, '');
+-        const wantsWorkMode = compact === '工作模式' || compact === '切换工作模式' || compact === '进入工作模式'
+-            || compact === 'workmode' || compact === 'switchtoworkmode' || compact === 'enterworkmode';
+-        const wantsMonitorMode = compact === '监控模式' || compact === '切换监控模式' || compact === '进入监控模式'
+-            || compact === 'monitormode' || compact === 'switchtomonitormode' || compact === 'entermonitormode';
+-        if (isProModeActive && (wantsWorkMode || wantsMonitorMode)) {
+-            removeLoading(loadingId);
+-            if (wantsMonitorMode) {
+-                if (typeof window.setMonitorModeFromChat === 'function') {
+-                    window.setMonitorModeFromChat(true);
+-                    if (typeof window.refreshWorkModeMonitorList === 'function') window.refreshWorkModeMonitorList();
+-                    addMessage('正在切换到监控模式...', 'ai');
+-                    saveMessage('ai', '正在切换到监控模式...');
+-                } else {
+-                    addMessage('监控模式入口不可用，已保持当前模式不变。', 'ai');
+-                    saveMessage('ai', '监控模式入口不可用，已保持当前模式不变。');
+-                }
+-            } else {
+-                if (typeof window.setWorkModeFromChat === 'function') {
+-                    window.setWorkModeFromChat(true);
+-                    if (typeof window.refreshWorkModeMonitorList === 'function') window.refreshWorkModeMonitorList();
+-                    addMessage('正在切换到工作模式...', 'ai');
+-                    saveMessage('ai', '正在切换到工作模式...');
+-                } else {
+-                    addMessage('工作模式入口不可用，已保持当前模式不变。', 'ai');
+-                    saveMessage('ai', '工作模式入口不可用，已保持当前模式不变。');
+-                }
+-            }
+-            return;
+-        }
+-    } catch (_) {}
+-
+-    // pending import：当文件上传识别到“客户产品列表库”后，用户回复是/否/改成... 将触发导入
+-    try {
+-        const storageKey = 'xcagiPendingUnitProductsImport';
+-        let pending = window && window.__xcagiPendingUnitProductsImport;
+-
+-        // Restore pending import state if window variable is lost (e.g. refresh).
+-        if (!pending) {
+-            try {
+-                const raw = localStorage.getItem(storageKey);
+-                if (raw) pending = JSON.parse(raw);
+-                if (pending && window) window.__xcagiPendingUnitProductsImport = pending;
+-            } catch (_) {}
+-        }
+-
+-        // Ensure pending import belongs to the current chat session.
+-        try {
+-            const curSessionId = localStorage.getItem('ai_session_id') || '';
+-            if (pending && pending.session_id && pending.session_id !== curSessionId) {
+-                try { delete window.__xcagiPendingUnitProductsImport; } catch (_) {}
+-                try { localStorage.removeItem(storageKey); } catch (_) {}
+-                return;
+-            }
+-        } catch (_) {}
+-
+-        if (pending && pending.saved_name && pending.stage) {
+-            const msgTrim = String(message || '').trim();
+-            const stage = String(pending.stage || 'confirm_filename');
+-            const candidates = Array.isArray(pending.unit_candidates) ? pending.unit_candidates : [];
+-
+-            const clearPending = () => {
+-                try { delete window.__xcagiPendingUnitProductsImport; } catch (_) {}
+-                try { localStorage.removeItem(storageKey); } catch (_) {}
+-            };
+-
+-            const addAi = (text) => {
+-                removeLoading(loadingId);
+-                addMessage(text, 'ai');
+-                try { saveMessage('ai', text); } catch (_) {}
+-            };
+-
+-            const doImport = (unitNameToUse) => {
+-                const body = {
+-                    saved_name: pending.saved_name,
+-                    unit_name: (unitNameToUse || '').trim(),
+-                    create_purchase_unit: true,
+-                    skip_duplicates: true
+-                };
+-                return fetch(API_BASE + '/api/ai/sqlite/import_unit_products', {
+-                    method: 'POST',
+-                    headers: { 'Content-Type': 'application/json' },
+-                    body: JSON.stringify(body)
+-                }).then(r => r.json()).then(res => {
+-                    if (res && res.success) {
+-                        clearPending();
+-                        const msg = res.message || `导入成功：${body.unit_name}`;
+-                        addAi(msg);
+-                    } else {
+-                        const errMsg = (res && res.message) ? res.message : '导入失败（未知错误）';
+-                        addAi('导入失败：' + errMsg);
+-                    }
+-                }).catch(e => {
+-                    addAi('导入请求失败：' + (e && e.message ? e.message : String(e)));
+-                });
+-            };
+-
+-            // 解析“改成/改为”
+-            const renameMatch = msgTrim.match(/^(改成|改为)\s*(.+)$/);
+-
+-            if (stage === 'confirm_filename') {
+-                const yesMatch = /^(是|确认|确定|导入|开始导入|执行|添加客户|添加购买单位)/.test(msgTrim);
+-                const noMatch = /^(否|取消|不导入|不要|别导入|不用|停止)/.test(msgTrim);
+-
+-                if (renameMatch && renameMatch[2]) {
+-                    doImport(renameMatch[2]);
+-                    return;
+-                }
+-                if (noMatch) {
+-                    pending.stage = 'choose_candidate';
+-                    if (candidates.length > 0) {
+-                        const list = candidates
+-                            .slice(0, 10)
+-                            .map((u, i) => `${i + 1})${u}`)
+-                            .join('  ');
+-                        addAi('好的。我从该库里提取到一些“客户”候选：' + list + '。回复序号或直接输入名称即可导入。');
+-                    } else {
+-                        addAi('我从该库里没有提取到客户候选。请你直接回复“改成 <名称>”。');
+-                    }
+-                    return;
+-                }
+-                if (yesMatch) {
+-                    const guess = (pending.unit_name_guess || '').trim();
+-                    if (guess) {
+-                        doImport(guess);
+-                        return;
+-                    }
+-                    // If we can't guess unit_name, ask user to pick an available candidate.
+-                    pending.stage = 'choose_candidate';
+-                    if (candidates.length > 0) {
+-                        const list = candidates
+-                            .slice(0, 10)
+-                            .map((u, i) => `${i + 1})${u}`)
+-                            .join('  ');
+-                        addAi('好的。但我没法从文件名猜到客户名称。候选如下：' + list + '。回复序号或直接输入名称即可导入。');
+-                    } else {
+-                        addAi('我从该库里没有提取到客户候选。请你直接回复“改成 <名称>”。');
+-                    }
+-                    return;
+-                }
+-
+-                addAi('没太明白。请回复：是 / 否 / 改成 <名称>。');
+-                return;
+-            }
+-
+-            if (stage === 'choose_candidate') {
+-                const cancelMatch = /^(取消|不导入|不要|别导入|不用|停止|算了)/.test(msgTrim);
+-                if (cancelMatch) {
+-                    clearPending();
+-                    removeLoading(loadingId);
+-                    addMessage('已取消导入。', 'ai');
+-                    try { saveMessage('ai', '已取消导入。'); } catch (_) {}
+-                    return;
+-                }
+-
+-                if (renameMatch && renameMatch[2]) {
+-                    doImport(renameMatch[2]);
+-                    return;
+-                }
+-
+-                const numMatch = msgTrim.match(/^(\d{1,2})$/) || msgTrim.match(/^(\d{1,2})号$/);
+-                if (numMatch && numMatch[1]) {
+-                    const idx = parseInt(numMatch[1], 10) - 1;
+-                    if (idx >= 0 && idx < candidates.length) {
+-                        doImport(candidates[idx]);
+-                        return;
+-                    }
+-                }
+-
+-                // 兜底：把用户输入当作名称
+-                if (msgTrim.length >= 2 && !/^(是|否|确认|确定|导入|取消)/.test(msgTrim)) {
+-                    doImport(msgTrim);
+-                    return;
+-                }
+-
+-                addAi('请回复候选序号（如 1/2/3）或直接输入客户名称。');
+-                return;
+-            }
+-        }
+-    } catch (e) {
+-        // 不影响正常聊天
+-        console.warn('pending import intercept failed:', e);
+-    }
+-
+-    callUnifiedChat({
+-        message: message,
+-        isWechatCheck: options.isWechatCheck || false
+-    }).then(data => {
+-        removeLoading(loadingId);
+-        if (data.success) {
+-            addMessage(data.response, 'ai');
+-            saveMessage('ai', data.response);
+-            if (data.task) showTaskConfirm(data.task);
+-            
+-            if (data.autoAction) {
+-                console.log('🔧 检测到自动操作:', data.autoAction);
+-                console.log('🔧 proFeatureWidget存在:', !!window.proFeatureWidget);
+-                handleAutoAction(data.autoAction, message);
+-            }
+-        } else {
+-            addMessage('处理失败: ' + data.message, 'ai');
+-        }
+-    }).catch(e => {
+-        removeLoading(loadingId);
+-        addMessage('连接失败: ' + e.message, 'ai');
+-    });
+-}
+-
+-function callUnifiedChat(payload) {
+-    const headers = {'Content-Type': 'application/json'};
+-    return fetch(API_BASE + '/api/ai/chat-unified', {
+-        method: 'POST',
+-        headers,
+-        body: JSON.stringify(payload || {})
+-    }).then(async (r) => {
+-        if (r.status === 404) {
+-            return fetch(API_BASE + '/api/ai/chat', {
+-                method: 'POST',
+-                headers,
+-                body: JSON.stringify(payload || {})
+-            }).then(rr => rr.json());
+-        }
+-        return r.json();
+-    });
+-}
+-
+-function sendQuick(msg) {
+-    document.getElementById('messageInput').value = msg;
+-    sendMessage();
+-}
+-
+-function handleAutoAction(action, userMessage = '') {
+-    console.log('🔧 执行自动操作:', action);
+-    console.log('🔧 action.type:', action.type);
+-    console.log('🔧 proFeatureWidget存在:', !!window.proFeatureWidget);
+-    if (action && action.type === 'show_products_float') {
+-        window.dispatchEvent(new CustomEvent('xcagi:open-assistant-float', {
+-            detail: { feature: 'products', query: action.query || userMessage || '' }
+-        }));
+-        return;
+-    }
+-    
+-    if (!window.proFeatureWidget) {
+-        console.log('⚠️ proFeatureWidget未初始化，尝试初始化');
+-        if (typeof initProFeatureWidget === 'function') {
+-            initProFeatureWidget();
+-        }
+-    }
+-    
+-    switch(action.type) {
+-        case 'show_login':
+-        case 'show_contacts':
+-            // 微信相关功能已移除，不再调用
+-            break;
+-        case 'show_products':
+-            showProductsPanel(action.query);
+-            break;
+-        case 'show_customers':
+-            showUserListInRightPanel(userMessage);
+-            break;
+-        case 'export_customers_xlsx':
+-            exportCustomersXlsx();
+-            break;
+-        case 'show_print':
+-            showPrintPanel();
+-            break;
+-        case 'show_materials':
+-            showMaterialsPanel();
+-            break;
+-        case 'show_orders':
+-            showOrdersPanel();
+-            break;
+-        case 'show_file_upload':
+-            showFileUploadPanel(action.purpose);
+-            break;
+-        case 'show_labels_export':
+-            if (action.labels && Array.isArray(action.labels) && action.labels.length > 0) {
+-                showLabelsExportPanelWithLabels(action.labels);
+-            } else {
+-                showLabelsExportPanel();
+-            }
+-            break;
+-        case 'set_work_mode':
+-            if (typeof window.setWorkModeFromChat === 'function') {
+-                window.setWorkModeFromChat(!!action.enabled);
+-            }
+-            break;
+-        case 'show_monitor':
+-            // 监控模式只走独立入口；缺失时保持当前模式，避免静默串扰。
+-            if (typeof window.setMonitorModeFromChat === 'function') {
+-                window.setMonitorModeFromChat(true);
+-            } else {
+-                console.warn('[pro-runtime] monitor mode entry missing; skip fallback to work mode');
+-                if (typeof addMessage === 'function') {
+-                    addMessage('监控模式入口不可用，已保持当前模式不变。', 'ai');
+-                }
+-                break;
+-            }
+-            if (typeof window.refreshWorkModeMonitorList === 'function') {
+-                window.refreshWorkModeMonitorList();
+-            }
+-            break;
+-        case 'show_wechat_messages':
+-            // 微信消息功能已移除
+-            break;
+-        case 'show_images':
+-            showMediaPanel('image', action.source);
+-            break;
+-        case 'show_videos':
+-            showMediaPanel('video', action.source);
+-            break;
+-        case 'already_logged':
+-            break;
+-        case 'tool_call':
+-            console.log('🔧 执行工具调用:', action.tool_key, action.params);
+-            if (action.tool_key === 'products') {
+-                const query = action.params?.model_number || action.params?.keyword || action.query || '';
+-                const unitName = action.params?.unit_name || '';
+-                showProductsPanel(query, unitName);
+-            } else if (action.tool_key === 'customers') {
+-                showCustomersPanel();
+-            } else if (action.tool_key === 'shipments') {
+-                showOrdersPanel();
+-            } else if (action.tool_key === 'print_label') {
+-                showPrintPanel();
+-            } else if (action.tool_key === 'materials') {
+-                showMaterialsPanel();
+-            } else if (action.tool_key === 'show_labels_export') {
+-                showLabelsExportPanel();
+-            }
+-            break;
+-        default:
+-            console.log('未知操作类型:', action.type);
+-    }
+-}
+-
+-// 暴露给专业模式（Jarvis）统一复用
+-window.__legacyHandleAutoAction = handleAutoAction;
+-if (!(window.__XCAGI_CHAT__ && window.__XCAGI_CHAT__.ownsAutoAction) && !window.__VUE_HANDLE_AUTO_ACTION__) {
+-    window.handleAutoAction = handleAutoAction;
+-}
+-
+-function showProductsPanel(query, unitName) {
+-    const isProModeActive = !!(document.body && document.body.classList.contains('pro-mode-active'));
+-    if (isProModeActive && window.proFeatureWidget && typeof window.proFeatureWidget.showFeature === 'function') {
+-        const config = { query: query || '' };
+-        if (unitName) config.unit_name = unitName;
+-        window.proFeatureWidget.showFeature('product_query', config);
+-        return;
+-    }
+-
+-    // 非专业版优先使用统一视图切换，避免依赖旧的 href 菜单结构
+-    if (typeof switchView === 'function') {
+-        switchView('products');
+-    } else {
+-        const productsMenu = document.querySelector('.menu-item[data-view="products"]');
+-        const productsLink = document.querySelector('a[href*="database"], a[href*="products"]');
+-        if (productsMenu) productsMenu.click();
+-        else if (productsLink) productsLink.click();
+-    }
+-
+-    if (query) {
+-        setTimeout(() => {
+-            const searchInput = document.getElementById('productSearch')
+-                || document.querySelector('input[placeholder*="搜索"], input[id*="search"]');
+-            if (searchInput) {
+-                searchInput.value = query;
+-                searchInput.dispatchEvent(new Event('input'));
+-            }
+-        }, 280);
+-    }
+-}
+-
+-function showCustomersPanel() {
+-    if (typeof switchView === 'function') {
+-        switchView('customers');
+-    }
+-}
+-
+-let customersExportEntryHideTimer = null;
+-
+-function ensureCustomersExportEntry() {
+-    let entry = document.getElementById('customersExportEntry');
+-    if (entry) return entry;
+-
+-    entry = document.createElement('div');
+-    entry.id = 'customersExportEntry';
+-    entry.className = 'file-upload-entry';
+-    entry.innerHTML = `
+-        <span class="entry-icon">⬇️</span>
+-        <span class="entry-text">下载客户XLSX</span>
+-    `;
+-    entry.addEventListener('click', () => {
+-        const url = entry.getAttribute('data-download-url') || '';
+-        downloadCustomersXlsxFile(url);
+-    });
+-    document.body.appendChild(entry);
+-    return entry;
+-}
+-
+-function getFilenameFromDisposition(disposition, fallback = '客户列表.xlsx') {
+-    if (!disposition) return fallback;
+-    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+-    if (utf8Match && utf8Match[1]) {
+-        try { return decodeURIComponent(utf8Match[1]); } catch (_) {}
+-    }
+-    const plainMatch = disposition.match(/filename="?([^"]+)"?/i);
+-    if (plainMatch && plainMatch[1]) return plainMatch[1];
+-    return fallback;
+-}
+-
+-async function downloadCustomersXlsxFile(url) {
+-    if (!url) return;
+-    const entry = document.getElementById('customersExportEntry');
+-    const textEl = entry ? entry.querySelector('.entry-text') : null;
+-    const oldText = textEl ? textEl.textContent : '';
+-    if (textEl) textEl.textContent = '正在下载...';
+-    if (entry) entry.classList.add('show');
+-    try {
+-        const response = await fetch(url, { method: 'GET' });
+-        if (!response.ok) {
+-            throw new Error(`下载失败(${response.status})`);
+-        }
+-        const blob = await response.blob();
+-        const filename = getFilenameFromDisposition(
+-            response.headers.get('content-disposition'),
+-            '客户列表.xlsx'
+-        );
+-        const blobUrl = URL.createObjectURL(blob);
+-        const link = document.createElement('a');
+-        link.href = blobUrl;
+-        link.download = filename;
+-        link.style.display = 'none';
+-        document.body.appendChild(link);
+-        link.click();
+-        setTimeout(() => {
+-            link.remove();
+-            URL.revokeObjectURL(blobUrl);
+-        }, 0);
+-        if (textEl) textEl.textContent = '已开始下载';
+-        setTimeout(() => {
+-            if (textEl) textEl.textContent = oldText || '下载客户XLSX';
+-            if (entry) entry.classList.remove('show');
+-        }, 1200);
+-    } catch (err) {
+-        if (textEl) textEl.textContent = `下载失败: ${(err && err.message) ? err.message : '未知错误'}`;
+-        setTimeout(() => {
+-            if (textEl) textEl.textContent = oldText || '下载客户XLSX';
+-        }, 1800);
+-    }
+-}
+-
+-function exportCustomersXlsx() {
+-    const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-    const entry = ensureCustomersExportEntry();
+-    // 后端客户导出接口是 `/api/customers/export`
+-    const url = `${apiBase}/api/customers/export`;
+-    entry.setAttribute('data-download-url', url);
+-    entry.classList.add('show');
+-    if (typeof hideFileUploadEntry === 'function') {
+-        hideFileUploadEntry();
+-    }
+-    if (customersExportEntryHideTimer) {
+-        clearTimeout(customersExportEntryHideTimer);
+-    }
+-    customersExportEntryHideTimer = setTimeout(() => {
+-        entry.classList.remove('show');
+-    }, 20000);
+-}
+-
+-let shipmentDownloadEntryHideTimer = null;
+-
+-function ensureShipmentDownloadEntry() {
+-    let entry = document.getElementById('shipmentDownloadEntry');
+-    if (entry) return entry;
+-
+-    entry = document.createElement('div');
+-    entry.id = 'shipmentDownloadEntry';
+-    entry.className = 'file-upload-entry shipment-download-entry';
+-    entry.innerHTML = `
+-        <span class="entry-icon">📄</span>
+-        <span class="entry-text">下载发货单</span>
+-    `;
+-    entry.addEventListener('click', () => {
+-        const url = entry.getAttribute('data-download-url') || '';
+-        const name = entry.getAttribute('data-download-filename') || '发货单.xlsx';
+-        if (url) downloadShipmentFile(url, name);
+-    });
+-    const uploadEntry = document.getElementById('fileUploadEntry');
+-    if (uploadEntry && uploadEntry.parentNode) {
+-        uploadEntry.parentNode.insertBefore(entry, uploadEntry.nextSibling);
+-    } else {
+-        document.body.appendChild(entry);
+-    }
+-    return entry;
+-}
+-
+-function downloadShipmentFile(url, filename) {
+-    const entry = document.getElementById('shipmentDownloadEntry');
+-    const textEl = entry ? entry.querySelector('.entry-text') : null;
+-    const oldText = textEl ? textEl.textContent : '';
+-    if (textEl) textEl.textContent = '正在下载...';
+-    if (entry) entry.classList.add('show');
+-    fetch(url, { method: 'GET' })
+-        .then(r => {
+-            if (!r.ok) throw new Error('下载失败');
+-            return r.blob();
+-        })
+-        .then(blob => {
+-            const blobUrl = URL.createObjectURL(blob);
+-            const link = document.createElement('a');
+-            link.href = blobUrl;
+-            link.download = filename || '发货单.xlsx';
+-            link.style.display = 'none';
+-            document.body.appendChild(link);
+-            link.click();
+-            setTimeout(() => {
+-                link.remove();
+-                URL.revokeObjectURL(blobUrl);
+-            }, 0);
+-            if (textEl) textEl.textContent = '已开始下载';
+-        })
+-        .catch(() => {
+-            if (textEl) textEl.textContent = '下载失败';
+-        })
+-        .finally(() => {
+-            setTimeout(() => {
+-                if (textEl) textEl.textContent = oldText || '下载发货单';
+-                if (entry) entry.classList.remove('show');
+-            }, 1200);
+-        });
+-}
+-
+-function showShipmentDownloadEntry(filename) {
+-    if (!filename) return;
+-    const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-    const entry = ensureShipmentDownloadEntry();
+-    const url = apiBase + '/outputs/' + encodeURIComponent(filename);
+-    entry.setAttribute('data-download-url', url);
+-    entry.setAttribute('data-download-filename', filename);
+-    const textEl = entry.querySelector('.entry-text');
+-    if (textEl) textEl.textContent = '下载 ' + (filename.length > 20 ? filename.slice(0, 16) + '…' : filename);
+-    entry.classList.add('show');
+-    if (shipmentDownloadEntryHideTimer) clearTimeout(shipmentDownloadEntryHideTimer);
+-    shipmentDownloadEntryHideTimer = setTimeout(() => {
+-        entry.classList.remove('show');
+-        if (textEl) textEl.textContent = '下载发货单';
+-    }, 60000);
+-}
+-
+-window.showShipmentDownloadEntry = showShipmentDownloadEntry;
+-
+-function showUserListInRightPanel(userMessage = '') {
+-    if (typeof switchView === 'function') {
+-        switchView('chat');
+-    }
+-
+-    const isProModeActive = !!(document.body && document.body.classList.contains('pro-mode-active'));
+-    if (isProModeActive && window.proFeatureWidget && typeof window.proFeatureWidget.showFeature === 'function') {
+-        window.proFeatureWidget.showFeature('user_list', { query: userMessage || '' });
+-        return;
+-    }
+-
+-    const panel = document.getElementById('taskPanel');
+-    if (!panel) return;
+-    panel.innerHTML = '<div class="empty-state">正在加载用户名单...</div>';
+-
+-    fetch(API_BASE + '/api/customers')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (!data.success) {
+-                throw new Error(data.message || '加载失败');
+-            }
+-            const customers = data.customers || data.data || [];
+-            renderUserListPanel(customers, userMessage);
+-        })
+-        .catch(err => {
+-            panel.innerHTML = `<div class="empty-state">加载用户列表失败：${escapeHtml(err.message || '未知错误')}</div>`;
+-        });
+-}
+-
+-function renderUserListPanel(customers, userMessage = '') {
+-    const panel = document.getElementById('taskPanel');
+-    const header = document.querySelector('.right-panel .panel-header');
+-    if (!panel) return;
+-    if (header) {
+-        header.innerHTML = '<span>用户名单（可编辑）</span><button class="btn-icon btn-excel" id="panelExportExcelBtn" title="导出客户Excel"><svg class="excel-icon-svg" viewBox="0 0 24 24" width="20" height="20"><rect width="24" height="24" rx="3" fill="#217346"/><path stroke="#fff" stroke-width="2.2" stroke-linecap="round" fill="none" d="M7 7l10 10M17 7L7 17"/></svg></button>';
+-        header.style.display = 'flex';
+-        header.style.justifyContent = 'space-between';
+-        header.style.alignItems = 'center';
+-        const excelBtn = document.getElementById('panelExportExcelBtn');
+-        if (excelBtn) {
+-            excelBtn.addEventListener('click', () => exportCustomersXlsx());
+-        }
+-    }
+-
+-    if (!Array.isArray(customers) || customers.length === 0) {
+-        panel.innerHTML = '<div class="empty-state">暂无用户数据</div>';
+-        return;
+-    }
+-
+-    const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-    const exportBtn = `
+-        <div class="user-list-hint" style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+-            <button class="btn btn-secondary btn-sm" id="exportCustomersXlsxBtn">导出XLSX</button>
+-        </div>
+-    `;
+-    const hint = userMessage
+-        ? `<div class="user-list-hint">已根据指令展示：${escapeHtml(userMessage)}</div>`
+-        : '<div class="user-list-hint">支持手动编辑；也支持对话编辑，例如：把用户成都国圣的电话改成13800000000</div>';
+-
+-    const rows = customers.map(c => {
+-        const id = Number(c.id || 0);
+-        const name = escapeHtml(c.customer_name || c.unit_name || c.name || '');
+-        const contact = escapeHtml(c.contact_person || '');
+-        const phone = escapeHtml(c.contact_phone || '');
+-        const address = escapeHtml(c.address || '');
+-        return `
+-            <div class="user-edit-card" data-customer-id="${id}">
+-                <div class="user-edit-title">${name || '未命名用户'}</div>
+-                <label>联系人</label>
+-                <input type="text" class="user-edit-input" data-field="contact_person" value="${contact}">
+-                <label>电话</label>
+-                <input type="text" class="user-edit-input" data-field="contact_phone" value="${phone}">
+-                <label>地址</label>
+-                <input type="text" class="user-edit-input" data-field="address" value="${address}">
+-                <button class="btn btn-primary btn-sm user-save-btn" data-action="save-user" data-id="${id}">
+-                    保存
+-                </button>
+-            </div>
+-        `;
+-    }).join('');
+-
+-    panel.innerHTML = `${exportBtn}${hint}<div class="user-edit-list">${rows}</div>`;
+-    const exportBtnEl = document.getElementById('exportCustomersXlsxBtn');
+-    if (exportBtnEl) {
+-        exportBtnEl.addEventListener('click', () => {
+-            exportCustomersXlsx();
+-        });
+-    }
+-    panel.querySelectorAll('[data-action="save-user"]').forEach(btn => {
+-        btn.addEventListener('click', () => saveUserEdit(btn));
+-    });
+-}
+-
+-function saveUserEdit(button) {
+-    const customerId = Number(button.getAttribute('data-id') || 0);
+-    if (!customerId) return;
+-    const card = button.closest('.user-edit-card');
+-    if (!card) return;
+-
+-    const payload = {
+-        contact_person: (card.querySelector('[data-field="contact_person"]')?.value || '').trim(),
+-        contact_phone: (card.querySelector('[data-field="contact_phone"]')?.value || '').trim(),
+-        address: (card.querySelector('[data-field="address"]')?.value || '').trim(),
+-        discount_rate: 1,
+-        is_active: 1
+-    };
+-
+-    const originalText = button.textContent;
+-    button.disabled = true;
+-    button.textContent = '保存中...';
+-
+-    fetch(API_BASE + '/api/customers/' + customerId, {
+-        method: 'PUT',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify(payload)
+-    })
+-        .then(r => r.json())
+-        .then(data => {
+-            if (!data.success) {
+-                throw new Error(data.message || '保存失败');
+-            }
+-            button.textContent = '已保存';
+-            setTimeout(() => {
+-                button.textContent = originalText;
+-                button.disabled = false;
+-            }, 800);
+-        })
+-        .catch(err => {
+-            alert('保存失败: ' + (err.message || '未知错误'));
+-            button.textContent = originalText;
+-            button.disabled = false;
+-        });
+-}
+-
+-function showPrintPanel() {
+-    var win = document.getElementById('printPanelWindow');
+-    var statusEl = document.getElementById('printPanelStatus');
+-    var progressEl = document.getElementById('printPanelProgress');
+-    var resultsEl = document.getElementById('printPanelResults');
+-    var startBtn = document.getElementById('printPanelStartBtn');
+-    if (!win || !statusEl) return;
+-
+-    win.classList.add('show');
+-    progressEl.style.display = 'none';
+-    progressEl.textContent = '';
+-    resultsEl.innerHTML = '';
+-    statusEl.textContent = '正在连接打印机...';
+-    if (startBtn) { startBtn.disabled = false; startBtn.textContent = '开始打印'; }
+-
+-    var apiBase = typeof API_BASE !== 'undefined' ? API_BASE : '';
+-    fetch(apiBase + '/api/printers')
+-        .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error('获取打印机失败')); })
+-        .then(function(data) {
+-            var label = data.classified && data.classified.label_printer;
+-            var name = label && label.name;
+-            var connected = label && label.is_connected;
+-            if (connected && name) {
+-                statusEl.textContent = '标签打印机已连接：' + name;
+-            } else {
+-                statusEl.textContent = '未检测到标签打印机，请检查连接后点击「开始打印」重试。';
+-            }
+-        })
+-        .catch(function(e) {
+-            statusEl.textContent = '连接打印机失败：' + (e && e.message ? e.message : '请稍后重试');
+-        });
+-
+-    if (!window._printPanelBound) {
+-        window._printPanelBound = true;
+-        function closePrintPanel() {
+-            var w = document.getElementById('printPanelWindow');
+-            if (w) w.classList.remove('show');
+-        }
+-        ['printPanelCloseBtn', 'printPanelCloseBtn2'].forEach(function(id) {
+-            var btn = document.getElementById(id);
+-            if (btn) btn.addEventListener('click', closePrintPanel);
+-        });
+-        if (startBtn) {
+-            startBtn.addEventListener('click', function() {
+-                if (startBtn.disabled) return;
+-                startBtn.disabled = true;
+-                startBtn.textContent = '打印中...';
+-                progressEl.style.display = 'block';
+-                progressEl.textContent = '正在连接打印机并调用打印 API...';
+-                resultsEl.innerHTML = '';
+-
+-                fetch(apiBase + '/api/print/all_labels', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' })
+-                    .then(function(r) { return r.json(); })
+-                    .then(function(res) {
+-                        progressEl.style.display = 'none';
+-                        startBtn.disabled = false;
+-                        startBtn.textContent = '开始打印';
+-                        if (res.success) {
+-                            statusEl.textContent = res.message || '打印完成';
+-                            var total = res.total || 0;
+-                            var successCount = res.success_count != null ? res.success_count : (res.results ? res.results.filter(function(x) { return x.success; }).length : 0);
+-                            var html = '<p class="labels-export-hint">共 ' + total + ' 张，成功 ' + successCount + ' 张</p>';
+-                            if (res.results && res.results.length) {
+-                                html += '<ul class="labels-export-ul">';
+-                                res.results.forEach(function(item) {
+-                                    var ok = item.success ? '✓' : '✗';
+-                                    html += '<li>' + ok + ' ' + (item.filename || '') + (item.message ? ' — ' + item.message : '') + '</li>';
+-                                });
+-                                html += '</ul>';
+-                            }
+-                            resultsEl.innerHTML = html;
+-                        } else {
+-                            statusEl.textContent = '打印失败：' + (res.message || '未知错误');
+-                            resultsEl.innerHTML = '<p class="labels-export-hint">' + (res.message || '') + '</p>';
+-                        }
+-                    })
+-                    .catch(function(e) {
+-                        progressEl.style.display = 'none';
+-                        startBtn.disabled = false;
+-                        startBtn.textContent = '开始打印';
+-                        statusEl.textContent = '打印请求失败';
+-                        resultsEl.innerHTML = '<p class="labels-export-hint">' + (e && e.message ? e.message : '网络错误') + '</p>';
+-                    });
+-            });
+-        }
+-    }
+-}
+-
+-function showMaterialsPanel() {
+-    const materialsLink = document.querySelector('a[href*="materials"], a[href*="原材料"]');
+-    if (materialsLink) {
+-        materialsLink.click();
+-    }
+-}
+-
+-function showOrdersPanel() {
+-    // 优先使用全局的 switchView
+-    if (typeof switchView === 'function') {
+-        switchView('orders');
+-        return;
+-    }
+-    const ordersLink = document.querySelector('a[href*="orders"], a[href*="订单"], a[href*="出货"]');
+-    if (ordersLink) ordersLink.click();
+-}
+-
+-function showFileUploadPanel(purpose) {
+-    // 专业模式下优先显示右下角科技化入口，避免直接弹窗打断
+-    const proOverlay = document.getElementById('proModeOverlay');
+-    const isProModeActive = !!(proOverlay && proOverlay.classList.contains('active'));
+-    if (isProModeActive && typeof showFileUploadEntry === 'function') {
+-        showFileUploadEntry();
+-        return;
+-    }
+-
+-    // 优先直接打开导入窗口，并传入用途
+-    if (typeof openImportWindow === 'function') {
+-        openImportWindow(purpose || 'general');
+-        return;
+-    }
+-    // 兜底：点击页面右下角入口（fileUploadEntry）
+-    const entry = document.getElementById('fileUploadEntry');
+-    if (entry) {
+-        entry.click();
+-        return;
+-    }
+-}
+-
+-function showLabelsExportPanel() {
+-    var win = document.getElementById('labelsExportWindow');
+-    var listEl = document.getElementById('labelsExportList');
+-    var floatContainer = document.getElementById('labelFloatPreviews');
+-    if (!win || !listEl) return;
+-    _bindLabelPreviewModalClose();
+-    listEl.innerHTML = '<p class="labels-export-hint">加载中...</p>';
+-    win.classList.add('show');
+-    if (floatContainer) {
+-        floatContainer.classList.remove('hidden');
+-        floatContainer.innerHTML = '';
+-    }
+-    var apiBase = typeof API_BASE !== 'undefined' ? API_BASE : '';
+-    fetch(apiBase + '/api/print/list_labels')
+-        .then(function(r) {
+-            if (!r.ok) {
+-                return r.json().then(function(err) { throw new Error(err.message || '请求失败 ' + r.status); }).catch(function() { throw new Error('请求失败 ' + r.status); });
+-            }
+-            return r.json();
+-        })
+-        .then(function(data) {
+-            if (data && data.success && Array.isArray(data.labels) && data.labels.length > 0) {
+-                renderLabelPanel(data.labels);
+-            } else {
+-                listEl.innerHTML = '<p class="labels-export-hint">暂无标签文件。请先生成发货单，系统会自动生成标签到商标导出。</p>';
+-                if (floatContainer) { floatContainer.innerHTML = ''; floatContainer.classList.add('hidden'); }
+-            }
+-        })
+-        .catch(function(e) {
+-            listEl.innerHTML = '<p class="labels-export-hint">加载失败：' + (e && e.message ? e.message : '请稍后重试') + '。</p>';
+-            if (floatContainer) { floatContainer.innerHTML = ''; floatContainer.classList.add('hidden'); }
+-        });
+-}
+-
+-function showLabelsExportPanelWithLabels(labels) {
+-    var win = document.getElementById('labelsExportWindow');
+-    var listEl = document.getElementById('labelsExportList');
+-    var floatContainer = document.getElementById('labelFloatPreviews');
+-    if (!win || !listEl) return;
+-    _bindLabelPreviewModalClose();
+-    listEl.innerHTML = '<p class="labels-export-hint">加载中...</p>';
+-    win.classList.add('show');
+-    if (floatContainer) {
+-        floatContainer.classList.remove('hidden');
+-        floatContainer.innerHTML = '';
+-    }
+-    if (labels && Array.isArray(labels) && labels.length > 0) {
+-        renderLabelPanel(labels);
+-    } else {
+-        listEl.innerHTML = '<p class="labels-export-hint">暂无标签文件。请先生成发货单，系统会自动生成标签到商标导出。</p>';
+-        if (floatContainer) { floatContainer.innerHTML = ''; floatContainer.classList.add('hidden'); }
+-    }
+-}
+-
+-function renderLabelPanel(labels) {
+-    var listEl = document.getElementById('labelsExportList');
+-    var floatContainer = document.getElementById('labelFloatPreviews');
+-    if (!listEl) return;
+-    var base = window.location.origin || (window.location.protocol + '//' + window.location.host);
+-    listEl.replaceChildren();
+-    var hint = document.createElement('p');
+-    hint.className = 'labels-export-hint';
+-    hint.style.marginBottom = '10px';
+-    hint.textContent = '点击文件名下载标签（共 ' + labels.length + ' 个）';
+-    var list = document.createElement('ul');
+-    list.className = 'labels-export-ul';
+-    labels.forEach(function(item) {
+-        var filename = String(item.filename || 'label.png');
+-        var url = base + '/api/print/label/' + encodeURIComponent(filename);
+-        var label = (item.order_number || '') + ' 第' + (item.label_number || '') + ' 项';
+-        var li = document.createElement('li');
+-        var link = document.createElement('a');
+-        link.href = url;
+-        link.download = filename;
+-        link.target = '_blank';
+-        link.rel = 'noopener';
+-        link.textContent = item.filename || label;
+-        li.appendChild(link);
+-        list.appendChild(li);
+-    });
+-    listEl.append(hint, list);
+-    if (floatContainer) {
+-        floatContainer.replaceChildren();
+-        var maxPreviews = Math.min(8, labels.length);
+-        for (var i = 0; i < maxPreviews; i++) {
+-            let item = labels[i];
+-            let filename = String(item.filename || 'label.png');
+-            let url = base + '/api/print/label/' + encodeURIComponent(filename);
+-            var img = document.createElement('img');
+-            img.className = 'label-float-preview';
+-            img.src = url;
+-            img.alt = item.filename || ('标签 ' + (i + 1));
+-            img.loading = 'lazy';
+-            img.addEventListener('click', function (e) {
+-                e.preventDefault();
+-                var modal = document.getElementById('labelPreviewModal');
+-                var modalImg = document.getElementById('labelPreviewModalImg');
+-                var modalDownload = document.getElementById('labelPreviewModalDownload');
+-                if (modal && modalImg && modalDownload) {
+-                    modalImg.src = url;
+-                    modalDownload.href = url;
+-                    modalDownload.download = filename;
+-                    modal.classList.remove('hidden');
+-                    modal.setAttribute('aria-hidden', 'false');
+-                }
+-            });
+-            floatContainer.appendChild(img);
+-        }
+-    }
+-}
+-
+-function closeLabelsPanel() {
+-    var win = document.getElementById('labelsExportWindow');
+-    if (win) win.classList.remove('show');
+-    var c = document.getElementById('labelFloatPreviews');
+-    if (c) { c.innerHTML = ''; c.classList.add('hidden'); }
+-}
+-
+-function _bindLabelExportClose() {
+-    if (window._labelsExportCloseBound) return;
+-    window._labelsExportCloseBound = true;
+-    var win = document.getElementById('labelsExportWindow');
+-    if (!win) return;
+-    ['labelsExportCloseBtn', 'labelsExportCloseBtn2'].forEach(function(id) {
+-        var btn = document.getElementById(id);
+-        if (btn) btn.addEventListener('click', closeLabelsPanel);
+-    });
+-}
+-
+-function _bindLabelPreviewModalClose() {
+-    if (window._labelPreviewModalBound) return;
+-    window._labelPreviewModalBound = true;
+-    var modal = document.getElementById('labelPreviewModal');
+-    if (!modal) return;
+-    var backdrop = modal.querySelector('.label-preview-modal-backdrop');
+-    var closeBtn = modal.querySelector('.label-preview-modal-close');
+-    function closeModal() {
+-        modal.classList.add('hidden');
+-        modal.setAttribute('aria-hidden', 'true');
+-        var img = document.getElementById('labelPreviewModalImg');
+-        if (img) img.src = '';
+-    }
+-    if (backdrop) backdrop.addEventListener('click', closeModal);
+-    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+-}
+-
+-function showWechatMessagesPanel() {
+-    if (window.proFeatureWidget && typeof window.proFeatureWidget.showFeature === 'function') {
+-        window.proFeatureWidget.showFeature('wechat_messages');
+-    } else {
+-        const messagesPanel = document.getElementById('wechatMessagesPanel');
+-        if (messagesPanel) {
+-            messagesPanel.style.display = 'block';
+-        }
+-    }
+-}
+-
+-function showMediaPanel(mediaType, source) {
+-    if (window.proFeatureWidget && typeof window.proFeatureWidget.showMediaPanel === 'function') {
+-        window.proFeatureWidget.showMediaPanel(mediaType, source);
+-    } else {
+-        console.log('⚠️ proFeatureWidget未加载十二面体媒体面板');
+-        addMessage('📺 媒体面板功能正在加载中...', 'ai');
+-    }
+-}
+-
+-let lastWechatPopupTime = 0;
+-
+-function addMessage(content, type) {
+-    if (type === 'ai' && content && typeof content === 'string') {
+-        const contentLower = content.toLowerCase();
+-        const now = Date.now();
+-        
+-        if (contentLower.includes('微信') || contentLower.includes('wechat') || 
+-            contentLower.includes('登录') || contentLower.includes('扫码')) {
+-            
+-            const timeSinceLastPopup = now - lastWechatPopupTime;
+-            if (timeSinceLastPopup > 5000) {
+-                console.log('🤖 AI 消息(addMessage)包含微信关键词，但跳过避免重复弹窗');
+-            } else {
+-                console.log('🤖 AI 消息(addMessage)包含微信关键词，但刚显示过，跳过');
+-            }
+-        }
+-
+-        const fileKeywords = [
+-            '上传文件', '导入文件', '请上传', '请提供', '请导入',
+-            '需要文件', '读取文件', '处理文件', '分析文件',
+-            '上传图片', '导入图片', '上传excel', '导入excel',
+-            '上传文档', '上传csv', '请选择文件', '请拖拽文件',
+-            'upload', 'import file', 'please upload'
+-        ];
+-        const needsFile = fileKeywords.some(keyword => contentLower.includes(keyword.toLowerCase()));
+-        if (needsFile) {
+-            console.log('🤖 AI 消息(addMessage)包含文件相关关键词，显示文件上传入口');
+-            showFileUploadEntry();
+-        }
+-    }
+-
+-    const container = document.getElementById('chatMessages');
+-    const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+-    const safeContent = escapeHtml(content).replace(/\n/g, '<br>');
+-    const safeTime = escapeHtml(time);
+-    const div = document.createElement('div');
+-    div.className = 'message ' + type;
+-    div.innerHTML = `<div>${safeContent}</div><div class="time">${safeTime}</div>`;
+-    container.appendChild(div);
+-    container.scrollTop = container.scrollHeight;
+-}
+-
+-function showLoading() {
+-    const id = 'loading-' + Date.now();
+-    const container = document.getElementById('chatMessages');
+-    const div = document.createElement('div');
+-    div.className = 'message ai';
+-    div.id = id;
+-    div.innerHTML = '<div><span class="status-dot online"></span> 处理中...</div>';
+-    container.appendChild(div);
+-    container.scrollTop = container.scrollHeight;
+-    return id;
+-}
+-
+-function removeLoading(id) {
+-    const el = document.getElementById(id);
+-    if (el) el.remove();
+-}
+-
+-function showTaskConfirm(task) {
+-    const panel = document.getElementById('taskPanel');
+-    let itemsHtml = '';
+-    if (task.items && task.items.length > 0) {
+-        const keys = Object.keys(task.items[0]);
+-        itemsHtml = '<table class="data-table" style="margin-top:10px;"><thead><tr>' + 
+-            keys.map(k => '<th>' + escapeHtml(k) + '</th>').join('') + '</tr></thead><tbody>' +
+-            task.items.map(item => '<tr>' + keys.map(k => '<td>' + escapeHtml(item[k]) + '</td>').join('') + '</tr>').join('') +
+-            '</tbody></table>';
+-    }
+-    panel.innerHTML = `
+-        <div class="task-card">
+-            <div class="task-header">${escapeHtml(task.title)}</div>
+-            <div>${escapeHtml(task.description)}</div>
+-            ${itemsHtml}
+-            <div class="task-actions">
+-                <button class="btn btn-success btn-sm" data-action="confirm-task">确认执行</button>
+-                <button class="btn btn-secondary btn-sm" data-action="cancel-task">取消</button>
+-            </div>
+-        </div>
+-    `;
+-    window.currentTask = task;
+-    panel.querySelector('[data-action="confirm-task"]')?.addEventListener('click', confirmTask);
+-    panel.querySelector('[data-action="cancel-task"]')?.addEventListener('click', cancelTask);
+-}
+-
+-function confirmTask() {
+-    alert('任务已确认执行');
+-    window.currentTask = null;
+-    document.getElementById('taskPanel').innerHTML = '<div class="empty-state">暂无任务</div>';
+-}
+-
+-function cancelTask() {
+-    window.currentTask = null;
+-    document.getElementById('taskPanel').innerHTML = '<div class="empty-state">暂无任务</div>';
+-}
+-
+-function addTask(taskId, taskName) {
+-    const panel = document.getElementById('taskPanel');
+-    const emptyState = panel.querySelector('.empty-state, .task-list-empty');
+-    if (emptyState) {
+-        panel.innerHTML = '';
+-    }
+-    
+-    const taskHtml = `
+-        <div class="task-item" id="task-${taskId}">
+-            <div class="task-item-header">
+-                <span class="task-item-name">${taskName}</span>
+-                <span class="task-item-status in-progress" id="status-${taskId}">进行中</span>
+-            </div>
+-            <div class="task-progress-container" id="progress-container-${taskId}">
+-                <div class="task-progress-bar">
+-                    <div class="task-progress-fill" id="progress-fill-${taskId}" style="width: 0%"></div>
+-                </div>
+-                <div class="task-progress-text">
+-                    <span id="progress-text-${taskId}">0%</span>
+-                    <span>处理中...</span>
+-                </div>
+-            </div>
+-            <div id="result-${taskId}" style="display: none;"></div>
+-        </div>
+-    `;
+-    panel.insertAdjacentHTML('afterbegin', taskHtml);
+-}
+-
+-function updateTaskProgress(taskId, taskName, progress, status, result = '') {
+-    const panel = document.getElementById('taskPanel');
+-    let taskElement = document.getElementById(`task-${taskId}`);
+-    
+-    if (!taskElement) {
+-        addTask(taskId, taskName);
+-        taskElement = document.getElementById(`task-${taskId}`);
+-    }
+-    
+-    const progressFill = document.getElementById(`progress-fill-${taskId}`);
+-    const progressText = document.getElementById(`progress-text-${taskId}`);
+-    const statusElement = document.getElementById(`status-${taskId}`);
+-    const progressContainer = document.getElementById(`progress-container-${taskId}`);
+-    const resultContainer = document.getElementById(`result-${taskId}`);
+-    
+-    if (status === 'completed') {
+-        progressFill.style.width = '100%';
+-        progressText.textContent = '100%';
+-        statusElement.textContent = '已完成';
+-        statusElement.className = 'task-item-status completed';
+-        progressContainer.style.display = 'none';
+-        
+-        if (result) {
+-            resultContainer.innerHTML = `<div class="task-result">${escapeHtml(result)}</div>`;
+-            resultContainer.style.display = 'block';
+-        } else {
+-            resultContainer.innerHTML = `<span class="task-completed-badge">已完成</span>`;
+-            resultContainer.style.display = 'block';
+-        }
+-    } else {
+-        progressFill.style.width = `${progress}%`;
+-        progressText.textContent = `${progress}%`;
+-        statusElement.textContent = '进行中';
+-        statusElement.className = 'task-item-status in-progress';
+-        progressContainer.style.display = 'block';
+-        resultContainer.style.display = 'none';
+-    }
+-}
+-
+-function handleKeyDown(e) {
+-    if (e.key === 'Enter' && !e.shiftKey) {
+-        e.preventDefault();
+-        sendMessage();
+-    }
+-}
+-
+-function loadPrintProducts() {
+-    fetch(API_BASE + '/api/products')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success) {
+-                const select = document.getElementById('printProductSelect');
+-                select.textContent = '';
+-                const defaultOption = document.createElement('option');
+-                defaultOption.value = '';
+-                defaultOption.textContent = '请选择产品';
+-                select.appendChild(defaultOption);
+-                data.data.forEach(p => {
+-                    const option = document.createElement('option');
+-                    option.value = p.model_number || '';
+-                    option.textContent = `${p.model_number || ''} - ${p.name || ''}`;
+-                    select.appendChild(option);
+-                });
+-            }
+-        });
+-}
+-
+-function previewLabel() {
+-}
+-
+-function printLabel() {
+-    const model = document.getElementById('printProductSelect').value;
+-    const qty = document.getElementById('printQuantity').value;
+-    if (!model) {
+-        alert('请选择产品');
+-        return;
+-    }
+-    alert('已将 ' + model + ' 标签发送到打印机，打印数量：' + qty);
+-}
+-
+-function saveSettings() {
+-    alert('设置已保存');
+-}
+-
+-function loadUserPreferences() {
+-    fetch(API_BASE + '/api/preferences?user_id=default')
+-    .then(r => r.json())
+-    .then(data => {
+-        if (data.success && data.preferences) {
+-            applyUserPreferences(data.preferences);
+-        }
+-    })
+-    .catch(err => console.error('加载用户偏好失败:', err));
+-}
+-
+-function applyUserPreferences(prefs) {
+-    if (prefs.theme) {
+-        document.body.setAttribute('data-theme', prefs.theme);
+-    }
+-    if (prefs.fontSize) {
+-        document.body.style.fontSize = prefs.fontSize + 'px';
+-    }
+-}
+-
+-function saveUserPreference(key, value) {
+-    fetch(API_BASE + '/api/preferences', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify({
+-            user_id: 'default',
+-            key: key,
+-            value: value
+-        })
+-    }).catch(err => console.error('保存偏好失败:', err));
+-}
+-
+-function showProgress() {
+-    const panel = document.getElementById('progressPanel');
+-    if (panel) {
+-        panel.style.display = 'block';
+-        panel.style.opacity = '0';
+-        panel.style.transform = 'translateY(20px)';
+-        setTimeout(() => {
+-            panel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+-            panel.style.opacity = '1';
+-            panel.style.transform = 'translateY(0)';
+-        }, 10);
+-    }
+-}
+-
+-function hideProgress() {
+-    const panel = document.getElementById('progressPanel');
+-    if (panel) {
+-        panel.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+-        panel.style.opacity = '0';
+-        panel.style.transform = 'translateY(20px)';
+-        setTimeout(() => {
+-            panel.style.display = 'none';
+-            panel.style.transform = '';
+-        }, 300);
+-    }
+-}
+-
+-function updateProgress(percent, task) {
+-    const panel = document.getElementById('progressPanel');
+-    if (!panel) return;
+-    
+-    if (!panel.style.display || panel.style.display === 'none') {
+-        showProgress();
+-    }
+-
+-    const percentEl = document.getElementById('progressPercent');
+-    const barFill = document.getElementById('progressBarFill');
+-    const taskEl = document.getElementById('progressTask');
+-
+-    if (percentEl) percentEl.textContent = percent + '%';
+-    if (barFill) barFill.style.width = percent + '%';
+-    if (taskEl && task) taskEl.textContent = task;
+-
+-    if (percent >= 100) {
+-        setTimeout(() => {
+-            hideProgress();
+-        }, 500);
+-    }
+-}
+diff --git a/FHD/XCAGI/static/js/modules/customers.js b/FHD/XCAGI/static/js/modules/customers.js
+deleted file mode 100755
+index 33e3de0605..0000000000
+--- a/FHD/XCAGI/static/js/modules/customers.js
++++ /dev/null
+@@ -1,96 +0,0 @@
+-let customersTableBound = false;
+-
+-function bindCustomersTableEvents() {
+-    if (customersTableBound) return;
+-    customersTableBound = true;
+-}
+-
+-function loadCustomers() {
+-    fetch(API_BASE + '/api/customers')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success) {
+-                const customers = data.customers || data.data || [];
+-                renderCustomers(customers);
+-                document.getElementById('customerCount').textContent = customers.length;
+-            }
+-        });
+-}
+-
+-function renderCustomers(customers) {
+-    bindCustomersTableEvents();
+-    const tbody = document.getElementById('customersTableBody');
+-    tbody.textContent = '';
+-    if (!customers || customers.length === 0) {
+-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无客户</td></tr>';
+-        return;
+-    }
+-    customers.forEach(c => {
+-        const tr = document.createElement('tr');
+-
+-        const checkboxTd = document.createElement('td');
+-        const checkbox = document.createElement('input');
+-        checkbox.type = 'checkbox';
+-        checkbox.className = 'customer-checkbox';
+-        checkbox.value = String(c.id);
+-        checkboxTd.appendChild(checkbox);
+-        tr.appendChild(checkboxTd);
+-
+-        const unitTd = document.createElement('td');
+-        // 接口字段以 customer_name 为准；兼容老字段 unit_name/name
+-        unitTd.textContent = c.customer_name || c.unit_name || c.name || '';
+-        tr.appendChild(unitTd);
+-
+-        const contactTd = document.createElement('td');
+-        contactTd.textContent = c.contact_person || '';
+-        tr.appendChild(contactTd);
+-
+-        const phoneTd = document.createElement('td');
+-        phoneTd.textContent = c.contact_phone || '';
+-        tr.appendChild(phoneTd);
+-
+-        const addressTd = document.createElement('td');
+-        // 新字段是 contact_address；兼容旧字段 address
+-        addressTd.textContent = c.contact_address || c.address || '';
+-        tr.appendChild(addressTd);
+-
+-        tbody.appendChild(tr);
+-    });
+-}
+-
+-function toggleAllCustomers(checkbox) {
+-    document.querySelectorAll('.customer-checkbox').forEach(cb => {
+-        cb.checked = checkbox.checked;
+-    });
+-}
+-
+-function batchDeleteCustomers() {
+-    const checked = document.querySelectorAll('.customer-checkbox:checked');
+-    if (checked.length === 0) {
+-        alert('请选择要删除的客户');
+-        return;
+-    }
+-    const key = prompt('请输入密钥确认删除:');
+-    if (key !== '61408693') {
+-        alert('密钥错误');
+-        return;
+-    }
+-    
+-    const ids = Array.from(checked).map(cb => parseInt(cb.value));
+-    
+-    fetch(API_BASE + '/api/customers/batch-delete', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        // 后端接口期望字段为 `ids`
+-        body: JSON.stringify({ ids })
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            alert(data.message);
+-            loadCustomers();
+-        } else {
+-            alert('删除失败: ' + data.message);
+-        }
+-    }).catch(e => {
+-        alert('删除失败: ' + e.message);
+-    });
+-}
+diff --git a/FHD/XCAGI/static/js/modules/file-import.js b/FHD/XCAGI/static/js/modules/file-import.js
+deleted file mode 100755
+index d337ea592f..0000000000
+--- a/FHD/XCAGI/static/js/modules/file-import.js
++++ /dev/null
+@@ -1,746 +0,0 @@
+-function openPreviewWindow(mediaUrl, mediaType, sourceElement) {
+-    const previewWindow = document.getElementById('previewFloatWindow');
+-    const mediaContainer = document.getElementById('previewMedia');
+-    
+-    if (mediaType === 'image') {
+-        mediaContainer.innerHTML = '<img src="' + mediaUrl + '" alt="预览图片">';
+-    } else if (mediaType === 'video') {
+-        mediaContainer.innerHTML = '<video src="' + mediaUrl + '" controls></video>';
+-    } else {
+-        mediaContainer.innerHTML = '<div class="preview-placeholder">不支持的媒体类型</div>';
+-    }
+-
+-    if (sourceElement) {
+-        animatePreviewWindow(sourceElement, previewWindow);
+-    } else {
+-        previewWindow.classList.add('show');
+-    }
+-
+-    setTimeout(() => {
+-        initHoverHighlight(mediaContainer);
+-    }, 400);
+-}
+-
+-function animatePreviewWindow(sourceElement, targetWindow) {
+-    const firstRect = sourceElement.getBoundingClientRect();
+-    const targetRect = targetWindow.getBoundingClientRect();
+-    
+-    const deltaX = firstRect.left - targetRect.left;
+-    const deltaY = firstRect.top - targetRect.top;
+-    const deltaWidth = firstRect.width - targetRect.width;
+-    const deltaHeight = firstRect.height - targetRect.height;
+-    
+-    targetWindow.classList.add('animating');
+-    targetWindow.style.display = 'block';
+-    targetWindow.style.opacity = '0';
+-    targetWindow.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${firstRect.width / targetRect.width})`;
+-    targetWindow.style.transformOrigin = 'top left';
+-    
+-    requestAnimationFrame(() => {
+-        targetWindow.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+-        targetWindow.style.opacity = '1';
+-        targetWindow.style.transform = 'translate(0, 0) scale(1)';
+-    });
+-    
+-    setTimeout(() => {
+-        targetWindow.classList.remove('animating');
+-        targetWindow.classList.add('show');
+-        targetWindow.style.transition = '';
+-        targetWindow.style.transform = '';
+-        targetWindow.style.transformOrigin = '';
+-    }, 350);
+-}
+-
+-function closePreviewWindow() {
+-    const previewWindow = document.getElementById('previewFloatWindow');
+-    
+-    if (previewWindow.classList.contains('show')) {
+-        previewWindow.style.opacity = '0';
+-        previewWindow.style.transform = 'scale(0.8)';
+-        previewWindow.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+-        
+-        setTimeout(() => {
+-            previewWindow.classList.remove('show');
+-            previewWindow.style.display = 'none';
+-            previewWindow.style.opacity = '';
+-            previewWindow.style.transform = '';
+-            previewWindow.style.transition = '';
+-            removeHoverHighlight();
+-        }, 300);
+-    }
+-}
+-
+-(function() {
+-    const highlightBox = document.createElement('div');
+-    highlightBox.className = 'hover-highlight-box';
+-    document.body.appendChild(highlightBox);
+-
+-    let activeContainer = null;
+-    let boxWidth = 0;
+-    let boxHeight = 0;
+-    let animationFrameId = null;
+-    let lastX = 0;
+-    let lastY = 0;
+-
+-    const updateHighlightPosition = () => {
+-        if (activeContainer) {
+-            const x = lastX - boxWidth / 2;
+-            const y = lastY - boxHeight / 2;
+-            highlightBox.style.left = x + 'px';
+-            highlightBox.style.top = y + 'px';
+-        }
+-        animationFrameId = null;
+-    };
+-
+-    document.addEventListener('mousemove', function(e) {
+-        if (activeContainer) {
+-            lastX = e.clientX;
+-            lastY = e.clientY;
+-            if (!animationFrameId) {
+-                animationFrameId = requestAnimationFrame(updateHighlightPosition);
+-            }
+-        }
+-    });
+-
+-    window.initHoverHighlight = function(mediaContainer) {
+-        if (!mediaContainer) return;
+-        
+-        activeContainer = mediaContainer;
+-        const rect = mediaContainer.getBoundingClientRect();
+-        boxWidth = Math.min(rect.width, 300);
+-        boxHeight = Math.min(rect.height, 200);
+-        highlightBox.style.width = boxWidth + 'px';
+-        highlightBox.style.height = boxHeight + 'px';
+-        highlightBox.classList.add('active');
+-
+-        mediaContainer.addEventListener('mouseleave', function() {
+-            highlightBox.classList.remove('active');
+-            activeContainer = null;
+-        });
+-
+-        mediaContainer.addEventListener('mouseenter', function() {
+-            activeContainer = mediaContainer;
+-            highlightBox.classList.add('active');
+-        });
+-    };
+-
+-    window.removeHoverHighlight = function() {
+-        highlightBox.classList.remove('active');
+-        activeContainer = null;
+-    };
+-})();
+-
+-function testPreviewAnimation() {
+-    const testElement = document.createElement('div');
+-    testElement.className = 'message user';
+-    testElement.style.position = 'fixed';
+-    testElement.style.left = '30%';
+-    testElement.style.top = '40%';
+-    testElement.style.width = '200px';
+-    testElement.style.height = '150px';
+-    testElement.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+-    testElement.style.borderRadius = '12px';
+-    testElement.style.display = 'flex';
+-    testElement.style.alignItems = 'center';
+-    testElement.style.justifyContent = 'center';
+-    testElement.style.color = 'white';
+-    testElement.style.fontSize = '16px';
+-    testElement.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+-    testElement.style.zIndex = '9999';
+-    testElement.innerHTML = '<span>📷 测试图片</span>';
+-    document.body.appendChild(testElement);
+-    
+-    setTimeout(() => {
+-        openPreviewWindow('https://picsum.photos/400/300', 'image', testElement);
+-        
+-        setTimeout(() => {
+-            testElement.remove();
+-        }, 400);
+-    }, 100);
+-}
+-
+-let currentImportPurpose = 'general';
+-let dropZoneBound = false;
+-let activeUploadSessionId = null;
+-let isUploadProcessing = false;
+-
+-function emitUploadState(state, extra = {}) {
+-    try {
+-        window.__aiUploadState = {
+-            state,
+-            ts: Date.now(),
+-            purpose: currentImportPurpose || 'general',
+-            ...extra
+-        };
+-        window.dispatchEvent(new CustomEvent('ai-upload-status', {
+-            detail: {
+-                state,
+-                purpose: currentImportPurpose || 'general',
+-                ...extra
+-            }
+-        }));
+-    } catch (e) {
+-        console.warn('emitUploadState failed:', e);
+-    }
+-}
+-
+-function appendUploadMessage(text) {
+-    if (document.body && document.body.classList.contains('pro-mode-active') && typeof window.jarvisAddMessageExternal === 'function') {
+-        window.jarvisAddMessageExternal(text, 'ai');
+-        return;
+-    }
+-    if (typeof addMessage === 'function') {
+-        addMessage(text, 'system');
+-    }
+-}
+-
+-function buildExcelNextStepPrompt(suggestedUseCustomersImport) {
+-    const options = suggestedUseCustomersImport
+-        ? ['导入客户', '加载产品', '加载公司名称', '加载入出货记录', '导入模板']
+-        : ['加载产品', '加载公司名称', '加载入出货记录', '导入模板'];
+-    return [
+-        '🧭 已识别到 Excel 文件。',
+-        '',
+-        '下一步你要我执行哪一项？可直接回复下面任一指令：',
+-        ...options,
+-        '',
+-        suggestedUseCustomersImport ? '💡 若为客户列表，回复「导入客户」或「上传客户管理」并重新选择该文件即可自动导入。' : '当前模板能力：发货单模板、出货记录模板（后续可继续扩展）。'
+-    ].join('\n');
+-}
+-
+-function openImportWindow(purpose = 'general') {
+-    currentImportPurpose = purpose || 'general';
+-    // 打开新窗口时作废旧会话，防止旧任务继续回写
+-    activeUploadSessionId = null;
+-    isUploadProcessing = false;
+-    const window = document.getElementById('importFloatWindow');
+-    const titleEl = document.querySelector('#importFloatWindow .import-header h4');
+-    const hintEl = document.querySelector('#importFloatWindow .drop-zone-hint');
+-    if (titleEl) {
+-        if (currentImportPurpose === 'customers_import') {
+-            titleEl.textContent = '上传客户 Excel 更新客户';
+-        } else if (currentImportPurpose === 'product_import') {
+-            titleEl.textContent = 'PRODUCT IMPORT';
+-        } else if (currentImportPurpose === 'order_parse') {
+-            titleEl.textContent = 'ORDER PARSE';
+-        } else {
+-            titleEl.textContent = 'FILE ANALYZE';
+-        }
+-    }
+-    if (hintEl) {
+-        if (currentImportPurpose === 'customers_import') {
+-            hintEl.textContent = '请上传客户列表 .xlsx（需含「单位名称」列），将校验格式并更新联系人/电话/地址';
+-        } else if (currentImportPurpose === 'product_import') {
+-            hintEl.textContent = '产品导入模式：支持任意文件，自动识别并分析';
+-        } else if (currentImportPurpose === 'order_parse') {
+-            hintEl.textContent = '订单解析模式：上传后自动提取订单关键信息';
+-        } else {
+-            hintEl.textContent = '通用模式：支持任意文件类型，自动识别并分析';
+-        }
+-    }
+-    window.classList.add('show');
+-    hideFileUploadEntry();
+-    resetImportState();
+-    const fileInput = document.getElementById('fileInput');
+-    if (fileInput) fileInput.value = '';
+-    initDropZone();
+-}
+-
+-function closeImportWindow() {
+-    // 关闭时作废当前会话，避免异步结果继续更新UI
+-    activeUploadSessionId = null;
+-    isUploadProcessing = false;
+-    const window = document.getElementById('importFloatWindow');
+-    window.classList.remove('show');
+-    hideFileUploadEntry();
+-    resetImportState();
+-    const fileInput = document.getElementById('fileInput');
+-    if (fileInput) fileInput.value = '';
+-}
+-
+-function showFileUploadEntry() {
+-    const entry = document.getElementById('fileUploadEntry');
+-    if (entry && !entry.classList.contains('show')) {
+-        entry.classList.add('show');
+-        console.log('显示文件上传入口');
+-    }
+-}
+-
+-function hideFileUploadEntry() {
+-    const entry = document.getElementById('fileUploadEntry');
+-    if (entry) {
+-        entry.classList.remove('show');
+-        console.log('隐藏文件上传入口');
+-    }
+-}
+-
+-function initDropZone() {
+-    const dropZone = document.getElementById('dropZone');
+-    const fileInput = document.getElementById('fileInput');
+-    
+-    if (!dropZone || !fileInput) return;
+-    if (dropZoneBound) return;
+-    dropZoneBound = true;
+-    
+-    dropZone.addEventListener('click', () => {
+-        fileInput.click();
+-    });
+-    
+-    dropZone.addEventListener('dragenter', (e) => {
+-        e.preventDefault();
+-        e.stopPropagation();
+-        dropZone.classList.add('dragover');
+-    });
+-    
+-    dropZone.addEventListener('dragover', (e) => {
+-        e.preventDefault();
+-        e.stopPropagation();
+-        dropZone.classList.add('dragover');
+-    });
+-    
+-    dropZone.addEventListener('dragleave', (e) => {
+-        e.preventDefault();
+-        e.stopPropagation();
+-        if (!dropZone.contains(e.relatedTarget)) {
+-            dropZone.classList.remove('dragover');
+-        }
+-    });
+-    
+-    dropZone.addEventListener('drop', (e) => {
+-        e.preventDefault();
+-        e.stopPropagation();
+-        dropZone.classList.remove('dragover');
+-        const files = e.dataTransfer.files;
+-        if (files.length > 0) {
+-            handleFileSelect(files);
+-        }
+-    });
+-    
+-    fileInput.addEventListener('change', (e) => {
+-        if (e.target.files.length > 0) {
+-            handleFileSelect(e.target.files);
+-        }
+-    });
+-}
+-
+-function resetImportState() {
+-    const progress = document.getElementById('importProgress');
+-    const progressBar = document.getElementById('progressBar');
+-    const progressText = document.getElementById('progressText');
+-    const progressPercent = document.getElementById('importProgressPercent');
+-    const status = document.getElementById('importStatus');
+-    if (progress) progress.classList.remove('show');
+-    if (progressBar) progressBar.style.width = '0%';
+-    if (progressText) progressText.textContent = '读取中...';
+-    if (progressPercent) progressPercent.textContent = '0%';
+-    if (status) status.classList.remove('show', 'success', 'error');
+-}
+-
+-function handleFileSelect(files) {
+-    if (isUploadProcessing) {
+-        appendUploadMessage('⏳ 上一次文件仍在处理，请稍候或关闭后重新上传。');
+-        return;
+-    }
+-    const progress = document.getElementById('importProgress');
+-    const progressBar = document.getElementById('progressBar');
+-    const progressText = document.getElementById('progressText');
+-    const progressPercent = document.getElementById('importProgressPercent');
+-    const status = document.getElementById('importStatus');
+-    
+-    progress.classList.add('show');
+-    status.classList.remove('show', 'success', 'error');
+-    if (progressBar) progressBar.style.width = '1%';
+-    if (progressPercent) progressPercent.textContent = '1%';
+-    if (progressText) progressText.textContent = '读取中: 准备上传...';
+-    
+-    const selectedFiles = [];
+-    for (let i = 0; i < files.length; i++) {
+-        selectedFiles.push(files[i]);
+-    }
+-
+-    if (selectedFiles.length === 0) {
+-        progressText.textContent = '没有可处理的文件';
+-        if (progressPercent) progressPercent.textContent = '0%';
+-        status.textContent = '请选择文件后重试';
+-        status.classList.add('show', 'error');
+-        emitUploadState('error', { message: '没有可处理的文件' });
+-        return;
+-    }
+-
+-    const uploadSessionId = crypto.randomUUID();
+-    activeUploadSessionId = uploadSessionId;
+-    isUploadProcessing = true;
+-
+-    emitUploadState('pending', { fileCount: selectedFiles.length });
+-    appendUploadMessage(`⏳ 检测到 ${selectedFiles.length} 个文件，等待上传并读取中...`);
+-    processGenericFiles(selectedFiles, progressBar, progressText, progressPercent, status, uploadSessionId);
+-}
+-
+-async function processGenericFiles(files, progressBar, progressText, progressPercent, status, uploadSessionId) {
+-    const allSummaries = [];
+-    let analyzedCount = 0;
+-    let uploadOnlyCount = 0;
+-    let hasExcelUpload = false;
+-    let hasCustomersList = false;
+-    let customersImportFileCount = 0;
+-    // Some multi-step flows (e.g. unit_products_db) need extra time for the user to read prompt.
+-    let delayCloseMs = 900;
+-    for (let i = 0; i < files.length; i++) {
+-        if (uploadSessionId !== activeUploadSessionId) {
+-            return;
+-        }
+-        const file = files[i];
+-        const startPercent = Math.max(1, Math.round((i / files.length) * 100));
+-        if (progressBar) progressBar.style.width = `${startPercent}%`;
+-        if (progressPercent) progressPercent.textContent = `${startPercent}%`;
+-        progressText.textContent = `读取中: ${file.name}`;
+-        emitUploadState('processing', { fileName: file.name, percent: startPercent });
+-
+-        const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-        const customersImportUrl = (apiBase && String(apiBase).trim())
+-            ? (String(apiBase).replace(/\/$/, '') + '/api/customers/import')
+-            : (typeof window !== 'undefined' && window.location && window.location.origin && window.location.origin !== 'null'
+-                ? window.location.origin + '/api/customers/import'
+-                : '/api/customers/import');
+-
+-        if (currentImportPurpose === 'customers_import') {
+-            if (!/\.xlsx$/i.test(file.name || '')) {
+-                appendUploadMessage(`❌ ${file.name}：客户导入仅支持 .xlsx，且表头需含「单位名称」列。`);
+-            } else {
+-                try {
+-                    const importForm = new FormData();
+-                    importForm.append('file', file);
+-                    const importResp = await fetch(customersImportUrl, { method: 'POST', body: importForm });
+-                    const rawText = await importResp.text();
+-                    if (uploadSessionId !== activeUploadSessionId) return;
+-                    let importData = null;
+-                    try {
+-                        if (rawText.trim().startsWith('<')) {
+-                            throw new Error('服务器返回了网页而非数据，请确认后端已启动且接口 /api/customers/import 可用（状态码 ' + importResp.status + '）');
+-                        }
+-                        importData = JSON.parse(rawText);
+-                    } catch (parseErr) {
+-                        const msg = parseErr.message || String(parseErr);
+-                        if (msg.indexOf('服务器返回') !== -1) throw parseErr;
+-                        appendUploadMessage(`❌ 导入请求失败 (${file.name})：服务器返回异常（${importResp.status}），请检查后端是否正常运行。`);
+-                        analyzedCount += 1;
+-                        continue;
+-                    }
+-                    if (importData.success) {
+-                        const inserted = (importData.inserted || 0);
+-                        const skipped = (importData.skipped || 0);
+-                        const insertedNames = importData.inserted_unit_names || [];
+-                        const skippedRows = importData.skipped_row_numbers || [];
+-                        let tip = `✅ 客户已更新：${importData.message}，列表已自动刷新`;
+-                        if (skipped > 0) {
+-                            const rowHint = skippedRows.length > 0 ? ` 第 ${skippedRows.join('、')} 行` : '';
+-                            tip += `（有 ${skipped} 行因「单位名称」为空被跳过${rowHint}，请补全后重新导入）`;
+-                        }
+-                        if (insertedNames.length > 0) {
+-                            tip += ` 新增单位：${insertedNames.join('、')}`;
+-                        }
+-                        appendUploadMessage(tip);
+-                        const refresh = typeof loadCustomers === 'function' ? loadCustomers : (typeof window !== 'undefined' && window.loadCustomers);
+-                        if (refresh) {
+-                            setTimeout(function () { refresh(); }, 150);
+-                        }
+-                        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+-                            window.dispatchEvent(new CustomEvent('customers-imported', { detail: importData }));
+-                        }
+-                        var sw = (typeof switchView === 'function') ? switchView : (typeof window !== 'undefined' && window.switchView);
+-                        if (inserted > 0 && sw) {
+-                            setTimeout(function () { sw('customers'); }, 300);
+-                            if (refresh) { setTimeout(function () { refresh(); }, 500); }
+-                        }
+-                    } else {
+-                        appendUploadMessage(`❌ 导入失败：${importData.message || '格式不符合或缺少「单位名称」列'}`);
+-                    }
+-                    analyzedCount += 1;
+-                } catch (err) {
+-                    appendUploadMessage(`❌ 导入请求失败 (${file.name})：${err.message || '网络错误'}`);
+-                }
+-            }
+-            customersImportFileCount += 1;
+-            const donePercent = Math.round(((i + 1) / files.length) * 100);
+-            if (progressBar) progressBar.style.width = `${donePercent}%`;
+-            if (progressPercent) progressPercent.textContent = `${donePercent}%`;
+-            continue;
+-        }
+-
+-        const formData = new FormData();
+-        formData.append('file', file);
+-        formData.append('purpose', currentImportPurpose || 'general');
+-
+-        try {
+-            const response = await fetch(apiBase + '/api/ai/file/analyze', {
+-                method: 'POST',
+-                body: formData
+-            });
+-
+-            if (uploadSessionId !== activeUploadSessionId) {
+-                return;
+-            }
+-
+-            const rawText = await response.text();
+-            let result = null;
+-            try {
+-                result = JSON.parse(rawText);
+-            } catch (parseErr) {
+-                result = {
+-                    success: false,
+-                    message: `服务返回非JSON响应(${response.status})`
+-                };
+-            }
+-
+-            // 兼容旧后端：当通用分析接口不可用时，Excel回退到旧接口
+-            if ((!result || !result.success) && /\.(xlsx|xls|csv)$/i.test(file.name)) {
+-                const fallbackFormData = new FormData();
+-                fallbackFormData.append('excel_file', file);
+-                const fallbackResp = await fetch(apiBase + '/api/excel/upload', {
+-                    method: 'POST',
+-                    body: fallbackFormData
+-                });
+-                const fallbackText = await fallbackResp.text();
+-                try {
+-                    const fallbackJson = JSON.parse(fallbackText);
+-                    if (fallbackJson && fallbackJson.success) {
+-                        // 二段回退：尝试调用模板分解接口，拿真实分析结果
+-                        let deepSummary = '';
+-                        try {
+-                            const decomposeResp = await fetch(apiBase + '/api/excel/decompose', {
+-                                method: 'POST',
+-                                headers: { 'Content-Type': 'application/json' },
+-                                body: JSON.stringify({
+-                                    filename: file.name,
+-                                    file_path: fallbackJson.file_path || '',
+-                                    sample_rows: 5
+-                                })
+-                            });
+-                            const decomposeText = await decomposeResp.text();
+-                            const decomposeJson = JSON.parse(decomposeText);
+-                            if (decomposeJson && decomposeJson.success && decomposeJson.decomposition) {
+-                                const d = decomposeJson.decomposition;
+-                                const entryCount = Array.isArray(d.editable_entries) ? d.editable_entries.length : 0;
+-                                const amountCount = Array.isArray(d.amount_related_entries) ? d.amount_related_entries.length : 0;
+-                                deepSummary = `检测到表头行: ${d.header_row || '-'}；可编辑词条: ${entryCount} 个；金额相关字段: ${amountCount} 个。`;
+-                            }
+-                        } catch (deepErr) {
+-                            // 继续走普通回退提示
+-                        }
+-
+-                        result = {
+-                            success: true,
+-                            parser_used: deepSummary ? 'excel_fallback+decompose' : 'excel_fallback',
+-                            extension: '.xlsx',
+-                            text_preview: '',
+-                            ai_summary: deepSummary || 'Excel 文件已上传成功（当前环境仅完成上传，未读取内容）。',
+-                            analyzed: !!deepSummary
+-                        };
+-                    } else if (fallbackJson && fallbackJson.message) {
+-                        result = {
+-                            success: false,
+-                            message: fallbackJson.message
+-                        };
+-                    }
+-                } catch (fallbackParseErr) {
+-                    result = result || {
+-                        success: false,
+-                        message: `回退接口返回非JSON(${fallbackResp.status})`
+-                    };
+-                }
+-            }
+-            const donePercent = Math.round(((i + 1) / files.length) * 100);
+-            if (progressBar) progressBar.style.width = `${donePercent}%`;
+-            if (progressPercent) progressPercent.textContent = `${donePercent}%`;
+-            emitUploadState('processing', { fileName: file.name, percent: donePercent });
+-
+-            if (result && result.success) {
+-                const parser = result.parser_used || 'metadata';
+-                const resultExt = String(result.extension || '').toLowerCase();
+-                const nameIsExcel = /\.(xlsx|xls|csv)$/i.test(file.name || '');
+-                if (nameIsExcel || ['.xlsx', '.xls', '.csv'].includes(resultExt) || parser.includes('excel')) {
+-                    hasExcelUpload = true;
+-                }
+-                if (result.suggested_use === 'customers_import') hasCustomersList = true;
+-                const preview = (result.text_preview || '').trim();
+-                const summary = (result.ai_summary || '').trim();
+-                const resultText = summary || preview || '已完成读取，但该文件暂无可提取正文。';
+-                const hasAnalysis = result.analyzed !== false && (
+-                    parser.includes('decompose') ||
+-                    parser === 'excel' ||
+-                    parser === 'image_ocr' ||
+-                    parser === 'pdf' ||
+-                    parser === 'docx' ||
+-                    parser === 'text' ||
+-                    (summary && !summary.includes('仅完成上传'))
+-                );
+-                if (hasAnalysis) analyzedCount += 1;
+-                else uploadOnlyCount += 1;
+-                const messageParts = [
+-                    `📎 文件分析完成: ${file.name}`,
+-                    `解析器: ${parser}`,
+-                    `分析结果:\n${resultText.slice(0, 700)}`
+-                ];
+-                if (preview && summary && preview !== summary) {
+-                    messageParts.push(`内容预览:\n${preview.slice(0, 350)}`);
+-                }
+-                // Multi-step: unit_products_db requires user confirmation in chat.
+-                if (result.suggested_use === 'unit_products_db' && result.saved_name) {
+-                    delayCloseMs = Math.max(delayCloseMs, 2500);
+-                    try {
+-                        let sessionId = '';
+-                        try { sessionId = localStorage.getItem('ai_session_id') || ''; } catch (_) {}
+-                        window.__xcagiPendingUnitProductsImport = {
+-                            saved_name: result.saved_name,
+-                            unit_name_guess: (result.unit_name_guess || '').trim(),
+-                            unit_candidates: Array.isArray(result.unit_candidates) ? result.unit_candidates : [],
+-                            stage: 'confirm_filename',
+-                            session_id: sessionId
+-                        };
+-                        try { localStorage.setItem('xcagiPendingUnitProductsImport', JSON.stringify(window.__xcagiPendingUnitProductsImport)); } catch (_) {}
+-                    } catch (_) { /* best-effort */ }
+-                    const guess = (result.unit_name_guess || '').trim();
+-                    messageParts.push(
+-                        guess
+-                            ? `下一步：请到聊天里回复“是”以导入客户「${guess}」的产品；也可回复“否 / 改成 <名称>”。`
+-                            : `下一步：请到聊天里回复“是 / 否 / 改成 <名称>”以完成客户 + 产品导入。`
+-                    );
+-                }
+-                const msg = messageParts.join('\n\n');
+-                allSummaries.push(msg);
+-                appendUploadMessage(msg);
+-            } else {
+-                appendUploadMessage(`❌ 文件分析失败 (${file.name}): ${(result && (result.message || result.error)) || '未知错误'}`);
+-            }
+-        } catch (err) {
+-            if (uploadSessionId !== activeUploadSessionId) {
+-                return;
+-            }
+-            console.error('File analyze error:', err);
+-            const hint = (err && err.message === 'Failed to fetch') ? '（请检查网络连接或服务是否启动）' : '';
+-            appendUploadMessage(`❌ 文件请求失败 (${file.name}): ${err.message}${hint}`);
+-        }
+-    }
+-
+-    if (uploadSessionId !== activeUploadSessionId) {
+-        return;
+-    }
+-
+-    progressText.textContent = '文件分析完成';
+-    if (progressPercent) progressPercent.textContent = '100%';
+-    if (progressBar) progressBar.style.width = '100%';
+-    var wasCustomersImportOnly = (currentImportPurpose === 'customers_import' && customersImportFileCount === files.length);
+-    if (wasCustomersImportOnly) {
+-        status.textContent = `客户导入完成（${files.length} 个文件）`;
+-    } else if (uploadOnlyCount > 0 && analyzedCount === 0) {
+-        status.textContent = `已上传 ${files.length} 个文件（当前环境未完成内容分析）`;
+-    } else if (uploadOnlyCount > 0) {
+-        status.textContent = `已分析 ${analyzedCount} 个，另有 ${uploadOnlyCount} 个仅上传`;
+-    } else {
+-        status.textContent = `已完成 ${files.length} 个文件分析`;
+-    }
+-    status.classList.add('show', 'success');
+-    emitUploadState('completed', { fileCount: files.length });
+-    if (!wasCustomersImportOnly) {
+-        if (uploadOnlyCount > 0 && analyzedCount === 0) {
+-            appendUploadMessage(`✅ 文件上传完成：共 ${files.length} 个文件已接收，当前环境未完成内容分析。`);
+-        } else if (uploadOnlyCount > 0) {
+-            appendUploadMessage(`✅ 文件处理完成：已分析 ${analyzedCount} 个，另有 ${uploadOnlyCount} 个仅上传。`);
+-        } else {
+-            appendUploadMessage(`✅ 文件上传完成，已读取并分析 ${files.length} 个文件。`);
+-        }
+-        if (hasExcelUpload) {
+-            appendUploadMessage(buildExcelNextStepPrompt(hasCustomersList));
+-        }
+-    }
+-    isUploadProcessing = false;
+-    setTimeout(() => {
+-        try {
+-            closeImportWindow();
+-        } catch (e) {
+-            console.warn('自动关闭上传窗失败:', e);
+-        }
+-    }, delayCloseMs);
+-}
+-
+-async function openCamera() {
+-    const cameraPanel = document.getElementById('cameraPanel');
+-    const cameraVideo = document.getElementById('cameraVideo');
+-    
+-    try {
+-        cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
+-        cameraVideo.srcObject = cameraStream;
+-        cameraPanel.style.display = 'block';
+-    } catch (err) {
+-        console.error('Camera error:', err);
+-        alert('无法访问摄像头: ' + err.message);
+-    }
+-}
+-
+-function closeCamera() {
+-    const cameraPanel = document.getElementById('cameraPanel');
+-    const cameraVideo = document.getElementById('cameraVideo');
+-    
+-    if (cameraStream) {
+-        cameraStream.getTracks().forEach(track => track.stop());
+-        cameraStream = null;
+-    }
+-    
+-    cameraPanel.style.display = 'none';
+-    cameraVideo.srcObject = null;
+-}
+-
+-function capturePhoto() {
+-    const cameraVideo = document.getElementById('cameraVideo');
+-    const cameraCanvas = document.getElementById('cameraCanvas');
+-    const ctx = cameraCanvas.getContext('2d');
+-    
+-    cameraCanvas.width = cameraVideo.videoWidth;
+-    cameraCanvas.height = cameraVideo.videoHeight;
+-    
+-    ctx.drawImage(cameraVideo, 0, 0);
+-    
+-    cameraCanvas.toBlob(async (blob) => {
+-        const file = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+-        handleFileSelect([file]);
+-        closeCamera();
+-    }, 'image/jpeg');
+-}
+-
+-// Vue `vue-dist` 页面在部分部署下可能不会加载 legacy `ui.js`，
+-// 导致 `[data-close-action="closeImportWindow"]` 的点击委托失效。
+-// 这里直接绑定 import 关闭按钮，确保 `importCloseBtn` 可点击。
+-(function ensureImportWindowCloseHandlers() {
+-    try {
+-        if (typeof window === 'undefined') return;
+-        if (window.__XCAGI_IMPORT_CLOSE_HANDLERS_BOUND__) return;
+-        window.__XCAGI_IMPORT_CLOSE_HANDLERS_BOUND__ = true;
+-
+-        const bindCloseBtn = (id) => {
+-            const el = document.getElementById(id);
+-            if (!el) return;
+-            if (el.getAttribute('data-xcagi-bound-close-import') === '1') return;
+-            el.setAttribute('data-xcagi-bound-close-import', '1');
+-            el.addEventListener('click', (e) => {
+-                e.preventDefault();
+-                e.stopPropagation();
+-                try { closeImportWindow(); } catch (_) {}
+-            });
+-        };
+-
+-        // 直接绑定（importFloatWindow 在 App.vue 中通常已渲染）
+-        bindCloseBtn('importCloseBtn');
+-        bindCloseBtn('cancelImportBtn');
+-
+-        // 兜底事件委托
+-        document.addEventListener('click', (e) => {
+-            const target = e && e.target && e.target.closest ? e.target.closest('[data-close-action="closeImportWindow"]') : null;
+-            if (!target) return;
+-            e.preventDefault();
+-            e.stopPropagation();
+-            try { closeImportWindow(); } catch (_) {}
+-        });
+-    } catch (_) {
+-        // best-effort; do not break import module
+-    }
+-})();
+diff --git a/FHD/XCAGI/static/js/modules/materials.js b/FHD/XCAGI/static/js/modules/materials.js
+deleted file mode 100755
+index 892fe5a548..0000000000
+--- a/FHD/XCAGI/static/js/modules/materials.js
++++ /dev/null
+@@ -1,244 +0,0 @@
+-let materialListCache = [];
+-let materialTableEventsBound = false;
+-
+-function bindMaterialTableEvents() {
+-    if (materialTableEventsBound) return;
+-    materialTableEventsBound = true;
+-
+-    const tbody = document.getElementById('materialsTableBody');
+-    if (!tbody) return;
+-
+-    tbody.addEventListener('click', function(e) {
+-        const target = e.target.closest('[data-action][data-material-id]');
+-        if (!target) return;
+-
+-        const materialId = Number(target.getAttribute('data-material-id'));
+-        if (!materialId) return;
+-
+-        if (target.getAttribute('data-action') === 'edit-material') {
+-            editMaterial(materialId);
+-            return;
+-        }
+-
+-        if (target.getAttribute('data-action') === 'delete-material') {
+-            deleteMaterial(materialId);
+-        }
+-    });
+-}
+-
+-function loadMaterials() {
+-    fetch(API_BASE + '/api/materials')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success) renderMaterials(data.data);
+-        });
+-}
+-
+-function renderMaterials(materials) {
+-    bindMaterialTableEvents();
+-    materialListCache = Array.isArray(materials) ? materials : [];
+-    const tbody = document.getElementById('materialsTableBody');
+-    tbody.textContent = '';
+-    if (!materialListCache.length) {
+-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无原材料</td></tr>';
+-        return;
+-    }
+-    materialListCache.forEach(m => {
+-        const isLow = Number(m.quantity || 0) <= Number(m.min_stock || 0);
+-        const tr = document.createElement('tr');
+-        if (isLow) tr.style.background = '#fff3cd';
+-
+-        const checkboxTd = document.createElement('td');
+-        const checkbox = document.createElement('input');
+-        checkbox.type = 'checkbox';
+-        checkbox.className = 'material-checkbox';
+-        checkbox.value = String(m.id);
+-        checkboxTd.appendChild(checkbox);
+-        tr.appendChild(checkboxTd);
+-
+-        const codeTd = document.createElement('td');
+-        codeTd.textContent = m.material_code || '';
+-        tr.appendChild(codeTd);
+-
+-        const nameTd = document.createElement('td');
+-        nameTd.textContent = m.name || '';
+-        tr.appendChild(nameTd);
+-
+-        const categoryTd = document.createElement('td');
+-        categoryTd.textContent = m.category || '';
+-        tr.appendChild(categoryTd);
+-
+-        const quantityTd = document.createElement('td');
+-        const quantityBadge = document.createElement('span');
+-        quantityBadge.className = `badge ${isLow ? 'badge-danger' : 'badge-success'}`;
+-        quantityBadge.textContent = String(Number(m.quantity || 0));
+-        quantityTd.appendChild(quantityBadge);
+-        tr.appendChild(quantityTd);
+-
+-        const priceTd = document.createElement('td');
+-        priceTd.textContent = `¥${Number(m.unit_price || 0)}`;
+-        tr.appendChild(priceTd);
+-
+-        const supplierTd = document.createElement('td');
+-        supplierTd.textContent = m.supplier || '';
+-        tr.appendChild(supplierTd);
+-
+-        const actionTd = document.createElement('td');
+-        const actionBtns = document.createElement('div');
+-        actionBtns.className = 'action-btns';
+-        const editBtn = document.createElement('button');
+-        editBtn.className = 'btn btn-sm btn-secondary';
+-        editBtn.textContent = '编辑';
+-        editBtn.setAttribute('data-action', 'edit-material');
+-        editBtn.setAttribute('data-material-id', String(m.id));
+-        const deleteBtn = document.createElement('button');
+-        deleteBtn.className = 'btn btn-sm btn-danger';
+-        deleteBtn.textContent = '删除';
+-        deleteBtn.setAttribute('data-action', 'delete-material');
+-        deleteBtn.setAttribute('data-material-id', String(m.id));
+-        actionBtns.appendChild(editBtn);
+-        actionBtns.appendChild(deleteBtn);
+-        actionTd.appendChild(actionBtns);
+-        tr.appendChild(actionTd);
+-
+-        tbody.appendChild(tr);
+-    });
+-}
+-
+-function searchMaterials() {
+-    const query = document.getElementById('materialSearch').value;
+-    const categoryEl = document.getElementById('materialCategoryFilter');
+-    const category = categoryEl ? categoryEl.value.trim() : '';
+-    let url = API_BASE + '/api/materials';
+-    const params = [];
+-    if (query) params.push('search=' + encodeURIComponent(query));
+-    if (category) params.push('category=' + encodeURIComponent(category));
+-    if (params.length) url += '?' + params.join('&');
+-    fetch(url).then(r => r.json()).then(data => {
+-        if (data.success) renderMaterials(data.data);
+-    });
+-}
+-
+-function loadLowStock() {
+-    fetch(API_BASE + '/api/materials/low-stock')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success && data.data.length > 0) {
+-                document.getElementById('lowStockWarning').style.display = 'block';
+-                document.getElementById('lowStockList').innerHTML = data.data.map(m => 
+-                    `<div>${escapeHtml(m.name)} (${Number(m.quantity || 0)}/${Number(m.min_stock || 0)}) - ${escapeHtml(m.supplier || '')}</div>`
+-                ).join('');
+-            } else {
+-                document.getElementById('lowStockWarning').style.display = 'none';
+-            }
+-        });
+-}
+-
+-function showMaterialModal() {
+-    document.getElementById('materialModal').classList.add('active');
+-    document.getElementById('materialModalTitle').textContent = '添加原材料';
+-    document.getElementById('materialId').value = '';
+-}
+-
+-function closeMaterialModal() {
+-    document.getElementById('materialModal').classList.remove('active');
+-}
+-
+-function editMaterial(id) {
+-    const m = materialListCache.find(x => Number(x.id) === Number(id));
+-    if (!m) return;
+-    document.getElementById('materialModal').classList.add('active');
+-    document.getElementById('materialModalTitle').textContent = '编辑原材料';
+-    document.getElementById('materialId').value = m.id;
+-    document.getElementById('materialCode').value = m.material_code;
+-    document.getElementById('materialName').value = m.name;
+-    document.getElementById('materialCategory').value = m.category;
+-    document.getElementById('materialSpec').value = m.specification;
+-    document.getElementById('materialUnit').value = m.unit;
+-    document.getElementById('materialQuantity').value = m.quantity;
+-    document.getElementById('materialPrice').value = m.unit_price;
+-    document.getElementById('materialSupplier').value = m.supplier;
+-    document.getElementById('materialMinStock').value = m.min_stock;
+-}
+-
+-function saveMaterial() {
+-    const id = document.getElementById('materialId').value;
+-    const data = {
+-        material_code: document.getElementById('materialCode').value,
+-        name: document.getElementById('materialName').value,
+-        category: document.getElementById('materialCategory').value,
+-        specification: document.getElementById('materialSpec').value,
+-        unit: document.getElementById('materialUnit').value,
+-        quantity: parseFloat(document.getElementById('materialQuantity').value) || 0,
+-        unit_price: parseFloat(document.getElementById('materialPrice').value) || 0,
+-        supplier: document.getElementById('materialSupplier').value,
+-        min_stock: parseFloat(document.getElementById('materialMinStock').value) || 0
+-    };
+-
+-    if (!data.material_code || !data.name) {
+-        alert('请填写必填项');
+-        return;
+-    }
+-
+-    const method = id ? 'PUT' : 'POST';
+-    const url = id ? API_BASE + '/api/materials/' + id : API_BASE + '/api/materials';
+-
+-    fetch(url, {
+-        method: method,
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify(data)
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            closeMaterialModal();
+-            loadMaterials();
+-        } else {
+-            alert(data.message || '保存失败');
+-        }
+-    });
+-}
+-
+-function deleteMaterial(id) {
+-    if (!confirm('确定删除这个原材料？')) return;
+-    fetch(API_BASE + '/api/materials/' + id, {method: 'DELETE'})
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success) loadMaterials();
+-            else alert(data.message);
+-        });
+-}
+-
+-function toggleAllMaterials(checkbox) {
+-    document.querySelectorAll('.material-checkbox').forEach(cb => {
+-        cb.checked = checkbox.checked;
+-    });
+-}
+-
+-function batchDeleteMaterials() {
+-    const checked = document.querySelectorAll('.material-checkbox:checked');
+-    if (checked.length === 0) {
+-        alert('请选择要删除的原材料');
+-        return;
+-    }
+-    const key = prompt('请输入密钥确认删除:');
+-    if (key !== '61408693') {
+-        alert('密钥错误');
+-        return;
+-    }
+-    
+-    const ids = Array.from(checked).map(cb => parseInt(cb.value));
+-    
+-    fetch(API_BASE + '/api/materials/batch-delete', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify({material_ids: ids})
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            alert(data.message);
+-            loadMaterials();
+-        } else {
+-            alert('删除失败: ' + data.message);
+-        }
+-    }).catch(e => {
+-        alert('删除失败: ' + e.message);
+-    });
+-}
+diff --git a/FHD/XCAGI/static/js/modules/orders.js b/FHD/XCAGI/static/js/modules/orders.js
+deleted file mode 100755
+index 775cc685a5..0000000000
+--- a/FHD/XCAGI/static/js/modules/orders.js
++++ /dev/null
+@@ -1,113 +0,0 @@
+-let ordersTableEventsBound = false;
+-
+-function bindOrdersTableEvents() {
+-    if (ordersTableEventsBound) return;
+-    ordersTableEventsBound = true;
+-
+-    const tbody = document.getElementById('ordersTableBody');
+-    if (!tbody) return;
+-    tbody.addEventListener('click', function(e) {
+-        const target = e.target.closest('[data-action="delete-order"][data-order-number]');
+-        if (!target) return;
+-        deleteOrder(target.getAttribute('data-order-number'));
+-    });
+-}
+-
+-function loadOrders() {
+-    fetch(API_BASE + '/api/orders')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success) renderOrders(data.data || []);
+-        });
+-}
+-
+-function renderOrders(orders) {
+-    bindOrdersTableEvents();
+-    const tbody = document.getElementById('ordersTableBody');
+-    tbody.textContent = '';
+-    if (!orders || orders.length === 0) {
+-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无出货记录</td></tr>';
+-        return;
+-    }
+-    orders.forEach(o => {
+-        const tr = document.createElement('tr');
+-
+-        const orderNumber = document.createElement('td');
+-        orderNumber.textContent = o.order_number || '';
+-        tr.appendChild(orderNumber);
+-
+-        const customerName = document.createElement('td');
+-        customerName.textContent = o.customer_name || '';
+-        tr.appendChild(customerName);
+-
+-        const date = document.createElement('td');
+-        date.textContent = o.date || '';
+-        tr.appendChild(date);
+-
+-        const amount = document.createElement('td');
+-        amount.textContent = `¥${Number(o.total_amount || 0)}`;
+-        tr.appendChild(amount);
+-
+-        const statusTd = document.createElement('td');
+-        const badge = document.createElement('span');
+-        badge.className = 'badge badge-success';
+-        badge.textContent = o.status || '已完成';
+-        statusTd.appendChild(badge);
+-        tr.appendChild(statusTd);
+-
+-        const actionTd = document.createElement('td');
+-        const deleteBtn = document.createElement('button');
+-        deleteBtn.className = 'btn btn-danger btn-sm';
+-        deleteBtn.textContent = '删除';
+-        deleteBtn.setAttribute('data-action', 'delete-order');
+-        deleteBtn.setAttribute('data-order-number', encodeURIComponent(o.order_number || ''));
+-        actionTd.appendChild(deleteBtn);
+-        tr.appendChild(actionTd);
+-
+-        tbody.appendChild(tr);
+-    });
+-}
+-
+-function deleteOrder(orderNumber) {
+-    const decodedOrderNumber = decodeURIComponent(orderNumber);
+-    if (!confirm('确定要删除订单 ' + decodedOrderNumber + ' 吗？')) return;
+-    
+-    fetch(API_BASE + '/api/orders/' + encodeURIComponent(decodedOrderNumber), {
+-        method: 'DELETE'
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            alert(data.message);
+-            loadOrders();
+-        } else {
+-            alert('删除失败: ' + data.message);
+-        }
+-    }).catch(e => {
+-        alert('删除失败: ' + e.message);
+-    });
+-}
+-
+-function clearAllOrders() {
+-    const key = prompt('请输入密钥确认清空:');
+-    if (key !== '61408693') {
+-        alert('密钥错误');
+-        return;
+-    }
+-    if (!confirm('确定要清空所有出货记录吗？此操作不可恢复！')) return;
+-    
+-    fetch(API_BASE + '/api/orders/clear-all', {
+-        method: 'DELETE'
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            alert(data.message);
+-            loadOrders();
+-        } else {
+-            alert('清空失败: ' + data.message);
+-        }
+-    }).catch(e => {
+-        alert('清空失败: ' + e.message);
+-    });
+-}
+-
+-function searchOrders() {
+-    loadOrders();
+-}
+diff --git a/FHD/XCAGI/static/js/modules/products.js b/FHD/XCAGI/static/js/modules/products.js
+deleted file mode 100755
+index 2b0e586cd7..0000000000
+--- a/FHD/XCAGI/static/js/modules/products.js
++++ /dev/null
+@@ -1,342 +0,0 @@
+-let productListCache = [];
+-let productTableEventsBound = false;
+-/** 当前产品列表所属单位（从下拉选择），用于编辑/删除时传参 */
+-let currentProductUnitName = '';
+-
+-function bindProductTableEvents() {
+-    if (productTableEventsBound) return;
+-    productTableEventsBound = true;
+-
+-    const tbody = document.getElementById('productsTableBody');
+-    if (!tbody) return;
+-
+-    tbody.addEventListener('click', function(e) {
+-        const target = e.target.closest('[data-action][data-product-id]');
+-        if (!target) return;
+-
+-        const productId = Number(target.getAttribute('data-product-id'));
+-        if (!productId) return;
+-
+-        if (target.getAttribute('data-action') === 'edit-product') {
+-            editProduct(productId);
+-            return;
+-        }
+-
+-        if (target.getAttribute('data-action') === 'delete-product') {
+-            deleteProduct(productId);
+-        }
+-    });
+-}
+-
+-function loadProductUnits() {
+-    const sel = document.getElementById('productUnitSelect');
+-    if (!sel || sel.options.length > 1) return;
+-    const base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    // 兼容：如果 /api/products/units 不存在，则从产品列表推导 distinct(Product.unit)
+-    fetch(base + '/api/products?per_page=1000&page=1')
+-        .then(function (r) { return r.json(); })
+-        .then(function (data) {
+-            if (!sel) return;
+-            var list = (data && data.success && Array.isArray(data.data))
+-                ? data.data.map(function (p) { return p.unit || p.unit_name || ''; })
+-                : [];
+-            // 去空 + 去重保序
+-            list = list.filter(function (x) { return !!x; });
+-            list = Array.from(new Set(list));
+-            if (!Array.isArray(list)) list = [];
+-            list.forEach(function (u) {
+-                var opt = document.createElement('option');
+-                opt.value = u;
+-                opt.textContent = u;
+-                sel.appendChild(opt);
+-            });
+-        })
+-        .catch(function () {});
+-    return;
+-}
+-
+-function loadProducts() {
+-    var sel = document.getElementById('productUnitSelect');
+-    if (sel && sel.options.length <= 1) loadProductUnits();
+-    var unitName = (sel && sel.value) ? sel.value.trim() : '';
+-    currentProductUnitName = unitName;
+-    var tbody = document.getElementById('productsTableBody');
+-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state">加载中...</td></tr>';
+-    var base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    var url = base + '/api/products';
+-    if (unitName) url += '?unit=' + encodeURIComponent(unitName);
+-    fetch(url)
+-        .then(function (r) { return r.json().catch(function () { return { success: false, message: '返回格式异常' }; }); })
+-        .then(function (data) {
+-            if (data && data.success && Array.isArray(data.data)) {
+-                renderProducts(data.data, unitName);
+-            } else {
+-                renderProducts([], unitName);
+-                if (tbody && data && !data.success && data.message) {
+-                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">加载失败：' + (data.message || '未知错误') + '</td></tr>';
+-                }
+-            }
+-        })
+-        .catch(function (err) {
+-            if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="empty-state">加载失败：' + (err.message || '网络错误') + '</td></tr>';
+-        });
+-}
+-
+-function renderProducts(products, unitName) {
+-    bindProductTableEvents();
+-    productListCache = Array.isArray(products) ? products : [];
+-    var tbody = document.getElementById('productsTableBody');
+-    if (!tbody) return;
+-    tbody.textContent = '';
+-    if (!productListCache.length) {
+-        var hint = unitName
+-            ? '该单位暂无产品，可点击「添加产品」为该单位录入产品'
+-            : '请先选择客户，即可查看或添加该单位的产品';
+-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">' + hint + '</td></tr>';
+-        return;
+-    }
+-    productListCache.forEach(p => {
+-        const tr = document.createElement('tr');
+-
+-        const checkboxTd = document.createElement('td');
+-        const checkbox = document.createElement('input');
+-        checkbox.type = 'checkbox';
+-        checkbox.className = 'product-checkbox';
+-        checkbox.value = String(p.id);
+-        checkboxTd.appendChild(checkbox);
+-        tr.appendChild(checkboxTd);
+-
+-        const modelTd = document.createElement('td');
+-        modelTd.textContent = p.model_number || '';
+-        tr.appendChild(modelTd);
+-
+-        const nameTd = document.createElement('td');
+-        nameTd.textContent = p.name || '';
+-        tr.appendChild(nameTd);
+-
+-        const specTd = document.createElement('td');
+-        specTd.textContent = p.specification || '';
+-        tr.appendChild(specTd);
+-
+-        const priceTd = document.createElement('td');
+-        priceTd.textContent = `¥${Number(p.price || 0)}`;
+-        tr.appendChild(priceTd);
+-
+-        const actionTd = document.createElement('td');
+-        const actionBtns = document.createElement('div');
+-        actionBtns.className = 'action-btns';
+-        const editBtn = document.createElement('button');
+-        editBtn.className = 'btn btn-sm btn-secondary';
+-        editBtn.textContent = '编辑';
+-        editBtn.setAttribute('data-action', 'edit-product');
+-        editBtn.setAttribute('data-product-id', String(p.id));
+-        const deleteBtn = document.createElement('button');
+-        deleteBtn.className = 'btn btn-sm btn-danger';
+-        deleteBtn.textContent = '删除';
+-        deleteBtn.setAttribute('data-action', 'delete-product');
+-        deleteBtn.setAttribute('data-product-id', String(p.id));
+-        actionBtns.appendChild(editBtn);
+-        actionBtns.appendChild(deleteBtn);
+-        actionTd.appendChild(actionBtns);
+-        tr.appendChild(actionTd);
+-
+-        tbody.appendChild(tr);
+-    });
+-}
+-
+-function toggleAllProducts(checkbox) {
+-    document.querySelectorAll('.product-checkbox').forEach(cb => {
+-        cb.checked = checkbox.checked;
+-    });
+-}
+-
+-function batchDeleteProducts() {
+-    const checked = document.querySelectorAll('.product-checkbox:checked');
+-    if (checked.length === 0) {
+-        alert('请选择要删除的产品');
+-        return;
+-    }
+-    const key = prompt('请输入密钥确认删除:');
+-    if (key !== '61408693') {
+-        alert('密钥错误');
+-        return;
+-    }
+-    if (!confirm('确定要删除选中的 ' + checked.length + ' 个产品吗？')) return;
+-    
+-    const ids = Array.from(checked).map(cb => parseInt(cb.value));
+-    
+-    fetch(API_BASE + '/api/products/batch-delete', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify({product_ids: ids})
+-    }).then(r => r.json()).then(data => {
+-        if (data.success) {
+-            alert(data.message);
+-            loadProducts();
+-        } else {
+-            alert('删除失败: ' + data.message);
+-        }
+-    }).catch(e => {
+-        alert('删除失败: ' + e.message);
+-    });
+-}
+-
+-function searchProducts() {
+-    var query = document.getElementById('productSearch').value;
+-    var sel = document.getElementById('productUnitSelect');
+-    var unitName = (sel && sel.value) ? sel.value.trim() : '';
+-    var base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    var url = base + '/api/products?';
+-    if (unitName) url += 'unit=' + encodeURIComponent(unitName) + '&';
+-    if (query) url += 'search=' + encodeURIComponent(query);
+-    else if (!unitName) url = base + '/api/products';
+-    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+-        if (data.success) renderProducts(data.data, unitName);
+-    });
+-}
+-
+-function showProductModal(id = null) {
+-    document.getElementById('productModal').classList.add('active');
+-    document.getElementById('productModalTitle').textContent = id ? '编辑产品' : '添加产品';
+-    if (!id) {
+-        document.getElementById('productId').value = '';
+-        document.getElementById('productModel').value = '';
+-        document.getElementById('productName').value = '';
+-        document.getElementById('productSpec').value = '';
+-        document.getElementById('productPrice').value = '';
+-    }
+-}
+-
+-function closeProductModal() {
+-    document.getElementById('productModal').classList.remove('active');
+-}
+-
+-function editProduct(id, model, name, spec, price) {
+-    if (typeof model === 'undefined') {
+-        const product = productListCache.find(p => Number(p.id) === Number(id));
+-        if (!product) return;
+-        model = product.model_number || '';
+-        name = product.name || '';
+-        spec = product.specification || '';
+-        price = product.price || 0;
+-    }
+-    document.getElementById('productModal').classList.add('active');
+-    document.getElementById('productModalTitle').textContent = '编辑产品';
+-    document.getElementById('productId').value = id;
+-    document.getElementById('productModel').value = model;
+-    document.getElementById('productName').value = name;
+-    document.getElementById('productSpec').value = spec;
+-    document.getElementById('productPrice').value = price;
+-}
+-
+-function saveProduct() {
+-    var id = document.getElementById('productId').value;
+-    var sel = document.getElementById('productUnitSelect');
+-    var unitName = (sel && sel.value) ? sel.value.trim() : '';
+-    var unitId = (sel && sel.selectedOptions && sel.selectedOptions[0]) ? (sel.selectedOptions[0].getAttribute('data-id') || '') : '';
+-    var data = {
+-        model_number: document.getElementById('productModel').value,
+-        name: document.getElementById('productName').value,
+-        specification: document.getElementById('productSpec').value,
+-        price: parseFloat(document.getElementById('productPrice').value) || 0
+-    };
+-    if (!data.model_number || !data.name) {
+-        alert('请填写型号和名称');
+-        return;
+-    }
+-    if (!id && !unitName) {
+-        alert('请先选择客户，再添加产品');
+-        return;
+-    }
+-    if (unitName) {
+-        data.purchase_unit = unitName;
+-        if (unitId) data.purchase_unit_id = parseInt(unitId, 10);
+-    }
+-    if (id) {
+-        if (currentProductUnitName) data.unit_name = currentProductUnitName;
+-    }
+-    var base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    var method = id ? 'PUT' : 'POST';
+-    var url = id ? base + '/api/products/' + id : base + '/api/products';
+-    fetch(url, {
+-        method: method,
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify(data)
+-    }).then(function (r) { return r.json(); }).then(function (res) {
+-        if (res.success) {
+-            closeProductModal();
+-            loadProducts();
+-        } else {
+-            alert(res.message || '保存失败');
+-        }
+-    }).catch(function (e) { alert('保存失败：' + (e.message || '网络错误')); });
+-}
+-
+-function deleteProduct(id) {
+-    if (!confirm('确定删除这个产品？')) return;
+-    var base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    var opts = { method: 'DELETE', headers: { 'Content-Type': 'application/json' } };
+-    if (currentProductUnitName) opts.body = JSON.stringify({ purchase_unit: currentProductUnitName });
+-    fetch(base + '/api/products/' + id, opts)
+-        .then(function (r) { return r.json(); })
+-        .then(function (data) {
+-            if (data.success) loadProducts();
+-            else alert(data.message || '删除失败');
+-        })
+-        .catch(function (e) { alert('删除失败：' + (e.message || '网络错误')); });
+-}
+-
+-/** 导出当前选中单位的产品价格表（Excel） */
+-function exportProductPriceList() {
+-    var sel = document.getElementById('productUnitSelect');
+-    if (!sel || !sel.value || !sel.value.trim()) {
+-        alert('请先选择客户');
+-        return;
+-    }
+-    var unitName = sel.value.trim();
+-    var unitId = (sel.selectedOptions && sel.selectedOptions[0]) ? (sel.selectedOptions[0].getAttribute('data-id') || '') : '';
+-    var base = (typeof API_BASE !== 'undefined' ? API_BASE : '') || '';
+-    var params = new URLSearchParams();
+-    if (unitId) params.set('unit_id', unitId);
+-    params.set('unit', unitName);
+-    var url = base + '/api/products/export_unit_products_xlsx?' + params.toString();
+-    fetch(url)
+-        .then(function (res) {
+-            if (res.ok) return res.blob();
+-            return res.text().then(function (text) {
+-                try {
+-                    var data = JSON.parse(text);
+-                    throw new Error(data.message || '导出失败');
+-                } catch (e) {
+-                    if (e instanceof SyntaxError || (text && text.trim().startsWith('<'))) {
+-                        throw new Error('服务器返回异常（' + res.status + '），请确认该单位有产品数据');
+-                    }
+-                    if (e instanceof Error) throw e;
+-                    throw new Error(text || res.statusText || '导出失败');
+-                }
+-            });
+-        })
+-        .then(function (blob) {
+-            var a = document.createElement('a');
+-            a.href = URL.createObjectURL(blob);
+-            var contentDisposition = res.headers && res.headers.get('content-disposition');
+-            if (contentDisposition) {
+-                var filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+-                if (filenameMatch && filenameMatch[1]) {
+-                    a.download = filenameMatch[1].replace(/['"]/g, '');
+-                } else {
+-                    a.download = (unitName || '产品') + '_价格表.xlsx';
+-                }
+-            } else {
+-                a.download = (unitName || '产品') + '_价格表.xlsx';
+-            }
+-            a.style.display = 'none';
+-            document.body.appendChild(a);
+-            a.click();
+-            URL.revokeObjectURL(a.href);
+-            setTimeout(function () { a.remove(); }, 100);
+-        })
+-        .catch(function (err) {
+-            alert('导出失败：' + (err.message || '未返回文件'));
+-        });
+-}
+diff --git a/FHD/XCAGI/static/js/modules/shipment-records.js b/FHD/XCAGI/static/js/modules/shipment-records.js
+deleted file mode 100755
+index 83b00374d8..0000000000
+--- a/FHD/XCAGI/static/js/modules/shipment-records.js
++++ /dev/null
+@@ -1,355 +0,0 @@
+-/**
+- * 出货记录管理：按客户查看、导出出货记录 Excel
+- */
+-(function() {
+-    const apiBase = typeof API_BASE !== 'undefined' ? API_BASE : '';
+-    let currentUnits = [];
+-    let currentRecords = null;
+-    let currentSheetNames = [];
+-    let currentSheetIndex = 0;
+-
+-    function getSelect() {
+-        return document.getElementById('shipmentRecordUnitSelect');
+-    }
+-
+-    function getTableHead() {
+-        return document.getElementById('shipmentRecordsTableHead');
+-    }
+-
+-    function getTableBody() {
+-        return document.getElementById('shipmentRecordsTableBody');
+-    }
+-
+-    function getCardTitle() {
+-        return document.getElementById('shipmentRecordsCardTitle');
+-    }
+-
+-    function getSheetsTabs() {
+-        return document.getElementById('shipmentRecordsSheetsTabs');
+-    }
+-
+-    /** 加载客户列表到下拉框 */
+-    function loadShipmentRecordsUnits() {
+-        const sel = getSelect();
+-        if (!sel) return;
+-        sel.innerHTML = '<option value="">加载中...</option>';
+-        fetch(apiBase + '/api/shipment-records/units')
+-            .then(function(r) { return r.json(); })
+-            .then(function(data) {
+-                currentUnits = (data.data || []);
+-                sel.innerHTML = '<option value="">请选择客户</option>';
+-                currentUnits.forEach(function(u) {
+-                    const opt = document.createElement('option');
+-                    opt.value = u;
+-                    opt.textContent = u;
+-                    sel.appendChild(opt);
+-                });
+-            })
+-            .catch(function(e) {
+-                sel.innerHTML = '<option value="">加载失败</option>';
+-                console.error('出货记录单位列表加载失败', e);
+-            });
+-    }
+-
+-    /** 切换工作表标签 */
+-    function renderSheetTabs() {
+-        const container = getSheetsTabs();
+-        if (!container) return;
+-        if (!currentRecords || !currentSheetNames.length) {
+-            container.style.display = 'none';
+-            return;
+-        }
+-        container.style.display = 'block';
+-        container.innerHTML = '';
+-        currentSheetNames.forEach(function(name, idx) {
+-            const btn = document.createElement('button');
+-            btn.className = 'btn btn-sm ' + (idx === currentSheetIndex ? 'btn-primary' : 'btn-secondary');
+-            btn.textContent = name;
+-            btn.style.marginRight = '8px';
+-            btn.onclick = function() {
+-                currentSheetIndex = idx;
+-                renderCurrentSheet();
+-                renderSheetTabs();
+-            };
+-            container.appendChild(btn);
+-        });
+-    }
+-
+-    /** 渲染当前工作表的表格（带操作列与编辑） */
+-    function renderCurrentSheet() {
+-        const thead = getTableHead();
+-        const tbody = getTableBody();
+-        const cardTitle = getCardTitle();
+-        if (!currentRecords || !currentSheetNames.length) {
+-            if (thead) thead.innerHTML = '<th>暂无数据</th>';
+-            if (tbody) tbody.innerHTML = '<tr><td colspan="1" class="empty-state">请先选择客户并加载</td></tr>';
+-            return;
+-        }
+-        const sheetName = currentSheetNames[currentSheetIndex];
+-        const rows = currentRecords[sheetName] || [];
+-        if (rows.length === 0) {
+-            if (thead) thead.innerHTML = '<th>暂无数据</th>';
+-            if (tbody) tbody.innerHTML = '<tr><td colspan="1" class="empty-state">该工作表无数据</td></tr>';
+-            return;
+-        }
+-        const cols = Object.keys(rows[0]);
+-        if (thead) {
+-            thead.innerHTML = cols.map(function(c) { return '<th>' + escapeHtml(c) + '</th>'; }).join('') + '<th class="th-actions">操作</th>';
+-        }
+-        if (tbody) {
+-            tbody.innerHTML = '';
+-            rows.forEach(function(row, rowIndex) {
+-                const tr = document.createElement('tr');
+-                tr.className = 'shipment-record-row';
+-                cols.forEach(function(c) {
+-                    const td = document.createElement('td');
+-                    td.className = 'shipment-record-cell';
+-                    td.title = String(row[c] || '');
+-                    td.textContent = String(row[c] || '');
+-                    tr.appendChild(td);
+-                });
+-                const tdAction = document.createElement('td');
+-                tdAction.className = 'shipment-record-actions';
+-                const btnEdit = document.createElement('button');
+-                btnEdit.type = 'button';
+-                btnEdit.className = 'btn btn-sm btn-secondary shipment-record-edit-btn';
+-                btnEdit.textContent = '编辑';
+-                btnEdit.dataset.rowIndex = String(rowIndex);
+-                btnEdit.onclick = function() { openEditModal(sheetName, rowIndex, cols, row); };
+-                const btnDelete = document.createElement('button');
+-                btnDelete.type = 'button';
+-                btnDelete.className = 'btn btn-sm btn-danger shipment-record-delete-btn';
+-                btnDelete.textContent = '删除';
+-                btnDelete.dataset.rowIndex = String(rowIndex);
+-                btnDelete.onclick = function() { confirmDeleteRecord(sheetName, rowIndex, row); };
+-                btnDelete.style.marginLeft = '4px';
+-                tdAction.appendChild(btnEdit);
+-                tdAction.appendChild(btnDelete);
+-                tr.appendChild(tdAction);
+-                tbody.appendChild(tr);
+-            });
+-        }
+-        var unit = getSelect() ? getSelect().value : '';
+-        if (cardTitle) cardTitle.textContent = (unit ? unit + ' - ' : '') + '工作表：' + sheetName + '（共 ' + rows.length + ' 条）';
+-    }
+-
+-    var editModalRowIndex = null;
+-    var editModalSheetName = null;
+-    var editModalCols = null;
+-
+-    function openEditModal(sheetName, rowIndex, cols, row) {
+-        editModalSheetName = sheetName;
+-        editModalRowIndex = rowIndex;
+-        editModalCols = cols;
+-        var form = document.getElementById('shipmentRecordEditForm');
+-        var modal = document.getElementById('shipmentRecordEditModal');
+-        if (!form || !modal) return;
+-        form.innerHTML = '';
+-        cols.forEach(function(col) {
+-            var label = document.createElement('label');
+-            label.className = 'form-label';
+-            label.textContent = col;
+-            label.style.display = 'block';
+-            label.style.marginTop = '10px';
+-            form.appendChild(label);
+-            var input = document.createElement('input');
+-            input.type = 'text';
+-            input.className = 'form-control';
+-            input.name = col;
+-            input.value = String(row[col] != null ? row[col] : '');
+-            input.style.width = '100%';
+-            input.style.marginBottom = '4px';
+-            form.appendChild(input);
+-        });
+-        modal.classList.add('show');
+-    }
+-
+-    function closeEditModal() {
+-        var modal = document.getElementById('shipmentRecordEditModal');
+-        if (modal) modal.classList.remove('show');
+-        editModalRowIndex = null;
+-        editModalSheetName = null;
+-        editModalCols = null;
+-    }
+-
+-    function saveEditModal() {
+-        var form = document.getElementById('shipmentRecordEditForm');
+-        var unit = getSelect() ? getSelect().value : '';
+-        if (!form || !unit || editModalSheetName == null || editModalRowIndex == null || !editModalCols) {
+-            closeEditModal();
+-            return;
+-        }
+-        var updates = {};
+-        editModalCols.forEach(function(col) {
+-            var input = form.querySelector('input[name="' + col + '"]');
+-            if (input) updates[col] = input.value;
+-        });
+-        fetch(apiBase + '/api/shipment-records/record', {
+-            method: 'PATCH',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({
+-                purchase_unit: unit,
+-                sheet_name: editModalSheetName,
+-                row_index: editModalRowIndex,
+-                updates: updates
+-            })
+-        })
+-            .then(function(r) { return r.json(); })
+-            .then(function(data) {
+-                if (data.success) {
+-                    closeEditModal();
+-                    loadShipmentRecords();
+-                } else {
+-                    alert(data.message || '保存失败');
+-                }
+-            })
+-            .catch(function(e) {
+-                alert('保存失败：' + (e.message || '网络错误'));
+-            });
+-    }
+-
+-    function confirmDeleteRecord(sheetName, rowIndex, row) {
+-        var displayText = '';
+-        for (var key in row) {
+-            if (row[key]) {
+-                displayText += (row[key] + ' ');
+-                if (displayText.length > 50) {
+-                    displayText += '...';
+-                    break;
+-                }
+-            }
+-        }
+-        if (confirm('确定要删除这条记录吗？\n\n' + displayText)) {
+-            deleteRecord(sheetName, rowIndex);
+-        }
+-    }
+-
+-    function deleteRecord(sheetName, rowIndex) {
+-        var unit = getSelect() ? getSelect().value : '';
+-        if (!unit) {
+-            alert('请先选择客户');
+-            return;
+-        }
+-        fetch(apiBase + '/api/shipment-records/record', {
+-            method: 'DELETE',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({
+-                purchase_unit: unit,
+-                sheet_name: sheetName,
+-                row_index: rowIndex
+-            })
+-        })
+-            .then(function(r) { return r.json(); })
+-            .then(function(data) {
+-                if (data.success) {
+-                    loadShipmentRecords();
+-                } else {
+-                    alert(data.message || '删除失败');
+-                }
+-            })
+-            .catch(function(e) {
+-                alert('删除失败：' + (e.message || '网络错误'));
+-            });
+-    }
+-
+-    function bindShipmentRecordEditModal() {
+-        var cancel = document.getElementById('shipmentRecordEditCancel');
+-        var save = document.getElementById('shipmentRecordEditSave');
+-        var modal = document.getElementById('shipmentRecordEditModal');
+-        if (cancel) cancel.onclick = closeEditModal;
+-        if (save) save.onclick = saveEditModal;
+-        if (modal) {
+-            modal.onclick = function(e) {
+-                if (e.target === modal) closeEditModal();
+-            };
+-        }
+-    }
+-
+-    function escapeHtml(s) {
+-        var div = document.createElement('div');
+-        div.textContent = s;
+-        return div.innerHTML;
+-    }
+-
+-    /** 查看记录：按当前选中的客户加载并渲染 */
+-    function loadShipmentRecords() {
+-        const sel = getSelect();
+-        if (!sel || !sel.value) {
+-            alert('请先选择客户');
+-            return;
+-        }
+-        const unit = sel.value;
+-        const tbody = getTableBody();
+-        if (tbody) tbody.innerHTML = '<tr><td colspan="1" class="empty-state">加载中...</td></tr>';
+-        fetch(apiBase + '/api/shipment-records/records?purchase_unit=' + encodeURIComponent(unit))
+-            .then(function(r) { return r.json(); })
+-            .then(function(data) {
+-                if (!data.success) {
+-                    if (getTableBody()) getTableBody().innerHTML = '<tr><td colspan="1" class="empty-state">' + (data.message || '加载失败') + '</td></tr>';
+-                    currentRecords = null;
+-                    currentSheetNames = [];
+-                    return;
+-                }
+-                currentRecords = data.shipment_records || {};
+-                currentSheetNames = data.sheets || [];
+-                currentSheetIndex = 0;
+-                renderSheetTabs();
+-                renderCurrentSheet();
+-            })
+-            .catch(function(e) {
+-                if (getTableBody()) getTableBody().innerHTML = '<tr><td colspan="1" class="empty-state">请求失败：' + (e.message || '网络错误') + '</td></tr>';
+-                console.error('出货记录加载失败', e);
+-            });
+-    }
+-
+-    /** 导出当前选中单位的出货记录 Excel（下载） */
+-    function exportShipmentRecords() {
+-        const sel = getSelect();
+-        if (!sel || !sel.value) {
+-            alert('请先选择客户');
+-            return;
+-        }
+-        var unit = sel.value;
+-        var url = apiBase + '/api/shipment-records/export?purchase_unit=' + encodeURIComponent(unit);
+-        fetch(url)
+-            .then(function(res) {
+-                if (!res.ok) return res.json().then(function(j) { throw new Error(j.message || '导出失败'); });
+-                return res.blob();
+-            })
+-            .then(function(blob) {
+-                var a = document.createElement('a');
+-                a.href = URL.createObjectURL(blob);
+-                a.download = (unit.replace(/[<>:"/\\|?*]/g, '') || '出货记录') + '_出货记录.xlsx';
+-                a.style.display = 'none';
+-                document.body.appendChild(a);
+-                a.click();
+-                URL.revokeObjectURL(a.href);
+-                setTimeout(function() { a.remove(); }, 100);
+-            })
+-            .catch(function(e) {
+-                alert('导出失败：' + (e.message || '未知错误'));
+-            });
+-    }
+-
+-    function onShipmentRecordUnitChange() {
+-        currentRecords = null;
+-        currentSheetNames = [];
+-        var tbody = getTableBody();
+-        var thead = getTableHead();
+-        if (tbody) tbody.innerHTML = '<tr><td colspan="1" class="empty-state">请点击「查看记录」加载数据</td></tr>';
+-        if (thead) thead.innerHTML = '<th>暂无数据</th>';
+-        if (getSheetsTabs()) getSheetsTabs().style.display = 'none';
+-        if (getCardTitle()) getCardTitle().textContent = '选择客户后点击「查看记录」加载数据';
+-    }
+-
+-    window.loadShipmentRecordsUnits = loadShipmentRecordsUnits;
+-    window.loadShipmentRecords = loadShipmentRecords;
+-    window.exportShipmentRecords = exportShipmentRecords;
+-    window.onShipmentRecordUnitChange = onShipmentRecordUnitChange;
+-
+-    if (document.readyState === 'loading') {
+-        document.addEventListener('DOMContentLoaded', bindShipmentRecordEditModal);
+-    } else {
+-        bindShipmentRecordEditModal();
+-    }
+-})();
+diff --git a/FHD/XCAGI/static/js/modules/tools.js b/FHD/XCAGI/static/js/modules/tools.js
+deleted file mode 100755
+index bdb983d374..0000000000
+--- a/FHD/XCAGI/static/js/modules/tools.js
++++ /dev/null
+@@ -1,325 +0,0 @@
+-let allTools = [];
+-let toolContainerDelegationBound = false;
+-
+-function bindToolsEvents() {
+-    if (toolContainerDelegationBound) return;
+-    toolContainerDelegationBound = true;
+-
+-    const container = document.getElementById('toolsContainer');
+-    if (!container) return;
+-
+-    container.addEventListener('click', function(e) {
+-        const queryBtn = e.target.closest('[data-action="open-tool"][data-tool-id]');
+-        if (queryBtn) {
+-            e.stopPropagation();
+-            showToolDetail(queryBtn.getAttribute('data-tool-id'));
+-            return;
+-        }
+-
+-        const card = e.target.closest('.tool-card[data-tool-id]');
+-        if (card) {
+-            showToolDetail(card.getAttribute('data-tool-id'));
+-        }
+-    });
+-
+-    document.addEventListener('click', function(e) {
+-        const closeBtn = e.target.closest('[data-action="close-tool-modal"]');
+-        if (closeBtn) {
+-            closeToolModal();
+-            return;
+-        }
+-
+-        const modal = e.target.closest('#toolDetailModal');
+-        if (modal && e.target === modal) {
+-            closeToolModal();
+-        }
+-    });
+-}
+-
+-function loadTools() {
+-    bindToolsEvents();
+-    fetch(API_BASE + '/api/db-tools')
+-        .then(r => r.json())
+-        .then(data => {
+-            if (data.success && data.tools && data.tools.length > 0) {
+-                allTools = data.tools;
+-                renderTools(allTools);
+-            } else {
+-                return fetch(API_BASE + '/api/tools')
+-                    .then(r => r.json())
+-                    .then(data => {
+-                        if (data.success) {
+-                            allTools = data.tools || data || [];
+-                            renderTools(allTools);
+-                        }
+-                    });
+-            }
+-        })
+-        .catch(err => {
+-            console.error('加载工具失败:', err);
+-            const container = document.getElementById('toolsContainer');
+-            if (!container) return;
+-            container.textContent = '';
+-            const errorDiv = document.createElement('div');
+-            errorDiv.className = 'error';
+-            errorDiv.textContent = '加载失败: ' + String(err);
+-            container.appendChild(errorDiv);
+-        });
+-}
+-
+-function renderTools(tools) {
+-    const container = document.getElementById('toolsContainer');
+-    if (!container) return;
+-    container.textContent = '';
+-    if (!tools || tools.length === 0) {
+-        const emptyDiv = document.createElement('div');
+-        emptyDiv.className = 'empty';
+-        emptyDiv.textContent = '没有找到工具';
+-        container.appendChild(emptyDiv);
+-        return;
+-    }
+-
+-    const categoryNames = {
+-        products: '产品管理',
+-        customers: '客户/客户',
+-        orders: '出货单',
+-        excel: 'Excel 处理',
+-        ocr: '图片 OCR',
+-        materials: '原材料仓库',
+-        print: '标签打印',
+-        database: '数据库管理',
+-        system: '系统设置'
+-    };
+-
+-    tools.forEach(tool => {
+-        const categoryKey = (tool && tool.category && tool.category.category_key) ? tool.category.category_key : (tool && tool.category ? tool.category : 'other');
+-        const categoryName = categoryNames[categoryKey] || categoryKey;
+-        const toolId = (tool && tool.id != null) ? String(tool.id) : tool.tool_key;
+-
+-        const card = document.createElement('div');
+-        card.className = 'tool-card';
+-        card.setAttribute('data-tool-id', toolId);
+-
+-        const categorySpan = document.createElement('span');
+-        categorySpan.className = `tool-category ${categoryKey}`;
+-        categorySpan.textContent = categoryName;
+-        card.appendChild(categorySpan);
+-
+-        const nameDiv = document.createElement('div');
+-        nameDiv.className = 'tool-name';
+-        nameDiv.textContent = tool.name || '';
+-        card.appendChild(nameDiv);
+-
+-        const descDiv = document.createElement('div');
+-        descDiv.className = 'tool-description';
+-        descDiv.textContent = tool.description || '';
+-        card.appendChild(descDiv);
+-
+-        const actionsDiv = document.createElement('div');
+-        actionsDiv.className = 'tool-actions';
+-        const viewBtn = document.createElement('button');
+-        viewBtn.className = 'tool-action-btn query';
+-        viewBtn.textContent = '查看';
+-        viewBtn.setAttribute('data-action', 'open-tool');
+-        viewBtn.setAttribute('data-tool-id', toolId);
+-        actionsDiv.appendChild(viewBtn);
+-        card.appendChild(actionsDiv);
+-
+-        container.appendChild(card);
+-    });
+-}
+-
+-function getActionClass(actionName) {
+-    const actionMap = {
+-        'query': 'query',
+-        'search': 'query',
+-        'list': 'query',
+-        'add': 'add',
+-        'create': 'add',
+-        'new': 'add',
+-        'edit': 'edit',
+-        'update': 'edit',
+-        'modify': 'edit',
+-        'delete': 'delete',
+-        'remove': 'delete'
+-    };
+-    return actionMap[actionName.toLowerCase()] || 'query';
+-}
+-
+-function filterTools() {
+-    const search = document.getElementById('toolSearch').value.toLowerCase();
+-    const category = document.getElementById('toolCategoryFilter').value;
+-
+-    let filtered = allTools.filter(tool => {
+-        const categoryKey = (tool && tool.category && tool.category.category_key)
+-            ? tool.category.category_key
+-            : (tool && tool.category ? tool.category : '');
+-        const matchSearch = !search || 
+-            (tool.name || '').toLowerCase().includes(search) || 
+-            (tool.description || '').toLowerCase().includes(search);
+-        const matchCategory = !category || categoryKey === category;
+-        return matchSearch && matchCategory;
+-    });
+-
+-    renderTools(filtered);
+-}
+-
+-function showToolDetail(toolId) {
+-    const tool = allTools.find(t => ((t && t.id != null) ? String(t.id) : null) === toolId || t.tool_key === toolId);
+-    if (!tool) return;
+-
+-    const categoryNames = {
+-        products: '产品管理',
+-        customers: '客户/客户',
+-        orders: '出货单',
+-        excel: 'Excel 处理',
+-        ocr: '图片 OCR',
+-        materials: '原材料仓库',
+-        print: '标签打印',
+-        database: '数据库管理',
+-        system: '系统设置'
+-    };
+-
+-    const categoryKey = (tool && tool.category && tool.category.category_key) ? tool.category.category_key : (tool && tool.category ? tool.category : 'other');
+-    const toolKey = tool.tool_key || tool.id;
+-    const params = tool.parameters || [];
+-
+-    const existing = document.getElementById('toolDetailModal');
+-    if (existing) existing.remove();
+-
+-    const modal = document.createElement('div');
+-    modal.className = 'modal';
+-    modal.id = 'toolDetailModal';
+-    modal.style.display = 'flex';
+-
+-    const content = document.createElement('div');
+-    content.className = 'modal-content';
+-    content.style.maxWidth = '500px';
+-
+-    const header = document.createElement('div');
+-    header.className = 'modal-header';
+-    const title = document.createElement('span');
+-    title.textContent = tool.name || '';
+-    const close = document.createElement('span');
+-    close.className = 'close';
+-    close.textContent = '×';
+-    close.setAttribute('data-action', 'close-tool-modal');
+-    header.appendChild(title);
+-    header.appendChild(close);
+-    content.appendChild(header);
+-
+-    const body = document.createElement('div');
+-    body.className = 'modal-body';
+-
+-    const pCategory = document.createElement('p');
+-    pCategory.innerHTML = `<strong>分类：</strong>${escapeHtml(categoryNames[categoryKey] || categoryKey)}`;
+-    body.appendChild(pCategory);
+-
+-    const pDesc = document.createElement('p');
+-    pDesc.innerHTML = `<strong>描述：</strong>${escapeHtml(tool.description || '无')}`;
+-    body.appendChild(pDesc);
+-
+-    const pToolKey = document.createElement('p');
+-    pToolKey.innerHTML = `<strong>工具Key：</strong>${escapeHtml(toolKey)}`;
+-    body.appendChild(pToolKey);
+-
+-    if (params.length > 0) {
+-        const paramsWrap = document.createElement('div');
+-        paramsWrap.className = 'tool-params';
+-        const paramsTitle = document.createElement('h4');
+-        paramsTitle.textContent = '参数';
+-        paramsWrap.appendChild(paramsTitle);
+-
+-        params.forEach(param => {
+-            const paramDiv = document.createElement('div');
+-            paramDiv.className = 'tool-param';
+-
+-            const label = document.createElement('label');
+-            label.textContent = `${param.name}${param.required ? ' *' : ''} (${param.type})`;
+-            paramDiv.appendChild(label);
+-
+-            const input = document.createElement('input');
+-            input.type = param.type === 'number' ? 'number' : 'text';
+-            input.id = `param_${param.name}`;
+-            input.placeholder = param.description || '';
+-            paramDiv.appendChild(input);
+-
+-            paramsWrap.appendChild(paramDiv);
+-        });
+-
+-        body.appendChild(paramsWrap);
+-    }
+-
+-    content.appendChild(body);
+-    modal.appendChild(content);
+-    document.body.appendChild(modal);
+-}
+-
+-function closeToolModal() {
+-    const modal = document.getElementById('toolDetailModal');
+-    if (modal) modal.remove();
+-}
+-
+-function executeToolAction(toolId, actionName) {
+-    const tool = allTools.find(t => t.id === toolId);
+-    if (!tool) return;
+-
+-    if (tool.parameters && tool.parameters.some(p => p.required)) {
+-        showToolDetail(toolId);
+-        return;
+-    }
+-
+-    executeToolActionFromModal(toolId, actionName);
+-}
+-
+-function executeToolActionFromModal(toolId, actionName) {
+-    const tool = allTools.find(t => t.id === toolId);
+-    if (!tool) return;
+-
+-    const params = {};
+-    if (tool.parameters) {
+-        tool.parameters.forEach(param => {
+-            const input = document.getElementById('param_' + param.name);
+-            if (input) {
+-                params[param.name] = input.value;
+-            }
+-        });
+-    }
+-
+-    fetch(API_BASE + '/api/tools/execute', {
+-        method: 'POST',
+-        headers: {'Content-Type': 'application/json'},
+-        body: JSON.stringify({
+-            tool_id: toolId,
+-            action: actionName,
+-            params: params
+-        })
+-    })
+-    .then(r => r.json())
+-    .then(data => {
+-        console.log('工具执行结果:', data);
+-        if (data.success) {
+-            // 检查是否是发货单生成
+-            if (toolId === 'shipment_generate' && data.doc_name) {
+-                console.log('发货单生成成功，文件名:', data.doc_name);
+-                // 显示下载按钮
+-                if (typeof window.showShipmentDownloadEntry === 'function') {
+-                    window.showShipmentDownloadEntry(data.doc_name);
+-                } else {
+-                    console.error('showShipmentDownloadEntry 函数不存在');
+-                }
+-                alert('发货单生成成功：' + data.doc_name + '\n请点击下方的下载按钮下载文件');
+-            } else {
+-                alert('执行成功：' + (data.message || data.response || JSON.stringify(data.data)));
+-            }
+-            if (tool.category === 'tools') loadTools();
+-        } else {
+-            alert('执行失败：' + data.message);
+-        }
+-    })
+-    .catch(err => {
+-        alert('执行失败：' + err);
+-    });
+-
+-    closeToolModal();
+-}
+diff --git a/FHD/XCAGI/static/js/modules/ui.js b/FHD/XCAGI/static/js/modules/ui.js
+deleted file mode 100755
+index 26ac92e461..0000000000
+--- a/FHD/XCAGI/static/js/modules/ui.js
++++ /dev/null
+@@ -1,517 +0,0 @@
+-let uiEventsBound = false;
+-function bindUiEvents() {
+-    if (uiEventsBound) return;
+-    uiEventsBound = true;
+-
+-    // Vue shell owns view navigation and most UI events.
+-    if (window.__VUE_APP_ACTIVE__) {
+-        return;
+-    }
+-
+-    document.querySelectorAll('.menu-item').forEach(item => {
+-        if (item.classList.contains('menu-item-link')) return;
+-        item.addEventListener('click', function() {
+-            const view = this.getAttribute('data-view');
+-            switchView(view);
+-        });
+-    });
+-
+-    const callIfExists = (fnName, ...args) => {
+-        if (typeof window[fnName] === 'function') {
+-            window[fnName](...args);
+-        }
+-    };
+-
+-    const bind = (id, eventName, handler) => {
+-        const el = document.getElementById(id);
+-        if (el) el.addEventListener(eventName, handler);
+-    };
+-
+-    bind('fileUploadEntry', 'click', () => callIfExists('openImportWindow'));
+-    bind('chooseFileBtn', 'click', () => {
+-        const fileInput = document.getElementById('fileInput');
+-        if (fileInput) fileInput.click();
+-    });
+-    bind('openCameraBtn', 'click', () => callIfExists('openCamera'));
+-    bind('capturePhotoBtn', 'click', () => callIfExists('capturePhoto'));
+-    bind('proExitBtn', 'click', () => callIfExists('toggleProMode'));
+-    bind('proBackBtn', 'click', () => callIfExists('stepBackProMode'));
+-    bind('modeSwitch', 'click', () => callIfExists('toggleProMode'));
+-    bind('logoutWechatBtn', 'click', () => callIfExists('logoutWechat'));
+-    bind('clearWechatMessagesBtn', 'click', () => callIfExists('clearWechatMessages'));
+-
+-    bind('batchDeleteProductsBtn', 'click', () => callIfExists('batchDeleteProducts'));
+-    bind('exportProductPriceListBtn', 'click', () => callIfExists('exportProductPriceList'));
+-    bind('showProductModalBtn', 'click', () => callIfExists('showProductModal'));
+-    bind('toggleAllProductsCheckbox', 'change', e => callIfExists('toggleAllProducts', e.target));
+-    bind('productSearch', 'input', () => callIfExists('searchProducts'));
+-    bind('productUnitSelect', 'change', () => callIfExists('loadProducts'));
+-
+-    bind('batchDeleteMaterialsBtn', 'click', () => callIfExists('batchDeleteMaterials'));
+-    bind('showMaterialModalBtn', 'click', () => callIfExists('showMaterialModal'));
+-    bind('toggleAllMaterialsCheckbox', 'change', e => callIfExists('toggleAllMaterials', e.target));
+-    bind('materialSearch', 'input', () => callIfExists('searchMaterials'));
+-    bind('materialCategoryFilter', 'change', () => callIfExists('searchMaterials'));
+-
+-    bind('clearAllOrdersBtn', 'click', () => callIfExists('clearAllOrders'));
+-    bind('orderSearch', 'input', () => callIfExists('searchOrders'));
+-    bind('orderDate', 'change', () => callIfExists('searchOrders'));
+-
+-    bind('loadShipmentRecordsBtn', 'click', () => callIfExists('loadShipmentRecords'));
+-    bind('exportShipmentRecordsBtn', 'click', () => callIfExists('exportShipmentRecords'));
+-    bind('shipmentRecordUnitSelect', 'change', () => callIfExists('onShipmentRecordUnitChange'));
+-
+-    bind('batchDeleteCustomersBtn', 'click', () => callIfExists('batchDeleteCustomers'));
+-    bind('importCustomersExcelBtn', 'click', () => {
+-        const input = document.getElementById('importCustomersExcelInput');
+-        if (input) input.click();
+-    });
+-    bind('importCustomersExcelInput', 'change', function() {
+-        const input = this;
+-        const file = input.files && input.files[0];
+-        if (!file) return;
+-        const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-        const form = new FormData();
+-        form.append('file', file);
+-        fetch(apiBase + '/api/customers/import', { method: 'POST', body: form })
+-            .then(function (r) {
+-                return r.text().then(function (text) {
+-                    try {
+-                        return { ok: r.ok, status: r.status, data: JSON.parse(text) };
+-                    } catch (_) {
+-                        return { ok: false, status: r.status, data: { success: false, message: text || '服务器返回异常（' + r.status + '）' } };
+-                    }
+-                });
+-            })
+-            .then(function (_r) {
+-                var data = _r.data;
+-                if (data.success) {
+-                    var msg = data.message;
+-                    if (data.not_found && data.not_found.length) {
+-                        msg += '\n未匹配到单位：' + data.not_found.slice(0, 5).join('、') + (data.not_found.length > 5 ? '...' : '');
+-                    }
+-                    if (data.inserted_unit_names && data.inserted_unit_names.length) {
+-                        msg += '\n新增：' + data.inserted_unit_names.join('、');
+-                    }
+-                    if (data.skipped_row_numbers && data.skipped_row_numbers.length) {
+-                        msg += '\n第 ' + data.skipped_row_numbers.join('、') + ' 行单位名称为空已跳过，请补全后重新导入';
+-                    }
+-                    alert(msg);
+-                    if (typeof loadCustomers === 'function') loadCustomers();
+-                } else {
+-                    alert('导入失败：' + (data.message || '未知错误') + (_r.status === 500 ? '（服务器 500，请查看控制台或后端日志）' : ''));
+-                }
+-            })
+-            .catch(function (err) { return alert('导入失败：' + (err.message || '网络错误')); })
+-            .finally(() => { input.value = ''; });
+-    });
+-    bind('exportCustomersExcelBtn', 'click', () => {
+-        const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-        const link = document.createElement('a');
+-        // 后端客户导出接口是 `/api/customers/export`
+-        link.href = `${apiBase}/api/customers/export`;
+-        link.download = '客户列表.xlsx';
+-        link.style.display = 'none';
+-        document.body.appendChild(link);
+-        link.click();
+-        setTimeout(() => link.remove(), 0);
+-    });
+-    bind('toggleAllCustomersCheckbox', 'change', e => callIfExists('toggleAllCustomers', e.target));
+-
+-    bind('importProductsExcelBtn', 'click', () => {
+-        const input = document.getElementById('importProductsExcelInput');
+-        if (input) input.click();
+-    });
+-    bind('importProductsExcelInput', 'change', function() {
+-        const input = this;
+-        const file = input.files && input.files[0];
+-        if (!file) return;
+-        const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-        const form = new FormData();
+-        form.append('file', file);
+-        fetch(apiBase + '/api/products/import', { method: 'POST', body: form })
+-            .then(function (r) {
+-                return r.text().then(function (text) {
+-                    try {
+-                        return { ok: r.ok, status: r.status, data: JSON.parse(text) };
+-                    } catch (_) {
+-                        return { ok: false, status: r.status, data: { success: false, message: text || '服务器返回异常（' + r.status + '）' } };
+-                    }
+-                });
+-            })
+-            .then(function (_r) {
+-                var data = _r.data;
+-                if (data.success) {
+-                    alert(data.message || '导入成功');
+-                    if (typeof loadProducts === 'function') loadProducts();
+-                } else {
+-                    alert('导入失败：' + (data.message || '未知错误') + (_r.status === 500 ? '（服务器错误，请查看控制台或后端日志）' : ''));
+-                }
+-            })
+-            .catch(function (err) { return alert('导入失败：' + (err.message || '网络错误')); })
+-            .finally(() => { input.value = ''; });
+-    });
+-
+-    bind('printProductSelect', 'change', () => callIfExists('previewLabel'));
+-    bind('printLabelBtn', 'click', () => callIfExists('printLabel'));
+-    bind('saveSettingsBtn', 'click', () => callIfExists('saveSettings'));
+-    bind('wechatContactSaveBtn', 'click', () => callIfExists('saveWechatContactFromForm'));
+-    bind('wechatContactClearBtn', 'click', () => callIfExists('clearWechatContactForm'));
+-    bind('wechatContactRefreshCacheBtn', 'click', () => callIfExists('refreshWechatContactCache'));
+-    bind('wechatContactRefreshMessagesCacheBtn', 'click', () => callIfExists('refreshWechatMessagesCache'));
+-    bind('wechatContactSearchBtn', 'click', () => callIfExists('searchWechatContactsForStar'));
+-    bind('wechatContactUnstarAllBtn', 'click', () => callIfExists('unstarAllWechatContacts'));
+-    bind('wechatContactEditSaveBtn', 'click', () => callIfExists('saveWechatContactEdit'));
+-    bind('wechatContactSearch', 'input', () => callIfExists('filterWechatContacts'));
+-    bind('wechatContactTypeFilter', 'change', () => callIfExists('loadWechatContacts'));
+-    bind('toolSearch', 'input', () => callIfExists('filterTools'));
+-    bind('toolCategoryFilter', 'change', () => callIfExists('filterTools'));
+-
+-    document.addEventListener('click', function(e) {
+-        const actionBtn = e.target.closest('.template-preview-action[data-template-action]');
+-        if (!actionBtn) return;
+-        const action = actionBtn.getAttribute('data-template-action');
+-        const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-        if (action === 'view-print' || action === 'open-print') {
+-            if (typeof switchView === 'function') switchView('print');
+-            if (typeof window.handleAutoAction === 'function') window.handleAutoAction({ type: 'show_print' });
+-        } else if (action === 'view-labels-export' || action === 'show-labels-export') {
+-            if (typeof window.handleAutoAction === 'function') window.handleAutoAction({ type: 'show_labels_export' });
+-        } else if (action === 'open-excel-preview') {
+-            var templateId = actionBtn.getAttribute('data-template-id');
+-            if (templateId) {
+-                window.open(apiBase + '/api/templates/' + encodeURIComponent(templateId) + '/file', '_blank');
+-            }
+-        } else if (action === 'view-template-overview') {
+-            showTemplateOverviewModal(apiBase);
+-        } else if (action === 'show-template-overview') {
+-            window.open(apiBase + '/api/shipment-template/overview?filename=' + encodeURIComponent('发货单模板.xlsx'), '_blank');
+-        } else if (action === 'view-shipment-records' || action === 'open-shipment-records') {
+-            if (typeof switchView === 'function') switchView('shipment-records');
+-        }
+-    });
+-}
+-
+-function showTemplateOverviewModal(apiBase) {
+-    apiBase = apiBase || (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-    var modal = document.getElementById('templateOverviewModal');
+-    var content = document.getElementById('templateOverviewContent');
+-    if (!modal || !content) return;
+-    content.innerHTML = '<p class="muted">加载中...</p>';
+-    modal.classList.add('active');
+-    fetch(apiBase + '/api/shipment-template/overview?filename=' + encodeURIComponent('发货单模板.xlsx'))
+-        .then(function(r) { return r.json(); })
+-        .then(function(data) {
+-            if (!data.success) {
+-                content.innerHTML = '<p class="muted">' + (data.message || '加载失败') + '</p>';
+-                return;
+-            }
+-            var t = data.template || {};
+-            var entries = data.editable_entries || [];
+-            var price = data.price_calculation || {};
+-            var intro = data.template_display_intro || [];
+-            var html = '<p><strong>模板：</strong>' + (t.name || '-') + '（工作表：' + (t.sheet || '-') + '）</p>';
+-            if (intro.length) {
+-                html += '<p><strong>说明：</strong></p><ul style="margin:0 0 12px 20px;">';
+-                intro.forEach(function(s) { html += '<li>' + s + '</li>'; });
+-                html += '</ul>';
+-            }
+-            if (entries.length) {
+-                html += '<p><strong>可编辑词条：</strong></p><p style="margin:0 0 8px;font-size:13px;color:#666;">' + entries.map(function(e) { return e.name + '(' + (e.column || '') + ')'; }).join('、') + '</p>';
+-            }
+-            if (price.detail_formula || price.total_formula) {
+-                html += '<p><strong>金额计算：</strong></p><ul style="margin:0 0 12px 20px;font-size:13px;">';
+-                if (price.detail_formula) html += '<li>' + price.detail_formula + '</li>';
+-                if (price.total_formula) html += '<li>' + price.total_formula + '</li>';
+-                if (price.uppercase_amount) html += '<li>' + price.uppercase_amount + '</li>';
+-                if (price.lowercase_amount) html += '<li>' + price.lowercase_amount + '</li>';
+-                html += '</ul>';
+-            }
+-            content.innerHTML = html;
+-        })
+-        .catch(function(err) {
+-            content.innerHTML = '<p class="muted">加载失败：' + (err.message || '网络错误') + '</p>';
+-        });
+-    bind('saveProductBtn', 'click', () => callIfExists('saveProduct'));
+-    bind('saveMaterialBtn', 'click', () => callIfExists('saveMaterial'));
+-
+-    // 统一关闭事件委托：支持 data-close-action / data-close-target / 点击 modal 蒙层关闭
+-    document.addEventListener('click', function(e) {
+-        const actionCloser = e.target.closest('[data-close-action]');
+-        if (actionCloser) {
+-            const action = actionCloser.getAttribute('data-close-action');
+-            callIfExists(action);
+-            return;
+-        }
+-
+-        const targetCloser = e.target.closest('[data-close-target]');
+-        if (targetCloser) {
+-            const targetId = targetCloser.getAttribute('data-close-target');
+-            const targetEl = targetId ? document.getElementById(targetId) : null;
+-            if (targetEl) {
+-                if (targetEl.classList.contains('modal')) {
+-                    targetEl.classList.remove('active');
+-                } else {
+-                    targetEl.style.display = 'none';
+-                }
+-            }
+-            return;
+-        }
+-
+-        // 点击模态框遮罩层时关闭（仅对统一 modal 生效）
+-        if (e.target.classList && e.target.classList.contains('modal') && e.target.id) {
+-            e.target.classList.remove('active');
+-            if (e.target.id === 'toolDetailModal') {
+-                e.target.remove();
+-            }
+-        }
+-    });
+-}
+-
+-if (document.readyState === 'loading') {
+-    document.addEventListener('DOMContentLoaded', bindUiEvents);
+-} else {
+-    bindUiEvents();
+-}
+-
+-function switchView(view) {
+-    currentView = view;
+-    
+-    document.querySelectorAll('.menu-item').forEach(item => {
+-        item.classList.remove('active');
+-        if (item.getAttribute('data-view') === view) {
+-            item.classList.add('active');
+-        }
+-    });
+-
+-    const titles = {
+-        'chat': '智能对话',
+-        'products': '产品管理',
+-        'materials': '原材料仓库',
+-        'orders': '出货单',
+-        'shipment-records': '出货记录管理',
+-        'customers': '客户管理',
+-        'wechat-contacts': '微信联系人列表',
+-        'print': '标签打印',
+-        'template-preview': '模板预览',
+-        'settings': '系统设置',
+-        'tools': '工具表'
+-    };
+-    document.getElementById('pageTitle').textContent = titles[view] || '';
+-
+-    document.querySelectorAll('.page-view').forEach(v => v.classList.remove('active'));
+-    document.getElementById('view-' + view).classList.add('active');
+-
+-    if (view === 'products') loadProducts();
+-    if (view === 'tools') loadTools();
+-    if (view === 'materials') { loadMaterials(); loadLowStock(); }
+-    if (view === 'orders') loadOrders();
+-    if (view === 'shipment-records') loadShipmentRecordsUnits();
+-    if (view === 'customers') loadCustomers();
+-    if (view === 'wechat-contacts' && typeof loadWechatContacts === 'function') loadWechatContacts();
+-    if (view === 'print') loadPrintProducts();
+-    if (view === 'settings') loadDistillationVersions();
+-}
+-
+-function loadDistillationVersions() {
+-    const el = document.getElementById('distillationVersionsContent');
+-    if (!el) return;
+-    const apiBase = (typeof API_BASE !== 'undefined' ? API_BASE : '');
+-    el.innerHTML = '<p class="muted">加载中...</p>';
+-    fetch(apiBase + '/api/distillation/versions')
+-        .then(function(r) { return r.json(); })
+-        .then(function(data) {
+-            if (!data.success) {
+-                el.innerHTML = '<p class="muted">无法加载：' + (data.message || '未知错误') + '</p>';
+-                return;
+-            }
+-            var versions = data.versions || [];
+-            var samples = data.distillation_samples != null ? data.distillation_samples : 0;
+-            if (versions.length === 0) {
+-                el.innerHTML = '<p class="muted">暂无训练产物。专业版对话会参与蒸馏，积累数据后运行「蒸馏/每周重训」即可生成 last.pt、best.pt。</p><p class="muted">已积累样本数：' + samples + '</p>';
+-                return;
+-            }
+-            var html = '<table class="table" style="width:100%; margin-bottom:12px;"><thead><tr><th>文件</th><th>说明</th><th>修改时间</th><th>大小</th></tr></thead><tbody>';
+-            versions.forEach(function(v) {
+-                html += '<tr><td>' + (v.name || '') + '</td><td>' + (v.label || '') + '</td><td>' + (v.modified || '-') + '</td><td>' + (v.size_kb != null ? v.size_kb + ' KB' : '-') + '</td></tr>';
+-            });
+-            html += '</tbody></table><p class="muted">已积累蒸馏样本数：' + samples + '（仅专业版对话参与）</p>';
+-            el.innerHTML = html;
+-        })
+-        .catch(function(err) {
+-            el.innerHTML = '<p class="muted">加载失败：' + (err.message || '网络错误') + '</p>';
+-        });
+-}
+-
+-function openPreviewWindow(mediaUrl, mediaType, sourceElement) {
+-    const previewWindow = document.getElementById('previewFloatWindow');
+-    const mediaContainer = document.getElementById('previewMedia');
+-    mediaContainer.textContent = '';
+-
+-    if (mediaType === 'image') {
+-        const img = document.createElement('img');
+-        img.src = mediaUrl;
+-        img.alt = '预览图片';
+-        mediaContainer.appendChild(img);
+-    } else if (mediaType === 'video') {
+-        const video = document.createElement('video');
+-        video.src = mediaUrl;
+-        video.controls = true;
+-        mediaContainer.appendChild(video);
+-    } else {
+-        const placeholder = document.createElement('div');
+-        placeholder.className = 'preview-placeholder';
+-        placeholder.textContent = '不支持的媒体类型';
+-        mediaContainer.appendChild(placeholder);
+-    }
+-
+-    if (sourceElement) {
+-        animatePreviewWindow(sourceElement, previewWindow);
+-    } else {
+-        previewWindow.classList.add('show');
+-    }
+-
+-    setTimeout(() => {
+-        initHoverHighlight(mediaContainer);
+-    }, 400);
+-}
+-
+-function animatePreviewWindow(sourceElement, targetWindow) {
+-    const firstRect = sourceElement.getBoundingClientRect();
+-    const targetRect = targetWindow.getBoundingClientRect();
+-    
+-    const deltaX = firstRect.left - targetRect.left;
+-    const deltaY = firstRect.top - targetRect.top;
+-    const deltaWidth = firstRect.width - targetRect.width;
+-    const deltaHeight = firstRect.height - targetRect.height;
+-    
+-    targetWindow.classList.add('animating');
+-    targetWindow.style.display = 'block';
+-    targetWindow.style.opacity = '0';
+-    targetWindow.style.transform = `translate(${deltaX}px, ${deltaY}px) scale(${firstRect.width / targetRect.width})`;
+-    targetWindow.style.transformOrigin = 'top left';
+-    
+-    requestAnimationFrame(() => {
+-        targetWindow.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+-        targetWindow.style.opacity = '1';
+-        targetWindow.style.transform = 'translate(0, 0) scale(1)';
+-    });
+-    
+-    setTimeout(() => {
+-        targetWindow.classList.remove('animating');
+-        targetWindow.classList.add('show');
+-        targetWindow.style.transition = '';
+-        targetWindow.style.transform = '';
+-        targetWindow.style.transformOrigin = '';
+-    }, 350);
+-}
+-
+-function closePreviewWindow() {
+-    const previewWindow = document.getElementById('previewFloatWindow');
+-    
+-    if (previewWindow.classList.contains('show')) {
+-        previewWindow.style.opacity = '0';
+-        previewWindow.style.transform = 'scale(0.8)';
+-        previewWindow.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+-        
+-        setTimeout(() => {
+-            previewWindow.classList.remove('show');
+-            previewWindow.style.display = 'none';
+-            previewWindow.style.opacity = '';
+-            previewWindow.style.transform = '';
+-            previewWindow.style.transition = '';
+-            removeHoverHighlight();
+-        }, 300);
+-    }
+-}
+-
+-(function() {
+-    const highlightBox = document.createElement('div');
+-    highlightBox.className = 'hover-highlight-box';
+-    document.body.appendChild(highlightBox);
+-
+-    let activeContainer = null;
+-    let boxWidth = 0;
+-    let boxHeight = 0;
+-    let animationFrameId = null;
+-    let lastX = 0;
+-    let lastY = 0;
+-
+-    const updateHighlightPosition = () => {
+-        if (activeContainer) {
+-            const x = lastX - boxWidth / 2;
+-            const y = lastY - boxHeight / 2;
+-            highlightBox.style.left = x + 'px';
+-            highlightBox.style.top = y + 'px';
+-        }
+-        animationFrameId = null;
+-    };
+-
+-    document.addEventListener('mousemove', function(e) {
+-        if (activeContainer) {
+-            lastX = e.clientX;
+-            lastY = e.clientY;
+-            if (!animationFrameId) {
+-                animationFrameId = requestAnimationFrame(updateHighlightPosition);
+-            }
+-        }
+-    });
+-
+-    window.initHoverHighlight = function(mediaContainer) {
+-        if (!mediaContainer) return;
+-        
+-        activeContainer = mediaContainer;
+-        const rect = mediaContainer.getBoundingClientRect();
+-        boxWidth = Math.min(rect.width, 300);
+-        boxHeight = Math.min(rect.height, 200);
+-        highlightBox.style.width = boxWidth + 'px';
+-        highlightBox.style.height = boxHeight + 'px';
+-        highlightBox.classList.add('active');
+-
+-        mediaContainer.addEventListener('mouseleave', function() {
+-            highlightBox.classList.remove('active');
+-            activeContainer = null;
+-        });
+-
+-        mediaContainer.addEventListener('mouseenter', function() {
+-            activeContainer = mediaContainer;
+-            highlightBox.classList.add('active');
+-        });
+-    };
+-
+-    window.removeHoverHighlight = function() {
+-        highlightBox.classList.remove('active');
+-        activeContainer = null;
+-    };
+-})();
+-
+-function testPreviewAnimation() {
+-    const testElement = document.createElement('div');
+-    testElement.className = 'message user';
+-    testElement.style.position = 'fixed';
+-    testElement.style.left = '30%';
+-    testElement.style.top = '40%';
+-    testElement.style.width = '200px';
+-    testElement.style.height = '150px';
+-    testElement.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+-    testElement.style.borderRadius = '12px';
+-    testElement.style.display = 'flex';
+-    testElement.style.alignItems = 'center';
+-    testElement.style.justifyContent = 'center';
+-    testElement.style.color = 'white';
+-    testElement.style.fontSize = '16px';
+-    testElement.style.boxShadow = '0 4px 15px rgba(0,0,0,0.2)';
+-    testElement.style.zIndex = '9999';
+-    const span = document.createElement('span');
+-    span.textContent = '📷 测试图片';
+-    testElement.appendChild(span);
+-    document.body.appendChild(testElement);
+-    
+-    setTimeout(() => {
+-        openPreviewWindow('https://picsum.photos/400/300', 'image', testElement);
+-        
+-        setTimeout(() => {
+-            testElement.remove();
+-        }, 400);
+-    }, 100);
+-}
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/docs/planning/\350\205\276\350\256\257\344\272\221Pages\351\203\250\347\275\262\346\214\207\345\215\227.md" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/docs/planning/\350\205\276\350\256\257\344\272\221Pages\351\203\250\347\275\262\346\214\207\345\215\227.md"
+deleted file mode 100644
+index d05ca223b0..0000000000
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/docs/planning/\350\205\276\350\256\257\344\272\221Pages\351\203\250\347\275\262\346\214\207\345\215\227.md"
++++ /dev/null
+@@ -1,342 +0,0 @@
+-# 腾讯云 Pages 部署指南
+-
+-## 📋 部署方案概述
+-
+-**腾讯云 Pages**：无服务器静态网站托管服务
+-
+-- **零配置**：无需手动配置服务器、CDN、SSL证书
+-- **自动部署**：关联代码仓库后自动构建和部署
+-- **全球加速**：自动部署到 EO 全球节点
+-- **免费额度**：每月免费 100GB 流量
+-- **HTTPS支持**：自动配置 SSL 证书
+-
+-## 🚀 部署步骤
+-
+-### 方法一：通过代码仓库部署（推荐）
+-
+-#### 第一步：创建 Git 仓库
+-
+-1. **初始化本地仓库**
+-
+-   ```bash
+-   cd "E:\成都修茈科技有限公司"
+-   git init
+-   git add .
+-   git commit -m "Initial commit"
+-   ```
+-
+-2. **推送到远程仓库**
+-   - **GitHub**：创建新仓库，然后推送
+-   - **GitLab**：创建新仓库，然后推送
+-   - **Gitee**：创建新仓库，然后推送（推荐国内用户）
+-
+-   ```bash
+-   # GitHub 示例
+-   git remote add origin https://github.com/你的用户名/仓库名.git
+-   git branch -M main
+-   git push -u origin main
+-   ```
+-
+-#### 第二步：创建 Pages 应用
+-
+-1. **进入 Pages 控制台**
+-   - 登录腾讯云控制台
+-   - 搜索"静态网站托管"或"Pages"
+-   - 进入 Pages 控制台
+-
+-2. **创建新应用**
+-   - 点击"新建应用"
+-   - **框架**：选择"静态网站"或"自定义"
+-   - **代码源**：选择你的代码仓库（GitHub/GitLab/Gitee）
+-   - **分支**：选择 main 或 master
+-   - **构建目录**：留空（根目录）
+-   - 点击"创建"
+-
+-3. **等待部署完成**
+-   - 系统会自动构建和部署
+-   - 通常需要 1-3 分钟
+-   - 部署完成后会提供访问地址
+-
+-### 方法二：通过手动上传部署
+-
+-#### 第一步：准备文件
+-
+-1. **确保文件结构正确**
+-
+-   ```
+-   E:\成都修茈科技有限公司\
+-   ├── index.html
+-   ├── about.html
+-   ├── services.html
+-   ├── solutions.html
+-   ├── cases.html
+-   ├── news.html
+-   ├── contact.html
+-   ├── honors.html
+-   ├── case-*.html
+-   ├── styles.css
+-   ├── main.js
+-   ├── activities.json
+-   ├── news.json
+-   ├── assets\
+-   │   └── brand-logo.svg
+-   └── uploads\
+-       ├── activity_banner_1.svg
+-       ├── activity_banner_2.svg
+-       └── activity_banner_3.svg
+-   ```
+-
+-2. **压缩文件**
+-   - 将所有文件压缩为 zip 格式
+-   - 确保包含 uploads 文件夹
+-
+-#### 第二步：创建 Pages 应用
+-
+-1. **进入 Pages 控制台**
+-   - 登录腾讯云控制台
+-   - 搜索"静态网站托管"或"Pages"
+-   - 进入 Pages 控制台
+-
+-2. **创建新应用**
+-   - 点击"新建应用"
+-   - **部署方式**：选择"手动上传"
+-   - **应用名称**：输入应用名称（如：xiuzai-website）
+-   - **上传文件**：选择压缩的 zip 文件
+-   - 点击"创建"
+-
+-3. **等待部署完成**
+-   - 系统会自动解压和部署
+-   - 通常需要 1-2 分钟
+-
+-### 第三步：配置自定义域名
+-
+-1. **添加域名**
+-   - 进入 Pages 应用详情
+-   - 点击"设置" → "自定义域名"
+-   - 点击"添加域名"
+-   - 输入你的域名（如：www.xiuzai.com）
+-
+-2. **配置 DNS**
+-   - 获取 CNAME 记录
+-   - 到域名 DNS 管理处添加 CNAME 记录
+-   - 等待 DNS 生效（通常 10 分钟 - 24 小时）
+-
+-3. **SSL 证书**
+-   - Pages 会自动申请和配置 SSL 证书
+-   - 无需手动操作
+-
+-### 第四步：测试访问
+-
+-1. **测试默认域名**
+-   - 访问：`https://应用名.pages.tencent-cloud.com`
+-
+-2. **测试自定义域名**
+-   - 访问：`https://你的域名`
+-
+-3. **检查功能**
+-   - 测试所有页面链接
+-   - 检查图片和资源加载
+-   - 测试移动端显示
+-
+-## 🔄 持续部署（推荐）
+-
+-### 自动更新流程
+-
+-1. **修改本地文件**
+-   - 编辑网站内容
+-   - 添加新功能
+-
+-2. **提交代码**
+-
+-   ```bash
+-   git add .
+-   git commit -m "Update website"
+-   git push
+-   ```
+-
+-3. **自动部署**
+-   - Pages 检测到代码更新
+-   - 自动构建和部署
+-   - 通常 1-3 分钟完成
+-
+-### 配置 Webhook（可选）
+-
+-1. **获取 Webhook URL**
+-   - 进入 Pages 应用设置
+-   - 找到 Webhook 配置
+-   - 复制 Webhook URL
+-
+-2. **配置仓库 Webhook**
+-   - 在代码仓库设置中添加 Webhook
+-   - 粘贴 Webhook URL
+-   - 选择触发事件（push）
+-
+-## 💰 成本估算
+-
+-### 免费额度
+-
+-- **流量**：每月 100GB
+-- **构建次数**：每月 500 次
+-- **存储**：1GB
+-
+-### 付费套餐
+-
+-- **基础版**：9.9元/月
+-  - 流量：500GB
+-  - 构建：1000次
+-  - 存储：5GB
+-
+-- **专业版**：49.9元/月
+-  - 流量：2TB
+-  - 构建：5000次
+-  - 存储：20GB
+-
+-### 预估费用（小型企业网站）
+-
+-- **免费额度**：通常足够使用
+-- **如超出**：基础版 9.9元/月
+-
+-## 🔧 高级配置
+-
+-### 1. 自定义 404 页面
+-
+-1. **创建 404.html**
+-
+-   ```html
+-   <!DOCTYPE html>
+-   <html>
+-     <head>
+-       <meta charset="UTF-8" />
+-       <title>页面未找到</title>
+-     </head>
+-     <body>
+-       <h1>404 - 页面未找到</h1>
+-       <p>抱歉，您访问的页面不存在。</p>
+-       <a href="/">返回首页</a>
+-     </body>
+-   </html>
+-   ```
+-
+-2. **上传到项目根目录**
+-   - 将 404.html 放在项目根目录
+-   - 重新部署
+-
+-### 2. 环境变量
+-
+-1. **添加环境变量**
+-   - 进入 Pages 应用设置
+-   - 找到环境变量配置
+-   - 添加需要的变量
+-
+-2. **在代码中使用**
+-   ```javascript
+-   const apiUrl = process.env.API_URL || 'default-api-url'
+-   ```
+-
+-### 3. 重定向规则
+-
+-1. **创建 \_redirects 文件**
+-
+-   ```
+-   /old-page.html /new-page.html 301
+-   /blog/* /articles/:splat 301
+-   ```
+-
+-2. **上传到项目根目录**
+-   - 将 \_redirects 文件放在项目根目录
+-   - 重新部署
+-
+-### 4. 自定义 Headers
+-
+-1. **创建 \_headers 文件**
+-
+-   ```
+-   /*
+-     X-Frame-Options: DENY
+-     X-Content-Type-Options: nosniff
+-     Referrer-Policy: strict-origin-when-cross-origin
+-   ```
+-
+-2. **上传到项目根目录**
+-   - 将 \_headers 文件放在项目根目录
+-   - 重新部署
+-
+-## 📝 维护建议
+-
+-### 定期更新
+-
+-- 修改内容后直接提交代码
+-- Pages 会自动部署更新
+-
+-### 监控访问
+-
+-- 在 Pages 控制台查看访问统计
+-- 监控流量使用情况
+-
+-### 备份代码
+-
+-- 定期备份 Git 仓库
+-- 使用 GitHub/GitLab/Gitee 的版本控制
+-
+-## 🆘 常见问题
+-
+-### 1. 部署失败
+-
+-- 检查代码仓库是否正确连接
+-- 检查构建配置是否正确
+-- 查看部署日志了解错误详情
+-
+-### 2. 页面无法访问
+-
+-- 检查部署状态是否为"运行中"
+-- 检查自定义域名 DNS 配置
+-- 等待 DNS 生效
+-
+-### 3. 图片无法加载
+-
+-- 检查文件路径是否正确
+-- 检查 uploads 文件夹是否上传
+-- 检查文件名大小写
+-
+-### 4. 更新后没有生效
+-
+-- 检查代码是否成功推送
+-- 等待自动部署完成
+-- 清除浏览器缓存
+-
+-### 5. 超出免费额度
+-
+-- 升级到付费套餐
+-- 优化网站资源大小
+-- 使用 CDN 缓存
+-
+-### 6. EdgeOne（`*.edgeone.cool`）与本地 `http://127.0.0.1:9999` 不一致
+-
+-- **本地 9999**：运行 `python app.py`（Flask），读当前工程文件，并有 `/api/*`、`/admin`。
+-- **Pages / EdgeOne**：只下发已部署的静态文件，**不会跑 Flask**；新闻与活动依赖根目录的 `activities.json`、`news.json` 和 `uploads/`。
+-- **对齐方式**：推送或上传**整站**（含 `assets/`），部署完成后在控制台**刷新缓存**；需要后台管理时需单独部署 Python 服务。
+-
+-## 📞 技术支持
+-
+-- **腾讯云 Pages 文档**：https://cloud.tencent.com/document/product/1552
+-- **Pages 控制台**：https://console.cloud.tencent.com/pages
+-- **工单系统**：腾讯云控制台 → 工单系统
+-- **技术社区**：https://cloud.tencent.com/developer
+-
+-## 🎯 快速部署检查清单
+-
+-- [ ] 准备网站文件
+-- [ ] 创建 Git 仓库（推荐）
+-- [ ] 推送到远程仓库（GitHub/GitLab/Gitee）
+-- [ ] 在 Pages 控制台创建应用
+-- [ ] 关联代码仓库或上传文件
+-- [ ] 等待部署完成
+-- [ ] 测试默认域名访问
+-- [ ] 配置自定义域名
+-- [ ] 配置 DNS 解析
+-- [ ] 测试自定义域名访问
+-- [ ] 配置持续部署（可选）
+-
+----
+-
+-**部署完成后，你的企业门户网站就可以通过 https://你的域名 访问了！**
+-- 
+2.50.1 (Apple Git-155)
+

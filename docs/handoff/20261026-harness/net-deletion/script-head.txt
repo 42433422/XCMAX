@@ -1,0 +1,75 @@
+"""净删除棘轮：跟踪的代码和文档总行数不得高于基线。"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+
+FHD_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = FHD_ROOT.parent
+BASELINE = FHD_ROOT / "metrics" / "line_baseline.json"
+
+EXIT_OK, EXIT_FAIL, EXIT_USAGE = 0, 1, 2
+
+# 「代码 + 文档」= 会被人工审阅、需要维护的行数。
+CODE_DOC_SUFFIXES = {
+    # 文档
+    ".md", ".mdx", ".rst", ".txt", ".adoc",
+    # 代码
+    ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte",
+    ".java", ".kt", ".kts", ".dart", ".go", ".rs", ".rb", ".php", ".cs", ".swift",
+    ".c", ".h", ".cc", ".cpp", ".hpp", ".scala", ".m", ".mm",
+    # 脚本 / 配置 / SQL
+    ".sh", ".bash", ".zsh", ".ps1", ".sql", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".json",
+}
+
+DOC_SUFFIXES = {".md", ".mdx", ".rst", ".adoc"}
+
+# 依赖目录 / 构建产物 / 虚拟环境：非人工维护代码。
+SKIP_DIR_NAMES = {
+    "node_modules", "dist", "build", "coverage", "htmlcov", ".venv", "venv",
+    "__pycache__", ".next", ".nuxt", ".dart_tool", "Pods", "DerivedData",
+    "site-packages", "vendor", "target", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+}
+
+# 锁文件与生成物：由工具产出，不应计入人工维护行数。
+SKIP_FILE_NAMES = {
+    "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "pnpm-lock.yaml",
+    "poetry.lock", "uv.lock", "Gemfile.lock", "Cargo.lock", "composer.lock",
+    "Pipfile.lock", "flake.lock", "requirements.lock.txt", "requirements-server-api.lock.txt",
+}
+
+# 指标 / 遥测 / 报告目录：随 CI 与运行时持续追加，非代码或文档。
+SKIP_PATH_PREFIXES = (
+    "FHD/metrics/", "metrics/", "reports/", "test_reports/", "FHD/reports/",
+    # 验收证据目录：随实机验收持续追加的日志/截图摘要，非人工维护文档。
+    "FHD/docs/evidence/",
+    "成都修茈科技有限公司/capabilities/assets/evidence/",  # 目录生成的公开证据副本
+    # 以下为生成物 / 第三方 / dump，非人工维护，逐项说明：
+    "FHD/third_party/",                          # vendored 第三方源码
+    "FHD/docs/legal/",                           # 软著申请用的整份源码 dump
+    "FHD/contracts/",                            # 由 schema 生成的契约快照
+    "FHD/dataset_rag/",                          # 数据集文件
+    "成都修茈科技有限公司/corp-butler/assets/",    # 前端打包产物
+)
+
+# 生成物横幅：文件头部声明自动生成即不计入。
+GENERATED_BANNER_RE = re.compile(
+    r"(DO NOT EDIT|auto-?generated|@generated|自动生成|代码生成|此文件由.*生成)",
+    re.IGNORECASE,
+)
+_BANNER_BYTES = 2048      # 读取上限（足以覆盖头部若干行）
+_BANNER_HEAD_LINES = 5    # 只认开头这几行内的横幅声明；按行而非按字节，避免随散文增删漂移
+
+
+def _git(*args: str) -> str:
+    proc = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), *args],
+        capture_output=True,
+        text=True,
+        check=Fals

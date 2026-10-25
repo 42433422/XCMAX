@@ -1,0 +1,32 @@
+From 0a29fc7d4a6435279eb264e2d5b85e5d689111ad Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:53:04 +0800
+Subject: [PATCH 20/43] fix(employees): keep dependency error returns
+ consistently typed
+
+
+diff --git a/FHD/app/mod_sdk/generated_employee_worker.py b/FHD/app/mod_sdk/generated_employee_worker.py
+index e188346efd..5c57086d02 100644
+--- a/FHD/app/mod_sdk/generated_employee_worker.py
++++ b/FHD/app/mod_sdk/generated_employee_worker.py
+@@ -78,7 +78,7 @@ class GeneratedEmployeeWorker:
+ 
+     def _dependency_error(
+         self, result: Any, handler: str, message: str = "员工依赖未成功完成"
+-    ) -> Optional[Dict[str, Any]]:
++    ) -> Dict[str, Any]:
+         receipt = (
+             {
+                 **result,
+@@ -91,7 +91,7 @@ class GeneratedEmployeeWorker:
+         )
+         outcome = tool_receipt_outcome(receipt)
+         if outcome == "success":
+-            return None
++            return {}
+         return {
+             **self._err(message, meta={"handler": handler}),
+             "outcome": outcome,
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,10 @@
+{
+  "commit": "9950a393b557b75e23098057ef4b7f81075e0647",
+  "committed_lines": 2335933,
+  "baseline": 2330609,
+  "delta": 5324,
+  "status": "fail",
+  "baseline_unchanged": true,
+  "dirty_work_excluded": true,
+  "inventory": "git ls-tree -z / canonical counting and banner rules"
+}

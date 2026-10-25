@@ -1,0 +1,770 @@
+From 5bf10061a1851efecdd3ea52275c1b5f4ceabf9d Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 23:37:30 +0800
+Subject: [PATCH 25/43] refactor(tests): share planner stream transport
+ fixtures
+
+
+diff --git a/FHD/tests/fixtures/compat_stream.py b/FHD/tests/fixtures/compat_stream.py
+new file mode 100644
+index 0000000000..6dff6924db
+--- /dev/null
++++ b/FHD/tests/fixtures/compat_stream.py
+@@ -0,0 +1,43 @@
++"""Patch the SSE transport seam without changing request identity fixtures."""
++
++from contextlib import ExitStack, contextmanager
++from types import SimpleNamespace
++from unittest.mock import DEFAULT, patch
++
++
++@contextmanager
++def planner_stream_transport(
++    api,
++    *,
++    tier,
++    events=DEFAULT,
++    event_error=DEFAULT,
++    authorize=DEFAULT,
++    client=DEFAULT,
++    mode=False,
++    patches=None,
++):
++    configs = {
++        "planner_workflow_interrupt_reply": {"return_value": None},
++        "_ensure_vector_index_if_needed": {"return_value": None},
++        "create_modstore_openai_client_from_request": {},
++        "runtime_context_with_tier": {"side_effect": tier},
++    }
++    if authorize is not DEFAULT:
++        configs["_ensure_chat_db_read_authorized"] = {"return_value": authorize}
++    if events is not DEFAULT:
++        configs["_xcagi_guarded_planner_stream_events"] = {"return_value": events}
++    if event_error is not DEFAULT:
++        configs["_xcagi_guarded_planner_stream_events"] = {"side_effect": event_error}
++    if client is not DEFAULT:
++        configs["create_modstore_openai_client_from_request"] = {"return_value": client}
++    if mode:
++        configs["set_llm_mode"] = {}
++    configs.update(patches or {})
++    with ExitStack() as stack:
++        yield SimpleNamespace(
++            **{
++                name: stack.enter_context(patch.object(api, name, **kwargs))
++                for name, kwargs in configs.items()
++            }
++        )
+diff --git a/FHD/tests/test_application/test_planner_compat_agent_trace.py b/FHD/tests/test_application/test_planner_compat_agent_trace.py
+index e43517f0cc..bcad2ab171 100644
+--- a/FHD/tests/test_application/test_planner_compat_agent_trace.py
++++ b/FHD/tests/test_application/test_planner_compat_agent_trace.py
+@@ -14,6 +14,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
+     XcagiCompatChatBody,
+ )
+ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++from tests.fixtures.compat_stream import planner_stream_transport
+ 
+ 
+ def _make_request() -> Request:
+@@ -546,40 +547,10 @@ def test_stream_done_result_attaches_agent_run_id(
+             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+             return_value=repo,
+         ),
+-        patch.object(
++        planner_stream_transport(
+             stream_helpers,
+-            "effective_db_read_token",
+-            return_value="",
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_merge_runtime_context_with_message_paths",
+-            return_value=({"workspace": "demo"}, []),
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "runtime_context_with_tier",
+-            side_effect=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "planner_workflow_interrupt_reply",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_ensure_vector_index_if_needed",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "create_modstore_openai_client_from_request",
+-            return_value=MagicMock(),
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_xcagi_guarded_planner_stream_events",
+-            return_value=iter(
++            tier=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
++            events=iter(
+                 [
+                     {"type": "token", "text": "hello"},
+                     {
+@@ -591,8 +562,16 @@ def test_stream_done_result_attaches_agent_run_id(
+                     },
+                 ]
+             ),
+-        ) as mock_stream,
++            client=MagicMock(),
++            patches={
++                "effective_db_read_token": {"return_value": ""},
++                "_merge_runtime_context_with_message_paths": {
++                    "return_value": ({"workspace": "demo"}, [])
++                },
++            },
++        ) as transport,
+     ):
++        mock_stream = transport._xcagi_guarded_planner_stream_events
+         chunks = list(
+             stream_helpers._xcagi_planner_stream_bytes(
+                 _make_request(),
+@@ -631,40 +610,10 @@ def test_stream_requires_token_event_finalizes_waiting_agent_run(real_compat_act
+             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+             return_value=repo,
+         ),
+-        patch.object(
+-            stream_helpers,
+-            "effective_db_read_token",
+-            return_value="",
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_merge_runtime_context_with_message_paths",
+-            return_value=({"workspace": "demo"}, []),
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "runtime_context_with_tier",
+-            side_effect=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "planner_workflow_interrupt_reply",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_ensure_vector_index_if_needed",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "create_modstore_openai_client_from_request",
+-            return_value=MagicMock(),
+-        ),
+-        patch.object(
++        planner_stream_transport(
+             stream_helpers,
+-            "_xcagi_guarded_planner_stream_events",
+-            return_value=iter(
++            tier=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
++            events=iter(
+                 [
+                     {"type": "token", "text": "partial"},
+                     {
+@@ -675,7 +624,14 @@ def test_stream_requires_token_event_finalizes_waiting_agent_run(real_compat_act
+                     },
+                 ]
+             ),
+-        ),
++            client=MagicMock(),
++            patches={
++                "effective_db_read_token": {"return_value": ""},
++                "_merge_runtime_context_with_message_paths": {
++                    "return_value": ({"workspace": "demo"}, [])
++                },
++            },
++        ) as transport,
+     ):
+         chunks = list(
+             stream_helpers._xcagi_planner_stream_bytes(
+@@ -706,41 +662,18 @@ def test_stream_error_event_finalizes_failed_agent_run(real_compat_actor) -> Non
+             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
+             return_value=repo,
+         ),
+-        patch.object(
+-            stream_helpers,
+-            "effective_db_read_token",
+-            return_value="",
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_merge_runtime_context_with_message_paths",
+-            return_value=({"workspace": "demo"}, []),
+-        ),
+-        patch.object(
++        planner_stream_transport(
+             stream_helpers,
+-            "runtime_context_with_tier",
+-            side_effect=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "planner_workflow_interrupt_reply",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_ensure_vector_index_if_needed",
+-            return_value=None,
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "create_modstore_openai_client_from_request",
+-            return_value=MagicMock(),
+-        ),
+-        patch.object(
+-            stream_helpers,
+-            "_xcagi_guarded_planner_stream_events",
+-            return_value=iter([{"type": "error", "message": "stream error", "status_code": 503}]),
+-        ),
++            tier=lambda ctx, _tier: {**dict(ctx or {}), "ai_tier": _tier},
++            events=iter([{"type": "error", "message": "stream error", "status_code": 503}]),
++            client=MagicMock(),
++            patches={
++                "effective_db_read_token": {"return_value": ""},
++                "_merge_runtime_context_with_message_paths": {
++                    "return_value": ({"workspace": "demo"}, [])
++                },
++            },
++        ) as transport,
+     ):
+         chunks = list(
+             stream_helpers._xcagi_planner_stream_bytes(
+diff --git a/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py b/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
+index 5c1c328315..77cf421cf7 100644
+--- a/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
++++ b/FHD/tests/test_routes/test_xcagi_compat_chat_helpers_ext3.py
+@@ -34,6 +34,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
+ import pytest
+ 
+ from app.fastapi_routes import xcagi_compat_chat_helpers as ch
++from tests.fixtures.compat_stream import planner_stream_transport
+ 
+ 
+ def _anonymous_sse_events(chunks, kinds):
+@@ -723,96 +724,42 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_mode_online_sets_llm_mode(self):
+         request = self._make_request()
+         body = self._make_body(mode="online")
+-        with (
+-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter([{"type": "token", "text": "hello"}]),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "token", "text": "hello"}]),
++            mode=True,
++        ) as transport:
++            mock_set = transport.set_llm_mode
+             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         mock_set.assert_called_once_with("online")
+ 
+     def test_mode_offline_sets_llm_mode(self):
+         request = self._make_request()
+         body = self._make_body(mode="OFFLINE")
+-        with (
+-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter([{"type": "token", "text": "hello"}]),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "token", "text": "hello"}]),
++            mode=True,
++        ) as transport:
++            mock_set = transport.set_llm_mode
+             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         mock_set.assert_called_once_with("offline")
+ 
+     def test_mode_other_does_not_set_llm_mode(self):
+         request = self._make_request()
+         body = self._make_body(mode="custom")
+-        with (
+-            patch("app.fastapi_routes.xcagi_compat_chat_helpers.set_llm_mode") as mock_set,
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter([{"type": "token", "text": "hello"}]),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "token", "text": "hello"}]),
++            mode=True,
++        ) as transport:
++            mock_set = transport.set_llm_mode
+             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         mock_set.assert_not_called()
+ 
+@@ -908,31 +855,12 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_empty_merged_reply_yields_error(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter([{"type": "token", "text": ""}]),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "token", "text": ""}]),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         _anonymous_sse_events(results, ["token", "error"])
+         assert len(results) == 2
+@@ -944,36 +872,17 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_merged_reply_with_thinking_steps(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "token", "text": "[正在调用工具:查询]"},
+-                        {"type": "token", "text": "result"},
+-                    ]
+-                ),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter(
++                [
++                    {"type": "token", "text": "[正在调用工具:查询]"},
++                    {"type": "token", "text": "result"},
++                ]
++            ),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         _anonymous_sse_events(results, ["token", "token", "done"])
+         assert len(results) == 3
+@@ -985,36 +894,14 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_error_event_in_stream(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "token", "text": "partial"},
+-                        {"type": "error", "message": "stream error"},
+-                    ]
+-                ),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter(
++                [{"type": "token", "text": "partial"}, {"type": "error", "message": "stream error"}]
++            ),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         _anonymous_sse_events(results, ["token", "error"])
+         assert len(results) == 2
+@@ -1025,36 +912,18 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_requires_token_event_halts_stream(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "token", "text": "partial"},
+-                        {"type": "requires_token", "token_name": "WRITE_TOKEN"},
+-                    ]
+-                ),
+-            ) as planner,
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter(
++                [
++                    {"type": "token", "text": "partial"},
++                    {"type": "requires_token", "token_name": "WRITE_TOKEN"},
++                ]
++            ),
++        ) as transport:
++            planner = transport._xcagi_guarded_planner_stream_events
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         assert planner.call_args.args[0] is body
+         assert planner.call_args.args[0].message == body.message
+@@ -1070,36 +939,12 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_done_event_in_stream_continues(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "done"},
+-                        {"type": "token", "text": "after done"},
+-                    ]
+-                ),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "done"}, {"type": "token", "text": "after done"}]),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         # done event is skipped (continue), then token + final done
+         assert len(results) >= 2
+@@ -1107,36 +952,12 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_unknown_event_type_yielded(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "custom", "data": "value"},
+-                        {"type": "token", "text": "result"},
+-                    ]
+-                ),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "custom", "data": "value"}, {"type": "token", "text": "result"}]),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         # Should yield custom + token + done
+         assert len(results) >= 2
+@@ -1144,31 +965,12 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_recoverable_error_exception(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                side_effect=RuntimeError("stream failed"),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            event_error=RuntimeError("stream failed"),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         _anonymous_sse_events(results, ["error"])
+         assert len(results) == 1
+@@ -1178,36 +980,17 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_ephemeral_token_not_added_to_reply_parts(self):
+         request = self._make_request()
+         body = self._make_body(message="hello")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter(
+-                    [
+-                        {"type": "token", "text": "ephemeral", "ephemeral": True},
+-                        {"type": "token", "text": "real"},
+-                    ]
+-                ),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ),
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter(
++                [
++                    {"type": "token", "text": "ephemeral", "ephemeral": True},
++                    {"type": "token", "text": "real"},
++                ]
++            ),
++        ) as transport:
+             results = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         _anonymous_sse_events(results, ["token", "token", "done"])
+         assert len(results) == 3
+@@ -1218,31 +1001,13 @@ class TestXcagiPlannerStreamBytesAdditional:
+     def test_db_read_authorized_with_db_read_message_sets_context(self):
+         request = self._make_request()
+         body = self._make_body(message="查询数据库", db_read_token="valid")
+-        with (
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_chat_db_read_authorized",
+-                return_value=(True, None),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.planner_workflow_interrupt_reply",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._ensure_vector_index_if_needed",
+-                return_value=None,
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.create_modstore_openai_client_from_request",
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers._xcagi_guarded_planner_stream_events",
+-                return_value=iter([{"type": "token", "text": "result"}]),
+-            ),
+-            patch(
+-                "app.fastapi_routes.xcagi_compat_chat_helpers.runtime_context_with_tier",
+-                side_effect=lambda ctx, tier: ctx,
+-            ) as mock_tier,
+-        ):
++        with planner_stream_transport(
++            ch,
++            authorize=(True, None),
++            tier=lambda ctx, tier: ctx,
++            events=iter([{"type": "token", "text": "result"}]),
++        ) as transport:
++            mock_tier = transport.runtime_context_with_tier
+             list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))
+         # runtime_context_with_tier should be called with context that has chat_db_read_authorized
+         call_args = mock_tier.call_args
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,143 @@
+From d57383a80bdd08c400d241703eeb093380e5647f Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 20:44:47 +0800
+Subject: [PATCH 10/43] fix(harness): redact batch failure logs and refresh
+ stale parser tests
+
+
+diff --git a/FHD/CHANGELOG.md b/FHD/CHANGELOG.md
+index b04cf2dbb2..8474573b98 100644
+--- a/FHD/CHANGELOG.md
++++ b/FHD/CHANGELOG.md
+@@ -3,7 +3,7 @@
+ ## Unreleased
+ 
+ ### Changed
+-- 候选整改：工具使用已验证会话与正式审批，写入回执持久保存；结果未知时阻止重复执行，任务面板如实显示待核对。记忆与知识检索加强账号、租户和 Mod 范围校验；仍待整体门禁、主线合入与 Mac 安装包实测。
++- 候选整改：工具使用已验证会话与正式审批，审批后沿用原调用及持久回执，结果未知时阻止重复执行；批量产品整批提交并独立读回，失败日志隐藏业务字段。记忆与知识检索加强账号、租户和 Mod 范围校验，任务面板如实显示待核对；仍待整体门禁、主线合入与 Mac 安装包实测。
+ - 整理模块职责、兼容入口及扩展目录，减少重复源码；工具发现和源码桌面内置扩展初始化默认读取统一的 FHD/mods，保留显式配置、打包资源与旧目录兼容。修复独立工具进程的标准库路径冲突，保持原接口与审批行为。仍有巨型模块、过渡依赖和真实端侧验收待完成，当前不代表全部架构债务闭环。
+ 
+ - 工程债收口：合并 Mod 商店机械拆分文件、外置大体积验收媒体、压缩巨型矩阵测试，并诚实安置工具契约样例；结构门禁加严。用户侧功能与操作路径不变。
+diff --git a/FHD/app/infrastructure/repositories/product_repository_impl.py b/FHD/app/infrastructure/repositories/product_repository_impl.py
+index 4a45c09af9..2a3d2eba0c 100644
+--- a/FHD/app/infrastructure/repositories/product_repository_impl.py
++++ b/FHD/app/infrastructure/repositories/product_repository_impl.py
+@@ -384,8 +384,8 @@ class SQLAlchemyProductRepository(ProductRepository, ProductExportMixin):
+             if creation is not None:
+                 result["creation_proof"] = creation.receipt_proof(manifest)
+             return result
+-        except (SQLAlchemyError, *_REPOSITORY_ERRORS):
+-            logger.exception("批量产品事务失败")
++        except (SQLAlchemyError, *_REPOSITORY_ERRORS) as exc:
++            logger.warning("批量产品事务失败: %s", type(exc).__name__)
+             return {"success": False, "message": "批量添加失败，请稍后重试"}
+ 
+     def batch_delete(self, product_ids: list[int]) -> dict[str, Any]:
+diff --git a/FHD/tests/test_application/test_agent_loop_zero.py b/FHD/tests/test_application/test_agent_loop_zero.py
+index db1256b7d3..ae5a891926 100644
+--- a/FHD/tests/test_application/test_agent_loop_zero.py
++++ b/FHD/tests/test_application/test_agent_loop_zero.py
+@@ -10,40 +10,46 @@ import pytest
+ 
+ from app.application.employee_runtime.agent_loop import (
+     _format_tool_calls,
+-    _parse_args,
++    _parse_tool_args,
+     default_employee_tools,
+     run_employee_agent_loop,
+ )
+ 
+ 
+ class TestParseArgs:
+-    """Tests for _parse_args helper."""
++    """Tests for the strict model-argument parser."""
+ 
+     def test_parse_valid_json(self) -> None:
+-        result = _parse_args('{"key": "value"}')
++        result, error = _parse_tool_args('{"key": "value"}')
+         assert result == {"key": "value"}
++        assert error is None
+ 
+     def test_parse_empty_string(self) -> None:
+-        result = _parse_args("")
++        result, error = _parse_tool_args("")
+         assert result == {}
++        assert error is None
+ 
+     def test_parse_none_like(self) -> None:
+-        result = _parse_args(None)
++        result, error = _parse_tool_args(None)
+         assert result == {}
++        assert error is None
+ 
+     def test_parse_invalid_json(self) -> None:
+-        result = _parse_args("not json at all")
++        result, error = _parse_tool_args("not json at all")
+         assert result == {}
++        assert error and "JSON" in error
+ 
+     def test_parse_non_dict_json(self) -> None:
+-        result = _parse_args("[1, 2, 3]")
++        result, error = _parse_tool_args("[1, 2, 3]")
+         assert result == {}
++        assert error and "JSON" in error
+ 
+     def test_parse_dict_with_nested_data(self) -> None:
+         raw = '{"task": "create_order", "items": [1, 2]}'
+-        result = _parse_args(raw)
++        result, error = _parse_tool_args(raw)
+         assert result["task"] == "create_order"
+         assert result["items"] == [1, 2]
++        assert error is None
+ 
+ 
+ class TestFormatToolCalls:
+diff --git a/FHD/tests/test_application/test_products_agent_routes.py b/FHD/tests/test_application/test_products_agent_routes.py
+index 24374ecc7c..cf0ef3a5c6 100644
+--- a/FHD/tests/test_application/test_products_agent_routes.py
++++ b/FHD/tests/test_application/test_products_agent_routes.py
+@@ -133,7 +133,9 @@ def test_batch_spawn_reviews_all_inputs_and_isolates_two_tenants(
+     assert {row.id for row in _rows(actor)}.isdisjoint(row.id for row in _rows(other))
+ 
+ 
+-def test_actual_spawn_batch_rolls_back_when_row_101_fails(batch_runtime, reviewed_agent_http):
++def test_actual_spawn_batch_rolls_back_when_row_101_fails(
++    batch_runtime, reviewed_agent_http, capfd
++):
+     from sqlalchemy import text
+ 
+     actor = batch_runtime
+@@ -147,13 +149,16 @@ def test_actual_spawn_batch_rolls_back_when_row_101_fails(batch_runtime, reviewe
+         "POST",
+         "/api/products/batch",
+         json={
+-            "products": [{"name": f"P-{index}"} for index in range(100)] + [{"name": "FAIL"}],
++            "products": [{"name": f"PRIVATE-BATCH-{index}"} for index in range(100)]
++            + [{"name": "FAIL"}],
+         },
+     )
+     assert result.response.status_code == 202
+     assert result.run.status != "completed" and result.output["outcome"] == "unknown"
+     assert result.receipt["success"] is False
+     assert _rows(actor) == []
++    captured = capfd.readouterr()
++    assert "PRIVATE-BATCH-" not in captured.out + captured.err
+ 
+ 
+ @pytest.mark.parametrize(
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/base-update-mgmt.html" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/base-update-mgmt.html"
+index 1e86363a20..f80c3b4f32 100644
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/base-update-mgmt.html"
++++ "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/base-update-mgmt.html"
+@@ -35,7 +35,7 @@
+       <div>
+         <span class="eyebrow">产品底座与账户 / 运行底座</span>
+         <h1>版本与更新管理</h1>
+-        <div class="cap-feature-meta"><span class="cap-status st-verified">已验证</span><span>代码更新于 2026-10-14</span></div>
++        <div class="cap-feature-meta"><span class="cap-status st-verified">已验证</span><span>代码更新于 2026-10-25</span></div>
+         <p>版本比对、更新拉取与发布推送链路。</p>
+       </div>
+       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain=base">返回 产品底座与账户</a></p></div>
+-- 
+2.50.1 (Apple Git-155)
+

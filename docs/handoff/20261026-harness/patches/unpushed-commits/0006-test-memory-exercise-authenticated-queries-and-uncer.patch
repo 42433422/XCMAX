@@ -1,0 +1,462 @@
+From 9b7936ea4750457f4b0537ff91cad05147811c4d Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 18:54:00 +0800
+Subject: [PATCH 06/43] test(memory): exercise authenticated queries and
+ uncertain receipts
+
+
+diff --git a/FHD/tests/test_routes/test_customer_routes_cov.py b/FHD/tests/test_routes/test_customer_routes_cov.py
+index 7efe483bf2..c0cb593287 100644
+--- a/FHD/tests/test_routes/test_customer_routes_cov.py
++++ b/FHD/tests/test_routes/test_customer_routes_cov.py
+@@ -71,10 +71,11 @@ class TestAgentNodeOutput:
+         out = _agent_node_output(run, "n2")
+         assert out["success"] is True
+ 
+-    def test_fallback_completed_status(self):
++    def test_completed_without_receipt_is_unknown(self):
+         run = _make_run("completed")
+         out = _agent_node_output(run, "no_match")
+-        assert out["success"] is True
++        assert out["success"] is False
++        assert out["outcome"] == "unknown"
+ 
+     def test_fallback_failed_with_error_message(self):
+         run = _make_run("failed", error="oops")
+diff --git a/FHD/tests/test_routes/test_persy_memory_routes.py b/FHD/tests/test_routes/test_persy_memory_routes.py
+index 1687a97769..aae5a154f4 100644
+--- a/FHD/tests/test_routes/test_persy_memory_routes.py
++++ b/FHD/tests/test_routes/test_persy_memory_routes.py
+@@ -1,216 +1,192 @@
+ from __future__ import annotations
+ 
+-from unittest.mock import patch
+-
+ import pytest
+ from fastapi import FastAPI
+ from fastapi.testclient import TestClient
+ 
+ from app.application import dataset_rag_app_service as dataset_rag_module
+-from app.application.dataset_rag_app_service import (
+-    DatasetAccessContext,
+-    DatasetRagApplicationService,
+-)
++from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
++from app.application.dataset_rag_app_service import DatasetRagApplicationService
+ from app.application.persy_memory_app_service import PersyMemoryApplicationService
+-from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
++from app.domain.shared_services import user_memory_service as memory_module
+ from app.fastapi_routes.knowledge_v1 import router as knowledge_router
+-
+-
+-@pytest.fixture(autouse=True)
+-def _explicit_gateway_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+-    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "1")
+-
+-
+-def _headers(*, actor: str = "7", tenant: str = "2", write: bool = True) -> dict[str, str]:
+-    permissions = "dataset.read,dataset.write" if write else "dataset.read"
+-    return {
+-        "X-Dataset-Actor-ID": actor,
+-        "X-Dataset-Tenant-ID": tenant,
+-        "X-Dataset-Permissions": permissions,
+-    }
+-
+-
+-def _access(*, actor: str = "7", tenant: str = "2") -> DatasetAccessContext:
+-    return DatasetAccessContext(
+-        actor_id=actor,
+-        tenant_id=tenant,
+-        permissions=frozenset({"dataset.read", "dataset.write"}),
++from app.infrastructure.auth.agent_mod_scope import agent_dataset_access_context
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++
++
++@pytest.fixture
++def runtime(tmp_path, monkeypatch, trusted_actor):
++    import app.application.persy_memory_app_service as persy_module
++
++    actor = trusted_actor()
++    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
++    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
++    monkeypatch.delenv("MODEL_USAGE_WALLET_REQUIRED", raising=False)
++    monkeypatch.setenv("XCAGI_USER_MEMORY_JSON_PATH", str(tmp_path / "memories.json"))
++    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(tmp_path / "datasets.json"))
++    monkeypatch.setenv("XCAGI_TRUST_DATASET_ACCESS_HEADERS", "0")
++    memory_module.reset_user_memory_service()
++    memories = PersyMemoryApplicationService(memory_module.get_user_memory_service())
++    monkeypatch.setattr(persy_module, "_persy_memory_service", memories)
++    monkeypatch.setattr(dataset_rag_module, "_dataset_rag_app_service", None)
++    monkeypatch.setattr(
++        "app.application.agent_orchestrator.run_repository._agent_run_repository",
++        SQLAlchemyAgentRunRepository(session_factory=actor.factory, auto_create=False),
+     )
+-
+-
+-def _memory_service() -> PersyMemoryApplicationService:
+-    UserMemoryStore._instance = None
+-    UserMemoryService._instance = None
+-    return PersyMemoryApplicationService(UserMemoryService(storage_type="memory"))
+-
+-
+-def test_persy_memory_routes_cover_review_query_graph_and_delete(tmp_path) -> None:
+     app = FastAPI()
+     app.include_router(knowledge_router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-    memories = _memory_service()
+     datasets = DatasetRagApplicationService(
+-        embedder=None,
+-        allowed_roots=[tmp_path],
+-        storage_path=tmp_path / "datasets.json",
++        embedder=None, allowed_roots=[tmp_path], storage_path=tmp_path / "datasets.json"
+     )
++    try:
++        yield actor, TestClient(app, raise_server_exceptions=False), memories, datasets
++    finally:
++        memory_module.reset_user_memory_service()
++
++
++def test_persy_memory_routes_cover_review_query_graph_and_delete(runtime, trusted_actor) -> None:
++    actor, client, memories, datasets = runtime
++    reader = trusted_actor(role="viewer")
++    access = agent_dataset_access_context(actor.context)
+     captured = memories.capture_conversation_turn(
+-        access_context=_access(),
+-        user_message="客户北辰科技的负责人是李明",
+-        session_id="route-chat",
++        access_context=access, user_message="客户北辰科技的负责人是李明", session_id="route-chat"
+     )
+     memory_id = captured["candidates"][0]["memory_id"]
+-    datasets.ingest_document(
++    assert datasets.ingest_document(
+         dataset_id="persy-knowledge",
+         source="续约制度.md",
+         text="北辰科技续约需要财务审批。",
+         chunk_strategy="fixed",
+-        access_context=_access(),
++        access_context=access,
++    )["success"]
++    pending = client.get(
++        "/api/knowledge/v1/datasets/persy-knowledge/memories?status=pending", headers=actor.headers
++    )
++    denied = client.post(
++        f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}/confirm",
++        headers={
++            **reader.headers,
++            "X-Dataset-Permissions": "dataset.write,*",
++            "X-Dataset-Admin": "true",
++        },
++        json={},
++    )
++    confirmed = client.post(
++        f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}/confirm",
++        headers=actor.headers,
++        json={},
++    )
++    query = client.post(
++        "/api/knowledge/v1/datasets/persy-knowledge/memories/query",
++        headers=actor.headers,
++        json={"query": "北辰科技负责人", "top_k": 3},
++    )
++    # This read executes the real registered RAG handler in its isolated process.
++    unified_query = client.post(
++        "/api/knowledge/v1/datasets/persy-knowledge/query",
++        headers=actor.headers,
++        json={"query": "北辰科技负责人和续约要求", "top_k": 3},
++    )
++    graph = client.get(
++        "/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80", headers=actor.headers
++    )
++    deleted = client.delete(
++        f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}?reason=obsolete",
++        headers=actor.headers,
+     )
+ 
+-    with (
+-        patch(
+-            "app.fastapi_routes.knowledge_v1._persy_memory_service",
+-            return_value=memories,
+-        ),
+-        patch.dict("os.environ", {"DATASET_RAG_STORE_PATH": str(tmp_path / "datasets.json")}),
+-        patch.object(dataset_rag_module, "_dataset_rag_app_service", None),
+-    ):
+-        pending = client.get(
+-            "/api/knowledge/v1/datasets/persy-knowledge/memories?status=pending",
+-            headers=_headers(),
+-        )
+-        denied = client.post(
+-            f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}/confirm",
+-            headers=_headers(write=False),
+-            json={},
+-        )
+-        confirmed = client.post(
+-            f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}/confirm",
+-            headers=_headers(),
+-            json={},
+-        )
+-        query = client.post(
+-            "/api/knowledge/v1/datasets/persy-knowledge/memories/query",
+-            headers=_headers(),
+-            json={"query": "北辰科技负责人", "top_k": 3},
+-        )
+-        unified_query = client.post(
+-            "/api/knowledge/v1/datasets/persy-knowledge/query",
+-            headers=_headers(),
+-            json={"query": "北辰科技负责人和续约要求", "top_k": 3},
+-        )
+-        graph = client.get(
+-            "/api/knowledge/v1/datasets/persy-knowledge/graph?limit=80",
+-            headers=_headers(),
+-        )
+-        deleted = client.delete(
+-            f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}?reason=obsolete",
+-            headers=_headers(),
+-        )
+-
+-    assert pending.status_code == 200
+-    assert pending.json()["summary"]["pending"] == 1
+-    assert denied.status_code == 403
+-    assert denied.json()["required_permission"] == "dataset.write"
+-    assert confirmed.status_code == 200
+-    assert confirmed.json()["memory"]["status"] == "active"
+-    assert query.status_code == 200
+-    assert query.json()["chunks"][0]["metadata"]["memory_id"] == memory_id
+-    assert unified_query.status_code == 200
++    assert pending.status_code == 200 and pending.json()["summary"]["pending"] == 1
++    assert denied.status_code == 403 and denied.json()["required_permission"] == "dataset.write"
++    assert confirmed.status_code == 200 and confirmed.json()["memory"]["status"] == "active"
++    assert (
++        query.status_code == 200 and query.json()["chunks"][0]["metadata"]["memory_id"] == memory_id
++    )
++    assert unified_query.status_code == 200, unified_query.text
+     assert unified_query.json()["persy_memory"]["count"] == 1
+     assert any(
+         chunk["metadata"].get("memory_id") == memory_id for chunk in unified_query.json()["chunks"]
+     )
+     assert any(chunk["metadata"].get("document_id") for chunk in unified_query.json()["chunks"])
+     assert "已确认的长期记忆" in unified_query.json()["answer"]
+-    assert graph.status_code == 200
+-    assert graph.json()["stats"]["memory_count"] == 1
++    assert graph.status_code == 200 and graph.json()["stats"]["memory_count"] == 1
+     assert any(node["id"] == f"memory:{memory_id}" for node in graph.json()["nodes"])
+-    assert deleted.status_code == 200
+-    assert deleted.json()["memory"]["status"] == "deleted"
+-
+-
+-def test_persy_memory_routes_fail_closed_across_users_and_datasets() -> None:
+-    app = FastAPI()
+-    app.include_router(knowledge_router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-    memories = _memory_service()
+-    captured = memories.capture_conversation_turn(
+-        access_context=_access(actor="alice"),
+-        user_message="我偏好下午沟通",
+-    )
+-    memory_id = captured["candidates"][0]["memory_id"]
+-
+-    with patch("app.fastapi_routes.knowledge_v1._persy_memory_service", return_value=memories):
++    assert deleted.status_code == 200 and deleted.json()["memory"]["status"] == "deleted"
++
++
++def test_persy_memory_routes_fail_closed_across_users_and_datasets(runtime, trusted_actor) -> None:
++    actor, client, memories, _ = runtime
++    bob, foreign = trusted_actor(), trusted_actor(tenant_id=8)
++    access = agent_dataset_access_context(actor.context)
++    private = memories.capture_conversation_turn(
++        access_context=access, user_message="我偏好下午沟通"
++    )["candidates"][0]
++    shared = memories.capture_conversation_turn(
++        access_context=access, user_message="客户北辰科技的沟通时间是周二下午", scope="tenant"
++    )["candidates"][0]
++    for outsider, expected in ((bob, {shared["memory_id"]}), (foreign, set())):
++        headers = {
++            **outsider.headers,
++            "X-User-ID": str(actor.user_id),
++            "X-Dataset-Actor-ID": str(actor.user_id),
++            "X-Dataset-Tenant-ID": "7",
++            "X-Dataset-Admin": "true",
++        }
++        listed = client.get("/api/knowledge/v1/datasets/persy-knowledge/memories", headers=headers)
++        assert listed.status_code == 200
++        assert {row["memory_id"] for row in listed.json()["memories"]} == expected
+         other_user = client.post(
+-            f"/api/knowledge/v1/datasets/persy-knowledge/memories/{memory_id}/confirm",
+-            headers=_headers(actor="bob"),
++            f"/api/knowledge/v1/datasets/persy-knowledge/memories/{private['memory_id']}/confirm",
++            headers=headers,
+             json={},
+         )
+-        unsupported = client.get(
+-            "/api/knowledge/v1/datasets/not-persy/memories",
+-            headers=_headers(actor="alice"),
++        assert (
++            other_user.status_code == 404
++            and other_user.json()["error_code"] == "persy_memory_not_found"
+         )
+-
+-    assert other_user.status_code == 404
+-    assert other_user.json()["error_code"] == "persy_memory_not_found"
+-    assert unsupported.status_code == 404
+-    assert unsupported.json()["error_code"] == "persy_dataset_required"
++    unsupported = client.get("/api/knowledge/v1/datasets/not-persy/memories", headers=actor.headers)
++    assert (
++        unsupported.status_code == 404
++        and unsupported.json()["error_code"] == "persy_dataset_required"
++    )
+ 
+ 
+-def test_admin_header_defaults_to_its_tenant_for_status_and_query(tmp_path) -> None:
+-    app = FastAPI()
+-    app.include_router(knowledge_router)
+-    client = TestClient(app, raise_server_exceptions=False)
+-    datasets = DatasetRagApplicationService(
+-        embedder=None,
+-        allowed_roots=[tmp_path],
+-        storage_path=tmp_path / "datasets.json",
+-    )
+-    admin = DatasetAccessContext(
+-        actor_id="admin",
+-        permissions=frozenset({"dataset.admin"}),
+-        is_admin=True,
+-    )
+-    datasets.ingest_document(
+-        dataset_id="secure-admin",
+-        source="a.md",
+-        text="Tenant A only.",
+-        tenant_id="tenant-a",
+-        chunk_strategy="fixed",
+-        access_context=admin,
+-    )
+-    datasets.ingest_document(
+-        dataset_id="secure-admin",
+-        source="b.md",
+-        text="Tenant B only.",
+-        tenant_id="tenant-b",
+-        chunk_strategy="fixed",
+-        access_context=admin,
+-    )
++@pytest.mark.parametrize("role", ["admin", "viewer"])
++def test_admin_header_defaults_to_its_tenant_for_status_and_query(
++    runtime, trusted_actor, role
++) -> None:
++    actor, client, _, datasets = runtime
++    account = trusted_actor(role=role)
++    other = trusted_actor(tenant_id=8)
++    for owner, source in ((actor, "a.md"), (other, "b.md")):
++        assert datasets.ingest_document(
++            dataset_id="secure-admin",
++            source=source,
++            text=f"Tenant {owner.tenant_id} only.",
++            chunk_strategy="fixed",
++            access_context=agent_dataset_access_context(owner.context),
++        )["success"]
+     headers = {
++        **account.headers,
+         "X-Dataset-Actor-ID": "admin",
+-        "X-Dataset-Tenant-ID": "tenant-a",
++        "X-Dataset-Tenant-ID": "8",
+         "X-Dataset-Admin": "true",
++        "X-Dataset-Permissions": "dataset.admin,*",
+     }
+-
+-    with patch(
+-        "app.application.dataset_rag_app_service.get_dataset_rag_app_service",
+-        return_value=datasets,
+-    ):
+-        status = client.get(
+-            "/api/knowledge/v1/datasets/secure-admin/status",
+-            headers=headers,
+-        )
+-        query = client.post(
+-            "/api/knowledge/v1/datasets/secure-admin/query",
+-            headers=headers,
+-            json={"query": "Tenant", "top_k": 5},
+-        )
+-
+-    assert status.json()["document_count"] == 2
+-    assert status.json()["tenant_ids"] == ["tenant-a", "tenant-b"]
+-    # admin 默认看所有 tenant（_dataset_read_tenant_scope 对 admin 返回 ""）；
+-    # 若需限定到自身 tenant，应在 query body 显式传 tenant_id。
+-    assert len(query.json()["chunks"]) >= 1
++    status = client.get("/api/knowledge/v1/datasets/secure-admin/status", headers=headers)
++    query = client.post(
++        "/api/knowledge/v1/datasets/secure-admin/query",
++        headers=headers,
++        json={"query": "Tenant", "top_k": 5},
++    )
++    assert status.status_code == 200
++    assert status.json()["document_count"] == 1 and status.json()["tenant_ids"] == ["7"]
++    assert query.status_code == 200 and query.json()["success"], query.text
++    assert query.json()["chunks"] and all(
++        chunk["metadata"]["tenant_id"] == "7" for chunk in query.json()["chunks"]
++    )
++    cross = client.post(
++        "/api/knowledge/v1/datasets/secure-admin/query",
++        headers=headers,
++        json={"query": "Tenant", "tenant_id": "8"},
++    )
++    assert cross.status_code == 403 and cross.json()["error_code"] == "dataset_permission_denied"
+diff --git a/FHD/tests/test_routes/test_xcagi_compat_product_branch_cov.py b/FHD/tests/test_routes/test_xcagi_compat_product_branch_cov.py
+index 2bcdb7ee4c..f8b99e8d56 100644
+--- a/FHD/tests/test_routes/test_xcagi_compat_product_branch_cov.py
++++ b/FHD/tests/test_routes/test_xcagi_compat_product_branch_cov.py
+@@ -25,12 +25,13 @@ from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+ 
+ 
+ class TestAgentNodeOutput:
+-    def test_final_output_none_falls_back_to_steps(self):
++    def test_final_output_without_step_receipt_is_unknown(self):
+         run = SimpleNamespace(
+             final_output=None, steps=[], status="completed", error="", run_id="r1"
+         )
+         out = xp._agent_node_output(run, "n1")
+-        assert out["success"] is True
++        assert out["success"] is False
++        assert out["outcome"] == "unknown"
+         assert out["agent_status"] == "completed"
+         assert out["run_id"] == "r1"
+ 
+@@ -59,13 +60,14 @@ class TestAgentNodeOutput:
+         out = xp._agent_node_output(run, "n1")
+         assert out["from_step"] == 1
+ 
+-    def test_steps_not_found_uses_status(self):
++    def test_missing_node_receipt_is_unknown(self):
+         step = SimpleNamespace(node_id="other", output={})
+         run = SimpleNamespace(
+             final_output=None, steps=[step], status="completed", error="", run_id=""
+         )
+         out = xp._agent_node_output(run, "n1")
+-        assert out["success"] is True
++        assert out["success"] is False
++        assert out["outcome"] == "unknown"
+         assert "run_id" not in out
+ 
+     def test_status_not_completed_sets_success_false(self):
+@@ -99,17 +101,19 @@ class TestAgentNodeOutput:
+         out = xp._agent_node_output(run, "n1")
+         assert out["message"] == "orig"
+ 
+-    def test_final_output_empty_dict(self):
++    def test_final_output_empty_dict_is_unknown(self):
+         run = SimpleNamespace(final_output={}, steps=[], status="completed", error="", run_id="r7")
+         out = xp._agent_node_output(run, "n1")
+-        assert out["success"] is True
++        assert out["success"] is False
++        assert out["outcome"] == "unknown"
+ 
+-    def test_steps_none(self):
++    def test_steps_none_is_unknown(self):
+         run = SimpleNamespace(
+             final_output=None, steps=None, status="completed", error="", run_id="r8"
+         )
+         out = xp._agent_node_output(run, "n1")
+-        assert out["success"] is True
++        assert out["success"] is False
++        assert out["outcome"] == "unknown"
+ 
+ 
+ # ---------------------------------------------------------------------------
+-- 
+2.50.1 (Apple Git-155)
+

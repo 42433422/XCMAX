@@ -1,0 +1,108 @@
+From a8c606781c96135f89cddfb46d28bd65785b45f7 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 02:46:22 +0800
+Subject: [PATCH 41/43] fix(materials): verify persisted stock and price
+ aliases without dropping inputs
+
+
+diff --git a/FHD/app/application/business_db_write_verification.py b/FHD/app/application/business_db_write_verification.py
+index 7779cbc235..d55da4b20e 100644
+--- a/FHD/app/application/business_db_write_verification.py
++++ b/FHD/app/application/business_db_write_verification.py
+@@ -73,6 +73,8 @@ def _model_config(entity: str):
+             Material,
+             {
+                 "material_name": "name",
++                "min_quantity": "min_stock",
++                "price": "unit_price",
+             },
+             ("material_code", "material_name", "name"),
+         )
+diff --git a/FHD/tests/test_application/test_business_action_ledger.py b/FHD/tests/test_application/test_business_action_ledger.py
+index 7a9ab11d65..e3dfeb5142 100644
+--- a/FHD/tests/test_application/test_business_action_ledger.py
++++ b/FHD/tests/test_application/test_business_action_ledger.py
+@@ -594,3 +594,80 @@ def test_customer_readback_rejects_wrong_target_unchecked_fields_and_empty_name(
+         with actor.factory() as db:
+             first = db.get(PurchaseUnit, first_id)
+             assert (first.unit_name, first.contact_phone) == ("First", "old")
++
++
++@pytest.mark.parametrize(
++    "submitted,stock,price,checked_fields",
++    [
++        ({"min_quantity": 12, "min_stock": 12}, 12, 0, ["material_code", "min_stock", "name"]),
++        ({"min_quantity": 0, "min_stock": 0}, 0, 0, ["material_code", "min_stock", "name"]),
++        ({"price": 3.5}, 0, 3.5, ["material_code", "name", "unit_price"]),
++        ({"price": 3.5, "unit_price": 3.5}, 0, 3.5, ["material_code", "name", "unit_price"]),
++    ],
++    ids=["http_min_quantity", "http_zero_min_quantity", "service_price", "matching_price_alias"],
++)
++def test_real_material_create_verifies_normalized_aliases_after_commit(
++    trusted_actor, approved_tool_context, submitted, stock, price, checked_fields
++):
++    from app.db.models.material import Material
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor(permissions=["tool.materials.create"])
++    params = {"material_code": "READBACK-1", "name": "Readback resin", **submitted}
++    step = AgentStep(node_id="material", tool_id="materials", action="create", params=params)
++    result = AgentToolExecutor().execute(
++        step,
++        runtime_context=approved_tool_context(actor, step, business_action_id="material-alias"),
++    )
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        row = db.query(Material).filter_by(material_code=params["material_code"]).one()
++        assert row.tenant_id == actor.tenant_id
++        assert (row.name, row.min_stock, float(row.unit_price)) == (params["name"], stock, price)
++        assert row.id == result["data"]["id"]
++    assert result["success"] and result["business_verification"]["verified"], result
++    assert result["business_verification"]["checked_fields"] == checked_fields
++
++
++def test_material_readback_rejects_alias_conflicts_wrong_values_targets_and_tenant(
++    trusted_actor, approved_tool_context
++):
++    from app.application.agent_orchestrator.business_action_verification import verify_action_result
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++    from app.db.models.material import Material
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor(permissions=["tool.materials.create"])
++    other = trusted_actor(tenant_id=8, permissions=["tool.materials.create"])
++    params = {
++        "material_code": "READBACK-1",
++        "name": "Readback resin",
++        "min_stock": 12,
++        "unit_price": 3.5,
++    }
++    step = AgentStep(node_id="material", tool_id="materials", action="create", params=params)
++    result = AgentToolExecutor().execute(
++        step,
++        runtime_context=approved_tool_context(actor, step, business_action_id="material-guards"),
++    )
++    assert result["success"] and result["business_verification"]["verified"], result
++    record_id = result["data"]["id"]
++    spec = get_tool_action_spec("materials", "create")
++    for changed, receipt_id, tenant_id, reason in [
++        ({"min_stock": 13}, record_id, actor.tenant_id, "field_mismatch"),
++        ({"min_quantity": 13}, record_id, actor.tenant_id, "field_mismatch"),
++        ({"min_quantity": 12, "min_stock": 13}, record_id, actor.tenant_id, "field_mismatch"),
++        ({"price": 4.5}, record_id, actor.tenant_id, "field_mismatch"),
++        ({"price": 3.5, "unit_price": 4.5}, record_id, actor.tenant_id, "field_mismatch"),
++        ({"min_quantitty": 12}, record_id, actor.tenant_id, "unverifiable_fields"),
++        ({}, record_id + 1, actor.tenant_id, "target_mismatch"),
++        ({}, record_id, other.tenant_id, "record_not_found"),
++    ]:
++        payload = {**params, "id": record_id, **changed}
++        receipt = {**result, "data": {**result["data"], "id": receipt_id}}
++        with tenant_scope(tenant_id):
++            checked, verified = verify_action_result(spec, payload, receipt)
++        assert verified is False and checked["success"] is False, (payload, checked)
++        assert checked["business_verification"]["reason"] == reason, (payload, checked)
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        row = db.get(Material, record_id)
++        assert (row.tenant_id, row.min_stock, float(row.unit_price)) == (actor.tenant_id, 12, 3.5)
+-- 
+2.50.1 (Apple Git-155)
+

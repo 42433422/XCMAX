@@ -1,0 +1,101 @@
+From f304414e6478fe4e0e6ab43c27aec5e288912267 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 18:20:57 +0800
+Subject: [PATCH 03/43] fix(evidence): ignore runtime-only directories as
+ implementation proof
+
+
+diff --git a/FHD/tests/test_dev/test_capability_center_code_date.py b/FHD/tests/test_dev/test_capability_center_code_date.py
+index b0ba80f9ff..26b3cc0dca 100644
+--- a/FHD/tests/test_dev/test_capability_center_code_date.py
++++ b/FHD/tests/test_dev/test_capability_center_code_date.py
+@@ -18,6 +18,23 @@ MODULE = importlib.util.module_from_spec(SPEC)
+ SPEC.loader.exec_module(MODULE)
+ 
+ 
++def test_runtime_cache_and_untracked_files_do_not_establish_source(tmp_path, monkeypatch):
++    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
++    monkeypatch.setattr(MODULE, "REPO_ROOT", tmp_path)
++    monkeypatch.setattr(MODULE, "e", lambda rel: tmp_path / rel)
++    cache = tmp_path / "legacy/__pycache__"
++    cache.mkdir(parents=True)
++    (cache / "retired.pyc").write_bytes(b"runtime-cache")
++    assert not MODULE.path_exists("legacy")
++    source = tmp_path / "legacy/source.py"
++    source.write_text("pass\n", encoding="utf-8")
++    assert not MODULE.path_exists("legacy")
++    subprocess.run(["git", "-C", str(tmp_path), "add", "legacy/source.py"], check=True)
++    assert MODULE.path_exists("legacy")
++    source.unlink()
++    assert not MODULE.path_exists("legacy")
++
++
+ @pytest.mark.parametrize(
+     "commit_time, expected",
+     [
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/scripts/build_capability_center.py" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/scripts/build_capability_center.py"
+index ffbd4d6078..5fb74a1fa6 100644
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/scripts/build_capability_center.py"
++++ "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/scripts/build_capability_center.py"
+@@ -4,18 +4,18 @@
+ from __future__ import annotations
+ 
+ import argparse
+-import html
+ import hashlib
++import html
+ import json
+ import re
+ import runpy
+ import shutil
+ import subprocess
+ import sys
+-from urllib.parse import quote, urlsplit
+ from datetime import datetime
+ from functools import lru_cache
+ from pathlib import Path
++from urllib.parse import quote, urlsplit
+ from zoneinfo import ZoneInfo
+ 
+ WEBSITE_DIR = Path(__file__).resolve().parents[1]
+@@ -181,7 +181,8 @@ def evidence_state(rel: str) -> dict:
+ 
+ def path_exists(rel: str) -> bool:
+     # External provenance links are not repository files.
+-    # Directories (impl roots) use ordinary exists(); media may be archive-only
++    # Directories require tracked source; runtime caches cannot establish an impl.
++    # Media may be archive-only
+     # (MANIFEST-verified, blob not mounted) and still count as present so CI
+     # --check matches a fully materialized tree.
+     if not rel or urlsplit(rel).scheme:
+@@ -190,7 +191,17 @@ def path_exists(rel: str) -> bool:
+         path = e(rel)
+     except ValueError:
+         return False
+-    if path.exists():
++    if path.is_dir():
++        tracked = git("ls-files", "-z", "--", rel, cwd=REPO_ROOT)
++        if tracked is None:
++            raise RuntimeError(f"Cannot verify source directory: {rel}")
++        return any(
++            (REPO_ROOT / name).is_file()
++            and "__pycache__" not in Path(name).parts
++            and Path(name).suffix not in {".pyc", ".pyo"}
++            for name in tracked.split("\0") if name
++        )
++    if path.is_file():
+         return True
+     return evidence_state(rel)["exists"]
+ 
+@@ -816,7 +827,7 @@ def build(repo_root_note: bool = True) -> tuple[dict, list[str], list[dict]]:
+ 
+ def compute_stats(domains_out: list[dict], feature_index: list[dict]) -> dict:
+     active = [f for f in feature_index if not f.get("excluded")]
+-    by_status = {s: 0 for s in STATUS_ORDER}
++    by_status = dict.fromkeys(STATUS_ORDER, 0)
+     for f in active:
+         by_status[f["status"]] += 1
+     verified_times = []
+-- 
+2.50.1 (Apple Git-155)
+

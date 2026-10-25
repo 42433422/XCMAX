@@ -1,0 +1,513 @@
+From bf2aac3713e76e31de256c09dced2ec342666930 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:06:06 +0800
+Subject: [PATCH 14/43] fix(files): restrict office output reads to
+ authenticated owners
+
+
+diff --git a/FHD/app/application/office_parse_app_service.py b/FHD/app/application/office_parse_app_service.py
+index e517855f56..1a102aafd4 100644
+--- a/FHD/app/application/office_parse_app_service.py
++++ b/FHD/app/application/office_parse_app_service.py
+@@ -2,108 +2,29 @@
+ 
+ from __future__ import annotations
+ 
+-import logging
+ from pathlib import Path
+ from typing import Any
+ 
+-from app.utils.operational_errors import RECOVERABLE_ERRORS
+-
+-logger = logging.getLogger(__name__)
+-
+ OFFICE_UPLOAD_SUFFIXES = frozenset(
+     {".xlsx", ".xlsm", ".xls", ".csv", ".docx", ".doc", ".pdf", ".pptx", ".ppt"}
+ )
+ 
+-EMPLOYEE_BY_SUFFIX: dict[str, str] = {
+-    ".xlsx": "excel-full-read-employee",
+-    ".xlsm": "excel-full-read-employee",
+-    ".xls": "excel-full-read-employee",
+-    ".csv": "csv-full-read-employee",
+-    ".docx": "word-full-read-employee",
+-    ".doc": "word-full-read-employee",
+-    ".pdf": "pdf-full-read-employee",
+-    ".pptx": "ppt-full-read-employee",
+-    ".ppt": "ppt-full-read-employee",
+-}
+-
+-
+-def resolve_office_read_employee(filename: str) -> str:
+-    suffix = Path(str(filename or "")).suffix.lower()
+-    return EMPLOYEE_BY_SUFFIX.get(suffix, "")
+-
+-
+-def is_office_docking_file(filename: str) -> bool:
+-    return Path(str(filename or "")).suffix.lower() in OFFICE_UPLOAD_SUFFIXES
+-
+-
+-async def run_office_read_employee(
+-    employee_id: str,
+-    *,
+-    file_path: str,
+-    workspace_root: str,
+-    output_relpath: str | None = None,
+-) -> dict[str, Any]:
+-    """调用已加载 employee_pack 的 /run 语义（进程内 dispatch）。"""
+-    from app.mod_sdk.mods_bus import import_mod_backend_py
+-
+-    mod_id = str(employee_id or "").strip()
+-    if not mod_id:
+-        raise ValueError("缺少 employee_id")
+-
+-    mod_path = ""
+-    try:
+-        from app.infrastructure.mods.registry import get_mod_registry
+-
+-        meta = get_mod_registry().get_mod_metadata(mod_id)
+-        mod_path = str(getattr(meta, "mod_path", "") or "")
+-    except RECOVERABLE_ERRORS:
+-        logger.debug("office parse mod lookup failed", exc_info=True)
+-
+-    if not mod_path:
+-        from pathlib import Path as _Path
+-
+-        guess = _Path(__file__).resolve().parents[2] / "mods" / "_employees" / mod_id
+-        if guess.is_dir():
+-            mod_path = str(guess)
+-    if not mod_path:
+-        raise RuntimeError(f"办公员工 Mod 未找到: {mod_id}")
+-
+-    payload: dict[str, Any] = {
+-        "file_path": file_path,
+-        "workspace_root": workspace_root,
+-        "action": "convert",
+-    }
+-    if output_relpath:
+-        payload["output_relpath"] = output_relpath
+-
+-    stem = mod_id.replace("-", "_")
+-    blueprints = import_mod_backend_py(mod_path, mod_id, "blueprints")
+-    dispatch = getattr(blueprints, "_dispatch_run", None) if blueprints else None
+-    if not callable(dispatch):
+-        raise RuntimeError(f"员工 Mod 缺少 dispatch: {mod_id}")
+-    result = await dispatch(mod_id, mod_id, stem, payload)
+-    if isinstance(result, dict) and result.get("success") is False:
+-        raise RuntimeError(str(result.get("message") or result.get("error") or "员工执行失败"))
+-    data = result.get("data") if isinstance(result, dict) else result
+-    return data if isinstance(data, dict) else {"raw": data}
+-
+ 
+ def read_workspace_output_files(
+     workspace_root: str,
+     file_paths: list[str],
+     *,
++    runtime_context: dict[str, Any],
+     max_bytes: int = 2_097_152,
+ ) -> list[dict[str, Any]]:
+     from fastapi import HTTPException
+ 
+-    from app.infrastructure.workspace import (
+-        resolve_existing_file_under_root,
+-    )
+-    from app.infrastructure.workspace import (
+-        workspace_root as configured_workspace_root,
+-    )
++    from app.application.employee_runtime.loader import employee_owner_workspace
++    from app.infrastructure.workspace import workspace_root as configured_workspace_root
+ 
+     base = configured_workspace_root()
++    owner = employee_owner_workspace(runtime_context).parent
++    owner_prefix = owner.relative_to(base).as_posix() + "/"
+     out: list[dict[str, Any]] = []
+     for raw in file_paths:
+         raw_path = str(raw or "").strip()
+@@ -118,19 +39,20 @@ def read_workspace_output_files(
+             continue
+         else:
+             rel = normalized.lstrip("/")
++        if not rel.startswith(owner_prefix) or any(
++            part in {"", ".", ".."} for part in rel.split("/")
++        ):
++            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
++            continue
+         try:
+-            path = resolve_existing_file_under_root(base, rel)
++            path = base / rel
++            blob = _read_pinned_output(base, path, max_bytes=max_bytes)
+         except FileNotFoundError:
+             out.append({"path": rel, "kind": "text", "error": "file_not_found"})
+             continue
+         except (ValueError, OSError, HTTPException):
+             out.append({"path": rel, "kind": "text", "error": "invalid_path"})
+             continue
+-        try:
+-            blob = path.read_bytes()[:max_bytes]
+-        except OSError:
+-            out.append({"path": rel, "kind": "text", "error": "read_failed"})
+-            continue
+         suffix = path.suffix.lower()
+         if suffix == ".json":
+             import json
+@@ -150,3 +72,37 @@ def read_workspace_output_files(
+         text = blob.decode("utf-8", errors="replace")
+         out.append({"path": rel, "kind": "text", "text": text})
+     return out
++
++
++def _read_pinned_output(base: Path, path: Path, *, max_bytes: int) -> bytes:
++    import os
++    import re
++    import stat
++
++    from app.application.shipment_excel_etl_security import (
++        _open_directory_under_root,
++        _windows_open_relative,
++    )
++
++    name = path.name
++    if not re.fullmatch(r"[^/\\]+", name) or name in (".", "..") or "\x00" in name:
++        raise ValueError("output must be one path component")
++    parent = _open_directory_under_root(base, path.parent, create=False)
++    descriptor = None
++    try:
++        descriptor = (
++            _windows_open_relative(parent, name, directory=False, create=False, for_input=True)
++            if os.name == "nt"
++            else os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
++        )
++        stream = os.fdopen(descriptor, "rb")
++        descriptor = None
++        with stream:
++            info = os.fstat(stream.fileno())
++            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
++                raise ValueError("output must be a private regular file")
++            return stream.read(max_bytes)
++    finally:
++        if descriptor is not None:
++            os.close(descriptor)
++        os.close(parent)
+diff --git a/FHD/app/fastapi_routes/platform_shell_routes.py b/FHD/app/fastapi_routes/platform_shell_routes.py
+index 0a7faba84a..a3a3777012 100644
+--- a/FHD/app/fastapi_routes/platform_shell_routes.py
++++ b/FHD/app/fastapi_routes/platform_shell_routes.py
+@@ -180,11 +180,16 @@ async def _save_workspace_upload(
+ 
+ 
+ @router.post("/workspace-read-files", response_model=dict[str, object])
+-async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody):
++async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody, request: Request):
+     """Read approved output files located under the selected workspace."""
+     from app.application.office_parse_app_service import read_workspace_output_files
++    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
+ 
+-    files = read_workspace_output_files(body.workspace_root, body.file_paths or [])
++    files = read_workspace_output_files(
++        body.workspace_root,
++        body.file_paths or [],
++        runtime_context=request_runtime_context(request),
++    )
+     return {"success": True, "data": {"files": files}}
+ 
+ 
+diff --git a/FHD/tests/application/test_office_parse_app_service.py b/FHD/tests/application/test_office_parse_app_service.py
+index 860e3ed517..c9909e4fde 100644
+--- a/FHD/tests/application/test_office_parse_app_service.py
++++ b/FHD/tests/application/test_office_parse_app_service.py
+@@ -3,25 +3,37 @@ from __future__ import annotations
+ import json
+ 
+ from app.application.office_parse_app_service import read_workspace_output_files
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+ 
+ 
+-def test_reads_relative_and_absolute_outputs_inside_workspace(tmp_path, monkeypatch) -> None:
++def test_reads_relative_and_absolute_outputs_inside_workspace(
++    tmp_path, monkeypatch, trusted_actor
++) -> None:
++    from app.application.employee_runtime.loader import employee_owner_workspace
++
++    actor = trusted_actor()
+     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+-    output = tmp_path / "outputs" / "data.json"
+-    output.parent.mkdir()
++    output = employee_owner_workspace(actor.context) / "outputs" / "data.json"
++    output.parent.mkdir(parents=True)
+     output.write_text(json.dumps({"row_count": 3}), encoding="utf-8")
+ 
+-    files = read_workspace_output_files(str(tmp_path), ["outputs/data.json", str(output)])
++    relative = output.relative_to(tmp_path).as_posix()
++    files = read_workspace_output_files(
++        str(tmp_path), [relative, str(output)], runtime_context=actor.context
++    )
+ 
+-    assert [item["path"] for item in files] == ["outputs/data.json", "outputs/data.json"]
++    assert [item["path"] for item in files] == [relative, relative]
+     assert [item["json"] for item in files] == [{"row_count": 3}, {"row_count": 3}]
+ 
+ 
+-def test_rejects_absolute_output_outside_workspace(tmp_path, monkeypatch) -> None:
++def test_rejects_absolute_output_outside_workspace(tmp_path, monkeypatch, trusted_actor) -> None:
++    actor = trusted_actor()
+     monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+     outside = tmp_path.parent / f"{tmp_path.name}-outside.json"
+     outside.write_text("{}", encoding="utf-8")
+ 
+-    files = read_workspace_output_files(str(tmp_path), [str(outside)])
++    files = read_workspace_output_files(
++        str(tmp_path), [str(outside)], runtime_context=actor.context
++    )
+ 
+     assert files == [{"path": str(outside), "kind": "text", "error": "invalid_path"}]
+diff --git a/FHD/tests/test_routes/test_office_output_owner.py b/FHD/tests/test_routes/test_office_output_owner.py
+new file mode 100644
+index 0000000000..673fcce7df
+--- /dev/null
++++ b/FHD/tests/test_routes/test_office_output_owner.py
+@@ -0,0 +1,242 @@
++"""Output reads retain real actor, tenant and active Mod ownership at the file handle."""
++
++import json
++import os
++from datetime import timedelta
++from types import SimpleNamespace
++
++import pytest
++from fastapi import FastAPI
++from fastapi.testclient import TestClient
++
++from app.application.employee_runtime.loader import employee_owner_workspace
++from app.application.office_parse_app_service import read_workspace_output_files
++from app.fastapi_routes.platform_shell_routes import router
++from tests.fixtures.backend_ci_isolation import reviewed_agent_http as reviewed_agent_http
++from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
++from tests.test_application.test_employee_python_governed import employee_http as employee_http
++from tests.test_infrastructure.test_employee_signed_archive import (
++    signed_employee_pack as signed_employee_pack,
++)
++
++
++@pytest.fixture
++def owned_output(tmp_path, monkeypatch, trusted_actor):
++    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
++    actor = trusted_actor(mod_id="csv-full-read-employee")
++    root = employee_owner_workspace(actor.context, "csv-full-read-employee")
++    path = root / "task" / "outputs" / "data.json"
++    path.parent.mkdir(parents=True)
++    path.write_text(json.dumps({"value": "SYNTHETIC-PRIVATE-OWNER-RESULT"}))
++    app = FastAPI()
++    app.include_router(router)
++    client = TestClient(app)
++    return SimpleNamespace(actor=actor, path=path, client=client, workspace=tmp_path)
++
++
++def _read(case, headers):
++    return case.client.post(
++        "/api/platform-shell/workspace-read-files",
++        headers=headers,
++        json={"workspace_root": str(case.workspace), "file_paths": [str(case.path)]},
++    )
++
++
++def test_actual_owner_can_read_output_without_trusting_body_workspace(owned_output):
++    case = owned_output
++    response = case.client.post(
++        "/api/platform-shell/workspace-read-files",
++        headers=case.actor.headers,
++        json={"workspace_root": "/untrusted-body-root", "file_paths": [str(case.path)]},
++    )
++    assert response.status_code == 200
++    assert response.json()["data"]["files"][0]["json"] == {
++        "value": "SYNTHETIC-PRIVATE-OWNER-RESULT"
++    }
++
++
++def test_anonymous_and_forged_identity_headers_never_read_output(owned_output):
++    case = owned_output
++    for headers in ({}, {"X-User-ID": str(case.actor.user_id), "X-Tenant-ID": "7"}):
++        response = _read(case, headers)
++        assert response.status_code == 401
++        assert "SYNTHETIC-PRIVATE-OWNER-RESULT" not in response.text
++
++
++@pytest.mark.parametrize("scope", ["actor", "tenant", "mod"])
++def test_real_other_scope_cannot_read_known_owner_path(owned_output, trusted_actor, scope):
++    case = owned_output
++    other = trusted_actor(
++        user_id=case.actor.user_id if scope == "mod" else None,
++        tenant_id=99 if scope == "tenant" else case.actor.tenant_id,
++        mod_id="xcagi-planner-excel-tools" if scope == "mod" else "csv-full-read-employee",
++    )
++    response = _read(case, other.headers)
++    assert response.status_code == 200
++    assert response.json()["data"]["files"][0]["error"] == "invalid_path"
++    assert "SYNTHETIC-PRIVATE-OWNER-RESULT" not in response.text
++    assert case.path.is_file()
++
++
++@pytest.mark.parametrize("state", ["expired", "revoked"])
++def test_session_must_remain_valid_and_entitled_at_read_time(owned_output, state):
++    from app.db.models.user import Session as UserSession
++    from app.utils.time import utc_now_naive
++
++    case = owned_output
++    with case.actor.factory.begin() as db:
++        session = db.get(UserSession, case.actor.session_row_id)
++        if state == "expired":
++            session.expires_at = utc_now_naive() - timedelta(seconds=1)
++        else:
++            session.entitled_mod_ids_json = "[]"
++    response = _read(case, case.actor.headers)
++    assert response.status_code in {401, 403}
++    assert "SYNTHETIC-PRIVATE-OWNER-RESULT" not in response.text
++
++
++@pytest.mark.parametrize("link", ["file_symlink", "directory_symlink", "hardlink", "fifo"])
++def test_output_handle_rejects_links_and_special_files(owned_output, link):
++    case = owned_output
++    original = case.path
++    target = case.workspace / "legacy-unowned.json"
++    target.write_text('"SYNTHETIC-UNOWNED-RESULT"')
++    original.unlink()
++    if link == "file_symlink":
++        original.symlink_to(target)
++    elif link == "hardlink":
++        os.link(target, original)
++    elif link == "fifo":
++        os.mkfifo(original)
++    else:
++        original.parent.rmdir()
++        original.parent.symlink_to(target.parent, target_is_directory=True)
++        case.path = original.parent / target.name
++    response = _read(case, case.actor.headers)
++    assert response.status_code == 200
++    assert response.json()["data"]["files"][0]["error"] == "invalid_path"
++    assert "SYNTHETIC-UNOWNED-RESULT" not in response.text
++
++
++def test_legacy_global_file_is_preserved_without_inferred_owner(owned_output):
++    case = owned_output
++    case.path = case.workspace / "outputs" / "data.json"
++    case.path.parent.mkdir()
++    case.path.write_text('"SYNTHETIC-LEGACY-UNOWNED"')
++    response = _read(case, case.actor.headers)
++    assert response.json()["data"]["files"][0]["error"] == "invalid_path"
++    assert case.path.read_text() == '"SYNTHETIC-LEGACY-UNOWNED"'
++
++
++@pytest.mark.parametrize("leaf", ["..", "bad\x00.json", "../data.json"])
++def test_malformed_file_components_never_open_output(owned_output, leaf):
++    case = owned_output
++    case.path = case.path.parent / leaf
++    response = _read(case, case.actor.headers)
++    assert response.status_code == 200
++    assert response.json()["data"]["files"][0]["error"] == "invalid_path"
++    assert "SYNTHETIC-PRIVATE-OWNER-RESULT" not in response.text
++
++
++def test_owner_prefix_cannot_hide_traversal_into_another_real_accounts_file(
++    owned_output, trusted_actor
++):
++    case = owned_output
++    other = trusted_actor(mod_id="csv-full-read-employee")
++    foreign = employee_owner_workspace(other.context, "csv-full-read-employee") / "foreign.json"
++    foreign.parent.mkdir(parents=True)
++    foreign.write_text('{"value":"SYNTHETIC-FORBIDDEN-PEER"}')
++    case.path = case.path.parent / "../../../../../" / foreign.relative_to(case.workspace)
++    response = _read(case, case.actor.headers)
++    assert response.status_code == 200
++    assert "SYNTHETIC-FORBIDDEN-PEER" not in response.text
++    assert response.json()["data"]["files"][0]["error"] == "invalid_path"
++
++
++@pytest.mark.parametrize("replacement", ["before_pin", "after_pin"])
++def test_directory_replacement_cannot_redirect_the_open_file(
++    owned_output, monkeypatch, replacement
++):
++    from app.application import shipment_excel_etl_security as security
++
++    case = owned_output
++    foreign = case.workspace / "other-account-output"
++    foreign.mkdir()
++    (foreign / case.path.name).write_text('"SYNTHETIC-OTHER-ACCOUNT"')
++    original = security._open_directory_under_root
++
++    def replace(directory):
++        directory.rename(directory.with_name("original-output"))
++        directory.symlink_to(foreign, target_is_directory=True)
++
++    def pin(base, directory, **kwargs):
++        if replacement == "before_pin":
++            replace(directory)
++        handle = original(base, directory, **kwargs)
++        if replacement == "after_pin":
++            replace(directory)
++        return handle
++
++    monkeypatch.setattr(security, "_open_directory_under_root", pin)
++    response = _read(case, case.actor.headers)
++    assert response.status_code == 200
++    row = response.json()["data"]["files"][0]
++    if replacement == "before_pin":
++        assert row["error"] == "invalid_path"
++    else:
++        assert row["json"] == {"value": "SYNTHETIC-PRIVATE-OWNER-RESULT"}
++    assert "SYNTHETIC-OTHER-ACCOUNT" not in response.text
++
++
++def test_file_read_is_bounded_before_loading_entire_output(owned_output, monkeypatch):
++    case = owned_output
++    case.path.write_text("0123456789" * 100)
++    actual_fdopen, reads = os.fdopen, []
++
++    class BoundedStream:
++        def __init__(self, stream):
++            self.stream = stream
++
++        def __enter__(self):
++            return self
++
++        def __exit__(self, *args):
++            self.stream.close()
++
++        def fileno(self):
++            return self.stream.fileno()
++
++        def read(self, size):
++            reads.append(size)
++            return self.stream.read(size)
++
++    monkeypatch.setattr(os, "fdopen", lambda *args: BoundedStream(actual_fdopen(*args)))
++    rows = read_workspace_output_files(
++        str(case.workspace), [str(case.path)], runtime_context=case.actor.context, max_bytes=16
++    )
++    assert rows[0]["text"] == "0123456789012345"
++    assert reads == [16]
++
++
++def test_real_signed_employee_artifact_is_readable_only_by_its_actual_owner(
++    employee_http, trusted_actor
++):
++    case = employee_http
++    created = case.http.request(
++        "POST",
++        f"/api/mod/{case.pack.pack_id}/employees/{case.pack.pack_id}/run",
++        json={"file_path": case.upload()["file_path"], "user_request": "读取 CSV"},
++    )
++    assert created.run.status == "completed", created.output
++    proof = created.output["business_verification"]
++    assert proof["verified"] is True
++    body = {"file_paths": [proof["artifacts"][0]["path"]]}
++    own = case.http.client.post("/api/platform-shell/workspace-read-files", json=body)
++    assert own.status_code == 200
++    assert own.json()["data"]["files"][0]["json"]["rows"] == [{"a": "1", "b": "2"}]
++    other = trusted_actor(mod_id=case.pack.pack_id)
++    denied = case.http.client.post(
++        "/api/platform-shell/workspace-read-files", headers=other.headers, json=body
++    )
++    assert denied.json()["data"]["files"][0]["error"] == "invalid_path"
++    assert '"rows"' not in denied.text
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,634 @@
+{
+  "goal": "Close all76 checklist items with evidence, then formally update/release1.0.0.7;macOS acceptance only. PR2631 prerequisite merged.",
+  "draft_worktree": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX",
+  "draft_branch": "codex/harness-remediation-20261025",
+  "draft_base": "86c1a72060ba8014cb088089ff3fd0e9c355901e",
+  "draft_patch_sha256": "42808cce0edf82c2489ac67bb6c2c4f4271bbf1d7096fde429a9f1e01a674789",
+  "pr2631_worktree": "/Users/a4243342/.codex/worktrees/pr2631-fix/XCMAX",
+  "pr2631_branch": "codex/pr2631-merge-fixes",
+  "pr2631_head": "8479464bd71fa80fb3243edec9aef12ff81a6fa6",
+  "pr2631_ci_run": 40174854847,
+  "next": [
+    "Finalize and independently recheck prefix-ancestor-safe Mac leaf artifact evidence gate; exact13path checkpoint and no formal signedCI claim.",
+    "Continue94offlineeval failures and sharedchat/ExcelWorkflow semanticgaps using actualPrincipal/originalgrant/readback; preserveall76acceptance gates.",
+    "Find only evidence-backed superseded sources/docs for recoverable archival or real duplicate consolidation; net+3669FAIL, never raise/exclude/deleteuniqueassertions.",
+    "One integrationPR after committed Python3.11 push_preflight.py --fix/allrequiredchecks; protectedmainmerge, exactmain signed1.0.0.7 Mac install, actualmodel/business/twoaccount/restart acceptance."
+  ],
+  "installed_mac_sha": "7e2f0e29ffd4edbd8fac1ca77409aa95e07d2c80",
+  "installed_mac_is_remediation": false,
+  "pr2631_cleanup": "clean_agent_workspace completed; 153 task caches removed; 71 GiB available; global runtime excluded by retention settings",
+  "pr2631_tested_merge_source": "7cf4bc0f5d38636f49e1a44dde03bc2596cbb784",
+  "followup_findings": [
+    "PR2631 is a prerequisite structural integration, not the 76-item safety remediation; b9cc WIP has not entered it",
+    "Canonical trace terminal owner: app/application/agent_orchestrator/trace_runs.py TraceRunService.finalize; trace_payloads.py infers status; observed_tool_trace.py still guesses success from absent failure",
+    "Canonical nested-loop bug owner: app/domain/shared_services/unified_intent_recognizer.py _recognize_deepseek; creates coroutine then attempts nested run_until_complete; fix with context-preserving sync/async bridge",
+    "frontend/src/utils/agentTaskWorkspaceModel.ts capabilitiesOf must honor server recovery/unsafe-replay restrictions; taskCenter already has snapshot/reconnect",
+    "b9cc authorize_agent_tool and agent_mod_execution_scope retain compatibility allow when actor/Mod bindings absent; all internal entrypoints must get trusted binding before fail-closed conversion",
+    "Missing durable business_action_id ledger across runs/processes/restarts; agent:run:step key is not business idempotency",
+    "Root import adaptations after2631: app.services.tools_workflow_* -> app.domain.shared_services.tools_workflow_*; inventory_inputs -> app.domain.app_pure.inventory_inputs; workflow.types -> workflow.workflow_types",
+    "Only macOS is in current acceptance scope; Windows is not a blocking requirement",
+    "For borrowed Python3.11 environment, set PYTHONPATH to this FHD plus its six packages/xcagi_langgraph* roots to avoid old editable provenance; do not bypass assert_vendored_sources"
+  ],
+  "candidate_gate_tests": "FHD/tests/test_scripts/test_harness_acceptance.py 17 passed; synthetic gate validation only, not runtime closure",
+  "pr2631_status": "merged",
+  "pr2631_mainline_commit": "86c1a72060ba8014cb088089ff3fd0e9c355901e",
+  "pr2631_ci": "29 workflows and all 11 required checks passed",
+  "pr2631_source_tree_matches_main": true,
+  "pr2631_worktree_archived": true,
+  "pr2631_worktree_archive_identity": "/Users/a4243342/.codex/worktrees/pr2631-fix/XCMAX",
+  "draft_checkpoint_head": "9950a393b557b75e23098057ef4b7f81075e0647",
+  "draft_has_uncommitted_followup": true,
+  "current_main_observed": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "installed_mac_version": "1.0.0.6",
+  "acceptance_scope": "macOS only, per user; no Windows requirement",
+  "closure": "All 76 checklist items remain open pending exact-main installed real-model/business acceptance; source/test progress is partial.",
+  "current_work": [
+    "All recent source changes committed locally through 63dcee75434fab9177ce99ec6bf401bd77ee6884; source tree clean at checkpoint.",
+    "Mac controlled worker, minimal helper packaging, final-package evidence validation and declared defusedxml dependency have local test evidence; no final signed product or installed0.7 acceptance.",
+    "Offline original121cases:27pass94fail, strict gate unchanged.",
+    "Architecture layer ownership fixed and11guards pass; live Excel kernel adapter design remains in review.",
+    "No safe additional document archive found; current net gate +5055 fails."
+  ],
+  "remaining_known": [
+    "Candidate is not release-ready; net deletion currently fails; do not raise baseline to claim completion.",
+    "Explicit tool effects/risk contracts need calibration; conservative approval for every non-read-only tool is not final normal UX.",
+    "Service principal/delegation for scheduled/background jobs not implemented; business key/body user_id cannot stand in for a user session.",
+    "Claimed action after crash has no automatic confirmed-orphan reconciliation route; pending/OCR completion and compensations remain open.",
+    "Dataset mutations need true independent artifact/job readback verifier; missing verifier cannot be reported completed.",
+    "Actual public route + tenant data ownership must be verified; helper-only tests do not close public HTTP acceptance.",
+    "Tenant printing of shared artifact paths remains gated until actual file ownership is verified.",
+    "Model-specific/image-aware budgeting, full usage/cost chain, semantic discovery, full shared decision kernel and live P95 baselines remain open.",
+    "Verified aaf4e378ba already gives Legacy JSON/SSE andEmployee sharedModelTurnDriver with samebatch/grant/cursor/lease. Defaultmainlinechat stillhasdistinctentryrouting; actualExcelWorkflow agentic JSONloop remainslive/separate, concreteadapter/recoverydesign pending. Continuation/reconciliation stillneeds finalsource/runtime acceptance.",
+    "Legacy unresolvedwrite fence is actor/tenant/Mod andcanonicalresourcedomain, includesCRUD/DBaliases+removedcontracts;readonly allowed. Resourcecontracts finerthan domain and historyqueryoptimization remainopen. Anonymous puretext hasno businessidentity/task.",
+    "Native productbatch fullindependentreadback missing;legacypublictenantproductCRUD stillgated. Legacycreate normalization unit_name lacks verifiermap;do not fakecomplete. Tenantartifact/print/OCR filesystem ownership remainsgated whereunproved.",
+    "CurrentMacsourcegate directworker isolation wired and frozenhelperbuilt. Remaining .doc nativeconverter execution andadvancedPPT/animation/VLM notaccepted; no historical installed acceptance proved, donotlabelregressionorfullOfficeclosure. Offline121eval still94fail; all76open.",
+    "Current source Mac employee directPython now wired to original signed approval/snapshot/SQLqueue and OS leaf isolation/readback;309host+16independent+16frozen+30basicOffice passed. Exactmain signed installed acceptance and realprovider remain open.",
+    "Current origin/main54d4541cbe merged locally at2c14fdfa45,42724tests collect. PR2631 is merged86c1; its postmerge automaticMod publish was denied because artifact-generator changed without manifest version increase; no publication occurred."
+  ],
+  "disk_available_observed": "57.27 GiB",
+  "current_cleanup": {
+    "head": "63dcee7543",
+    "result": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/cleanup-63dcee7543.json",
+    "status": "clean",
+    "removed_count": 315,
+    "errors": [],
+    "retained": "All active worktrees/apps/runtime/data/secrets and external durable proof/helper bundles preserved; uncertain canary retained because ownership not captured.",
+    "disk_free_GiB": 58.06
+  },
+  "latest_recovery_backup": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-9950a393b5",
+  "latest_recovery_patch_sha256": "e0d9c86ec80159fe7bb97770a1c80d67d67f2e6858b0e8af041c49a679258028",
+  "next_block_p0_memory_v2": {
+    "file": "FHD/app/fastapi_routes/domains/misc/routes.py",
+    "read_owners": "memory_v2_list line224, memory_v2_summary line244",
+    "confirmed": "Real SQLite two-account tenant7/tenant8 + isolated JSON: attacker session GET list/summary with victim query user_id returns victim synthetic marker and planner_context HTTP200. Anonymous also on minimal router; full app middleware not included, do not overclaim anonymous whole app.",
+    "write_compatibility": "Legitimate signed session POST old Memory v2 route returns400/tool_identity_required zero write because helper remains unsigned/autoContinue.",
+    "mod_scope": "Same real account ModA confirmed Memory v2 recalled by ModB and host planner via raw UID, planner.py line294.",
+    "not_confirmed": "userId alias is not central cross-user write: missing canonical schema rejects, foreign canonical identity rejects, own canonical wins over alias.",
+    "evidence": "Security agent isolated read-only verification: alias4, Mod scope2, HTTP3; no repository edits or external calls.",
+    "checkpoint_disposition": "Historical finding; implemented partially in current candidate. Read current owning source and remaining_known; not an installed acceptance claim."
+  },
+  "current_net_deletion_true_delta": 3814,
+  "current_net_deletion_includes_untracked": false,
+  "updated_at": "2026-10-25T19:08:35.517605+00:00",
+  "pr2631_reverified_merged": true,
+  "next_block_persy_formal_approval": {
+    "confirmed": "Actualsession POSTconfirm withoutgrant changes JSONactive with0AgentRuns; privateUIDandtenantshared reads scoped correctly; no confirmed crossUID read exploit.",
+    "implementation_plan": "Add strict persy_memory.write operation confirm/reject/correct/delete;actualactor ACL resolves privateactor/tenant:<id>owner+targetdigest;registeredHTTP→centralformalgrant/ledger→independentpersistedownerreadback;202+run/task;reuseexistingworkspace/SSE and sharedreview binding,notnewpoll loop.",
+    "backend_files": [
+      "config/risk_actions.registry.json",
+      "app/application/agent_orchestrator/tool_spec_data/{input_schemas,output_schemas,constants}.py",
+      "app/fastapi_routes/knowledge/memory.py",
+      "app/domain/shared_services/tools_workflow_dispatch.py",
+      "app/domain/shared_services/tools_workflow_memory_rag.py",
+      "app/application/persy_memory_graph.py",
+      "app/application/agent_orchestrator/business_action_verification.py"
+    ],
+    "frontend_files": [
+      "frontend/src/composables/usePersyMemoryGovernance.ts",
+      "frontend/src/api/knowledgeBase.ts",
+      "frontend/src/composables/useAgentTaskWorkspace.ts",
+      "frontend/src/components/chat/AgentTaskRuntimePanel.vue"
+    ],
+    "boundary": "Privateuser andexplicittenantsharing areintentional,do notblindly replacewithMemoryv2 fixedModowner orrestore rawplannerfallback;query(reinforce=true)also writescounters andremainsunreviewed.",
+    "checkpoint_disposition": "Historical finding; implemented partially in current candidate. Read current owning source and remaining_known; not an installed acceptance claim."
+  },
+  "source_trees": {
+    "app": "ce71cc104a67f1ae0d8ebee9f408e8cf7c7f6332",
+    "frontend": "dc562ddf864b542903934088238cb9e605d2be89",
+    "product_trees_identical_to_tested_0df802d26b": true
+  },
+  "next_block_arch_execution_kernel": {
+    "status": "read-only plan, no implementation",
+    "owners": [
+      "app/legacy/chat/legacy_chat_adapter.py::append_tool_messages",
+      "app/application/agent_orchestrator/trace_runs.py::dispatch_tool",
+      "app/fastapi_routes/domains/conversation/stream_helpers.py::producer/trace finalize"
+    ],
+    "confirmed_gaps": [
+      "Legacy sync/stream still independently decide tool loop,requestlocaldedup andsuccessful-last-result cache.",
+      "TurnTrace.start savefailure maycontinue;SSE attachestraceafterexecution andmayignoreproducerdone.result."
+    ],
+    "slice": "Obtain persistent trustedtask beforeproducer;reuseTraceRunService predispatch step/call, durable receipts/replay/unknown block;finalize same run;remove supersededlocaldedup/cache andmatchingduplicatethin tests. ExistingEmployeeownerclaim mustbe generalizedcarefully, notobserverwrapper.",
+    "preserve": [
+      "strictJSON/Excelparamfill/toolorder/tokenprompts",
+      "modelroute/backupforcedtoolchoice/multimodal",
+      "both /ai/chat/stream and /ai/unified_chat/stream plusJSON/batch"
+    ],
+    "acceptance": "Actualsignedsession→waitingformalgrant→samepersistedrun/step→dispatch/readback;savefailure/disconnect/duplicatecall/restartunknown mustnotdispatchagain. Stableturn/task/callidentity cannotbe newlysupplied to bypassunknown.",
+    "limits": "Estimated60–90 obsolete source+160–180 testlines before newglue/faulttests;not enoughalonefor4452netlinegate andnot fullARCHclosure."
+  },
+  "historical_test_checkpoints": {
+    "affected30_backend_files": "1487 passed, 1 failed (old vector fallback lacked real approval; fixture subsequently fixed)",
+    "ledger_schema_before_admin_expansion": "62 passed; after adding tenant-admin test, four genuine isolation failures reproduced, policy subsequently fixed by security agent",
+    "security_formal_approval": "222 passed, 1 skipped (PostgreSQL), exact SQLite/HTTP approval and durable consumption covered",
+    "employee_atomic_task_claim": "269 passed, includes four-process real effect/crash/restart fixture",
+    "memory_scope_checkpoint": "260 passed; final composition simplification focused 71 passed",
+    "root_print_purchase_routes": "13 passed; parameter preservation and waiting/no side effects; artifact print uses actual platform account because tenant file ownership is still gated",
+    "frontend": "37 passed; typecheck and focused ESLint passed before latest backend-only edits",
+    "integration51_files": "2507 passed, 13 failed; 7 RAG old-session/approval fixtures assigned security, 3 Excel preview assigned runs/tools, 3 workflow_tools fixture/schema response assigned root; not release ready",
+    "rag_and_knowledge_final": "512 passed across 7 files; exact signed sessions, formal grants, spawned tools and host job completion checked; dataset mutating tool receipts still unknown without independent verifier",
+    "identity_and_unknown_tool_final": "78 passed",
+    "http_final": "173 passed; targeted true public two-tenant customer/material writes and cross-target no effects",
+    "frontend_current": "37 passed in 3 files (22 panel/model +15 agentTaskCenter), Vue typecheck and targeted ESLint passed",
+    "integration_final": "2623 passed in 225.28s, 55 affected files, source checkpoint2d079eb389; XML integration-checkpoint-2d079eb389.xml",
+    "capability_builder": "23 passed; runtime-only directories cannot establish implementation evidence",
+    "checkpoint_preflight": "dc1f3b39fb: changelog and capability-center pass; net-deletion fails +5545; no baseline raise, no push",
+    "integration_memory_66_files": "0df802d26b:3258 passed,7 failed/267.98s;5 stale completed-without-receipt assertions fixed,195 affected HTTP/Memory tests passed43.54s;2 old Persy route fixtures still under investigation. Failure XML retained.",
+    "memory_frontend": "350 passed in8 files;Vue typecheck and9fileESLint passed; API/approval boundary mocks+realVue, not installedMacE2E.",
+    "memory_backend": "44 passed scoped actualSQLite/JSON approval→queue→spawn→readback lifecycle and planner;427 compatible tests;cache-only/wrongowner/target/value/diskreadfailure verifier coverage.",
+    "persy_capture": "18 passed, actualsignedsession+SQLite+JSON/vector: valid pending capture restored, forged/expired identity zero writes; no automatic activation from source text.",
+    "schema_equivalence": "Root independently verified all104 input/101 output+auxiliary values exactly equal; mutable template/spec isolation regression.",
+    "test_consolidation": "Root handler294 passed10.54s and CRUD210 passed3.21s; before/after unchanged owner executed lines/arcs retained, lost0; persistent evidence manifests external.",
+    "preflight_0df802d26b": "changelog/capability-center pass;net-deletion fails+4471 (2335080 vs2330609), unchanged baseline; no push",
+    "http_receipt_followup": "195 passed43.54s;5 stale absent-receipt success assertions corrected; actual successful receipts still succeed.",
+    "persy_fixture_followup": "4 real-session/SQLite/JSON routes passed7.96s;related70 passed60.28s; legitimate spawnedRAG query restored, forgedheaderscannotcross tenant;no productcodechange.",
+    "previous_current_integration": {
+      "files": 92,
+      "source_before": "integration-next-source-before.json",
+      "log": "integration-next.log",
+      "status": "passed",
+      "no_installed_acceptance": true,
+      "passed": 4230,
+      "duration_sec": 412.46,
+      "source_unchanged": true,
+      "result": "integration-next-result.json",
+      "qualification": "bc9953da1d production functionality; subsequent5format files ASTunchanged. d57383a80b product failure-log-only change31 actual tests passed; zero parser test fix86passed; further Employee source changes uncommitted/in progress."
+    }
+  },
+  "current_checkpoint_evidence": "mac-employee-leaf-20261025/host-root-checkpoint.json",
+  "current_tests": {
+    "Mac_host": "309passed before2importsort; exactAST pairequivalence +30formalchainpostformat passed; independent16attacks passed",
+    "Mac_packaging": "16frozenregression +30actualworker basicconversion/readback source/frozen passed; noactualprovider, signed product, orinstalled acceptance",
+    "offline_eval": "Latest complete121:33pass88fail. Finance3 and materialcreate/update/delete now actual session, original signed grant, SQLqueue, actual business dispatch, independent persisted tenant readback. Materialbatch actual2softdeletes stillunknown because product lacksverifier; originalcompletionexpectationretained.",
+    "main54_collection": "42724 collected,0errors,9.96s. Candidate diff against main passes whitespace check; inherited upstream patch whitespace preserved.",
+    "architecture": "8103:11devguards pass, no baselinechange; current-v-cleanHEAD2130nodeids identical:2044pass78samefail8skip; pickup79+independent16, public9+ports6; collection42771noerrors. 29testfiles3996assert/1888functions normalizedASTsame.",
+    "Mac_CI_leaf_evidence": "63dcee:183/183 contract tests zero skip; exact frozen13 sources actual local adhoc helper16/16 zero skip; root three prefix-ancestor metadata attacks rejected. Fresh declared dependency spec13/13. Formal native signed DMG/real CI/installed acceptance pending.",
+    "Excel_kernel_migration": "WIP uncommitted:original182 passed; latest extended576=566pass10fail, cleanHEAD original538 comparison pending; approval projection reconstruction and explicit20s SDK timeout semantics under bounded correction; no installed acceptance."
+  },
+  "retained_active_paths": [
+    {
+      "path": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX",
+      "reason": "active76-item goal candidate worktree;source committed andrecoverable;not a completed delivery"
+    },
+    {
+      "path": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/frontend/node_modules",
+      "reason": "task-installed dependencies stillneeded fornextfrontend changes/regression"
+    }
+  ],
+  "original_draft_patch_sha256": "3f254f7a3144c0b0e29a103e70d24c7cbdb8ecca74e231d69318036d80d91499",
+  "original_untracked_backup_paths": [
+    "FHD/evals/harness_acceptance.py",
+    "FHD/tests/test_scripts/test_harness_acceptance.py"
+  ],
+  "active_followup_current": {
+    "status": "Committed d69765d792 with in-progress architecture source WIP; notpushed/notdelivered",
+    "evidence": "mac-leaf-packaging-20261026/ci-leaf-gate-implementation-20261026/root-checkpoint.json",
+    "net_deletion": "+4949 FAIL, committed HEAD only, excludes WIP",
+    "next": [
+      "Finish concrete Excel agentic adapter/recovery design before implementation.",
+      "Validate small conventional group-chat test parameter tables with exact original case mapping/AST/outcomes/coverage.",
+      "Triage 94 offline eval failures using original assertions and real authenticated approval/queue flow.",
+      "Only after source/checks pass: one integration PR, protected main merge, exact-main signed Mac installed real-provider/business/restart acceptance. Windows excluded."
+    ]
+  },
+  "net_deletion_candidates_next": {
+    "frontend_unused": {
+      "paths": [
+        "FHD/frontend/src/utils/commandBuffer.ts",
+        "FHD/frontend/src/utils/excelImportPersistence.ts"
+      ],
+      "net_with_direct_owner_tests": 817,
+      "evidence": "Tools read-only rg acrossfrontend/public/Mods/scripts and Vite autoimport:0productioncaller;only directowner unit/smoke tests. Root independently read source and references. Actual print uses PrintFlow. Do not clear historical browser storage."
+    },
+    "frontend_scaffold": {
+      "paths": [
+        "FHD/frontend/src/views/SettingsView.coverage.test.ts",
+        "FHD/frontend/src/views/SettingsView.functions.test.ts",
+        "FHD/frontend/src/views/SettingsView.enhanced.test.ts"
+      ],
+      "estimated_net": "400–550",
+      "requirement": "Preserve everycase/assertion/mock handle/difference;Vitest hoist isolation;rerun current598 exact suite."
+    },
+    "trace": {
+      "source_estimated_net": "210–240",
+      "test_estimated_net": "600–900",
+      "evidence": "49private reexports147lines+8dead/test-only forwarders52lines inchat_trace;oneactual_extract_artifacts caller mustimportowner. _call_model_completion15lines no prodcaller. cov1139+branch1026 shareparser/usage/retrieval/memory/metadata. Keep billing/ledger/truncation/alias/dedup uniqueassertions and executedline/arc loss0."
+    },
+    "legacy_tests": {
+      "estimated_net": "650–850",
+      "evidence": "legacycov540 canretireonlyafter movingunique truncation/SSEstreamtext assertions;branch1104 repeatedMagicMock scaffolding canreusemain801 helpers. Preserveallbehavior andcoverage."
+    },
+    "do_not_archive": {
+      "path": "FHD/docs/legal/software-copyright/V10-申请材料-20260901/程序鉴别材料-完整源代码.txt",
+      "reason": "Current pending CPCC submission full source evidence per legal README:254–284;not superseded. 344067lines/13616052bytes,alreadyexcluded bynetgate atscriptline55. Preserveexactbytes/location. sha256 a0728eba3bdba93730df123ad869e540ef25396b8d730f4e4d6bb41c1e63cfaf"
+    },
+    "docs": "Only4lineAUDIT_18_31_CLOSEOUT strongcandidate, not useful for5413gap. Do not archive live LEGACY_CLEANUP_TRACKING/ADCDFG/agent-shared-memory because scripts/manifests consume them."
+  },
+  "current_backend_test_files": "integration-current-files.json",
+  "pr2631_postmerge_publication": {
+    "status": "blocked_by_existing_version_gate",
+    "run_id": 40177304111,
+    "actual_source": "86c1a72060ba8014cb088089ff3fd0e9c355901e",
+    "failure": "artifact-generator source changed without strictly higher manifest.version; prepare failed, package-and-publish skipped",
+    "investigation": "Exact job log reconfirmed artifact-generator version1.1.0 unchanged onmerge/currentmain; packagepublish skipped. Existing local07a versionfix preserved, not yet integrated/published.",
+    "affected_mods": 69,
+    "known_latest_public_mods": 10,
+    "private_history_unknown": 59,
+    "package_and_publish": "skipped; requires explicit workflow_dispatch+publish_release",
+    "version_fix": "07a2e3ca3b local commit:70 manifests+138/-138 net0;22tests+all cumulative metadata pass;formal source-plan still waits protectedmain/exactchecks;no publishing",
+    "latest_read_only_audit": "pr2631-postmerge-audit/result.json",
+    "candidate_artifact_generator_version": "1.1.1"
+  },
+  "current_integration": {
+    "status": "Local remediation checkpoints only; no integration PR or mainline delivery",
+    "commit": "63dcee75434fab9177ce99ec6bf401bd77ee6884",
+    "host": 309,
+    "postformat_original_grant_chain": 30,
+    "independent_attacks": 16,
+    "frozen_helper_tests": 16,
+    "basic_office_source_frozen_matrix": 30,
+    "installed_acceptance": false
+  },
+  "latest_preflight": {
+    "log": "preflight-d57383a80b.log",
+    "changelog": "pass",
+    "capability-center": "pass",
+    "net-deletion": "fail",
+    "volatile_working_delta": 3045,
+    "committed_checkpoint_delta": 3062,
+    "baseline_not_raised": true,
+    "no_push": true,
+    "qualification": "Historical d573 fullpreflight only. Latestcommittednet+5324FAIL;offline33pass88fail. No remediationpush/PR/release; baselineunchanged."
+  },
+  "release_target": "1.0.0.7",
+  "release_authorization": "User explicitly requested version1.0.0.7 after full remediation closure; do not prematurely present a version bump as closure. Exact main protected checks + signed Mac install/real-model/business acceptance remain required.",
+  "current_remote_main": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "active_p0_work": {
+    "root": "9950a393b5 committed;net+5324FAIL. Next review Excel kernel implementation; productbatchdelete independent verification and remaining88evals unresolved.",
+    "dag_fixture_migration": "Completed and committed 63dcee: 13 paths; 183 contract tests + actual local adhoc helper16 pass. Formal CI/signed DMG/installed acceptance pending.",
+    "architecture_regression_review": "Authorized design implementation8existing+1policy+listedtests; shared model kernel no extra scheduler, preserve original run/grant/receipts.",
+    "group_chat_case_tables": "Completed materials2alias fix, committeda8c606. No running subtask.",
+    "living_docs_retirement_review": "Completed readonly94failuretriage;79auth/14identity/1memoryowner.17ready candidates+materialalias productfix;3legacytenantpolicyblocks. No running subtask.",
+    "current_checkpoint": "d69765d79207dbd5cab327f5a027163fa07e918d"
+  },
+  "model_routing_checkpoint": {
+    "commit": "54055c5217556dc8ebc670e7290d81b648e2ea57",
+    "tested_files": 25,
+    "passed": 1035,
+    "real_model_calls": 0,
+    "source_hashes_verified_by_root": true,
+    "evidence": "model-eval-readiness-20261025/handoff.json",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-54055c5217"
+  },
+  "mainline_adaptation_checkpoint": {
+    "commit": "9efa2ea5dff553e3360c4e1f61a5ba33e84ce5bc",
+    "main": "35bf0796641b2ba4dc02a549dac29cefb2f12460",
+    "method": "merge main preserving candidate commits",
+    "collection": 41088,
+    "collection_errors": 0,
+    "critical_files": 15,
+    "critical_passed": 367,
+    "source_unchanged": true,
+    "critical_seconds": 148.61,
+    "python_lint_and_format_files": 248,
+    "evidence": "main35-integration-20261025",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-9efa2ea5df",
+    "independent_security_review": "canonical actual route objects and P0 protected context preserved; all33 frozen sources preserved beyond import migration"
+  },
+  "office_read_owner_checkpoint": {
+    "commit": "bf2aac3713e76e31de256c09dced2ec342666930",
+    "tests": 22,
+    "duration_sec": 5.52,
+    "source_unchanged": true,
+    "real_local_sql_principal_and_signed_worker": true,
+    "installed_acceptance": false,
+    "evidence": "office-read-owner-boundary-20261025/owner-final-result.json",
+    "before_failures_preserved": [
+      "before.json",
+      "strict.xml",
+      "traversal-before.xml"
+    ],
+    "retired_helpers": "Zero actual callers for run_office_read_employee/suffix helper adapter; historical legal source dump unchanged",
+    "legacy_files_preserved": true,
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-bf2aac3713"
+  },
+  "generated_worker_checkpoint": {
+    "commit": "37d73775b280e9b45d346a00cc134b0a83793cfc",
+    "packs": 8,
+    "before_after_equal_cases": 488,
+    "function_ast_pairs_equal": 104,
+    "old_internal_arcs": 1824,
+    "lost_arcs": 0,
+    "net_lines": -1451,
+    "evidence": "worker-dedup-20261025/final-source-manifest.json",
+    "min_host": "1.0.0.7",
+    "published": false
+  },
+  "generated_worker_redaction_checkpoint": {
+    "commit": "8cd4d76c5a",
+    "tests": 544,
+    "seconds": 0.64,
+    "evidence": "generated-worker-log-redaction-20261025/result.json",
+    "real_model_calls": 0,
+    "installed_acceptance": false
+  },
+  "generated_worker_receipt_checkpoint": {
+    "commit": "0daaa9643526a8f0628bdb5153f5854951e2f169",
+    "tests": 760,
+    "seconds": 0.78,
+    "source_unchanged": true,
+    "evidence": "generated-worker-receipts-20261025/result.json",
+    "before_false_completion": "generated-worker-receipts-20261025/before-false-completion.xml",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-0daaa96435",
+    "real_model_calls": 0,
+    "installed_acceptance": false
+  },
+  "net_deletion_latest_committed": {
+    "commit": "9950a393b557b75e23098057ef4b7f81075e0647",
+    "committed_lines": 2335933,
+    "baseline": 2330609,
+    "delta": 5324,
+    "status": "fail",
+    "baseline_unchanged": true,
+    "dirty_work_excluded": true,
+    "inventory": "git ls-tree -z / canonical counting and banner rules",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-9950a393b5"
+  },
+  "last_state_update": "2026-10-25T19:04:02.410197+00:00",
+  "employee_handler_receipt_checkpoint": {
+    "commit": "5d8e9b3440",
+    "tests": 972,
+    "seconds": 1.84,
+    "source_unchanged": true,
+    "qualification": "temporary actualworker import andsynthetic helpercallbacks; notP0fullintegration/installedacceptance",
+    "evidence": "employee-handler-receipts-20261025/result.json"
+  },
+  "mod_completion_scope_checkpoint": {
+    "commit": "d5c73efb0c815db03b3c22da1ac0be53f542a7b5",
+    "tests": 141,
+    "seconds": 2.85,
+    "source_unchanged": true,
+    "evidence": "mod-completion-scope-20261025/result.json",
+    "qualification": "Actual provider+current scope; syntheticSDK/HTTPtransport; realmodelcalls0. Unscopedlegacyhelper exists and authenticatedcallers remainaudit.",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-d5c73efb0c"
+  },
+  "vector_owner_checkpoint": {
+    "commit": "70c1bd70d9c2c6e9a1a743d1a1a3c25bc5c74b7f",
+    "paths": 21,
+    "root_verified_agent_hashes": 20,
+    "agent_tests": 518,
+    "agent_seconds": 64.99,
+    "search_compatibility_tests": 25,
+    "final_format_ast_equal": true,
+    "formatted_source_compatibility_tests": 72,
+    "root_final_vector_tests": 15,
+    "root_seconds": 22.72,
+    "root_sources_unchanged": true,
+    "root_phase19_full_file_passed": 142,
+    "root_phase19_full_file_other_skipped": 4,
+    "net_lines": 623,
+    "evidence": "excel-vector-isolation-20261025/root-checkpoint.json",
+    "open_p0": "excel-vector-isolation-20261025/approval-input-mutation-open-gap.json",
+    "recovery": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/recovery-70c1bd70d9",
+    "installed_acceptance": false
+  },
+  "model_kernel_checkpoint": {
+    "commit": "aaf4e378ba164331ab9d5e6cb810127b9c2347c4",
+    "owned_files": 34,
+    "passed": 486,
+    "source_unchanged": true,
+    "evidence": "shared-model-kernel-final-safe-20261025/root-checkpoint.json",
+    "real_model_calls": 0,
+    "installed_acceptance": false
+  },
+  "sse_scaffold_checkpoint": {
+    "commit": "5bf10061a1851efecdd3ea52275c1b5f4ceabf9d",
+    "before_passed": 133,
+    "after_passed": 133,
+    "test_assertions_AST_unchanged": true,
+    "lost_production_lines_or_arcs": 0,
+    "net_lines": -259,
+    "evidence": "sse-scaffold-dedup-20261025/root-checkpoint.json"
+  },
+  "office_worker_checkpoint": {
+    "commit": "dd804f3f6b48b1121d1996e84a0c079cf854f800",
+    "before_after_equal_cases": 520,
+    "aggregate_passed": 729,
+    "net_lines": -981,
+    "evidence": "office-worker-dedup-20261025/root-checkpoint.json",
+    "host_test_metadata": "explicit candidate1.0.0.7 fixture only",
+    "installed_acceptance": false
+  },
+  "recent_checkpoints": {
+    "vector_and_documents": {
+      "commit": "9dab58819e430b59196fcfb511e1c9695bd0aacc",
+      "passed": 111,
+      "source_unchanged": true
+    },
+    "leaf_primitive": {
+      "commit": "300bebe22f5b813692dc28d578d904438705fa24",
+      "passed": 22,
+      "actual_mac": true,
+      "host_wired": false,
+      "packaged": false
+    },
+    "archived_retirement": {
+      "commit": "d339450d9919c7ffc398200445798a3b871faa29",
+      "net_lines": -4811,
+      "archive_manifest": "/Users/a4243342/XCMAX-archives/harness-retired-static-20261026/MANIFEST.json"
+    },
+    "workflow_comparison": {
+      "commit": "b42d9b9c2140313e1b89765e3c8db81aa70b0b03",
+      "compat_passed": 227,
+      "independent_passed": 97,
+      "final_manifest_native_passed": 4,
+      "mod_candidate_version": "1.0.0.1",
+      "published": false
+    },
+    "TopAssistant_harness": {
+      "commit": "301b7d41dfc909718c50f0376baef5c582a76352",
+      "before_after_passed": 148,
+      "assertion_AST_unchanged": true,
+      "lost_coverage": 0,
+      "net_lines": -143
+    },
+    "legacy_domain_compat": {
+      "commit": "dd55618fd5f4c16177b1bb4197b55f985eac014f",
+      "net_lines": -220,
+      "tests": "before140pass/1oldfail;after150pass/sameoldfail; alloriginaloutcomespreserved"
+    },
+    "Mac_leaf_host_integration": {
+      "commit": "4ee0825e23b3ae17764e2a22294944d58c5d0490",
+      "passed": 309,
+      "final_import_sort_postformat": 30,
+      "independent_review_passed": 16,
+      "source_hashes_verified": true,
+      "evidence": "mac-employee-leaf-20261025/host-root-checkpoint.json",
+      "host_wired": true,
+      "formal_signed_product": false,
+      "installed_acceptance": false
+    },
+    "Mac_leaf_packaging": {
+      "commit": "68fe5688518609ed03196d61b0283098e1e38df5",
+      "frozen_regression_passed": 16,
+      "actual_base_office_matrix_passed": 30,
+      "source_hashes_verified": true,
+      "helper_sha256": "c5716d446d6cea1e21459d4a8e80c0e1e228fac0d6455d938865826dd014f778",
+      "bundle_sha256": "694ae4947a9648c742c9dcf18978132bec8fa93ada64ffdb42f5b8dc9da44021",
+      "evidence": "mac-leaf-packaging-20261026/compatibility-final-result.json",
+      "scope": "arm64 local adhoc helper, basic office/readback, synthetic data/model; not .doc/advanced PPT/VLM/fullOffice/installed release acceptance"
+    },
+    "vector_offline_eval": {
+      "commit": "a4263d54b39e015c1ea3adda5eb53bc6af2fe1c7",
+      "target": "actual Principal/grant/queue/snapshot/8rows10chunks readback passed",
+      "full_baseline": "22pass99fail; allother120outcomesunchanged versusoriginal21pass100fail diagnostic",
+      "threshold_unchanged": "121/0failure/score1.0",
+      "evidence": "net-retirement-next-20261026/eval-vector-diagnosis-20261026/root-checkpoint.json"
+    },
+    "historical_report_retirement": {
+      "commit": "6e3b35d397ed7241c096f58a897bc74218ccdaca",
+      "net_lines": -2189,
+      "archived_and_root_SHA_verified": true,
+      "other14348_sources_unchanged": true,
+      "evidence": "ssot-retirement-inventory-20261026/root-checkpoint.json"
+    },
+    "obsolete_empty_runners": {
+      "commit": "37822e91518b2b8c513b85913f5a73f4e4dada8e",
+      "net_lines": -613,
+      "actual_tests_or_assertions_removed": 0,
+      "archive_manifest_sha256": "27dc130ba6bb0f860282434f427c3056dd0062dc3b7bcbc78cc88f55cebf7249",
+      "other_16179_tracked_path_hashes_unchanged": true
+    },
+    "main54_integration": {
+      "commit": "2c14fdfa455cfddbe37acb331cc99417ca147943",
+      "origin_main": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+      "all_62_eval_declarations_AST_equal_to_validated_candidate": true,
+      "eval_owner_tests_passed": 2,
+      "collected_tests": 42724,
+      "collection_errors": 0,
+      "evidence": "main54-integration-20261026/resolution.json"
+    },
+    "architecture_layers": {
+      "commit": "8103eeca02b3ec00399358d7b7f16517e60a5224",
+      "parent": "2c14fdfa455cfddbe37acb331cc99417ca147943",
+      "owned_paths": 68,
+      "net_tracked_text_lines": 7,
+      "sourcefreeze_sha256": "c92795b72e56633d8bafde7a433aa4ace3b6783baf7e8e26129fb01849d4331d",
+      "committed_bytes_equal_sourcefreeze": true,
+      "guards": "11pass, no baseline change",
+      "pickup": 79,
+      "independent_pickup": 16,
+      "consumer_pair": "2130each;2044pass78samefail8skip;0regression",
+      "delivered": false
+    },
+    "memory_offline_eval": {
+      "commit": "d354ec5180f6c4d79c3716de953cad536dd829b6",
+      "parent": "8103eeca02b3ec00399358d7b7f16517e60a5224",
+      "owned_source_sha256": {
+        "FHD/evals/run_agent_eval_body_2.py": "81a4d2a22726d64197931e4d4a246b8d22cab2ac70beaf999e8a7e8679ab47ab",
+        "FHD/evals/agent_tasks.jsonl": "41d04a61c3fce655c7471ac0bafb3a807e20987bed3b698ba545c4cd1ec64293",
+        "FHD/tests/test_application/test_agent_eval_harness.py": "84e7dc5da21c16e4930e5e7481e0ed0186101eaa7d75f940811b709f8ba7a0d2"
+      },
+      "all_original3_test_functions_AST_unchanged": true,
+      "dataset_cases": 121,
+      "changed_dataset_ids": [
+        "memory_v2_propose_route_forces_agent_orchestrator",
+        "memory_v2_confirm_route_forces_agent_orchestrator",
+        "memory_v2_reject_route_forces_agent_orchestrator",
+        "memory_v2_correct_route_forces_agent_orchestrator",
+        "memory_v2_delete_route_forces_agent_orchestrator"
+      ],
+      "dataset_change_only": "initial HTTP200→202 for five memory approvals; all business assertions/thresholds unchanged",
+      "selected_passed": 7,
+      "independent_selected_passed": 7,
+      "independent_permissions_and_Mod_revocation_denied": true,
+      "full_eval": "27passed94failed; other116outcomesandfailedchecksidentical in same fresh-process environment",
+      "canonical_concatenated_evaluator_ruff": "passed",
+      "QA01_or_installed_acceptance": false
+    },
+    "Mac_CI_leaf_evidence": {
+      "commit": "63dcee75434fab9177ce99ec6bf401bd77ee6884",
+      "owned_paths": 13,
+      "passed_contract_tests": 183,
+      "actual_local_adhoc_helper_tests_passed": 16,
+      "final_source_hashes_verified": true,
+      "source_manifest": "mac-leaf-packaging-20261026/ci-leaf-gate-implementation-20261026/prefix-ancestor-final-owned13-result.json",
+      "source_manifest_sha256": "68c600739c97837805c80b5dae018e7c6c5544d46d391a9a35db7def1c267418",
+      "root_prefix_ancestor_red_replayed_green": true,
+      "official_python_framework_layout": "synthetic contract coverage only; not actual signed artifact",
+      "declared_dependency_fix": "defusedxml==0.7.1 only across4projections; fresh actual spec reaches Analysis after13/13 dependency checks",
+      "formal_CI_dispatched": false,
+      "signed_product_built": false,
+      "installed_acceptance": false
+    },
+    "group_chat_case_tables": {
+      "commit": "d69765d79207dbd5cab327f5a027163fa07e918d",
+      "net_lines": -106,
+      "before_after_unit_passed_each": 694,
+      "original_cases_reconstructed": 33,
+      "other_cases_AST_unchanged": 661,
+      "all_module_AST_reconstruction_exact": true,
+      "covered_source_lines": 7975,
+      "covered_source_arcs": 10293,
+      "per_case_phase_contexts": 2083,
+      "actual_production_coverage_sets_equal": true,
+      "focused_coverage_floor": "Original78percent fullappfloor failed at3.24percent inboth focusedruns;unchanged",
+      "evidence": "group-chat-case-tables-20261026/root-checkpoint.json"
+    },
+    "materials_readback_alias": {
+      "commit": "a8c606781c96135f89cddfb46d28bd65785b45f7",
+      "production_aliases_only": 2,
+      "regression_passed": 56,
+      "root_independent_passed": 5,
+      "original_tests_AST_and_bytes_unchanged": true,
+      "evidence": "materials-readback-alias-fix-20261026/root-checkpoint.json"
+    },
+    "finance_offline_eval": {
+      "commit": "7526f1000180c5477480e1e5f1a2fc76f4091621",
+      "full_before_after": "27pass94fail ->30pass91fail",
+      "other118_exact": true,
+      "selected_passed": 11,
+      "evidence": "sql-route-eval-migration-20261026/root-checkpoint.json"
+    },
+    "materials_offline_eval": {
+      "commit": "9950a393b557b75e23098057ef4b7f81075e0647",
+      "full_before_after": "30pass91fail ->33pass88fail",
+      "other117_exact": true,
+      "selected_passed": 15,
+      "batch_original_completion_assertions_still_failed": true,
+      "evidence": "sql-route-eval-migration-20261026/materials/root-checkpoint.json"
+    }
+  },
+  "retained_uncertain_canary": {
+    "path": "/var/folders/__/b1ssv8dx68l6rnzfp0drs8j40000gn/T/xcagi-leaf-deny-90h0i6qj",
+    "reason": "empty; temporal match to redprobe but ownership not directly captured, do not delete by inference; failedstagearchived/verified/exactremoved"
+  },
+  "verified_origin_main": "54d4541cbe4cd77e258163c75e3e9fc8c886b507",
+  "historical_observations": [
+    "552bd7dbee localcheckpoint clean. Backend85files3823pass361.58s;one test-only fixture corrected duringcollection, all productionhashesunchanged;Root finalwhole2changedtestfiles48pass16.97s. Frontend26files598pass+typecheck/lint;Ruff58filescheck/formatpass.",
+    "Preflight changelog/capabilitycenterpass, netdeletion+5413fail. No baseline raised;no remediationpush/PR/mainmerge/build/install. Main remains86c1;installedMac1.0.0.6 SHA7e2f0e29ffd4edbd8fac1ca77409aa95e07d2c80.",
+    "d57383a80b checkpoint:92files4230pass (all captured source immutable);frontend33files770pass+print/import303pass;CI importlib fullcollection41028 noerror.5 old Python format-only ASTequal;loggingredactionactual31pass;stalezero parser86pass. All76closureopen;no remediationpush/mainmerge/packageinstall.",
+    "dev-guards current fails: layer-ratchet65>64 newpickup; arch-fitness10 newimports in product_compat_ports/excel_ocr/memory_rag/shipments_docs_ops/pickup. Actualdependencydirection fix pending; no baseline/suppress changes."
+  ],
+  "current_cleanup_note": "Root63dcee mandatorysafe cleanup315caches/0errors completed. Currentarchtests/source WIP active; no global cleanup rerun during tests. Newrootfinance/material tempdatabases managed by TemporaryDirectory; durable external red/green/source/recovery proofs retained. No rootexecsession remains live."
+}

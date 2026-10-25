@@ -1,0 +1,24 @@
+Upload repo: https://github.com/42433422/XCMAX
+
+Harness draft (LOCAL, not pushed as own remote branch):
+  worktree: /Users/a4243342/.codex/worktrees/b9cc/XCMAX
+  branch:   codex/harness-remediation-20261025
+  HEAD:     9950a393b557b75e23098057ef4b7f81075e0647
+  based on / merge-base origin/main: 54d4541cbe4cd77e258163c75e3e9fc8c886b507
+  ahead:    45 commits (+ uncommitted Excel/workflow kernel migration files)
+
+Key unpushed commits:
+  7526f10001 finance eval real sessions/grants/SQL readback
+  9950a393b5 materials mutations real approval + tenant readback
+  a8c606781c materials stock/price alias persistence
+  70c1bd70d9 Excel vector isolation / owner-scoped mutations
+  d354ec5180 memory eval real sessions/approvals
+
+Merged mainline related:
+  https://github.com/42433422/XCMAX/pull/2631
+  https://github.com/42433422/XCMAX/pull/2663
+  https://github.com/42433422/XCMAX/pull/2675  (main tip 54d4541cb)
+  https://github.com/42433422/XCMAX/pull/2619
+  https://github.com/42433422/XCMAX/pull/2615  (earlier excel domain extract)
+
+Open unrelated at handoff: #2661 #2660 #2659 #2658

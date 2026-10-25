@@ -1,0 +1,3262 @@
+{
+  "suite": "agent_platform_minimum",
+  "execution_mode": "fixture_local",
+  "model_note": "fixture_local = simulated/fixture harness, NOT live provider model calls",
+  "tasks_path": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/evals/agent_tasks.jsonl",
+  "total": 121,
+  "passed": 33,
+  "failed": 88,
+  "score": 0.2727,
+  "source_worktree": "/Users/a4243342/.codex/worktrees/b9cc/XCMAX",
+  "related_head_hint": "9950a393b557b75e23098057ef4b7f81075e0647 (materials mutation tip; report sits under materials/ after that work)",
+  "full_report_path_in_package": "eval-121/full-after-result-33pass-88fail.json",
+  "original_mac_path": "/Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/sql-route-eval-migration-20261026/materials/full-after-result.json",
+  "passed_ids": [
+    {
+      "id": "business_db_raw_sql_blocked",
+      "kind": "agent_plan"
+    },
+    {
+      "id": "xcauto_openai_compatible_credentials",
+      "kind": "xcauto_credentials"
+    },
+    {
+      "id": "xcauto_provider_alias_routes_to_openai_compatible",
+      "kind": "xcauto_credentials"
+    },
+    {
+      "id": "xcauto_llm_trace_records_provider_model_tokens",
+      "kind": "llm_trace"
+    },
+    {
+      "id": "agent_run_records_xcauto_llm_trace",
+      "kind": "agent_run_llm_trace"
+    },
+    {
+      "id": "agent_run_debits_local_wallet_for_xcauto_llm",
+      "kind": "agent_run_llm_trace"
+    },
+    {
+      "id": "agent_run_records_rag_citations",
+      "kind": "agent_run_rag_trace"
+    },
+    {
+      "id": "agent_run_records_ocr_artifact",
+      "kind": "agent_run_artifact_trace"
+    },
+    {
+      "id": "agent_run_records_user_memory_reference",
+      "kind": "agent_run_memory_trace"
+    },
+    {
+      "id": "agent_run_blocks_tool_when_wallet_insufficient",
+      "kind": "agent_plan"
+    },
+    {
+      "id": "agent_run_blocks_tool_when_budget_exceeded",
+      "kind": "agent_plan"
+    },
+    {
+      "id": "agent_run_debits_market_wallet_for_xcauto_llm",
+      "kind": "agent_run_llm_trace"
+    },
+    {
+      "id": "dataset_rag_answers_pdf_with_citation",
+      "kind": "dataset_rag_document_qa"
+    },
+    {
+      "id": "agent_run_auto_ingests_pdf_artifact_to_dataset",
+      "kind": "agent_run_artifact_trace"
+    },
+    {
+      "id": "dataset_rag_tenant_version_rerank_index_persist",
+      "kind": "dataset_rag_governance"
+    },
+    {
+      "id": "memory_v2_candidate_confirm_correct_delete",
+      "kind": "memory_v2_lifecycle"
+    },
+    {
+      "id": "memory_v2_source_governance_blocks_poison_context",
+      "kind": "memory_v2_governance"
+    },
+    {
+      "id": "dataset_rag_version_diff_rollback_rebuild",
+      "kind": "dataset_rag_version_ops"
+    },
+    {
+      "id": "dataset_rag_rbac_tenant_scope",
+      "kind": "dataset_rag_rbac"
+    },
+    {
+      "id": "dataset_rag_rebuild_queue_governance",
+      "kind": "dataset_rag_rebuild_queue"
+    },
+    {
+      "id": "dataset_rag_sqlite_vector_backend",
+      "kind": "dataset_rag_vector_backend"
+    },
+    {
+      "id": "excel_vector_ingest_route_forces_agent_orchestrator",
+      "kind": "excel_vector_route_agent"
+    },
+    {
+      "id": "memory_v2_propose_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent"
+    },
+    {
+      "id": "memory_v2_confirm_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent"
+    },
+    {
+      "id": "memory_v2_reject_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent"
+    },
+    {
+      "id": "memory_v2_correct_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent"
+    },
+    {
+      "id": "memory_v2_delete_route_forces_agent_orchestrator",
+      "kind": "memory_v2_route_agent"
+    },
+    {
+      "id": "materials_create_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent"
+    },
+    {
+      "id": "materials_update_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent"
+    },
+    {
+      "id": "materials_delete_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent"
+    },
+    {
+      "id": "finance_create_transaction_route_forces_agent_orchestrator",
+      "kind": "finance_route_agent"
+    },
+    {
+      "id": "finance_update_transaction_route_forces_agent_orchestrator",
+      "kind": "finance_route_agent"
+    },
+    {
+      "id": "finance_delete_transaction_route_forces_agent_orchestrator",
+      "kind": "finance_route_agent"
+    }
+  ],
+  "failed_items": [
+    {
+      "id": "business_db_read_auto",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "initial_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_db_write_requires_approval",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "employee_execute_requires_approval",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "tool_output_schema_violation_blocks_run",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "step_error_contains:工具输出 缺少字段：data",
+          "actual": [
+            "工具任务需要有效的身份授权，请重新登录或授权"
+          ],
+          "expected": "工具输出 缺少字段：data"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "generate_office_document_requires_approval_and_records_artifact",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "artifact_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:artifact.attached",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "artifact.attached"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "agent_run_repairs_missing_low_risk_params",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "initial_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[1].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "observation.recorded",
+            "tool.failed",
+            "step.repair_applied",
+            "step.retry_scheduled",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "observation.recorded",
+            "tool.failed",
+            "step.repair_applied",
+            "step.retry_scheduled",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "agent_run_multistep_repairs_second_low_risk_step",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "initial_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 2
+        },
+        {
+          "name": "tool_call_count",
+          "actual": 1,
+          "expected": 3
+        },
+        {
+          "name": "repair_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "observation_count",
+          "actual": 1,
+          "expected": 3
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[1].tool_id",
+          "actual": null,
+          "expected": "business_db"
+        },
+        {
+          "name": "tool_calls[1].action",
+          "actual": null,
+          "expected": "read"
+        },
+        {
+          "name": "tool_calls[1].status",
+          "actual": null,
+          "expected": "failed"
+        },
+        {
+          "name": "tool_calls[1].cost_units",
+          "actual": null,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[2].tool_id",
+          "actual": null,
+          "expected": "business_db"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "agent_run_llm_repairs_missing_low_risk_params",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "initial_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[1].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "observation.recorded",
+            "tool.failed",
+            "step.llm_repair_requested",
+            "llm.completed",
+            "billing.recorded",
+            "step.repair_applied",
+            "step.retry_scheduled",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "tool.started",
+            "observation.recorded",
+            "tool.failed",
+            "step.llm_repair_requested",
+            "llm.completed",
+            "billing.recorded",
+            "step.repair_applied",
+            "step.retry_scheduled",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "agent_run_refunds_tool_wallet_when_charged_tool_fails",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "step_error_contains:temporary database error",
+          "actual": [
+            "工具任务需要有效的身份授权，请重新登录或授权"
+          ],
+          "expected": "temporary database error"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "agent_run_refunds_market_wallet_when_charged_tool_fails",
+      "kind": "agent_plan",
+      "failed_checks": [
+        {
+          "name": "dispatch_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "step_error_contains:temporary database error",
+          "actual": [
+            "工具任务需要有效的身份授权，请重新登录或授权"
+          ],
+          "expected": "temporary database error"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "memory_v2_active_records_enter_planner_context",
+      "kind": "memory_v2_planner_context",
+      "failed_checks": [
+        {
+          "name": "context_has_memory_v2",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "summary_contains",
+          "actual": "",
+          "expected": "favorite_customer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "multimodal_ocr_artifact_autonomous_plan",
+      "kind": "multimodal_autonomous_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_answer_contains",
+          "actual": "",
+          "expected": "XCauto"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "multimodal_excel_artifact_autonomous_import_plan",
+      "kind": "multimodal_autonomous_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_output.node_outputs.import_excel_records.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "final_output.node_outputs.import_excel_records.imported_count",
+          "actual": null,
+          "expected": 1
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "multimodal_pdf_artifact_autonomous_document_export_plan",
+      "kind": "multimodal_autonomous_plan",
+      "failed_checks": [
+        {
+          "name": "final_status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "artifact_count",
+          "actual": 1,
+          "expected": 2
+        },
+        {
+          "name": "metadata.dataset_ingest_count",
+          "actual": 1,
+          "expected": 2
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "final_output.node_outputs.generate_document_from_artifacts.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "final_output.node_outputs.generate_document_from_artifacts.file_name",
+          "actual": null,
+          "expected": "risk-summary.docx"
+        },
+        {
+          "name": "final_output.node_outputs.generate_document_from_artifacts.download_url",
+          "actual": null,
+          "expected": "/api/ai/kitten/document/pickup/eval-doc-token"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.started",
+            "planner.completed",
+            "artifact.attached",
+            "dataset.ingested",
+            "step.waiting_user",
+            "step.approved",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "billing.refund_recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "ocr_recognize_route_forces_agent_orchestrator",
+      "kind": "ocr_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 400,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run.status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "artifact_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_ocr_route_forces_agent_orchestrator",
+      "kind": "business_ocr_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.event",
+          "actual": null,
+          "expected": "ocr.requested"
+        },
+        {
+          "name": "payload.published",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_print_label_route_forces_agent_orchestrator",
+      "kind": "business_event_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.event",
+          "actual": null,
+          "expected": "print.job.submitted"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_inventory_update_route_forces_agent_orchestrator",
+      "kind": "business_event_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.event",
+          "actual": null,
+          "expected": "inventory.changed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_shipment_create_route_forces_agent_orchestrator",
+      "kind": "business_event_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.event",
+          "actual": null,
+          "expected": "shipment.created"
+        },
+        {
+          "name": "payload.published",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "publish_call_count",
+          "actual": 0,
+          "expected": 1
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "business_shipment_create_missing_spec_rejects_before_publish",
+      "kind": "business_event_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": false
+        },
+        {
+          "name": "error_code",
+          "actual": null,
+          "expected": "SHIPMENT_SPEC_REQUIRED"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "system_printer_post_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "system_startup_enable_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "system_startup_disable_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "database_backup_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "database_backup_delete_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "database_restore_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "performance_cache_clear_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "performance_cache_invalidate_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "performance_reinitialize_route_forces_agent_orchestrator",
+      "kind": "system_maintenance_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "tools_execute_route_forces_agent_orchestrator",
+      "kind": "tools_execute_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "templates_analyze_route_forces_agent_orchestrator",
+      "kind": "templates_analyze_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "excel_skill_analyze_route_forces_agent_orchestrator",
+      "kind": "excel_skill_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "excel_skill_view_route_forces_agent_orchestrator",
+      "kind": "excel_skill_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "label_template_route_forces_agent_orchestrator",
+      "kind": "label_template_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "document_template_create_route_forces_agent_orchestrator",
+      "kind": "document_template_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "document_template_update_route_forces_agent_orchestrator",
+      "kind": "document_template_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "document_template_delete_route_forces_agent_orchestrator",
+      "kind": "document_template_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_query_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_ingest_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_diff_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_rollback_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_rebuild_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_cancel_rebuild_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dataset_rag_delete_document_route_forces_agent_orchestrator",
+      "kind": "dataset_rag_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "materials_batch_delete_route_forces_agent_orchestrator",
+      "kind": "materials_route_agent",
+      "failed_checks": [
+        {
+          "name": "payload.success",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "run.status",
+          "actual": "blocked",
+          "expected": "completed"
+        },
+        {
+          "name": "tool_calls[0].status",
+          "actual": "failed",
+          "expected": "completed"
+        },
+        {
+          "name": "event_type:tool.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "tool.completed"
+        },
+        {
+          "name": "event_type:run.completed",
+          "actual": [
+            "run.created",
+            "planner.completed",
+            "step.waiting_user",
+            "step.approved",
+            "task.queued",
+            "task.dispatched",
+            "tool.started",
+            "billing.recorded",
+            "observation.recorded",
+            "tool.failed"
+          ],
+          "expected": "run.completed"
+        },
+        {
+          "name": "payload.deleted_count",
+          "actual": null,
+          "expected": 2
+        },
+        {
+          "name": "business_verification.verified",
+          "actual": null,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_create_location_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_update_location_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_create_warehouse_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_update_warehouse_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_delete_warehouse_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_stock_in_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_stock_out_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "inventory_transfer_route_forces_agent_orchestrator",
+      "kind": "inventory_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_create_supplier_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_update_supplier_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_delete_supplier_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_create_order_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_update_order_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_approve_order_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_cancel_order_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "purchase_create_inbound_route_forces_agent_orchestrator",
+      "kind": "purchase_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_batch_create_route_forces_agent_orchestrator",
+      "kind": "products_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_update_route_forces_agent_orchestrator",
+      "kind": "products_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_delete_route_forces_agent_orchestrator",
+      "kind": "products_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "customers_create_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "customers_update_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "customers_delete_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "customers_batch_delete_route_forces_agent_orchestrator",
+      "kind": "customers_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_records_create_route_forces_agent_orchestrator",
+      "kind": "shipment_records_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_records_update_route_forces_agent_orchestrator",
+      "kind": "shipment_records_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_records_delete_route_forces_agent_orchestrator",
+      "kind": "shipment_records_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_generate_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_generate_batch_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_print_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_clear_shipment_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_set_sequence_alias_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_reset_sequence_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_clear_all_alias_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "shipment_orders_delete_route_forces_agent_orchestrator",
+      "kind": "shipment_orders_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "print_selection_route_forces_agent_orchestrator",
+      "kind": "print_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "print_document_route_forces_agent_orchestrator",
+      "kind": "print_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "print_label_route_forces_agent_orchestrator",
+      "kind": "print_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "print_test_route_forces_agent_orchestrator",
+      "kind": "print_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "print_workflow_label_dispatch_route_forces_agent_orchestrator",
+      "kind": "print_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_compat_add_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_compat_update_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_compat_delete_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "products_compat_batch_delete_route_forces_agent_orchestrator",
+      "kind": "products_compat_route_agent",
+      "failed_checks": [
+        {
+          "name": "status_code",
+          "actual": 401,
+          "expected": 200
+        },
+        {
+          "name": "payload.success",
+          "actual": null,
+          "expected": true
+        },
+        {
+          "name": "payload.agent_status",
+          "actual": null,
+          "expected": "completed"
+        },
+        {
+          "name": "payload.run_id_present",
+          "actual": false,
+          "expected": true
+        },
+        {
+          "name": "run_attached",
+          "actual": false,
+          "expected": true
+        }
+      ],
+      "error": null
+    }
+  ]
+}

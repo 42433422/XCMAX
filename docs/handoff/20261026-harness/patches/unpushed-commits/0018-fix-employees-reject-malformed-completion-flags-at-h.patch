@@ -1,0 +1,286 @@
+From 5d8e9b34406bc169e49c1aeff686e8fcd7bb2a9a Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:36:43 +0800
+Subject: [PATCH 18/43] fix(employees): reject malformed completion flags at
+ host result boundaries
+
+
+diff --git a/FHD/app/application/employee_runtime/executor.py b/FHD/app/application/employee_runtime/executor.py
+index e730bf5bcd..9978cc94ab 100644
+--- a/FHD/app/application/employee_runtime/executor.py
++++ b/FHD/app/application/employee_runtime/executor.py
+@@ -11,6 +11,7 @@ import uuid
+ from pathlib import Path
+ from typing import Any
+ 
++from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
+ from app.application.employee_runtime.agent_runner import run_agent_handler
+ from app.application.employee_runtime.loader import (
+     DIRECT_PYTHON_RUNTIME_MISSING_MSG,
+@@ -54,22 +55,50 @@ def _build_enriched_ctx(employee_id: str, workspace_root: str) -> dict[str, Any]
+             result = await mod_employee_complete(
+                 messages=messages, max_tokens=max_tokens, temperature=temperature
+             )
+-            if isinstance(result, dict) and result.get("success"):
+-                return {"ok": True, "content": result.get("content", "")}
++            receipt = _handler_output("llm_md", result)
++            receipt.pop("output")
++            receipt.pop("handler")
++            if receipt["ok"]:
++                return {**receipt, "content": result.get("content", "")}
++            return {**receipt, "error": "LLM 调用未成功完成"}
++        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
++            logger.warning("employee LLM callback failed (%s)", type(exc).__name__)
+             return {
+                 "ok": False,
+-                "error": result.get("error", "LLM 调用失败")
+-                if isinstance(result, dict)
+-                else "未知错误",
++                "outcome": "unknown",
++                "reconciliation_required": True,
++                "retryable": False,
++                "error": "LLM 调用异常，执行状态待核对",
+             }
+-        except RECOVERABLE_ERRORS as exc:  # noqa: BLE001  LLM 调用边界：异常转结构化结果
+-            return {"ok": False, "error": repr(exc)}
+ 
+     ctx["call_llm"] = _call_llm
+     ctx["http_get"], ctx["http_post"] = build_http_helpers()
+     return ctx
+ 
+ 
++def _handler_output(handler: str, output: Any) -> dict[str, Any]:
++    receipt = (
++        {
++            **output,
++            "success": output.get("success", output.get("ok")),
++            "reconciliation_required": output.get("reconciliation_required")
++            or output.get("requires_reconciliation"),
++        }
++        if isinstance(output, dict)
++        else None
++    )
++    outcome = tool_receipt_outcome(receipt)
++    return {
++        "handler": handler,
++        "ok": outcome == "success",
++        "outcome": outcome,
++        "output": output,
++        "retryable": False,
++        "reconciliation_required": outcome == "unknown",
++        "pending_approval": outcome == "waiting_approval",
++    }
++
++
+ def _get_section(config: dict[str, Any], key: str) -> dict[str, Any]:
+     val = config.get(key) if isinstance(config, dict) else None
+     return val if isinstance(val, dict) else {}
+@@ -289,19 +318,9 @@ def _action_direct_python_module(
+     if str(payload.get("handler") or "").strip() == "specialized":
+         spec_out = _run_maybe_async(handle_specialized, employee_id, payload, ctx)
+         if isinstance(spec_out, dict):
+-            return {
+-                "handler": "specialized",
+-                "ok": bool(spec_out.get("ok", True)),
+-                "output": spec_out,
+-            }
++            return _handler_output("specialized", spec_out)
+     out = _run_maybe_async(run_fn, payload, ctx)
+-    if isinstance(out, dict):
+-        return {
+-            "handler": "direct_python",
+-            "ok": bool(out.get("ok", out.get("success", True))),
+-            "output": out,
+-        }
+-    return {"handler": "direct_python", "ok": True, "output": out}
++    return _handler_output("direct_python", out)
+ 
+ 
+ def _cognition_fhd(
+@@ -397,13 +416,7 @@ def _actions_fhd(
+         return {
+             "task": task,
+             "handlers": ["specialized"],
+-            "outputs": [
+-                {
+-                    "handler": "specialized",
+-                    "ok": bool(spec_out.get("ok", True)) if isinstance(spec_out, dict) else True,
+-                    "output": spec_out,
+-                }
+-            ],
++            "outputs": [_handler_output("specialized", spec_out)],
+             "summary": "executed specialized handler",
+         }
+     outputs: list[dict[str, Any]] = []
+diff --git a/FHD/app/application/employee_runtime/result_verifier.py b/FHD/app/application/employee_runtime/result_verifier.py
+index 2880c2e484..fd6f444716 100644
+--- a/FHD/app/application/employee_runtime/result_verifier.py
++++ b/FHD/app/application/employee_runtime/result_verifier.py
+@@ -4,6 +4,18 @@ from __future__ import annotations
+ 
+ from typing import Any
+ 
++_APPROVAL_STATES = {"waiting_approval", "waiting_user", "awaiting_approval"}
++
++
++def _invalid_completion_flag(data: dict[str, Any]) -> bool:
++    return any(key in data and type(data[key]) is not bool for key in ("success", "ok"))
++
++
++def _states(data: dict[str, Any]) -> set[str]:
++    return {
++        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
++    }
++
+ 
+ def verify_employee_run_result(
+     employee_id: str,
+@@ -37,11 +49,12 @@ def execution_result_error(data: dict[str, Any]) -> str:
+     """Inspect canonical result envelopes, never infer success from HTTP delivery."""
+     if data.get("error"):
+         return str(data["error"])
+-    states = {
+-        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+-    }
++    if _invalid_completion_flag(data):
++        return "员工执行回执状态无效，需核对原任务"
++    states = _states(data)
+     if (
+         states & {"unknown", "pending", "accepted", "running", "failed", "blocked", "cancelled"}
++        or states & _APPROVAL_STATES
+         or data.get("reconciliation_required")
+         or data.get("requires_reconciliation")
+         or data.get("pending_approval")
+@@ -68,11 +81,10 @@ def execution_result_error(data: dict[str, Any]) -> str:
+ 
+ def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
+     """Preserve unknown identity through the same envelopes used by verification."""
+-    states = {
+-        str(data.get(key) or "").strip().lower() for key in ("execution_state", "status", "outcome")
+-    }
++    states = _states(data)
+     if (
+         states & {"unknown", "accepted", "pending", "running"}
++        or _invalid_completion_flag(data)
+         or data.get("reconciliation_required")
+         or data.get("requires_reconciliation")
+     ):
+@@ -89,7 +101,7 @@ def execution_result_requires_reconciliation(data: dict[str, Any]) -> bool:
+ 
+ 
+ def execution_result_awaits_approval(data: dict[str, Any]) -> bool:
+-    if data.get("pending_approval"):
++    if data.get("pending_approval") or _states(data) & _APPROVAL_STATES:
+         return True
+     children = [data.get("result"), data.get("output")]
+     outputs = data.get("outputs")
+diff --git a/FHD/tests/application/test_employee_result_verifier.py b/FHD/tests/application/test_employee_result_verifier.py
+index 69ab799c75..6c63c3f94c 100644
+--- a/FHD/tests/application/test_employee_result_verifier.py
++++ b/FHD/tests/application/test_employee_result_verifier.py
+@@ -1,5 +1,10 @@
+ from __future__ import annotations
+ 
++import asyncio
++import json
++
++import pytest
++
+ from app.application.employee_runtime.result_verifier import verify_employee_run_result
+ 
+ 
+@@ -87,3 +92,77 @@ def test_unknown_identity_variants_are_not_verified_and_require_reconciliation()
+         for result in (child, {"success": True, "result": {"outputs": [{"output": child}]}}):
+             assert verify_employee_run_result("employee", result)[0] is False
+             assert execution_result_requires_reconciliation(result) is True
++
++
++@pytest.mark.parametrize("flag", ["ok", "success"])
++@pytest.mark.parametrize("value", ["false", "true", 1, 0, None, [], {}])
++def test_non_boolean_completion_flags_never_prove_success(flag, value):
++    from app.application.employee_runtime.result_verifier import (
++        execution_result_requires_reconciliation,
++    )
++
++    result = {"success": True, "result": {"summary": "done", "output": {flag: value}}}
++    assert verify_employee_run_result("employee", result)[0] is False
++    assert execution_result_requires_reconciliation(result) is True
++
++
++@pytest.mark.parametrize("state", ["waiting_approval", "waiting_user", "awaiting_approval"])
++@pytest.mark.parametrize("key", ["status", "outcome", "execution_state"])
++def test_approval_states_survive_result_wrappers(key, state):
++    from app.application.employee_runtime.result_verifier import execution_result_awaits_approval
++
++    result = {"success": True, "result": {"summary": "done", "outputs": [{key: state}]}}
++    assert verify_employee_run_result("employee", result)[0] is False
++    assert execution_result_awaits_approval(result) is True
++
++
++@pytest.mark.parametrize(
++    "receipt,outcome",
++    [
++        ({"ok": True, "summary": "done"}, "success"),
++        ({"success": True}, "success"),
++        ({"ok": "false"}, "unknown"),
++        ({"ok": 1}, "unknown"),
++        ({"ok": True, "success": False}, "failure"),
++        ({"ok": True, "pending": True}, "pending"),
++        ({"ok": True, "outcome": "unknown"}, "unknown"),
++        ({"ok": True, "pending_approval": True}, "waiting_approval"),
++        ({}, "unknown"),
++        ("plain string", "unknown"),
++    ],
++)
++def test_actual_module_result_keeps_canonical_state(tmp_path, receipt, outcome):
++    from app.application.employee_runtime.executor import _action_direct_python_module
++
++    workers = tmp_path / "backend" / "employees"
++    workers.mkdir(parents=True)
++    (workers / "worker.py").write_text(f"def run(payload, ctx):\n    return {receipt!r}\n")
++    result = _action_direct_python_module(tmp_path, "employee", {}, {}, "task", str(tmp_path))
++    assert result["output"] == receipt
++    assert result["ok"] is (outcome == "success")
++    assert result["outcome"] == outcome
++
++
++@pytest.mark.parametrize("failure", ["exception", "response", "truthy", "pending", "unknown"])
++def test_llm_callback_boundary_preserves_state_and_hides_credentials(monkeypatch, failure):
++    from app.application.employee_runtime.executor import _build_enriched_ctx
++
++    secret = "SYNTHETIC-LLM-CALLBACK-PRIVATE-TOKEN"
++
++    async def completion(**_kwargs):
++        if failure == "exception":
++            raise OSError(secret)
++        return {
++            "response": {"success": False, "error": secret},
++            "truthy": {"success": "false", "content": secret},
++            "pending": {"success": True, "pending": True, "content": secret},
++            "unknown": {"success": True, "outcome": "unknown", "content": secret},
++        }[failure]
++
++    monkeypatch.setattr("app.mod_sdk.mod_employee_llm.mod_employee_complete", completion)
++    result = asyncio.run(_build_enriched_ctx("employee", "/tmp")["call_llm"]([{}]))
++    assert result["ok"] is False
++    assert secret not in json.dumps(result)
++    assert result["outcome"] == (
++        "failure" if failure == "response" else "pending" if failure == "pending" else "unknown"
++    )
+diff --git a/FHD/tests/test_application/test_employee_runtime_executor_ext2.py b/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
+index e8d939270a..b2f2667389 100644
+--- a/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
++++ b/FHD/tests/test_application/test_employee_runtime_executor_ext2.py
+@@ -358,7 +358,8 @@ class TestActionDirectPythonModule:
+         out = exec_mod._action_direct_python_module(
+             tmp_path, "emp-1", {}, {"input": {}}, "task", None
+         )
+-        assert out["ok"] is True
++        assert out["ok"] is False
++        assert out["outcome"] == "unknown"
+         assert out["output"] == "plain string"
+ 
+     def test_module_load_failure(self, tmp_path):
+-- 
+2.50.1 (Apple Git-155)
+

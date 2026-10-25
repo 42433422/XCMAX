@@ -1,0 +1,32 @@
+{
+  "version_target": "1.0.0.7",
+  "clients_in_scope": {
+    "macOS": "YES — only acceptance scope",
+    "Windows": "NOT required this wave",
+    "Web": "not formal 1.0.0.7 target in state",
+    "Android": "not in scope"
+  },
+  "package_vs_formal": {
+    "candidate_install_packages": "NOT built for remediation tip",
+    "formal_download_entry": "NOT done",
+    "auto_update_push": "NOT done",
+    "server_deploy": "NOT done for 1.0.0.7"
+  },
+  "currently_installed_mac": {
+    "version": "1.0.0.6",
+    "sha": "7e2f0e29ffd4edbd8fac1ca77409aa95e07d2c80",
+    "is_remediation": false
+  },
+  "QA-06": {
+    "id": "QA-06",
+    "title": "Windows/macOS 安装包实测",
+    "closure": "open",
+    "evidence_gap": "1.0.0.7未构建为已合主线正式签名包，未安装验收。",
+    "candidate_status": "partial",
+    "candidate_progress": "仅macOS；已安装仍为1.0.0.6/7e2f0e29ffd4edbd8fac1ca77409aa95e07d2c80。",
+    "source_checkpoint": "552bd7dbee1f27a08730d22ee4ad486ae87404db",
+    "last_progress_review": "2026-10-25T18:51:26.585533+00:00"
+  },
+  "goal": "Close all76 checklist items with evidence, then formally update/release1.0.0.7;macOS acceptance only. PR2631 prerequisite merged.",
+  "acceptance_scope": "macOS only, per user; no Windows requirement"
+}

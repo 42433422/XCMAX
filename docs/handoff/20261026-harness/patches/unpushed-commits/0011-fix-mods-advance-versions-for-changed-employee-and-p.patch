@@ -1,0 +1,1532 @@
+From 07a2e3ca3be48a16a332e2adccb2bde742aac25f Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 20:57:32 +0800
+Subject: [PATCH 11/43] fix(mods): advance versions for changed employee and
+ planner packages
+
+
+diff --git a/FHD/mods/_employees/artifact-generator/manifest.json b/FHD/mods/_employees/artifact-generator/manifest.json
+index 9d8d63cc4e..07873d5441 100644
+--- a/FHD/mods/_employees/artifact-generator/manifest.json
++++ b/FHD/mods/_employees/artifact-generator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "artifact-generator",
+   "name": "产物生成员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "artifact-generator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "产物生成员工",
+       "description": "根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式",
+diff --git a/FHD/mods/_employees/change-request-auditor/manifest.json b/FHD/mods/_employees/change-request-auditor/manifest.json
+index a4c8fc2acf..c023488f10 100644
+--- a/FHD/mods/_employees/change-request-auditor/manifest.json
++++ b/FHD/mods/_employees/change-request-auditor/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "change-request-auditor",
+   "name": "变更评审员",
+-  "version": "1.1.2",
++  "version": "1.1.3",
+   "author": "admin",
+   "description": "以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。",
+   "artifact": "employee_pack",
+@@ -34,7 +34,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "change-request-auditor",
+-      "version": "1.1.2",
++      "version": "1.1.3",
+       "artifact": "employee_pack",
+       "name": "变更评审员",
+       "description": "以 Persy 事实、Para Goal/Loop 执行关联和 Retort 意图反问审查能力变更；任何 veto、缺证据或意图错位都失败关闭。",
+diff --git a/FHD/mods/_employees/code-validator/manifest.json b/FHD/mods/_employees/code-validator/manifest.json
+index 13d34f79b0..2680c952f5 100644
+--- a/FHD/mods/_employees/code-validator/manifest.json
++++ b/FHD/mods/_employees/code-validator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "code-validator",
+   "name": "代码校验员工",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "code-validator",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "代码校验员工",
+       "description": "对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证",
+diff --git a/FHD/mods/_employees/csv-full-read-employee/manifest.json b/FHD/mods/_employees/csv-full-read-employee/manifest.json
+index 1f6bf079e2..3f593aba51 100644
+--- a/FHD/mods/_employees/csv-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/csv-full-read-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "csv-full-read-employee",
+   "name": "CSV 全量读取员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "csv-full-read-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "CSV 全量读取员",
+       "description": "CSV全量读取员工：上传 .csv 文件，使用 direct_python 解析为结构化 data.json，包含 columns、rows、row_count、meta，禁止 LLM 编造行列"
+diff --git a/FHD/mods/_employees/csv-generate-employee/manifest.json b/FHD/mods/_employees/csv-generate-employee/manifest.json
+index 35c239c539..9f8bab926e 100644
+--- a/FHD/mods/_employees/csv-generate-employee/manifest.json
++++ b/FHD/mods/_employees/csv-generate-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "csv-generate-employee",
+   "name": "CSV 生成员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "CSV生成员工：上传 .json（含 columns 与 rows）写出 outputs/output.csv，使用 direct_python，禁止编造表格数据",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "csv-generate-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "CSV 生成员",
+       "description": "CSV生成员工：上传 .json（含 columns 与 rows）写出 outputs/output.csv，使用 direct_python，禁止编造表格数据"
+diff --git a/FHD/mods/_employees/daily-orchestrator/manifest.json b/FHD/mods/_employees/daily-orchestrator/manifest.json
+index 49126722f1..b0033ff92d 100644
+--- a/FHD/mods/_employees/daily-orchestrator/manifest.json
++++ b/FHD/mods/_employees/daily-orchestrator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "daily-orchestrator",
+   "name": "每日编排员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "daily-orchestrator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "每日编排员",
+       "description": "每日编排员工包：direct-python 子能力只读排序工作项；真实派工、分支、提交与审批仍由宿主受控链执行。",
+diff --git a/FHD/mods/_employees/dbops-engineer/manifest.json b/FHD/mods/_employees/dbops-engineer/manifest.json
+index 2584f0778e..a2be24ac93 100644
+--- a/FHD/mods/_employees/dbops-engineer/manifest.json
++++ b/FHD/mods/_employees/dbops-engineer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "dbops-engineer",
+   "name": "数据库运维工程师",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "dbops-engineer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "数据库运维工程师",
+       "description": "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
+diff --git a/FHD/mods/_employees/delivery-receipt-officer/manifest.json b/FHD/mods/_employees/delivery-receipt-officer/manifest.json
+index 6684c68c7d..297e4ac62a 100644
+--- a/FHD/mods/_employees/delivery-receipt-officer/manifest.json
++++ b/FHD/mods/_employees/delivery-receipt-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "delivery-receipt-officer",
+   "name": "交付签收员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "delivery-receipt-officer",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "交付签收员",
+       "description": "O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。",
+diff --git a/FHD/mods/_employees/deploy-release-officer/manifest.json b/FHD/mods/_employees/deploy-release-officer/manifest.json
+index 2b502d2e89..a7d6c3d6b8 100644
+--- a/FHD/mods/_employees/deploy-release-officer/manifest.json
++++ b/FHD/mods/_employees/deploy-release-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "deploy-release-officer",
+   "name": "发布部署主管",
+-  "version": "1.0.1",
++  "version": "1.0.2",
+   "author": "admin",
+   "description": "编排 xiu-ci.com 全站的构建与发布流程，包含 Docker 镜像、腾讯云 Pages 部署、脚本维护；不写业务逻辑。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "deploy-release-officer",
+-      "version": "1.0.0",
++      "version": "1.0.2",
+       "artifact": "employee_pack",
+       "name": "发布部署主管",
+       "description": "编排 xiu-ci.com 全站的构建与发布流程，包含 Docker 镜像、腾讯云 Pages 部署、脚本维护；不写业务逻辑。",
+diff --git a/FHD/mods/_employees/doc-knowledge-curator/manifest.json b/FHD/mods/_employees/doc-knowledge-curator/manifest.json
+index ace8a99005..ea7f32b4ea 100644
+--- a/FHD/mods/_employees/doc-knowledge-curator/manifest.json
++++ b/FHD/mods/_employees/doc-knowledge-curator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "doc-knowledge-curator",
+   "name": "文档知识管理员",
+-  "version": "1.0.3",
++  "version": "1.0.4",
+   "author": "admin",
+   "description": "维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "doc-knowledge-curator",
+-      "version": "1.0.0",
++      "version": "1.0.4",
+       "artifact": "employee_pack",
+       "name": "文档知识管理员",
+       "description": "维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。",
+diff --git a/FHD/mods/_employees/ecosystem-delivery-reporter/manifest.json b/FHD/mods/_employees/ecosystem-delivery-reporter/manifest.json
+index ef5453d412..822e6f517f 100644
+--- a/FHD/mods/_employees/ecosystem-delivery-reporter/manifest.json
++++ b/FHD/mods/_employees/ecosystem-delivery-reporter/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ecosystem-delivery-reporter",
+   "name": "生态交付回传员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ecosystem-delivery-reporter",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "生态交付回传员",
+       "description": "O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。",
+diff --git a/FHD/mods/_employees/ecosystem-investor-portal-officer/manifest.json b/FHD/mods/_employees/ecosystem-investor-portal-officer/manifest.json
+index 29a7923b27..eedc996e8b 100644
+--- a/FHD/mods/_employees/ecosystem-investor-portal-officer/manifest.json
++++ b/FHD/mods/_employees/ecosystem-investor-portal-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ecosystem-investor-portal-officer",
+   "name": "投资方只读门户员",
+-  "version": "1.2.0",
++  "version": "1.2.1",
+   "author": "admin",
+   "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ecosystem-investor-portal-officer",
+-      "version": "1.2.0",
++      "version": "1.2.1",
+       "artifact": "employee_pack",
+       "name": "投资方只读门户员",
+       "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
+diff --git a/FHD/mods/_employees/ecosystem-joint-catalog-officer/manifest.json b/FHD/mods/_employees/ecosystem-joint-catalog-officer/manifest.json
+index baf1c0d823..856a56275e 100644
+--- a/FHD/mods/_employees/ecosystem-joint-catalog-officer/manifest.json
++++ b/FHD/mods/_employees/ecosystem-joint-catalog-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ecosystem-joint-catalog-officer",
+   "name": "联合 Catalog 策展员",
+-  "version": "1.2.0",
++  "version": "1.2.1",
+   "author": "admin",
+   "description": "O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ecosystem-joint-catalog-officer",
+-      "version": "1.2.0",
++      "version": "1.2.1",
+       "artifact": "employee_pack",
+       "name": "联合 Catalog 策展员",
+       "description": "O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。",
+diff --git a/FHD/mods/_employees/ecosystem-partner-onboard-officer/manifest.json b/FHD/mods/_employees/ecosystem-partner-onboard-officer/manifest.json
+index 6ff28d02e9..dd6b999198 100644
+--- a/FHD/mods/_employees/ecosystem-partner-onboard-officer/manifest.json
++++ b/FHD/mods/_employees/ecosystem-partner-onboard-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ecosystem-partner-onboard-officer",
+   "name": "生态伙伴接入员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ecosystem-partner-onboard-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "生态伙伴接入员",
+       "description": "O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。",
+diff --git a/FHD/mods/_employees/ecosystem-revenue-share-reconciler/manifest.json b/FHD/mods/_employees/ecosystem-revenue-share-reconciler/manifest.json
+index 90d9ccc2e4..16d96291df 100644
+--- a/FHD/mods/_employees/ecosystem-revenue-share-reconciler/manifest.json
++++ b/FHD/mods/_employees/ecosystem-revenue-share-reconciler/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ecosystem-revenue-share-reconciler",
+   "name": "生态分润对账员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ecosystem-revenue-share-reconciler",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "生态分润对账员",
+       "description": "O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。",
+diff --git a/FHD/mods/_employees/employee-interview-assistant/manifest.json b/FHD/mods/_employees/employee-interview-assistant/manifest.json
+index d609ad9b0b..b14384de46 100644
+--- a/FHD/mods/_employees/employee-interview-assistant/manifest.json
++++ b/FHD/mods/_employees/employee-interview-assistant/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "employee-interview-assistant",
+   "name": "员工信息访谈员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "employee-interview-assistant",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "员工信息访谈员",
+       "description": "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
+diff --git a/FHD/mods/_employees/employee-pack-curator/manifest.json b/FHD/mods/_employees/employee-pack-curator/manifest.json
+index 116f9d36da..3f42a5a5b2 100644
+--- a/FHD/mods/_employees/employee-pack-curator/manifest.json
++++ b/FHD/mods/_employees/employee-pack-curator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "employee-pack-curator",
+   "name": "员工包策展员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "employee-pack-curator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "员工包策展员",
+       "description": "管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。",
+diff --git a/FHD/mods/_employees/employee-pack-quality-interviewer/manifest.json b/FHD/mods/_employees/employee-pack-quality-interviewer/manifest.json
+index 847fd170a7..cc606f8b53 100644
+--- a/FHD/mods/_employees/employee-pack-quality-interviewer/manifest.json
++++ b/FHD/mods/_employees/employee-pack-quality-interviewer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "employee-pack-quality-interviewer",
+   "name": "员工包质询员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "对候选 employee_pack（.xcemp）做结构化「入职面试」：基于用户粘贴的 manifest 节选、同步测试日志或\n沙盒 JSON，对照职责边界与平台契约给出录用/有条件录用/驳回结论与可执行修改清单。\n不替代渗透测试、法务合规或正式 HR 录用；不编造未出现在输入中的文件路径、接口或密钥。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "employee-pack-quality-interviewer",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "员工包质询员",
+       "description": "对候选 employee_pack（.xcemp）做结构化「入职面试」：基于用户粘贴的 manifest 节选、同步测试日志或\n沙盒 JSON，对照职责边界与平台契约给出录用/有条件录用/驳回结论与可执行修改清单。\n不替代渗透测试、法务合规或正式 HR 录用；不编造未出现在输入中的文件路径、接口或密钥。",
+diff --git a/FHD/mods/_employees/employee-planner/manifest.json b/FHD/mods/_employees/employee-planner/manifest.json
+index f9eab95ba0..203c4a72ef 100644
+--- a/FHD/mods/_employees/employee-planner/manifest.json
++++ b/FHD/mods/_employees/employee-planner/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "employee-planner",
+   "name": "规划设计员工",
+-  "version": "1.2.0",
++  "version": "1.2.1",
+   "author": "admin",
+   "description": "根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "employee-planner",
+-      "version": "1.2.0",
++      "version": "1.2.1",
+       "artifact": "employee_pack",
+       "name": "规划设计员工",
+       "description": "根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图",
+diff --git a/FHD/mods/_employees/enterprise-adoption-officer/manifest.json b/FHD/mods/_employees/enterprise-adoption-officer/manifest.json
+index c5e276db5f..d7768d9050 100644
+--- a/FHD/mods/_employees/enterprise-adoption-officer/manifest.json
++++ b/FHD/mods/_employees/enterprise-adoption-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "enterprise-adoption-officer",
+   "name": "企业使用跟踪员",
+-  "version": "1.2.0",
++  "version": "1.2.1",
+   "author": "admin",
+   "description": "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "enterprise-adoption-officer",
+-      "version": "1.2.0",
++      "version": "1.2.1",
+       "artifact": "employee_pack",
+       "name": "企业使用跟踪员",
+       "description": "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
+diff --git a/FHD/mods/_employees/excel-full-read-employee/manifest.json b/FHD/mods/_employees/excel-full-read-employee/manifest.json
+index 7920357288..a09330028d 100644
+--- a/FHD/mods/_employees/excel-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/excel-full-read-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "excel-full-read-employee",
+   "name": "Excel 读取员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "excel-full-read-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Excel 读取员",
+       "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格"
+diff --git a/FHD/mods/_employees/excel-generate-employee/manifest.json b/FHD/mods/_employees/excel-generate-employee/manifest.json
+index 40aca9f9cc..1fb2a60753 100644
+--- a/FHD/mods/_employees/excel-generate-employee/manifest.json
++++ b/FHD/mods/_employees/excel-generate-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "excel-generate-employee",
+   "name": "Excel 生成员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "excel-generate-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Excel 生成员",
+       "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据"
+diff --git a/FHD/mods/_employees/excel-qc-employee/manifest.json b/FHD/mods/_employees/excel-qc-employee/manifest.json
+index 3ca9bb273e..c9097f4f85 100644
+--- a/FHD/mods/_employees/excel-qc-employee/manifest.json
++++ b/FHD/mods/_employees/excel-qc-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "excel-qc-employee",
+   "name": "Excel 质检员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Excel质检员工：对回填结果做独立结构对账——计划符合性、保护区完整性、expected 重算、公式健康、rules_ref 追溯、块结构漂移，输出 qc_report.json（PASS/WARN/FAIL + 问责路由），不复用映射员/写入员代码路径，禁止编造检查结果",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "excel-qc-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Excel 质检员",
+       "description": "Excel质检员工：对回填结果做独立结构对账——计划符合性、保护区完整性、expected 重算、公式健康、rules_ref 追溯、块结构漂移，输出 qc_report.json（PASS/WARN/FAIL + 问责路由），不复用映射员/写入员代码路径，禁止编造检查结果"
+diff --git a/FHD/mods/_employees/excel-rules-map-employee/manifest.json b/FHD/mods/_employees/excel-rules-map-employee/manifest.json
+index 71a3408a96..c8935831ab 100644
+--- a/FHD/mods/_employees/excel-rules-map-employee/manifest.json
++++ b/FHD/mods/_employees/excel-rules-map-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "excel-rules-map-employee",
+   "name": "Excel 规则映射员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Excel规则映射员工：infer 从读取员 workbook.json 推断模板块结构/键列/日历锚/公式区/公式模板，输出可固化的 rules.json 提案（置信度+待确认项）；compile 把固化规则与槽位记录编译为模板写入员 plan.json（带 rules_ref 哈希），禁止 LLM 编造结构",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "excel-rules-map-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Excel 规则映射员",
+       "description": "Excel规则映射员工：infer 从读取员 workbook.json 推断模板块结构/键列/日历锚/公式区/公式模板，输出可固化的 rules.json 提案（置信度+待确认项）；compile 把固化规则与槽位记录编译为模板写入员 plan.json（带 rules_ref 哈希），禁止 LLM 编造结构"
+diff --git a/FHD/mods/_employees/excel-template-write-employee/manifest.json b/FHD/mods/_employees/excel-template-write-employee/manifest.json
+index 3e915b3a38..4d32b943fd 100644
+--- a/FHD/mods/_employees/excel-template-write-employee/manifest.json
++++ b/FHD/mods/_employees/excel-template-write-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "excel-template-write-employee",
+   "name": "Excel 模板写入员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，按 phases 回填模板生成结果，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "excel-template-write-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Excel 模板写入员",
+       "description": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，按 phases 回填模板生成结果，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格"
+diff --git a/FHD/mods/_employees/fhd-core-maintainer/manifest.json b/FHD/mods/_employees/fhd-core-maintainer/manifest.json
+index c92178ab49..38f9844a6a 100644
+--- a/FHD/mods/_employees/fhd-core-maintainer/manifest.json
++++ b/FHD/mods/_employees/fhd-core-maintainer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "fhd-core-maintainer",
+   "name": "FHD 核心应用维护员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "fhd-core-maintainer",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "FHD 核心应用维护员",
+       "description": "维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。",
+diff --git a/FHD/mods/_employees/flask-entry-keeper/manifest.json b/FHD/mods/_employees/flask-entry-keeper/manifest.json
+index 7837e1f18e..c3ae41d7ed 100644
+--- a/FHD/mods/_employees/flask-entry-keeper/manifest.json
++++ b/FHD/mods/_employees/flask-entry-keeper/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "flask-entry-keeper",
+   "name": "Flask 入口维护员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "维护根目录 Flask 应用 app.py 的路由、表单处理、excel-to-ai 动态页与依赖 requirements.txt；对接静态站，不涉及 MODstore 或 Nginx 配置。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "flask-entry-keeper",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Flask 入口维护员",
+       "description": "维护根目录 Flask 应用 app.py 的路由、表单处理、excel-to-ai 动态页与依赖 requirements.txt；对接静态站，不涉及 MODstore 或 Nginx 配置。",
+diff --git a/FHD/mods/_employees/github-pr-gatekeeper/manifest.json b/FHD/mods/_employees/github-pr-gatekeeper/manifest.json
+index 0e84edbcbc..3c48c0d4b0 100644
+--- a/FHD/mods/_employees/github-pr-gatekeeper/manifest.json
++++ b/FHD/mods/_employees/github-pr-gatekeeper/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "github-pr-gatekeeper",
+   "name": "GitHub PR 守门员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "github-pr-gatekeeper",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "GitHub PR 守门员",
+       "description": "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。",
+diff --git a/FHD/mods/_employees/hex-quality-assessor/manifest.json b/FHD/mods/_employees/hex-quality-assessor/manifest.json
+index f472f45d26..a617cf483c 100644
+--- a/FHD/mods/_employees/hex-quality-assessor/manifest.json
++++ b/FHD/mods/_employees/hex-quality-assessor/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "hex-quality-assessor",
+   "name": "六维质检员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "对制作车间产物执行六维质量评估与放行建议",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "hex-quality-assessor",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "六维质检员工",
+       "description": "对制作车间产物执行六维质量评估与放行建议",
+diff --git a/FHD/mods/_employees/host-checker/manifest.json b/FHD/mods/_employees/host-checker/manifest.json
+index a03ab2a632..d489164ac2 100644
+--- a/FHD/mods/_employees/host-checker/manifest.json
++++ b/FHD/mods/_employees/host-checker/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "host-checker",
+   "name": "运维员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "host-checker",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "运维员工",
+       "description": "探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性",
+diff --git a/FHD/mods/_employees/intake-dispatcher/manifest.json b/FHD/mods/_employees/intake-dispatcher/manifest.json
+index fa47384552..53271c0574 100644
+--- a/FHD/mods/_employees/intake-dispatcher/manifest.json
++++ b/FHD/mods/_employees/intake-dispatcher/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "intake-dispatcher",
+   "name": "需求接入员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "intake-dispatcher",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "需求接入员",
+       "description": "把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。",
+diff --git a/FHD/mods/_employees/intent-analyst/manifest.json b/FHD/mods/_employees/intent-analyst/manifest.json
+index 1163a7a1c9..100f675b5d 100644
+--- a/FHD/mods/_employees/intent-analyst/manifest.json
++++ b/FHD/mods/_employees/intent-analyst/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "intent-analyst",
+   "name": "需求分析员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "intent-analyst",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "需求分析员工",
+       "description": "解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限",
+diff --git a/FHD/mods/_employees/java-payment-bridge-officer/manifest.json b/FHD/mods/_employees/java-payment-bridge-officer/manifest.json
+index 802b699821..40992f4cae 100644
+--- a/FHD/mods/_employees/java-payment-bridge-officer/manifest.json
++++ b/FHD/mods/_employees/java-payment-bridge-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "java-payment-bridge-officer",
+   "name": "Java 支付桥接员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "java-payment-bridge-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "Java 支付桥接员",
+       "description": "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
+diff --git a/FHD/mods/_employees/legacy-archive-curator/manifest.json b/FHD/mods/_employees/legacy-archive-curator/manifest.json
+index cf0d0c4b97..91bf1bc084 100644
+--- a/FHD/mods/_employees/legacy-archive-curator/manifest.json
++++ b/FHD/mods/_employees/legacy-archive-curator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "legacy-archive-curator",
+   "name": "工作区归档管理员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "legacy-archive-curator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "工作区归档管理员",
+       "description": "S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。",
+diff --git a/FHD/mods/_employees/llm-ops-engineer/manifest.json b/FHD/mods/_employees/llm-ops-engineer/manifest.json
+index 853ef46f63..8e144750e8 100644
+--- a/FHD/mods/_employees/llm-ops-engineer/manifest.json
++++ b/FHD/mods/_employees/llm-ops-engineer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "llm-ops-engineer",
+   "name": "LLM 运维工程师",
+-  "version": "1.6.0",
++  "version": "1.6.1",
+   "author": "admin",
+   "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
+   "artifact": "employee_pack",
+@@ -42,7 +42,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "llm-ops-engineer",
+-      "version": "1.6.0",
++      "version": "1.6.1",
+       "artifact": "employee_pack",
+       "name": "LLM 运维工程师",
+       "description": "负责 LLM API key 健康检查、真实额度与成本追踪、模型选型、全平台 AI 资产接口盘点，并通过后台巡检主动切换所有平台 AI 员工的运行时模型；切换前确认额度、密钥、目录与健康，切换后复验并在失败时自动回滚。",
+diff --git a/FHD/mods/_employees/log-monitor-incident/manifest.json b/FHD/mods/_employees/log-monitor-incident/manifest.json
+index 1b69d73d4b..055270f53c 100644
+--- a/FHD/mods/_employees/log-monitor-incident/manifest.json
++++ b/FHD/mods/_employees/log-monitor-incident/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "log-monitor-incident",
+   "name": "日志监控与事故响应员",
+-  "version": "1.3.0",
++  "version": "1.3.1",
+   "author": "admin",
+   "description": "归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "log-monitor-incident",
+-      "version": "1.3.0",
++      "version": "1.3.1",
+       "artifact": "employee_pack",
+       "name": "日志监控与事故响应员",
+       "description": "归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。",
+diff --git a/FHD/mods/_employees/market-frontend-dev/manifest.json b/FHD/mods/_employees/market-frontend-dev/manifest.json
+index 17414313f4..779836d0ad 100644
+--- a/FHD/mods/_employees/market-frontend-dev/manifest.json
++++ b/FHD/mods/_employees/market-frontend-dev/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "market-frontend-dev",
+   "name": "市场前端开发员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "market-frontend-dev",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "市场前端开发员",
+       "description": "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
+diff --git a/FHD/mods/_employees/marketing-site-builder/manifest.json b/FHD/mods/_employees/marketing-site-builder/manifest.json
+index 4e9de0a67e..81346840c1 100644
+--- a/FHD/mods/_employees/marketing-site-builder/manifest.json
++++ b/FHD/mods/_employees/marketing-site-builder/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "marketing-site-builder",
+   "name": "营销站点构建员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "marketing-site-builder",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "营销站点构建员",
+       "description": "维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。",
+diff --git a/FHD/mods/_employees/miniapp-builder/manifest.json b/FHD/mods/_employees/miniapp-builder/manifest.json
+index 7285b90076..0e36585f46 100644
+--- a/FHD/mods/_employees/miniapp-builder/manifest.json
++++ b/FHD/mods/_employees/miniapp-builder/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "miniapp-builder",
+   "name": "小程序员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "miniapp-builder",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "小程序员工",
+       "description": "为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑",
+diff --git a/FHD/mods/_employees/mobile-android-release-officer/manifest.json b/FHD/mods/_employees/mobile-android-release-officer/manifest.json
+index e5cf53544e..63f19369cc 100644
+--- a/FHD/mods/_employees/mobile-android-release-officer/manifest.json
++++ b/FHD/mods/_employees/mobile-android-release-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "mobile-android-release-officer",
+   "name": "Android 发版员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "mobile-android-release-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "Android 发版员",
+       "description": "Flutter Android 渠道构建与发布：统一 Flutter CI、release-android、签名 APK/AAB 与真机 smoke。",
+diff --git a/FHD/mods/_employees/mobile-ios-release-officer/manifest.json b/FHD/mods/_employees/mobile-ios-release-officer/manifest.json
+index bc57daa614..96b42efa41 100644
+--- a/FHD/mods/_employees/mobile-ios-release-officer/manifest.json
++++ b/FHD/mods/_employees/mobile-ios-release-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "mobile-ios-release-officer",
+   "name": "iOS 发版员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。",
+   "artifact": "employee_pack",
+@@ -38,7 +38,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "mobile-ios-release-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "iOS 发版员",
+       "description": "Flutter iOS 渠道发布：Runner、Fastlane match、签名、TestFlight / App Store Connect 上传与 release 门禁。",
+diff --git a/FHD/mods/_employees/mods-and-eskill-curator/manifest.json b/FHD/mods/_employees/mods-and-eskill-curator/manifest.json
+index 5d71ff915d..8584a930f5 100644
+--- a/FHD/mods/_employees/mods-and-eskill-curator/manifest.json
++++ b/FHD/mods/_employees/mods-and-eskill-curator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "mods-and-eskill-curator",
+   "name": "Mods/ESkill 策展员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
+   "artifact": "employee_pack",
+@@ -30,7 +30,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "mods-and-eskill-curator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "Mods/ESkill 策展员",
+       "description": "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
+diff --git a/FHD/mods/_employees/modstore-backend-api/manifest.json b/FHD/mods/_employees/modstore-backend-api/manifest.json
+index fbd5c44217..cb9dcd526b 100644
+--- a/FHD/mods/_employees/modstore-backend-api/manifest.json
++++ b/FHD/mods/_employees/modstore-backend-api/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "modstore-backend-api",
+   "name": "MODstore 后端 API 员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "modstore-backend-api",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "MODstore 后端 API 员",
+       "description": "维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。",
+diff --git a/FHD/mods/_employees/nginx-config-engineer/manifest.json b/FHD/mods/_employees/nginx-config-engineer/manifest.json
+index 477cfd6be9..5e593438b7 100644
+--- a/FHD/mods/_employees/nginx-config-engineer/manifest.json
++++ b/FHD/mods/_employees/nginx-config-engineer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "nginx-config-engineer",
+   "name": "Nginx 配置工程师",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "nginx-config-engineer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "Nginx 配置工程师",
+       "description": "维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。",
+diff --git a/FHD/mods/_employees/pack-registrar/manifest.json b/FHD/mods/_employees/pack-registrar/manifest.json
+index 6f713ac89a..32fe9c82ce 100644
+--- a/FHD/mods/_employees/pack-registrar/manifest.json
++++ b/FHD/mods/_employees/pack-registrar/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "pack-registrar",
+   "name": "打包登记员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "pack-registrar",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "打包登记员工",
+       "description": "将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包",
+diff --git a/FHD/mods/_employees/payment-billing-reconciler/manifest.json b/FHD/mods/_employees/payment-billing-reconciler/manifest.json
+index 0e6250f451..24e824440c 100644
+--- a/FHD/mods/_employees/payment-billing-reconciler/manifest.json
++++ b/FHD/mods/_employees/payment-billing-reconciler/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "payment-billing-reconciler",
+   "name": "支付账单对账员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "payment-billing-reconciler",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "支付账单对账员",
+       "description": "维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。",
+diff --git a/FHD/mods/_employees/pdf-full-read-employee/manifest.json b/FHD/mods/_employees/pdf-full-read-employee/manifest.json
+index 6e7bc20729..1e3e4bd1bc 100644
+--- a/FHD/mods/_employees/pdf-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/pdf-full-read-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "pdf-full-read-employee",
+   "name": "PDF 全量读取员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "制作 PDF 全量读取员工包",
+   "artifact": "employee_pack",
+@@ -40,7 +40,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "pdf-full-read-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "PDF 生成员",
+       "description": "制作 PDF 全量读取员工包"
+diff --git a/FHD/mods/_employees/pdf-generate-employee/manifest.json b/FHD/mods/_employees/pdf-generate-employee/manifest.json
+index a2b805eae0..2016b6a7f5 100644
+--- a/FHD/mods/_employees/pdf-generate-employee/manifest.json
++++ b/FHD/mods/_employees/pdf-generate-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "pdf-generate-employee",
+   "name": "PDF 生成员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "制作 PDF 生成员工包",
+   "artifact": "employee_pack",
+@@ -40,7 +40,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "pdf-generate-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "PDF 生成员",
+       "description": "制作 PDF 生成员工包"
+diff --git a/FHD/mods/_employees/ppt-full-read-employee/manifest.json b/FHD/mods/_employees/ppt-full-read-employee/manifest.json
+index 44c78b70ea..9049e7a09e 100644
+--- a/FHD/mods/_employees/ppt-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/ppt-full-read-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ppt-full-read-employee",
+   "name": "PPT 全量读取员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "PPT全量读取员工：上传 .pptx，输出 presentation_full.json 中介；解析大纲与每页正文；图片 VLM 识图；按「为这份PPT生成每页的演讲备注」生成演讲备注。direct_python，禁止编造幻灯片正文。",
+   "artifact": "employee_pack",
+@@ -40,7 +40,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ppt-full-read-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "PPT 生成员",
+       "description": "制作 PPT 全量读取员工包"
+diff --git a/FHD/mods/_employees/ppt-generate-employee/manifest.json b/FHD/mods/_employees/ppt-generate-employee/manifest.json
+index 1c40217bad..5597157a5f 100644
+--- a/FHD/mods/_employees/ppt-generate-employee/manifest.json
++++ b/FHD/mods/_employees/ppt-generate-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "ppt-generate-employee",
+   "name": "PPT 生成员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "PPT 生成员：LLM 编排 + OOXML 执行。支持从零 compose 多页演示、基于上传 pptx 增强（图片+动画）。输出 output.pptx，禁止纯文字冒充动效作业。",
+   "artifact": "employee_pack",
+@@ -42,7 +42,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "ppt-generate-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "PPT 生成员",
+       "description": "制作 PPT 生成员工包（Codex 级）"
+diff --git a/FHD/mods/_employees/push-update-context-officer/manifest.json b/FHD/mods/_employees/push-update-context-officer/manifest.json
+index 0e363f7a3a..2f60ae083a 100644
+--- a/FHD/mods/_employees/push-update-context-officer/manifest.json
++++ b/FHD/mods/_employees/push-update-context-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "push-update-context-officer",
+   "name": "推送更新员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "push-update-context-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "推送更新员工",
+       "description": "在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。",
+diff --git a/FHD/mods/_employees/quality-validator/manifest.json b/FHD/mods/_employees/quality-validator/manifest.json
+index 6a771924de..b449f1ed3a 100644
+--- a/FHD/mods/_employees/quality-validator/manifest.json
++++ b/FHD/mods/_employees/quality-validator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "quality-validator",
+   "name": "质检员工",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "对生成的产物进行服务端校验，包括 manifest 合规性、Python 语法、资产完整性与一致性检查",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "quality-validator",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "质检员工",
+       "description": "对生成的产物进行服务端校验，包括 manifest 合规性、Python 语法、资产完整性与一致性检查",
+diff --git a/FHD/mods/_employees/retention-officer/manifest.json b/FHD/mods/_employees/retention-officer/manifest.json
+index 6448542870..f62cbbb9e9 100644
+--- a/FHD/mods/_employees/retention-officer/manifest.json
++++ b/FHD/mods/_employees/retention-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "retention-officer",
+   "name": "档案清理员",
+-  "version": "1.0.2",
++  "version": "1.0.3",
+   "author": "admin",
+   "description": "周期性清理 workbench_script_runs、上传分片、旋转日志、知识缓存等过期文件，并把每次清理结果写回员工执行流水，作为「定时档案清理」岗位在员工大会上发言。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "retention-officer",
+-      "version": "1.0.0",
++      "version": "1.0.3",
+       "artifact": "employee_pack",
+       "name": "档案清理员",
+       "description": "周期性清理 workbench_script_runs、上传分片、旋转日志、知识缓存等过期文件，并把每次清理结果写回员工执行流水，作为「定时档案清理」岗位在员工大会上发言。",
+diff --git a/FHD/mods/_employees/sandbox-tester/manifest.json b/FHD/mods/_employees/sandbox-tester/manifest.json
+index 2c1683aae9..5884cebafe 100644
+--- a/FHD/mods/_employees/sandbox-tester/manifest.json
++++ b/FHD/mods/_employees/sandbox-tester/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "sandbox-tester",
+   "name": "测试员工",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "对员工工作流执行沙箱测试，包括结构校验与 Mock 执行验证",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "sandbox-tester",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "测试员工",
+       "description": "对员工工作流执行沙箱测试，包括结构校验与 Mock 执行验证",
+diff --git a/FHD/mods/_employees/script-binder/manifest.json b/FHD/mods/_employees/script-binder/manifest.json
+index 1c8fd792ed..f7c5a7dfe4 100644
+--- a/FHD/mods/_employees/script-binder/manifest.json
++++ b/FHD/mods/_employees/script-binder/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "script-binder",
+   "name": "配置绑定员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "script-binder",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "配置绑定员工",
+       "description": "将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构",
+diff --git a/FHD/mods/_employees/security-secrets-guard/manifest.json b/FHD/mods/_employees/security-secrets-guard/manifest.json
+index 14c9bd7d43..cb590fb045 100644
+--- a/FHD/mods/_employees/security-secrets-guard/manifest.json
++++ b/FHD/mods/_employees/security-secrets-guard/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "security-secrets-guard",
+   "name": "安全密钥守卫",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "security-secrets-guard",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "安全密钥守卫",
+       "description": "保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。",
+diff --git a/FHD/mods/_employees/self-checker/manifest.json b/FHD/mods/_employees/self-checker/manifest.json
+index fd57c750d7..631f2a7db0 100644
+--- a/FHD/mods/_employees/self-checker/manifest.json
++++ b/FHD/mods/_employees/self-checker/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "self-checker",
+   "name": "自检员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "执行员工包独立可执行自检，验证 .xcemp 包在隔离环境下可正常加载与运行",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "self-checker",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "自检员工",
+       "description": "执行员工包独立可执行自检，验证 .xcemp 包在隔离环境下可正常加载与运行",
+diff --git a/FHD/mods/_employees/seo-sitemap-curator/manifest.json b/FHD/mods/_employees/seo-sitemap-curator/manifest.json
+index 5de0d32583..c69612cb41 100644
+--- a/FHD/mods/_employees/seo-sitemap-curator/manifest.json
++++ b/FHD/mods/_employees/seo-sitemap-curator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "seo-sitemap-curator",
+   "name": "SEO 站点地图管理员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "维护 xiu-ci.com 的 SEO 资产：sitemap.xml、robots.txt、百度/必应站长校验文件与结构化数据，确保收录与排名质量。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "seo-sitemap-curator",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "SEO 站点地图管理员",
+       "description": "维护 xiu-ci.com 的 SEO 资产：sitemap.xml、robots.txt、百度/必应站长校验文件与结构化数据，确保收录与排名质量。",
+diff --git a/FHD/mods/_employees/site-content-editor/manifest.json b/FHD/mods/_employees/site-content-editor/manifest.json
+index 6e659985af..a67e9b677c 100644
+--- a/FHD/mods/_employees/site-content-editor/manifest.json
++++ b/FHD/mods/_employees/site-content-editor/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "site-content-editor",
+   "name": "静态站内容编辑员",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "site-content-editor",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "静态站内容编辑员",
+       "description": "维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。",
+diff --git a/FHD/mods/_employees/task-router-officer/manifest.json b/FHD/mods/_employees/task-router-officer/manifest.json
+index 5682539dc0..3a3096e058 100644
+--- a/FHD/mods/_employees/task-router-officer/manifest.json
++++ b/FHD/mods/_employees/task-router-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "task-router-officer",
+   "name": "任务派发员",
+-  "version": "1.0.1",
++  "version": "1.0.2",
+   "author": "admin",
+   "description": "把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "task-router-officer",
+-      "version": "1.0.0",
++      "version": "1.0.2",
+       "artifact": "employee_pack",
+       "name": "任务派发员",
+       "description": "把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。",
+diff --git a/FHD/mods/_employees/test-qa-runner/manifest.json b/FHD/mods/_employees/test-qa-runner/manifest.json
+index 058e7d39ec..73014b0058 100644
+--- a/FHD/mods/_employees/test-qa-runner/manifest.json
++++ b/FHD/mods/_employees/test-qa-runner/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "test-qa-runner",
+   "name": "测试质量运行员",
+-  "version": "2.0.3",
++  "version": "2.0.4",
+   "author": "admin",
+   "description": "负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。",
+   "artifact": "employee_pack",
+@@ -20,7 +20,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "test-qa-runner",
+-      "version": "2.0.3",
++      "version": "2.0.4",
+       "artifact": "employee_pack",
+       "name": "测试质量运行员",
+       "description": "负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。"
+diff --git a/FHD/mods/_employees/top-architect/manifest.json b/FHD/mods/_employees/top-architect/manifest.json
+index 6cc72ea29b..3623f282ce 100644
+--- a/FHD/mods/_employees/top-architect/manifest.json
++++ b/FHD/mods/_employees/top-architect/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "top-architect",
+   "name": "顶级架构师员工",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "top-architect",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "顶级架构师员工",
+       "description": "掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。",
+diff --git a/FHD/mods/_employees/user-customer-service-officer/manifest.json b/FHD/mods/_employees/user-customer-service-officer/manifest.json
+index 72609ff1e6..3965e40de0 100644
+--- a/FHD/mods/_employees/user-customer-service-officer/manifest.json
++++ b/FHD/mods/_employees/user-customer-service-officer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "user-customer-service-officer",
+   "name": "用户客服员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
+   "artifact": "employee_pack",
+@@ -26,7 +26,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "user-customer-service-officer",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "用户客服员工",
+       "description": "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
+diff --git a/FHD/mods/_employees/vibe-coding-maintainer/manifest.json b/FHD/mods/_employees/vibe-coding-maintainer/manifest.json
+index d049e60068..1b8ea25d0a 100644
+--- a/FHD/mods/_employees/vibe-coding-maintainer/manifest.json
++++ b/FHD/mods/_employees/vibe-coding-maintainer/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "vibe-coding-maintainer",
+   "name": "Vibe-Coding 维护员",
+-  "version": "2.0.0",
++  "version": "2.0.1",
+   "author": "admin",
+   "description": "全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。",
+   "artifact": "employee_pack",
+@@ -46,7 +46,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "vibe-coding-maintainer",
+-      "version": "1.0.0",
++      "version": "2.0.1",
+       "artifact": "employee_pack",
+       "name": "Vibe-Coding 维护员",
+       "description": "全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。"
+diff --git a/FHD/mods/_employees/word-full-read-employee/manifest.json b/FHD/mods/_employees/word-full-read-employee/manifest.json
+index 321afddf28..6c78e2005d 100644
+--- a/FHD/mods/_employees/word-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/word-full-read-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "word-full-read-employee",
+   "name": "Word 全量读取员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造",
+   "artifact": "employee_pack",
+@@ -44,7 +44,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "word-full-read-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Word 全量读取员",
+       "description": "Word全量读取员工：上传 .docx，direct_python 全量提取段落/表格/样式，输出 document_full.json，禁止 LLM 编造"
+diff --git a/FHD/mods/_employees/word-generate-employee/manifest.json b/FHD/mods/_employees/word-generate-employee/manifest.json
+index e2aa2a92cd..0bbd7b56a1 100644
+--- a/FHD/mods/_employees/word-generate-employee/manifest.json
++++ b/FHD/mods/_employees/word-generate-employee/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "word-generate-employee",
+   "name": "Word 生成员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "XCAGI",
+   "description": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx",
+   "artifact": "employee_pack",
+@@ -40,7 +40,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "word-generate-employee",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "Word 生成员",
+       "description": "Word生成员工：支持 document_full.json、user_query 纯文本或 .txt；可选 template.docx；输出 generated_document.docx"
+diff --git a/FHD/mods/_employees/workbench-ux-stylist/manifest.json b/FHD/mods/_employees/workbench-ux-stylist/manifest.json
+index 24539b825f..a7daacdab1 100644
+--- a/FHD/mods/_employees/workbench-ux-stylist/manifest.json
++++ b/FHD/mods/_employees/workbench-ux-stylist/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "workbench-ux-stylist",
+   "name": "工作台 UX 设计员",
+-  "version": "1.0.0",
++  "version": "1.0.1",
+   "author": "admin",
+   "description": "专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "workbench-ux-stylist",
+-      "version": "1.0.0",
++      "version": "1.0.1",
+       "artifact": "employee_pack",
+       "name": "工作台 UX 设计员",
+       "description": "专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。",
+diff --git a/FHD/mods/_employees/workflow-automator/manifest.json b/FHD/mods/_employees/workflow-automator/manifest.json
+index 4c1afa70bd..99785abb2d 100644
+--- a/FHD/mods/_employees/workflow-automator/manifest.json
++++ b/FHD/mods/_employees/workflow-automator/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "workflow-automator",
+   "name": "流程自动化员工",
+-  "version": "1.1.0",
++  "version": "1.1.1",
+   "author": "admin",
+   "description": "为员工包创建自动化工作流（Skill 组），通过自然语言生成画布节点与连线",
+   "artifact": "employee_pack",
+@@ -22,7 +22,7 @@
+   "employee_config_v2": {
+     "identity": {
+       "id": "workflow-automator",
+-      "version": "1.1.0",
++      "version": "1.1.1",
+       "artifact": "employee_pack",
+       "name": "流程自动化员工",
+       "description": "为员工包创建自动化工作流（Skill 组），通过自然语言生成画布节点与连线",
+diff --git a/FHD/mods/xcagi-customer-service-bridge/manifest.json b/FHD/mods/xcagi-customer-service-bridge/manifest.json
+index 1668e95293..62c46945dd 100755
+--- a/FHD/mods/xcagi-customer-service-bridge/manifest.json
++++ b/FHD/mods/xcagi-customer-service-bridge/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "xcagi-customer-service-bridge",
+   "name": "客服业务页桥接 Mod",
+-  "version": "1.0.0.0",
++  "version": "1.0.0.1",
+   "author": "成都修茈科技有限公司",
+   "description": "里程碑 K/O（客服）：外部/内部客服页物理视图在 Mod 包；API 仍走宿主门面。",
+   "primary": false,
+diff --git a/FHD/mods/xcagi-planner-bridge/manifest.json b/FHD/mods/xcagi-planner-bridge/manifest.json
+index 8a350557a2..8c99baba0c 100755
+--- a/FHD/mods/xcagi-planner-bridge/manifest.json
++++ b/FHD/mods/xcagi-planner-bridge/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "id": "xcagi-planner-bridge",
+   "name": "XCAGI 对话 Planner 门面 Mod",
+-  "version": "1.0.0.0",
++  "version": "1.0.0.1",
+   "author": "成都修茈科技有限公司",
+   "description": "Planner 对话/工具 API 门面（3d/B）+ 主对话与智能生态业务页（K/O+/P 物理视图）。",
+   "primary": true,
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,507 @@
+From 301b7d41dfc909718c50f0376baef5c582a76352 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 00:43:53 +0800
+Subject: [PATCH 30/43] refactor(tests): share TopAssistant setup without
+ losing assertions
+
+
+diff --git a/FHD/frontend/src/components/TopAssistantFloat.coverage.test.ts b/FHD/frontend/src/components/TopAssistantFloat.coverage.test.ts
+index b9f493f000..895ad36c33 100644
+--- a/FHD/frontend/src/components/TopAssistantFloat.coverage.test.ts
++++ b/FHD/frontend/src/components/TopAssistantFloat.coverage.test.ts
+@@ -1,29 +1,8 @@
++import { makeFetchResponse, mountComponent } from './__tests__/topAssistantFloatHarness'
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+-import { mount, flushPromises } from '@vue/test-utils'
+-import { createRouter, createMemoryHistory } from 'vue-router'
++import { flushPromises } from '@vue/test-utils'
+ import { createPinia, setActivePinia } from 'pinia'
+-import { defineComponent, h, nextTick } from 'vue'
+-import TopAssistantFloat from './TopAssistantFloat.vue'
+-
+-// ===== Mock 模块 =====
+-
+-// RouterLink 桩组件
+-const RouterLinkStub = defineComponent({
+-  name: 'RouterLinkStub',
+-  props: { to: { type: [String, Object], default: '/' } },
+-  setup:
+-    (props, { slots }) =>
+-    () =>
+-      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
+-})
+-
+-// ExcelPreview 桩组件，附带 $el 与 querySelector 以覆盖滚动同步逻辑
+-const ExcelPreviewStub = defineComponent({
+-  name: 'ExcelPreview',
+-  setup() {
+-    return () => h('div', { class: 'excel-preview-stub' })
+-  },
+-})
++import { nextTick } from 'vue'
+ 
+ vi.mock('@/api', () => {
+   class ApiError extends Error {
+@@ -76,134 +55,11 @@ vi.mock('@/api/products', () => {
+   }
+ })
+ 
+-vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
+-  launchAdvancedDriverTour: vi.fn(async () => undefined),
+-}))
+-
+-vi.mock('@/composables/useTutorialCatalog', () => ({
+-  useTutorialCatalog: () => ({
+-    tutorialTracks: [
+-      {
+-        id: 'host',
+-        title: '宿主入门',
+-        summary: '认识XC',
+-        description: '宿主入门说明',
+-        recommended: true,
+-      },
+-      { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
+-    ],
+-    advancedTrackHint: '进阶路线提示',
+-    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
+-  }),
+-}))
+-
+-vi.mock('@/composables/useWorkflowModsRuntimeContext', () => ({
+-  useWorkflowModsRuntimeContext: () => ({ modWorkflowEmployeesActive: { value: false } }),
+-}))
+-
+-vi.mock('@/composables/useWorkflowPanoramaNavVisible', () => ({
+-  useWorkflowPanoramaNavVisible: () => ({ showWorkflowPanoramaNav: { value: false } }),
+-}))
+-
+-vi.mock('@/utils/workflowNav', () => ({
+-  resolveWorkflowVisualizationLocation: vi.fn(() => ({ name: 'workflow-visualization' })),
+-}))
+-
+ vi.mock('@/utils/erpDomainPaths', () => ({
+   resolveErpApiPath: (p: string) => p,
+   resolveErpApiPathWhenReady: async (p: string) => p,
+ }))
+ 
+-vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
+-  useEnterpriseScopedWorkflowRegistry: () => ({
+-    scopedRegistryEntries: {
+-      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
+-    },
+-  }),
+-}))
+-
+-vi.mock('@/utils/workflowEmployeeRegistry', () => ({
+-  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
+-  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
+-  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
+-  resolveLabel: (entry: { id: string }, _resolver: (k: string) => string) => {
+-    const map: Record<string, string> = {
+-      wechat_msg: '微信消息员工',
+-      label_print: '标签打印员工',
+-      receipt_confirm: '收货确认员工',
+-    }
+-    return map[entry.id] || entry.id
+-  },
+-}))
+-
+-vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
+-  syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
+-}))
+-
+-vi.mock('@/constants/productFlow', () => ({
+-  DEFAULT_TUTORIAL_TRACK_ID: 'host',
+-}))
+-
+-vi.mock('@/constants/workflowEmployeeMods', () => ({
+-  WORKFLOW_EMPLOYEE_IDS: ['wechat_msg', 'label_print', 'receipt_confirm', 'shipment_mgmt'],
+-}))
+-
+-// ===== 测试辅助 =====
+-
+-function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
+-  return {
+-    ok,
+-    status: ok ? 200 : 500,
+-    headers: { get: () => 'application/json' },
+-    json: async () => body,
+-    text: async () => JSON.stringify(body),
+-  }
+-}
+-
+-function createTestRouter() {
+-  const names = [
+-    'home',
+-    'login',
+-    'register',
+-    'settings',
+-    'mod-store',
+-    'products',
+-    'product-onboarding',
+-    'chat',
+-    'dashboard',
+-    'workflow-visualization',
+-    'shipment-records',
+-    'customers',
+-    'template-preview',
+-    'materials',
+-    'inventory',
+-    'approval-hub',
+-  ]
+-  const EmptyComp = defineComponent({ setup: () => () => h('div') })
+-  const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
+-  routes.push({ path: '/', name: 'home', component: EmptyComp })
+-  routes.push({ path: '/:pathMatch(.*)*', name: 'fallback', component: EmptyComp })
+-  return createRouter({ history: createMemoryHistory(), routes })
+-}
+-
+-async function mountComponent(options: Record<string, unknown> = {}) {
+-  const router = options.router || createTestRouter()
+-  await router.push('/chat')
+-  await router.isReady()
+-  const wrapper = mount(TopAssistantFloat, {
+-    global: {
+-      plugins: [router],
+-      stubs: {
+-        RouterLink: RouterLinkStub,
+-        ExcelPreview: ExcelPreviewStub,
+-        Teleport: true,
+-      },
+-    },
+-  })
+-  await flushPromises()
+-  return { wrapper, router }
+-}
+-
+ function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {}) {
+   window.dispatchEvent(new CustomEvent(name, { detail }))
+ }
+diff --git a/FHD/frontend/src/components/TopAssistantFloat.functions.test.ts b/FHD/frontend/src/components/TopAssistantFloat.functions.test.ts
+index 96a81f9054..b1cd883247 100644
+--- a/FHD/frontend/src/components/TopAssistantFloat.functions.test.ts
++++ b/FHD/frontend/src/components/TopAssistantFloat.functions.test.ts
+@@ -1,27 +1,7 @@
++import { makeFetchResponse, mountComponent } from './__tests__/topAssistantFloatHarness'
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+-import { mount, flushPromises } from '@vue/test-utils'
+-import { createRouter, createMemoryHistory } from 'vue-router'
++import { flushPromises } from '@vue/test-utils'
+ import { createPinia, setActivePinia } from 'pinia'
+-import { defineComponent, h } from 'vue'
+-import TopAssistantFloat from './TopAssistantFloat.vue'
+-
+-// ===== Mock 模块 =====
+-
+-const RouterLinkStub = defineComponent({
+-  name: 'RouterLinkStub',
+-  props: { to: { type: [String, Object], default: '/' } },
+-  setup:
+-    (props, { slots }) =>
+-    () =>
+-      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
+-})
+-
+-const ExcelPreviewStub = defineComponent({
+-  name: 'ExcelPreview',
+-  setup() {
+-    return () => h('div', { class: 'excel-preview-stub' })
+-  },
+-})
+ 
+ const mockApiPost = vi.fn(async () => ({ success: true, data: {} }))
+ const mockApiGet = vi.fn(async () => ({ success: true, data: {} }))
+@@ -65,77 +45,10 @@ vi.mock('@/api/products', () => ({
+   },
+ }))
+ 
+-vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
+-  launchAdvancedDriverTour: vi.fn(async () => undefined),
+-}))
+-
+-vi.mock('@/composables/useTutorialCatalog', () => ({
+-  useTutorialCatalog: () => ({
+-    tutorialTracks: [
+-      {
+-        id: 'host',
+-        title: '宿主入门',
+-        summary: '认识XC',
+-        description: '宿主入门说明',
+-        recommended: true,
+-      },
+-      { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
+-    ],
+-    advancedTrackHint: '进阶路线提示',
+-    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
+-  }),
+-}))
+-
+-vi.mock('@/composables/useWorkflowModsRuntimeContext', () => ({
+-  useWorkflowModsRuntimeContext: () => ({ modWorkflowEmployeesActive: { value: false } }),
+-}))
+-
+-vi.mock('@/composables/useWorkflowPanoramaNavVisible', () => ({
+-  useWorkflowPanoramaNavVisible: () => ({ showWorkflowPanoramaNav: { value: false } }),
+-}))
+-
+-vi.mock('@/utils/workflowNav', () => ({
+-  resolveWorkflowVisualizationLocation: vi.fn(() => ({ name: 'workflow-visualization' })),
+-}))
+-
+ vi.mock('@/utils/erpDomainPaths', () => ({
+   resolveErpApiPath: (p: string) => p,
+ }))
+ 
+-vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
+-  useEnterpriseScopedWorkflowRegistry: () => ({
+-    scopedRegistryEntries: {
+-      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
+-    },
+-  }),
+-}))
+-
+-vi.mock('@/utils/workflowEmployeeRegistry', () => ({
+-  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
+-  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
+-  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
+-  resolveLabel: (entry: { id: string }, _resolver: (k: string) => string) => {
+-    const map: Record<string, string> = {
+-      wechat_msg: '微信消息员工',
+-      label_print: '标签打印员工',
+-      receipt_confirm: '收货确认员工',
+-    }
+-    return map[entry.id] || entry.id
+-  },
+-}))
+-
+-vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
+-  syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
+-}))
+-
+-vi.mock('@/constants/productFlow', () => ({
+-  DEFAULT_TUTORIAL_TRACK_ID: 'host',
+-}))
+-
+-vi.mock('@/constants/workflowEmployeeMods', () => ({
+-  WORKFLOW_EMPLOYEE_IDS: ['wechat_msg', 'label_print', 'receipt_confirm', 'shipment_mgmt'],
+-}))
+-
+ vi.mock('@/composables/useIndustryUiText', () => ({
+   useIndustryUiText: () => ({
+     entityName: { value: '产品' },
+@@ -164,62 +77,6 @@ vi.mock('@/composables/useIndustryUiText', () => ({
+   }),
+ }))
+ 
+-// ===== 测试辅助 =====
+-
+-function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
+-  return {
+-    ok,
+-    status: ok ? 200 : 500,
+-    headers: { get: () => 'application/json' },
+-    json: async () => body,
+-    text: async () => JSON.stringify(body),
+-  }
+-}
+-
+-function createTestRouter() {
+-  const names = [
+-    'home',
+-    'login',
+-    'register',
+-    'settings',
+-    'mod-store',
+-    'products',
+-    'product-onboarding',
+-    'chat',
+-    'dashboard',
+-    'workflow-visualization',
+-    'shipment-records',
+-    'customers',
+-    'template-preview',
+-    'materials',
+-    'inventory',
+-    'approval-hub',
+-  ]
+-  const EmptyComp = defineComponent({ setup: () => () => h('div') })
+-  const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
+-  routes.push({ path: '/', name: 'home', component: EmptyComp })
+-  routes.push({ path: '/:pathMatch(.*)*', name: 'fallback', component: EmptyComp })
+-  return createRouter({ history: createMemoryHistory(), routes })
+-}
+-
+-async function mountComponent(options: Record<string, unknown> = {}) {
+-  const router = options.router || createTestRouter()
+-  await router.push('/chat')
+-  await router.isReady()
+-  const wrapper = mount(TopAssistantFloat, {
+-    global: {
+-      plugins: [router],
+-      stubs: {
+-        RouterLink: RouterLinkStub,
+-        ExcelPreview: ExcelPreviewStub,
+-        Teleport: true,
+-      },
+-    },
+-  })
+-  await flushPromises()
+-  return { wrapper, router, vm: wrapper.vm as any }
+-}
+-
+ // ===== 测试 =====
+ 
+ beforeEach(() => {
+diff --git a/FHD/frontend/src/components/__tests__/topAssistantFloatHarness.ts b/FHD/frontend/src/components/__tests__/topAssistantFloatHarness.ts
+new file mode 100644
+index 0000000000..bb19d2533b
+--- /dev/null
++++ b/FHD/frontend/src/components/__tests__/topAssistantFloatHarness.ts
+@@ -0,0 +1,144 @@
++import { vi } from 'vitest'
++import { mount, flushPromises } from '@vue/test-utils'
++import { createRouter, createMemoryHistory, type Router } from 'vue-router'
++import { defineComponent, h } from 'vue'
++import TopAssistantFloat from '../TopAssistantFloat.vue'
++
++// Shared Vue/transport fixtures; each suite retains its API spies and scope mocks.
++
++const RouterLinkStub = defineComponent({
++  name: 'RouterLinkStub',
++  props: { to: { type: [String, Object], default: '/' } },
++  setup:
++    (props, { slots }) =>
++    () =>
++      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
++})
++
++const ExcelPreviewStub = defineComponent({
++  name: 'ExcelPreview',
++  setup() {
++    return () => h('div', { class: 'excel-preview-stub' })
++  },
++})
++
++vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
++  launchAdvancedDriverTour: vi.fn(async () => undefined),
++}))
++
++vi.mock('@/composables/useTutorialCatalog', () => ({
++  useTutorialCatalog: () => ({
++    tutorialTracks: [
++      {
++        id: 'host',
++        title: '宿主入门',
++        summary: '认识XC',
++        description: '宿主入门说明',
++        recommended: true,
++      },
++      { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
++    ],
++    advancedTrackHint: '进阶路线提示',
++    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
++  }),
++}))
++
++vi.mock('@/composables/useWorkflowModsRuntimeContext', () => ({
++  useWorkflowModsRuntimeContext: () => ({ modWorkflowEmployeesActive: { value: false } }),
++}))
++
++vi.mock('@/composables/useWorkflowPanoramaNavVisible', () => ({
++  useWorkflowPanoramaNavVisible: () => ({ showWorkflowPanoramaNav: { value: false } }),
++}))
++
++vi.mock('@/utils/workflowNav', () => ({
++  resolveWorkflowVisualizationLocation: vi.fn(() => ({ name: 'workflow-visualization' })),
++}))
++
++vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
++  useEnterpriseScopedWorkflowRegistry: () => ({
++    scopedRegistryEntries: {
++      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
++    },
++  }),
++}))
++
++vi.mock('@/utils/workflowEmployeeRegistry', () => ({
++  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
++  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
++  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
++  resolveLabel: (entry: { id: string }, _resolver: (k: string) => string) => {
++    const map: Record<string, string> = {
++      wechat_msg: '微信消息员工',
++      label_print: '标签打印员工',
++      receipt_confirm: '收货确认员工',
++    }
++    return map[entry.id] || entry.id
++  },
++}))
++
++vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
++  syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
++}))
++
++vi.mock('@/constants/productFlow', () => ({
++  DEFAULT_TUTORIAL_TRACK_ID: 'host',
++}))
++
++vi.mock('@/constants/workflowEmployeeMods', () => ({
++  WORKFLOW_EMPLOYEE_IDS: ['wechat_msg', 'label_print', 'receipt_confirm', 'shipment_mgmt'],
++}))
++
++export function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
++  return {
++    ok,
++    status: ok ? 200 : 500,
++    headers: { get: () => 'application/json' },
++    json: async () => body,
++    text: async () => JSON.stringify(body),
++  }
++}
++
++function createTestRouter() {
++  const names = [
++    'home',
++    'login',
++    'register',
++    'settings',
++    'mod-store',
++    'products',
++    'product-onboarding',
++    'chat',
++    'dashboard',
++    'workflow-visualization',
++    'shipment-records',
++    'customers',
++    'template-preview',
++    'materials',
++    'inventory',
++    'approval-hub',
++  ]
++  const EmptyComp = defineComponent({ setup: () => () => h('div') })
++  const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
++  routes.push({ path: '/', name: 'home', component: EmptyComp })
++  routes.push({ path: '/:pathMatch(.*)*', name: 'fallback', component: EmptyComp })
++  return createRouter({ history: createMemoryHistory(), routes })
++}
++
++export async function mountComponent(options: { router?: Router } = {}) {
++  const router = options.router || createTestRouter()
++  await router.push('/chat')
++  await router.isReady()
++  const wrapper = mount(TopAssistantFloat, {
++    global: {
++      plugins: [router],
++      stubs: {
++        RouterLink: RouterLinkStub,
++        ExcelPreview: ExcelPreviewStub,
++        Teleport: true,
++      },
++    },
++  })
++  await flushPromises()
++  return { wrapper, router, vm: wrapper.vm }
++}
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,3734 @@
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index ffe9bdd543..31a2d39395 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -10,11 +10,71 @@ from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ 
++def material_batch_ids(params):
++    ids = params.get("material_ids", params.get("ids"))
++    if (
++        not isinstance(ids, list)
++        or not ids
++        or any(type(value) is not int or value <= 0 for value in ids)
++        or len(set(ids)) != len(ids)
++        or ("ids" in params and "material_ids" in params and params["ids"] != ids)
++    ):
++        raise ValueError("material batch requires distinct positive integer ids")
++    return ids
++
++
++def prepare_action_verification(spec, params):
++    """Capture owned active targets locally, after approval and before dispatch."""
++    if (spec.tool_id, spec.action) != ("materials", "batch_delete"):
++        return None
++    from app.db.models.material import Material
++    from app.db.session import get_db
++    from app.infrastructure.tenant_scope import tenant_id_for_write
++
++    ids, tenant = material_batch_ids(params), tenant_id_for_write()
++    with get_db() as db:
++        rows = db.query(Material).filter(Material.tenant_id == tenant, Material.id.in_(ids)).all()
++        if len(rows) != len(ids) or any(row.is_active != 1 for row in rows):
++            raise ValueError("material batch targets unavailable")
++    return tenant, tuple(ids)
++
++
++def _verify_material_batch(params, result, before_state):
++    from app.db.models.material import Material
++    from app.db.session import get_db
++    from app.infrastructure.tenant_scope import tenant_id_for_write
++
++    evidence = {"verified": False, "method": "tenant_material_batch_readback"}
++    try:
++        ids, tenant = material_batch_ids(params), tenant_id_for_write()
++        evidence.update(tenant_id=tenant, record_ids=ids, state="unverified")
++        if before_state != (tenant, tuple(ids)):
++            evidence["reason"] = "missing_original_active_targets"
++        elif type(result.get("deleted_count")) is not int or result["deleted_count"] != len(ids):
++            evidence["reason"] = "deleted_count_mismatch"
++        else:
++            with get_db() as db:
++                rows = (
++                    db.query(Material)
++                    .filter(Material.tenant_id == tenant, Material.id.in_(ids))
++                    .all()
++                )
++                verified = len(rows) == len(ids) and all(row.is_active == 0 for row in rows)
++            evidence.update(verified=verified, state="inactive" if verified else "unverified")
++            if not verified:
++                evidence["reason"] = "targets_not_inactive"
++    except RECOVERABLE_ERRORS:
++        evidence["reason"] = "readback_unavailable"
++    return {**result, "business_verification": evidence}, evidence["verified"] is True
++
++
+ def verify_action_result(
+-    spec, params: dict, result: dict, *, runtime_context=None
++    spec, params: dict, result: dict, *, runtime_context=None, before_state=None
+ ) -> tuple[dict, bool]:
+     if tool_receipt_outcome(result) != "success":
+         return result, False
++    if (spec.tool_id, spec.action) == ("materials", "batch_delete"):
++        return _verify_material_batch(params, result, before_state)
+     if spec.tool_id == "generate_office_document" and spec.action == "execute":
+         from xml.etree.ElementTree import ParseError
+         from zipfile import BadZipFile
+diff --git a/FHD/app/application/agent_orchestrator/model_turn_runtime.py b/FHD/app/application/agent_orchestrator/model_turn_runtime.py
+index ded7b976ca..d30a81e09a 100644
+--- a/FHD/app/application/agent_orchestrator/model_turn_runtime.py
++++ b/FHD/app/application/agent_orchestrator/model_turn_runtime.py
+@@ -54,6 +54,8 @@ _FORBIDDEN_KEYS = {
+     "_mod_authorization",
+     "_tool_approval_grants",
+     "_legacy_execution_lease",
++    "_workflow_execution_lease",
++    "_workflow_model_policy",
+     "runtime_context",
+ }
+ _SECRET = re.compile(
+@@ -141,7 +143,11 @@ def decode_state(value: Any, *, durable: bool = True) -> dict[str, Any]:
+         raise ModelTurnError("持久模型状态字段不完整或不受支持")
+     if len(exact_json(state).encode()) > 8 * 1024 * 1024:
+         raise ModelTurnError("模型持久内容超过安全容量，未执行后续调用")
+-    if state["phase"] not in _PHASES or state["kernel"] not in {"legacy", "employee_agent"}:
++    if state["phase"] not in _PHASES or state["kernel"] not in {
++        "legacy",
++        "employee_agent",
++        "workflow_agentic",
++    }:
+         raise ModelTurnError("持久模型状态无效")
+     for field in ("revision", "round", "next_call_index"):
+         if type(state[field]) is not int or state[field] < 0:
+@@ -388,6 +394,8 @@ class ModelTurnDriver:
+             self._active_previous + time.monotonic() - self._active_started
+         )
+         self.state = decode_state(self.state, durable=bool(self.repository and self.persist_state))
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.bind_state(self.state)
+         if self.persist_state and (run := self._run()):
+             run.metadata[STATE_KEY] = copy.deepcopy(self.state)
+             phase = self.state["phase"]
+@@ -409,6 +417,8 @@ class ModelTurnDriver:
+             self.repository.save(run)
+ 
+     def initialize(self, messages, *, limits):
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.repository = self.repository
+         if self.state is None:
+             reference = None
+             if self.repository:
+@@ -459,6 +469,8 @@ class ModelTurnDriver:
+                     },
+                     copy.deepcopy(call.output),
+                 )
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.complete_restore()
+ 
+     def receipt(self, call):
+         run = self._run()
+@@ -528,6 +540,24 @@ class ModelTurnDriver:
+         if not batch:
+             # Product guards must run before the durable success checkpoint.
+             self.policy.validate_text(decision["content"])
++        transition = None
++        if not batch and self.policy.kernel == "workflow_agentic":
++            transition = self.policy.no_call_transition(decision, self.state)
++            if not isinstance(transition, dict) or (
++                transition != {"phase": "ready_model"}
++                and (
++                    not {"phase", "outcome", "final_text"}.issubset(transition)
++                    or set(transition) - {"phase", "outcome", "final_text", "exit_status"}
++                    or transition["phase"] != "terminal"
++                    or transition["outcome"] not in {"success", "failure"}
++                    or not isinstance(transition["final_text"], str)
++                    or (
++                        "exit_status" in transition
++                        and not isinstance(transition["exit_status"], str)
++                    )
++                )
++            ):
++                raise ModelTurnError("工作流空调用决策转换无效")
+         self.state["messages"].append(
+             {
+                 "role": "assistant",
+@@ -545,7 +575,9 @@ class ModelTurnDriver:
+         )
+         self.state["batch"], self.state["next_call_index"] = batch, 0
+         self.state["phase"] = "tool_batch" if batch else "terminal"
+-        if not batch:
++        if transition is not None:
++            self.state.update(transition)
++        elif not batch:
+             final_outcome = getattr(self.policy, "final_outcome", lambda: "success")()
+             self.state.update(outcome=final_outcome, final_text=decision["content"])
+             run = self._run()
+@@ -591,7 +623,13 @@ class ModelTurnDriver:
+                     if self.state["outcome"] == "cancelled"
+                     else "failed"
+                 )
+-            key = "employee_result" if self.policy.kernel == "employee_agent" else "chat_payload"
++            key = (
++                "workflow_result"
++                if self.policy.kernel == "workflow_agentic"
++                else "employee_result"
++                if self.policy.kernel == "employee_agent"
++                else "chat_payload"
++            )
+             stored = run.final_output.get(key)
+             if (
+                 self.policy.kernel == "employee_agent"
+@@ -612,6 +650,18 @@ class ModelTurnDriver:
+                 run.final_output[key] = envelope
+             else:
+                 run.final_output[key] = copy.deepcopy(result)
++            if self.policy.kernel == "workflow_agentic":
++                run.metadata.update(
++                    tool_call_count=len(run.tool_calls),
++                    cost_units_total=sum(int(call.cost_units or 0) for call in run.tool_calls),
++                    artifact_count=len(run.artifacts),
++                )
++                run.final_output.update(
++                    node_outputs={step.node_id: step.output for step in run.steps},
++                    tool_calls=[call.to_dict() for call in run.tool_calls],
++                    artifacts=[artifact.to_dict() for artifact in run.artifacts],
++                    cost_units_total=run.metadata["cost_units_total"],
++                )
+             run.metadata["execution"] = {"state": "idle"}
+             run.add_event(
+                 "model_turn." + self.state["phase"],
+@@ -698,7 +748,9 @@ class ModelTurnDriver:
+         from .task_background import task_execution_context
+ 
+         execution_context = {
+-            key: value for key, value in self.context.items() if key != "_legacy_execution_lease"
++            key: value
++            for key, value in self.context.items()
++            if key not in {"_legacy_execution_lease", "_workflow_execution_lease"}
+         }
+         with llm_client_scope(self.policy.client, self.policy.model):
+             controller._execute_step(
+@@ -785,6 +837,11 @@ class ModelTurnDriver:
+                         "retryable": False,
+                         "message": "工具调用需要登录并关联服务端持久任务，未执行工具",
+                     }
++                    if self.policy.kernel == "workflow_agentic":
++                        self.state.update(phase="terminal", outcome="failure", final_text="")
++                        self.checkpoint()
++                        yield {"type": "result", "result": self.finish("failure", receipt=output)}
++                        return
+                 else:
+                     self.assert_active_budget()
+                     repeat = self.state["limits"]["repeat"]
+@@ -830,7 +887,8 @@ class ModelTurnDriver:
+                         ),
+                     }
+                     return
+-                self.policy.observe(call, output)
++                if stored or self.policy.kernel != "workflow_agentic":
++                    self.policy.observe(call, output)
+                 if outcome in {"unknown", "pending", "waiting_approval"}:
+                     yield {"type": "result", "result": self._suspend(outcome, output)}
+                     return
+@@ -980,9 +1038,27 @@ def resume_model_turn(controller, run, *, approved_step_id=""):
+ 
+     state = decode_state(run.metadata[STATE_KEY])
+     context = dict(run.metadata.get("runtime_context") or {})
+-    if validate_actor_context(context):
+-        raise ModelTurnError("持久模型任务登录授权失效")
+-    client, model = resolve_durable_model_client(context, state["model_reference"])
++    if state["kernel"] == "workflow_agentic":
++        from app.application.workflow.agentic_model_policy import (
++            WorkflowAgenticModelPolicy,
++            block_workflow_restore,
++        )
++        from app.utils.operational_errors import RECOVERABLE_ERRORS
++
++        from .trace_runs import WorkflowExecutionLease
++
++        try:
++            if validate_actor_context(context):
++                raise ModelTurnError("持久模型任务登录授权失效")
++            client, model = resolve_durable_model_client(context, state["model_reference"])
++            context["_workflow_execution_lease"] = WorkflowExecutionLease(run.run_id)
++            policy = WorkflowAgenticModelPolicy.restore(state["policy"], context, client, model)
++        except RECOVERABLE_ERRORS:
++            return block_workflow_restore(controller._repo, run, state)
++    else:
++        if validate_actor_context(context):
++            raise ModelTurnError("持久模型任务登录授权失效")
++        client, model = resolve_durable_model_client(context, state["model_reference"])
+     if state["kernel"] == "legacy":
+         from app.legacy.chat.legacy_chat_runtime import LegacyModelPolicy
+ 
+@@ -990,7 +1066,7 @@ def resume_model_turn(controller, run, *, approved_step_id=""):
+ 
+         context["_legacy_execution_lease"] = LegacyExecutionLease(run.run_id)
+         policy = LegacyModelPolicy.restore(state["policy"], context, client, model)
+-    else:
++    elif state["kernel"] == "employee_agent":
+         from app.application.employee_runtime.agent_loop import EmployeeModelPolicy
+ 
+         policy = EmployeeModelPolicy.restore(state["policy"], context, client, model)
+@@ -1018,6 +1094,13 @@ def terminal_model_payload(run):
+         policy = LegacyModelPolicy.restore(
+             state["policy"], {}, None, state["model_reference"]["model"]
+         )
++    elif state["kernel"] == "workflow_agentic":
++        stored = run.final_output.get("workflow_result")
++        if isinstance(stored, dict):
++            return copy.deepcopy(stored)
++        from app.application.workflow.agentic_model_policy import project_terminal_workflow
++
++        return project_terminal_workflow(run, state)
+     else:
+         from app.application.employee_runtime.agent_loop import EmployeeModelPolicy
+ 
+diff --git a/FHD/app/application/agent_orchestrator/tool_executor.py b/FHD/app/application/agent_orchestrator/tool_executor.py
+index e19cad88de..c4dc5b18d2 100644
+--- a/FHD/app/application/agent_orchestrator/tool_executor.py
++++ b/FHD/app/application/agent_orchestrator/tool_executor.py
+@@ -210,6 +210,12 @@ class AgentToolExecutor:
+             if existing is not None:
+                 return existing
+         try:
++            from app.application.agent_orchestrator.business_action_verification import (
++                prepare_action_verification,
++                verify_action_result,
++            )
++
++            before_state = prepare_action_verification(spec, step.params)
+             if runtime_context.get("_tool_dispatch_kind") == "model":
+                 from app.application.tools.workflow import _execute_workflow_tool_raw
+                 from app.application.tools.workflow_tools.dispatch import parse_arguments
+@@ -235,12 +241,12 @@ class AgentToolExecutor:
+             if claim is None:
+                 return result
+             ledger.record_receipt(claim, result)
+-            from app.application.agent_orchestrator.business_action_verification import (
+-                verify_action_result,
+-            )
+-
+             result, verified = verify_action_result(
+-                spec, step.params, result, runtime_context=runtime_context
++                spec,
++                step.params,
++                result,
++                runtime_context=runtime_context,
++                before_state=before_state,
+             )
+             return ledger.finish(claim, result, verified=verified)
+         except RECOVERABLE_ERRORS:
+diff --git a/FHD/app/application/agent_orchestrator/trace_runs.py b/FHD/app/application/agent_orchestrator/trace_runs.py
+index 6a524f4fb9..c40c7002ce 100644
+--- a/FHD/app/application/agent_orchestrator/trace_runs.py
++++ b/FHD/app/application/agent_orchestrator/trace_runs.py
+@@ -6,11 +6,11 @@ import hashlib
+ import json
+ from collections.abc import Callable, Sequence
+ from copy import deepcopy
+-from dataclasses import dataclass
++from dataclasses import dataclass, fields
+ from typing import Any, Protocol
+ from uuid import uuid4
+ 
+-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowNode
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ from .run_control import run_operation_lock
+@@ -54,6 +54,20 @@ class LegacyExecutionLease:
+     run_id: str
+ 
+ 
++@dataclass(frozen=True)
++class WorkflowExecutionLease:
++    """Admission capability for the original governed JSON workflow turn."""
++
++    run_id: str
++
++
++@dataclass(frozen=True)
++class WorkflowReceiptProjection:
++    """Trusted in-process metrics supplier; it cannot replace a tool receipt."""
++
++    read: Callable[[], dict[str, Any]]
++
++
+ def legacy_execution_context(run: AgentRun) -> dict[str, Any]:
+     return {
+         **deepcopy(run.metadata["runtime_context"]),
+@@ -179,6 +193,32 @@ class TraceRunService:
+         runtime_context: dict[str, Any],
+         source: str | None = None,
+         channel: str = "compat_chat",
++    ):
++        return self._claim_model_turn_run(
++            message=message, runtime_context=runtime_context, source=source, channel=channel
++        )
++
++    def claim_workflow_run(self, *, message, runtime_context, plan, policy_snapshot):
++        return self._claim_model_turn_run(
++            message=message,
++            runtime_context=runtime_context,
++            source=str(runtime_context.get("source") or ""),
++            channel="workflow_agentic",
++            kernel="workflow_agentic",
++            plan=plan,
++            policy_snapshot=policy_snapshot,
++        )
++
++    def _claim_model_turn_run(
++        self,
++        *,
++        message,
++        runtime_context,
++        source=None,
++        channel="compat_chat",
++        kernel="legacy",
++        plan=None,
++        policy_snapshot=None,
+     ):
+         from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+ 
+@@ -207,6 +247,10 @@ class TraceRunService:
+             for key, value in context.items()
+             if key not in excluded and not key.startswith("_")
+         }
++        if kernel == "workflow_agentic":
++            from .model_turn_runtime import safe_value
++
++            options["workflow_policy"] = safe_value(policy_snapshot)
+         fingerprint = hashlib.sha256(
+             json.dumps([message, options], ensure_ascii=False, sort_keys=True, default=str).encode()
+         ).hexdigest()
+@@ -228,17 +272,22 @@ class TraceRunService:
+             user_id=context["user_id"],
+             source=source,
+             channel=channel,
+-            intent="legacy_chat_adapter",
++            intent=plan.intent if plan is not None else "legacy_chat_adapter",
+         )
++        if plan is not None:
++            run.plan_id = plan.plan_id
+         context.update(run_id=run.run_id, agent_run_id=run.run_id)
+         run.metadata.update(
+-            execution_kernel="legacy",
++            execution_kernel=kernel,
+             legacy_request_fingerprint=fingerprint,
+             runtime_context=context,
+         )
+         run.metadata["task_context"]["root_run_id"] = run.run_id
+         claimed, created = self.repository.claim_first_task_run(run)
+-        if claimed.metadata.get("legacy_request_fingerprint") != fingerprint:
++        if (
++            claimed.metadata.get("legacy_request_fingerprint") != fingerprint
++            or claimed.metadata.get("execution_kernel") != kernel
++        ):
+             raise ValueError("对话 turn 已绑定不同请求，请关联原任务或开始独立新 turn")
+         claimed.metadata["admission_replayed"] = not created
+         return claimed
+@@ -514,6 +563,7 @@ class TraceRunService:
+         params: dict[str, Any],
+         runtime_context: dict[str, Any],
+         dispatch: Callable[[dict[str, Any]], str | dict[str, Any]],
++        projection: WorkflowReceiptProjection | None = None,
+     ) -> dict[str, Any]:
+         """Persist a dynamic call before entering the existing controlled dispatcher."""
+         from app.application.tools.registered_capabilities import (
+@@ -543,10 +593,18 @@ class TraceRunService:
+                 runtime_context=runtime_context,
+             )
+             if employee_id is None:
+-                lease = runtime_context.get("_legacy_execution_lease")
++                kind = run.metadata.get("execution_kernel")
++                lease = runtime_context.get(
++                    "_workflow_execution_lease"
++                    if kind == "workflow_agentic"
++                    else "_legacy_execution_lease"
++                )
++                capability = (
++                    WorkflowExecutionLease if kind == "workflow_agentic" else LegacyExecutionLease
++                )
+                 if (
+-                    run.metadata.get("execution_kernel") != "legacy"
+-                    or not isinstance(lease, LegacyExecutionLease)
++                    kind not in {"legacy", "workflow_agentic"}
++                    or not isinstance(lease, capability)
+                     or lease.run_id != run_id
+                 ):
+                     raise ValueError("对话工具缺少服务端持久任务认领，未执行")
+@@ -555,7 +613,7 @@ class TraceRunService:
+                 {
+                     key: value
+                     for key, value in runtime_context.items()
+-                    if key != "_legacy_execution_lease"
++                    if key not in {"_legacy_execution_lease", "_workflow_execution_lease"}
+                 },
+             )
+             existing = next((call for call in run.tool_calls if call.call_id == call_id), None)
+@@ -768,6 +826,32 @@ class TraceRunService:
+                 "verified": bool(verified) and outcome == "success",
+                 "method": "read_only_receipt" if spec.read_only else "business_readback",
+             }
++            if projection is not None:
++                from .model_turn_runtime import safe_value
++
++                if run.metadata.get("execution_kernel") == "workflow_agentic":
++                    call.permission = spec.permission
++                try:
++                    if (
++                        not isinstance(projection, WorkflowReceiptProjection)
++                        or run.metadata.get("execution_kernel") != "workflow_agentic"
++                    ):
++                        raise ValueError("工作流投影缺少可信内存能力")
++                    metrics = safe_value(projection.read())
++                    if not isinstance(metrics, dict) or set(metrics) != {
++                        field.name for field in fields(NodeExecutionResult)
++                    }:
++                        raise ValueError("工作流投影不是对象")
++                    metrics["output"] = deepcopy(checked)
++                    metrics["success"] = outcome == "success"
++                    call.metadata["workflow_projection"] = {
++                        "version": 1,
++                        "output_digest": canonical_hash(output),
++                        "node_digest": canonical_hash(metrics),
++                        "node_result": metrics,
++                    }
++                except (TypeError, *RECOVERABLE_ERRORS):
++                    call.metadata["workflow_projection_error"] = "workflow_projection_invalid"
+             self.recording.append_artifacts(run, _extract_artifacts(output))
+             run.final_output = {
+                 "node_outputs": {item.node_id: item.output for item in run.steps},
+diff --git a/FHD/app/application/ai_chat/agent_workflow_bridge.py b/FHD/app/application/ai_chat/agent_workflow_bridge.py
+index ce9ed4e5e2..fead5b976b 100644
+--- a/FHD/app/application/ai_chat/agent_workflow_bridge.py
++++ b/FHD/app/application/ai_chat/agent_workflow_bridge.py
+@@ -24,6 +24,13 @@ class AgentWorkflowBridge:
+         self.output_message = output_message
+         self.artifact_payloads = artifact_payloads
+ 
++    def actual_run(self, runtime_context: dict[str, Any]) -> AgentRun:
++        """Read the canonical run; never reconstruct executed tool evidence."""
++        run = self.repository.get(str(runtime_context.get("run_id") or ""))
++        if run is None or run.metadata.get("execution_kernel") != "workflow_agentic":
++            raise ValueError("原持久工作流任务不存在")
++        return run
++
+     @staticmethod
+     def iter_artifact_payloads(
+         output: dict[str, Any],
+diff --git a/FHD/app/application/ai_chat/planned_workflow_dispatch.py b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+index 34145c9994..9b7b4ed1fe 100644
+--- a/FHD/app/application/ai_chat/planned_workflow_dispatch.py
++++ b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+@@ -92,7 +92,13 @@ class WorkflowDispatchCallbacks(Protocol):
+         **kwargs: Any,
+     ) -> tuple[WorkflowRunResult, list[dict[str, Any]]]: ...
+     def _start_agentic_workflow_agent_run(
+-        self, *, user_id: str, message: str, plan: PlanGraph, runtime_context: dict[str, Any]
++        self,
++        *,
++        user_id: str,
++        message: str,
++        plan: PlanGraph,
++        runtime_context: dict[str, Any],
++        tool_registry: dict[str, Any] | None = None,
+     ) -> AgentRun: ...
+     @staticmethod
+     def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str: ...
+@@ -491,14 +497,13 @@ class PlannedWorkflowDispatch:
+             return confirmation_payload
+         agentic_pre_run = None
+         if use_agentic:
+-            try:
+-                agentic_pre_run = self.callbacks._start_agentic_workflow_agent_run(
+-                    user_id=user_id, message=message, plan=plan, runtime_context=runtime_ctx
+-                )
+-                runtime_ctx["run_id"] = agentic_pre_run.run_id
+-                runtime_ctx["agent_run_id"] = agentic_pre_run.run_id
+-            except RECOVERABLE_ERRORS:
+-                logger.debug("Agentic workflow AgentRun pre-create skipped", exc_info=True)
++            agentic_pre_run = self.callbacks._start_agentic_workflow_agent_run(
++                user_id=user_id,
++                message=message,
++                plan=plan,
++                runtime_context=runtime_ctx,
++                tool_registry=tool_registry,
++            )
+         run_result, state_updates = self.callbacks._run_workflow_with_state_updates(
+             plan=plan,
+             runtime_context=runtime_ctx,
+diff --git a/FHD/app/application/ai_chat_app_service.py b/FHD/app/application/ai_chat_app_service.py
+index 7fecf5f04a..f0f5b8d827 100644
+--- a/FHD/app/application/ai_chat_app_service.py
++++ b/FHD/app/application/ai_chat_app_service.py
+@@ -615,11 +615,29 @@ class AIChatApplicationService(
+         )
+ 
+     def _start_agentic_workflow_agent_run(
+-        self, *, user_id: str, message: str, plan: PlanGraph, runtime_context: dict[str, Any]
++        self,
++        *,
++        user_id: str,
++        message: str,
++        plan: PlanGraph,
++        runtime_context: dict[str, Any],
++        tool_registry: dict[str, Any] | None = None,
+     ) -> AgentRun:
+-        return self._agent_workflow_bridge().start_run(
+-            user_id=user_id, message=message, plan=plan, runtime_context=runtime_context
++        from app.application.workflow.agentic_model_policy import admit_policy, create_policy
++        from app.application.workflow.engine import WorkflowEngine
++
++        engine = self.workflow_engine
++        if type(engine).__module__ == "app.legacy.workflow.legacy_engine_adapter":
++            engine = engine.engine
++        if not isinstance(engine, WorkflowEngine):
++            raise ValueError("当前工作流 runtime 不支持持久模型决策")
++        policy = create_policy(
++            engine, plan, {**runtime_context, "message": message}, tool_registry or {}
+         )
++        run = admit_policy(policy)
++        runtime_context.update(policy.context)
++        runtime_context["_workflow_model_policy"] = policy
++        return run
+ 
+     def _bridge_agentic_workflow_result_to_agent_run(
+         self,
+@@ -631,6 +649,12 @@ class AIChatApplicationService(
+         runtime_context: dict[str, Any],
+         agent_run: AgentRun | None = None,
+     ) -> AgentRun:
++        from app.application.workflow.agentic_model_policy import WorkflowAgenticModelPolicy
++
++        if isinstance(runtime_context.get("_workflow_model_policy"), WorkflowAgenticModelPolicy):
++            return self._agent_workflow_bridge().actual_run(runtime_context)
++        if "_workflow_model_policy" in runtime_context:
++            raise ValueError("工作流结果投影需要可信内存策略")
+         return self._agent_workflow_bridge().record_result(
+             user_id=user_id,
+             message=message,
+diff --git a/FHD/app/application/workflow/agent_loop.py b/FHD/app/application/workflow/agent_loop.py
+index b46fb232d4..e99055e597 100644
+--- a/FHD/app/application/workflow/agent_loop.py
++++ b/FHD/app/application/workflow/agent_loop.py
+@@ -65,138 +65,9 @@ def run_agentic_loop(
+     user_id: str | None,
+     state_schema: StateSchema | None = None,
+ ) -> WorkflowRunResult:
+-    """Run the model-directed tool loop with fail-closed completion semantics."""
+-    runtime_context = dict(runtime_context or {})
+-    schema = state_schema or engine._default_state_schema
+-    all_node_results: list[NodeExecutionResult] = []
+-    agent_history: list[dict[str, Any]] = []
+-    max_steps = 10
+-    step = 0
+-    terminal_reason = ""
+-    completed_by_model = False
+-    decision_errors = 0
++    """Adapt workflow hooks to the shared durable model-turn driver."""
++    from .agentic_model_policy import run_workflow_policy
+ 
+-    user_message = str(runtime_context.get("message") or "").strip()
+-
+-    while step < max_steps:
+-        step += 1
+-
+-        decision = engine._llm_decide_next_step(
+-            user_message=user_message,
+-            tool_registry=tool_registry,
+-            runtime_context=runtime_context,
+-            agent_history=agent_history,
+-            user_id=user_id,
+-        )
+-
+-        if decision is None:
+-            terminal_reason = "模型未返回可执行决策"
+-            break
+-
+-        decision_action = str(decision.get("action") or "").strip()
+-        tool_id = decision.get("tool_id", "")
+-        tool_action = str(
+-            decision.get("action_name") or decision.get("tool_action") or decision_action
+-        ).strip()
+-        params = decision.get("params") or {}
+-        reasoning = str(decision.get("reasoning", "")).strip()
+-
+-        event_logger.info(
+-            "AgenticLoop step=%d action=%s.%s reasoning=%s",
+-            step,
+-            tool_id,
+-            tool_action,
+-            reasoning[:100],
+-        )
+-
+-        if decision_action == "done":
+-            agent_history.append({"step": step, "role": "done"})
+-            completed_by_model = True
+-            break
+-
+-        agent_history.append(
+-            {
+-                "step": step,
+-                "role": "assistant",
+-                "tool_id": tool_id,
+-                "action": tool_action,
+-                "params": params,
+-                "reasoning": reasoning,
+-            }
+-        )
+-
+-        if not tool_id or not tool_action or tool_action == "execute":
+-            decision_errors += 1
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": "工具决策缺少 tool_id 或真实 action_name，已跳过。",
+-                }
+-            )
+-            continue
+-
+-        node_result = engine._run_single_tool(
+-            tool_id=tool_id,
+-            action=tool_action,
+-            params=params,
+-            runtime_context=runtime_context,
+-            max_retries=max_retries,
+-            retryable=engine._agentic_tool_allows_auto_retry(tool_registry, tool_id, tool_action),
+-        )
+-        all_node_results.append(node_result)
+-        engine._append_node_trace(runtime_context, node_result)
+-        engine._merge_state_schema(runtime_context, node_result, schema)
+-
+-        runtime_context.setdefault("node_outputs", {})
+-        runtime_context["node_outputs"][f"agent_step_{step}"] = node_result.output
+-        engine._emit_state_update(node_result)
+-
+-        if not node_result.success:
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": f"工具执行失败: {node_result.error}",
+-                }
+-            )
+-        else:
+-            output_preview = engine._summarize_output(node_result.output)
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": f"结果: {output_preview}",
+-                }
+-            )
+-
+-    if step >= max_steps:
+-        event_logger.warning("AgenticLoop 达到最大步数限制 %d", max_steps)
+-        terminal_reason = f"达到最大步数限制 {max_steps}，但模型未声明完成"
+-
+-    failed_results = [result for result in all_node_results if not result.success]
+-    success = completed_by_model and not failed_results and decision_errors == 0
+-    if failed_results:
+-        terminal_reason = f"{len(failed_results)} 个工具步骤失败"
+-    elif decision_errors:
+-        terminal_reason = f"{decision_errors} 个模型工具决策无效"
+-    runtime_context["workflow_status"] = {
+-        "state": "completed" if success else "failed",
+-        "completed_by_model": completed_by_model,
+-        "steps": step,
+-        "failed_tool_steps": len(failed_results),
+-        "invalid_decisions": decision_errors,
+-        "message": "AgenticLoop 执行完成" if success else terminal_reason,
+-    }
+-
+-    return WorkflowRunResult(
+-        plan_id=plan.plan_id,
+-        success=success,
+-        node_results=all_node_results,
+-        final_context=runtime_context,
+-        message=(
+-            f"AgenticLoop 完成（{step} 步）"
+-            if success
+-            else f"AgenticLoop 未完成（{step} 步）：{terminal_reason}"
+-        ),
++    return run_workflow_policy(
++        engine, plan, runtime_context, max_retries, tool_registry, user_id, state_schema
+     )
+diff --git a/FHD/app/application/workflow/agentic_model_policy.py b/FHD/app/application/workflow/agentic_model_policy.py
+new file mode 100644
+index 0000000000..21bf92a2a8
+--- /dev/null
++++ b/FHD/app/application/workflow/agentic_model_policy.py
+@@ -0,0 +1,754 @@
++"""JSON workflow decisions adapted to the existing durable model-turn driver."""
++
++from __future__ import annotations
++
++import copy
++from dataclasses import asdict
++from datetime import UTC, datetime
++
++from app.application.agent_orchestrator.business_action_ledger import canonical_hash
++from app.application.agent_orchestrator.model_turn_runtime import (
++    ModelTurnError,
++    ModelTurnRejected,
++    exact_json,
++    policy_secrets,
++    run_model_turn,
++    safe_value,
++)
++from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
++from app.application.agent_orchestrator.trace_runs import (
++    WorkflowExecutionLease,
++    WorkflowReceiptProjection,
++)
++from app.application.tools.workflow_tools.dispatch import parse_arguments
++from app.utils.operational_errors import RECOVERABLE_ERRORS
++
++from .engine_decisions import build_decision_messages, decision_model_scope
++from .workflow_types import NodeExecutionResult, PlanGraph, StateSchema, WorkflowRunResult
++
++_TYPES = {
++    None: None,
++    bool: "bool",
++    int: "int",
++    float: "float",
++    str: "str",
++    list: "list",
++    dict: "dict",
++}
++_INVALID = "工具决策缺少 tool_id 或真实 action_name，已跳过。"
++
++
++def _schema_snapshot(schema):
++    rows = []
++    portable = True
++    for name, field in schema.fields.items():
++        token = next((token for kind, token in _TYPES.items() if field.type is kind), "ephemeral")
++        portable = (
++            portable and token != "ephemeral" and field.merge in {"set", "append", "merge_dict"}
++        )
++        rows.append({"key": name, "type": token, "merge": field.merge})
++    return rows, portable
++
++
++def _portable_engine(engine):
++    from .engine import WorkflowEngine
++
++    if type(engine) is not WorkflowEngine:
++        return False
++    for name in (
++        "_llm_decide_next_step",
++        "_run_single_tool",
++        "_agentic_tool_allows_auto_retry",
++        "_append_node_trace",
++        "_merge_state_schema",
++        "_emit_state_update",
++        "_summarize_output",
++        "_recovery_hint",
++    ):
++        original = getattr(WorkflowEngine, name)
++        actual = getattr(engine, name)
++        if getattr(actual, "__func__", actual) is not original:
++            return False
++    dispatch = engine._dispatch
++    if getattr(dispatch, "__module__", "") == "app.legacy.workflow.legacy_engine_adapter":
++        cells = getattr(dispatch, "__closure__", None) or []
++        return any(
++            getattr(cell.cell_contents, "__module__", "") == "app.di.registry" for cell in cells
++        )
++    return dispatch is registered_workflow_dispatch
++
++
++def registered_workflow_dispatch(*, tool_id, action, params):
++    from app.application.facades.tools_facade import execute_registered_workflow_tool
++
++    return execute_registered_workflow_tool(tool_id, action, params)
++
++
++def _limits(registry, max_retries, context):
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++
++    longest = 0.0
++    for tool_id, meta in registry.items():
++        for action in meta.get("actions") or {}:
++            spec = get_tool_action_spec(tool_id, action)
++            if spec is not None:
++                longest = max(
++                    longest,
++                    float(spec.timeout_seconds) * (1 + max_retries if spec.idempotent else 1),
++                )
++    seconds = min(86400.0, 10 * (20.0 + longest))
++    # Request options can only reduce the server-derived bound.
++    if isinstance(context.get("timeout_seconds"), (int, float)) and context["timeout_seconds"] > 0:
++        seconds = min(seconds, float(context["timeout_seconds"]))
++    if context.get("deadline_utc"):
++        try:
++            deadline = datetime.fromisoformat(str(context["deadline_utc"]).replace("Z", "+00:00"))
++            if deadline.tzinfo is None:
++                deadline = deadline.replace(tzinfo=UTC)
++            # Preserve a stable admission fingerprint; check the absolute deadline per turn.
++        except ValueError:
++            raise ModelTurnError("工作流任务 deadline 无效") from None
++    return {"rounds": 10, "calls": 10, "repeat": 0, "seconds": max(0.001, seconds)}
++
++
++class WorkflowAgenticModelPolicy:
++    kernel = "workflow_agentic"
++
++    def __init__(
++        self, engine, plan, context, registry, max_retries, schema, client, model, *, snapshot=None
++    ):
++        self.engine, self.plan, self.context = engine, plan, dict(context or {})
++        self.registry = copy.deepcopy(registry)
++        self.max_retries, self.schema = max_retries, schema
++        self.client, self.model = client, model
++        self.repository = None
++        self.nodes = {}
++        self._node_metrics = {}
++        self._live = set()
++        self._state = None
++        self._replaying = True
++        fields, portable_schema = _schema_snapshot(schema)
++        self._snapshot = snapshot or {
++            "version": 1,
++            "protocol": "workflow-json-v1",
++            "plan": asdict(plan),
++            "registry_entries": [
++                [
++                    name,
++                    {key: value for key, value in meta.items() if key != "actions"},
++                    [[action, value] for action, value in (meta.get("actions") or {}).items()],
++                ]
++                for name, meta in registry.items()
++            ],
++            "schema": fields,
++            "max_retries": max_retries,
++            "hook_profile": "workflow-engine-v1"
++            if portable_schema and _portable_engine(engine)
++            else "ephemeral",
++            "limits": _limits(registry, max_retries, self.context),
++            "request_parameters": {"temperature": 0.1, "max_tokens": 600},
++        }
++
++    def secrets(self):
++        return policy_secrets(self.context, self.client)
++
++    def snapshot(self):
++        return copy.deepcopy(self._snapshot)
++
++    @classmethod
++    def restore(cls, snapshot, context, client, model):
++        from .engine import WorkflowEngine
++        from .workflow_types import Branch, WorkflowNode
++
++        if snapshot.get("hook_profile") != "workflow-engine-v1":
++            raise ModelTurnError(
++                "原工作流包含不可恢复的 Python hook", error_code="workflow_hook_not_restorable"
++            )
++        plan = dict(snapshot["plan"])
++        plan["nodes"] = [
++            WorkflowNode(**{**row, "branches": [Branch(**branch) for branch in row["branches"]]})
++            for row in plan["nodes"]
++        ]
++        schema = StateSchema()
++        types = {value: key for key, value in _TYPES.items()}
++        for row in snapshot["schema"]:
++            if row["type"] not in types:
++                raise ModelTurnError("原工作流 StateSchema 不可恢复")
++            schema.declare(row["key"], types[row["type"]], row["merge"])
++        registry = {
++            name: {**meta, "actions": dict(actions)}
++            for name, meta, actions in snapshot["registry_entries"]
++        }
++        return cls(
++            WorkflowEngine(registered_workflow_dispatch),
++            PlanGraph(**plan),
++            context,
++            registry,
++            snapshot["max_retries"],
++            schema,
++            client,
++            model,
++            snapshot=copy.deepcopy(snapshot),
++        )
++
++    def validate_saved(self, state):
++        if (
++            state["kernel"] != self.kernel
++            or state["policy"] != self.snapshot()
++            or state["limits"] != self._snapshot["limits"]
++        ):
++            raise ModelTurnError("原工作流策略已变化，不能替换模型决策")
++        self._state = state
++        run = self.repository.get(self.context["run_id"]) if self.repository else None
++        self._admission_context = copy.deepcopy(
++            run.metadata["runtime_context"] if run else self.context
++        )
++        if "_workflow_execution_lease" in self.context:
++            self._admission_context["_workflow_execution_lease"] = self.context[
++                "_workflow_execution_lease"
++            ]
++        self.context = copy.deepcopy(self._admission_context)
++        self.nodes = {}
++        self._node_metrics = {}
++        self._live = set()
++        self._replaying = True
++
++    def complete_restore(self):
++        self._replaying = False
++
++    def bind_state(self, state):
++        self._state = state
++
++    def check_control(self):
++        from app.application.agent_orchestrator.run_control import get_run_control
++
++        if get_run_control(str(self.context.get("run_id") or "")) == "cancel":
++            raise ModelTurnRejected("工作流任务已取消")
++        if self.context.get("deadline_utc"):
++            deadline = datetime.fromisoformat(
++                str(self.context["deadline_utc"]).replace("Z", "+00:00")
++            )
++            if deadline.tzinfo is None:
++                deadline = deadline.replace(tzinfo=UTC)
++            if datetime.now(UTC) >= deadline:
++                raise ModelTurnRejected("工作流任务 deadline 已到期", error_code="wall_time_limit")
++
++    def _history(self, messages):
++        history, step = [], 0
++        for message in messages:
++            if message.get("role") == "assistant":
++                envelope = parse_arguments(message["content"])
++                step = envelope["step"]
++                decision, kind = envelope["decision"], envelope["kind"]
++                if kind == "done":
++                    history.append({"step": step, "role": "done"})
++                elif kind in {"execute", "invalid"}:
++                    history.append(
++                        {
++                            "step": step,
++                            "role": "assistant",
++                            "tool_id": decision.get("tool_id", ""),
++                            "action": decision.get("action_name", ""),
++                            "params": decision.get("params", {}),
++                            "reasoning": decision.get("reasoning", ""),
++                        }
++                    )
++                    if kind == "invalid":
++                        history.append({"step": step, "role": "system", "content": _INVALID})
++            elif message.get("role") == "tool":
++                output = parse_arguments(message["content"])
++                output = output.get("result", output)
++                node = self.nodes.get(message.get("tool_call_id"))
++                text = (
++                    f"结果: {self.engine._summarize_output(output)}"
++                    if tool_receipt_outcome(output) == "success"
++                    else f"工具执行失败: {node.error if node else output.get('message') or output.get('error') or 'unknown error'}"
++                )
++                history.append({"step": step, "role": "system", "content": text})
++        return history
++
++    def request(self, messages, state):
++        self._state = state
++        return {
++            "messages": build_decision_messages(
++                str(self.context.get("message") or "").strip(),
++                self.registry,
++                self.context,
++                self._history(messages),
++            ),
++            "tools": None,
++            "tool_choice": None,
++        }
++
++    def transport(self, request):
++        from openai import APITimeoutError
++
++        try:
++            with decision_model_scope(self.client, self.model, self.check_control) as binding:
++                decision = self.engine._llm_decide_next_step(
++                    user_message=str(self.context.get("message") or "").strip(),
++                    tool_registry=self.registry,
++                    runtime_context=self.context,
++                    agent_history=self._history_from_state(),
++                    user_id=self.context.get("user_id"),
++                )
++            for completion in binding.usage:
++                yield {"type": "usage", "completion": completion}
++        except ModelTurnError:
++            raise
++        except ValueError as exc:
++            raise ModelTurnRejected(str(exc), error_code="invalid_tool_arguments") from exc
++        except (APITimeoutError, *RECOVERABLE_ERRORS) as exc:
++            raise ModelTurnError("工作流模型请求中断，未重新请求原决策") from exc
++        if decision is None:
++            normalized, kind = {}, "none"
++        elif not isinstance(decision, dict):
++            raise ModelTurnRejected("工作流决策必须是 JSON 对象")
++        elif str(decision.get("action") or "").strip() == "done":
++            normalized, kind = {"action": "done"}, "done"
++        else:
++            action = str(
++                decision.get("action_name")
++                or decision.get("tool_action")
++                or decision.get("action")
++                or ""
++            ).strip()
++            params = decision.get("params", {})
++            if not isinstance(params, dict):
++                raise ModelTurnRejected("工作流工具参数必须是 JSON 对象")
++            normalized = {
++                "tool_id": str(decision.get("tool_id") or "").strip(),
++                "action_name": action,
++                "params": params,
++                "reasoning": str(decision.get("reasoning") or "").strip(),
++            }
++            kind = (
++                "execute" if normalized["tool_id"] and action and action != "execute" else "invalid"
++            )
++        step = self._state["round"]
++        calls = []
++        if kind == "execute":
++            params = {
++                "tool_id": normalized["tool_id"],
++                "action": normalized["action_name"],
++                "params": normalized["params"],
++            }
++            identity = (
++                "wfa_"
++                + canonical_hash(
++                    [self.context.get("run_id", ""), self._state["request_id"], 0, params]
++                )[:48]
++            )
++            calls.append(
++                {"id": identity, "name": "execute_erp_capability", "arguments": exact_json(params)}
++            )
++        yield {
++            "type": "decision",
++            "decision": {
++                "content": exact_json({"kind": kind, "decision": normalized, "step": step}),
++                "calls": calls,
++            },
++        }
++
++    def _history_from_state(self):
++        messages = []
++        for message in self._state["messages"]:
++            if "receipt" not in message:
++                messages.append(message)
++            else:
++                call = self._call(message["receipt"]["call_id"])
++                if (
++                    call is None
++                    or canonical_hash(call.output) != message["receipt"]["output_digest"]
++                ):
++                    raise ModelTurnError("原工作流回执已变化")
++                messages.append(
++                    {
++                        "role": "tool",
++                        "tool_call_id": call.call_id,
++                        "content": exact_json(call.output),
++                    }
++                )
++        return self._history(messages)
++
++    def meter(self, completion, state):
++        pass  # Existing provider billing remains the sole model-usage owner.
++
++    def prepare_arguments(self, name, params):
++        return params
++
++    def validate_call(self, call, *, approved):
++        from app.application.agent_orchestrator.tool_spec import (
++            get_tool_action_spec,
++            validate_tool_call,
++        )
++        from app.infrastructure.auth.agent_mod_scope import authorize_agent_tool
++
++        params = call["params"]
++        tool, action = params["tool_id"], params["action"]
++        if action not in (self.registry.get(tool, {}).get("actions") or {}):
++            raise ModelTurnRejected("工具不在原工作流目录")
++        validation = validate_tool_call(tool, action, params["params"])
++        if not validation.ok:
++            raise ModelTurnRejected(validation.message)
++        denied = authorize_agent_tool(tool, action, params["params"], self.context)
++        if denied:
++            raise ModelTurnRejected(denied["message"])
++        spec = get_tool_action_spec(tool, action)
++        if not spec.read_only and (
++            self._snapshot["hook_profile"] != "workflow-engine-v1"
++            or not _portable_engine(self.engine)
++        ):
++            raise ModelTurnRejected(
++                "不可恢复的工作流 hook 不能执行写入", error_code="workflow_hook_not_restorable"
++            )
++
++    def before_call(self, call):
++        return iter(())
++
++    def dispatch(self, call, repository):
++        from app.application.agent_orchestrator.chat_trace import _run_service
++
++        self.repository = repository
++        params, holder = call["params"], {}
++
++        def dispatch(context):
++            result = self.engine._run_single_tool(
++                tool_id=params["tool_id"],
++                action=params["action"],
++                params=params["params"],
++                runtime_context=context,
++                max_retries=self.max_retries,
++                retryable=self.engine._agentic_tool_allows_auto_retry(
++                    self.registry, params["tool_id"], params["action"]
++                ),
++            )
++            holder.update(asdict(result))
++            return {"success": result.success, "result": result.output}
++
++        return _run_service(repository).dispatch_tool(
++            self.context["run_id"],
++            call_id=call["id"],
++            tool_name=call["name"],
++            params=params,
++            runtime_context=self.context,
++            dispatch=dispatch,
++            projection=WorkflowReceiptProjection(lambda: holder),
++        )
++
++    def _call(self, identity):
++        run = self.repository.get(self.context["run_id"]) if self.repository else None
++        return (
++            next((call for call in run.tool_calls if call.call_id == identity), None)
++            if run
++            else None
++        )
++
++    def observe(self, call, output):
++        saved = self._call(call["id"])
++        if saved is None:
++            raise ModelTurnError("工作流原调用回执不存在")
++        projection = saved.metadata.get("workflow_projection")
++        if saved.metadata.get("workflow_projection_error") or not isinstance(projection, dict):
++            raise ModelTurnError("工作流回执投影缺失，原回执已保留")
++        if projection.get("node_digest") != canonical_hash(projection.get("node_result")):
++            raise ModelTurnError("工作流回执投影已损坏，原回执已保留")
++        if projection["output_digest"] != canonical_hash(output):
++            step = next(
++                row
++                for row in self.repository.get(self.context["run_id"]).steps
++                if row.step_id == saved.step_id
++            )
++            old = projection["node_result"]["output"]
++            if (
++                tool_receipt_outcome(old) != "waiting_approval"
++                or step.attempt_count < 1
++                or tool_receipt_outcome(output)
++                not in {"success", "failure", "unknown", "cancelled"}
++            ):
++                raise ModelTurnError("工作流原回执投影摘要已变化")
++            projection = copy.deepcopy(projection)
++            projection["node_result"].update(
++                output=copy.deepcopy(output),
++                success=tool_receipt_outcome(output) == "success",
++                error=step.error,
++                started_at=step.started_at,
++                finished_at=step.finished_at,
++                duration_ms=step.duration_ms,
++            )
++            metrics = projection["node_result"]
++            metrics["recovery_hint"] = (
++                ""
++                if metrics["success"]
++                else self.engine._recovery_hint(
++                    tool_id=metrics["tool_id"],
++                    action=metrics["action"],
++                    error=step.error,
++                    output=output,
++                    retryable=metrics["retryable"],
++                )
++            )
++            metrics["attempts"] = [
++                {
++                    "attempt": step.attempt_count,
++                    "success": metrics["success"],
++                    "error": str(step.error or "")[:240],
++                    "duration_ms": step.duration_ms,
++                }
++            ]
++            projection["output_digest"] = canonical_hash(output)
++            projection["node_digest"] = canonical_hash(projection["node_result"])
++            run = self.repository.get(self.context["run_id"])
++            next(row for row in run.tool_calls if row.call_id == saved.call_id).metadata[
++                "workflow_projection"
++            ] = projection
++            self.repository.save(run)
++        result = NodeExecutionResult(**projection["node_result"])
++        if (
++            result.output != output and result.output != output.get("result")
++        ) or result.success != (tool_receipt_outcome(output) == "success"):
++            raise ModelTurnError("工作流投影与真实工具回执不一致")
++        self._node_metrics[call["id"]] = copy.deepcopy(projection["node_result"])
++        self.nodes[call["id"]] = result
++        marker = (call["id"], projection["output_digest"])
++        if marker not in self._live:
++            revised = any(identity == call["id"] for identity, _digest in self._live)
++            self._live.add(marker)
++            if revised:
++                self.context = copy.deepcopy(self._admission_context)
++                for identity, metrics in self._node_metrics.items():
++                    self.nodes[identity] = NodeExecutionResult(**copy.deepcopy(metrics))
++                    self._project_node(identity, self.nodes[identity])
++                result = self.nodes[call["id"]]
++            else:
++                self._project_node(call["id"], result)
++            if not self._replaying:
++                self.engine._emit_state_update(result)
++
++    def _project_node(self, identity, result):
++        self.engine._append_node_trace(self.context, result)
++        self.engine._merge_state_schema(self.context, result, self.schema)
++        self.context.setdefault("node_outputs", {})[
++            f"agent_step_{self._step_for_call(identity)}"
++        ] = result.output
++
++    def _step_for_call(self, identity):
++        for message in self._state["messages"]:
++            if any(row["id"] == identity for row in message.get("tool_calls") or []):
++                return parse_arguments(message["content"])["step"]
++        raise ModelTurnError("工作流调用不属于原决策")
++
++    def after_batch(self, state):
++        return None
++
++    def validate_text(self, text):
++        parse_arguments(text)
++
++    def no_call_transition(self, decision, state):
++        current = parse_arguments(decision["content"])
++        if current["kind"] == "invalid":
++            return {"phase": "ready_model"}
++        invalid = sum(
++            parse_arguments(row["content"])["kind"] == "invalid"
++            for row in state["messages"]
++            if row.get("role") == "assistant"
++        )
++        failed = sum(not row.success for row in self.nodes.values())
++        success = current["kind"] == "done" and not invalid and not failed
++        text = (
++            "AgenticLoop 执行完成"
++            if success
++            else (
++                f"{failed} 个工具步骤失败"
++                if failed
++                else f"{invalid} 个模型工具决策无效"
++                if invalid
++                else "模型未返回可执行决策"
++            )
++        )
++        return {
++            "phase": "terminal",
++            "outcome": "success" if success else "failure",
++            "final_text": text,
++        }
++
++    def result(self, state, outcome, receipt):
++        success = outcome == "success"
++        status = (
++            "completed"
++            if success
++            else "waiting_user"
++            if outcome == "waiting_approval"
++            else "cancelled"
++            if outcome == "cancelled"
++            else "blocked"
++            if outcome in {"pending", "unknown"}
++            else "failed"
++        )
++        invalid = sum(
++            parse_arguments(row["content"])["kind"] == "invalid"
++            for row in state["messages"]
++            if row.get("role") == "assistant"
++        )
++        context = {
++            key: copy.deepcopy(value)
++            for key, value in self.context.items()
++            if not key.startswith("_") and key not in {"db_read_token", "db_write_token"}
++        }
++        reason = str(
++            receipt.get("message")
++            or state.get("notice")
++            or state.get("final_text")
++            or "模型未声明完成"
++        )
++        context["workflow_status"] = {
++            "state": status,
++            "completed_by_model": any(
++                parse_arguments(row["content"])["kind"] == "done"
++                for row in state["messages"]
++                if row.get("role") == "assistant"
++            ),
++            "steps": state["round"],
++            "failed_tool_steps": sum(not row.success for row in self.nodes.values()),
++            "invalid_decisions": invalid,
++            "message": reason,
++        }
++        result = WorkflowRunResult(
++            self.plan.plan_id,
++            success,
++            list(self.nodes.values()),
++            context,
++            f"AgenticLoop 完成（{state['round']} 步）"
++            if success
++            else f"AgenticLoop 未完成（{state['round']} 步）：{reason}",
++        )
++        return {"success": success, "workflow_result": asdict(result), "outcome": outcome}
++
++
++def create_policy(engine, plan, context, registry, max_retries=1, schema=None):
++    from app.infrastructure.llm.client import get_openai_compatible_client, resolve_chat_model
++
++    schema = schema or engine._default_state_schema
++    client, model = (
++        (get_openai_compatible_client(), resolve_chat_model())
++        if context.get("_actor_authorization")
++        else (None, "")
++    )
++    safe_value(
++        {
++            key: value
++            for key, value in context.items()
++            if not key.startswith("_") and key not in {"db_read_token", "db_write_token"}
++        },
++        secrets=policy_secrets(context, client),
++    )
++    return WorkflowAgenticModelPolicy(
++        engine, plan, context, registry, max_retries, schema, client, model
++    )
++
++
++def admit_policy(policy):
++    from app.application.agent_orchestrator.chat_trace import _run_service
++
++    service = _run_service()
++    run = service.claim_workflow_run(
++        message=str(policy.context.get("message") or ""),
++        runtime_context=policy.context,
++        plan=policy.plan,
++        policy_snapshot=policy.snapshot(),
++    )
++    policy.context = {
++        **run.metadata["runtime_context"],
++        "_workflow_execution_lease": WorkflowExecutionLease(run.run_id),
++    }
++    policy.admission_replayed = bool(run.metadata.get("admission_replayed"))
++    policy.repository = service.repository
++    return run
++
++
++def project_terminal_workflow(run, state):
++    """Recover the terminal-checkpoint boundary without publishing old callbacks."""
++    from types import SimpleNamespace
++
++    policy = WorkflowAgenticModelPolicy.restore(
++        state["policy"], run.metadata["runtime_context"], None, state["model_reference"]["model"]
++    )
++    policy.repository = SimpleNamespace(
++        get=lambda identity: run if identity == run.run_id else None
++    )
++    policy.validate_saved(state)
++    for call in run.tool_calls:
++        if call.metadata.get("workflow_projection", {}).get("output_digest") != canonical_hash(
++            call.output
++        ):
++            raise ModelTurnError("原终态工具回执已变化，不能重建完成结果")
++        policy.observe({"id": call.call_id}, copy.deepcopy(call.output))
++    return policy.result(state, state["outcome"], {})
++
++
++def block_workflow_restore(repository, run, state):
++    """Retain the original evidence when actor/model/Python hooks cannot restore."""
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++
++    notice = "原工作流身份、模型配置或 Python hook 无法恢复，已停止执行，请核对原任务"
++    state.update(
++        phase="reconciliation",
++        outcome="unknown",
++        blocked_model_recovery=True,
++        notice=notice,
++        exit_status="workflow_restore_blocked",
++    )
++    run.metadata[STATE_KEY] = state
++    run.status, run.error = "blocked", notice
++    payload = run.final_output.get("workflow_result")
++    if isinstance(payload, dict):
++        payload.update(success=False, outcome="unknown")
++        if isinstance(payload.get("workflow_result"), dict):
++            result = payload["workflow_result"]
++            result.update(success=False, message=notice)
++            result.setdefault("final_context", {}).setdefault("workflow_status", {}).update(
++                state="blocked", message=notice
++            )
++    run.add_event("model_turn.reconciliation", notice, {"error_code": "workflow_restore_blocked"})
++    return repository.save(run)
++
++
++def run_workflow_policy(engine, plan, context, max_retries, registry, user_id, schema):
++    context = dict(context or {})
++    if user_id is not None and "user_id" not in context:
++        context["user_id"] = user_id
++    policy = context.get("_workflow_model_policy")
++    if isinstance(policy, WorkflowAgenticModelPolicy):
++        if policy.engine is not engine or policy.plan != plan or policy.registry != registry:
++            raise ModelTurnError("原工作流 admission 与执行策略不一致")
++        run = policy.repository.get(policy.context["run_id"])
++    else:
++        policy = create_policy(engine, plan, context, registry, max_retries, schema)
++        run = admit_policy(policy) if policy.context.get("_actor_authorization") else None
++    if run and policy.admission_replayed:
++        stored = run.final_output.get("workflow_result")
++        if not isinstance(stored, dict):
++            from app.application.agent_orchestrator.model_turn_runtime import (
++                STATE_KEY,
++                terminal_model_payload,
++            )
++
++            if run.metadata.get(STATE_KEY, {}).get("phase") == "terminal":
++                stored = terminal_model_payload(run)
++        if not isinstance(stored, dict):
++            raise ModelTurnError("原工作流正在执行或等待核对，不能重新请求模型")
++        payload = stored
++    else:
++        for event in run_model_turn(
++            policy,
++            context=policy.context,
++            messages=[],
++            limits=policy.snapshot()["limits"],
++            repository=policy.repository,
++            run_id=run.run_id if run else "",
++        ):
++            if event["type"] == "result":
++                payload = event["result"]
++    projected = dict(payload["workflow_result"])
++    projected["node_results"] = [NodeExecutionResult(**row) for row in projected["node_results"]]
++    return WorkflowRunResult(**projected)
+diff --git a/FHD/app/application/workflow/engine.py b/FHD/app/application/workflow/engine.py
+index 974c67e3c0..7366ebcef2 100644
+--- a/FHD/app/application/workflow/engine.py
++++ b/FHD/app/application/workflow/engine.py
+@@ -225,9 +225,12 @@ class WorkflowEngine:
+         user_id: str | None,
+         state_schema: StateSchema | None = None,
+     ) -> WorkflowRunResult:
+-        return run_agentic_loop(
++        result = run_agentic_loop(
+             self, logger, plan, runtime_context, max_retries, tool_registry, user_id, state_schema
+         )
++        if result.final_context.get("workflow_status", {}).get("steps") == 10:
++            logger.warning("AgenticLoop 达到最大步数限制 %d", 10)
++        return result
+ 
+     def _llm_decide_next_step(
+         self,
+diff --git a/FHD/app/application/workflow/engine_decisions.py b/FHD/app/application/workflow/engine_decisions.py
+index 429615e274..e1ca55362b 100644
+--- a/FHD/app/application/workflow/engine_decisions.py
++++ b/FHD/app/application/workflow/engine_decisions.py
+@@ -5,10 +5,65 @@ from __future__ import annotations
+ import json
+ import logging
+ from collections.abc import Callable
++from contextlib import contextmanager
++from contextvars import ContextVar
++from copy import copy
++from types import SimpleNamespace
+ from typing import Any, Protocol
+ 
++import httpx
++
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
++_BOUND_MODEL = ContextVar("workflow_decision_model", default=None)
++
++
++@contextmanager
++def decision_model_scope(client, model, check):
++    binding = SimpleNamespace(client=client, model=model, check=check, usage=[])
++    token = _BOUND_MODEL.set(binding)
++    try:
++        yield binding
++    finally:
++        _BOUND_MODEL.reset(token)
++
++
++class _BoundDecisionTransport:
++    def __init__(self, binding):
++        self.binding = binding
++
++    def post(self, url, *, headers, json):
++        from app.application.agent_orchestrator.model_turn_runtime import model_transport
++
++        content = None
++        client = self.binding.client
++        request = {key: value for key, value in json.items() if key != "model"}
++        if getattr(client, "is_modstore_openai_compatible", False) is True:
++            adapter = copy(client.adapter)
++            adapter.timeout = min(20.0, float(adapter.timeout))
++            client = type(client)(adapter)
++        else:
++            request["timeout"] = httpx.Timeout(20.0, connect=10.0)
++            if callable(getattr(client, "with_options", None)):
++                client = client.with_options(max_retries=0)
++        for event in model_transport(
++            client,
++            self.binding.model,
++            request,
++            check=self.binding.check,
++        ):
++            if event["type"] == "usage":
++                self.binding.usage.append(event["completion"])
++            elif event["type"] == "decision":
++                if event["decision"]["calls"]:
++                    raise ValueError("工作流单步协议需要 JSON 正文，不能改用 SDK 工具批次")
++                content = event["decision"]["content"]
++        if content is None:
++            raise ValueError("工作流模型未返回完整 JSON 决策")
++        return SimpleNamespace(
++            status_code=200, json=lambda: {"choices": [{"message": {"content": content}}]}
++        )
++
+ 
+ class AgentSettings(Protocol):
+     @property
+@@ -31,6 +86,71 @@ class DecisionHttpClient(Protocol):
+     ) -> DecisionResponse: ...
+ 
+ 
++def build_decision_messages(user_message, tool_registry, runtime_context, agent_history):
++    tool_specs = []
++    for tid, spec in tool_registry.items():
++        if not isinstance(spec, dict):
++            continue
++        actions = spec.get("actions") or {}
++        action_list = []
++        for aname, ameta in actions.items():
++            if not isinstance(ameta, dict):
++                continue
++            action_list.append(
++                {
++                    "action": aname,
++                    "risk": ameta.get("risk", "low"),
++                    "idempotent": bool(ameta.get("idempotent", False)),
++                    "required_params": ameta.get("required_params", []),
++                }
++            )
++        tool_specs.append(
++            {"tool_id": tid, "description": spec.get("description", ""), "actions": action_list}
++        )
++    history_lines = []
++    for h in agent_history[-8:]:
++        role = h.get("role", "")
++        if role == "done":
++            history_lines.append("Assistant: 已完成任务")
++        elif role == "assistant":
++            history_lines.append(
++                f"Assistant: 决定执行 {h.get('tool_id')}.{h.get('action')} (reasoning: {h.get('reasoning', '')[:80]})"
++            )
++        else:
++            history_lines.append(f"System: {h.get('content', '')[:200]}")
++    excel_analysis = runtime_context.get("excel_analysis")
++    excel_info = ""
++    if isinstance(excel_analysis, dict):
++        fp = excel_analysis.get("file_path", "")
++        excel_info = f"\n当前 Excel 文件: {fp}"
++    prompt = {
++        "task": "作为 Agent，决定下一步动作。",
++        "rules": [
++            '如果任务已完成，返回 {"action": "done"}。',
++            '如果需要执行工具，返回 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}。',
++            "params 必须填写所有 required_params（不能留空）。",
++            "优先使用低风险、幂等工具。",
++            "只决定下一步，不要一次决定多步。",
++        ],
++        "user_message": user_message,
++        "excel_context": excel_info,
++        "recent_history": "\n".join(history_lines) if history_lines else "(首步决策)",
++        "tool_registry": tool_specs,
++        "output_schema": {
++            "action": "done | execute",
++            "tool_id": "string (当 action=execute 时)",
++            "action_name": "string (当 action=execute 时)",
++            "params": "{} (当 action=execute 时)",
++            "reasoning": "string",
++        },
++    }
++    messages = [
++        {"role": "system", "content": "你是工作流 Agent，只输出 JSON。"},
++        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
++    ]
++    return messages
++
++
+ class AgentDecisionClient:
+     def __init__(
+         self,
+@@ -54,78 +174,31 @@ class AgentDecisionClient:
+         询问 LLM：下一步做什么（单步决策）。
+         返回 {"action": "done"} 表示结束，或 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}
+         """
+-        ai_service = self._ai_factory()
++        binding = _BOUND_MODEL.get()
++        ai_service = (
++            SimpleNamespace(
++                api_key="bound-model-reference",
++                api_url="bound-model-reference",
++                model=binding.model,
++            )
++            if binding is not None
++            else self._ai_factory()
++        )
+         api_key = getattr(ai_service, "api_key", "") or ""
+         if not api_key:
+             self._logger.warning("AgenticLoop 缺少 API_KEY，跳过")
+             return None
+-        tool_specs = []
+-        for tid, spec in tool_registry.items():
+-            if not isinstance(spec, dict):
+-                continue
+-            actions = spec.get("actions") or {}
+-            action_list = []
+-            for aname, ameta in actions.items():
+-                if not isinstance(ameta, dict):
+-                    continue
+-                action_list.append(
+-                    {
+-                        "action": aname,
+-                        "risk": ameta.get("risk", "low"),
+-                        "idempotent": bool(ameta.get("idempotent", False)),
+-                        "required_params": ameta.get("required_params", []),
+-                    }
+-                )
+-            tool_specs.append(
+-                {"tool_id": tid, "description": spec.get("description", ""), "actions": action_list}
+-            )
+-        history_lines = []
+-        for h in agent_history[-8:]:
+-            role = h.get("role", "")
+-            if role == "done":
+-                history_lines.append("Assistant: 已完成任务")
+-            elif role == "assistant":
+-                history_lines.append(
+-                    f"Assistant: 决定执行 {h.get('tool_id')}.{h.get('action')} (reasoning: {h.get('reasoning', '')[:80]})"
+-                )
+-            else:
+-                history_lines.append(f"System: {h.get('content', '')[:200]}")
+-        excel_analysis = runtime_context.get("excel_analysis")
+-        excel_info = ""
+-        if isinstance(excel_analysis, dict):
+-            fp = excel_analysis.get("file_path", "")
+-            excel_info = f"\n当前 Excel 文件: {fp}"
+-        prompt = {
+-            "task": "作为 Agent，决定下一步动作。",
+-            "rules": [
+-                '如果任务已完成，返回 {"action": "done"}。',
+-                '如果需要执行工具，返回 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}。',
+-                "params 必须填写所有 required_params（不能留空）。",
+-                "优先使用低风险、幂等工具。",
+-                "只决定下一步，不要一次决定多步。",
+-            ],
+-            "user_message": user_message,
+-            "excel_context": excel_info,
+-            "recent_history": "\n".join(history_lines) if history_lines else "(首步决策)",
+-            "tool_registry": tool_specs,
+-            "output_schema": {
+-                "action": "done | execute",
+-                "tool_id": "string (当 action=execute 时)",
+-                "action_name": "string (当 action=execute 时)",
+-                "params": "{} (当 action=execute 时)",
+-                "reasoning": "string",
+-            },
+-        }
+-        messages = [
+-            {"role": "system", "content": "你是工作流 Agent，只输出 JSON。"},
+-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+-        ]
++        messages = build_decision_messages(
++            user_message, tool_registry, runtime_context, agent_history
++        )
+         try:
+             from app.infrastructure.llm.providers.credentials import default_chat_completions_url
+ 
+             api_url = getattr(ai_service, "api_url", "") or default_chat_completions_url()
+             model = getattr(ai_service, "model", "") or "deepseek-chat"
+-            response = self._http_factory().post(
++            response = (
++                _BoundDecisionTransport(binding) if binding is not None else self._http_factory()
++            ).post(
+                 api_url,
+                 headers={
+                     "Authorization": f"Bearer {api_key}",
+@@ -150,7 +223,12 @@ class AgentDecisionClient:
+             raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+             if not raw:
+                 return None
+-            parsed = json.loads(raw)
++            if binding is not None:
++                from app.application.tools.workflow_tools.dispatch import parse_arguments
++
++                parsed = parse_arguments(raw)
++            else:
++                parsed = json.loads(raw)
+             action = str(parsed.get("action") or "").strip().lower()
+             if action == "done":
+                 return {"action": "done"}
+@@ -160,6 +238,8 @@ class AgentDecisionClient:
+                 or parsed.get("tool_action")
+                 or ("" if action == "execute" else action)
+             ).strip()
++            if binding is not None and not isinstance(parsed.get("params"), dict):
++                raise ValueError("工具参数必须是 JSON 对象，不能降级为空对象")
+             params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
+             reasoning = str(parsed.get("reasoning") or "").strip()
+             if not tool_id or not action_name:
+@@ -172,5 +252,7 @@ class AgentDecisionClient:
+                 "reasoning": reasoning,
+             }
+         except RECOVERABLE_ERRORS as e:
++            if binding is not None:
++                raise
+             self._logger.warning("AgenticLoop LLM 决策失败: %s", e, exc_info=True)
+             return None
+diff --git a/FHD/app/domain/shared_services/tools_workflow_erp_master.py b/FHD/app/domain/shared_services/tools_workflow_erp_master.py
+index ea59c219b1..e50693ce24 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_erp_master.py
++++ b/FHD/app/domain/shared_services/tools_workflow_erp_master.py
+@@ -218,19 +218,22 @@ def _registered_router_materials(
+         ids = [int(x) for x in raw_ids if str(x).strip()]
+         try:
+             result = svc.batch_delete_materials(ids)
+-        except RECOVERABLE_ERRORS as err:
+-            logger.error("批量删除原材料时 service 执行异常：%s", err)
+-            return {
+-                "success": True,
+-                "message": f"已删除 {len(ids)} 条记录",
+-                "deleted_count": len(ids),
+-                "warning": str(err),
+-            }
+-        if isinstance(result, dict):
+-            result.setdefault("success", True)
+-            result.setdefault("deleted_count", len(ids))
++        except RECOVERABLE_ERRORS:
++            logger.error("批量删除原材料时服务回执不可用")
++            result = None
++        if (
++            isinstance(result, dict)
++            and isinstance(result.get("success"), bool)
++            and (not result["success"] or type(result.get("deleted_count")) is int)
++        ):
+             return result
+-        return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
++        return {
++            "success": False,
++            "outcome": "unknown",
++            "error_code": "material_batch_receipt_unavailable",
++            "message": "批量删除结果未确认，请核对原任务",
++            "retryable": False,
++        }
+     if action == "export":
+         return cast(
+             "dict[Any, Any]",
+diff --git a/FHD/app/fastapi_routes/materials.py b/FHD/app/fastapi_routes/materials.py
+index aee1d01595..cfdf53d1e8 100755
+--- a/FHD/app/fastapi_routes/materials.py
++++ b/FHD/app/fastapi_routes/materials.py
+@@ -219,18 +219,21 @@ def batch_delete_materials(
+                 {"success": False, "message": "请求体必须是 JSON 对象"}, status_code=400
+             )
+ 
+-        ids = data.get("material_ids")
+-        if ids is None:
+-            ids = data.get("ids", [])
+-
+-        valid_ids: list[int] = []
+-        for raw_id in ids or []:
+-            try:
+-                valid_ids.append(int(raw_id))
+-            except (TypeError, ValueError):
+-                continue
+-
+-        deleted_count = len(valid_ids)
++        from app.application.agent_orchestrator.business_action_verification import (
++            material_batch_ids,
++        )
++
++        try:
++            valid_ids = material_batch_ids(data)
++        except ValueError:
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error_code": "invalid_material_ids",
++                    "message": "请选择不重复的有效原材料ID",
++                },
++                status_code=400,
++            )
+         result = _run_materials_agent(
+             request=request,
+             action="batch_delete",
+@@ -248,15 +251,7 @@ def batch_delete_materials(
+                 if result.get("pending_approval")
+                 else 400,
+             )
+-        return JSONResponse(
+-            {
+-                **result,
+-                "success": True,
+-                "message": f"已删除 {deleted_count} 条记录",
+-                "deleted_count": deleted_count,
+-            },
+-            status_code=200,
+-        )
++        return JSONResponse(jsonable_encoder(result), status_code=200)
+     except RECOVERABLE_ERRORS:
+         logger.exception("批量删除原材料失败")
+         return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index 82dd4b0217..8baa61340f 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -199,9 +199,7 @@ def test_sql_eval_host_restores_database_bindings_after_exception(tmp_path):
+ 
+ 
+ @pytest.mark.parametrize("action", ["create", "update", "delete", "batch_delete"])
+-def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failure(
+-    tmp_path, action
+-):
++def test_material_route_eval_reads_real_sql_after_original_approval(tmp_path, action):
+     task = next(
+         row
+         for row in eval_module.load_tasks()
+@@ -211,7 +209,7 @@ def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failu
+     path.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
+     result = run_eval(path)
+     item = result["results"][0]
+-    assert item["passed"] is (action != "batch_delete"), item
++    assert item["passed"] is True, item
+     details = item["details"]
+     assert details["run"]["run_id"] == details["initial_response"]["run_id"]
+     assert details["approval_consumption_count"] == 1 and details["step_params_unchanged"] is True
+@@ -220,12 +218,9 @@ def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failu
+         row for row in before if row["tenant_id"] == 8
+     ]
+     if action == "batch_delete":
+-        assert details["run"]["status"] == "blocked"
+-        assert details["response"]["success"] is False
+-        assert details["response"]["outcome"] == "unknown"
+         assert not any(row["is_active"] for row in after if row["tenant_id"] == 7)
+-        assert any(check["name"] == "run.status" for check in item["failed_checks"])
++        assert details["response"]["deleted_count"] == len(task["body"]["ids"])
+         assert task["expected"]["run_status"] == "completed"
+-    else:
+-        assert details["run"]["status"] == "completed"
+-        assert details["response"]["business_verification"]["verified"] is True
++    assert details["run"]["status"] == "completed"
++    assert details["response"]["success"] is True
++    assert details["response"]["business_verification"]["verified"] is True
+diff --git a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+index f0d41bf2c6..55ccd6c994 100644
+--- a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
++++ b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+@@ -14,6 +14,7 @@ from app.application.ai_chat_app_service import (
+     AIChatApplicationService,
+     _skip_pro_excel_deterministic_import,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
+ from tests.test_application.ai_chat_test_helpers import (
+     _make_node,
+     _make_node_result,
+@@ -22,6 +23,10 @@ from tests.test_application.ai_chat_test_helpers import (
+     _make_svc,
+ )
+ 
++trusted_actor = workflow_fixtures.trusted_actor
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++workflow_model = workflow_fixtures.workflow_model
++
+ 
+ def _make_step(
+     *,
+@@ -444,10 +449,7 @@ class TestAttachDeterministicWorkflowTrace:
+     def test_import_error_returns_payload_unchanged(self):
+         """chat_trace 模块不可用 → 返回原 payload。"""
+         payload = {"success": True, "message": "ok"}
+-        import sys
+-
+-        saved = sys.modules.pop("app.application.agent_orchestrator.chat_trace", None)
+-        try:
++        with patch.dict("sys.modules", {"app.application.agent_orchestrator.chat_trace": None}):
+             result = AIChatApplicationService._attach_deterministic_workflow_trace(
+                 payload,
+                 user_id="u1",
+@@ -456,9 +458,6 @@ class TestAttachDeterministicWorkflowTrace:
+                 context={"k": "v"},
+                 intent="test",
+             )
+-        finally:
+-            if saved is not None:
+-                sys.modules["app.application.agent_orchestrator.chat_trace"] = saved
+         assert result is payload
+ 
+     def test_with_file_context_attaches_trace(self):
+@@ -930,10 +929,13 @@ class TestStartDeterministicImportAgentRun:
+ 
+ 
+ class TestStartAgenticWorkflowAgentRun:
+-    """_start_agentic_workflow_agent_run 分支测试。"""
++    """Admission persists the real actor before model or tool execution."""
+ 
+-    def test_creates_run_and_saves(self):
++    def test_creates_run_and_saves(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        http = reviewed_agent_http(actor)
+         svc = _make_svc()
++        svc.workflow_engine = workflow_fixtures.workflow_engine()
+         plan = _make_plan(
+             plan_id="p1",
+             intent="import",
+@@ -941,44 +943,36 @@ class TestStartAgenticWorkflowAgentRun:
+             risk_level="medium",
+             metadata={"key": "val"},
+         )
+-        saved_run = Mock()
+-        saved_run.run_id = "run_1"
+-        with patch(
+-            "app.application.agent_orchestrator.run_repository.get_agent_run_repository"
+-        ) as mock_repo_fn:
+-            mock_repo = mock_repo_fn.return_value
+-            mock_repo.save.return_value = saved_run
+-            result = svc._start_agentic_workflow_agent_run(
+-                user_id="u1",
+-                message="hello",
+-                plan=plan,
+-                runtime_context={"ctx": "v"},
+-            )
+-        assert result is saved_run
+-        mock_repo.save.assert_called_once()
+-        saved_arg = mock_repo.save.call_args[0][0]
+-        assert saved_arg.user_id == "u1"
++        context = {**actor.context, "ctx": "v"}
++        result = svc._start_agentic_workflow_agent_run(
++            user_id="u1",
++            message="hello",
++            plan=plan,
++            runtime_context=context,
++        )
++        saved_arg = http.repository.get(result.run_id)
++        assert result.run_id == saved_arg.run_id
++        assert saved_arg.user_id == str(actor.user_id)
+         assert saved_arg.status == "running"
+         assert saved_arg.plan_id == "p1"
+         assert saved_arg.intent == "import"
+-
+-    def test_empty_plan_attrs_handled(self):
+-        svc = _make_svc()
+-        plan = SimpleNamespace(plan_id="", intent="", todo_steps=None, risk_level="", metadata=None)
+-        saved_run = Mock()
+-        saved_run.run_id = "run_2"
+-        with patch(
+-            "app.application.agent_orchestrator.run_repository.get_agent_run_repository"
+-        ) as mock_repo_fn:
+-            mock_repo = mock_repo_fn.return_value
+-            mock_repo.save.return_value = saved_run
+-            result = svc._start_agentic_workflow_agent_run(
+-                user_id="",
+-                message="",
+-                plan=plan,
+-                runtime_context=None,
+-            )
+-        assert result is saved_run
++        assert saved_arg.tool_calls == []
++        assert context["run_id"] == result.run_id
++        assert saved_arg.metadata["execution_kernel"] == "workflow_agentic"
++
++    def test_empty_plan_attrs_handled(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        http = reviewed_agent_http(actor)
++        svc = _make_svc()
++        svc.workflow_engine = workflow_fixtures.workflow_engine()
++        plan = _make_plan(plan_id="", intent="", todo_steps=None, risk_level="", metadata=None)
++        result = svc._start_agentic_workflow_agent_run(
++            user_id="",
++            message="",
++            plan=plan,
++            runtime_context=dict(actor.context),
++        )
++        assert http.repository.get(result.run_id).run_id == result.run_id
+ 
+ 
+ class TestBridgeAgenticWorkflowResultToAgentRun:
+diff --git a/FHD/tests/test_application/test_business_action_ledger.py b/FHD/tests/test_application/test_business_action_ledger.py
+index e3dfeb5142..929f4f256d 100644
+--- a/FHD/tests/test_application/test_business_action_ledger.py
++++ b/FHD/tests/test_application/test_business_action_ledger.py
+@@ -671,3 +671,192 @@ def test_material_readback_rejects_alias_conflicts_wrong_values_targets_and_tena
+     with tenant_scope(actor.tenant_id), actor.factory() as db:
+         row = db.get(Material, record_id)
+         assert (row.tenant_id, row.min_stock, float(row.unit_price)) == (actor.tenant_id, 12, 3.5)
++
++
++def _material_batch_rows(actor):
++    from app.db.models.material import Material
++
++    with actor.factory.begin() as db:
++        db.add_all(
++            Material(id=key, tenant_id=tenant, material_code=f"BATCH-{key}", name=f"resin-{key}")
++            for key, tenant in [(1, 7), (2, 7), (3, 7), (9001, 8)]
++        )
++
++    def read():
++        with actor.factory() as db:
++            return list(db.execute(Material.__table__.select().order_by(Material.id)).mappings())
++
++    return read
++
++
++def test_material_batch_delete_checks_original_targets_and_replays_without_dispatch(
++    trusted_actor, approved_tool_context, monkeypatch
++):
++    from app.application.material_app_service import MaterialApplicationService
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [2, 1]}
++    )
++    context = approved_tool_context(actor, step, business_action_id="material-batch")
++    result = AgentToolExecutor().execute(step, runtime_context=context)
++    assert result["success"] is True and result["deleted_count"] == 2, result
++    proof = result["business_verification"]
++    assert proof["verified"] is True and proof["tenant_id"] == 7
++    assert proof["record_ids"] == [2, 1] and proof["state"] == "inactive"
++    after = read()
++    assert [row for row in before if row["id"] not in {1, 2}] == [
++        row for row in after if row["id"] not in {1, 2}
++    ]
++    assert all(row["is_active"] == 0 for row in after if row["id"] in {1, 2})
++
++    def forbidden(*args, **kwargs):
++        raise AssertionError("completed action must not dispatch again")
++
++    monkeypatch.setattr(MaterialApplicationService, "batch_delete_materials", forbidden)
++    replay = AgentToolExecutor().execute(step, runtime_context=context)
++    assert replay["business_action_replayed"] is True and replay["success"] is True
++    assert read() == after
++
++
++@pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
++def test_material_batch_invalid_targets_have_no_partial_effects(
++    trusted_actor, approved_tool_context, ids
++):
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
++    )
++    assert result["success"] is False, result
++    assert read() == before
++
++
++@pytest.mark.parametrize("fault", ["no_effect", "partial", "wrong_count", "lost_receipt"])
++def test_material_batch_verifier_does_not_trust_service_success(
++    trusted_actor, approved_tool_context, monkeypatch, fault
++):
++    from app.application.material_app_service import MaterialApplicationService
++    from app.db.models.material import Material
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    original = MaterialApplicationService.batch_delete_materials
++
++    def dispatch(service, ids):
++        if fault == "no_effect":
++            return {"success": True, "deleted_count": len(ids)}
++        if fault == "partial":
++            with actor.factory.begin() as db:
++                db.query(Material).filter_by(id=ids[0], tenant_id=7).update({"is_active": 0})
++            return {"success": True, "deleted_count": len(ids)}
++        result = original(service, ids)
++        if fault == "lost_receipt":
++            raise RuntimeError("receipt lost after commit")
++        return {**result, "deleted_count": 1}
++
++    monkeypatch.setattr(MaterialApplicationService, "batch_delete_materials", dispatch)
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="faulty-batch")
++    )
++    assert result["success"] is False and result["outcome"] == "unknown", result
++    assert result["retryable"] is False
++    after = read()
++    assert [row for row in before if row["id"] not in {1, 2}] == [
++        row for row in after if row["id"] not in {1, 2}
++    ]
++    expected_inactive = 0 if fault == "no_effect" else 1 if fault == "partial" else 2
++    assert sum(row["is_active"] == 0 for row in after if row["id"] in {1, 2}) == expected_inactive
++
++
++@pytest.mark.parametrize("receipt", [None, {"success": True}])
++def test_material_batch_raw_missing_receipt_never_fabricates_count(monkeypatch, receipt):
++    from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
++
++    monkeypatch.setattr(
++        "app.application.get_material_application_service",
++        lambda: SimpleNamespace(batch_delete_materials=lambda ids: receipt),
++    )
++    result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "pro", "")
++    assert result["success"] is False and result["outcome"] == "unknown", result
++    assert "deleted_count" not in result
++
++
++def test_material_batch_inactive_target_is_not_a_new_success(trusted_actor, approved_tool_context):
++    from app.db.models.material import Material
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    with actor.factory.begin() as db:
++        db.query(Material).filter_by(id=2, tenant_id=7).update({"is_active": 0})
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step,
++        runtime_context=approved_tool_context(actor, step, business_action_id="inactive-batch"),
++    )
++    assert result["success"] is False and read() == before
++
++
++def test_material_batch_saved_success_is_not_its_own_verification(
++    trusted_actor, approved_tool_context
++):
++    from app.application.agent_orchestrator.business_action_verification import verify_action_result
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="saved-batch")
++    )
++    assert result["success"] is True, result
++    before = read()
++    with tenant_scope(7):
++        checked, verified = verify_action_result(
++            get_tool_action_spec("materials", "batch_delete"), step.params, result
++        )
++    assert verified is False
++    assert checked["business_verification"]["reason"] == "missing_original_active_targets"
++    assert read() == before
++
++
++def test_material_batch_http_projection_keeps_actual_receipt(monkeypatch):
++    from app.fastapi_routes import materials
++
++    receipt = {"success": True, "message": "actual result", "deleted_count": 1}
++    monkeypatch.setattr(materials, "_run_materials_agent", lambda **kwargs: receipt)
++    response = materials.batch_delete_materials(SimpleNamespace(), {"ids": [1, 2]})
++    assert response.status_code == 200
++    assert json.loads(response.body) == receipt
++
++
++@pytest.mark.parametrize(
++    "data",
++    [{}, {"ids": [1, "bad"]}, {"ids": [1, 1]}, {"ids": [True]}, {"ids": [1], "material_ids": [2]}],
++)
++def test_material_batch_http_bad_targets_never_start_a_task(monkeypatch, data):
++    from app.fastapi_routes import materials
++
++    def forbidden(**kwargs):
++        raise AssertionError("invalid batch must not be scheduled")
++
++    monkeypatch.setattr(materials, "_run_materials_agent", forbidden)
++    response = materials.batch_delete_materials(SimpleNamespace(), data)
++    assert response.status_code == 400
++    assert json.loads(response.body)["error_code"] == "invalid_material_ids"
+diff --git a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+index c7957fcec1..9abd56c6db 100644
+--- a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
++++ b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+@@ -4,6 +4,13 @@ import pytest
+ 
+ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++json_model = workflow_fixtures.json_model
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_engine = workflow_fixtures.workflow_engine
++workflow_model = workflow_fixtures.workflow_model
+ 
+ 
+ def test_workflow_registry_exposes_employee_and_business_db_tools():
+@@ -1028,89 +1035,110 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
+     assert len(result.attempts) == 2
+ 
+ 
+-def test_agentic_loop_uses_action_name_and_disables_write_retry():
+-    from app.application.workflow.engine import WorkflowEngine
+-    from app.application.workflow.workflow_types import PlanGraph
++def test_agentic_loop_uses_action_name_and_disables_write_retry(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
+ 
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
+     calls = []
+ 
+-    def dispatch(tool_id, action, params):
+-        calls.append((tool_id, action))
++    def dispatch(self, step, spec, action, params, runtime_context):
++        calls.append(("business_db", action))
+         return {"success": False, "message": "write rejected"}
+ 
+-    engine = WorkflowEngine(tool_dispatcher=dispatch)
+-    call_count = {"n": 0}
+-
+-    def decide(*args, **kwargs):
+-        call_count["n"] += 1
+-        if call_count["n"] == 1:
+-            return {
+-                "action": "execute",
++    workflow_fixtures.inline_business_adapter(monkeypatch, dispatch)
++    json_model(
++        monkeypatch,
++        [
++            {
+                 "tool_id": "business_db",
+-                "action_name": "write",
+-                "params": {"entity": "products", "operation": "create", "payload": {}},
++                "action": "write",
++                "params": {
++                    "entity": "products",
++                    "operation": "create",
++                    "payload": {"product_name": "rejected product"},
++                },
+                 "reasoning": "write product",
+-            }
+-        return {"action": "done"}
+-
+-    with patch.object(engine, "_llm_decide_next_step", side_effect=decide):
+-        result = engine.run(
+-            PlanGraph(plan_id="p-agentic", intent="agentic"),
+-            runtime_context={"message": "create product"},
+-            max_retries=2,
+-            agentic_loop=True,
+-            tool_registry={
+-                "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
+             },
+-        )
+-
+-    assert calls == [("business_db", "write")]
+-    assert result.node_results[0].retryable is False
+-    assert "副作用" in result.node_results[0].recovery_hint
++            {"action": "done"},
++        ],
++    )
++    first = workflow_engine().run(
++        PlanGraph(plan_id="p-agentic", intent="agentic"),
++        runtime_context={**actor.context, "message": "create product"},
++        max_retries=2,
++        agentic_loop=True,
++        tool_registry={
++            "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
++        },
++    )
++    run_id = first.final_context["run_id"]
++    assert calls == []
++    grant = http.client.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
++    queued = http.client.post(f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant})
++    assert queued.status_code == 202, queued.text
++    execution = http.queue.claim_run(run_id, "workflow-retry", lease_seconds=60)
++    final = AgentOrchestrator(
++        repository=ClaimedRunRepository(http.repository, execution, "workflow-retry")
++    ).execute_dispatched_run(run_id)
++    result = final.final_output["workflow_result"]["workflow_result"]
++    assert calls == [("business_db", "write")], [
++        (call.tool_id, call.output) for call in final.tool_calls
++    ]
++    assert result["node_results"][0]["retryable"] is False
++    assert "副作用" in result["node_results"][0]["recovery_hint"]
+ 
+ 
+-def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
++def test_ai_chat_agentic_excel_loop_returns_agent_run_trace(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
+ 
+     from app.application.ai_chat_app_service import AIChatApplicationService
+-    from app.application.workflow.workflow_types import (
+-        NodeExecutionResult,
+-        PlanGraph,
+-        WorkflowRunResult,
+-    )
++    from app.application.workflow.workflow_types import PlanGraph
+ 
+-    repo = InMemoryAgentRunRepository()
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    repo = http.repository
+     plan = PlanGraph(
+         plan_id="p-agentic-excel",
+         intent="excel_agentic_analysis",
+         todo_steps=["inspect excel"],
+     )
+-    run_result = WorkflowRunResult(
+-        plan_id="p-agentic-excel",
+-        success=True,
+-        node_results=[
+-            NodeExecutionResult(
+-                node_id="agent_excel_analysis_query",
+-                success=True,
+-                tool_id="excel_analysis",
+-                action="query",
+-                params={"file_path": "/tmp/demo.xlsx", "question": "查价格"},
+-                output={
+-                    "success": True,
+-                    "message": "Excel 分析完成",
+-                    "artifacts": [
+-                        {
+-                            "artifact_type": "excel_query_result",
+-                            "name": "demo.xlsx",
+-                            "source": "excel_analysis.query",
+-                            "summary": "价格列已识别",
+-                        }
+-                    ],
+-                },
+-                duration_ms=7,
+-            )
++
++    workflow_fixtures.inline_business_adapter(
++        monkeypatch,
++        lambda *args: {
++            "success": True,
++            "message": "Excel 分析完成",
++            "artifacts": [
++                {
++                    "artifact_type": "excel_query_result",
++                    "name": "demo.xlsx",
++                    "source": "excel_analysis.query",
++                    "summary": "价格列已识别",
++                }
++            ],
++        },
++    )
++    json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "excel_analysis",
++                "action": "query",
++                "params": {"file_path": "/tmp/demo.xlsx", "question": "查价格"},
++            },
++            {"action": "done"},
+         ],
+-        final_context={"workflow_status": {"state": "completed"}},
+-        message="AgenticLoop 完成（2 步）",
+     )
+ 
+     with (
+@@ -1139,18 +1167,22 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
+         )
+         service.approval_service = Mock()
+         service.approval_service.get_approval_required_nodes.return_value = []
+-        service.workflow_engine.run = Mock(return_value=run_result)
++        service.workflow_engine = workflow_engine()
++        original_run = service.workflow_engine.run
++        service.workflow_engine.run = Mock(wraps=original_run)
+ 
+         result = service._try_handle_dynamic_workflow(
+             user_id="u1",
+             message="分析这个 Excel 下一步",
+             source="pro",
+-            context={"excel_analysis": {"file_path": "/tmp/demo.xlsx"}},
++            context={**actor.context, "excel_analysis": {"file_path": "/tmp/demo.xlsx"}},
+             file_context={},
+         )
+ 
+     assert result is not None
+-    assert result["success"] is True
++    assert result["success"] is True, [
++        (call.tool_id, call.output) for call in repo.get(result["run_id"]).tool_calls
++    ]
+     assert result["data"]["action"] == "workflow_done"
+     assert result["run_id"]
+     runtime_context = service.workflow_engine.run.call_args.kwargs["runtime_context"]
+@@ -1160,7 +1192,8 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
+     run = repo.get(result["run_id"])
+     assert run is not None
+     assert run.status == "completed"
+-    assert run.metadata["trace_mode"] == "agentic_loop_bridge"
++    assert run.metadata["execution_kernel"] == "workflow_agentic"
++    assert all(not call.metadata.get("observed") for call in run.tool_calls)
+     assert run.metadata["tool_call_count"] == 1
+     assert run.metadata["artifact_count"] == 1
+     assert run.tool_calls[0].tool_id == "excel_analysis"
+diff --git a/FHD/tests/test_application/test_workflow_engine.py b/FHD/tests/test_application/test_workflow_engine.py
+index 0c3d17b984..98ed8fcec4 100644
+--- a/FHD/tests/test_application/test_workflow_engine.py
++++ b/FHD/tests/test_application/test_workflow_engine.py
+@@ -12,6 +12,11 @@ from app.application.workflow.workflow_types import (
+     WorkflowNode,
+     WorkflowRunResult,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_model = workflow_fixtures.workflow_model
+ 
+ 
+ def _make_engine(dispatch_result=None):
+@@ -322,7 +327,11 @@ class TestWorkflowEngineAgenticLoop:
+         assert result.success is False
+         assert len(result.node_results) == 0
+ 
+-    def test_agentic_loop_execute_then_done(self):
++    def test_agentic_loop_execute_then_done(
++        self, trusted_actor, reviewed_agent_http, workflow_model
++    ):
++        actor = trusted_actor()
++        reviewed_agent_http(actor)
+         engine = _make_engine({"success": True, "data": []})
+         call_count = 0
+ 
+@@ -343,7 +352,7 @@ class TestWorkflowEngineAgenticLoop:
+             plan = _simple_plan()
+             result = engine.run(
+                 plan,
+-                runtime_context={"message": "test"},
++                runtime_context={**actor.context, "message": "test"},
+                 agentic_loop=True,
+                 tool_registry={"products": {"actions": {"query": {"risk": "low"}}}},
+             )
+diff --git a/FHD/tests/test_application/test_workflow_engine_cov.py b/FHD/tests/test_application/test_workflow_engine_cov.py
+index 3f0048a7a5..6833543a03 100644
+--- a/FHD/tests/test_application/test_workflow_engine_cov.py
++++ b/FHD/tests/test_application/test_workflow_engine_cov.py
+@@ -23,6 +23,11 @@ from app.application.workflow.workflow_types import (
+     WorkflowNode,
+     WorkflowRunResult,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_model = workflow_fixtures.workflow_model
+ 
+ # ---------------------------------------------------------------------------
+ # Helpers
+@@ -233,7 +238,9 @@ class TestAgenticLoopDoneBranch:
+         assert result.node_results == []
+         assert result.success is False
+ 
+-    def test_max_steps_warning_logged(self):
++    def test_max_steps_warning_logged(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        reviewed_agent_http(actor)
+         """Lines 231-232: step >= max_steps → warning is logged."""
+         engine = _make_engine({"success": True})
+         plan = _plan([_node()])
+@@ -253,9 +260,9 @@ class TestAgenticLoopDoneBranch:
+         ):
+             result = engine._run_agentic_loop(
+                 plan=plan,
+-                runtime_context={"message": "loop"},
++                runtime_context={**actor.context, "message": "loop"},
+                 max_retries=0,
+-                tool_registry={"products": {}},
++                tool_registry={"products": {"actions": {"query": {}}}},
+                 user_id=None,
+             )
+ 
+diff --git a/FHD/tests/test_application/test_workflow_model_turn.py b/FHD/tests/test_application/test_workflow_model_turn.py
+new file mode 100644
+index 0000000000..367df2fe24
+--- /dev/null
++++ b/FHD/tests/test_application/test_workflow_model_turn.py
+@@ -0,0 +1,538 @@
++"""Workflow JSON decisions use real actor admission and the shared durable cursor."""
++
++import json
++from types import SimpleNamespace
++
++import pytest
++from openai import OpenAI
++
++from tests.fixtures import backend_ci_isolation
++
++trusted_actor = backend_ci_isolation.trusted_actor
++reviewed_agent_http = backend_ci_isolation.reviewed_agent_http
++
++
++@pytest.fixture
++def workflow_model(monkeypatch):
++    from app.infrastructure.llm.client import llm_client_scope
++
++    monkeypatch.setenv("OPENAI_API_KEY", "workflow-fixture-model-canary")
++    monkeypatch.setenv("OPENAI_BASE_URL", "https://workflow-fixture.example/v1")
++    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
++    model = OpenAI(
++        api_key="workflow-fixture-model-canary", base_url="https://workflow-fixture.example/v1"
++    )
++    with llm_client_scope(model, "workflow-fixture-model"):
++        yield model
++
++
++def json_model(monkeypatch, decisions):
++    from openai.resources.chat.completions import Completions
++
++    requests = []
++    values = iter(decisions)
++
++    def complete(self, **request):
++        requests.append(request)
++        value = next(values)
++        return SimpleNamespace(
++            choices=[
++                SimpleNamespace(
++                    finish_reason="stop",
++                    message=SimpleNamespace(
++                        content=value if isinstance(value, str) else json.dumps(value),
++                        tool_calls=None,
++                    ),
++                )
++            ],
++            usage=None,
++        )
++
++    monkeypatch.setattr(Completions, "create", complete)
++    return requests
++
++
++def workflow_engine():
++    from app.application.workflow.agentic_model_policy import registered_workflow_dispatch
++    from app.application.workflow.engine import WorkflowEngine
++
++    return WorkflowEngine(registered_workflow_dispatch)
++
++
++def run_workflow(actor, registry, *, engine=None, message="workflow", turn="original"):
++    from app.application.workflow.workflow_types import PlanGraph
++
++    return (engine or workflow_engine()).run(
++        PlanGraph("workflow-plan", "workflow-test"),
++        agentic_loop=True,
++        tool_registry=registry,
++        runtime_context={
++            **actor.context,
++            "message": message,
++            "conversation_id": "workflow",
++            "turn_id": turn,
++        },
++    )
++
++
++def test_json_read_then_done_uses_original_run_receipt_and_prompt(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "business_db",
++                "action": "read",
++                "params": {"entity": "customers"},
++                "reasoning": "read",
++            },
++            {"action": "done"},
++        ],
++    )
++    result = run_workflow(
++        actor, {"business_db": {"actions": {"read": {"risk": "low", "idempotent": True}}}}
++    )
++    assert result.success is True, result
++    assert len(result.node_results) == 1
++    assert result.node_results[0].tool_id == "business_db"
++    assert result.node_results[0].action == "read"
++    run = http.repository.get(result.final_context["run_id"])
++    assert run.metadata[STATE_KEY]["phase"] == "terminal"
++    assert run.metadata[STATE_KEY]["round"] == 2
++    assert run.tool_calls[0].call_id.startswith("wfa_")
++    assert run.tool_calls[0].metadata["independent_verification"]["verified"] is True
++    assert not any(call.metadata.get("observed") for call in run.tool_calls)
++    assert len(requests) == 2
++    assert all(
++        request["timeout"].read == 20.0 and request["timeout"].connect == 10.0
++        for request in requests
++    )
++    prompt = json.loads(requests[1]["messages"][1]["content"])
++    assert "business_db.read" in prompt["recent_history"]
++    assert "结果:" in prompt["recent_history"]
++    assert "workflow-fixture-model-canary" not in json.dumps(run.metadata[STATE_KEY])
++    assert "_actor_authorization" not in result.final_context
++
++
++@pytest.mark.parametrize(
++    "value",
++    [
++        "{}",
++        "[]",
++        '{"tool_id":"business_db","action":"read","params":[]}',
++        '{"action":"done","action":"execute"}',
++    ],
++)
++def test_invalid_json_never_creates_intent(
++    trusted_actor, reviewed_agent_http, workflow_model, monkeypatch, value
++):
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(monkeypatch, [value])
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    assert result.success is False
++    run = http.repository.get(result.final_context["run_id"])
++    assert run.tool_calls == []
++    assert len(requests) == 1
++
++
++def test_anonymous_tool_does_not_dispatch_or_request_next_model(monkeypatch):
++    from app.application.workflow.engine import WorkflowEngine
++    from app.application.workflow.workflow_types import PlanGraph
++
++    calls = []
++    engine = WorkflowEngine(lambda **params: calls.append(params))
++    monkeypatch.setattr(
++        engine,
++        "_llm_decide_next_step",
++        lambda **kwargs: {
++            "tool_id": "business_db",
++            "action": "read",
++            "params": {"entity": "customers"},
++        },
++    )
++    result = engine.run(
++        PlanGraph("anonymous", "test"),
++        agentic_loop=True,
++        tool_registry={"business_db": {"actions": {"read": {}}}},
++    )
++    assert result.success is False
++    assert result.node_results == [] and calls == []
++    assert result.final_context["workflow_status"]["steps"] == 1
++
++
++@pytest.mark.parametrize(
++    "count,final_kind", [(1, "done"), (10, "done"), (10, "execute"), (10, "invalid")]
++)
++def test_ten_step_boundary_and_invalid_history(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    count,
++    final_kind,
++):
++    actor = trusted_actor()
++    reviewed_agent_http(actor)
++    read = {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}}
++    invalid = {"tool_id": "", "action": "execute", "params": {}}
++    decisions = [read] * (count - 1) + [
++        {"action": "done"} if final_kind == "done" else read if final_kind == "execute" else invalid
++    ]
++    requests = json_model(monkeypatch, decisions)
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    assert result.success is (final_kind == "done")
++    assert len(requests) == count
++    assert result.final_context["workflow_status"]["steps"] == count
++    if count == 10:
++        prompt = json.loads(requests[-1]["messages"][1]["content"])
++        assert len(prompt["recent_history"].splitlines()) == 8
++        assert (
++            len({node.node_id for node in result.node_results}) <= 1
++        )  # Public aliases remain compatible.
++
++
++def test_invalid_then_done_cannot_erase_original_error(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from unittest.mock import Mock
++
++    actor = trusted_actor()
++    reviewed_agent_http(actor)
++    engine = workflow_engine()
++    engine._llm_decide_next_step = Mock(
++        side_effect=[{"action": "execute", "tool_id": ""}, {"action": "done"}]
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}}, engine=engine)
++    assert result.success is False
++    assert result.final_context["workflow_status"]["invalid_decisions"] == 1
++    assert engine._llm_decide_next_step.call_args.kwargs["agent_history"][-1]["content"].startswith(
++        "工具决策缺少"
++    )
++
++
++def test_actual_rbac_denial_and_missing_catalog_create_no_intent(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    actor = trusted_actor(role="workflow-denied", permissions=[])
++    http = reviewed_agent_http(actor)
++    json_model(
++        monkeypatch,
++        [{"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}}],
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    assert result.success is False
++    assert http.repository.get(result.final_context["run_id"]).tool_calls == []
++
++
++def test_nonportable_write_hook_is_rejected_before_intent(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    engine = workflow_engine()
++    calls = []
++    monkeypatch.setattr(engine, "_run_single_tool", lambda **kwargs: calls.append(kwargs))
++    json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "business_db",
++                "action": "write",
++                "params": {
++                    "entity": "customers",
++                    "operation": "create",
++                    "payload": {"unit_name": "must not write"},
++                },
++            }
++        ],
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"write": {}}}}, engine=engine)
++    assert result.success is False and calls == []
++    assert http.repository.get(result.final_context["run_id"]).tool_calls == []
++
++
++def test_budget_is_derived_from_canonical_timeout_and_only_reduced_by_request():
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++    from app.application.workflow.agentic_model_policy import _limits
++
++    registry = {"business_db": {"actions": {"read": {}}}}
++    timeout = get_tool_action_spec("business_db", "read").timeout_seconds
++    expected = min(86400, 10 * (20 + timeout * 3))
++    assert _limits(registry, 2, {})["seconds"] == expected
++    assert _limits(registry, 2, {"timeout_seconds": 100000})["seconds"] == expected
++    assert _limits(registry, 2, {"timeout_seconds": 1})["seconds"] == 1
++
++
++def inline_business_adapter(monkeypatch, dispatch):
++    """Deterministic I/O only; execute() retains real actor, Mod and grant checks."""
++    from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
++
++    monkeypatch.setattr(
++        AgentToolExecutor,
++        "execute_with_deadline",
++        lambda self, step, *, runtime_context, deadline_monotonic: self.execute(
++            step, runtime_context=runtime_context
++        ),
++    )
++    monkeypatch.setattr(AgentToolExecutor, "_dispatch", dispatch)
++
++
++def test_terminal_checkpoint_rebuilds_read_only_after_response_crash(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(
++        monkeypatch,
++        [
++            {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}},
++            {"action": "done"},
++        ],
++    )
++    registry = {"business_db": {"actions": {"read": {}}}}
++    first = run_workflow(actor, registry)
++    run = http.repository.get(first.final_context["run_id"])
++    original_calls = [call.to_dict() for call in run.tool_calls]
++    run.final_output.pop("workflow_result")
++    http.repository.save(run)
++    replay = run_workflow(actor, registry)
++    assert replay.success is True and len(requests) == 2
++    assert replay.final_context["run_id"] == run.run_id
++    assert replay.node_results == first.node_results
++    assert [call.to_dict() for call in http.repository.get(run.run_id).tool_calls] == original_calls
++
++
++@pytest.mark.parametrize("extra", ["limits", "batch", "next_call_index", "request_id"])
++def test_no_call_transition_cannot_mutate_authority_or_budget(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    extra,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.application.workflow.agentic_model_policy import WorkflowAgenticModelPolicy
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    json_model(monkeypatch, [{"action": "done"}])
++    monkeypatch.setattr(
++        WorkflowAgenticModelPolicy,
++        "no_call_transition",
++        lambda self, decision, state: {
++            "phase": "ready_model",
++            extra: 999,
++        },
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    run = http.repository.get(result.final_context["run_id"])
++    assert run.status == "blocked" and not result.success
++    assert run.metadata[STATE_KEY]["limits"]["rounds"] == 10
++    assert run.metadata[STATE_KEY]["limits"]["calls"] == 10
++    assert run.tool_calls == []
++
++
++def test_public_hooks_preserve_projection_fields_and_inline_order(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.workflow.workflow_types import NodeExecutionResult
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    engine = workflow_engine()
++    expected = NodeExecutionResult(
++        "display-alias",
++        True,
++        "business_db",
++        "read",
++        params={"entity": "customers"},
++        output={"success": True, "data": []},
++        retries=2,
++        retryable=True,
++        started_at="2026-10-26T01:00:00+00:00",
++        finished_at="2026-10-26T01:00:01+00:00",
++        duration_ms=1000,
++        attempts=[{"attempt": 3, "success": True}],
++    )
++    events = []
++    append, merge = engine._append_node_trace, engine._merge_state_schema
++    monkeypatch.setattr(engine, "_run_single_tool", lambda **kwargs: expected)
++
++    def trace(context, result):
++        events.append("trace")
++        append(context, result)
++
++    def schema(context, result, schema):
++        events.append("schema")
++        merge(context, result, schema)
++
++    def emit(result):
++        events.append("emit")
++        assert result == expected
++
++    monkeypatch.setattr(engine, "_append_node_trace", trace)
++    monkeypatch.setattr(engine, "_merge_state_schema", schema)
++    monkeypatch.setattr(engine, "_emit_state_update", emit)
++    json_model(
++        monkeypatch,
++        [
++            {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}},
++            {"action": "done"},
++        ],
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}}, engine=engine)
++    assert result.success and result.node_results == [expected]
++    assert events == ["trace", "schema", "emit"]
++    assert result.final_context["node_outputs"]["agent_step_1"] == expected.output
++    call = http.repository.get(result.final_context["run_id"]).tool_calls[0]
++    assert call.node_id == call.call_id and call.node_id != expected.node_id
++
++
++def test_admission_failure_precedes_model_and_intent(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(monkeypatch, [{"action": "done"}])
++    monkeypatch.setattr(
++        http.repository,
++        "claim_first_task_run",
++        lambda run: (_ for _ in ()).throw(ValueError("storage admission failed")),
++    )
++    with pytest.raises(ValueError, match="storage admission failed"):
++        run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    assert requests == []
++
++
++@pytest.mark.parametrize("field", ["user_id", "tenant_id", "active_mod_id"])
++def test_real_actor_scope_cannot_be_changed_before_admission(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    field,
++):
++    from app.application.workflow.workflow_types import PlanGraph
++
++    actor = trusted_actor()
++    reviewed_agent_http(actor)
++    requests = json_model(monkeypatch, [{"action": "done"}])
++    with pytest.raises(ValueError):
++        workflow_engine().run(
++            PlanGraph("scope", "test"),
++            agentic_loop=True,
++            runtime_context={**actor.context, field: "unrelated-scope"},
++            tool_registry={"business_db": {"actions": {"read": {}}}},
++        )
++    assert requests == []
++
++
++def test_market_account_binding_uses_bounded_copy_without_mutating_original_client(
++    trusted_actor,
++    reviewed_agent_http,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.db.models.user import Session as UserSession
++    from app.domain.shared_services.conversation.modstore_adapter import (
++        ModstoreOpenAICompatibleClient,
++        ModstorePlatformAdapter,
++    )
++    from app.infrastructure.llm.client import llm_client_scope
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    token = "workflow-market-session-canary"
++    with actor.factory.begin() as db:
++        row = db.get(UserSession, actor.session_row_id)
++        row.market_user_id = 77
++        row.market_access_token = token
++    adapter = ModstorePlatformAdapter(
++        platform_url="https://market-fixture.example",
++        auth_token=token,
++        user_id=77,
++        default_provider="fixture",
++        default_model="same-account-model",
++        timeout=60,
++    )
++    calls = []
++
++    def complete(self, **request):
++        calls.append((self.timeout, self.auth_token, request["model"]))
++        return {
++            "choices": [
++                {
++                    "finish_reason": "stop",
++                    "message": {"content": '{"action":"done"}', "tool_calls": None},
++                }
++            ],
++            "usage": None,
++        }
++
++    monkeypatch.setattr(ModstorePlatformAdapter, "chat_completion_sync", complete)
++    client = ModstoreOpenAICompatibleClient(adapter)
++    with llm_client_scope(client, "fixture/same-account-model"):
++        result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    assert result.success is True
++    assert calls == [(20.0, token, "fixture/same-account-model")]
++    assert adapter.timeout == 60 and adapter.auth_token == token
++    state = http.repository.get(result.final_context["run_id"]).metadata[STATE_KEY]
++    assert state["model_reference"]["kind"] == "market_session"
++    assert state["model_reference"]["market_user_id"] == 77
++    assert token not in json.dumps(state)
++
++
++def test_sdk_timeout_suspends_original_inflight_decision_without_retry(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    import httpx
++    from openai import APITimeoutError
++    from openai.resources.chat.completions import Completions
++
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = []
++
++    def timeout(self, **request):
++        requests.append(request)
++        raise APITimeoutError(request=httpx.Request("POST", "https://workflow-fixture.example/v1"))
++
++    monkeypatch.setattr(Completions, "create", timeout)
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    run = http.repository.get(result.final_context["run_id"])
++    assert not result.success and run.status == "blocked"
++    assert run.metadata[STATE_KEY]["blocked_model_recovery"] is True
++    assert run.metadata[STATE_KEY]["round"] == 1 and run.tool_calls == []
++    assert len(requests) == 1
+diff --git a/FHD/tests/test_application/test_workflow_model_turn_durable.py b/FHD/tests/test_application/test_workflow_model_turn_durable.py
+new file mode 100644
+index 0000000000..88659e2b31
+--- /dev/null
++++ b/FHD/tests/test_application/test_workflow_model_turn_durable.py
+@@ -0,0 +1,283 @@
++"""Real SQL, original HTTP grant and independent write readback for workflow turns."""
++
++import json
++
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++json_model = workflow_fixtures.json_model
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++run_workflow = workflow_fixtures.run_workflow
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_model = workflow_fixtures.workflow_model
++
++
++def test_original_write_waits_then_continues_same_call_and_model(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
++    from app.db.models.purchase_unit import PurchaseUnit
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(
++        monkeypatch,
++        [
++            {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}},
++            {
++                "tool_id": "business_db",
++                "action": "write",
++                "params": {
++                    "entity": "customers",
++                    "operation": "create",
++                    "payload": {"unit_name": "workflow approved customer"},
++                },
++            },
++            {"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}},
++            {"action": "done"},
++        ],
++    )
++    registry = {
++        "business_db": {
++            "actions": {
++                "read": {"risk": "low", "idempotent": True},
++                "write": {"risk": "medium", "idempotent": False},
++            }
++        }
++    }
++    first = run_workflow(actor, registry)
++    assert first.success is False
++    assert first.final_context["workflow_status"]["state"] == "waiting_user"
++    run = http.repository.get(first.final_context["run_id"])
++    assert len(requests) == 2 and len(run.tool_calls) == 2
++    assert run.metadata[STATE_KEY]["next_call_index"] == 0
++    original = [(call.call_id, call.step_id, call.params) for call in run.tool_calls]
++    active_seconds = run.metadata[STATE_KEY]["active_seconds"]
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        assert db.query(PurchaseUnit).filter_by(unit_name="workflow approved customer").count() == 0
++    review = http.client.get(f"/api/agent/runs/{run.run_id}")
++    assert review.status_code == 200, review.text
++    grant = review.json()["approval"]["grant"]
++    assert STATE_KEY not in json.dumps(review.json())
++    queued = http.client.post(
++        f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": grant}
++    )
++    assert queued.status_code == 202, queued.text
++    execution = http.queue.claim_run(run.run_id, "workflow-test", lease_seconds=60)
++    assert execution is not None
++    fenced = ClaimedRunRepository(http.repository, execution, "workflow-test")
++    final = AgentOrchestrator(repository=fenced).execute_dispatched_run(run.run_id)
++    assert final.status == "completed", {"state": final.metadata[STATE_KEY], "error": final.error}
++    assert [(call.call_id, call.step_id, call.params) for call in final.tool_calls[:2]] == original
++    assert final.metadata[STATE_KEY]["round"] == 4 and len(requests) == 4
++    projected = final.final_output["workflow_result"]["workflow_result"]
++    assert len(projected["final_context"]["workflow_trace"]) == len(final.tool_calls)
++    assert all(row["success"] for row in projected["final_context"]["workflow_trace"])
++    assert final.metadata[STATE_KEY]["active_seconds"] >= active_seconds
++    assert len(final.metadata[STATE_KEY]["delivered"]) == 3
++    assert final.tool_calls[1].metadata["independent_verification"]["verified"] is True
++    assert all(not call.metadata.get("observed") for call in final.tool_calls)
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        assert db.query(PurchaseUnit).filter_by(unit_name="workflow approved customer").count() == 1
++    replay = run_workflow(actor, registry)
++    assert replay.success is True and len(requests) == 4
++    assert replay.final_context["run_id"] == final.run_id
++    assert (
++        http.client.post(
++            f"/api/agent/runs/{run.run_id}/continue", json={"approval_grant": grant}
++        ).status_code
++        != 202
++    )
++
++
++def _waiting_write(actor, monkeypatch):
++    workflow_fixtures.json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "business_db",
++                "action": "write",
++                "params": {
++                    "entity": "customers",
++                    "operation": "create",
++                    "payload": {"unit_name": "workflow boundary customer"},
++                },
++            }
++        ],
++    )
++    first = run_workflow(actor, {"business_db": {"actions": {"write": {}}}})
++    return first.final_context["run_id"]
++
++
++import pytest
++
++
++@pytest.mark.parametrize("damage", ["projection", "receipt", "budget", "model_reference"])
++def test_saved_boundary_damage_blocks_original_write(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    damage,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
++    from app.db.models.purchase_unit import PurchaseUnit
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    run_id = _waiting_write(actor, monkeypatch)
++    review = http.client.get(f"/api/agent/runs/{run_id}")
++    queued = http.client.post(
++        f"/api/agent/runs/{run_id}/continue",
++        json={"approval_grant": review.json()["approval"]["grant"]},
++    )
++    assert queued.status_code == 202
++    run = http.repository.get(run_id)
++    original_id = run.tool_calls[0].call_id
++    if damage == "projection":
++        run.tool_calls[0].metadata["workflow_projection"]["node_result"]["success"] = True
++    elif damage == "receipt":
++        run.tool_calls[0].output["changed"] = True
++    elif damage == "budget":
++        run.metadata[STATE_KEY]["active_seconds"] = run.metadata[STATE_KEY]["limits"]["seconds"] + 1
++    else:
++        run.metadata[STATE_KEY]["model_reference"]["endpoint"] = "https://different.example/v1"
++    http.repository.save(run)
++    execution = http.queue.claim_run(run_id, "workflow-boundary", lease_seconds=60)
++    final = AgentOrchestrator(
++        repository=ClaimedRunRepository(http.repository, execution, "workflow-boundary")
++    ).execute_dispatched_run(run_id)
++    assert final.status in {"blocked", "failed"}
++    assert [call.call_id for call in final.tool_calls] == [original_id]
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        assert db.query(PurchaseUnit).filter_by(unit_name="workflow boundary customer").count() == 0
++
++
++@pytest.mark.parametrize("outcome", ["unknown", "pending", "waiting_approval"])
++def test_unresolved_real_receipt_holds_cursor_and_never_requests_next_model(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    outcome,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    workflow_fixtures.inline_business_adapter(
++        monkeypatch, lambda *args: {"success": False, "outcome": outcome}
++    )
++    requests = json_model(
++        monkeypatch,
++        [{"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}}],
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    run = http.repository.get(result.final_context["run_id"])
++    assert not result.success and len(requests) == 1
++    assert len(run.tool_calls) == 1
++    assert run.metadata[STATE_KEY]["next_call_index"] == 0
++    assert run.metadata[STATE_KEY]["delivered"] == []
++    assert (
++        run.metadata[STATE_KEY]["phase"]
++        == {
++            "unknown": "reconciliation",
++            "pending": "pending",
++            "waiting_approval": "waiting_approval",
++        }[outcome]
++    )
++
++
++@pytest.mark.parametrize("damage", ["shape", "json", "type_error"])
++def test_damaged_memory_projection_preserves_actual_receipt_and_blocks(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    damage,
++):
++    from app.application.agent_orchestrator.trace_runs import (
++        TraceRunService,
++        WorkflowReceiptProjection,
++    )
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    original = TraceRunService.dispatch_tool
++
++    def dispatch(self, *args, **kwargs):
++        def broken():
++            raise TypeError("broken trusted projection")
++
++        kwargs["projection"] = (
++            {"read": "JSON cannot construct a callback"}
++            if damage == "json"
++            else WorkflowReceiptProjection(
++                broken if damage == "type_error" else lambda: {"output": {"success": True}}
++            )
++        )
++        return original(self, *args, **kwargs)
++
++    monkeypatch.setattr(TraceRunService, "dispatch_tool", dispatch)
++    requests = json_model(
++        monkeypatch,
++        [{"tool_id": "business_db", "action": "read", "params": {"entity": "customers"}}],
++    )
++    result = run_workflow(actor, {"business_db": {"actions": {"read": {}}}})
++    run = http.repository.get(result.final_context["run_id"])
++    assert run.status == "blocked" and not result.success and len(requests) == 1
++    assert run.tool_calls[0].output["success"] is True
++    assert run.tool_calls[0].metadata["workflow_projection_error"] == "workflow_projection_invalid"
++    assert run.tool_calls[0].metadata["independent_verification"]["verified"] is True
++
++
++@pytest.mark.parametrize("finished", [False, True])
++def test_historical_observed_run_is_readable_but_never_promoted_to_model_execution(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    finished,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.application.ai_chat.agent_workflow_bridge import AgentWorkflowBridge
++    from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    requests = json_model(monkeypatch, [])
++    bridge = AgentWorkflowBridge(http.repository, lambda output: "", lambda output: [])
++    plan = PlanGraph("old-observed", "old-history")
++    run = bridge.start_run(
++        user_id=str(actor.user_id),
++        message="historical",
++        plan=plan,
++        runtime_context=dict(actor.context),
++    )
++    if finished:
++        run = bridge.record_result(
++            user_id=str(actor.user_id),
++            message="historical",
++            plan=plan,
++            runtime_context=dict(actor.context),
++            agent_run=run,
++            run_result=WorkflowRunResult(plan.plan_id, True, [], {}, "historical snapshot"),
++        )
++    before = run.to_dict()
++    review = http.client.get(f"/api/agent/runs/{run.run_id}")
++    assert review.status_code == 200, review.text
++    assert not review.json().get("approval")
++    continued = http.client.post(f"/api/agent/runs/{run.run_id}/continue", json={})
++    assert continued.status_code != 202, continued.text
++    after = http.repository.get(run.run_id)
++    assert after.to_dict() == before
++    assert STATE_KEY not in after.metadata
++    assert requests == [] and http.queue.get(run.run_id) is None
+diff --git a/FHD/tests/test_application/test_workflow_model_turn_process_resume.py b/FHD/tests/test_application/test_workflow_model_turn_process_resume.py
+new file mode 100644
+index 0000000000..5bc95042a1
+--- /dev/null
++++ b/FHD/tests/test_application/test_workflow_model_turn_process_resume.py
+@@ -0,0 +1,271 @@
++"""Two spawned workers compete for the same formally approved workflow cursor."""
++
++import multiprocessing
++
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++trusted_actor = workflow_fixtures.trusted_actor
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++workflow_model = workflow_fixtures.workflow_model
++
++
++def _resume_workflow(url, run_id, owner, ready, start, outcomes):
++    from sqlalchemy import create_engine
++    from sqlalchemy.orm import sessionmaker
++
++    from app import db as host_db
++    from app.application.agent_orchestrator import run_repository, task_execution_repository
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
++    from app.application.agent_orchestrator.task_execution_sql_repository import (
++        SQLAlchemyTaskExecutionRepository,
++    )
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
++    from tests.test_application.test_workflow_model_turn import json_model
++
++    class Patches:
++        @staticmethod
++        def setattr(owner, name, value):
++            setattr(owner, name, value)
++
++    requests = json_model(Patches(), [{"action": "done"}])
++    engine = create_engine(url)
++    factory = sessionmaker(bind=engine)
++    host_db.HostSessionLocal = factory
++    runs = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
++    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
++    run_repository._agent_run_repository = runs
++    task_execution_repository._task_execution_repository = queue
++    ready.put(owner)
++    try:
++        assert start.wait(25)
++        execution = queue.claim_run(run_id, owner, lease_seconds=60)
++        if execution is None:
++            outcomes.put({"claimed": False, "requests": 0})
++            return
++        final = AgentOrchestrator(
++            repository=ClaimedRunRepository(runs, execution, owner)
++        ).execute_dispatched_run(run_id)
++        queue.finish(run_id, owner, final.status, execution_count=execution.execution_count)
++        outcomes.put(
++            {
++                "claimed": True,
++                "status": final.status,
++                "requests": len(requests),
++                "calls": [call.call_id for call in final.tool_calls],
++                "output": final.final_output,
++            }
++        )
++    finally:
++        engine.dispose()
++
++
++def test_two_processes_continue_original_workflow_once(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.db.models.purchase_unit import PurchaseUnit
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    workflow_fixtures.json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "business_db",
++                "action": "write",
++                "params": {
++                    "entity": "customers",
++                    "operation": "create",
++                    "payload": {"unit_name": "workflow process customer"},
++                },
++            }
++        ],
++    )
++    first = workflow_fixtures.run_workflow(actor, {"business_db": {"actions": {"write": {}}}})
++    run = http.repository.get(first.final_context["run_id"])
++    original_id = run.tool_calls[0].call_id
++    review = http.client.get(f"/api/agent/runs/{run.run_id}")
++    assert review.status_code == 200
++    approved = http.client.post(
++        f"/api/agent/runs/{run.run_id}/continue",
++        json={"approval_grant": review.json()["approval"]["grant"]},
++    )
++    assert approved.status_code == 202, approved.text
++    ctx = multiprocessing.get_context("spawn")
++    ready, outcomes, start = ctx.Queue(), ctx.Queue(), ctx.Event()
++    workers = [
++        ctx.Process(
++            target=_resume_workflow,
++            args=(str(actor.factory.kw["bind"].url), run.run_id, owner, ready, start, outcomes),
++        )
++        for owner in ("workflow-one", "workflow-two")
++    ]
++    try:
++        for worker in workers:
++            worker.start()
++        assert {ready.get(timeout=25), ready.get(timeout=25)} == {"workflow-one", "workflow-two"}
++        start.set()
++        results = [outcomes.get(timeout=45), outcomes.get(timeout=45)]
++        assert sorted(value["claimed"] for value in results) == [False, True]
++        winner = next(value for value in results if value["claimed"])
++        assert winner["status"] == "completed" and winner["requests"] == 1
++        assert winner["calls"] == [original_id]
++        for worker in workers:
++            worker.join(timeout=20)
++            assert worker.exitcode == 0
++        final = http.repository.get(run.run_id)
++        assert final.metadata[STATE_KEY]["round"] == 2
++        assert final.steps[0].attempt_count == 1
++        assert final.tool_calls[0].metadata["independent_verification"]["verified"] is True
++        with tenant_scope(actor.tenant_id), actor.factory() as db:
++            assert (
++                db.query(PurchaseUnit).filter_by(unit_name="workflow process customer").count() == 1
++            )
++    finally:
++        start.set()
++        for worker in workers:
++            if worker.is_alive():
++                worker.terminate()
++                worker.join(timeout=5)
++        ready.close()
++        outcomes.close()
++
++
++def _approved_workflow_crash(url, run_id, after_intent):
++    import json
++    import os
++
++    from sqlalchemy import create_engine, event
++    from sqlalchemy.orm import sessionmaker
++
++    from app import db as host_db
++    from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY, ModelTurnDriver
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
++    from app.application.agent_orchestrator.task_execution_sql_repository import (
++        SQLAlchemyTaskExecutionRepository,
++    )
++    from app.application.agent_orchestrator.trace_runs import WorkflowExecutionLease
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
++    from app.application.workflow.agentic_model_policy import WorkflowAgenticModelPolicy
++    from app.infrastructure.llm.client import resolve_durable_model_client
++
++    engine = create_engine(url)
++    factory = sessionmaker(bind=engine)
++    host_db.HostSessionLocal = factory
++    if after_intent:
++        committing = {"intent": False}
++
++        def detect(_connection, _cursor, statement, parameters, _context, _many):
++            if statement.startswith("UPDATE agent_runs"):
++                for value in parameters:
++                    if isinstance(value, str) and value.startswith("{"):
++                        payload = json.loads(value)
++                        steps, calls = payload.get("steps", []), payload.get("tool_calls", [])
++                        if len(steps) == len(calls) == 1 and steps[0]["status"] == "running":
++                            committing["intent"] = (
++                                calls[0]["output"].get("outcome") == "waiting_approval"
++                            )
++
++        def committed(_session):
++            if committing["intent"]:
++                os._exit(74)
++
++        event.listen(engine, "after_cursor_execute", detect)
++        event.listen(factory.class_, "after_commit", committed)
++    runs = SQLAlchemyAgentRunRepository(session_factory=factory, auto_create=False)
++    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory, auto_create=False)
++    execution = queue.get(run_id)
++    run = runs.get(run_id)
++    state = run.metadata[STATE_KEY]
++    context = {
++        **run.metadata["runtime_context"],
++        "_workflow_execution_lease": WorkflowExecutionLease(run_id),
++    }
++    client, model = resolve_durable_model_client(context, state["model_reference"])
++    policy = WorkflowAgenticModelPolicy.restore(state["policy"], context, client, model)
++    fenced = ClaimedRunRepository(runs, execution, execution.lease_owner)
++    driver = ModelTurnDriver(policy, repository=fenced, run_id=run_id, context=context, state=state)
++    driver.initialize([], limits={})
++    with worker_claim_scope(runs, execution, execution.lease_owner):
++        driver.execute_approved(
++            AgentOrchestrator(repository=fenced), run.metadata["dispatch"]["approved_step_id"]
++        )
++    saved = runs.get(run_id)
++    assert saved.metadata[STATE_KEY]["phase"] == "waiting_approval"
++    assert saved.metadata[STATE_KEY]["next_call_index"] == 0
++    assert saved.steps[0].attempt_count == 1
++    assert saved.tool_calls[0].output["business_verification"]["verified"] is True
++    os._exit(73)
++
++
++import pytest
++
++
++@pytest.mark.parametrize("after_intent", [False, True])
++def test_real_os_crash_at_approved_intent_and_receipt_boundaries(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++    after_intent,
++):
++    from app.application.agent_orchestrator.model_turn_runtime import STATE_KEY
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
++    from app.db.models.agent import AgentTaskExecutionRecord
++    from app.db.models.purchase_unit import PurchaseUnit
++    from app.infrastructure.tenant_scope import tenant_scope
++    from tests.test_application.test_workflow_model_turn_durable import _waiting_write
++
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    run_id = _waiting_write(actor, monkeypatch)
++    review = http.client.get(f"/api/agent/runs/{run_id}")
++    queued = http.client.post(
++        f"/api/agent/runs/{run_id}/continue",
++        json={"approval_grant": review.json()["approval"]["grant"]},
++    )
++    assert queued.status_code == 202
++    execution = http.queue.claim_run(run_id, "workflow-crash", lease_seconds=60)
++    process = multiprocessing.get_context("spawn").Process(
++        target=_approved_workflow_crash,
++        args=(str(actor.factory.kw["bind"].url), run_id, after_intent),
++    )
++    try:
++        process.start()
++        process.join(timeout=35)
++        assert process.exitcode == (74 if after_intent else 73)
++    finally:
++        if process.is_alive():
++            process.terminate()
++            process.join(timeout=5)
++    crashed = http.repository.get(run_id)
++    original = crashed.tool_calls[0]
++    original_usage = dict(original.metadata.get("usage_ledger") or {})
++    with actor.factory.begin() as db:
++        db.query(AgentTaskExecutionRecord).filter_by(run_id=run_id).update(
++            {"lease_expires_at": "2000-01-01T00:00:00+00:00"}
++        )
++    replacement = http.queue.claim_run(run_id, "workflow-recovered", lease_seconds=60)
++    assert replacement.execution_count == execution.execution_count + 1
++    requests = workflow_fixtures.json_model(monkeypatch, [{"action": "done"}])
++    final = AgentOrchestrator(
++        repository=ClaimedRunRepository(http.repository, replacement, "workflow-recovered")
++    ).execute_dispatched_run(run_id, recovered=True)
++    assert final.status == ("blocked" if after_intent else "completed")
++    assert [call.call_id for call in final.tool_calls] == [original.call_id]
++    assert final.steps[0].attempt_count == 1
++    assert final.tool_calls[0].metadata.get("usage_ledger", {}) == original_usage
++    assert len(requests) == (0 if after_intent else 1)
++    assert final.metadata[STATE_KEY]["round"] == (1 if after_intent else 2)
++    with tenant_scope(actor.tenant_id), actor.factory() as db:
++        assert db.query(PurchaseUnit).filter_by(unit_name="workflow boundary customer").count() == (
++            0 if after_intent else 1
++        )
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered.py b/FHD/tests/test_services/test_tools_workflow_registered.py
+index 0ba3b3549c..5bf7a8fb6f 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered.py
+@@ -313,15 +313,17 @@ class TestMaterialsRouter:
+     @pytest.mark.parametrize("ids,error", [([1], False), ([1, 2, 3], False), ([1, 2], True)])
+     def test_batch_delete_action(self, ids, error):
+         mock_svc = MagicMock()
+-        mock_svc.batch_delete_materials.return_value = {"success": True}
++        mock_svc.batch_delete_materials.return_value = {"success": True, "deleted_count": len(ids)}
+         if error:
+             mock_svc.batch_delete_materials.side_effect = RuntimeError("db down")
+         with patch("app.application.get_material_application_service", return_value=mock_svc):
+             result = _registered_router_materials("batch_delete", {"ids": ids}, {}, "admin", "")
+-            assert result["success"] is True
+-            assert result["deleted_count"] == len(ids)
+             if error:
+-                assert "warning" in result
++                assert result["success"] is False and result["outcome"] == "unknown"
++                assert "deleted_count" not in result and "warning" not in result
++            else:
++                assert result["success"] is True
++                assert result["deleted_count"] == len(ids)
+ 
+     def test_export_action(self):
+         mock_svc = MagicMock()
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+index c5f9f1c3fa..6e791e8ee4 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+@@ -702,13 +702,13 @@ class TestMaterialsRouterBranches:
+         svc.batch_delete_materials.side_effect = RuntimeError("db error")
+         with patch("app.application.get_material_application_service", return_value=svc):
+             result = _registered_router_materials("batch_delete", {"ids": [1]}, {}, "admin", "")
+-        assert result["success"] is True
+-        assert "db error" in result["warning"]
++        assert result["success"] is False and result["outcome"] == "unknown"
++        assert "deleted_count" not in result and "warning" not in result
+ 
+     def test_batch_delete_non_dict_result(self):
+         svc = MagicMock()
+         svc.batch_delete_materials.return_value = None
+         with patch("app.application.get_material_application_service", return_value=svc):
+             result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
+-        assert result["success"] is True
+-        assert result["deleted_count"] == 2
++        assert result["success"] is False and result["outcome"] == "unknown"
++        assert "deleted_count" not in result

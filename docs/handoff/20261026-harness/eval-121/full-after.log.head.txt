@@ -1,0 +1,80 @@
+INFO:app.shell.xcagi_mods_discover:xcagi_mods_discover: using XCAGI root /Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: sz-qsm-pro, name: 奇士美 PRO
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-erp-domain-bridge, name: XCAGI 通用业务领域门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-planner-bridge, name: XCAGI 对话 Planner 门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-office-employee-pack-bridge, name: 办公 employee_pack 桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: taiyangniao-pro, name: 太阳鸟 PRO
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-planner-excel-tools, name: Planner Excel 原生工具 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-lan-license-bridge, name: 局域网授权桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: coating-industry, name: 涂料行业包
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-neuro-bus-bridge, name: NeuroBus 事件桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: sunbird-attendance-custom, name: 太阳鸟考勤转换
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-core-workflow-employees, name: XCAGI 核心工作流（三名内置员工）
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: accessories-packaging-industry, name: 饰品包装行业包
+WARNING:app.infrastructure.mods.manifest:[parse_manifest] Mod manifest not found
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-customer-service-bridge, name: 客服业务页桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-model-payment-bridge, name: 模型付费桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-approval-bridge, name: 审批中心门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: lan-gate-ai-employee, name: 局域网授权 AI 员工
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-workflow-visualization-bridge, name: 工作流可视化
+INFO:app.shell.xcagi_mods_discover:xcagi_mods_discover: using XCAGI root /Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: sz-qsm-pro, name: 奇士美 PRO
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-erp-domain-bridge, name: XCAGI 通用业务领域门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-planner-bridge, name: XCAGI 对话 Planner 门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-office-employee-pack-bridge, name: 办公 employee_pack 桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: taiyangniao-pro, name: 太阳鸟 PRO
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-planner-excel-tools, name: Planner Excel 原生工具 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-lan-license-bridge, name: 局域网授权桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: coating-industry, name: 涂料行业包
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-neuro-bus-bridge, name: NeuroBus 事件桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: sunbird-attendance-custom, name: 太阳鸟考勤转换
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-core-workflow-employees, name: XCAGI 核心工作流（三名内置员工）
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: accessories-packaging-industry, name: 饰品包装行业包
+WARNING:app.infrastructure.mods.manifest:[parse_manifest] Mod manifest not found
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-customer-service-bridge, name: 客服业务页桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-model-payment-bridge, name: 模型付费桥接 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-approval-bridge, name: 审批中心门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: lan-gate-ai-employee, name: 局域网授权 AI 员工
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-workflow-visualization-bridge, name: 工作流可视化
+INFO:app.shell.xcagi_mods_discover:xcagi_mods_discover: using XCAGI root /Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: sz-qsm-pro, name: 奇士美 PRO
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-erp-domain-bridge, name: XCAGI 通用业务领域门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Successfully parsed manifest for mod: xcagi-planner-bridge, name: XCAGI 对话 Planner 门面 Mod
+INFO:app.infrastructure.mods.manifest:[parse_manifest] Checking manifest

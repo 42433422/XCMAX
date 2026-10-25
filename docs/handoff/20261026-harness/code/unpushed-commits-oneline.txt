@@ -1,0 +1,45 @@
+9950a393b5 test(eval): verify material mutations with real approval and tenant readback
+7526f10001 test(eval): execute financial routes through real sessions grants and SQL readback
+a8c606781c fix(materials): verify persisted stock and price aliases without dropping inputs
+d69765d792 refactor(tests): parameterize equivalent group chat cases without coverage loss
+63dcee7543 build(mac): require complete final-package employee leaf evidence
+d354ec5180 test(eval): exercise memory routes with real sessions and original approvals
+8103eeca02 refactor: move governed workflow composition into application owners
+2c14fdfa45 Merge current main and retain governed vector eval in its new body owner
+37822e9151 refactor: archive runners whose historical test targets no longer exist
+6e3b35d397 refactor: archive obsolete hardcoded reports and one-off PDF scripts
+a4263d54b3 test(eval): verify vector ingestion through original approval and SQL readback
+68fe568851 build(mac): bundle a minimal employee leaf helper
+4ee0825e23 fix(runtime): isolate Mac employee code and publish approved artifacts
+dd55618fd5 refactor: retain legacy imports through canonical domain definitions
+301b7d41df refactor(tests): share TopAssistant setup without losing assertions
+b42d9b9c21 fix(tools): return explicit receipts from workbook comparisons
+d339450d99 refactor: retire orphan Flask assets and duplicate deployment guide
+300bebe22f feat(runtime): prepare a bounded Mac employee leaf boundary
+9dab58819e fix(tools): bind vector inputs and document artifacts to approved tasks
+5bf10061a1 refactor(tests): share planner stream transport fixtures
+aaf4e378ba refactor(agent): persist shared model decisions and fence recovered execution
+dd804f3f6b refactor(employees): share office workers and enforce host SDK compatibility
+1017998cce test(chat): verify anonymous streams without fabricated task identity
+70c1bd70d9 fix(vector): isolate Excel indexes and govern owner-scoped mutations
+0a29fc7d4a fix(employees): keep dependency error returns consistently typed
+d5c73efb0c fix(llm): keep employee completions inside the current model scope
+5d8e9b3440 fix(employees): reject malformed completion flags at host result boundaries
+0daaa96435 fix(employees): preserve uncertain dependency receipts without false completion
+8cd4d76c5a fix(employees): redact dependency errors and reject malformed results
+37d73775b2 refactor(employees): share generated handlers without changing pack behavior
+bf2aac3713 fix(files): restrict office output reads to authenticated owners
+9efa2ea5df merge(main): preserve harness remediation across canonical module moves
+6e6234829b fix(employees): govern signed Python actions through durable approval
+54055c5217 fix(llm): bind model credentials to the verified host session
+07a2e3ca3b fix(mods): advance versions for changed employee and planner packages
+d57383a80b fix(harness): redact batch failure logs and refresh stale parser tests
+bc9953da1d fix(harness): preserve approved call receipts and verify product batches
+552bd7dbee chore(evidence): refresh planner bridge source date
+62fa62efc5 wip(harness): persist legacy turns and review scoped business writes
+9b7936ea47 test(memory): exercise authenticated queries and uncertain receipts
+0df802d26b wip(memory): enforce scoped ownership and reviewed durable updates
+dc1f3b39fb chore(evidence): refresh current label implementation date
+f304414e64 fix(evidence): ignore runtime-only directories as implementation proof
+2d079eb389 wip(harness): checkpoint authenticated execution and recovery safeguards
+621fb9602a wip(harness): preserve safety and runtime remediation before mainline port

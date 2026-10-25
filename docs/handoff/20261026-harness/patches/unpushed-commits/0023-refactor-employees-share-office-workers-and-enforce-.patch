@@ -1,0 +1,2892 @@
+From dd804f3f6b48b1121d1996e84a0c079cf854f800 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 23:26:24 +0800
+Subject: [PATCH 23/43] refactor(employees): share office workers and enforce
+ host SDK compatibility
+
+
+diff --git a/FHD/app/infrastructure/mods/artifact_package.py b/FHD/app/infrastructure/mods/artifact_package.py
+index 222de6050b..418b24453c 100755
+--- a/FHD/app/infrastructure/mods/artifact_package.py
++++ b/FHD/app/infrastructure/mods/artifact_package.py
+@@ -47,6 +47,24 @@ def peek_artifact(package_path: str) -> str:
+     return normalize_artifact(data)
+ 
+ 
++def employee_host_dependency_error(manifest: dict[str, Any]) -> str:
++    """Check only the employee's host SDK requirement, using the native version gate."""
++    from .manifest import ModMetadata, host_xcagi_version, validate_dependencies
++
++    metadata = ModMetadata.from_dict(
++        {"id": manifest.get("id"), "dependencies": manifest.get("dependencies")}
++    )
++    metadata.dependencies = {
++        key: value for key, value in metadata.dependencies.items() if key == "xcagi"
++    }
++    if validate_dependencies(metadata, []):
++        return ""
++    return (
++        f"员工包 {metadata.id} 需要 xcagi {metadata.dependencies['xcagi']}，"
++        f"当前宿主 {host_xcagi_version()}"
++    )
++
++
+ def validate_bundle_manifest(manifest: dict[str, Any], depth: int = 0) -> list[str]:
+     from .artifact_constants import ARTIFACT_BUNDLE, BUNDLE_MAX_DEPTH
+ 
+diff --git a/FHD/app/infrastructure/mods/employee_registry.py b/FHD/app/infrastructure/mods/employee_registry.py
+index d203639fd3..da75a153a4 100644
+--- a/FHD/app/infrastructure/mods/employee_registry.py
++++ b/FHD/app/infrastructure/mods/employee_registry.py
+@@ -12,7 +12,7 @@ from typing import Any
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ from .artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
+-from .artifact_package import validate_employee_pack_manifest
++from .artifact_package import employee_host_dependency_error, validate_employee_pack_manifest
+ from .management.paths import is_package_directory_name, trusted_child_path
+ from .package import (
+     ModPackage,
+@@ -135,6 +135,8 @@ class EmployeeRegistry:
+                 ve = validate_employee_pack_manifest(manifest)
+                 if ve:
+                     return False, "; ".join(ve)
++                if error := employee_host_dependency_error(manifest):
++                    return False, error
+                 scope = str(manifest.get("scope") or "global").strip().lower()
+                 if scope != "global":
+                     return False, "当前仅支持 scope=global 的员工包安装"
+diff --git a/FHD/app/infrastructure/mods/management/http_routes.py b/FHD/app/infrastructure/mods/management/http_routes.py
+index 8b40b3302d..e1f0c1393b 100644
+--- a/FHD/app/infrastructure/mods/management/http_routes.py
++++ b/FHD/app/infrastructure/mods/management/http_routes.py
+@@ -13,6 +13,7 @@ from fastapi import FastAPI
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ from ..artifact_constants import ARTIFACT_EMPLOYEE_PACK, normalize_artifact
++from ..artifact_package import employee_host_dependency_error
+ from ..manifest import ModMetadata
+ from ..registry import ModRegistry
+ from .paths import is_package_directory_name, trusted_child_path
+@@ -73,6 +74,13 @@ class ModHttpRoutes:
+                 else None
+             )
+             if receipt and receipt.get("requires_restart"):
++                with open(
++                    os.path.join(receipt["installed_root"], "manifest.json"), encoding="utf-8"
++                ) as stream:
++                    pending_manifest = json.load(stream)
++                if error := employee_host_dependency_error(pending_manifest):
++                    self._ports.logger.warning("employee_pack SDK incompatible %s: %s", pid, error)
++                    return False
+                 if not activate_pending_install(pid, mods_root=employee_root):
+                     return False
+             trusted, reason = verify_direct_python_pack_trust(pack_path)
+@@ -92,6 +100,9 @@ class ModHttpRoutes:
+             return False
+         if normalize_artifact(data) != ARTIFACT_EMPLOYEE_PACK:
+             return False
++        if error := employee_host_dependency_error(data):
++            self._ports.logger.warning("employee_pack SDK incompatible %s: %s", pid, error)
++            return False
+         from app.mod_sdk.product_plane import employee_pack_allowed_in_runtime
+ 
+         resolved_id = str(data.get("id") or pid).strip()
+diff --git a/FHD/app/mod_sdk/office_employee_worker.py b/FHD/app/mod_sdk/office_employee_worker.py
+new file mode 100644
+index 0000000000..1131a68ad5
+--- /dev/null
++++ b/FHD/app/mod_sdk/office_employee_worker.py
+@@ -0,0 +1,236 @@
++"""File-transform entrypoint shared by office packs with source-local rules."""
++
++from __future__ import annotations
++
++import asyncio
++import importlib
++import json
++import sys
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++from app.mod_sdk.errors import BOUNDARY_ERRORS
++
++
++class OfficeEmployeeWorker:
++    """Keep each pack's anchor, converter, identity and mutable rules independent."""
++
++    def __init__(
++        self,
++        source_file: str,
++        employee_id: str,
++        label: str,
++        system_prompt: str,
++        rule_spec: Dict[str, Any],
++        converter_module: str,
++        *,
++        template_write: bool = False,
++        json_fallback: bool = False,
++    ):
++        self.source_file = source_file
++        self.employee_id = employee_id
++        self.label = label
++        self.system_prompt = system_prompt
++        self.rule_spec = rule_spec
++        self.converter_module = converter_module
++        self.template_write = template_write
++        self.json_fallback = json_fallback
++
++    def _ok(
++        self,
++        data: Any,
++        *,
++        warnings: Optional[List[str]] = None,
++        meta: Optional[Dict[str, Any]] = None,
++    ) -> Dict[str, Any]:
++        return {
++            "ok": True,
++            "summary": self._summary(data),
++            "items": data if isinstance(data, list) else [data],
++            "warnings": list(warnings or []),
++            "error": "",
++            "meta": dict(meta or {}),
++        }
++
++    def _err(
++        self,
++        msg: str,
++        *,
++        warnings: Optional[List[str]] = None,
++        meta: Optional[Dict[str, Any]] = None,
++    ) -> Dict[str, Any]:
++        return {
++            "ok": False,
++            "summary": msg[:400],
++            "items": [],
++            "warnings": list(warnings or []),
++            "error": msg[:1000],
++            "meta": dict(meta or {}),
++        }
++
++    def _summary(self, data: Any) -> str:
++        if isinstance(data, str):
++            return data[:4000]
++        try:
++            return json.dumps(data, ensure_ascii=False)[:4000]
++        except TypeError:
++            return str(data)[:4000]
++
++    def _pack_root(self) -> Path:
++        return Path(self.source_file).resolve().parents[1]
++
++    def _workspace_root(self, ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
++        raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
++        return Path(str(raw)).expanduser()
++
++    def _resolve_input(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
++        raw = str(
++            payload.get("file_path")
++            or payload.get("path")
++            or payload.get("plan_path" if self.template_write else "excel_path")
++            or ""
++        ).strip()
++        if not raw:
++            if self.template_write:
++                if isinstance(payload.get("plan"), dict):
++                    return None
++                raise FileNotFoundError(
++                    "缺少 file_path：请上传 plan.json 写入计划，或在 payload.plan 传入计划对象。"
++                )
++            raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
++        p = Path(raw).expanduser()
++        if not p.is_absolute():
++            p = self._workspace_root(ctx, payload) / raw
++        if not p.is_file():
++            raise FileNotFoundError(f"文件不存在：{p}")
++        return p
++
++    def _resolve_output(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
++        rel = str(
++            payload.get("output_relpath")
++            or self.rule_spec.get("default_output_relpath")
++            or ("outputs/filled.xlsx" if self.template_write else "outputs/employee_output.xlsx")
++        ).strip()
++        p = Path(rel).expanduser()
++        if not p.is_absolute():
++            p = self._workspace_root(ctx, payload) / rel
++        p.parent.mkdir(parents=True, exist_ok=True)
++        return p
++
++    def _resolve_template(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
++        raw = str(
++            (payload.get("template_path") if self.template_write else None)
++            or payload.get("template_relpath")
++            or self.rule_spec.get("default_template_relpath")
++            or self.rule_spec.get("template_relpath")
++            or ""
++        ).strip()
++        if not raw and not self.template_write:
++            return None
++        candidates = []
++        if raw:
++            p = Path(raw).expanduser()
++            if p.is_absolute():
++                candidates.append(p)
++            else:
++                candidates.append(self._workspace_root(ctx, payload) / raw)
++                candidates.append(self._pack_root() / raw)
++                candidates.append(self._pack_root() / "backend" / "templates" / raw)
++                if raw.startswith("backend/"):
++                    candidates.append(self._pack_root() / raw[len("backend/") :])
++        for cand in candidates:
++            if cand.is_file():
++                return cand
++        bundled_templates = (
++            sorted((self._pack_root() / "templates").rglob("*.xls*"))
++            if (self._pack_root() / "templates").is_dir()
++            else []
++        )
++        if bundled_templates:
++            return bundled_templates[0]
++        return None
++
++    async def run(self, payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
++        payload = dict(payload or {})
++        ctx = dict(ctx or {})
++        action = (
++            str(payload.get("action") or self.rule_spec.get("default_action") or "convert")
++            .strip()
++            .lower()
++        )
++        if action in ("help", "说明", "status"):
++            return self._ok(
++                {"employee": self.label, "rule_spec": self.rule_spec},
++                meta={"handler": "direct_python", "action": "help"},
++            )
++        allowed = (
++            ("convert", "upload", "转换", "回填", "")
++            if self.template_write
++            else ("convert", "upload", "转换", "")
++        )
++        if action not in allowed:
++            return self._err(
++                f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
++            )
++        try:
++            vendor_dir = self._pack_root() / "vendor"
++            if str(vendor_dir) not in sys.path:
++                sys.path.insert(0, str(vendor_dir))
++            convert_file = importlib.import_module(self.converter_module).convert_file
++            src = self._resolve_input(payload, ctx)
++            out = self._resolve_output(payload, ctx)
++            template = self._resolve_template(payload, ctx)
++            result = convert_file(
++                src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=self.rule_spec
++            )
++            if asyncio.iscoroutine(result):
++                result = await result
++            run_warnings = []
++            if isinstance(result, dict):
++                result.setdefault("output_path", str(out))
++                result.setdefault("template_path", str(template or ""))
++                if self.template_write:
++                    run_warnings = [str(w) for w in result.get("warnings") or []]
++            else:
++                result = {
++                    "output_path": str(out),
++                    "template_path": str(template or ""),
++                    "result": result,
++                }
++            if (
++                self.json_fallback
++                and not out.is_file()
++                and out.suffix.lower() == ".json"
++                and isinstance(result, dict)
++            ):
++                out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
++            produced = Path(str(result.get("output_path") or out)) if self.template_write else out
++            if not produced.is_file():
++                verb = "回填" if self.template_write else "转换"
++                return self._err(
++                    f"{verb}未生成输出文件：{produced}",
++                    meta={"handler": "direct_python", "action": "convert"},
++                )
++            return self._ok(
++                result,
++                warnings=run_warnings,
++                meta={
++                    "handler": "direct_python",
++                    "action": "convert",
++                    "runtime": "generated_python",
++                },
++            )
++        except BOUNDARY_ERRORS as exc:  # noqa: BLE001
++            return self._err(
++                str(exc),
++                warnings=[
++                    "请检查 plan.json 写入计划、模板文件与 sheet 名是否匹配。"
++                    if self.template_write
++                    else "请检查输入文件、模板文件和题目规则是否匹配。"
++                ],
++                meta={
++                    "handler": "direct_python",
++                    "action": "convert",
++                    "runtime": "generated_python",
++                },
++            )
+diff --git a/FHD/mods/_employees/csv-full-read-employee/backend/employees/csv_full_read_employee.py b/FHD/mods/_employees/csv-full-read-employee/backend/employees/csv_full_read_employee.py
+index 9070cb695c..090b1fddd3 100644
+--- a/FHD/mods/_employees/csv-full-read-employee/backend/employees/csv_full_read_employee.py
++++ b/FHD/mods/_employees/csv-full-read-employee/backend/employees/csv_full_read_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "csv-full-read-employee"
+ EMPLOYEE_LABEL = "CSV 全量读取员"
+@@ -31,167 +23,7 @@ RULE_SPEC = {
+     "pack_id": "csv-full-read-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from csv_full_read.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "csv_full_read.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/csv-full-read-employee/manifest.json b/FHD/mods/_employees/csv-full-read-employee/manifest.json
+index 3f593aba51..0ecfcd37e6 100644
+--- a/FHD/mods/_employees/csv-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/csv-full-read-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "csv-full-read-employee",
+diff --git a/FHD/mods/_employees/csv-generate-employee/backend/employees/csv_generate_employee.py b/FHD/mods/_employees/csv-generate-employee/backend/employees/csv_generate_employee.py
+index ee6a6e5b17..833a90c564 100644
+--- a/FHD/mods/_employees/csv-generate-employee/backend/employees/csv_generate_employee.py
++++ b/FHD/mods/_employees/csv-generate-employee/backend/employees/csv_generate_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "csv-generate-employee"
+ EMPLOYEE_LABEL = "CSV 生成员"
+@@ -31,167 +23,7 @@ RULE_SPEC = {
+     "pack_id": "csv-generate-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from csv_generate.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "csv_generate.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/csv-generate-employee/manifest.json b/FHD/mods/_employees/csv-generate-employee/manifest.json
+index 9f8bab926e..181b713d45 100644
+--- a/FHD/mods/_employees/csv-generate-employee/manifest.json
++++ b/FHD/mods/_employees/csv-generate-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "csv-generate-employee",
+diff --git a/FHD/mods/_employees/excel-full-read-employee/backend/employees/excel_full_read_employee.py b/FHD/mods/_employees/excel-full-read-employee/backend/employees/excel_full_read_employee.py
+index ff47d405ad..9d2426e2ac 100644
+--- a/FHD/mods/_employees/excel-full-read-employee/backend/employees/excel_full_read_employee.py
++++ b/FHD/mods/_employees/excel-full-read-employee/backend/employees/excel_full_read_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "excel-full-read-employee"
+ EMPLOYEE_LABEL = "Excel 读取员"
+@@ -32,167 +24,7 @@ RULE_SPEC = {
+     "pack_id": "excel-full-read-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from excel_full_read.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "excel_full_read.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/excel-full-read-employee/manifest.json b/FHD/mods/_employees/excel-full-read-employee/manifest.json
+index a09330028d..1cc908addd 100644
+--- a/FHD/mods/_employees/excel-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/excel-full-read-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "excel-full-read-employee",
+diff --git a/FHD/mods/_employees/excel-generate-employee/backend/employees/excel_generate_employee.py b/FHD/mods/_employees/excel-generate-employee/backend/employees/excel_generate_employee.py
+index 5af00f93be..7b21f995db 100644
+--- a/FHD/mods/_employees/excel-generate-employee/backend/employees/excel_generate_employee.py
++++ b/FHD/mods/_employees/excel-generate-employee/backend/employees/excel_generate_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "excel-generate-employee"
+ EMPLOYEE_LABEL = "Excel 生成员"
+@@ -32,167 +24,7 @@ RULE_SPEC = {
+     "pack_id": "excel-generate-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from excel_generate.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "excel_generate.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/excel-generate-employee/manifest.json b/FHD/mods/_employees/excel-generate-employee/manifest.json
+index 1fb2a60753..fda52ece23 100644
+--- a/FHD/mods/_employees/excel-generate-employee/manifest.json
++++ b/FHD/mods/_employees/excel-generate-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "excel-generate-employee",
+diff --git a/FHD/mods/_employees/excel-template-write-employee/backend/employees/excel_template_write_employee.py b/FHD/mods/_employees/excel-template-write-employee/backend/employees/excel_template_write_employee.py
+index 4dec78285a..1bc79ac66d 100644
+--- a/FHD/mods/_employees/excel-template-write-employee/backend/employees/excel_template_write_employee.py
++++ b/FHD/mods/_employees/excel-template-write-employee/backend/employees/excel_template_write_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "excel-template-write-employee"
+ EMPLOYEE_LABEL = "Excel 模板写入员"
+@@ -42,176 +34,13 @@ RULE_SPEC = {
+     "pack_id": "excel-template-write-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("plan_path") or ""
+-    ).strip()
+-    if not raw:
+-        if isinstance(payload.get("plan"), dict):
+-            return None
+-        raise FileNotFoundError(
+-            "缺少 file_path：请上传 plan.json 写入计划，或在 payload.plan 传入计划对象。"
+-        )
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/filled.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_path")
+-        or payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    candidates = []
+-    if raw:
+-        p = Path(raw).expanduser()
+-        if p.is_absolute():
+-            candidates.append(p)
+-        else:
+-            candidates.append(_workspace_root(ctx, payload) / raw)
+-            candidates.append(_pack_root() / raw)
+-            candidates.append(_pack_root() / "backend" / "templates" / raw)
+-            if raw.startswith("backend/"):
+-                candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", "回填", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from excel_template_write.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        run_warnings: List[str] = []
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-            run_warnings = [str(w) for w in (result.get("warnings") or [])]
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        produced = Path(str(result.get("output_path") or out))
+-        if not produced.is_file():
+-            return _err(
+-                f"回填未生成输出文件：{produced}",
+-                meta={"handler": "direct_python", "action": "convert"},
+-            )
+-        normalized = _ok(
+-            result,
+-            warnings=run_warnings,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查 plan.json 写入计划、模板文件与 sheet 名是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__,
++    EMPLOYEE_ID,
++    EMPLOYEE_LABEL,
++    SYSTEM_PROMPT,
++    RULE_SPEC,
++    "excel_template_write.convert",
++    template_write=True,
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/excel-template-write-employee/manifest.json b/FHD/mods/_employees/excel-template-write-employee/manifest.json
+index 4d32b943fd..6dc878b8bd 100644
+--- a/FHD/mods/_employees/excel-template-write-employee/manifest.json
++++ b/FHD/mods/_employees/excel-template-write-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "excel-template-write-employee",
+diff --git a/FHD/mods/_employees/pdf-full-read-employee/backend/employees/pdf_full_read_employee.py b/FHD/mods/_employees/pdf-full-read-employee/backend/employees/pdf_full_read_employee.py
+index 2ec6e1d5bc..321a7af2c1 100644
+--- a/FHD/mods/_employees/pdf-full-read-employee/backend/employees/pdf_full_read_employee.py
++++ b/FHD/mods/_employees/pdf-full-read-employee/backend/employees/pdf_full_read_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "pdf-full-read-employee"
+ EMPLOYEE_LABEL = "PDF 生成员"
+@@ -42,169 +34,13 @@ RULE_SPEC = {
+     "pack_id": "pdf-full-read-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from pdf_full_read.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file() and out.suffix.lower() == ".json" and isinstance(result, dict):
+-            out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__,
++    EMPLOYEE_ID,
++    EMPLOYEE_LABEL,
++    SYSTEM_PROMPT,
++    RULE_SPEC,
++    "pdf_full_read.convert",
++    json_fallback=True,
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/pdf-full-read-employee/manifest.json b/FHD/mods/_employees/pdf-full-read-employee/manifest.json
+index 1e3e4bd1bc..0f91d27fe6 100644
+--- a/FHD/mods/_employees/pdf-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/pdf-full-read-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "pdf-full-read-employee",
+diff --git a/FHD/mods/_employees/pdf-generate-employee/backend/employees/pdf_generate_employee.py b/FHD/mods/_employees/pdf-generate-employee/backend/employees/pdf_generate_employee.py
+index e53ad9fdb0..496aeb79d9 100644
+--- a/FHD/mods/_employees/pdf-generate-employee/backend/employees/pdf_generate_employee.py
++++ b/FHD/mods/_employees/pdf-generate-employee/backend/employees/pdf_generate_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "pdf-generate-employee"
+ EMPLOYEE_LABEL = "PDF 生成员"
+@@ -32,167 +24,7 @@ RULE_SPEC = {
+     "pack_id": "pdf-generate-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from pdf_generate.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "pdf_generate.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/pdf-generate-employee/manifest.json b/FHD/mods/_employees/pdf-generate-employee/manifest.json
+index 2016b6a7f5..277a6db485 100644
+--- a/FHD/mods/_employees/pdf-generate-employee/manifest.json
++++ b/FHD/mods/_employees/pdf-generate-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "pdf-generate-employee",
+diff --git a/FHD/mods/_employees/ppt-full-read-employee/backend/employees/ppt_full_read_employee.py b/FHD/mods/_employees/ppt-full-read-employee/backend/employees/ppt_full_read_employee.py
+index b2c928ec2a..496e221b8d 100644
+--- a/FHD/mods/_employees/ppt-full-read-employee/backend/employees/ppt_full_read_employee.py
++++ b/FHD/mods/_employees/ppt-full-read-employee/backend/employees/ppt_full_read_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "ppt-full-read-employee"
+ EMPLOYEE_LABEL = "PPT 生成员"
+@@ -45,167 +37,7 @@ RULE_SPEC = {
+     "pack_id": "ppt-full-read-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from ppt_full_read.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "ppt_full_read.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/ppt-full-read-employee/manifest.json b/FHD/mods/_employees/ppt-full-read-employee/manifest.json
+index 9049e7a09e..b3af5e7cff 100644
+--- a/FHD/mods/_employees/ppt-full-read-employee/manifest.json
++++ b/FHD/mods/_employees/ppt-full-read-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "ppt-full-read-employee",
+diff --git a/FHD/mods/_employees/ppt-generate-employee/backend/employees/ppt_generate_employee.py b/FHD/mods/_employees/ppt-generate-employee/backend/employees/ppt_generate_employee.py
+index 526dd97a58..8845e84645 100644
+--- a/FHD/mods/_employees/ppt-generate-employee/backend/employees/ppt_generate_employee.py
++++ b/FHD/mods/_employees/ppt-generate-employee/backend/employees/ppt_generate_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "ppt-generate-employee"
+ EMPLOYEE_LABEL = "PPT 生成员"
+@@ -33,167 +25,7 @@ RULE_SPEC = {
+     "pack_id": "ppt-generate-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from ppt_generate.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "ppt_generate.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/ppt-generate-employee/manifest.json b/FHD/mods/_employees/ppt-generate-employee/manifest.json
+index 5597157a5f..d5bd87dd48 100644
+--- a/FHD/mods/_employees/ppt-generate-employee/manifest.json
++++ b/FHD/mods/_employees/ppt-generate-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "ppt-generate-employee",
+diff --git a/FHD/mods/_employees/word-generate-employee/backend/employees/word_generate_employee.py b/FHD/mods/_employees/word-generate-employee/backend/employees/word_generate_employee.py
+index 76b6b23f91..91c9643f15 100644
+--- a/FHD/mods/_employees/word-generate-employee/backend/employees/word_generate_employee.py
++++ b/FHD/mods/_employees/word-generate-employee/backend/employees/word_generate_employee.py
+@@ -1,14 +1,6 @@
+-"""Generated direct_python employee entrypoint."""
++"""Office pack identity and rules; file-transform plumbing lives in the host SDK."""
+ 
+-from __future__ import annotations
+-
+-import asyncio
+-import json
+-import sys
+-from pathlib import Path
+-from typing import Any, Dict, List, Optional
+-
+-from app.mod_sdk.errors import BOUNDARY_ERRORS
++from app.mod_sdk.office_employee_worker import OfficeEmployeeWorker
+ 
+ EMPLOYEE_ID = "word-generate-employee"
+ EMPLOYEE_LABEL = "Word 生成员"
+@@ -43,167 +35,7 @@ RULE_SPEC = {
+     "pack_id": "word-generate-employee",
+ }
+ 
+-
+-def _ok(
+-    data: Any, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": True,
+-        "summary": _summary(data),
+-        "items": data if isinstance(data, list) else [data],
+-        "warnings": list(warnings or []),
+-        "error": "",
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _err(
+-    msg: str, *, warnings: Optional[List[str]] = None, meta: Optional[Dict[str, Any]] = None
+-) -> Dict[str, Any]:
+-    return {
+-        "ok": False,
+-        "summary": msg[:400],
+-        "items": [],
+-        "warnings": list(warnings or []),
+-        "error": msg[:1000],
+-        "meta": dict(meta or {}),
+-    }
+-
+-
+-def _summary(data: Any) -> str:
+-    if isinstance(data, str):
+-        return data[:4000]
+-    try:
+-        return json.dumps(data, ensure_ascii=False)[:4000]
+-    except TypeError:
+-        return str(data)[:4000]
+-
+-
+-def _pack_root() -> Path:
+-    return Path(__file__).resolve().parents[1]
+-
+-
+-def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
+-    raw = payload.get("workspace_root") or ctx.get("workspace_root") or Path.cwd()
+-    return Path(str(raw)).expanduser()
+-
+-
+-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    raw = str(
+-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+-    ).strip()
+-    if not raw:
+-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+-    p = Path(raw).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / raw
+-    if not p.is_file():
+-        raise FileNotFoundError(f"文件不存在：{p}")
+-    return p
+-
+-
+-def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+-    rel = str(
+-        payload.get("output_relpath")
+-        or RULE_SPEC.get("default_output_relpath")
+-        or "outputs/employee_output.xlsx"
+-    ).strip()
+-    p = Path(rel).expanduser()
+-    if not p.is_absolute():
+-        p = _workspace_root(ctx, payload) / rel
+-    p.parent.mkdir(parents=True, exist_ok=True)
+-    return p
+-
+-
+-def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
+-    raw = str(
+-        payload.get("template_relpath")
+-        or RULE_SPEC.get("default_template_relpath")
+-        or RULE_SPEC.get("template_relpath")
+-        or ""
+-    ).strip()
+-    if not raw:
+-        return None
+-    candidates = []
+-    p = Path(raw).expanduser()
+-    if p.is_absolute():
+-        candidates.append(p)
+-    else:
+-        candidates.append(_workspace_root(ctx, payload) / raw)
+-        candidates.append(_pack_root() / raw)
+-        candidates.append(_pack_root() / "backend" / "templates" / raw)
+-        if raw.startswith("backend/"):
+-            candidates.append(_pack_root() / raw[len("backend/") :])
+-    for cand in candidates:
+-        if cand.is_file():
+-            return cand
+-    bundled_templates = (
+-        sorted((_pack_root() / "templates").rglob("*.xls*"))
+-        if (_pack_root() / "templates").is_dir()
+-        else []
+-    )
+-    if bundled_templates:
+-        return bundled_templates[0]
+-    return None
+-
+-
+-async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
+-    payload = dict(payload or {})
+-    ctx = dict(ctx or {})
+-    action = (
+-        str(payload.get("action") or RULE_SPEC.get("default_action") or "convert").strip().lower()
+-    )
+-    if action in ("help", "说明", "status"):
+-        return _ok(
+-            {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
+-            meta={"handler": "direct_python", "action": "help"},
+-        )
+-    if action not in ("convert", "upload", "转换", ""):
+-        return _err(
+-            f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
+-        )
+-    try:
+-        vendor_dir = _pack_root() / "vendor"
+-        if str(vendor_dir) not in sys.path:
+-            sys.path.insert(0, str(vendor_dir))
+-        from word_generate.convert import convert_file
+-
+-        src = _resolve_input(payload, ctx)
+-        out = _resolve_output(payload, ctx)
+-        template = _resolve_template(payload, ctx)
+-        result = convert_file(
+-            src, out, template_path=template, payload=payload, ctx=ctx, rule_spec=RULE_SPEC
+-        )
+-        if asyncio.iscoroutine(result):
+-            result = await result
+-        if isinstance(result, dict):
+-            result.setdefault("output_path", str(out))
+-            result.setdefault("template_path", str(template or ""))
+-        else:
+-            result = {
+-                "output_path": str(out),
+-                "template_path": str(template or ""),
+-                "result": result,
+-            }
+-        if not out.is_file():
+-            return _err(
+-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+-            )
+-        normalized = _ok(
+-            result,
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
+-        return {
+-            "ok": normalized["ok"],
+-            "summary": normalized["summary"],
+-            "items": normalized["items"],
+-            "warnings": normalized["warnings"],
+-            "error": normalized["error"],
+-            "meta": normalized["meta"],
+-        }
+-    except BOUNDARY_ERRORS as exc:  # noqa: BLE001
+-        return _err(
+-            str(exc),
+-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+-            meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
+-        )
++_worker = OfficeEmployeeWorker(
++    __file__, EMPLOYEE_ID, EMPLOYEE_LABEL, SYSTEM_PROMPT, RULE_SPEC, "word_generate.convert"
++)
++run = _worker.run
+diff --git a/FHD/mods/_employees/word-generate-employee/manifest.json b/FHD/mods/_employees/word-generate-employee/manifest.json
+index 0bbd7b56a1..0954f3e131 100644
+--- a/FHD/mods/_employees/word-generate-employee/manifest.json
++++ b/FHD/mods/_employees/word-generate-employee/manifest.json
+@@ -7,7 +7,7 @@
+   "artifact": "employee_pack",
+   "scope": "global",
+   "dependencies": {
+-    "xcagi": ">=1.0.0"
++    "xcagi": ">=1.0.0.7"
+   },
+   "employee": {
+     "id": "word-generate-employee",
+diff --git a/FHD/tests/test_infrastructure/test_employee_signed_archive.py b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+index fb1a38b2f6..c37b429fce 100644
+--- a/FHD/tests/test_infrastructure/test_employee_signed_archive.py
++++ b/FHD/tests/test_infrastructure/test_employee_signed_archive.py
+@@ -17,6 +17,7 @@ from fastapi import FastAPI
+ 
+ from app.application.employee_runtime.loader import verify_direct_python_pack_trust
+ from app.infrastructure.mods import install_receipts as receipts
++from app.infrastructure.mods import manifest as mod_manifest
+ from app.infrastructure.mods import mod_manager
+ from app.infrastructure.mods.employee_registry import EmployeeRegistry
+ from app.infrastructure.mods.package import ModPackage, compute_directory_hash
+@@ -31,7 +32,10 @@ def signed_employee_pack(tmp_path, monkeypatch):
+     private_key_path, public_key_path, registry, manifest and refresh_calls.
+     ``entry_source`` replaces only the HTTP entry, for import-boundary probes.
+     ``install=False`` leaves a package ready for a caller-controlled installation.
++    Host metadata models candidate SDK 1.0.0.7 for source-level regressions;
++    this does not qualify an installed or signed host release.
+     """
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.7")
+     key = Ed25519PrivateKey.generate()
+     private_key = tmp_path / "employee-test-private.pem"
+     private_key.write_bytes(
+@@ -131,6 +135,84 @@ def _register(pack):
+     return ok, app
+ 
+ 
++def test_signed_employee_sdk_gate_rejects_before_installing(
++    signed_employee_pack, tmp_path, monkeypatch
++):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker), install=False)
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.6")
++    accepted, error = pack.registry.install_from_package(
++        str(pack.package_path), verify_signature=True
++    )
++    assert accepted is False
++    assert "1.0.0.7" in error and "1.0.0.6" in error
++    assert not pack.employee_root.exists() and not marker.exists()
++    assert pack.refresh_calls == []
++
++
++def test_signed_existing_employee_sdk_gate_denies_first_import(
++    signed_employee_pack, tmp_path, monkeypatch, caplog
++):
++    marker = tmp_path / "must-not-import"
++    pack = signed_employee_pack(entry_source=_entry(marker))
++    receipt = pack.employee_root / ".install-receipts" / pack.pack_id / "receipt.json"
++    before = receipt.read_bytes()
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.6")
++    assert _register(pack)[0] is False
++    assert not marker.exists() and receipt.read_bytes() == before
++    assert pack.pack_id not in mod_manager._employee_pack_routes_registered
++    assert "1.0.0.7" in caplog.text and "1.0.0.6" in caplog.text
++
++
++def test_incompatible_signed_upgrade_preserves_running_employee(
++    signed_employee_pack, tmp_path, monkeypatch
++):
++    marker = tmp_path / "active-version"
++    old = signed_employee_pack(entry_source=_entry(marker, "old"))
++    assert _register(old)[0]
++    receipt = old.employee_root / ".install-receipts" / old.pack_id / "receipt.json"
++    before = receipt.read_bytes(), (old.pack_dir / "backend/entry.py").read_bytes()
++    new = signed_employee_pack("1.1.0", entry_source=_entry(marker, "new"), install=False)
++    monkeypatch.setattr(mod_manifest, "host_xcagi_version", lambda: "1.0.0.6")
++    accepted, error = new.registry.install_from_package(
++        str(new.package_path), verify_signature=True
++    )
++    assert accepted is False and "1.0.0.7" in error
++    assert (receipt.read_bytes(), (old.pack_dir / "backend/entry.py").read_bytes()) == before
++    assert marker.read_text() == "old" and new.refresh_calls == []
++    assert old.pack_id in mod_manager._employee_pack_routes_registered
++
++
++def test_pending_signed_employee_checks_sdk_before_new_process_activation(
++    signed_employee_pack, tmp_path
++):
++    marker = tmp_path / "active-version"
++    old = signed_employee_pack(entry_source=_entry(marker, "old"))
++    assert _register(old)[0]
++    new = signed_employee_pack("1.1.0", entry_source=_entry(marker, "new"))
++    receipt = old.employee_root / ".install-receipts" / old.pack_id / "receipt.json"
++    before = receipt.read_bytes(), (old.pack_dir / "backend/entry.py").read_bytes()
++    result = subprocess.run(
++        [
++            sys.executable,
++            "-c",
++            "import sys; from fastapi import FastAPI; "
++            "from app.infrastructure.mods import manifest,mod_manager; "
++            "manifest.host_xcagi_version=lambda:'1.0.0.6'; "
++            "assert not mod_manager.register_employee_pack_routes(FastAPI(),mod_manager.ModManager(sys.argv[1]),sys.argv[2])",
++            str(old.mods_root),
++            old.pack_id,
++        ],
++        capture_output=True,
++        text=True,
++        check=False,
++    )
++    assert result.returncode == 0, result.stdout + result.stderr
++    assert "1.0.0.7" in result.stderr and "1.0.0.6" in result.stderr
++    assert (receipt.read_bytes(), (old.pack_dir / "backend/entry.py").read_bytes()) == before
++    assert marker.read_text() == "old" and new.refresh_calls == []
++
++
+ def test_formal_employee_install_reads_back_real_signed_archive_and_imports(
+     signed_employee_pack, tmp_path
+ ):
+@@ -258,6 +340,8 @@ def test_active_employee_upgrade_waits_for_new_process_and_retains_old_code(
+             sys.executable,
+             "-c",
+             "import sys; from fastapi import FastAPI; "
++            # Match the fixture's candidate SDK metadata in this new process.
++            "from app.infrastructure.mods import manifest; manifest.host_xcagi_version=lambda:'1.0.0.7'; "
+             "from app.infrastructure.mods.mod_manager import ModManager,register_employee_pack_routes; "
+             "app=FastAPI(); assert register_employee_pack_routes(app,ModManager(sys.argv[1]),sys.argv[2]); "
+             "assert app.state.employee_version == 'new'",
+diff --git a/FHD/tests/test_mod_sdk/test_office_employee_worker.py b/FHD/tests/test_mod_sdk/test_office_employee_worker.py
+new file mode 100644
+index 0000000000..0ecccd99e5
+--- /dev/null
++++ b/FHD/tests/test_mod_sdk/test_office_employee_worker.py
+@@ -0,0 +1,347 @@
++"""Preserve office entrypoint behavior while sharing its file-transform plumbing."""
++
++from __future__ import annotations
++
++import asyncio
++import importlib.util
++import json
++import os
++import shutil
++import sys
++from pathlib import Path
++from types import SimpleNamespace
++
++import pytest
++
++PACKS = (
++    "csv-full-read",
++    "csv-generate",
++    "excel-full-read",
++    "excel-generate",
++    "excel-template-write",
++    "pdf-full-read",
++    "pdf-generate",
++    "ppt-full-read",
++    "ppt-generate",
++    "word-generate",
++)
++ROOT = Path(
++    os.environ.get("OFFICE_WORKER_CHARACTERIZATION_ROOT") or Path(__file__).resolve().parents[2]
++)
++OBSERVED = {}
++
++
++@pytest.fixture(scope="session", autouse=True)
++def save_behavior_proof():
++    yield
++    if destination := os.environ.get("OFFICE_WORKER_BEHAVIOR_PROOF"):
++        Path(destination).write_text(
++            json.dumps(OBSERVED, ensure_ascii=False, sort_keys=True, indent=2)
++        )
++
++
++@pytest.fixture(params=PACKS)
++def worker(request, tmp_path, monkeypatch):
++    name = request.param + "-employee"
++    source = (
++        ROOT / "mods/_employees" / name / "backend/employees" / (name.replace("-", "_") + ".py")
++    )
++    spec = importlib.util.spec_from_file_location("characterized_" + name, source)
++    module = importlib.util.module_from_spec(spec)
++    spec.loader.exec_module(module)
++    impl = getattr(module, "_worker", module)
++    staged = tmp_path / "installed/backend/employees/entry.py"
++    staged.parent.mkdir(parents=True)
++    shutil.copyfile(source, staged)
++    monkeypatch.setattr(
++        impl, "source_file" if hasattr(module, "_worker") else "__file__", str(staged)
++    )
++    monkeypatch.setattr(sys, "path", sys.path.copy())
++
++    def record(value):
++        OBSERVED[request.node.nodeid] = json.loads(
++            json.dumps(value, ensure_ascii=False, default=str).replace(str(tmp_path), "$TMP")
++        )
++        return value
++
++    return SimpleNamespace(
++        module=module,
++        impl=impl,
++        root=staged.parents[1],
++        record=record,
++        special=request.param == "excel-template-write",
++        pdf=request.param == "pdf-full-read",
++    )
++
++
++def touch(path, text="input"):
++    path.parent.mkdir(parents=True, exist_ok=True)
++    path.write_text(text)
++    return path
++
++
++@pytest.mark.parametrize("value", [None, "x" * 4100, [1, 2], {"a": 1}, {1}])
++def test_result_envelopes(worker, value):
++    impl = worker.impl
++    result = impl._ok(value, warnings=["w"], meta={"m": 1})
++    assert result["items"] == (value if isinstance(value, list) else [value])
++    assert result["summary"] == impl._summary(value) and len(result["summary"]) <= 4000
++    error = impl._err("e" * 1100, warnings=["w"], meta={"m": 1})
++    assert len(error["summary"]) == 400 and len(error["error"]) == 1000
++    assert error["items"] == [] and error["warnings"] == ["w"] and error["meta"] == {"m": 1}
++    worker.record([result, error])
++
++
++@pytest.mark.parametrize("origin", ["payload", "context", "cwd"])
++def test_workspace_and_source_anchor(worker, tmp_path, monkeypatch, origin):
++    ctx, payload = {}, {}
++    monkeypatch.chdir(tmp_path)
++    if origin == "payload":
++        payload["workspace_root"], ctx["workspace_root"] = str(tmp_path), "ignored"
++    elif origin == "context":
++        ctx["workspace_root"] = str(tmp_path)
++    assert worker.impl._workspace_root(ctx, payload) == tmp_path
++    assert worker.impl._pack_root() == worker.root
++    worker.record([str(worker.impl._workspace_root(ctx, payload)), str(worker.impl._pack_root())])
++
++
++@pytest.mark.parametrize(
++    "mode", ["file_path", "path", "alternate", "absolute", "missing", "empty", "plan"]
++)
++def test_input_resolution(worker, tmp_path, mode):
++    source = touch(tmp_path / "input.json")
++    key = "plan_path" if worker.special else "excel_path"
++    payload = {
++        key if mode == "alternate" else mode: str(source) if mode == "absolute" else source.name
++    }
++    if mode == "absolute":
++        payload = {"file_path": str(source)}
++    if mode in {"missing", "empty", "plan"}:
++        payload = (
++            {"file_path": "absent"} if mode == "missing" else {"plan": {}} if mode == "plan" else {}
++        )
++    if mode in {"missing", "empty", "plan"} and not (worker.special and mode == "plan"):
++        with pytest.raises(FileNotFoundError) as error:
++            worker.impl._resolve_input(payload, {"workspace_root": str(tmp_path)})
++        worker.record(str(error.value))
++    else:
++        result = worker.impl._resolve_input(payload, {"workspace_root": str(tmp_path)})
++        assert result == (None if mode == "plan" else source)
++        worker.record(str(result))
++
++
++@pytest.mark.parametrize("mode", ["default", "explicit", "absolute", "fallback"])
++def test_output_resolution(worker, tmp_path, monkeypatch, mode):
++    rule = worker.module.RULE_SPEC
++    payload = (
++        {
++            "output_relpath": str(tmp_path / "absolute.json")
++            if mode == "absolute"
++            else "nested/requested.json"
++        }
++        if mode in {"explicit", "absolute"}
++        else {}
++    )
++    if mode == "fallback":
++        monkeypatch.delitem(rule, "default_output_relpath", raising=False)
++    fallback = "outputs/filled.xlsx" if worker.special else "outputs/employee_output.xlsx"
++    expected = Path(payload.get("output_relpath") or rule.get("default_output_relpath") or fallback)
++    expected = expected if expected.is_absolute() else tmp_path / expected
++    result = worker.impl._resolve_output(payload, {"workspace_root": str(tmp_path)})
++    assert result == expected and result.parent.is_dir()
++    worker.record(str(result))
++
++
++@pytest.mark.parametrize(
++    "mode",
++    [
++        "none",
++        "absolute",
++        "workspace",
++        "pack",
++        "nested",
++        "backend",
++        "fallback",
++        "empty_dir",
++        "missing",
++        "rule_default",
++        "rule_legacy",
++        "template_path",
++    ],
++)
++def test_template_candidates_and_order(worker, tmp_path, monkeypatch, mode):
++    impl, root = worker.impl, worker.root
++    for key in ("default_template_relpath", "template_relpath"):
++        monkeypatch.delitem(worker.module.RULE_SPEC, key, raising=False)
++    raw, expected = "chosen.xlsx", None
++    locations = {
++        "absolute": tmp_path / "absolute.xlsx",
++        "workspace": tmp_path / raw,
++        "pack": root / raw,
++        "nested": root / "backend/templates" / raw,
++        "backend": root / raw,
++        "rule_default": tmp_path / raw,
++        "rule_legacy": tmp_path / raw,
++        "template_path": tmp_path / raw,
++    }
++    if mode in locations:
++        expected = touch(locations[mode])
++    if mode == "absolute":
++        raw = str(expected)
++    if mode == "backend":
++        raw = "backend/" + raw
++    payload = {"template_relpath": raw}
++    if mode in {"none", "empty_dir"}:
++        payload = {}
++    if mode == "empty_dir":
++        (root / "templates").mkdir()
++    if mode == "fallback":
++        touch(root / "templates/z.xlsm")
++        expected = touch(root / "templates/a.xlsx")
++    if mode.startswith("rule_"):
++        monkeypatch.setitem(
++            worker.module.RULE_SPEC,
++            "default_template_relpath" if mode == "rule_default" else "template_relpath",
++            raw,
++        )
++        payload = {}
++    if mode == "template_path":
++        payload = {"template_path": str(expected)}
++        if not worker.special:
++            expected = None
++    result = impl._resolve_template(payload, {"workspace_root": str(tmp_path)})
++    assert result == expected
++    worker.record(str(result))
++
++
++@pytest.mark.parametrize("action", ["help", "说明", "status", "unsupported"])
++def test_non_conversion_actions(worker, action):
++    result = asyncio.run(worker.impl.run({"action": action}, {}))
++    assert result["ok"] is (action != "unsupported")
++    assert result["meta"]["action"] == ("help" if result["ok"] else action)
++    if result["ok"]:
++        assert result["items"] == [
++            {"employee": worker.module.EMPLOYEE_LABEL, "rule_spec": worker.module.RULE_SPEC}
++        ]
++    worker.record(result)
++
++
++@pytest.mark.parametrize(
++    "kind",
++    [
++        "dict",
++        "async",
++        "scalar",
++        "none",
++        "no_output",
++        "missing_other",
++        "alternate_output",
++        "warnings",
++        "error",
++        "import_error",
++        "vendor_cached",
++        "empty_payload",
++    ],
++)
++def test_converter_receipts_and_failures(worker, tmp_path, monkeypatch, kind):
++    calls = []
++    source = touch(tmp_path / "input.json")
++    out = tmp_path / "result.json"
++    payload = {"file_path": source.name, "output_relpath": str(out)}
++    ctx = {"workspace_root": str(tmp_path)}
++    if kind == "missing_other":
++        out = tmp_path / "result.txt"
++        payload["output_relpath"] = str(out)
++    if kind == "empty_payload":
++        payload, ctx = None, None
++    vendor = str(worker.root / "vendor")
++    if kind == "vendor_cached":
++        sys.path.insert(0, vendor)
++
++    def convert(src, output, **kwargs):
++        calls.append([str(src), str(output), kwargs])
++        if kind == "error":
++            raise OSError("converter rejected input")
++        if kind not in {"no_output", "missing_other", "alternate_output"}:
++            touch(output, "converted")
++        if kind == "scalar":
++            return ["scalar", 2]
++        if kind == "none":
++            return None
++        result = {"converted": True}
++        if kind == "alternate_output":
++            result["output_path"] = str(touch(tmp_path / "actual.xlsx"))
++        if kind == "warnings":
++            result["warnings"] = ["one", 2]
++            result["template_path"] = "converter-owned-template"
++        return result
++
++    async def async_convert(*args, **kwargs):
++        return convert(*args, **kwargs)
++
++    package = worker.module.EMPLOYEE_ID.removesuffix("-employee").replace("-", "_")
++    monkeypatch.setitem(
++        sys.modules,
++        package + ".convert",
++        None
++        if kind == "import_error"
++        else SimpleNamespace(convert_file=async_convert if kind == "async" else convert),
++    )
++    result = asyncio.run(worker.impl.run(payload, ctx))
++    successful = kind not in {"error", "import_error", "empty_payload", "missing_other"}
++    if kind in {"no_output", "alternate_output"}:
++        successful = worker.pdf or (worker.special and kind == "alternate_output")
++    assert result["ok"] is successful
++    assert result["warnings"] == (
++        ["one", "2"]
++        if worker.special and kind == "warnings"
++        else []
++        if successful or kind in {"no_output", "missing_other", "alternate_output"}
++        else [
++            "请检查 plan.json 写入计划、模板文件与 sheet 名是否匹配。"
++            if worker.special
++            else "请检查输入文件、模板文件和题目规则是否匹配。"
++        ]
++    )
++    if calls:
++        assert calls[0][2]["rule_spec"] is worker.module.RULE_SPEC
++        assert calls[0][2]["payload"] == payload and calls[0][2]["ctx"] == ctx
++        assert sys.path.count(vendor) == 1
++    worker.record(
++        {"result": result, "calls": calls, "output": out.read_text() if out.is_file() else None}
++    )
++
++
++@pytest.mark.parametrize("action", ["convert", "upload", "转换", "回填", " "])
++def test_conversion_aliases_and_inline_plan(worker, tmp_path, monkeypatch, action):
++    source = touch(tmp_path / "input.json")
++    output = tmp_path / "result.json"
++    payload = {"action": action, "output_relpath": str(output)}
++    payload.update({"plan": {}} if worker.special else {"file_path": str(source)})
++
++    def convert(src, out, **kwargs):
++        assert src is (None if worker.special else src)
++        assert src == (None if worker.special else source)
++        touch(out)
++        return {}
++
++    package = worker.module.EMPLOYEE_ID.removesuffix("-employee").replace("-", "_")
++    monkeypatch.setitem(sys.modules, package + ".convert", SimpleNamespace(convert_file=convert))
++    result = asyncio.run(worker.impl.run(payload, {}))
++    assert result["ok"] is (action != "回填" or worker.special)
++    worker.record(result)
++
++
++@pytest.mark.parametrize("host_version,accepted", [("1.0.0.6", False), ("1.0.0.7", True)])
++@pytest.mark.parametrize("pack", PACKS)
++def test_office_sdk_dependency_uses_native_host_version_gate(
++    monkeypatch, pack, host_version, accepted
++):
++    from app.infrastructure.mods import manifest
++
++    data = json.loads(
++        (ROOT / "mods/_employees" / (pack + "-employee") / "manifest.json").read_text()
++    )
++    assert data["dependencies"]["xcagi"] == ">=1.0.0.7"
++    monkeypatch.setattr(manifest, "host_xcagi_version", lambda: host_version)
++    assert manifest.validate_dependencies(manifest.ModMetadata.from_dict(data), []) is accepted
+-- 
+2.50.1 (Apple Git-155)
+

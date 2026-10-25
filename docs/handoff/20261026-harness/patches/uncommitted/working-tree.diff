@@ -1,0 +1,1864 @@
+diff --git a/FHD/app/application/agent_orchestrator/business_action_verification.py b/FHD/app/application/agent_orchestrator/business_action_verification.py
+index ffe9bdd543..31a2d39395 100644
+--- a/FHD/app/application/agent_orchestrator/business_action_verification.py
++++ b/FHD/app/application/agent_orchestrator/business_action_verification.py
+@@ -10,11 +10,71 @@ from app.application.agent_orchestrator.tool_receipt import tool_receipt_outcome
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ 
++def material_batch_ids(params):
++    ids = params.get("material_ids", params.get("ids"))
++    if (
++        not isinstance(ids, list)
++        or not ids
++        or any(type(value) is not int or value <= 0 for value in ids)
++        or len(set(ids)) != len(ids)
++        or ("ids" in params and "material_ids" in params and params["ids"] != ids)
++    ):
++        raise ValueError("material batch requires distinct positive integer ids")
++    return ids
++
++
++def prepare_action_verification(spec, params):
++    """Capture owned active targets locally, after approval and before dispatch."""
++    if (spec.tool_id, spec.action) != ("materials", "batch_delete"):
++        return None
++    from app.db.models.material import Material
++    from app.db.session import get_db
++    from app.infrastructure.tenant_scope import tenant_id_for_write
++
++    ids, tenant = material_batch_ids(params), tenant_id_for_write()
++    with get_db() as db:
++        rows = db.query(Material).filter(Material.tenant_id == tenant, Material.id.in_(ids)).all()
++        if len(rows) != len(ids) or any(row.is_active != 1 for row in rows):
++            raise ValueError("material batch targets unavailable")
++    return tenant, tuple(ids)
++
++
++def _verify_material_batch(params, result, before_state):
++    from app.db.models.material import Material
++    from app.db.session import get_db
++    from app.infrastructure.tenant_scope import tenant_id_for_write
++
++    evidence = {"verified": False, "method": "tenant_material_batch_readback"}
++    try:
++        ids, tenant = material_batch_ids(params), tenant_id_for_write()
++        evidence.update(tenant_id=tenant, record_ids=ids, state="unverified")
++        if before_state != (tenant, tuple(ids)):
++            evidence["reason"] = "missing_original_active_targets"
++        elif type(result.get("deleted_count")) is not int or result["deleted_count"] != len(ids):
++            evidence["reason"] = "deleted_count_mismatch"
++        else:
++            with get_db() as db:
++                rows = (
++                    db.query(Material)
++                    .filter(Material.tenant_id == tenant, Material.id.in_(ids))
++                    .all()
++                )
++                verified = len(rows) == len(ids) and all(row.is_active == 0 for row in rows)
++            evidence.update(verified=verified, state="inactive" if verified else "unverified")
++            if not verified:
++                evidence["reason"] = "targets_not_inactive"
++    except RECOVERABLE_ERRORS:
++        evidence["reason"] = "readback_unavailable"
++    return {**result, "business_verification": evidence}, evidence["verified"] is True
++
++
+ def verify_action_result(
+-    spec, params: dict, result: dict, *, runtime_context=None
++    spec, params: dict, result: dict, *, runtime_context=None, before_state=None
+ ) -> tuple[dict, bool]:
+     if tool_receipt_outcome(result) != "success":
+         return result, False
++    if (spec.tool_id, spec.action) == ("materials", "batch_delete"):
++        return _verify_material_batch(params, result, before_state)
+     if spec.tool_id == "generate_office_document" and spec.action == "execute":
+         from xml.etree.ElementTree import ParseError
+         from zipfile import BadZipFile
+diff --git a/FHD/app/application/agent_orchestrator/model_turn_runtime.py b/FHD/app/application/agent_orchestrator/model_turn_runtime.py
+index ded7b976ca..d30a81e09a 100644
+--- a/FHD/app/application/agent_orchestrator/model_turn_runtime.py
++++ b/FHD/app/application/agent_orchestrator/model_turn_runtime.py
+@@ -54,6 +54,8 @@ _FORBIDDEN_KEYS = {
+     "_mod_authorization",
+     "_tool_approval_grants",
+     "_legacy_execution_lease",
++    "_workflow_execution_lease",
++    "_workflow_model_policy",
+     "runtime_context",
+ }
+ _SECRET = re.compile(
+@@ -141,7 +143,11 @@ def decode_state(value: Any, *, durable: bool = True) -> dict[str, Any]:
+         raise ModelTurnError("持久模型状态字段不完整或不受支持")
+     if len(exact_json(state).encode()) > 8 * 1024 * 1024:
+         raise ModelTurnError("模型持久内容超过安全容量，未执行后续调用")
+-    if state["phase"] not in _PHASES or state["kernel"] not in {"legacy", "employee_agent"}:
++    if state["phase"] not in _PHASES or state["kernel"] not in {
++        "legacy",
++        "employee_agent",
++        "workflow_agentic",
++    }:
+         raise ModelTurnError("持久模型状态无效")
+     for field in ("revision", "round", "next_call_index"):
+         if type(state[field]) is not int or state[field] < 0:
+@@ -388,6 +394,8 @@ class ModelTurnDriver:
+             self._active_previous + time.monotonic() - self._active_started
+         )
+         self.state = decode_state(self.state, durable=bool(self.repository and self.persist_state))
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.bind_state(self.state)
+         if self.persist_state and (run := self._run()):
+             run.metadata[STATE_KEY] = copy.deepcopy(self.state)
+             phase = self.state["phase"]
+@@ -409,6 +417,8 @@ class ModelTurnDriver:
+             self.repository.save(run)
+ 
+     def initialize(self, messages, *, limits):
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.repository = self.repository
+         if self.state is None:
+             reference = None
+             if self.repository:
+@@ -459,6 +469,8 @@ class ModelTurnDriver:
+                     },
+                     copy.deepcopy(call.output),
+                 )
++        if self.policy.kernel == "workflow_agentic":
++            self.policy.complete_restore()
+ 
+     def receipt(self, call):
+         run = self._run()
+@@ -528,6 +540,24 @@ class ModelTurnDriver:
+         if not batch:
+             # Product guards must run before the durable success checkpoint.
+             self.policy.validate_text(decision["content"])
++        transition = None
++        if not batch and self.policy.kernel == "workflow_agentic":
++            transition = self.policy.no_call_transition(decision, self.state)
++            if not isinstance(transition, dict) or (
++                transition != {"phase": "ready_model"}
++                and (
++                    not {"phase", "outcome", "final_text"}.issubset(transition)
++                    or set(transition) - {"phase", "outcome", "final_text", "exit_status"}
++                    or transition["phase"] != "terminal"
++                    or transition["outcome"] not in {"success", "failure"}
++                    or not isinstance(transition["final_text"], str)
++                    or (
++                        "exit_status" in transition
++                        and not isinstance(transition["exit_status"], str)
++                    )
++                )
++            ):
++                raise ModelTurnError("工作流空调用决策转换无效")
+         self.state["messages"].append(
+             {
+                 "role": "assistant",
+@@ -545,7 +575,9 @@ class ModelTurnDriver:
+         )
+         self.state["batch"], self.state["next_call_index"] = batch, 0
+         self.state["phase"] = "tool_batch" if batch else "terminal"
+-        if not batch:
++        if transition is not None:
++            self.state.update(transition)
++        elif not batch:
+             final_outcome = getattr(self.policy, "final_outcome", lambda: "success")()
+             self.state.update(outcome=final_outcome, final_text=decision["content"])
+             run = self._run()
+@@ -591,7 +623,13 @@ class ModelTurnDriver:
+                     if self.state["outcome"] == "cancelled"
+                     else "failed"
+                 )
+-            key = "employee_result" if self.policy.kernel == "employee_agent" else "chat_payload"
++            key = (
++                "workflow_result"
++                if self.policy.kernel == "workflow_agentic"
++                else "employee_result"
++                if self.policy.kernel == "employee_agent"
++                else "chat_payload"
++            )
+             stored = run.final_output.get(key)
+             if (
+                 self.policy.kernel == "employee_agent"
+@@ -612,6 +650,18 @@ class ModelTurnDriver:
+                 run.final_output[key] = envelope
+             else:
+                 run.final_output[key] = copy.deepcopy(result)
++            if self.policy.kernel == "workflow_agentic":
++                run.metadata.update(
++                    tool_call_count=len(run.tool_calls),
++                    cost_units_total=sum(int(call.cost_units or 0) for call in run.tool_calls),
++                    artifact_count=len(run.artifacts),
++                )
++                run.final_output.update(
++                    node_outputs={step.node_id: step.output for step in run.steps},
++                    tool_calls=[call.to_dict() for call in run.tool_calls],
++                    artifacts=[artifact.to_dict() for artifact in run.artifacts],
++                    cost_units_total=run.metadata["cost_units_total"],
++                )
+             run.metadata["execution"] = {"state": "idle"}
+             run.add_event(
+                 "model_turn." + self.state["phase"],
+@@ -698,7 +748,9 @@ class ModelTurnDriver:
+         from .task_background import task_execution_context
+ 
+         execution_context = {
+-            key: value for key, value in self.context.items() if key != "_legacy_execution_lease"
++            key: value
++            for key, value in self.context.items()
++            if key not in {"_legacy_execution_lease", "_workflow_execution_lease"}
+         }
+         with llm_client_scope(self.policy.client, self.policy.model):
+             controller._execute_step(
+@@ -785,6 +837,11 @@ class ModelTurnDriver:
+                         "retryable": False,
+                         "message": "工具调用需要登录并关联服务端持久任务，未执行工具",
+                     }
++                    if self.policy.kernel == "workflow_agentic":
++                        self.state.update(phase="terminal", outcome="failure", final_text="")
++                        self.checkpoint()
++                        yield {"type": "result", "result": self.finish("failure", receipt=output)}
++                        return
+                 else:
+                     self.assert_active_budget()
+                     repeat = self.state["limits"]["repeat"]
+@@ -830,7 +887,8 @@ class ModelTurnDriver:
+                         ),
+                     }
+                     return
+-                self.policy.observe(call, output)
++                if stored or self.policy.kernel != "workflow_agentic":
++                    self.policy.observe(call, output)
+                 if outcome in {"unknown", "pending", "waiting_approval"}:
+                     yield {"type": "result", "result": self._suspend(outcome, output)}
+                     return
+@@ -980,9 +1038,27 @@ def resume_model_turn(controller, run, *, approved_step_id=""):
+ 
+     state = decode_state(run.metadata[STATE_KEY])
+     context = dict(run.metadata.get("runtime_context") or {})
+-    if validate_actor_context(context):
+-        raise ModelTurnError("持久模型任务登录授权失效")
+-    client, model = resolve_durable_model_client(context, state["model_reference"])
++    if state["kernel"] == "workflow_agentic":
++        from app.application.workflow.agentic_model_policy import (
++            WorkflowAgenticModelPolicy,
++            block_workflow_restore,
++        )
++        from app.utils.operational_errors import RECOVERABLE_ERRORS
++
++        from .trace_runs import WorkflowExecutionLease
++
++        try:
++            if validate_actor_context(context):
++                raise ModelTurnError("持久模型任务登录授权失效")
++            client, model = resolve_durable_model_client(context, state["model_reference"])
++            context["_workflow_execution_lease"] = WorkflowExecutionLease(run.run_id)
++            policy = WorkflowAgenticModelPolicy.restore(state["policy"], context, client, model)
++        except RECOVERABLE_ERRORS:
++            return block_workflow_restore(controller._repo, run, state)
++    else:
++        if validate_actor_context(context):
++            raise ModelTurnError("持久模型任务登录授权失效")
++        client, model = resolve_durable_model_client(context, state["model_reference"])
+     if state["kernel"] == "legacy":
+         from app.legacy.chat.legacy_chat_runtime import LegacyModelPolicy
+ 
+@@ -990,7 +1066,7 @@ def resume_model_turn(controller, run, *, approved_step_id=""):
+ 
+         context["_legacy_execution_lease"] = LegacyExecutionLease(run.run_id)
+         policy = LegacyModelPolicy.restore(state["policy"], context, client, model)
+-    else:
++    elif state["kernel"] == "employee_agent":
+         from app.application.employee_runtime.agent_loop import EmployeeModelPolicy
+ 
+         policy = EmployeeModelPolicy.restore(state["policy"], context, client, model)
+@@ -1018,6 +1094,13 @@ def terminal_model_payload(run):
+         policy = LegacyModelPolicy.restore(
+             state["policy"], {}, None, state["model_reference"]["model"]
+         )
++    elif state["kernel"] == "workflow_agentic":
++        stored = run.final_output.get("workflow_result")
++        if isinstance(stored, dict):
++            return copy.deepcopy(stored)
++        from app.application.workflow.agentic_model_policy import project_terminal_workflow
++
++        return project_terminal_workflow(run, state)
+     else:
+         from app.application.employee_runtime.agent_loop import EmployeeModelPolicy
+ 
+diff --git a/FHD/app/application/agent_orchestrator/tool_executor.py b/FHD/app/application/agent_orchestrator/tool_executor.py
+index e19cad88de..c4dc5b18d2 100644
+--- a/FHD/app/application/agent_orchestrator/tool_executor.py
++++ b/FHD/app/application/agent_orchestrator/tool_executor.py
+@@ -210,6 +210,12 @@ class AgentToolExecutor:
+             if existing is not None:
+                 return existing
+         try:
++            from app.application.agent_orchestrator.business_action_verification import (
++                prepare_action_verification,
++                verify_action_result,
++            )
++
++            before_state = prepare_action_verification(spec, step.params)
+             if runtime_context.get("_tool_dispatch_kind") == "model":
+                 from app.application.tools.workflow import _execute_workflow_tool_raw
+                 from app.application.tools.workflow_tools.dispatch import parse_arguments
+@@ -235,12 +241,12 @@ class AgentToolExecutor:
+             if claim is None:
+                 return result
+             ledger.record_receipt(claim, result)
+-            from app.application.agent_orchestrator.business_action_verification import (
+-                verify_action_result,
+-            )
+-
+             result, verified = verify_action_result(
+-                spec, step.params, result, runtime_context=runtime_context
++                spec,
++                step.params,
++                result,
++                runtime_context=runtime_context,
++                before_state=before_state,
+             )
+             return ledger.finish(claim, result, verified=verified)
+         except RECOVERABLE_ERRORS:
+diff --git a/FHD/app/application/agent_orchestrator/trace_runs.py b/FHD/app/application/agent_orchestrator/trace_runs.py
+index 6a524f4fb9..c40c7002ce 100644
+--- a/FHD/app/application/agent_orchestrator/trace_runs.py
++++ b/FHD/app/application/agent_orchestrator/trace_runs.py
+@@ -6,11 +6,11 @@ import hashlib
+ import json
+ from collections.abc import Callable, Sequence
+ from copy import deepcopy
+-from dataclasses import dataclass
++from dataclasses import dataclass, fields
+ from typing import Any, Protocol
+ from uuid import uuid4
+ 
+-from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowNode
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
+ from .run_control import run_operation_lock
+@@ -54,6 +54,20 @@ class LegacyExecutionLease:
+     run_id: str
+ 
+ 
++@dataclass(frozen=True)
++class WorkflowExecutionLease:
++    """Admission capability for the original governed JSON workflow turn."""
++
++    run_id: str
++
++
++@dataclass(frozen=True)
++class WorkflowReceiptProjection:
++    """Trusted in-process metrics supplier; it cannot replace a tool receipt."""
++
++    read: Callable[[], dict[str, Any]]
++
++
+ def legacy_execution_context(run: AgentRun) -> dict[str, Any]:
+     return {
+         **deepcopy(run.metadata["runtime_context"]),
+@@ -179,6 +193,32 @@ class TraceRunService:
+         runtime_context: dict[str, Any],
+         source: str | None = None,
+         channel: str = "compat_chat",
++    ):
++        return self._claim_model_turn_run(
++            message=message, runtime_context=runtime_context, source=source, channel=channel
++        )
++
++    def claim_workflow_run(self, *, message, runtime_context, plan, policy_snapshot):
++        return self._claim_model_turn_run(
++            message=message,
++            runtime_context=runtime_context,
++            source=str(runtime_context.get("source") or ""),
++            channel="workflow_agentic",
++            kernel="workflow_agentic",
++            plan=plan,
++            policy_snapshot=policy_snapshot,
++        )
++
++    def _claim_model_turn_run(
++        self,
++        *,
++        message,
++        runtime_context,
++        source=None,
++        channel="compat_chat",
++        kernel="legacy",
++        plan=None,
++        policy_snapshot=None,
+     ):
+         from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+ 
+@@ -207,6 +247,10 @@ class TraceRunService:
+             for key, value in context.items()
+             if key not in excluded and not key.startswith("_")
+         }
++        if kernel == "workflow_agentic":
++            from .model_turn_runtime import safe_value
++
++            options["workflow_policy"] = safe_value(policy_snapshot)
+         fingerprint = hashlib.sha256(
+             json.dumps([message, options], ensure_ascii=False, sort_keys=True, default=str).encode()
+         ).hexdigest()
+@@ -228,17 +272,22 @@ class TraceRunService:
+             user_id=context["user_id"],
+             source=source,
+             channel=channel,
+-            intent="legacy_chat_adapter",
++            intent=plan.intent if plan is not None else "legacy_chat_adapter",
+         )
++        if plan is not None:
++            run.plan_id = plan.plan_id
+         context.update(run_id=run.run_id, agent_run_id=run.run_id)
+         run.metadata.update(
+-            execution_kernel="legacy",
++            execution_kernel=kernel,
+             legacy_request_fingerprint=fingerprint,
+             runtime_context=context,
+         )
+         run.metadata["task_context"]["root_run_id"] = run.run_id
+         claimed, created = self.repository.claim_first_task_run(run)
+-        if claimed.metadata.get("legacy_request_fingerprint") != fingerprint:
++        if (
++            claimed.metadata.get("legacy_request_fingerprint") != fingerprint
++            or claimed.metadata.get("execution_kernel") != kernel
++        ):
+             raise ValueError("对话 turn 已绑定不同请求，请关联原任务或开始独立新 turn")
+         claimed.metadata["admission_replayed"] = not created
+         return claimed
+@@ -514,6 +563,7 @@ class TraceRunService:
+         params: dict[str, Any],
+         runtime_context: dict[str, Any],
+         dispatch: Callable[[dict[str, Any]], str | dict[str, Any]],
++        projection: WorkflowReceiptProjection | None = None,
+     ) -> dict[str, Any]:
+         """Persist a dynamic call before entering the existing controlled dispatcher."""
+         from app.application.tools.registered_capabilities import (
+@@ -543,10 +593,18 @@ class TraceRunService:
+                 runtime_context=runtime_context,
+             )
+             if employee_id is None:
+-                lease = runtime_context.get("_legacy_execution_lease")
++                kind = run.metadata.get("execution_kernel")
++                lease = runtime_context.get(
++                    "_workflow_execution_lease"
++                    if kind == "workflow_agentic"
++                    else "_legacy_execution_lease"
++                )
++                capability = (
++                    WorkflowExecutionLease if kind == "workflow_agentic" else LegacyExecutionLease
++                )
+                 if (
+-                    run.metadata.get("execution_kernel") != "legacy"
+-                    or not isinstance(lease, LegacyExecutionLease)
++                    kind not in {"legacy", "workflow_agentic"}
++                    or not isinstance(lease, capability)
+                     or lease.run_id != run_id
+                 ):
+                     raise ValueError("对话工具缺少服务端持久任务认领，未执行")
+@@ -555,7 +613,7 @@ class TraceRunService:
+                 {
+                     key: value
+                     for key, value in runtime_context.items()
+-                    if key != "_legacy_execution_lease"
++                    if key not in {"_legacy_execution_lease", "_workflow_execution_lease"}
+                 },
+             )
+             existing = next((call for call in run.tool_calls if call.call_id == call_id), None)
+@@ -768,6 +826,32 @@ class TraceRunService:
+                 "verified": bool(verified) and outcome == "success",
+                 "method": "read_only_receipt" if spec.read_only else "business_readback",
+             }
++            if projection is not None:
++                from .model_turn_runtime import safe_value
++
++                if run.metadata.get("execution_kernel") == "workflow_agentic":
++                    call.permission = spec.permission
++                try:
++                    if (
++                        not isinstance(projection, WorkflowReceiptProjection)
++                        or run.metadata.get("execution_kernel") != "workflow_agentic"
++                    ):
++                        raise ValueError("工作流投影缺少可信内存能力")
++                    metrics = safe_value(projection.read())
++                    if not isinstance(metrics, dict) or set(metrics) != {
++                        field.name for field in fields(NodeExecutionResult)
++                    }:
++                        raise ValueError("工作流投影不是对象")
++                    metrics["output"] = deepcopy(checked)
++                    metrics["success"] = outcome == "success"
++                    call.metadata["workflow_projection"] = {
++                        "version": 1,
++                        "output_digest": canonical_hash(output),
++                        "node_digest": canonical_hash(metrics),
++                        "node_result": metrics,
++                    }
++                except (TypeError, *RECOVERABLE_ERRORS):
++                    call.metadata["workflow_projection_error"] = "workflow_projection_invalid"
+             self.recording.append_artifacts(run, _extract_artifacts(output))
+             run.final_output = {
+                 "node_outputs": {item.node_id: item.output for item in run.steps},
+diff --git a/FHD/app/application/ai_chat/agent_workflow_bridge.py b/FHD/app/application/ai_chat/agent_workflow_bridge.py
+index ce9ed4e5e2..fead5b976b 100644
+--- a/FHD/app/application/ai_chat/agent_workflow_bridge.py
++++ b/FHD/app/application/ai_chat/agent_workflow_bridge.py
+@@ -24,6 +24,13 @@ class AgentWorkflowBridge:
+         self.output_message = output_message
+         self.artifact_payloads = artifact_payloads
+ 
++    def actual_run(self, runtime_context: dict[str, Any]) -> AgentRun:
++        """Read the canonical run; never reconstruct executed tool evidence."""
++        run = self.repository.get(str(runtime_context.get("run_id") or ""))
++        if run is None or run.metadata.get("execution_kernel") != "workflow_agentic":
++            raise ValueError("原持久工作流任务不存在")
++        return run
++
+     @staticmethod
+     def iter_artifact_payloads(
+         output: dict[str, Any],
+diff --git a/FHD/app/application/ai_chat/planned_workflow_dispatch.py b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+index 34145c9994..9b7b4ed1fe 100644
+--- a/FHD/app/application/ai_chat/planned_workflow_dispatch.py
++++ b/FHD/app/application/ai_chat/planned_workflow_dispatch.py
+@@ -92,7 +92,13 @@ class WorkflowDispatchCallbacks(Protocol):
+         **kwargs: Any,
+     ) -> tuple[WorkflowRunResult, list[dict[str, Any]]]: ...
+     def _start_agentic_workflow_agent_run(
+-        self, *, user_id: str, message: str, plan: PlanGraph, runtime_context: dict[str, Any]
++        self,
++        *,
++        user_id: str,
++        message: str,
++        plan: PlanGraph,
++        runtime_context: dict[str, Any],
++        tool_registry: dict[str, Any] | None = None,
+     ) -> AgentRun: ...
+     @staticmethod
+     def _task_owner_id(user_id: str, runtime_context: dict[str, Any]) -> str: ...
+@@ -491,14 +497,13 @@ class PlannedWorkflowDispatch:
+             return confirmation_payload
+         agentic_pre_run = None
+         if use_agentic:
+-            try:
+-                agentic_pre_run = self.callbacks._start_agentic_workflow_agent_run(
+-                    user_id=user_id, message=message, plan=plan, runtime_context=runtime_ctx
+-                )
+-                runtime_ctx["run_id"] = agentic_pre_run.run_id
+-                runtime_ctx["agent_run_id"] = agentic_pre_run.run_id
+-            except RECOVERABLE_ERRORS:
+-                logger.debug("Agentic workflow AgentRun pre-create skipped", exc_info=True)
++            agentic_pre_run = self.callbacks._start_agentic_workflow_agent_run(
++                user_id=user_id,
++                message=message,
++                plan=plan,
++                runtime_context=runtime_ctx,
++                tool_registry=tool_registry,
++            )
+         run_result, state_updates = self.callbacks._run_workflow_with_state_updates(
+             plan=plan,
+             runtime_context=runtime_ctx,
+diff --git a/FHD/app/application/ai_chat_app_service.py b/FHD/app/application/ai_chat_app_service.py
+index 7fecf5f04a..f0f5b8d827 100644
+--- a/FHD/app/application/ai_chat_app_service.py
++++ b/FHD/app/application/ai_chat_app_service.py
+@@ -615,11 +615,29 @@ class AIChatApplicationService(
+         )
+ 
+     def _start_agentic_workflow_agent_run(
+-        self, *, user_id: str, message: str, plan: PlanGraph, runtime_context: dict[str, Any]
++        self,
++        *,
++        user_id: str,
++        message: str,
++        plan: PlanGraph,
++        runtime_context: dict[str, Any],
++        tool_registry: dict[str, Any] | None = None,
+     ) -> AgentRun:
+-        return self._agent_workflow_bridge().start_run(
+-            user_id=user_id, message=message, plan=plan, runtime_context=runtime_context
++        from app.application.workflow.agentic_model_policy import admit_policy, create_policy
++        from app.application.workflow.engine import WorkflowEngine
++
++        engine = self.workflow_engine
++        if type(engine).__module__ == "app.legacy.workflow.legacy_engine_adapter":
++            engine = engine.engine
++        if not isinstance(engine, WorkflowEngine):
++            raise ValueError("当前工作流 runtime 不支持持久模型决策")
++        policy = create_policy(
++            engine, plan, {**runtime_context, "message": message}, tool_registry or {}
+         )
++        run = admit_policy(policy)
++        runtime_context.update(policy.context)
++        runtime_context["_workflow_model_policy"] = policy
++        return run
+ 
+     def _bridge_agentic_workflow_result_to_agent_run(
+         self,
+@@ -631,6 +649,12 @@ class AIChatApplicationService(
+         runtime_context: dict[str, Any],
+         agent_run: AgentRun | None = None,
+     ) -> AgentRun:
++        from app.application.workflow.agentic_model_policy import WorkflowAgenticModelPolicy
++
++        if isinstance(runtime_context.get("_workflow_model_policy"), WorkflowAgenticModelPolicy):
++            return self._agent_workflow_bridge().actual_run(runtime_context)
++        if "_workflow_model_policy" in runtime_context:
++            raise ValueError("工作流结果投影需要可信内存策略")
+         return self._agent_workflow_bridge().record_result(
+             user_id=user_id,
+             message=message,
+diff --git a/FHD/app/application/workflow/agent_loop.py b/FHD/app/application/workflow/agent_loop.py
+index b46fb232d4..e99055e597 100644
+--- a/FHD/app/application/workflow/agent_loop.py
++++ b/FHD/app/application/workflow/agent_loop.py
+@@ -65,138 +65,9 @@ def run_agentic_loop(
+     user_id: str | None,
+     state_schema: StateSchema | None = None,
+ ) -> WorkflowRunResult:
+-    """Run the model-directed tool loop with fail-closed completion semantics."""
+-    runtime_context = dict(runtime_context or {})
+-    schema = state_schema or engine._default_state_schema
+-    all_node_results: list[NodeExecutionResult] = []
+-    agent_history: list[dict[str, Any]] = []
+-    max_steps = 10
+-    step = 0
+-    terminal_reason = ""
+-    completed_by_model = False
+-    decision_errors = 0
++    """Adapt workflow hooks to the shared durable model-turn driver."""
++    from .agentic_model_policy import run_workflow_policy
+ 
+-    user_message = str(runtime_context.get("message") or "").strip()
+-
+-    while step < max_steps:
+-        step += 1
+-
+-        decision = engine._llm_decide_next_step(
+-            user_message=user_message,
+-            tool_registry=tool_registry,
+-            runtime_context=runtime_context,
+-            agent_history=agent_history,
+-            user_id=user_id,
+-        )
+-
+-        if decision is None:
+-            terminal_reason = "模型未返回可执行决策"
+-            break
+-
+-        decision_action = str(decision.get("action") or "").strip()
+-        tool_id = decision.get("tool_id", "")
+-        tool_action = str(
+-            decision.get("action_name") or decision.get("tool_action") or decision_action
+-        ).strip()
+-        params = decision.get("params") or {}
+-        reasoning = str(decision.get("reasoning", "")).strip()
+-
+-        event_logger.info(
+-            "AgenticLoop step=%d action=%s.%s reasoning=%s",
+-            step,
+-            tool_id,
+-            tool_action,
+-            reasoning[:100],
+-        )
+-
+-        if decision_action == "done":
+-            agent_history.append({"step": step, "role": "done"})
+-            completed_by_model = True
+-            break
+-
+-        agent_history.append(
+-            {
+-                "step": step,
+-                "role": "assistant",
+-                "tool_id": tool_id,
+-                "action": tool_action,
+-                "params": params,
+-                "reasoning": reasoning,
+-            }
+-        )
+-
+-        if not tool_id or not tool_action or tool_action == "execute":
+-            decision_errors += 1
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": "工具决策缺少 tool_id 或真实 action_name，已跳过。",
+-                }
+-            )
+-            continue
+-
+-        node_result = engine._run_single_tool(
+-            tool_id=tool_id,
+-            action=tool_action,
+-            params=params,
+-            runtime_context=runtime_context,
+-            max_retries=max_retries,
+-            retryable=engine._agentic_tool_allows_auto_retry(tool_registry, tool_id, tool_action),
+-        )
+-        all_node_results.append(node_result)
+-        engine._append_node_trace(runtime_context, node_result)
+-        engine._merge_state_schema(runtime_context, node_result, schema)
+-
+-        runtime_context.setdefault("node_outputs", {})
+-        runtime_context["node_outputs"][f"agent_step_{step}"] = node_result.output
+-        engine._emit_state_update(node_result)
+-
+-        if not node_result.success:
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": f"工具执行失败: {node_result.error}",
+-                }
+-            )
+-        else:
+-            output_preview = engine._summarize_output(node_result.output)
+-            agent_history.append(
+-                {
+-                    "step": step,
+-                    "role": "system",
+-                    "content": f"结果: {output_preview}",
+-                }
+-            )
+-
+-    if step >= max_steps:
+-        event_logger.warning("AgenticLoop 达到最大步数限制 %d", max_steps)
+-        terminal_reason = f"达到最大步数限制 {max_steps}，但模型未声明完成"
+-
+-    failed_results = [result for result in all_node_results if not result.success]
+-    success = completed_by_model and not failed_results and decision_errors == 0
+-    if failed_results:
+-        terminal_reason = f"{len(failed_results)} 个工具步骤失败"
+-    elif decision_errors:
+-        terminal_reason = f"{decision_errors} 个模型工具决策无效"
+-    runtime_context["workflow_status"] = {
+-        "state": "completed" if success else "failed",
+-        "completed_by_model": completed_by_model,
+-        "steps": step,
+-        "failed_tool_steps": len(failed_results),
+-        "invalid_decisions": decision_errors,
+-        "message": "AgenticLoop 执行完成" if success else terminal_reason,
+-    }
+-
+-    return WorkflowRunResult(
+-        plan_id=plan.plan_id,
+-        success=success,
+-        node_results=all_node_results,
+-        final_context=runtime_context,
+-        message=(
+-            f"AgenticLoop 完成（{step} 步）"
+-            if success
+-            else f"AgenticLoop 未完成（{step} 步）：{terminal_reason}"
+-        ),
++    return run_workflow_policy(
++        engine, plan, runtime_context, max_retries, tool_registry, user_id, state_schema
+     )
+diff --git a/FHD/app/application/workflow/engine.py b/FHD/app/application/workflow/engine.py
+index 974c67e3c0..7366ebcef2 100644
+--- a/FHD/app/application/workflow/engine.py
++++ b/FHD/app/application/workflow/engine.py
+@@ -225,9 +225,12 @@ class WorkflowEngine:
+         user_id: str | None,
+         state_schema: StateSchema | None = None,
+     ) -> WorkflowRunResult:
+-        return run_agentic_loop(
++        result = run_agentic_loop(
+             self, logger, plan, runtime_context, max_retries, tool_registry, user_id, state_schema
+         )
++        if result.final_context.get("workflow_status", {}).get("steps") == 10:
++            logger.warning("AgenticLoop 达到最大步数限制 %d", 10)
++        return result
+ 
+     def _llm_decide_next_step(
+         self,
+diff --git a/FHD/app/application/workflow/engine_decisions.py b/FHD/app/application/workflow/engine_decisions.py
+index 429615e274..e1ca55362b 100644
+--- a/FHD/app/application/workflow/engine_decisions.py
++++ b/FHD/app/application/workflow/engine_decisions.py
+@@ -5,10 +5,65 @@ from __future__ import annotations
+ import json
+ import logging
+ from collections.abc import Callable
++from contextlib import contextmanager
++from contextvars import ContextVar
++from copy import copy
++from types import SimpleNamespace
+ from typing import Any, Protocol
+ 
++import httpx
++
+ from app.utils.operational_errors import RECOVERABLE_ERRORS
+ 
++_BOUND_MODEL = ContextVar("workflow_decision_model", default=None)
++
++
++@contextmanager
++def decision_model_scope(client, model, check):
++    binding = SimpleNamespace(client=client, model=model, check=check, usage=[])
++    token = _BOUND_MODEL.set(binding)
++    try:
++        yield binding
++    finally:
++        _BOUND_MODEL.reset(token)
++
++
++class _BoundDecisionTransport:
++    def __init__(self, binding):
++        self.binding = binding
++
++    def post(self, url, *, headers, json):
++        from app.application.agent_orchestrator.model_turn_runtime import model_transport
++
++        content = None
++        client = self.binding.client
++        request = {key: value for key, value in json.items() if key != "model"}
++        if getattr(client, "is_modstore_openai_compatible", False) is True:
++            adapter = copy(client.adapter)
++            adapter.timeout = min(20.0, float(adapter.timeout))
++            client = type(client)(adapter)
++        else:
++            request["timeout"] = httpx.Timeout(20.0, connect=10.0)
++            if callable(getattr(client, "with_options", None)):
++                client = client.with_options(max_retries=0)
++        for event in model_transport(
++            client,
++            self.binding.model,
++            request,
++            check=self.binding.check,
++        ):
++            if event["type"] == "usage":
++                self.binding.usage.append(event["completion"])
++            elif event["type"] == "decision":
++                if event["decision"]["calls"]:
++                    raise ValueError("工作流单步协议需要 JSON 正文，不能改用 SDK 工具批次")
++                content = event["decision"]["content"]
++        if content is None:
++            raise ValueError("工作流模型未返回完整 JSON 决策")
++        return SimpleNamespace(
++            status_code=200, json=lambda: {"choices": [{"message": {"content": content}}]}
++        )
++
+ 
+ class AgentSettings(Protocol):
+     @property
+@@ -31,6 +86,71 @@ class DecisionHttpClient(Protocol):
+     ) -> DecisionResponse: ...
+ 
+ 
++def build_decision_messages(user_message, tool_registry, runtime_context, agent_history):
++    tool_specs = []
++    for tid, spec in tool_registry.items():
++        if not isinstance(spec, dict):
++            continue
++        actions = spec.get("actions") or {}
++        action_list = []
++        for aname, ameta in actions.items():
++            if not isinstance(ameta, dict):
++                continue
++            action_list.append(
++                {
++                    "action": aname,
++                    "risk": ameta.get("risk", "low"),
++                    "idempotent": bool(ameta.get("idempotent", False)),
++                    "required_params": ameta.get("required_params", []),
++                }
++            )
++        tool_specs.append(
++            {"tool_id": tid, "description": spec.get("description", ""), "actions": action_list}
++        )
++    history_lines = []
++    for h in agent_history[-8:]:
++        role = h.get("role", "")
++        if role == "done":
++            history_lines.append("Assistant: 已完成任务")
++        elif role == "assistant":
++            history_lines.append(
++                f"Assistant: 决定执行 {h.get('tool_id')}.{h.get('action')} (reasoning: {h.get('reasoning', '')[:80]})"
++            )
++        else:
++            history_lines.append(f"System: {h.get('content', '')[:200]}")
++    excel_analysis = runtime_context.get("excel_analysis")
++    excel_info = ""
++    if isinstance(excel_analysis, dict):
++        fp = excel_analysis.get("file_path", "")
++        excel_info = f"\n当前 Excel 文件: {fp}"
++    prompt = {
++        "task": "作为 Agent，决定下一步动作。",
++        "rules": [
++            '如果任务已完成，返回 {"action": "done"}。',
++            '如果需要执行工具，返回 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}。',
++            "params 必须填写所有 required_params（不能留空）。",
++            "优先使用低风险、幂等工具。",
++            "只决定下一步，不要一次决定多步。",
++        ],
++        "user_message": user_message,
++        "excel_context": excel_info,
++        "recent_history": "\n".join(history_lines) if history_lines else "(首步决策)",
++        "tool_registry": tool_specs,
++        "output_schema": {
++            "action": "done | execute",
++            "tool_id": "string (当 action=execute 时)",
++            "action_name": "string (当 action=execute 时)",
++            "params": "{} (当 action=execute 时)",
++            "reasoning": "string",
++        },
++    }
++    messages = [
++        {"role": "system", "content": "你是工作流 Agent，只输出 JSON。"},
++        {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
++    ]
++    return messages
++
++
+ class AgentDecisionClient:
+     def __init__(
+         self,
+@@ -54,78 +174,31 @@ class AgentDecisionClient:
+         询问 LLM：下一步做什么（单步决策）。
+         返回 {"action": "done"} 表示结束，或 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}
+         """
+-        ai_service = self._ai_factory()
++        binding = _BOUND_MODEL.get()
++        ai_service = (
++            SimpleNamespace(
++                api_key="bound-model-reference",
++                api_url="bound-model-reference",
++                model=binding.model,
++            )
++            if binding is not None
++            else self._ai_factory()
++        )
+         api_key = getattr(ai_service, "api_key", "") or ""
+         if not api_key:
+             self._logger.warning("AgenticLoop 缺少 API_KEY，跳过")
+             return None
+-        tool_specs = []
+-        for tid, spec in tool_registry.items():
+-            if not isinstance(spec, dict):
+-                continue
+-            actions = spec.get("actions") or {}
+-            action_list = []
+-            for aname, ameta in actions.items():
+-                if not isinstance(ameta, dict):
+-                    continue
+-                action_list.append(
+-                    {
+-                        "action": aname,
+-                        "risk": ameta.get("risk", "low"),
+-                        "idempotent": bool(ameta.get("idempotent", False)),
+-                        "required_params": ameta.get("required_params", []),
+-                    }
+-                )
+-            tool_specs.append(
+-                {"tool_id": tid, "description": spec.get("description", ""), "actions": action_list}
+-            )
+-        history_lines = []
+-        for h in agent_history[-8:]:
+-            role = h.get("role", "")
+-            if role == "done":
+-                history_lines.append("Assistant: 已完成任务")
+-            elif role == "assistant":
+-                history_lines.append(
+-                    f"Assistant: 决定执行 {h.get('tool_id')}.{h.get('action')} (reasoning: {h.get('reasoning', '')[:80]})"
+-                )
+-            else:
+-                history_lines.append(f"System: {h.get('content', '')[:200]}")
+-        excel_analysis = runtime_context.get("excel_analysis")
+-        excel_info = ""
+-        if isinstance(excel_analysis, dict):
+-            fp = excel_analysis.get("file_path", "")
+-            excel_info = f"\n当前 Excel 文件: {fp}"
+-        prompt = {
+-            "task": "作为 Agent，决定下一步动作。",
+-            "rules": [
+-                '如果任务已完成，返回 {"action": "done"}。',
+-                '如果需要执行工具，返回 {"tool_id": "...", "action": "...", "params": {...}, "reasoning": "..."}。',
+-                "params 必须填写所有 required_params（不能留空）。",
+-                "优先使用低风险、幂等工具。",
+-                "只决定下一步，不要一次决定多步。",
+-            ],
+-            "user_message": user_message,
+-            "excel_context": excel_info,
+-            "recent_history": "\n".join(history_lines) if history_lines else "(首步决策)",
+-            "tool_registry": tool_specs,
+-            "output_schema": {
+-                "action": "done | execute",
+-                "tool_id": "string (当 action=execute 时)",
+-                "action_name": "string (当 action=execute 时)",
+-                "params": "{} (当 action=execute 时)",
+-                "reasoning": "string",
+-            },
+-        }
+-        messages = [
+-            {"role": "system", "content": "你是工作流 Agent，只输出 JSON。"},
+-            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+-        ]
++        messages = build_decision_messages(
++            user_message, tool_registry, runtime_context, agent_history
++        )
+         try:
+             from app.infrastructure.llm.providers.credentials import default_chat_completions_url
+ 
+             api_url = getattr(ai_service, "api_url", "") or default_chat_completions_url()
+             model = getattr(ai_service, "model", "") or "deepseek-chat"
+-            response = self._http_factory().post(
++            response = (
++                _BoundDecisionTransport(binding) if binding is not None else self._http_factory()
++            ).post(
+                 api_url,
+                 headers={
+                     "Authorization": f"Bearer {api_key}",
+@@ -150,7 +223,12 @@ class AgentDecisionClient:
+             raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+             if not raw:
+                 return None
+-            parsed = json.loads(raw)
++            if binding is not None:
++                from app.application.tools.workflow_tools.dispatch import parse_arguments
++
++                parsed = parse_arguments(raw)
++            else:
++                parsed = json.loads(raw)
+             action = str(parsed.get("action") or "").strip().lower()
+             if action == "done":
+                 return {"action": "done"}
+@@ -160,6 +238,8 @@ class AgentDecisionClient:
+                 or parsed.get("tool_action")
+                 or ("" if action == "execute" else action)
+             ).strip()
++            if binding is not None and not isinstance(parsed.get("params"), dict):
++                raise ValueError("工具参数必须是 JSON 对象，不能降级为空对象")
+             params = parsed.get("params") if isinstance(parsed.get("params"), dict) else {}
+             reasoning = str(parsed.get("reasoning") or "").strip()
+             if not tool_id or not action_name:
+@@ -172,5 +252,7 @@ class AgentDecisionClient:
+                 "reasoning": reasoning,
+             }
+         except RECOVERABLE_ERRORS as e:
++            if binding is not None:
++                raise
+             self._logger.warning("AgenticLoop LLM 决策失败: %s", e, exc_info=True)
+             return None
+diff --git a/FHD/app/domain/shared_services/tools_workflow_erp_master.py b/FHD/app/domain/shared_services/tools_workflow_erp_master.py
+index ea59c219b1..e50693ce24 100644
+--- a/FHD/app/domain/shared_services/tools_workflow_erp_master.py
++++ b/FHD/app/domain/shared_services/tools_workflow_erp_master.py
+@@ -218,19 +218,22 @@ def _registered_router_materials(
+         ids = [int(x) for x in raw_ids if str(x).strip()]
+         try:
+             result = svc.batch_delete_materials(ids)
+-        except RECOVERABLE_ERRORS as err:
+-            logger.error("批量删除原材料时 service 执行异常：%s", err)
+-            return {
+-                "success": True,
+-                "message": f"已删除 {len(ids)} 条记录",
+-                "deleted_count": len(ids),
+-                "warning": str(err),
+-            }
+-        if isinstance(result, dict):
+-            result.setdefault("success", True)
+-            result.setdefault("deleted_count", len(ids))
++        except RECOVERABLE_ERRORS:
++            logger.error("批量删除原材料时服务回执不可用")
++            result = None
++        if (
++            isinstance(result, dict)
++            and isinstance(result.get("success"), bool)
++            and (not result["success"] or type(result.get("deleted_count")) is int)
++        ):
+             return result
+-        return {"success": True, "message": f"已删除 {len(ids)} 条记录", "deleted_count": len(ids)}
++        return {
++            "success": False,
++            "outcome": "unknown",
++            "error_code": "material_batch_receipt_unavailable",
++            "message": "批量删除结果未确认，请核对原任务",
++            "retryable": False,
++        }
+     if action == "export":
+         return cast(
+             "dict[Any, Any]",
+diff --git a/FHD/app/fastapi_routes/materials.py b/FHD/app/fastapi_routes/materials.py
+index aee1d01595..cfdf53d1e8 100755
+--- a/FHD/app/fastapi_routes/materials.py
++++ b/FHD/app/fastapi_routes/materials.py
+@@ -219,18 +219,21 @@ def batch_delete_materials(
+                 {"success": False, "message": "请求体必须是 JSON 对象"}, status_code=400
+             )
+ 
+-        ids = data.get("material_ids")
+-        if ids is None:
+-            ids = data.get("ids", [])
+-
+-        valid_ids: list[int] = []
+-        for raw_id in ids or []:
+-            try:
+-                valid_ids.append(int(raw_id))
+-            except (TypeError, ValueError):
+-                continue
+-
+-        deleted_count = len(valid_ids)
++        from app.application.agent_orchestrator.business_action_verification import (
++            material_batch_ids,
++        )
++
++        try:
++            valid_ids = material_batch_ids(data)
++        except ValueError:
++            return JSONResponse(
++                {
++                    "success": False,
++                    "error_code": "invalid_material_ids",
++                    "message": "请选择不重复的有效原材料ID",
++                },
++                status_code=400,
++            )
+         result = _run_materials_agent(
+             request=request,
+             action="batch_delete",
+@@ -248,15 +251,7 @@ def batch_delete_materials(
+                 if result.get("pending_approval")
+                 else 400,
+             )
+-        return JSONResponse(
+-            {
+-                **result,
+-                "success": True,
+-                "message": f"已删除 {deleted_count} 条记录",
+-                "deleted_count": deleted_count,
+-            },
+-            status_code=200,
+-        )
++        return JSONResponse(jsonable_encoder(result), status_code=200)
+     except RECOVERABLE_ERRORS:
+         logger.exception("批量删除原材料失败")
+         return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)
+diff --git a/FHD/tests/test_application/test_agent_eval_harness.py b/FHD/tests/test_application/test_agent_eval_harness.py
+index 82dd4b0217..8baa61340f 100644
+--- a/FHD/tests/test_application/test_agent_eval_harness.py
++++ b/FHD/tests/test_application/test_agent_eval_harness.py
+@@ -199,9 +199,7 @@ def test_sql_eval_host_restores_database_bindings_after_exception(tmp_path):
+ 
+ 
+ @pytest.mark.parametrize("action", ["create", "update", "delete", "batch_delete"])
+-def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failure(
+-    tmp_path, action
+-):
++def test_material_route_eval_reads_real_sql_after_original_approval(tmp_path, action):
+     task = next(
+         row
+         for row in eval_module.load_tasks()
+@@ -211,7 +209,7 @@ def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failu
+     path.write_text(json.dumps(task, ensure_ascii=False) + "\n", encoding="utf-8")
+     result = run_eval(path)
+     item = result["results"][0]
+-    assert item["passed"] is (action != "batch_delete"), item
++    assert item["passed"] is True, item
+     details = item["details"]
+     assert details["run"]["run_id"] == details["initial_response"]["run_id"]
+     assert details["approval_consumption_count"] == 1 and details["step_params_unchanged"] is True
+@@ -220,12 +218,9 @@ def test_material_route_eval_reads_real_sql_and_preserves_unverified_batch_failu
+         row for row in before if row["tenant_id"] == 8
+     ]
+     if action == "batch_delete":
+-        assert details["run"]["status"] == "blocked"
+-        assert details["response"]["success"] is False
+-        assert details["response"]["outcome"] == "unknown"
+         assert not any(row["is_active"] for row in after if row["tenant_id"] == 7)
+-        assert any(check["name"] == "run.status" for check in item["failed_checks"])
++        assert details["response"]["deleted_count"] == len(task["body"]["ids"])
+         assert task["expected"]["run_status"] == "completed"
+-    else:
+-        assert details["run"]["status"] == "completed"
+-        assert details["response"]["business_verification"]["verified"] is True
++    assert details["run"]["status"] == "completed"
++    assert details["response"]["success"] is True
++    assert details["response"]["business_verification"]["verified"] is True
+diff --git a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+index f0d41bf2c6..55ccd6c994 100644
+--- a/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
++++ b/FHD/tests/test_application/test_ai_chat_app_service_branch_cov.py
+@@ -14,6 +14,7 @@ from app.application.ai_chat_app_service import (
+     AIChatApplicationService,
+     _skip_pro_excel_deterministic_import,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
+ from tests.test_application.ai_chat_test_helpers import (
+     _make_node,
+     _make_node_result,
+@@ -22,6 +23,10 @@ from tests.test_application.ai_chat_test_helpers import (
+     _make_svc,
+ )
+ 
++trusted_actor = workflow_fixtures.trusted_actor
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++workflow_model = workflow_fixtures.workflow_model
++
+ 
+ def _make_step(
+     *,
+@@ -444,10 +449,7 @@ class TestAttachDeterministicWorkflowTrace:
+     def test_import_error_returns_payload_unchanged(self):
+         """chat_trace 模块不可用 → 返回原 payload。"""
+         payload = {"success": True, "message": "ok"}
+-        import sys
+-
+-        saved = sys.modules.pop("app.application.agent_orchestrator.chat_trace", None)
+-        try:
++        with patch.dict("sys.modules", {"app.application.agent_orchestrator.chat_trace": None}):
+             result = AIChatApplicationService._attach_deterministic_workflow_trace(
+                 payload,
+                 user_id="u1",
+@@ -456,9 +458,6 @@ class TestAttachDeterministicWorkflowTrace:
+                 context={"k": "v"},
+                 intent="test",
+             )
+-        finally:
+-            if saved is not None:
+-                sys.modules["app.application.agent_orchestrator.chat_trace"] = saved
+         assert result is payload
+ 
+     def test_with_file_context_attaches_trace(self):
+@@ -930,10 +929,13 @@ class TestStartDeterministicImportAgentRun:
+ 
+ 
+ class TestStartAgenticWorkflowAgentRun:
+-    """_start_agentic_workflow_agent_run 分支测试。"""
++    """Admission persists the real actor before model or tool execution."""
+ 
+-    def test_creates_run_and_saves(self):
++    def test_creates_run_and_saves(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        http = reviewed_agent_http(actor)
+         svc = _make_svc()
++        svc.workflow_engine = workflow_fixtures.workflow_engine()
+         plan = _make_plan(
+             plan_id="p1",
+             intent="import",
+@@ -941,44 +943,36 @@ class TestStartAgenticWorkflowAgentRun:
+             risk_level="medium",
+             metadata={"key": "val"},
+         )
+-        saved_run = Mock()
+-        saved_run.run_id = "run_1"
+-        with patch(
+-            "app.application.agent_orchestrator.run_repository.get_agent_run_repository"
+-        ) as mock_repo_fn:
+-            mock_repo = mock_repo_fn.return_value
+-            mock_repo.save.return_value = saved_run
+-            result = svc._start_agentic_workflow_agent_run(
+-                user_id="u1",
+-                message="hello",
+-                plan=plan,
+-                runtime_context={"ctx": "v"},
+-            )
+-        assert result is saved_run
+-        mock_repo.save.assert_called_once()
+-        saved_arg = mock_repo.save.call_args[0][0]
+-        assert saved_arg.user_id == "u1"
++        context = {**actor.context, "ctx": "v"}
++        result = svc._start_agentic_workflow_agent_run(
++            user_id="u1",
++            message="hello",
++            plan=plan,
++            runtime_context=context,
++        )
++        saved_arg = http.repository.get(result.run_id)
++        assert result.run_id == saved_arg.run_id
++        assert saved_arg.user_id == str(actor.user_id)
+         assert saved_arg.status == "running"
+         assert saved_arg.plan_id == "p1"
+         assert saved_arg.intent == "import"
+-
+-    def test_empty_plan_attrs_handled(self):
+-        svc = _make_svc()
+-        plan = SimpleNamespace(plan_id="", intent="", todo_steps=None, risk_level="", metadata=None)
+-        saved_run = Mock()
+-        saved_run.run_id = "run_2"
+-        with patch(
+-            "app.application.agent_orchestrator.run_repository.get_agent_run_repository"
+-        ) as mock_repo_fn:
+-            mock_repo = mock_repo_fn.return_value
+-            mock_repo.save.return_value = saved_run
+-            result = svc._start_agentic_workflow_agent_run(
+-                user_id="",
+-                message="",
+-                plan=plan,
+-                runtime_context=None,
+-            )
+-        assert result is saved_run
++        assert saved_arg.tool_calls == []
++        assert context["run_id"] == result.run_id
++        assert saved_arg.metadata["execution_kernel"] == "workflow_agentic"
++
++    def test_empty_plan_attrs_handled(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        http = reviewed_agent_http(actor)
++        svc = _make_svc()
++        svc.workflow_engine = workflow_fixtures.workflow_engine()
++        plan = _make_plan(plan_id="", intent="", todo_steps=None, risk_level="", metadata=None)
++        result = svc._start_agentic_workflow_agent_run(
++            user_id="",
++            message="",
++            plan=plan,
++            runtime_context=dict(actor.context),
++        )
++        assert http.repository.get(result.run_id).run_id == result.run_id
+ 
+ 
+ class TestBridgeAgenticWorkflowResultToAgentRun:
+diff --git a/FHD/tests/test_application/test_business_action_ledger.py b/FHD/tests/test_application/test_business_action_ledger.py
+index e3dfeb5142..929f4f256d 100644
+--- a/FHD/tests/test_application/test_business_action_ledger.py
++++ b/FHD/tests/test_application/test_business_action_ledger.py
+@@ -671,3 +671,192 @@ def test_material_readback_rejects_alias_conflicts_wrong_values_targets_and_tena
+     with tenant_scope(actor.tenant_id), actor.factory() as db:
+         row = db.get(Material, record_id)
+         assert (row.tenant_id, row.min_stock, float(row.unit_price)) == (actor.tenant_id, 12, 3.5)
++
++
++def _material_batch_rows(actor):
++    from app.db.models.material import Material
++
++    with actor.factory.begin() as db:
++        db.add_all(
++            Material(id=key, tenant_id=tenant, material_code=f"BATCH-{key}", name=f"resin-{key}")
++            for key, tenant in [(1, 7), (2, 7), (3, 7), (9001, 8)]
++        )
++
++    def read():
++        with actor.factory() as db:
++            return list(db.execute(Material.__table__.select().order_by(Material.id)).mappings())
++
++    return read
++
++
++def test_material_batch_delete_checks_original_targets_and_replays_without_dispatch(
++    trusted_actor, approved_tool_context, monkeypatch
++):
++    from app.application.material_app_service import MaterialApplicationService
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [2, 1]}
++    )
++    context = approved_tool_context(actor, step, business_action_id="material-batch")
++    result = AgentToolExecutor().execute(step, runtime_context=context)
++    assert result["success"] is True and result["deleted_count"] == 2, result
++    proof = result["business_verification"]
++    assert proof["verified"] is True and proof["tenant_id"] == 7
++    assert proof["record_ids"] == [2, 1] and proof["state"] == "inactive"
++    after = read()
++    assert [row for row in before if row["id"] not in {1, 2}] == [
++        row for row in after if row["id"] not in {1, 2}
++    ]
++    assert all(row["is_active"] == 0 for row in after if row["id"] in {1, 2})
++
++    def forbidden(*args, **kwargs):
++        raise AssertionError("completed action must not dispatch again")
++
++    monkeypatch.setattr(MaterialApplicationService, "batch_delete_materials", forbidden)
++    replay = AgentToolExecutor().execute(step, runtime_context=context)
++    assert replay["business_action_replayed"] is True and replay["success"] is True
++    assert read() == after
++
++
++@pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
++def test_material_batch_invalid_targets_have_no_partial_effects(
++    trusted_actor, approved_tool_context, ids
++):
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
++    )
++    assert result["success"] is False, result
++    assert read() == before
++
++
++@pytest.mark.parametrize("fault", ["no_effect", "partial", "wrong_count", "lost_receipt"])
++def test_material_batch_verifier_does_not_trust_service_success(
++    trusted_actor, approved_tool_context, monkeypatch, fault
++):
++    from app.application.material_app_service import MaterialApplicationService
++    from app.db.models.material import Material
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    before = read()
++    original = MaterialApplicationService.batch_delete_materials
++
++    def dispatch(service, ids):
++        if fault == "no_effect":
++            return {"success": True, "deleted_count": len(ids)}
++        if fault == "partial":
++            with actor.factory.begin() as db:
++                db.query(Material).filter_by(id=ids[0], tenant_id=7).update({"is_active": 0})
++            return {"success": True, "deleted_count": len(ids)}
++        result = original(service, ids)
++        if fault == "lost_receipt":
++            raise RuntimeError("receipt lost after commit")
++        return {**result, "deleted_count": 1}
++
++    monkeypatch.setattr(MaterialApplicationService, "batch_delete_materials", dispatch)
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="faulty-batch")
++    )
++    assert result["success"] is False and result["outcome"] == "unknown", result
++    assert result["retryable"] is False
++    after = read()
++    assert [row for row in before if row["id"] not in {1, 2}] == [
++        row for row in after if row["id"] not in {1, 2}
++    ]
++    expected_inactive = 0 if fault == "no_effect" else 1 if fault == "partial" else 2
++    assert sum(row["is_active"] == 0 for row in after if row["id"] in {1, 2}) == expected_inactive
++
++
++@pytest.mark.parametrize("receipt", [None, {"success": True}])
++def test_material_batch_raw_missing_receipt_never_fabricates_count(monkeypatch, receipt):
++    from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
++
++    monkeypatch.setattr(
++        "app.application.get_material_application_service",
++        lambda: SimpleNamespace(batch_delete_materials=lambda ids: receipt),
++    )
++    result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "pro", "")
++    assert result["success"] is False and result["outcome"] == "unknown", result
++    assert "deleted_count" not in result
++
++
++def test_material_batch_inactive_target_is_not_a_new_success(trusted_actor, approved_tool_context):
++    from app.db.models.material import Material
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    with actor.factory.begin() as db:
++        db.query(Material).filter_by(id=2, tenant_id=7).update({"is_active": 0})
++    before = read()
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step,
++        runtime_context=approved_tool_context(actor, step, business_action_id="inactive-batch"),
++    )
++    assert result["success"] is False and read() == before
++
++
++def test_material_batch_saved_success_is_not_its_own_verification(
++    trusted_actor, approved_tool_context
++):
++    from app.application.agent_orchestrator.business_action_verification import verify_action_result
++    from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
++    from app.infrastructure.tenant_scope import tenant_scope
++
++    actor = trusted_actor(permissions=["tool.materials.batch_delete"])
++    read = _material_batch_rows(actor)
++    step = AgentStep(
++        node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [1, 2]}
++    )
++    result = AgentToolExecutor().execute(
++        step, runtime_context=approved_tool_context(actor, step, business_action_id="saved-batch")
++    )
++    assert result["success"] is True, result
++    before = read()
++    with tenant_scope(7):
++        checked, verified = verify_action_result(
++            get_tool_action_spec("materials", "batch_delete"), step.params, result
++        )
++    assert verified is False
++    assert checked["business_verification"]["reason"] == "missing_original_active_targets"
++    assert read() == before
++
++
++def test_material_batch_http_projection_keeps_actual_receipt(monkeypatch):
++    from app.fastapi_routes import materials
++
++    receipt = {"success": True, "message": "actual result", "deleted_count": 1}
++    monkeypatch.setattr(materials, "_run_materials_agent", lambda **kwargs: receipt)
++    response = materials.batch_delete_materials(SimpleNamespace(), {"ids": [1, 2]})
++    assert response.status_code == 200
++    assert json.loads(response.body) == receipt
++
++
++@pytest.mark.parametrize(
++    "data",
++    [{}, {"ids": [1, "bad"]}, {"ids": [1, 1]}, {"ids": [True]}, {"ids": [1], "material_ids": [2]}],
++)
++def test_material_batch_http_bad_targets_never_start_a_task(monkeypatch, data):
++    from app.fastapi_routes import materials
++
++    def forbidden(**kwargs):
++        raise AssertionError("invalid batch must not be scheduled")
++
++    monkeypatch.setattr(materials, "_run_materials_agent", forbidden)
++    response = materials.batch_delete_materials(SimpleNamespace(), data)
++    assert response.status_code == 400
++    assert json.loads(response.body)["error_code"] == "invalid_material_ids"
+diff --git a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+index c7957fcec1..9abd56c6db 100644
+--- a/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
++++ b/FHD/tests/test_application/test_chat_employee_db_workflow_tools.py
+@@ -4,6 +4,13 @@ import pytest
+ 
+ from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+ from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++json_model = workflow_fixtures.json_model
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_engine = workflow_fixtures.workflow_engine
++workflow_model = workflow_fixtures.workflow_model
+ 
+ 
+ def test_workflow_registry_exposes_employee_and_business_db_tools():
+@@ -1028,89 +1035,110 @@ def test_workflow_engine_retries_idempotent_write_once_then_succeeds():
+     assert len(result.attempts) == 2
+ 
+ 
+-def test_agentic_loop_uses_action_name_and_disables_write_retry():
+-    from app.application.workflow.engine import WorkflowEngine
+-    from app.application.workflow.workflow_types import PlanGraph
++def test_agentic_loop_uses_action_name_and_disables_write_retry(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
++    from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
++    from app.application.agent_orchestrator.worker_repository import ClaimedRunRepository
+ 
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
+     calls = []
+ 
+-    def dispatch(tool_id, action, params):
+-        calls.append((tool_id, action))
++    def dispatch(self, step, spec, action, params, runtime_context):
++        calls.append(("business_db", action))
+         return {"success": False, "message": "write rejected"}
+ 
+-    engine = WorkflowEngine(tool_dispatcher=dispatch)
+-    call_count = {"n": 0}
+-
+-    def decide(*args, **kwargs):
+-        call_count["n"] += 1
+-        if call_count["n"] == 1:
+-            return {
+-                "action": "execute",
++    workflow_fixtures.inline_business_adapter(monkeypatch, dispatch)
++    json_model(
++        monkeypatch,
++        [
++            {
+                 "tool_id": "business_db",
+-                "action_name": "write",
+-                "params": {"entity": "products", "operation": "create", "payload": {}},
++                "action": "write",
++                "params": {
++                    "entity": "products",
++                    "operation": "create",
++                    "payload": {"product_name": "rejected product"},
++                },
+                 "reasoning": "write product",
+-            }
+-        return {"action": "done"}
+-
+-    with patch.object(engine, "_llm_decide_next_step", side_effect=decide):
+-        result = engine.run(
+-            PlanGraph(plan_id="p-agentic", intent="agentic"),
+-            runtime_context={"message": "create product"},
+-            max_retries=2,
+-            agentic_loop=True,
+-            tool_registry={
+-                "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
+             },
+-        )
+-
+-    assert calls == [("business_db", "write")]
+-    assert result.node_results[0].retryable is False
+-    assert "副作用" in result.node_results[0].recovery_hint
++            {"action": "done"},
++        ],
++    )
++    first = workflow_engine().run(
++        PlanGraph(plan_id="p-agentic", intent="agentic"),
++        runtime_context={**actor.context, "message": "create product"},
++        max_retries=2,
++        agentic_loop=True,
++        tool_registry={
++            "business_db": {"actions": {"write": {"risk": "medium", "idempotent": False}}}
++        },
++    )
++    run_id = first.final_context["run_id"]
++    assert calls == []
++    grant = http.client.get(f"/api/agent/runs/{run_id}").json()["approval"]["grant"]
++    queued = http.client.post(f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant})
++    assert queued.status_code == 202, queued.text
++    execution = http.queue.claim_run(run_id, "workflow-retry", lease_seconds=60)
++    final = AgentOrchestrator(
++        repository=ClaimedRunRepository(http.repository, execution, "workflow-retry")
++    ).execute_dispatched_run(run_id)
++    result = final.final_output["workflow_result"]["workflow_result"]
++    assert calls == [("business_db", "write")], [
++        (call.tool_id, call.output) for call in final.tool_calls
++    ]
++    assert result["node_results"][0]["retryable"] is False
++    assert "副作用" in result["node_results"][0]["recovery_hint"]
+ 
+ 
+-def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
++def test_ai_chat_agentic_excel_loop_returns_agent_run_trace(
++    trusted_actor,
++    reviewed_agent_http,
++    workflow_model,
++    monkeypatch,
++):
+ 
+     from app.application.ai_chat_app_service import AIChatApplicationService
+-    from app.application.workflow.workflow_types import (
+-        NodeExecutionResult,
+-        PlanGraph,
+-        WorkflowRunResult,
+-    )
++    from app.application.workflow.workflow_types import PlanGraph
+ 
+-    repo = InMemoryAgentRunRepository()
++    actor = trusted_actor()
++    http = reviewed_agent_http(actor)
++    repo = http.repository
+     plan = PlanGraph(
+         plan_id="p-agentic-excel",
+         intent="excel_agentic_analysis",
+         todo_steps=["inspect excel"],
+     )
+-    run_result = WorkflowRunResult(
+-        plan_id="p-agentic-excel",
+-        success=True,
+-        node_results=[
+-            NodeExecutionResult(
+-                node_id="agent_excel_analysis_query",
+-                success=True,
+-                tool_id="excel_analysis",
+-                action="query",
+-                params={"file_path": "/tmp/demo.xlsx", "question": "查价格"},
+-                output={
+-                    "success": True,
+-                    "message": "Excel 分析完成",
+-                    "artifacts": [
+-                        {
+-                            "artifact_type": "excel_query_result",
+-                            "name": "demo.xlsx",
+-                            "source": "excel_analysis.query",
+-                            "summary": "价格列已识别",
+-                        }
+-                    ],
+-                },
+-                duration_ms=7,
+-            )
++
++    workflow_fixtures.inline_business_adapter(
++        monkeypatch,
++        lambda *args: {
++            "success": True,
++            "message": "Excel 分析完成",
++            "artifacts": [
++                {
++                    "artifact_type": "excel_query_result",
++                    "name": "demo.xlsx",
++                    "source": "excel_analysis.query",
++                    "summary": "价格列已识别",
++                }
++            ],
++        },
++    )
++    json_model(
++        monkeypatch,
++        [
++            {
++                "tool_id": "excel_analysis",
++                "action": "query",
++                "params": {"file_path": "/tmp/demo.xlsx", "question": "查价格"},
++            },
++            {"action": "done"},
+         ],
+-        final_context={"workflow_status": {"state": "completed"}},
+-        message="AgenticLoop 完成（2 步）",
+     )
+ 
+     with (
+@@ -1139,18 +1167,22 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
+         )
+         service.approval_service = Mock()
+         service.approval_service.get_approval_required_nodes.return_value = []
+-        service.workflow_engine.run = Mock(return_value=run_result)
++        service.workflow_engine = workflow_engine()
++        original_run = service.workflow_engine.run
++        service.workflow_engine.run = Mock(wraps=original_run)
+ 
+         result = service._try_handle_dynamic_workflow(
+             user_id="u1",
+             message="分析这个 Excel 下一步",
+             source="pro",
+-            context={"excel_analysis": {"file_path": "/tmp/demo.xlsx"}},
++            context={**actor.context, "excel_analysis": {"file_path": "/tmp/demo.xlsx"}},
+             file_context={},
+         )
+ 
+     assert result is not None
+-    assert result["success"] is True
++    assert result["success"] is True, [
++        (call.tool_id, call.output) for call in repo.get(result["run_id"]).tool_calls
++    ]
+     assert result["data"]["action"] == "workflow_done"
+     assert result["run_id"]
+     runtime_context = service.workflow_engine.run.call_args.kwargs["runtime_context"]
+@@ -1160,7 +1192,8 @@ def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
+     run = repo.get(result["run_id"])
+     assert run is not None
+     assert run.status == "completed"
+-    assert run.metadata["trace_mode"] == "agentic_loop_bridge"
++    assert run.metadata["execution_kernel"] == "workflow_agentic"
++    assert all(not call.metadata.get("observed") for call in run.tool_calls)
+     assert run.metadata["tool_call_count"] == 1
+     assert run.metadata["artifact_count"] == 1
+     assert run.tool_calls[0].tool_id == "excel_analysis"
+diff --git a/FHD/tests/test_application/test_workflow_engine.py b/FHD/tests/test_application/test_workflow_engine.py
+index 0c3d17b984..98ed8fcec4 100644
+--- a/FHD/tests/test_application/test_workflow_engine.py
++++ b/FHD/tests/test_application/test_workflow_engine.py
+@@ -12,6 +12,11 @@ from app.application.workflow.workflow_types import (
+     WorkflowNode,
+     WorkflowRunResult,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_model = workflow_fixtures.workflow_model
+ 
+ 
+ def _make_engine(dispatch_result=None):
+@@ -322,7 +327,11 @@ class TestWorkflowEngineAgenticLoop:
+         assert result.success is False
+         assert len(result.node_results) == 0
+ 
+-    def test_agentic_loop_execute_then_done(self):
++    def test_agentic_loop_execute_then_done(
++        self, trusted_actor, reviewed_agent_http, workflow_model
++    ):
++        actor = trusted_actor()
++        reviewed_agent_http(actor)
+         engine = _make_engine({"success": True, "data": []})
+         call_count = 0
+ 
+@@ -343,7 +352,7 @@ class TestWorkflowEngineAgenticLoop:
+             plan = _simple_plan()
+             result = engine.run(
+                 plan,
+-                runtime_context={"message": "test"},
++                runtime_context={**actor.context, "message": "test"},
+                 agentic_loop=True,
+                 tool_registry={"products": {"actions": {"query": {"risk": "low"}}}},
+             )
+diff --git a/FHD/tests/test_application/test_workflow_engine_cov.py b/FHD/tests/test_application/test_workflow_engine_cov.py
+index 3f0048a7a5..6833543a03 100644
+--- a/FHD/tests/test_application/test_workflow_engine_cov.py
++++ b/FHD/tests/test_application/test_workflow_engine_cov.py
+@@ -23,6 +23,11 @@ from app.application.workflow.workflow_types import (
+     WorkflowNode,
+     WorkflowRunResult,
+ )
++from tests.test_application import test_workflow_model_turn as workflow_fixtures
++
++reviewed_agent_http = workflow_fixtures.reviewed_agent_http
++trusted_actor = workflow_fixtures.trusted_actor
++workflow_model = workflow_fixtures.workflow_model
+ 
+ # ---------------------------------------------------------------------------
+ # Helpers
+@@ -233,7 +238,9 @@ class TestAgenticLoopDoneBranch:
+         assert result.node_results == []
+         assert result.success is False
+ 
+-    def test_max_steps_warning_logged(self):
++    def test_max_steps_warning_logged(self, trusted_actor, reviewed_agent_http, workflow_model):
++        actor = trusted_actor()
++        reviewed_agent_http(actor)
+         """Lines 231-232: step >= max_steps → warning is logged."""
+         engine = _make_engine({"success": True})
+         plan = _plan([_node()])
+@@ -253,9 +260,9 @@ class TestAgenticLoopDoneBranch:
+         ):
+             result = engine._run_agentic_loop(
+                 plan=plan,
+-                runtime_context={"message": "loop"},
++                runtime_context={**actor.context, "message": "loop"},
+                 max_retries=0,
+-                tool_registry={"products": {}},
++                tool_registry={"products": {"actions": {"query": {}}}},
+                 user_id=None,
+             )
+ 
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered.py b/FHD/tests/test_services/test_tools_workflow_registered.py
+index 0ba3b3549c..5bf7a8fb6f 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered.py
+@@ -313,15 +313,17 @@ class TestMaterialsRouter:
+     @pytest.mark.parametrize("ids,error", [([1], False), ([1, 2, 3], False), ([1, 2], True)])
+     def test_batch_delete_action(self, ids, error):
+         mock_svc = MagicMock()
+-        mock_svc.batch_delete_materials.return_value = {"success": True}
++        mock_svc.batch_delete_materials.return_value = {"success": True, "deleted_count": len(ids)}
+         if error:
+             mock_svc.batch_delete_materials.side_effect = RuntimeError("db down")
+         with patch("app.application.get_material_application_service", return_value=mock_svc):
+             result = _registered_router_materials("batch_delete", {"ids": ids}, {}, "admin", "")
+-            assert result["success"] is True
+-            assert result["deleted_count"] == len(ids)
+             if error:
+-                assert "warning" in result
++                assert result["success"] is False and result["outcome"] == "unknown"
++                assert "deleted_count" not in result and "warning" not in result
++            else:
++                assert result["success"] is True
++                assert result["deleted_count"] == len(ids)
+ 
+     def test_export_action(self):
+         mock_svc = MagicMock()
+diff --git a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+index c5f9f1c3fa..6e791e8ee4 100644
+--- a/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
++++ b/FHD/tests/test_services/test_tools_workflow_registered_ext2.py
+@@ -702,13 +702,13 @@ class TestMaterialsRouterBranches:
+         svc.batch_delete_materials.side_effect = RuntimeError("db error")
+         with patch("app.application.get_material_application_service", return_value=svc):
+             result = _registered_router_materials("batch_delete", {"ids": [1]}, {}, "admin", "")
+-        assert result["success"] is True
+-        assert "db error" in result["warning"]
++        assert result["success"] is False and result["outcome"] == "unknown"
++        assert "deleted_count" not in result and "warning" not in result
+ 
+     def test_batch_delete_non_dict_result(self):
+         svc = MagicMock()
+         svc.batch_delete_materials.return_value = None
+         with patch("app.application.get_material_application_service", return_value=svc):
+             result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "admin", "")
+-        assert result["success"] is True
+-        assert result["deleted_count"] == 2
++        assert result["success"] is False and result["outcome"] == "unknown"
++        assert "deleted_count" not in result

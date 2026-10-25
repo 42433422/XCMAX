@@ -1,0 +1,5 @@
+snapshot timezone: Asia/Shanghai (Mac local)
+worktree: /Users/a4243342/.codex/worktrees/b9cc/XCMAX
+Codex (ChatGPT) UI + exec-server processes are running.
+Earlier this session a bash job was grepping ownership tests under ~/.codex/worktrees and ~/.trae-cn — treat b9cc as potentially shared; do not reset/clean.
+No active pytest writer against b9cc confirmed at packaging time.

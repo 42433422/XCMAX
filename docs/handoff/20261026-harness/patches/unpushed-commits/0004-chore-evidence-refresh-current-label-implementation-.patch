@@ -1,0 +1,23 @@
+From dc1f3b39fbe63942ca430867f1e8b0fcb9a13862 Mon Sep 17 00:00:00 2001
+From: 4243342 <4243342@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 18:24:58 +0800
+Subject: [PATCH 04/43] chore(evidence): refresh current label implementation
+ date
+
+
+diff --git "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/erp-label.html" "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/erp-label.html"
+index 49ee4181c8..456f76a5d6 100644
+--- "a/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/erp-label.html"
++++ "b/\346\210\220\351\203\275\344\277\256\350\214\210\347\247\221\346\212\200\346\234\211\351\231\220\345\205\254\345\217\270/capabilities/feature/erp-label.html"
+@@ -35,7 +35,7 @@
+       <div>
+         <span class="eyebrow">ERP 与业务文件 / 单据与打印</span>
+         <h1>标签打印</h1>
+-        <div class="cap-feature-meta"><span class="cap-status st-partial">部分验证</span><span class="cap-platform cap-platform--verified">Web · 已验证</span><span>代码更新于 2026-09-30</span></div>
++        <div class="cap-feature-meta"><span class="cap-status st-partial">部分验证</span><span class="cap-platform cap-platform--verified">Web · 已验证</span><span>代码更新于 2026-10-25</span></div>
+         <p>单张标签打印与工作流批量标签调度，支持产品查找联动，面向生产现场贴标场景。</p>
+       </div>
+       <div class="page-hero-side"><p><a class="btn btn-secondary btn-sm" href="/capabilities/catalog.html?domain=erp">返回 ERP 与业务文件</a></p></div>
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,0 +1,8 @@
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/ARCHIVE_POINTER.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/AGENTS.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/config/ssot.yaml
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/SSOT_INDEX.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/DEV_TOOLS_INVENTORY.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/docs/evidence/e2e/feature-acceptance-20260922/WINDOWS-HANDOFF.md
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/push_preflight.py
+/Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD/scripts/dev/check_net_deletion.py

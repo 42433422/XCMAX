@@ -1,0 +1,344 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.15, pytest-9.1.1, pluggy-1.6.0
+rootdir: /Users/a4243342/.codex/worktrees/b9cc/XCMAX/FHD
+configfile: pyproject.toml
+plugins: mock-3.15.1, cov-7.1.0, asyncio-1.4.0, anyio-4.14.2, langsmith-0.10.17
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 44 items / 30 deselected / 14 selected
+
+tests/test_application/test_business_action_ledger.py FFFFFFF.....FF     [100%]
+
+=================================== FAILURES ===================================
+_ test_material_batch_delete_checks_original_targets_and_replays_without_dispatch _
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10c558e00>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10c5594e0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b8b7f10>
+
+    def test_material_batch_delete_checks_original_targets_and_replays_without_dispatch(
+        trusted_actor, approved_tool_context, monkeypatch
+    ):
+        from app.application.material_app_service import MaterialApplicationService
+    
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": [2, 1]})
+        context = approved_tool_context(actor, step, business_action_id="material-batch")
+        result = AgentToolExecutor().execute(step, runtime_context=context)
+>       assert result["success"] is True and result["deleted_count"] == 2, result
+E       AssertionError: {'success': False, 'outcome': 'unknown', 'error_code': 'business_action_reconciliation_required', 'retryable': False, ...}
+E       assert (False is True)
+
+tests/test_application/test_business_action_ledger.py:703: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids0] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10b97bce0>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10fb298a0>
+ids = [1, 9001]
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 23, 745886), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None,...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids1] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10b6bb740>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10fd009a0>
+ids = [1, 404]
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 24, 12922), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, ...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids2] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10cce42c0>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10fc64e00>
+ids = [1, 1]
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 24, 340540), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None,...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids3] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10fceb420>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10cce7060>
+ids = [True]
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 24, 602777), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None,...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids4] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10b4cfce0>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10fbbcd60>
+ids = [1.5]
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 24, 857007), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None,...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+______ test_material_batch_invalid_targets_have_no_partial_effects[ids5] _______
+
+trusted_actor = <function trusted_actor.<locals>.create at 0x10fe380e0>
+approved_tool_context = <function approved_tool_context.<locals>.approve at 0x10fe3be20>
+ids = ['1']
+
+    @pytest.mark.parametrize("ids", [[1, 9001], [1, 404], [1, 1], [True], [1.5], ["1"], []])
+    def test_material_batch_invalid_targets_have_no_partial_effects(
+        trusted_actor, approved_tool_context, ids
+    ):
+        actor = trusted_actor(permissions=["tool.materials.batch_delete"])
+        read = _material_batch_rows(actor)
+        before = read()
+        step = AgentStep(node_id="batch", tool_id="materials", action="batch_delete", params={"ids": ids})
+        result = AgentToolExecutor().execute(
+            step, runtime_context=approved_tool_context(actor, step, business_action_id="invalid-batch")
+        )
+        assert result["success"] is False, result
+>       assert read() == before
+E       AssertionError: assert [{'id': 1, 'm...enant_id': 8}] == [{'id': 1, 'm...enant_id': 8}]
+E         
+E         At index 0 diff: {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None, 'warehouse_location': None, 'min_stock': 0.0, 'max_stock': 0.0, 'description': None, 'is_active': 0, 'created_at': None, 'updated_at': datetime.datetime(2026, 10, 26, 3, 10, 25, 157499), 'tenant_id': 7} != {'id': 1, 'material_code': 'BATCH-1', 'name': 'resin-1', 'category': None, 'specification': None, 'unit': '个', 'quantity': 0.0, 'unit_price': Decimal('0.00'), 'supplier': None,...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_application/test_business_action_ledger.py:734: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+WARNING  app.infrastructure.mods.manifest:manifest.py:173 [parse_manifest] Mod manifest not found
+_____ test_material_batch_raw_missing_receipt_never_fabricates_count[None] _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10fa374d0>
+receipt = None
+
+    @pytest.mark.parametrize("receipt", [None, {"success": True}])
+    def test_material_batch_raw_missing_receipt_never_fabricates_count(monkeypatch, receipt):
+        from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
+    
+        monkeypatch.setattr(
+            "app.application.get_material_application_service",
+            lambda: SimpleNamespace(batch_delete_materials=lambda ids: receipt),
+        )
+        result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "pro", "")
+>       assert result["success"] is False and result["outcome"] == "unknown", result
+E       AssertionError: {'success': True, 'message': '已删除 2 条记录', 'deleted_count': 2}
+E       assert (True is False)
+
+tests/test_application/test_business_action_ledger.py:785: AssertionError
+___ test_material_batch_raw_missing_receipt_never_fabricates_count[receipt1] ___
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10fa37690>
+receipt = {'success': True, 'deleted_count': 2}
+
+    @pytest.mark.parametrize("receipt", [None, {"success": True}])
+    def test_material_batch_raw_missing_receipt_never_fabricates_count(monkeypatch, receipt):
+        from app.domain.shared_services.tools_workflow_erp_master import _registered_router_materials
+    
+        monkeypatch.setattr(
+            "app.application.get_material_application_service",
+            lambda: SimpleNamespace(batch_delete_materials=lambda ids: receipt),
+        )
+        result = _registered_router_materials("batch_delete", {"ids": [1, 2]}, {}, "pro", "")
+>       assert result["success"] is False and result["outcome"] == "unknown", result
+E       AssertionError: {'success': True, 'deleted_count': 2}
+E       assert (True is False)
+
+tests/test_application/test_business_action_ledger.py:785: AssertionError
+- generated xml file: /Users/a4243342/XCMAX-runtime/agent-scratch/harness-remediation-20261025/material-batch-verification-20261026/red-corrected.xml -
+=========================== short test summary info ============================
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_delete_checks_original_targets_and_replays_without_dispatch
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids0]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids1]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids2]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids3]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids4]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_invalid_targets_have_no_partial_effects[ids5]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_raw_missing_receipt_never_fabricates_count[None]
+FAILED tests/test_application/test_business_action_ledger.py::test_material_batch_raw_missing_receipt_never_fabricates_count[receipt1]
+================== 9 failed, 5 passed, 30 deselected in 4.31s ==================
