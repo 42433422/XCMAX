@@ -142,7 +142,7 @@ def test_legacy_history_routes_cannot_access_other_owners_session(store, monkeyp
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.fastapi_routes.domains.conversation.routes import router
+    from app.fastapi_routes.domains.conversation.conversation_routes import router
 
     store.save_message(session_id="private-route", user_id=41, role="user", content="本人内容")
     monkeypatch.setattr(

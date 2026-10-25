@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.customer import routes as cust_routes
-from app.fastapi_routes.domains.customer.routes import (
+from app.fastapi_routes.domains.customer.customer_routes import (
     _agent_node_output,
     _customers_agent_user_id,
     _execute_customers_route_action,
@@ -136,7 +136,7 @@ class TestCustomersAgentUserId:
 class TestExecuteCustomersRouteAction:
     def test_create_success(self):
         with patch(
-            "app.fastapi_routes.domains.customer.routes._customer_pg_insert",
+            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert",
             return_value={"id": 1, "name": "A"},
         ):
             result = _execute_customers_route_action("create", {"customer_name": "A"})
@@ -150,7 +150,8 @@ class TestExecuteCustomersRouteAction:
 
     def test_update_success(self):
         with patch(
-            "app.fastapi_routes.domains.customer.routes._customer_pg_update", return_value={"id": 5}
+            "app.fastapi_routes.domains.customer.customer_routes._customer_pg_update",
+            return_value={"id": 5},
         ):
             result = _execute_customers_route_action("update", {"id": 5, "name": "B"})
         assert result["success"] is True
@@ -166,7 +167,7 @@ class TestExecuteCustomersRouteAction:
         assert "不能为空" in result["message"]
 
     def test_delete_success(self):
-        with patch("app.fastapi_routes.domains.customer.routes._customer_delete_unified"):
+        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
             result = _execute_customers_route_action("delete", {"id": 10})
         assert result["success"] is True
 
@@ -175,7 +176,7 @@ class TestExecuteCustomersRouteAction:
         assert result["success"] is False
 
     def test_batch_delete_success(self):
-        with patch("app.fastapi_routes.domains.customer.routes._customer_delete_unified"):
+        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
             result = _execute_customers_route_action("batch_delete", {"ids": [1, 2, 3]})
         assert result["success"] is True
         assert result["deleted"] == 3
@@ -189,7 +190,7 @@ class TestExecuteCustomersRouteAction:
         assert result["success"] is False
 
     def test_batch_delete_invalid_id_skipped(self):
-        with patch("app.fastapi_routes.domains.customer.routes._customer_delete_unified"):
+        with patch("app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified"):
             result = _execute_customers_route_action("batch_delete", {"ids": [1, "abc", 2]})
         assert result["deleted"] == 2
         assert "abc" in result["skipped"]
@@ -200,7 +201,7 @@ class TestExecuteCustomersRouteAction:
                 raise HTTPException(status_code=404)
 
         with patch(
-            "app.fastapi_routes.domains.customer.routes._customer_delete_unified",
+            "app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified",
             side_effect=_raise_404,
         ):
             result = _execute_customers_route_action("batch_delete", {"ids": [1, 2]})
@@ -212,7 +213,7 @@ class TestExecuteCustomersRouteAction:
             raise HTTPException(status_code=500)
 
         with patch(
-            "app.fastapi_routes.domains.customer.routes._customer_delete_unified",
+            "app.fastapi_routes.domains.customer.customer_routes._customer_delete_unified",
             side_effect=_raise_500,
         ):
             with pytest.raises(HTTPException):
@@ -225,7 +226,7 @@ class TestExecuteCustomersRouteAction:
 
 
 # Shorthand for the routes module target path
-_ROUTES = "app.fastapi_routes.domains.customer.routes"
+_ROUTES = "app.fastapi_routes.domains.customer.customer_routes"
 # Lazy-import source: erp_customers_facade is imported inside functions
 _FACADE = "app.mod_sdk.erp_customers_facade"
 
@@ -459,7 +460,7 @@ class TestCustomersExportStub:
         # /customers/export conflicts with /customers/{customer_id}
         # The route is registered but the path matches customer_id="export"
         # The route itself raises 501 when directly invoked as a function
-        from app.fastapi_routes.domains.customer.routes import customers_export_stub
+        from app.fastapi_routes.domains.customer.customer_routes import customers_export_stub
 
         with pytest.raises(HTTPException) as exc_info:
             customers_export_stub()

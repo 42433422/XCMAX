@@ -225,7 +225,7 @@ def ai_sqlite_import_unit_products(body: dict = Body(default_factory=dict)):
     try:
         from app.application.agent_orchestrator import AgentOrchestrator
         from app.application.agent_orchestrator.tool_spec import validate_tool_call
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         data = body or {}
         saved_name = str(data.get("saved_name") or "").strip()

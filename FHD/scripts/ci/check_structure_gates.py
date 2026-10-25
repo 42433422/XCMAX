@@ -31,7 +31,7 @@ BASELINE = {
     "mixin_total": 12,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
-    "routes_total": 304,
+    "routes_total": 298,
     "routes_top_level": 115,
     "legacy_prod_ref_files": 27,
     "application_ports_py": 1,

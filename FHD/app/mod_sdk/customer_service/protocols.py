@@ -1,4 +1,4 @@
-"""Compat module path: debt19 renamed ports → customer_service_ports."""
+"""Feature protocols (debt19; was ports.py)."""
 
 from __future__ import annotations
 

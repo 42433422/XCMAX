@@ -8,9 +8,8 @@ from typing import Any
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
+from app.application.market_bridge.protocols import LatestToken, ProxyJSON, SaveToken
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-from .port_contracts import LatestToken, ProxyJSON, SaveToken
 
 
 @dataclass

@@ -1252,7 +1252,9 @@ class TestShipmentApprovalApproveRoute:
         with (
             patch("app.application.workflow.get_approval_service") as mock_get,
             patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
-            patch("app.fastapi_routes.domains.shipment.routes._dispatch_tool_for_approval"),
+            patch(
+                "app.fastapi_routes.domains.shipment.shipment_routes._dispatch_tool_for_approval"
+            ),
         ):
             svc = MagicMock()
             svc.approve.return_value = True

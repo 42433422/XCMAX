@@ -140,17 +140,17 @@
     }
   },
   "oversized_routers": {
-    "FHD/app/fastapi_routes/domains/misc/routes.py": {
+    "FHD/app/fastapi_routes/domains/misc/misc_routes.py": {
       "stack": "fhd_backend",
       "routes": 41,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/domains/static/routes.py": {
+    "FHD/app/fastapi_routes/domains/static/static_routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/domains/system/routes.py": {
+    "FHD/app/fastapi_routes/domains/system/system_routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20

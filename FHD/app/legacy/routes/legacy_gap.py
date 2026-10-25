@@ -10,12 +10,12 @@ from fastapi import FastAPI
 logger = logging.getLogger(__name__)
 
 _LEGACY_GAP_DOMAIN_MODULES: tuple[str, ...] = (
-    "app.fastapi_routes.domains.conversation.routes",
-    "app.fastapi_routes.domains.excel.routes",
-    "app.fastapi_routes.domains.product.routes",
-    "app.fastapi_routes.domains.static.routes",
-    "app.fastapi_routes.domains.system.routes",
-    "app.fastapi_routes.domains.shipment.routes",
+    "app.fastapi_routes.domains.conversation.conversation_routes",
+    "app.fastapi_routes.domains.excel.excel_routes",
+    "app.fastapi_routes.domains.product.product_routes",
+    "app.fastapi_routes.domains.static.static_routes",
+    "app.fastapi_routes.domains.system.system_routes",
+    "app.fastapi_routes.domains.shipment.shipment_routes",
 )
 
 

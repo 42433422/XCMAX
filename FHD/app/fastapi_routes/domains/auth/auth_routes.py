@@ -17,6 +17,7 @@ from fastapi.background import BackgroundTasks as BackgroundTasks
 
 import app.domain.app_pure.enterprise_registration_response as registration_response
 from app.db.models.user import User
+from app.domain.auth.ports import JsonObject
 from app.infrastructure.auth.dependencies import (
     get_logged_in_user,
     require_permission,
@@ -35,7 +36,6 @@ from .credential_login import CredentialLogin
 from .credential_routes import CredentialRoutes
 from .federated_login import FederatedLogin
 from .federated_routes import FederatedRoutes
-from .port_contracts import JsonObject
 from .profile_routes import ProfileRoutes
 from .recovery_routes import RecoveryRoutes
 from .registration import Registration, open_registration_allowed

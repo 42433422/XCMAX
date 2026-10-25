@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import AdminGate, ErrorPolicy, RefreshEntitlements
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, RefreshEntitlements
 
 
 class Impersonation:

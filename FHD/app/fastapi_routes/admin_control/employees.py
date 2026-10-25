@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import ErrorPolicy
+from app.application.admin_control.protocols import ErrorPolicy
 
 
 class LocalEmployees:

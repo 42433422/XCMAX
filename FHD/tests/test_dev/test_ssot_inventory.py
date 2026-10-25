@@ -43,7 +43,7 @@ def test_is_normative_recognizes_patterns():
 
 def test_domain_registered_in_registry():
     """dev-inventory 域已在 ssot.yaml 注册且 enabled。"""
-    from scripts.dev.ssot_plugins.base import find_domain, load_registry
+    from scripts.dev.ssot_plugins.plugin_base import find_domain, load_registry
 
     d = find_domain(load_registry(), "dev-inventory")
     assert d is not None, "dev-inventory 域未注册"

@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import AdminGate, ErrorPolicy, MarketProxy
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, MarketProxy
 
 
 class CustomerTickets:

@@ -1,0 +1,68 @@
+{
+  "2_ports": 12,
+  "3_layers": [
+    "application",
+    "domain",
+    "infrastructure"
+  ],
+  "10_legacy": 47,
+  "11": {
+    "types.py": 7,
+    "base.py": 8,
+    "routes.py": 0,
+    "paths.py": 13,
+    "convert.py": 15
+  },
+  "12_merged_top": [
+    [
+      136.6,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged.py"
+    ],
+    [
+      123.2,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged.py"
+    ],
+    [
+      123.2,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged.py"
+    ],
+    [
+      90.5,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py"
+    ],
+    [
+      89.4,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py"
+    ]
+  ],
+  "13_gt100kb": [
+    [
+      205.3,
+      "FHD/evals/run_agent_eval.py"
+    ],
+    [
+      171.4,
+      "FHD/packages/xcagi_langgraph_core/langgraph/pregel/main.py"
+    ],
+    [
+      136.6,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged.py"
+    ],
+    [
+      123.2,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged.py"
+    ],
+    [
+      123.2,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged.py"
+    ]
+  ],
+  "14_fastapi_routes_py": 301,
+  "15_pregel_kb": 171.4,
+  "20_package_json": 10,
+  "1_app_domain": {
+    "app_py": 592,
+    "domain_py": 346,
+    "ratio_py": 1.711
+  }
+}

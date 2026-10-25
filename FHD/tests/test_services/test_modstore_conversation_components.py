@@ -455,7 +455,7 @@ def test_capabilities_import_without_importing_public_adapter():
             "-c",
             "import importlib, sys; prefix='app.application.'; "
             "[importlib.import_module(prefix+'market_llm.'+name) for name in "
-            "('ports','authentication','catalog','multimodal','responses','routing',"
+            "('protocols','authentication','catalog','multimodal','responses','routing',"
             "'completions','streaming','account_queries')]; "
             "importlib.import_module('app.legacy.market_llm.openai_compat'); assert 'app.domain.shared_services.conversation.modstore_adapter' not in sys.modules",
         ],

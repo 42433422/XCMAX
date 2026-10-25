@@ -2664,7 +2664,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "set_default_printer").strip().lower()
@@ -2928,7 +2928,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.misc.routes import router
+    from app.fastapi_routes.domains.misc.misc_routes import router
     from app.services import user_memory_service as memory_mod
 
     expected = dict(task.get("expected") or {})
@@ -3554,10 +3554,10 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
-    import app.application.excel_imports as excel_imports
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
+    import app.application.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.legacy.routes.product import compat_routes as product_compat_routes
 
@@ -4126,7 +4126,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.domains.system.system_routes import router
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     expected = dict(task.get("expected") or {})
@@ -4213,7 +4213,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -4332,7 +4332,7 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from openpyxl import Workbook
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.excel.routes import router
+    from app.fastapi_routes.domains.excel.excel_routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -4410,7 +4410,7 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.excel.routes import router
+    from app.fastapi_routes.domains.excel.excel_routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -4510,7 +4510,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.domains.system.system_routes import router
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower() or "create"
@@ -4670,8 +4670,11 @@ def _run_agent_run_memory_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
+    from app.domain.shared_services.user_memory_service import (
+        UserMemoryService,
+        reset_user_memory_service,
+    )
     from app.services import user_memory_service as memory_module
-    from app.domain.shared_services.user_memory_service import UserMemoryService, reset_user_memory_service
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -4799,9 +4802,8 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.types import PlanGraph, WorkflowNode
-
     from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -4901,8 +4903,11 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_governance_task(task: dict[str, Any]) -> dict[str, Any]:
+    from app.domain.shared_services.user_memory_service import (
+        UserMemoryService,
+        reset_user_memory_service,
+    )
     from app.services import user_memory_service as memory_module
-    from app.domain.shared_services.user_memory_service import UserMemoryService, reset_user_memory_service
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -5064,7 +5069,7 @@ def _run_memory_v2_governance_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_plan(task: dict[str, Any]):
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan_data = dict(task.get("plan") or {})
     nodes = [

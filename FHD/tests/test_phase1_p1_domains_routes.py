@@ -419,7 +419,7 @@ def misc_client() -> TestClient:
 
 def test_fhd_db_write_token_verify_no_config(misc_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.misc.routes.configured_db_write_token",
+        "app.fastapi_routes.domains.misc.misc_routes.configured_db_write_token",
         return_value="",
     ):
         r = misc_client.post("/fhd/db-write-token/verify", json={"token": "x"})
@@ -428,7 +428,7 @@ def test_fhd_db_write_token_verify_no_config(misc_client: TestClient) -> None:
 
 def test_fhd_db_read_token_verify(misc_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.misc.routes.effective_db_read_token",
+        "app.fastapi_routes.domains.misc.misc_routes.effective_db_read_token",
         return_value="secret",
     ):
         r = misc_client.post("/fhd/db-read-token/verify", json={"token": "secret"})
