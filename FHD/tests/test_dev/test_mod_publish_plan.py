@@ -19,6 +19,14 @@ def git(root, *args):
     return plan.run(root, "git", *args)
 
 
+def commit_main(root, message):
+    git(root, "add", "FHD")
+    git(root, "commit", "-qm", message)
+    sha = git(root, "rev-parse", "HEAD")
+    git(root, "update-ref", "refs/remotes/origin/main", sha)
+    return sha
+
+
 def write_mod(root, source, version="1.0.0"):
     directory = root / source
     directory.mkdir(parents=True, exist_ok=True)
@@ -34,8 +42,9 @@ def repository(tmp_path):
     git(tmp_path, "config", "user.email", "fixture@example.invalid")
     for source in (
         "FHD/mods/_employees/employee-one",
+        "FHD/mods/host-one",
+        "FHD/XCAGI/mods/industry-one",
         "FHD/mods/xcagi-customer-service-bridge",
-        "FHD/XCAGI/mods/xcagi-customer-service-bridge",
     ):
         write_mod(tmp_path, source)
     git(tmp_path, "add", "FHD")
@@ -58,32 +67,26 @@ def test_changed_path_uses_package_root_not_parent_of_leaf(path, expected):
     assert plan.source_root(path) == expected
 
 
-def test_exact_main_ancestor_and_canonical_bridge(repository):
-    source = "FHD/mods/xcagi-customer-service-bridge"
-    write_mod(repository, source, "1.0.0.1")
-    git(repository, "add", "FHD")
-    git(repository, "commit", "-qm", "versioned fixes")
-    sha = git(repository, "rev-parse", "HEAD")
+def test_exact_main_ancestor_and_all_source_roots(repository):
+    for source in (
+        "FHD/mods/_employees/employee-one", "FHD/mods/host-one", "FHD/XCAGI/mods/industry-one",
+    ):
+        write_mod(repository, source, "1.0.1")
+    canonical = "FHD/mods/xcagi-customer-service-bridge"
+    write_mod(repository, canonical, "1.0.0.1")
+    sha = commit_main(repository, "versioned fixes")
     git(repository, "commit", "--allow-empty", "-qm", "unrelated metrics")
     git(repository, "update-ref", "refs/remotes/origin/main", "HEAD")
     git(repository, "checkout", "--detach", sha)
     rows = plan.discover(repository, sha)
-    assert rows == [
-        {"id": "xcagi-customer-service-bridge", "source": source, "version": "1.0.0.1"}
-    ]
+    by_id = {row["id"]: row for row in rows}
+    expected_ids = "employee-one host-one industry-one xcagi-customer-service-bridge"
+    assert by_id.keys() == set(expected_ids.split())
+    assert {row["version"] for row in rows} == {"1.0.1", "1.0.0.1"}
+    bridge = by_id["xcagi-customer-service-bridge"]
+    assert (bridge["source"], bridge["version"]) == (canonical, "1.0.0.1")
     with pytest.raises(ValueError, match="HEAD"):
         plan.discover(repository, "a" * 40)
-
-
-def test_source_only_change_requires_version_bump(repository):
-    source = repository / "FHD/XCAGI/mods/xcagi-customer-service-bridge/backend/worker.py"
-    source.write_text("fixed source\n")
-    git(repository, "add", "FHD")
-    git(repository, "commit", "-qm", "missing version bump")
-    sha = git(repository, "rev-parse", "HEAD")
-    git(repository, "update-ref", "refs/remotes/origin/main", sha)
-    with pytest.raises(ValueError, match="strictly higher manifest.version"):
-        plan.discover(repository, sha)
 
 
 def test_branch_only_source_rejected(repository):
@@ -94,17 +97,16 @@ def test_branch_only_source_rejected(repository):
 
 
 def test_changed_mirror_cannot_publish_over_stale_canonical(repository):
-    source = "FHD/XCAGI/mods/xcagi-customer-service-bridge"
-    write_mod(repository, source, "1.0.0.0")
-    git(repository, "add", "FHD")
-    git(repository, "commit", "-qm", "baseline mirror")
+    source = "FHD/XCAGI/mods/host-one"
+    write_mod(repository, source)
+    commit_main(repository, "baseline mirror")
+    (repository / source / "backend/worker.py").write_text("fixed source\n")
+    with pytest.raises(ValueError, match="strictly higher manifest.version"):
+        plan.discover(repository, commit_main(repository, "source changed without version bump"))
+
     write_mod(repository, source, "1.0.1")
-    git(repository, "add", "FHD")
-    git(repository, "commit", "-qm", "mirror only fix")
-    sha = git(repository, "rev-parse", "HEAD")
-    git(repository, "update-ref", "refs/remotes/origin/main", sha)
     with pytest.raises(ValueError, match="canonical source disagree"):
-        plan.discover(repository, sha)
+        plan.discover(repository, commit_main(repository, "mirror only fix"))
 
 
 def test_required_checks_use_exact_sha_latest_attempt_and_expected_app():
