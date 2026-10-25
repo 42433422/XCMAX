@@ -12,5 +12,5 @@ __all__ = ["auth", "routes"]
 
 def __getattr__(name: str) -> ModuleType:
     if name in {"routes", "_routes"}:
-        return import_module(f"{__name__}.routes")
+        return import_module(f"{__name__}.auth_routes")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
