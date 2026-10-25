@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 @dataclass
 class SagaStep:
@@ -29,13 +31,13 @@ class OrchestrationSaga:
             try:
                 step.action(context)
                 completed.append(step.name)
-            except Exception as exc:  # noqa: BLE001
+            except BOUNDARY_ERRORS as exc:
                 for name in reversed(completed):
                     comp = next((s.compensate for s in self.steps if s.name == name), None)
                     if comp:
                         try:
                             comp(context)
-                        except Exception:  # noqa: BLE001
+                        except BOUNDARY_ERRORS:
                             pass
                 return SagaResult(ok=False, completed=completed, error=str(exc))
         return SagaResult(ok=True, completed=completed)
