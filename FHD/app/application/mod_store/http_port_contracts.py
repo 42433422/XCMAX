@@ -5,9 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Protocol
 
-from app.infrastructure.mods.manifest import ModMetadata
-
 from app.fastapi_routes.mod_store.schemas import ModStoreInstallResult
+from app.infrastructure.mods.manifest import ModMetadata
 
 Payload = dict[str, Any]
 

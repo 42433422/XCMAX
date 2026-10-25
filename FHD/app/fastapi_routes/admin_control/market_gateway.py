@@ -8,8 +8,15 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.application.admin_control.protocols import (
+    AdminGate,
+    ErrorPolicy,
+    LocalProxy,
+    MarketProxy,
+    MarketTransport,
+)
+
 from .common import read_json_object
-from app.application.admin_control.protocols import AdminGate, ErrorPolicy, LocalProxy, MarketProxy, MarketTransport
 
 
 class MarketGateway:

@@ -10,11 +10,6 @@ from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
 from app.application.session_account_meta import AccountKind
-from app.http.error_codes import (
-    INVALID_INPUT,
-    error_envelope,
-)
-
 from app.domain.auth.ports import (
     AttachCookie,
     ErrorTypes,
@@ -24,6 +19,10 @@ from app.domain.auth.ports import (
     MarketFirstLogin,
     MarketPasswordLogin,
     RouteResult,
+)
+from app.http.error_codes import (
+    INVALID_INPUT,
+    error_envelope,
 )
 
 

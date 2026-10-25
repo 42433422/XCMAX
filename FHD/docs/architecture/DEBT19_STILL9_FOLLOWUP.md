@@ -14,12 +14,12 @@
 | 10 legacy | 47 | |
 | 11 same-name | types7/base8/routes0/paths13/convert15 | renamed/deleted first-party shims |
 | 14 fastapi_routes | 301 | moved HTTP port_contracts out |
-| 20 package.json | 10 | removed nested compat-resource-glob manifests |
 
 ## Intentionally still STILL (CI-honest)
 
 | # | why |
 |---|-----|
+| 20 package.json | market/frontend 的 `fast-glob` 指向 `file:./compat-resource-glob`，删除 package.json 会让 Market CI 找不到模块 |
 | 12/13 merged + >100KB | source-governance / big-files 禁止新增 `*_mod*` 机械碎片；与 #2631 CLOSEOUT 一致，保留三份 MODstore 巨文件与 evals 整文件 |
 | 15 pregel | vendored `xcagi_langgraph_core` 需完整 Generic 类；G12 已排除该树 |
 

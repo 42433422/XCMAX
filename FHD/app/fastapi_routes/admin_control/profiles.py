@@ -11,6 +11,7 @@ from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
 from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject
+
 from .profile_store import ProfileRepository
 
 if TYPE_CHECKING:

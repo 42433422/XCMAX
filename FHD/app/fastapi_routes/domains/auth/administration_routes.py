@@ -7,8 +7,8 @@ from collections.abc import Callable
 from fastapi import APIRouter, Body, Depends, Query, Request
 
 from app.db.models.user import User
-
 from app.domain.auth.ports import JsonObject
+
 from .user_administration import UserAdministration
 
 

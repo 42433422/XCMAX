@@ -13,6 +13,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session as DatabaseSession
 
 from app.db.models.user import Session, User
+from app.domain.auth.ports import (
+    Database,
+    ErrorTypes,
+    JsonObject,
+    PublicUser,
+    RouteResult,
+    UserDirectory,
+)
 from app.http.error_codes import (
     INVALID_FILE,
     INVALID_INPUT,
@@ -22,15 +30,6 @@ from app.http.error_codes import (
     SAVE_FAILED,
     UPDATE_FAILED,
     error_envelope,
-)
-
-from app.domain.auth.ports import (
-    Database,
-    ErrorTypes,
-    JsonObject,
-    PublicUser,
-    RouteResult,
-    UserDirectory,
 )
 
 

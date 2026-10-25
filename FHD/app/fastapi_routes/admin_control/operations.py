@@ -9,8 +9,9 @@ from typing import Any, cast
 from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from .common import installation_payload
 from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject, MarketProxy
+
+from .common import installation_payload
 
 
 class Operations:

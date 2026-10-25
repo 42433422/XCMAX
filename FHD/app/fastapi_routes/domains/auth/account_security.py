@@ -9,19 +9,18 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.db.models.user import User
+from app.domain.auth.ports import (
+    Database,
+    JsonObject,
+    PasswordBackend,
+    RouteResult,
+)
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     INVALID_INPUT,
     UNAUTHORIZED,
     WEAK_PASSWORD,
     error_envelope,
-)
-
-from app.domain.auth.ports import (
-    Database,
-    JsonObject,
-    PasswordBackend,
-    RouteResult,
 )
 
 

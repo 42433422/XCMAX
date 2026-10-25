@@ -11,6 +11,12 @@ from fastapi import BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db.models.user import User
+from app.domain.auth.ports import (
+    ErrorTypes,
+    JsonObject,
+    RouteResult,
+    SessionBackend,
+)
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     INVALID_INPUT,
@@ -19,13 +25,6 @@ from app.http.error_codes import (
     NO_SESSION,
     UNAUTHORIZED,
     error_envelope,
-)
-
-from app.domain.auth.ports import (
-    ErrorTypes,
-    JsonObject,
-    RouteResult,
-    SessionBackend,
 )
 
 

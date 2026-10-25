@@ -6,8 +6,9 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Body
 
-from .account_recovery import AccountRecovery
 from app.domain.auth.ports import JsonObject
+
+from .account_recovery import AccountRecovery
 
 
 class RecoveryRoutes:
