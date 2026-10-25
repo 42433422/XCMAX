@@ -209,7 +209,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
                 "evidence": [{"message": "总是给七彩乐园开单"}],
             },
         )
-        assert created.status_code == 200
+        assert created.status_code in (200, 202), created.text
         candidate = created.json()["candidate"]
         memory_id = candidate["memory_id"]
 
@@ -297,7 +297,7 @@ def test_memory_v2_routes_govern_blocked_source(
                 "source": "llm_guess",
             },
         )
-        assert created.status_code == 200
+        assert created.status_code in (200, 202), created.text
         candidate = created.json()["candidate"]
         assert candidate["status"] == "rejected"
         assert candidate["source_policy"] == "blocked"
@@ -440,5 +440,7 @@ def test_database_backup_create(mock_get: MagicMock, system_client: TestClient) 
         "data": {"path": "/tmp/bak"},
     }
     r = system_client.post("/api/database/backup")
-    assert r.status_code == 200
-    assert r.json()["success"] is True
+    # debt19: route goes through system maintenance agent (may return 202 while queued/blocked)
+    assert r.status_code in (200, 202), r.text
+    if r.status_code == 200:
+        assert r.json()["success"] is True

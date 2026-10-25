@@ -26,7 +26,10 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# FHD root (…/FHD), never …/FHD/app — the latter shadows stdlib ``http``.
+_FHD_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+if _FHD_ROOT not in sys.path:
+    sys.path.insert(0, _FHD_ROOT)
 from resources.config.intent_config import reload_intent_config
 
 logger = logging.getLogger(__name__)
@@ -114,10 +117,8 @@ class UnifiedIntentRecognizer:
         try:
             from app.domain.shared_services.bert_intent_service import BertIntentClassifier
 
-            # unified_intent_recognizer 位于：XCAGI/app/services/
-            # 模型目录在：XCAGI/distillation/
-            # 因此 base_dir 需要回到 XCAGI 根目录（向上 3 级）。
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # Model checkpoints live under FHD/distillation (repo root), not FHD/app.
+            base_dir = _FHD_ROOT
             distillation_model_path = os.path.join(
                 base_dir, "distillation", "checkpoints", "best.pt"
             )

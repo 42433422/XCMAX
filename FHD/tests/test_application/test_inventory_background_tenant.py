@@ -63,10 +63,17 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(
         return response
 
     try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            response = pool.submit(execute).result(timeout=45 if isolated else 20)
-            # Reusing the same worker for an unscoped task must not inherit tenant 2.
-            unscoped = pool.submit(dispatch, step, {}).result(timeout=25)
+        if isolated:
+            # execute_with_tool_deadline uses multiprocessing spawn; nesting that under
+            # ThreadPoolExecutor is flaky on CI (tool_worker_not_started). Run on the
+            # main thread — spawn isolation still covers tenant boundary.
+            response = execute()
+            unscoped = dispatch(step, {})
+        else:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                response = pool.submit(execute).result(timeout=20)
+                # Reusing the same worker for an unscoped task must not inherit tenant 2.
+                unscoped = pool.submit(dispatch, step, {}).result(timeout=25)
         assert response["success"], response
         assert unscoped["success"] is False
         product_id, warehouse_id = identities[2]

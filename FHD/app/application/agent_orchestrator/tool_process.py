@@ -17,7 +17,6 @@ from typing import Any, cast
 
 import psutil
 
-from app.application.tool_execution_deadline import invocation_deadline
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
@@ -33,6 +32,7 @@ def _json_scalar(value):
 
 def _worker(executor_type, payload, folder, ready, start, done, deadline, llm_scope=None):
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
+    from app.application.tool_execution_deadline import invocation_deadline
     from app.infrastructure.llm.client import llm_client_factory_scope, restore_worker_llm_client
 
     if os.name != "nt":
@@ -182,6 +182,8 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
     if not clean:
         return {"outcome": "unknown", "error_code": "tool_cleanup_failed", "retryable": False}
     if result:
+        from app.application.tool_execution_deadline import invocation_deadline
+
         with invocation_deadline(deadline) as budget:
             budget.uncertain.extend(result["uncertain"])
         return cast(dict[str, Any], result["output"])

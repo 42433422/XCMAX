@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Changed
+- **debt19 CI 红修**：恢复 ports/blueprints 兼容路径；修复 spawn 子进程被 `app.http` 阴影标准库 `http` 导致的工具超时；agent_routes 导出 `_enqueue_run`；维护/记忆路由接受 202。
 - **debt19**: 一次性收口 19 条架构/技术债（ports≤12/3 层、app:domain≈1.84、domain/services 消除、security/neuro_bus 加厚、blueprints 111→27、巨文件拆分、XCAGI mods 去重、版本/入口 SSOT、G12 门禁）。业务语义不变；不部署。
 
 
