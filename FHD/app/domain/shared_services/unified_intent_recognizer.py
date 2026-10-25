@@ -27,7 +27,9 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 # FHD root (…/FHD), never …/FHD/app — the latter shadows stdlib ``http``.
-_FHD_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_FHD_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 if _FHD_ROOT not in sys.path:
     sys.path.insert(0, _FHD_ROOT)
 from resources.config.intent_config import reload_intent_config
