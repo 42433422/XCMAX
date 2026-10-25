@@ -88,6 +88,7 @@ from app.domain.shared_services.user_preference_service import (
 # Submodule-compat (debt19): `from app.services import user_memory_service`
 from app.domain.shared_services import user_memory_service as user_memory_service
 from app.domain.shared_services import printer_service as printer_service
+from app.domain.shared_services import tools_workflow_common as tools_workflow_common
 
 if TYPE_CHECKING:
     from app.domain.shared_services.materials_service import MaterialsService
@@ -175,6 +176,7 @@ __all__ = [
     "get_user_memory_service",
     "user_memory_service",
     "printer_service",
+    "tools_workflow_common",
     "UserMemoryService",
     "ProductImportService",
     "get_product_import_service",
