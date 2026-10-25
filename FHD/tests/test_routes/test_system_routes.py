@@ -589,7 +589,7 @@ class TestPerformanceOptimizeReinitialize:
 class TestTemplatesProgress:
     def test_success(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_template_analysis_progress",
+            "app.fastapi_routes.domains.system.system_routes.get_template_analysis_progress",
             return_value={
                 "progress": 50,
                 "success": True,
@@ -624,7 +624,7 @@ class TestTemplatesDelete:
 
     def test_fs_template_not_found(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir", return_value="/nonexistent"
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir", return_value="/nonexistent"
         ):
             r = client.request(
                 "DELETE",
@@ -638,7 +638,7 @@ class TestTemplatesDelete:
         test_file = tmp_path / "test.docx"
         test_file.write_text("content")
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir", return_value=str(tmp_path)
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir", return_value=str(tmp_path)
         ):
             r = client.request(
                 "DELETE",
@@ -676,7 +676,7 @@ class TestTemplatesDelete:
 
     def test_error(self, client: TestClient):
         with patch(
-            "app.fastapi_routes.domains.system.routes.get_base_dir",
+            "app.fastapi_routes.domains.system.system_routes.get_base_dir",
             side_effect=RuntimeError("fail"),
         ):
             r = client.request(

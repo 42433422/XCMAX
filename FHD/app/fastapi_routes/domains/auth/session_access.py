@@ -21,7 +21,7 @@ from app.http.error_codes import (
     error_envelope,
 )
 
-from .port_contracts import (
+from app.domain.auth.ports import (
     ErrorTypes,
     JsonObject,
     RouteResult,

@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from fastapi import HTTPException, Request
 
-from .port_contracts import CatalogInstall, MarketProxy
+from app.application.mod_store.http_port_contracts import CatalogInstall, MarketProxy
 from .schemas import AiModDeliveryStartBody, ModStoreInstallResult, ModStoreSimpleResponse
 
 

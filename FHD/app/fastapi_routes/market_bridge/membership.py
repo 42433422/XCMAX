@@ -8,7 +8,7 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .port_contracts import ProxyJSON
+from app.application.market_bridge.protocols import ProxyJSON
 
 
 @dataclass

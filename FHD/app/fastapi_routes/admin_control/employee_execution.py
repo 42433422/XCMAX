@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .employee_backend import EmployeePrincipal, trusted_tenant
 from .employee_run import EmployeeWork
-from .port_contracts import ErrorPolicy, JsonObject
+from app.application.admin_control.protocols import ErrorPolicy, JsonObject
 
 
 class EmployeeExecution:

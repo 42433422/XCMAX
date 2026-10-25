@@ -8,7 +8,7 @@ from typing import Any, Protocol
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph
 
 Payload = dict[str, Any]
 

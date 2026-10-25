@@ -149,10 +149,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.user_cs_delivery_signoff",
         "create_signoff_request",
     ),
-    "customers_create": ("app.fastapi_routes.domains.customer.routes", "customers_create"),
-    "customers_delete": ("app.fastapi_routes.domains.customer.routes", "customers_delete"),
-    "customers_get_one": ("app.fastapi_routes.domains.customer.routes", "customers_get_one"),
-    "customers_update": ("app.fastapi_routes.domains.customer.routes", "customers_update"),
+    "customers_create": ("app.fastapi_routes.domains.customer.customer_routes", "customers_create"),
+    "customers_delete": ("app.fastapi_routes.domains.customer.customer_routes", "customers_delete"),
+    "customers_get_one": ("app.fastapi_routes.domains.customer.customer_routes", "customers_get_one"),
+    "customers_update": ("app.fastapi_routes.domains.customer.customer_routes", "customers_update"),
     "diagnostics": ("app.fastapi_routes.model_payment", "diagnostics"),
     "ensure_delivery_on_doc": (
         "app.domain.shared_services.user_cs_delivery",
@@ -289,7 +289,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "orders_next_number_under_api",
     ),
     "products_add": ("app.legacy.routes.product.compat_routes", "products_add"),
-    "products_batch": ("app.fastapi_routes.domains.product.routes", "products_batch"),
+    "products_batch": ("app.fastapi_routes.domains.product.product_routes", "products_batch"),
     "products_batch_delete": (
         "app.legacy.routes.product.compat_routes",
         "products_batch_delete",
@@ -298,18 +298,18 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.legacy.routes.product.compat_routes",
         "products_delete",
     ),
-    "products_export_xlsx": ("app.fastapi_routes.domains.product.routes", "products_export_xlsx"),
+    "products_export_xlsx": ("app.fastapi_routes.domains.product.product_routes", "products_export_xlsx"),
     "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
     "products_get_by_id": (
         "app.legacy.routes.product.compat_routes",
         "products_get_by_id",
     ),
     "products_product_names": (
-        "app.fastapi_routes.domains.product.routes",
+        "app.fastapi_routes.domains.product.product_routes",
         "products_product_names",
     ),
     "products_product_names_search": (
-        "app.fastapi_routes.domains.product.routes",
+        "app.fastapi_routes.domains.product.product_routes",
         "products_product_names_search",
     ),
     "products_update": (

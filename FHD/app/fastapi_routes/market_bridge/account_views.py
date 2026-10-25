@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .port_contracts import JsonObject, ProxyJSON, RefreshWallet, RequestAuthorization
+from app.application.market_bridge.protocols import JsonObject, ProxyJSON, RefreshWallet, RequestAuthorization
 
 
 def _merge_live_overview_fields(data: dict[str, Any], live: dict[str, Any]) -> None:

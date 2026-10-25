@@ -25,7 +25,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.dev.ssot_plugins.base import find_domain, load_registry, run_command  # noqa: E402
+from scripts.dev.ssot_plugins.plugin_base import find_domain, load_registry, run_command  # noqa: E402
 
 EXIT_OK = 0
 EXIT_DRIFT = 1

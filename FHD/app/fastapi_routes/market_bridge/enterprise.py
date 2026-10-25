@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .port_contracts import EnsureEnterprise, JsonObject, ProxyJSON
+from app.application.market_bridge.protocols import EnsureEnterprise, JsonObject, ProxyJSON
 
 
 def _dedupe_mod_ids(mod_ids: list[str]) -> list[str]:

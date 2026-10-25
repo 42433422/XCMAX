@@ -123,7 +123,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         vendor_dir = _backend_root() / "vendor"
         if str(vendor_dir) not in sys.path:
             sys.path.insert(0, str(vendor_dir))
-        from trademark_generation.convert import convert_trademark_profile
+        from trademark_generation.trademark_generation_convert import convert_trademark_profile
 
         out = _resolve_output(payload, ctx)
         result = convert_trademark_profile(

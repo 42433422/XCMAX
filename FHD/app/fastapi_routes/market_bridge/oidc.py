@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .port_contracts import JsonObject, NormalizeAuth, ProxyJSON
+from app.application.market_bridge.protocols import JsonObject, NormalizeAuth, ProxyJSON
 
 
 def _oidc_identity_from_profile(profile: dict[str, Any]) -> tuple[str, str, str]:

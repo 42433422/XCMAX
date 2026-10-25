@@ -21,7 +21,7 @@ from typing import Any
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
-from scripts.dev.ssot_plugins.base import ROOT  # noqa: E402
+from scripts.dev.ssot_plugins.plugin_base import ROOT  # noqa: E402
 
 DEPLOY_ROOT = ROOT / "scripts" / "deploy"
 HARDCODED_VERSION_RE = re.compile(r"\b\d+\.\d+\.\d+\.\d+\b")

@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .port_contracts import JsonObject, ProxyJSON
+from app.application.market_bridge.protocols import JsonObject, ProxyJSON
 
 
 def _extract_auth_token(payload: Any, names: tuple[str, ...], nested_names: tuple[str, ...]) -> str:

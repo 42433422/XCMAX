@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, Request
 from app.db.models.user import User
 
 from .account_security import AccountSecurity
-from .port_contracts import JsonObject
+from app.domain.auth.ports import JsonObject
 
 
 class SecurityRoutes:

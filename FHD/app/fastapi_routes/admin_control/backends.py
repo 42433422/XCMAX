@@ -1,6 +1,6 @@
 """Late-bound adapters to canonical services; no import of the public admin facade."""
 
-from .port_contracts import MarketTransport, SyncStore
+from app.application.admin_control.protocols import MarketTransport, SyncStore
 
 
 def load_market_transport() -> MarketTransport:

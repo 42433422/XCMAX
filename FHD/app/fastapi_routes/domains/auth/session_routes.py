@@ -7,7 +7,7 @@ from collections.abc import Callable
 from fastapi import APIRouter, Body, Request
 from fastapi.background import BackgroundTasks
 
-from .port_contracts import JsonObject
+from app.domain.auth.ports import JsonObject
 from .session_access import SessionAccess
 
 

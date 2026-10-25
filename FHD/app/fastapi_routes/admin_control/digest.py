@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import AdminGate, ErrorPolicy, JsonObject, LocalProxy, MarketProxy
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject, LocalProxy, MarketProxy
 
 
 class DigestReader:

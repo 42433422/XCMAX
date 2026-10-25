@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Query, Request
 from fastapi.background import BackgroundTasks
 
 from .federated_login import FederatedLogin
-from .port_contracts import JsonObject
+from app.domain.auth.ports import JsonObject
 
 
 class FederatedRoutes:
