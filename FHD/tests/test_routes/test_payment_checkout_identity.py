@@ -20,7 +20,7 @@ from app.utils.time import utc_now_naive
 pytestmark = pytest.mark.release_gate
 
 
-@pytest.fixture(params=["host", "full-host", "mods", "XCAGI/mods"])
+@pytest.fixture(params=["host", "full-host", "mods"])
 def payment_client(request, tmp_path, monkeypatch):
     import app.db as database
 

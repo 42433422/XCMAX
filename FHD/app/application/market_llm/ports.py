@@ -2,5 +2,38 @@
 
 from __future__ import annotations
 
-from .protocols import *  # noqa: F403
-from .protocols import __all__ as __all__  # type: ignore[misc]
+from .protocols import (  # noqa: F401
+    CacheKey,
+    ChatInput,
+    CompatibleCompletion,
+    CompatibleStream,
+    CompletionPorts,
+    Connection,
+    Messages,
+    NotifyRoundtrip,
+    OpenAIPorts,
+    Payload,
+    PostCompletion,
+    ResponsePorts,
+    Route,
+    StreamPorts,
+    SyncClientFactory,
+)
+
+__all__ = [
+    "CacheKey",
+    "ChatInput",
+    "CompatibleCompletion",
+    "CompatibleStream",
+    "CompletionPorts",
+    "Connection",
+    "Messages",
+    "NotifyRoundtrip",
+    "OpenAIPorts",
+    "Payload",
+    "PostCompletion",
+    "ResponsePorts",
+    "Route",
+    "StreamPorts",
+    "SyncClientFactory",
+]
