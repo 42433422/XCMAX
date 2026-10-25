@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services import service_optimizers as so
 from app.domain.shared_services.service_optimizers import (
     AIOptimizedService,
     CustomerServiceOptimizer,
@@ -15,6 +14,7 @@ from app.domain.shared_services.service_optimizers import (
     _dummy_context,
     optimize_ai_service,
 )
+from app.services import service_optimizers as so
 
 
 def _bare_ai() -> AIOptimizedService:

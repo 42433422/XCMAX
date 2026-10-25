@@ -25,6 +25,13 @@ from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
     runtime_context_after_workflow_interrupt,
 )
+from app.domain.shared_services.conversation.handlers import HandlersMixin
+from app.domain.shared_services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
+from app.domain.shared_services.kitten_report.financial_plugins import (
+    FinancialReportPlugin,
+    InventoryValuationPlugin,
+)
+from app.domain.shared_services.kitten_report.service import KittenReportExportService
 from app.infrastructure.cache.intent_cache import IntentCache, _default_should_cache_intent
 from app.infrastructure.payment import alipay as alipay_mod
 from app.infrastructure.payment.order_store import (
@@ -42,13 +49,6 @@ from app.infrastructure.persistence.compat_db.writes import (
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
-from app.domain.shared_services.conversation.handlers import HandlersMixin
-from app.domain.shared_services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
-from app.domain.shared_services.kitten_report.financial_plugins import (
-    FinancialReportPlugin,
-    InventoryValuationPlugin,
-)
-from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
 # ---------------------------------------------------------------------------
 # conversation handlers (hard rules + greeting/goodbye/help)

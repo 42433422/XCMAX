@@ -1234,6 +1234,7 @@ class TestAuthLogoutAdditional:
 
     def test_logout_with_entitlements_import_failure(self):
         from app.fastapi_routes.domains.auth.auth_routes import auth_logout
+
         from app.utils.operational_errors import INFRA_TRANSIENT
 
         request = MagicMock()

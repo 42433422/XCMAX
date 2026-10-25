@@ -41,10 +41,10 @@ from app.db.models import (
     SalesOrderItem,
     Warehouse,
 )
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.accounting_services import seed_default_chart_of_accounts
 from app.domain.shared_services.fulfillment_service import FulfillmentService
 from app.domain.shared_services.inventory_service import InventoryService
+from app.infrastructure.tenant_scope import tenant_scope
 
 ORDER_TOTAL = Decimal("1000.00")
 ORDER_QTY = 10

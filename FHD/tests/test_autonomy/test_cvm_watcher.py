@@ -24,6 +24,16 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from scripts.autonomy.types import (
+    Action,
+    ActionType,
+    AuditEntry,
+    Diagnosis,
+    Plan,
+    RiskLevel,
+    RuntimeTruthSnapshot,
+    Signal,
+)
 
 from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter, list_audit_entries
 from scripts.autonomy.cvm_autonomy_watcher import (
@@ -36,16 +46,6 @@ from scripts.autonomy.cvm_autonomy_watcher import (
     tick,
 )
 from scripts.autonomy.policies import ALL_POLICIES
-from scripts.autonomy.types import (
-    Action,
-    ActionType,
-    AuditEntry,
-    Diagnosis,
-    Plan,
-    RiskLevel,
-    RuntimeTruthSnapshot,
-    Signal,
-)
 
 # --------------------------------------------------------------------------- #
 # 工具函数

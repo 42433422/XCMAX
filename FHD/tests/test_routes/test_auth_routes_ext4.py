@@ -129,6 +129,7 @@ class TestEnrichRegisterWithTenant:
     )
     def test_handles_infra_transient(self, mock_bind):
         from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
+
         from app.utils.operational_errors import INFRA_TRANSIENT
 
         # Patch INFRA_TRANSIENT to include RuntimeError for this test

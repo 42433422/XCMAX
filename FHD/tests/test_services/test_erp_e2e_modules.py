@@ -42,7 +42,6 @@ from app.db.models import (
     Warehouse,
 )
 from app.db.models.mrp import ManufacturingOrder
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.accounting_services import (
     create_journal_entry,
     journal_entry_reverse,
@@ -51,6 +50,7 @@ from app.domain.shared_services.accounting_services import (
 from app.domain.shared_services.inventory_service import InventoryService
 from app.domain.shared_services.manufacturing_service import ManufacturingService
 from app.domain.shared_services.purchase_service import PurchaseService
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(scope="function")

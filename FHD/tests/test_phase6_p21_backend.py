@@ -57,16 +57,6 @@ from app.application.workflow.workflow_types import (
     WorkflowNode,
     WorkflowRunResult,
 )
-from app.fastapi_routes import service_bridge as sb
-from app.fastapi_routes.service_bridge import (
-    BridgeConfigUpdate,
-    OutboxCreate,
-    ServiceRequestCreate,
-    ServiceRequestRespond,
-)
-from app.infrastructure.payment import order_store
-from app.infrastructure.skills.template_manager import template_manager as tm
-from app.services import distilled_intent_service as dis_svc
 from app.domain.shared_services.conversation.context import ConversationContext
 from app.domain.shared_services.conversation.handlers import HandlersMixin
 from app.domain.shared_services.distilled_intent_service import (
@@ -78,6 +68,16 @@ from app.domain.shared_services.modstore_library_sync import (
     fetch_modstore_library_mod_ids,
     sync_modstore_library_to_local,
 )
+from app.fastapi_routes import service_bridge as sb
+from app.fastapi_routes.service_bridge import (
+    BridgeConfigUpdate,
+    OutboxCreate,
+    ServiceRequestCreate,
+    ServiceRequestRespond,
+)
+from app.infrastructure.payment import order_store
+from app.infrastructure.skills.template_manager import template_manager as tm
+from app.services import distilled_intent_service as dis_svc
 
 # ---------------------------------------------------------------------------
 # Shared helpers

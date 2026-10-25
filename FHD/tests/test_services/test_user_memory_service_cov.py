@@ -7,7 +7,6 @@ import os
 
 import pytest
 
-from app.services import user_memory_service
 from app.domain.shared_services.user_memory_service import (
     ActionPattern,
     ContextSummary,
@@ -18,6 +17,7 @@ from app.domain.shared_services.user_memory_service import (
     get_user_memory_service,
     reset_user_memory_service,
 )
+from app.services import user_memory_service
 
 
 @pytest.fixture(autouse=True)

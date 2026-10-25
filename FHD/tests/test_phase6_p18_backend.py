@@ -50,12 +50,12 @@ from app.application.workflow.workflow_types import (
     PlanGraph,
     WorkflowNode,
 )
+from app.domain.shared_services.ocr_service import OCRResult, OCRService
 from app.infrastructure.repositories.product_repository_impl import (
     TRIVIAL_MEASURE_UNITS,
     SQLAlchemyProductRepository,
 )
 from app.mod_sdk import industry_seed as industry_seed_mod
-from app.domain.shared_services.ocr_service import OCRResult, OCRService
 
 # ===========================================================================
 # Shared helpers / fixtures

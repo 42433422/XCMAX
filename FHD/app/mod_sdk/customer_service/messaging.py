@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .customer_service_ports import Environment, MessagingServices, Payload, PipelineRepository
 from .models import (
     ConnectedWelcomeBody,
     IntakeNoticeBody,
     WechatSendBody,
 )
-from .customer_service_ports import Environment, MessagingServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

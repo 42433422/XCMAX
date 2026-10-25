@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.application.employee_tools.protocols import QualityPorts
 from app.mod_sdk import employee_specialized_tools as tools
 from app.mod_sdk.employee_tools import quality
-from app.application.employee_tools.protocols import QualityPorts
 
 
 @pytest.mark.parametrize("failure", ["cancel", "communication", "timeout", "success"])

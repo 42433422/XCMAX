@@ -138,14 +138,18 @@ class TestNormalizeStreamChoice:
     """Cover ``_normalize_stream_choice`` helper."""
 
     def test_choice_with_delta_returns_unchanged(self):
-        from app.domain.shared_services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"delta": {"content": "hi"}, "index": 0, "finish_reason": None}
         result = _normalize_stream_choice(choice)
         assert "delta" in result
 
     def test_choice_with_message_dict_extracts_delta(self):
-        from app.domain.shared_services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"message": {"content": "hello"}, "index": 1, "finish_reason": "stop"}
         result = _normalize_stream_choice(choice)
@@ -153,14 +157,18 @@ class TestNormalizeStreamChoice:
         assert result["index"] == 1
 
     def test_choice_without_message_returns_empty_delta(self):
-        from app.domain.shared_services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"index": 0, "finish_reason": None}
         result = _normalize_stream_choice(choice)
         assert result["delta"] == {}
 
     def test_choice_with_tool_calls_in_message(self):
-        from app.domain.shared_services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {
             "message": {"content": "call", "tool_calls": [{"id": "t1"}]},
@@ -772,13 +780,17 @@ class TestCreateModstoreAdapterFromEnv:
     """Cover ``create_modstore_adapter_from_env``."""
 
     def test_no_env_returns_none(self, monkeypatch):
-        from app.domain.shared_services.conversation.modstore_adapter import create_modstore_adapter_from_env
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            create_modstore_adapter_from_env,
+        )
 
         monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
         assert create_modstore_adapter_from_env() is None
 
     def test_with_env_returns_adapter(self, monkeypatch):
-        from app.domain.shared_services.conversation.modstore_adapter import create_modstore_adapter_from_env
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            create_modstore_adapter_from_env,
+        )
 
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://env:8765")
         result = create_modstore_adapter_from_env()

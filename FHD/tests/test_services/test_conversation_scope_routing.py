@@ -105,8 +105,8 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
 
 @pytest.mark.asyncio
 async def test_follow_up_cache_separates_owners_history_and_models(monkeypatch):
-    from app.infrastructure.llm.client import llm_client_scope
     from app.domain.shared_services.conversation import api
+    from app.infrastructure.llm.client import llm_client_scope
 
     cache = {}
     monkeypatch.setattr(
@@ -171,11 +171,11 @@ async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suf
 
 
 def test_platform_worker_scope_keeps_model_and_credentials_out_of_environment(monkeypatch):
-    from app.infrastructure.llm import client as routing
     from app.domain.shared_services.conversation.modstore_adapter import (
         ModstoreOpenAICompatibleClient,
         ModstorePlatformAdapter,
     )
+    from app.infrastructure.llm import client as routing
 
     adapter = ModstorePlatformAdapter(auth_token="fake-owner-a")
     adapter.default_provider, adapter.default_model = "owner-a", "model"

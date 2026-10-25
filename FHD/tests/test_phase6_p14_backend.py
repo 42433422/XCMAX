@@ -39,6 +39,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.manager import (
+    AIConversationService,
+    get_ai_conversation_service,
+    init_ai_conversation_service,
+)
 from app.fastapi_routes.mobile_api import (
     MobileLoginRequest,
     MobileRefreshRequest,
@@ -60,12 +66,6 @@ from app.infrastructure.mods.mod_manager import (
     _short_exc_message,
     import_mod_backend_py,
     is_mods_disabled,
-)
-from app.domain.shared_services.conversation.context import ConversationContext
-from app.domain.shared_services.conversation.manager import (
-    AIConversationService,
-    get_ai_conversation_service,
-    init_ai_conversation_service,
 )
 
 # ===========================================================================

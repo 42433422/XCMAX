@@ -8,7 +8,11 @@ import pytest
 
 from app.domain.shared_services.user_cs_connected_welcome import maybe_send_connected_welcome
 from app.domain.shared_services.user_cs_intake_finalize import finalize_intake_submission
-from app.domain.shared_services.user_cs_pipeline import load_pipeline, save_pipeline, set_pipeline_stage
+from app.domain.shared_services.user_cs_pipeline import (
+    load_pipeline,
+    save_pipeline,
+    set_pipeline_stage,
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # user_cs_connected_welcome

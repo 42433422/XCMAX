@@ -12,6 +12,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.db.db_base import Base
+from app.db.models.butler_profile import ButlerUserProfile
+from app.db.models.user import User
 from app.domain.app_pure.butler_identity_catalog import (
     DEFAULT_MBTI_EI,
     DEFAULT_MBTI_JP,
@@ -20,9 +23,6 @@ from app.domain.app_pure.butler_identity_catalog import (
     derive_four_axes,
     derive_mbti_type,
 )
-from app.db.db_base import Base
-from app.db.models.butler_profile import ButlerUserProfile
-from app.db.models.user import User
 from app.domain.shared_services.butler_profile_service import ButlerProfileService
 
 

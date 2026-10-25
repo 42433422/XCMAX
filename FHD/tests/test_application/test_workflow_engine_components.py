@@ -10,7 +10,12 @@ import pytest
 from app.application.workflow.checkpointer import WorkflowCheckpointer
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.engine_decisions import AgentDecisionClient
-from app.application.workflow.workflow_types import Branch, NodeExecutionResult, PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import (
+    Branch,
+    NodeExecutionResult,
+    PlanGraph,
+    WorkflowNode,
+)
 
 
 def _plan(*node_ids):

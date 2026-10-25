@@ -29,9 +29,9 @@ from app.db.models import (
     SalesOrderItem,
     Warehouse,
 )
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.fulfillment_service import FulfillmentService
 from app.domain.shared_services.inventory_service import InventoryService
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(scope="function")

@@ -5,7 +5,15 @@
 环境: XCAGI_TEST_USER / XCAGI_TEST_PASS（本地验收租户账号，不入库）
 输出证据: FHD/docs/evidence/e2e/macos-release-1.0.0.4/g7-retest-10004.json
 """
-import argparse, base64, hashlib, json, os, subprocess, sys, urllib.request, uuid
+import argparse
+import base64
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+import uuid
 from urllib.parse import quote
 
 BASE = "http://127.0.0.1:17500"

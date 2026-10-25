@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.application import ai_chat_rag_integration as rag_integration
+from app.domain.shared_services.report_service import ReportService
 from app.fastapi_routes.rbac import router as rbac_router
 from app.infrastructure.persistence.compat_db import queries as compat_queries
 from app.neuro_bus.bus import (
@@ -35,7 +36,6 @@ from app.neuro_bus.bus import (
 )
 from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.services import xcmax_sync_service as sync_svc
-from app.domain.shared_services.report_service import ReportService
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -274,8 +274,8 @@ class TestConversationServiceUncoveredBranches:
         assert ConversationService._normalize_user_id("12.0") is None
 
     def test_get_conversation_service_resets_singleton(self):
-        from app.services import conversation_service as mod
         from app.domain.shared_services.conversation_service import get_conversation_service
+        from app.services import conversation_service as mod
 
         with patch.object(mod, "_conversation_service", None):
             svc1 = get_conversation_service()

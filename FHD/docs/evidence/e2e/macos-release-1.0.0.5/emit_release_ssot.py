@@ -5,7 +5,10 @@
 macOS 只有在全部门禁（含 G12 整机重启）PASS 时才为 FULL_CLOSED，否则 BLOCKED。
 Windows 只允许 FULL_CLOSED 或 INTERIM_CLOSED。
 """
-import json, os, sys, time
+import json
+import os
+import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SHA = "54325894cc6e3fc2becfcbc98697a099310d9420"

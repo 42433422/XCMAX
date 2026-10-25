@@ -30,6 +30,18 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from app.domain.shared_services.distilled_intent_service import (
+    DEFAULT_INTENT_LABELS,
+    DistilledIntentRecognizer,
+    get_distilled_recognizer,
+    is_distilled_model_available,
+    use_distilled_model,
+)
+from app.domain.shared_services.modstore_library_sync import (
+    download_modstore_export_zip,
+    fetch_modstore_library_mod_ids,
+    sync_modstore_library_to_local,
+)
 from app.fastapi_routes import service_bridge as sb
 from app.fastapi_routes.service_bridge import (
     BridgeConfigUpdate,
@@ -46,18 +58,6 @@ from app.fastapi_routes.service_bridge import (
 )
 from app.services import distilled_intent_service as dis_svc
 from app.services import modstore_library_sync as mls
-from app.domain.shared_services.distilled_intent_service import (
-    DEFAULT_INTENT_LABELS,
-    DistilledIntentRecognizer,
-    get_distilled_recognizer,
-    is_distilled_model_available,
-    use_distilled_model,
-)
-from app.domain.shared_services.modstore_library_sync import (
-    download_modstore_export_zip,
-    fetch_modstore_library_mod_ids,
-    sync_modstore_library_to_local,
-)
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

@@ -25,8 +25,8 @@ from sqlalchemy.pool import StaticPool
 import app.domain.shared_services.replenishment_service as replenishment_service
 from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.replenishment_service import suggest_replenishment
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(scope="function")

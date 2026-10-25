@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 
 import pytest
+from scripts.autonomy.types import Action, ActionType, Prediction, RiskLevel, RuntimeTruthSnapshot
 
 from scripts.autonomy.impact_predictor import (
     DISK_CLEAN_THRESHOLD,
@@ -23,7 +24,6 @@ from scripts.autonomy.impact_predictor import (
     predict,
     should_skip,
 )
-from scripts.autonomy.types import Action, ActionType, Prediction, RiskLevel, RuntimeTruthSnapshot
 
 # --------------------------------------------------------------------------- #
 # 工具函数

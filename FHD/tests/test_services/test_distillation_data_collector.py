@@ -426,7 +426,9 @@ class TestCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_already_satisfied(self):
-        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import (
+            collect_samples_via_deepseek,
+        )
 
         with patch(
             "app.domain.shared_services.distillation_data_collector.get_sample_count",

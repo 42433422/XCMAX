@@ -12,7 +12,12 @@ import pytest
 
 from app.application.workflow.clarification_node import build_clarify_node, insert_clarify_node
 from app.application.workflow.planner import LLMWorkflowPlanner
-from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    validate_plan_graph,
+)
 from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
 

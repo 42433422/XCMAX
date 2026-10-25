@@ -19,8 +19,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.db_base import Base
 from app.db.models.user import Session, User
-from app.fastapi_routes import market_account as market
 from app.domain.shared_services.conversation import modstore_adapter as facade
+from app.fastapi_routes import market_account as market
 from app.utils.time import utc_now_naive
 
 

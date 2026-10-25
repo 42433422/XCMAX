@@ -15,12 +15,12 @@ from app.desktop_runtime.database_profile import (
     resolve_storage_mode,
     save_profile,
 )
-from app.desktop_runtime.model_downloader import load_manifest
 from app.desktop_runtime.desktop_runtime_paths import (
     configure_desktop_environment,
     ensure_desktop_dirs,
     sqlite_database_url,
 )
+from app.desktop_runtime.model_downloader import load_manifest
 from app.desktop_runtime.sunbird_delivery_seed import (
     apply_sunbird_roster_seed_if_needed,
     sync_sunbird_delivery_files,

@@ -60,11 +60,6 @@ from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS  # 
 # 当直接执行脚本时，__package__ 为 None，需将 FHD 根目录放到 sys.path
 # 并使用绝对导入，避免 ``import types`` 命名冲突（脚本目录下有同名 types.py）。
 if __package__ in (None, ""):
-    from scripts.autonomy.cross_tier_gate import check_before_action
-    from scripts.autonomy.cross_tier_gate import is_enabled as cross_tier_gate_enabled
-    from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
-    from scripts.autonomy.impact_predictor import predict
-    from scripts.autonomy.policies import ALL_POLICIES
     from scripts.autonomy.types import (  # noqa: F401  # 仅导出供模块内使用
         Action,
         ActionResult,
@@ -79,12 +74,13 @@ if __package__ in (None, ""):
         RuntimeTruthSnapshot,
         Signal,
     )
+
+    from scripts.autonomy.cross_tier_gate import check_before_action
+    from scripts.autonomy.cross_tier_gate import is_enabled as cross_tier_gate_enabled
+    from scripts.autonomy.cvm_adapter import CvmAutonomyAdapter
+    from scripts.autonomy.impact_predictor import predict
+    from scripts.autonomy.policies import ALL_POLICIES
 else:
-    from .cross_tier_gate import check_before_action
-    from .cross_tier_gate import is_enabled as cross_tier_gate_enabled
-    from .cvm_adapter import CvmAutonomyAdapter
-    from .impact_predictor import predict
-    from .policies import ALL_POLICIES
     from .autonomy_types import (
         Action,
         ActionResult,
@@ -99,6 +95,11 @@ else:
         RuntimeTruthSnapshot,
         Signal,
     )
+    from .cross_tier_gate import check_before_action
+    from .cross_tier_gate import is_enabled as cross_tier_gate_enabled
+    from .cvm_adapter import CvmAutonomyAdapter
+    from .impact_predictor import predict
+    from .policies import ALL_POLICIES
 
 # 显式 autonomy callback（优先）+ 旁路 approval ledger client（fail-open）
 try:

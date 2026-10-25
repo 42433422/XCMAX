@@ -4,7 +4,15 @@
 用法: python3 g7-retest-10003.py [--base http://127.0.0.1:17500] [--xlsx 模板.xlsx]
 输出证据: FHD/docs/evidence/e2e/macos-release-1.0.0.3/g7-retest-10003.json
 """
-import argparse, base64, hashlib, json, os, subprocess, sys, urllib.request, uuid
+import argparse
+import base64
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+import uuid
 
 BASE = "http://127.0.0.1:17500"
 USER = os.environ["XCAGI_TEST_USER"]  # 必填：本地验收租户账号（不入库）

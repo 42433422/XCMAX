@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services import distillation_trainer as _distillation_module
 from app.domain.shared_services.distillation_trainer import (
     CHECKPOINT_DIR,
     DISTILL_DIR,
@@ -25,6 +24,7 @@ from app.domain.shared_services.distillation_trainer import (
     DistillationTrainer,
     main,
 )
+from app.services import distillation_trainer as _distillation_module
 
 torch = _distillation_module.torch
 torch_available = torch is not None

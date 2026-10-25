@@ -6,6 +6,13 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
+from .customer_service_ports import (
+    Employee,
+    Environment,
+    IntakeServices,
+    Payload,
+    PipelineRepository,
+)
 from .models import (
     DemandFormManualBody,
     DemandFormRedeemCodeBody,
@@ -14,7 +21,6 @@ from .models import (
     LandingFunnelSyncBody,
     PipelineBody,
 )
-from .customer_service_ports import Employee, Environment, IntakeServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

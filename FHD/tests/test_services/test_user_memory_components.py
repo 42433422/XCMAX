@@ -23,8 +23,8 @@ from fastapi.testclient import TestClient
 
 from app.application.user_memory.models import UserMemory
 from app.application.user_memory.patterns import chronological_contexts
-from app.application.user_memory.protocols import MemoryAccess
 from app.application.user_memory.preferences import PreferenceMemory
+from app.application.user_memory.protocols import MemoryAccess
 from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.services import user_memory_service as module
 

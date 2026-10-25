@@ -13,15 +13,15 @@ from typing import Any, NoReturn
 import httpx
 import pytest
 
-from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY
 from app.application.message_repository import MessageRepository
 from app.application.super_employee import cli as cli_module
 from app.application.super_employee.cli import CliExecutor
 from app.application.super_employee.devices import DeviceSelection
 from app.application.super_employee.messages import MessageSynchronizer
-from app.application.super_employee.protocols import CliPorts, MessageSyncPorts
 from app.application.super_employee.profiles import CODEX_PROFILE
+from app.application.super_employee.protocols import CliPorts, MessageSyncPorts
 from app.application.super_employee_service import CLAUDE_PROFILE, SuperEmployeeService
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY
 
 
 def test_message_repository_encrypts_new_rows_and_reads_legacy_jsonl(

@@ -17,7 +17,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.infrastructure.payment import order_store
 from app.domain.shared_services.hybrid_intent_service import (
     HybridIntentService,
     get_hybrid_intent_service,
@@ -25,6 +24,7 @@ from app.domain.shared_services.hybrid_intent_service import (
     hybrid_recognize_intents_sync,
     reset_hybrid_intent_service,
 )
+from app.infrastructure.payment import order_store
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 # ---------------------------------------------------------------------------

@@ -177,7 +177,9 @@ def test_fallback_planner_ignores_recoverable_memory_rag_error():
 
 
 def test_employee_tool_dispatch_calls_local_employee_runtime():
-    from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     with (
         patch(
@@ -233,7 +235,9 @@ def test_business_db_read_routes_to_business_service_router():
 
 
 def test_business_db_rejects_raw_sql():
-    from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     result = execute_registered_workflow_tool(
         "business_db",
@@ -254,8 +258,10 @@ def test_business_db_write_and_read_use_real_sqlite_services(monkeypatch, tmp_pa
     from app.db.db_base import Base
     from app.db.models.product import Product, UomCategory, UomUnit
     from app.db.models.purchase_unit import PurchaseUnit
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 
     db_mod.dispose_and_recreate_engine()
     tables = [
@@ -392,8 +398,10 @@ def test_business_db_full_crud_matrix_is_tenant_scoped_and_exact(monkeypatch, tm
     from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.shipment import ShipmentRecord
     from app.db.session import get_db
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 
     tables = [
         PurchaseUnit.__table__,
@@ -1064,7 +1072,11 @@ def test_agentic_loop_uses_action_name_and_disables_write_retry():
 def test_ai_chat_agentic_excel_loop_returns_agent_run_trace():
 
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.workflow_types import NodeExecutionResult, PlanGraph, WorkflowRunResult
+    from app.application.workflow.workflow_types import (
+        NodeExecutionResult,
+        PlanGraph,
+        WorkflowRunResult,
+    )
 
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(

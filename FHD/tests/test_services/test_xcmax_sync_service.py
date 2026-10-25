@@ -97,7 +97,10 @@ class TestReadSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import (
+                _read_sync_meta,
+                _write_sync_meta,
+            )
 
             _write_sync_meta("test_key", {"foo": "bar"})
             result = _read_sync_meta("test_key")
@@ -109,7 +112,10 @@ class TestReadSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import (
+                _read_sync_meta,
+                _write_sync_meta,
+            )
 
             _write_sync_meta("bad_key", {"a": 1})
             conn = sqlite3.connect(str(db_path))
@@ -130,7 +136,10 @@ class TestWriteSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import (
+                _read_sync_meta,
+                _write_sync_meta,
+            )
 
             _write_sync_meta("k1", {"x": 1})
             _write_sync_meta("k1", {"x": 2})  # overwrite
@@ -904,7 +913,10 @@ class TestApplyImMessage:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import (
+                _read_sync_meta,
+                _write_sync_meta,
+            )
 
             # Write a newer timestamp first
             _write_sync_meta("im_message:1", {"updated_at_ms": 2000, "id": 1})

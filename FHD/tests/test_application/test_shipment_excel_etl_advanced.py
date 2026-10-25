@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import clear_profile_cache
 from app.application.shipment_excel_etl_app_service import (
     execute_shipment_excel_etl,
@@ -21,6 +20,7 @@ from app.application.shipment_excel_etl_ocr import (
     text_blocks_to_grid,
 )
 from app.application.shipment_excel_etl_security import direct_execute_allowed
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 
 @pytest.fixture(autouse=True)

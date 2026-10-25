@@ -3554,10 +3554,10 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+    import app.application.excel_imports as excel_imports
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    import app.application.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.legacy.routes.product import compat_routes as product_compat_routes
 
@@ -4799,8 +4799,9 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []

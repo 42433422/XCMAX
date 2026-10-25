@@ -75,8 +75,8 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.db.db_base import Base
     from app.db.models import AIConversation, User
-    from app.infrastructure.tenant_scope import tenant_scope
     from app.domain.shared_services.database_service import DatabaseService
+    from app.infrastructure.tenant_scope import tenant_scope
 
     live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
     engine = create_engine(f"sqlite:///{live}")

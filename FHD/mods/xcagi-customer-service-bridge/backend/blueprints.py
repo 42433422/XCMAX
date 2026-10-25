@@ -10,6 +10,7 @@ from typing import Any, Dict, cast
 from fastapi import APIRouter
 from fastapi import Request as Request
 
+from app.application.customer_service.protocols import Employee, Environment
 from app.mod_sdk.customer_service.assembly import register_routes
 from app.mod_sdk.customer_service.models import (
     AnalyzePipelineBody as AnalyzePipelineBody,
@@ -65,7 +66,6 @@ from app.mod_sdk.customer_service.models import (
 from app.mod_sdk.customer_service.models import (
     WechatSendBody as WechatSendBody,
 )
-from app.application.customer_service.protocols import Employee, Environment
 from app.mod_sdk.errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.document_templates.crud import (
     _build_template_payload_from_row,
     _j,
@@ -15,6 +14,7 @@ from app.domain.shared_services.document_templates.crud import (
     create_template_with_payload,
     update_template_with_payload,
 )
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture
@@ -91,7 +91,9 @@ class TestEnsureTemplateTablesReady:
                 "app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"
             ) as mock_ensure,
         ):
-            from app.domain.shared_services.document_templates.crud import _ensure_template_tables_ready
+            from app.domain.shared_services.document_templates.crud import (
+                _ensure_template_tables_ready,
+            )
 
             _ensure_template_tables_ready()
             mock_init.assert_called_once()
@@ -99,7 +101,9 @@ class TestEnsureTemplateTablesReady:
 
     def test_handles_error_gracefully(self):
         with patch("app.db.init_db.init_template_tables", side_effect=RuntimeError("db error")):
-            from app.domain.shared_services.document_templates.crud import _ensure_template_tables_ready
+            from app.domain.shared_services.document_templates.crud import (
+                _ensure_template_tables_ready,
+            )
 
             # Should not raise
             _ensure_template_tables_ready()

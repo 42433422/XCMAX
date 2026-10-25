@@ -22,12 +22,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.infrastructure.persistence.shipment_record_command_impl import (
-    SQLAlchemyShipmentRecordCommand,
-)
 from app.domain.shared_services.conversation_service import (
     ConversationService,
     get_conversation_service,
+)
+from app.infrastructure.persistence.shipment_record_command_impl import (
+    SQLAlchemyShipmentRecordCommand,
 )
 
 # ---------------------------------------------------------------------------

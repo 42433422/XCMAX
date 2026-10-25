@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import clear_profile_cache
 from app.application.shipment_excel_etl_app_service import (
     batch_execute_shipment_excel_etl,
@@ -19,6 +18,7 @@ from app.application.shipment_excel_etl_app_service import (
     write_delivery_note_workbook,
     write_ledger_workbook,
 )
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 SAMPLE_DIR = Path("/Users/a4243342/Desktop/新建文件夹 (4)/产品文件夹/发货单")
 

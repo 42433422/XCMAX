@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services import unified_query_service as uqs_mod
 from app.domain.shared_services.unified_query_service import (
     UnifiedQueryService,
     check_purchase_unit_exists,
@@ -24,6 +23,7 @@ from app.domain.shared_services.unified_query_service import (
     get_product_names,
     get_purchase_units,
 )
+from app.services import unified_query_service as uqs_mod
 
 
 class _FakeQuery:

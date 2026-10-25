@@ -223,7 +223,9 @@ def test_sqlite_old_fact_read_and_status_write_never_recalculate(tmp_path, monke
 
 def test_event_and_customer_write_are_not_emitted_for_invalid_second_line():
     from app.application.shipment_business_record import remember_business_shipment
-    from app.domain.shared_services.tools_workflow_shipments_docs import _registered_router_business_event
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_business_event,
+    )
 
     payload = {
         "unit_name": "customer",

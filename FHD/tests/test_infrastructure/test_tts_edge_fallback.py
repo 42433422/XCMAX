@@ -23,7 +23,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services import tts_service as tts
 from app.domain.shared_services.tts_service import (
     _EDGE_VOICE_RE,
     DEFAULT_EDGE_VOICE,
@@ -36,6 +35,7 @@ from app.domain.shared_services.tts_service import (
     synthesize_to_data_uri,
     trigger_common_tts_warmup,
 )
+from app.services import tts_service as tts
 
 
 @pytest.fixture(autouse=True)

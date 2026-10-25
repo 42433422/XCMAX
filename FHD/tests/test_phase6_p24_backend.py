@@ -37,6 +37,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.desktop_runtime import queue as desktop_queue
+from app.domain.shared_services.session_service import SessionService
+from app.domain.shared_services.xcmax_sync_service import (
+    _ENTITY_APPLIERS,
+    apply_inbox,
+    push_outbox,
+    record_change,
+)
 from app.fastapi_routes import print_routes
 from app.fastapi_routes.print_routes import router as print_router
 from app.infrastructure.mods import mod_manager as mod_manager_mod
@@ -73,13 +80,6 @@ from app.neuro_bus.routing.policy_router import (
     decide_processor_with_policy,
 )
 from app.services import session_service as session_service_mod
-from app.domain.shared_services.session_service import SessionService
-from app.domain.shared_services.xcmax_sync_service import (
-    _ENTITY_APPLIERS,
-    apply_inbox,
-    push_outbox,
-    record_change,
-)
 
 # ---------------------------------------------------------------------------
 # Shared helpers

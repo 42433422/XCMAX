@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from fastapi import HTTPException, UploadFile
 
-from app.fastapi_routes import mod_store_routes as api
 from app.domain.shared_services.mod_zip_normalize import normalize_package_zip_path
+from app.fastapi_routes import mod_store_routes as api
 
 
 def _wrapped_zip() -> bytes:

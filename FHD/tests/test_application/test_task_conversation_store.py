@@ -189,8 +189,8 @@ def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
     from starlette.requests import Request
 
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.legacy.routes.conversation.compat_extra import conversations_get
     from app.domain.shared_services.conversation_service import ConversationService
+    from app.legacy.routes.conversation.compat_extra import conversations_get
 
     conversation = ConversationService()
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)

@@ -17,6 +17,7 @@ from app.ai_engines.deepseek.intent_service import INTENT_DESCRIPTIONS, _IntentR
 from app.application import aibiz_web_terminal_service as aibiz_mod
 from app.application.rbac_app_service import RbacAppService, get_rbac_app_service
 from app.domain.conversation.unified_intent_recognizer import _env_flag
+from app.domain.shared_services.deepseek_intent_service import _make_intent_cache_key, cn_to_number
 from app.infrastructure.documents.price_list_export import (
     _detect_header_row_count,
     _format_price_cell,
@@ -35,7 +36,6 @@ from app.infrastructure.persistence.compat_db.writes import (
 from app.infrastructure.persistence.sqlite_vector_store import SQLiteVectorStore
 from app.infrastructure.rag.rag_service import RagService, is_rag_enabled
 from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
-from app.domain.shared_services.deepseek_intent_service import _make_intent_cache_key, cn_to_number
 from tests.fixtures.backend_ci_isolation import isolated_login_host_db  # noqa: F401
 
 # ---------------------------------------------------------------------------

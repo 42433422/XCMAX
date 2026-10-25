@@ -483,8 +483,8 @@ class TestDeleteBackup:
 
 class TestServiceReExportGuard:
     def test_reexports_services_version_not_utils(self):
-        import app.services as services_pkg
         import app.domain.shared_services.database_service as correct_mod
+        import app.services as services_pkg
 
         assert services_pkg.get_database_service is correct_mod.get_database_service
         assert isinstance(services_pkg.get_database_service(), DatabaseService)

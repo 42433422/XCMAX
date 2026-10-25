@@ -586,7 +586,9 @@ class TestDistillationCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_samples_unknown_intent_skipped(self):
-        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import (
+            collect_samples_via_deepseek,
+        )
 
         mock_intent_result = {"intent": "unknown_intent", "slots": {}, "confidence": 0.9}
         with (
@@ -604,7 +606,9 @@ class TestDistillationCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_samples_invalid_result_skipped(self):
-        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import (
+            collect_samples_via_deepseek,
+        )
 
         with (
             patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
@@ -620,7 +624,9 @@ class TestDistillationCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_samples_valid_intent_saved(self):
-        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import (
+            collect_samples_via_deepseek,
+        )
 
         mock_result = {"intent": "greet", "slots": {}, "confidence": 0.9}
         with (

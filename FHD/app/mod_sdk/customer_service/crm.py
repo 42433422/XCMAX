@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .customer_service_ports import CrmServices, Payload, PipelineRepository
 from .models import (
     PipelineBody,
 )
-from .customer_service_ports import CrmServices, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

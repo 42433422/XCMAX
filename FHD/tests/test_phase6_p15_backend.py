@@ -17,11 +17,11 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from PIL import Image
 
+import app.domain.shared_services.tools_workflow_registered as twr
 import app.fastapi_routes.market_account as ma
 import app.fastapi_routes.mod_store_routes as msr
 import app.infrastructure.mods.catalog_client as cc
 import app.services.skills.label_template_generator.label_template_generator as ltg
-import app.domain.shared_services.tools_workflow_registered as twr
 from app.fastapi_routes.market_account import router as market_router
 from app.fastapi_routes.mod_store_routes import router as mod_store_router
 

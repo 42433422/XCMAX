@@ -78,7 +78,9 @@ def test_label_products_allow_enterprise_tenant(monkeypatch) -> None:
 
 
 def test_shipment_create_records_the_unit(monkeypatch) -> None:
-    from app.domain.shared_services.tools_workflow_shipments_docs import _registered_router_business_event
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_business_event,
+    )
 
     seen = {}
 

@@ -23,8 +23,8 @@ from sqlalchemy.pool import StaticPool
 import app.domain.shared_services.report_service as report_service
 from app.db.db_base import Base
 from app.db.models import Customer, Product, SalesOrder, SalesOrderItem, ShipmentRecord
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.report_service import ReportService
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 @pytest.fixture(scope="function")

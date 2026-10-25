@@ -64,9 +64,9 @@ from app.db.models import (
     SalesOrderItem,
     Warehouse,
 )
-from app.infrastructure.tenant_scope import tenant_scope
 from app.domain.shared_services.report_service import ReportService
 from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+from app.infrastructure.tenant_scope import tenant_scope
 
 # 精确验收句子（实体名按句中原样：A 产品含「产品」标记与空格，客户B含「客户」前缀）
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"

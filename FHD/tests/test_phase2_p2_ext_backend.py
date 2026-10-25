@@ -16,12 +16,12 @@ from app.domain.context.session_context import (
     _sanitize_untrusted_context_line,
     format_runtime_context_for_llm,
 )
-from app.infrastructure.rag.semantic_chunker import SemanticChunker
-from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 from app.domain.shared_services.conversation.context import ContextMixin, ConversationContext
 from app.domain.shared_services.conversation.intent import IntentMixin
 from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 from app.domain.shared_services.kitten_report.save_service import AnalysisSaveService
+from app.infrastructure.rag.semantic_chunker import SemanticChunker
+from app.infrastructure.repositories.product_repository_impl import SQLAlchemyProductRepository
 
 # ---------------------------------------------------------------------------
 # conversation context + intent mixin helpers

@@ -14,10 +14,10 @@ from typing import Any
 import pytest
 from PIL import Image
 
+from app.domain.label_template.ports import Grid, ImageAnalysisPorts, OCRPorts
 from app.services.skills.label_template_generator import analysis as image_analysis
 from app.services.skills.label_template_generator import label_template_generator as generator
 from app.services.skills.label_template_generator import ocr as image_ocr
-from app.domain.label_template.ports import Grid, ImageAnalysisPorts, OCRPorts
 
 _GENERATED_CONSUMER = r"""
 import importlib.util

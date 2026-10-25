@@ -34,8 +34,8 @@ def _note(number):
 
 @pytest.fixture
 def import_ports(tmp_path, monkeypatch):
-    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
     from app.application.shipment_etl_profile import clear_profile_cache
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     kb_path = tmp_path / "kb.json"
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(kb_path))
