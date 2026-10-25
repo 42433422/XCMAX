@@ -49,7 +49,7 @@ async def repair_runtime_convert_module(
         if prov in _facade().OAI_COMPAT_OPENAI_STYLE_PROVIDERS
         else None
     )
-    system = "你是 Python 代码修复器。只输出修复后的 convert.py Python 代码块。必须保留 convert_file 签名，必须真实读取 src_path/template_path 并保存 output_path。如果业务映射复杂，最低要求也必须基于模板 workbook 写出一个有效 xlsx 到 output_path，并返回统计信息。绝对禁止使用以下任何一种写法，否则代码将被拒绝：\n  - eval(...) / exec(...) / compile(...) / __import__(...)\n  - import subprocess / import os 后调用 os.system / import ctypes / import multiprocessing\n  - globals() / locals() / getattr(...) / setattr(...) / delattr(...) / input(...) / breakpoint()\n  - 任何形式的动态代码执行或反射调用\n允许使用 pathlib、json、datetime、re、typing、openpyxl、pandas、copy、collections、io。\n"
+    system = "你是 Python 代码修复器。只输出修复后的 convert.py Python 代码块。必须保留 convert_file 签名，必须真实读取 src_path/template_path 并保存 output_path。如果业务映射复杂，最低要求也必须基于模板 workbook 写出一个有效 xlsx 到 output_path，并返回统计信息。绝对禁止使用以下任何一种写法，否则代码将被拒绝：\n  - eval（...） / exec（...） / compile（...） / __import__（...）\n  - import subprocess / import os 后调用 os.system / import ctypes / import multiprocessing\n  - globals() / locals() / getattr(...) / setattr(...) / delattr(...) / input(...) / breakpoint()\n  - 任何形式的动态代码执行或反射调用\n允许使用 pathlib、json、datetime、re、typing、openpyxl、pandas、copy、collections、io。\n"
     user_msg = _facade().json.dumps(
         {
             "round": round_no,
@@ -201,5 +201,3 @@ def pack_has_direct_python_runtime(pack_dir: _facade().Path) -> bool:
 
 # --- from employee_asset_pipeline_part06_part01_part01.py ---
 """Implementation extracted from the public facade module."""
-
-

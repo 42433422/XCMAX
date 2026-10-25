@@ -1,31 +1,27 @@
-"""Re-export split modules (debt19). Includes private (_*) names."""
+"""Re-export / script entry for split eval modules (debt19)."""
 
 from __future__ import annotations
 
 import runpy
 import sys
-from pathlib import Path
+from pathlib import Path as _Path
 
 
-def _reexport(module) -> None:
-    g = globals()
-    for name, value in vars(module).items():
-        if name.startswith("__") and name.endswith("__"):
-            continue
-        g[name] = value
+def _load_splits_into(g: dict) -> None:
+    here = _Path(__file__).resolve().parent
+    for name in (
+        "run_agent_eval_mod1.py",
+        "run_agent_eval_mod2.py",
+        "run_agent_eval_mod3.py",
+    ):
+        path = here / name
+        src = path.read_text(encoding="utf-8")
+        exec(compile(src, str(path), "exec"), g)
 
 
 if __name__ == "__main__":
-    # Preserve historic `python FHD/evals/run_agent_eval.py` entry.
-    target = Path(__file__).with_name("run_agent_eval_mod3.py")
-    sys.argv[0] = str(target)
-    runpy.run_path(str(target), run_name="__main__")
+    g = {"__name__": "__main__", "__file__": __file__}
+    _load_splits_into(g)
+    raise SystemExit(g["main"]())
 else:
-    from . import run_agent_eval_mod1 as _split_0
-    from . import run_agent_eval_mod2 as _split_1
-    from . import run_agent_eval_mod3 as _split_2
-
-    _reexport(_split_0)
-    _reexport(_split_1)
-    _reexport(_split_2)
-    del _reexport, _split_0, _split_1, _split_2
+    _load_splits_into(globals())

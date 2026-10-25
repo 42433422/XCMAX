@@ -389,7 +389,9 @@ def build_rule_spec(
     *,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.employee_pipeline_routing import confident_word_full_extract_routing
+    from modstore_server.employee_pipeline_routing import (
+        confident_word_full_extract_routing,
+    )
 
     if confident_word_full_extract_routing(brief):
         return _facade().build_word_extract_rule_spec(brief)
@@ -487,7 +489,10 @@ def build_rule_spec(
                 a.get("filename") for a in (asset_manifest.get("expected_outputs") or [])[:5]
             ],
             "rules": [
-                {"filename": a.get("filename"), "preview": str(a.get("preview") or "")[:1000]}
+                {
+                    "filename": a.get("filename"),
+                    "preview": str(a.get("preview") or "")[:1000],
+                }
                 for a in (asset_manifest.get("rules") or [])[:5]
             ],
         },
@@ -564,7 +569,9 @@ def _slug_from_brief(brief: str) -> str:
 def _employee_name_from_brief(brief: str, fallback: str = "文件处理员工") -> str:
     text = (brief or "").strip()
     explicit = _facade().re.search(
-        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})", text, _facade().re.I
+        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})",
+        text,
+        _facade().re.I,
     )
     if explicit:
         return explicit.group(1).strip()
@@ -1405,7 +1412,9 @@ async def enrich_manifest_productivity_fields(
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
     """轻量 LLM：仅补 description / panel_summary / behavior_rules，与模板落盘并行，不阻塞 convert。"""
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if not is_direct_python_template_runtime(runtime_kind):
@@ -1489,7 +1498,9 @@ async def design_asset_employee_manifest(
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if is_direct_python_template_runtime(runtime_kind):
@@ -1867,7 +1878,7 @@ async def generate_runtime_convert_module(
         }
         max_tokens = 16000
     else:
-        system = "你是工作台 vibecoding 的 Python 实现器。只输出一个 Python 代码块，内容是 backend/vendor/<runtime>/convert.py。必须定义 convert_file(src_path: Path, output_path: Path, *, template_path: Optional[Path], payload: Dict[str, Any], ctx: Dict[str, Any], rule_spec: Dict[str, Any]) -> Dict[str, Any]。必须真实读取输入 Excel、按模板/规则写出 output_path。不能调用 LLM，不能写伪结果。绝对禁止使用以下任何一种写法，否则代码将被拒绝：\n  - eval(...) / exec(...) / compile(...) / __import__(...)\n  - import subprocess / import os 后调用 os.system / import ctypes / import multiprocessing\n  - globals() / locals() / getattr(...) / setattr(...) / delattr(...) / input(...) / breakpoint()\n  - 任何形式的动态代码执行或反射调用\n允许使用 pathlib、json、datetime、re、typing、openpyxl、pandas、copy、collections、io。异常要抛出清晰错误。\n正确示例：\n  from pathlib import Path\n  from openpyxl import load_workbook\n  def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx=None, rule_spec=None):\n      wb = load_workbook(src_path)\n      # ... 处理逻辑 ...\n      wb.save(output_path)\n      return {'output_path': str(output_path), 'stat_rows': 1}\n错误示例（会被拒绝）：\n  exec('print(1)')  # 禁止\n  __import__('os')   # 禁止\n  getattr(obj, 'x') # 禁止\n"
+        system = "你是工作台 vibecoding 的 Python 实现器。只输出一个 Python 代码块，内容是 backend/vendor/<runtime>/convert.py。必须定义 convert_file(src_path: Path, output_path: Path, *, template_path: Optional[Path], payload: Dict[str, Any], ctx: Dict[str, Any], rule_spec: Dict[str, Any]) -> Dict[str, Any]。必须真实读取输入 Excel、按模板/规则写出 output_path。不能调用 LLM，不能写伪结果。绝对禁止使用以下任何一种写法，否则代码将被拒绝：\n  - eval（...） / exec（...） / compile（...） / __import__（...）\n  - import subprocess / import os 后调用 os.system / import ctypes / import multiprocessing\n  - globals() / locals() / getattr(...) / setattr(...) / delattr(...) / input(...) / breakpoint()\n  - 任何形式的动态代码执行或反射调用\n允许使用 pathlib、json、datetime、re、typing、openpyxl、pandas、copy、collections、io。异常要抛出清晰错误。\n正确示例：\n  from pathlib import Path\n  from openpyxl import load_workbook\n  def convert_file(src_path, output_path, *, template_path=None, payload=None, ctx=None, rule_spec=None):\n      wb = load_workbook(src_path)\n      # ... 处理逻辑 ...\n      wb.save(output_path)\n      return {'output_path': str(output_path), 'stat_rows': 1}\n错误示例（会被拒绝）：\n  exec（'print(1)')  # 禁止\n  __import__('os')   # 禁止\n  getattr(obj, 'x') # 禁止\n"
         contract = {
             "input": "src_path points to the uploaded Excel file.",
             "template": "template_path may point to a bundled template workbook, or may be None.",
@@ -1942,5 +1953,3 @@ async def generate_runtime_convert_module(
         code.rstrip() + "\n",
         {"provider": prov, "model": mdl, "generated": True, "source": "llm_codegen"},
     )
-
-

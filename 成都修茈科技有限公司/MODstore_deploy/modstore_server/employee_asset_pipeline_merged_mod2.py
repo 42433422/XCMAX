@@ -143,7 +143,9 @@ def _copy_template_assets(
             filename = str(asset.get("filename") or src.name)
             rel = str(
                 rule_spec.get("template_relpath")
-                or _facade()._template_storage_relpath(filename, str(rule_spec.get("brief") or ""))
+                or _facade()._template_storage_relpath(
+                    filename, str(rule_spec.get("brief") or "")
+                )
             )
             dest = pack_dir / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -162,7 +164,10 @@ def materialize_asset_employee_pack(
         raise ValueError("manifest.id 缺失")
     emp = manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
     employee_id = pack_id
-    label = str(emp.get("label") or manifest.get("name") or employee_id).strip() or employee_id
+    label = (
+        str(emp.get("label") or manifest.get("name") or employee_id).strip()
+        or employee_id
+    )
     stem = _facade().sanitize_employee_stem(employee_id)
     runtime_mod = _facade()._runtime_package_name(pack_id, employee_id)
     runtime_kind = rule_spec.get("runtime_kind") or "generic_excel_transform"
@@ -197,11 +202,15 @@ def materialize_asset_employee_pack(
         )
 
         (pack_dir / "backend" / "employees" / f"{stem}.py").write_text(
-            render_employee_pack_employee_py(employee_id=employee_id, stem=stem, label=label),
+            render_employee_pack_employee_py(
+                employee_id=employee_id, stem=stem, label=label
+            ),
             encoding="utf-8",
         )
     else:
-        (pack_dir / "backend" / "vendor" / runtime_mod).mkdir(parents=True, exist_ok=True)
+        (pack_dir / "backend" / "vendor" / runtime_mod).mkdir(
+            parents=True, exist_ok=True
+        )
         (pack_dir / "backend" / "employees" / f"{stem}.py").write_text(
             _facade().render_direct_python_asset_worker(
                 employee_id=employee_id,
@@ -213,10 +222,14 @@ def materialize_asset_employee_pack(
         )
         for name, src in (
             _facade()
-            .render_runtime_modules(rule_spec, generated_convert_py=generated_convert_py)
+            .render_runtime_modules(
+                rule_spec, generated_convert_py=generated_convert_py
+            )
             .items()
         ):
-            (pack_dir / "backend" / "vendor" / runtime_mod / name).write_text(src, encoding="utf-8")
+            (pack_dir / "backend" / "vendor" / runtime_mod / name).write_text(
+                src, encoding="utf-8"
+            )
     _facade()._copy_template_assets(pack_dir, asset_manifest, rule_spec)
     (pack_dir / "asset_manifest.json").write_text(
         _facade().json.dumps(asset_manifest, ensure_ascii=False, indent=2) + "\n",
@@ -240,11 +253,17 @@ def validate_asset_employee_pack(
         else {}
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
-    top_actions = manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
-    top_handlers = (
-        top_actions.get("handlers") if isinstance(top_actions.get("handlers"), list) else []
+    top_actions = (
+        manifest.get("actions") if isinstance(manifest.get("actions"), dict) else {}
     )
-    v2_handlers = actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    top_handlers = (
+        top_actions.get("handlers")
+        if isinstance(top_actions.get("handlers"), list)
+        else []
+    )
+    v2_handlers = (
+        actions.get("handlers") if isinstance(actions.get("handlers"), list) else []
+    )
     _is_agent_handler = "agent" in v2_handlers
     if not _is_agent_handler and actions.get("handlers") != ["direct_python"]:
         warnings.append("actions.handlers 必须为 ['direct_python'] 或 ['agent']")
@@ -254,11 +273,17 @@ def validate_asset_employee_pack(
         )
     emp_dir = pack_dir / "backend" / "employees"
     py_files = (
-        [p for p in emp_dir.glob("*.py") if p.name != "__init__.py"] if emp_dir.is_dir() else []
+        [p for p in emp_dir.glob("*.py") if p.name != "__init__.py"]
+        if emp_dir.is_dir()
+        else []
     )
     if not py_files:
         warnings.append("缺少 backend/employees 入口脚本")
-    direct = actions.get("direct_python") if isinstance(actions.get("direct_python"), dict) else {}
+    direct = (
+        actions.get("direct_python")
+        if isinstance(actions.get("direct_python"), dict)
+        else {}
+    )
     module_name = str(direct.get("module") or "").strip()
     if module_name:
         expected_file = emp_dir / f"{module_name}.py"
@@ -288,7 +313,10 @@ def validate_asset_employee_pack(
     if tpl:
         template_dir = pack_dir / "backend" / "templates"
         has_any_template = template_dir.is_dir() and any(
-            (p.suffix.lower() in _facade().EXCEL_SUFFIXES for p in template_dir.rglob("*"))
+            (
+                p.suffix.lower() in _facade().EXCEL_SUFFIXES
+                for p in template_dir.rglob("*")
+            )
         )
         if not (
             (pack_dir / tpl).is_file()
@@ -318,12 +346,16 @@ async def run_asset_employee_scaffold_async(
     force_llm_codegen: bool = False,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.artifact_generator_blueprint import artifact_generator_preflight
+    from modstore_server.artifact_generator_blueprint import (
+        artifact_generator_preflight,
+    )
     from modstore_server.craft_failure_signals import (
         _employee_trigger_limits,
         emit_craft_step_failure,
     )
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
     from modstore_server.vibecoding_convert_loop import (
         is_llm_codegen_source,
         run_vibecoding_codegen_loop,
@@ -354,7 +386,11 @@ async def run_asset_employee_scaffold_async(
             "warnings": [],
             "missing_fields": bp_preflight.get("missing_fields") or [],
         }
-    _paths_ok, _path_errors, _paths_checked = _facade()._preflight_scaffold_write_access(
+    (
+        _paths_ok,
+        _path_errors,
+        _paths_checked,
+    ) = _facade()._preflight_scaffold_write_access(
         session_id=session_id, user_id=int(user.id)
     )
     if not _paths_ok:
@@ -392,7 +428,9 @@ async def run_asset_employee_scaffold_async(
     repair_history: _facade().List[_facade().Dict[str, _facade().Any]] = []
     domain_smoke: _facade().Dict[str, _facade().Any] = {}
     golden_comparison: _facade().Dict[str, _facade().Any] = {}
-    use_vibecoding_loop = is_direct_python_template_runtime(runtime_kind) or bool(force_llm_codegen)
+    use_vibecoding_loop = is_direct_python_template_runtime(runtime_kind) or bool(
+        force_llm_codegen
+    )
     base_manifest = _facade()._normalize_manifest(
         _facade()._fallback_manifest(_brief, rule_spec), _brief, rule_spec
     )
@@ -455,7 +493,9 @@ async def run_asset_employee_scaffold_async(
     warnings = _facade().validate_asset_employee_pack(pack_dir, manifest)
     if use_vibecoding_loop:
         if not generated_convert_py:
-            warnings.append(str(runtime_meta.get("error") or "vibecoding 未产出合格 convert"))
+            warnings.append(
+                str(runtime_meta.get("error") or "vibecoding 未产出合格 convert")
+            )
         elif domain_smoke.get("ok") is False and (not domain_smoke.get("skipped")):
             warnings.append(f"领域冒烟失败：{domain_smoke.get('error') or ''}"[:200])
         elif golden_comparison and (not golden_comparison.get("passed")):
@@ -495,7 +535,11 @@ async def run_asset_employee_scaffold_async(
         warnings = _facade().validate_asset_employee_pack(pack_dir, manifest)
         generated_convert_py = repaired
         runtime_meta = {**runtime_meta, "repaired_after_validate": True}
-    if warnings and len(repair_history) >= _max_repair_rounds and (not use_vibecoding_loop):
+    if (
+        warnings
+        and len(repair_history) >= _max_repair_rounds
+        and (not use_vibecoding_loop)
+    ):
         _budget_msg = f"动态修复预算已用尽（max_patch_steps={_max_repair_rounds}，max_patch_budget_tokens={_limits.get('max_patch_budget_tokens')}）"
         emit_craft_step_failure(
             step_id="generate",
@@ -523,7 +567,9 @@ async def run_asset_employee_scaffold_async(
         tmp_path.unlink(missing_ok=True)
     saved_package: _facade().Dict[str, _facade().Any] = {}
     if publish_to_catalog:
-        with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
+        with _facade().tempfile.NamedTemporaryFile(
+            suffix=".xcemp", delete=False
+        ) as tmp:
             tmp.write(raw_zip)
             pkg_tmp_path = _facade().Path(tmp.name)
         try:
@@ -542,7 +588,9 @@ async def run_asset_employee_scaffold_async(
             }
             saved_package = append_package(rec, pkg_tmp_path)
             row = (
-                db.query(_facade().CatalogItem).filter(_facade().CatalogItem.pkg_id == pid).first()
+                db.query(_facade().CatalogItem)
+                .filter(_facade().CatalogItem.pkg_id == pid)
+                .first()
             )
             if not row:
                 row = _facade().CatalogItem(pkg_id=pid, author_id=user.id)
@@ -592,7 +640,9 @@ async def run_word_extract_employee_scaffold_async(
     *,
     session_id: str,
     brief: str,
-    raw_files: _facade().Optional[_facade().List[_facade().Dict[str, _facade().Any]]] = None,
+    raw_files: _facade().Optional[
+        _facade().List[_facade().Dict[str, _facade().Any]]
+    ] = None,
     replace: bool = True,
     provider: _facade().Optional[str] = None,
     model: _facade().Optional[str] = None,

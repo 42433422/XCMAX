@@ -1,82 +1,3 @@
-from __future__ import annotations
-
-from langgraph._internal._exception_policy import TERMINATION_ERRORS
-from langgraph.pregel.main_mod1 import *  # noqa: F403
-
-class PregelDebt19Mixin2:
-    def _defaults(
-        self,
-        config: RunnableConfig,
-        *,
-        stream_mode: StreamMode | Sequence[StreamMode],
-        print_mode: StreamMode | Sequence[StreamMode],
-        output_keys: str | Sequence[str] | None,
-        interrupt_before: All | Sequence[str] | None,
-        interrupt_after: All | Sequence[str] | None,
-        durability: Durability | None = None,
-    ) -> tuple[
-        set[StreamMode],
-        str | Sequence[str],
-        All | Sequence[str],
-        All | Sequence[str],
-        BaseCheckpointSaver | None,
-        BaseStore | None,
-        BaseCache | None,
-        Durability,
-    ]:
-        if config["recursion_limit"] < 1:
-            raise ValueError("recursion_limit must be at least 1")
-        if output_keys is None:
-            output_keys = self.stream_channels_asis
-        else:
-            validate_keys(output_keys, self.channels)
-        interrupt_before = interrupt_before or self.interrupt_before_nodes
-        interrupt_after = interrupt_after or self.interrupt_after_nodes
-        if isinstance(stream_mode, str):
-            stream_modes = {stream_mode}
-        else:
-            stream_modes = set(stream_mode)
-        if isinstance(print_mode, str):
-            stream_modes.add(print_mode)
-        else:
-            stream_modes.update(print_mode)
-        if self.checkpointer is False:
-            checkpointer: BaseCheckpointSaver | None = None
-        elif CONFIG_KEY_CHECKPOINTER in config.get(CONF, {}):
-            checkpointer = config[CONF][CONFIG_KEY_CHECKPOINTER]
-        elif self.checkpointer is True:
-            raise RuntimeError("checkpointer=True cannot be used for root graphs.")
-        else:
-            checkpointer = self.checkpointer
-        if isinstance(checkpointer, BaseCheckpointSaver):
-            checkpointer = self._apply_checkpointer_allowlist(checkpointer)
-        if checkpointer and not config.get(CONF):
-            raise ValueError(
-                "Checkpointer requires one or more of the following 'configurable' "
-                "keys: thread_id, checkpoint_ns, checkpoint_id"
-            )
-        if CONFIG_KEY_RUNTIME in config.get(CONF, {}):
-            store: BaseStore | None = config[CONF][CONFIG_KEY_RUNTIME].store
-        else:
-            store = self.store
-        if CONFIG_KEY_CACHE in config.get(CONF, {}):
-            cache: BaseCache | None = config[CONF][CONFIG_KEY_CACHE]
-        else:
-            cache = self.cache
-        if durability is None:
-            durability = config.get(CONF, {}).get(CONFIG_KEY_DURABILITY, "async")
-        return (
-            stream_modes,
-            output_keys,
-            interrupt_before,
-            interrupt_after,
-            checkpointer,
-            store,
-            cache,
-            durability,
-        )
-
-    @overload
     def stream(
         self,
         input: InputT | Command | None,
@@ -1632,3 +1553,195 @@ class PregelDebt19Mixin2:
                 )
         # clear cache
         await self.cache.aclear(namespaces)
+
+
+def _trigger_to_nodes(nodes: dict[str, PregelNode]) -> Mapping[str, Sequence[str]]:
+    """Index from a trigger to nodes that depend on it."""
+    trigger_to_nodes: defaultdict[str, list[str]] = defaultdict(list)
+    for name, node in nodes.items():
+        for trigger in node.triggers:
+            trigger_to_nodes[trigger].append(name)
+    return dict(trigger_to_nodes)
+
+
+def _output(
+    stream_mode: StreamMode | Sequence[StreamMode],
+    print_mode: StreamMode | Sequence[StreamMode],
+    stream_subgraphs: bool,
+    getter: Callable[[], tuple[tuple[str, ...], str, Any]],
+    empty_exc: type[Exception],
+    version: Literal["v1", "v2"] = "v1",
+    output_mapper: Callable[[Any], Any] | None = None,
+    state_mapper: Callable[[Any], Any] | None = None,
+) -> Iterator:
+    while True:
+        try:
+            ns, mode, payload = getter()
+        except empty_exc:
+            break
+        if mode in print_mode:
+            if stream_subgraphs and ns:
+                print(
+                    " ".join(
+                        (
+                            get_bolded_text(f"[{mode}]"),
+                            get_colored_text(f"[graph={ns}]", color="yellow"),
+                            repr(payload),
+                        )
+                    )
+                )
+            else:
+                print(
+                    " ".join(
+                        (
+                            get_bolded_text(f"[{mode}]"),
+                            repr(payload),
+                        )
+                    )
+                )
+        if mode in stream_mode:
+            if version == "v2":
+                if mode == "values":
+                    # pop __interrupt__ into typed field, coerce data
+                    ints: tuple[Interrupt, ...] = ()
+                    if isinstance(payload, dict):
+                        ints = payload.pop(INTERRUPT, ())
+                        if output_mapper:
+                            payload = output_mapper(payload)
+                    yield {"type": mode, "ns": ns, "data": payload, "interrupts": ints}
+                elif mode in ("checkpoints", "debug"):
+                    # coerce state values in checkpoint/debug payloads
+                    if state_mapper:
+                        _coerce_checkpoint_values(payload, state_mapper)
+                    yield {"type": mode, "ns": ns, "data": payload}
+                else:
+                    yield {"type": mode, "ns": ns, "data": payload}
+            elif stream_subgraphs and isinstance(stream_mode, list):
+                yield (ns, mode, payload)
+            elif isinstance(stream_mode, list):
+                yield (mode, payload)
+            elif stream_subgraphs:
+                yield (ns, payload)
+            else:
+                yield payload
+
+
+def _coerce_checkpoint_values(payload: Any, mapper: Callable[[Any], Any]) -> None:
+    """Coerce `values` dicts inside checkpoint or debug payloads in-place.
+
+    Skips the initial checkpoint (where next contains ``__start__``) because
+    not all channels are populated yet and coercion would fail.
+    """
+    _START = "__start__"
+    # debug wrapper: {"type": "checkpoint", "payload": {"values": dict, ...}}
+    if (
+        isinstance(payload, dict)
+        and payload.get("type") == "checkpoint"
+        and isinstance(payload.get("payload"), dict)
+        and isinstance(payload["payload"].get("values"), dict)
+        and _START not in payload["payload"].get("next", ())
+    ):
+        payload["payload"]["values"] = mapper(payload["payload"]["values"])
+    # direct checkpoint payload: {"values": dict, ...}
+    elif (
+        isinstance(payload, dict)
+        and isinstance(payload.get("values"), dict)
+        and _START not in payload.get("next", ())
+    ):
+        payload["values"] = mapper(payload["values"])
+
+
+def _resolve_parent_ns(
+    graph_config: RunnableConfig | None, call_config: RunnableConfig | None
+) -> tuple[str, ...]:
+    """Return the checkpoint namespace the caller is running under.
+
+    `stream_events(version="v3")` uses this to scope its native projections
+    (`ValuesTransformer`, `MessagesTransformer`) to events emitted at
+    the run's own level. A root call resolves to `()`; a call made
+    from inside a node carries the outer graph's task namespace so the
+    projection still matches its own root-level events.
+    """
+    merged = ensure_config(graph_config, call_config)
+    ns = merged.get(CONF, {}).get(CONFIG_KEY_CHECKPOINT_NS)
+    if not ns:
+        return ()
+    return tuple(ns.split(NS_SEP))
+
+
+def _coerce_parent_runtime(value: Any) -> Runtime[Any]:
+    """Normalize the value stored under `CONFIG_KEY_RUNTIME` into a `Runtime`.
+
+    During a graph run this is always a `Runtime` the framework created and
+    published for child tasks to inherit. Layers outside the run (for example a
+    server's graph-factory path) may instead seed an object that only carries
+    `context`/`store`. Adopt its `context` so context set at the graph level
+    plumbs through (`merge` lets the run's own `context` take precedence when
+    one is provided). `store` is resolved separately (passed to the graph
+    directly), so it is not read off here. `merge` then combines this with the
+    run's own runtime, including the framework's `control`.
+    """
+    if isinstance(value, Runtime):
+        return value
+    return Runtime(context=getattr(value, "context", None))
+
+
+def _build_server_info(
+    config: RunnableConfig, parent_runtime: Runtime[Any]
+) -> ServerInfo | None:
+    """Build ServerInfo from config configurable.
+
+    The server puts assistant_id/graph_id in config configurable and the
+    authenticated user dict in configurable["langgraph_auth_user"].
+    """
+    configurable = config.get(CONF) or {}
+    assistant_id = configurable.get("assistant_id")
+    graph_id = configurable.get("graph_id")
+
+    # Read authenticated user from configurable (set by LangGraph Server).
+    # We prefer isinstance(BaseUser) but fall back to hasattr("identity")
+    # because the server's ProxyUser provides `permissions` via __getattr__,
+    # which Python's runtime_checkable Protocol check doesn't see.
+    auth_user_data = configurable.get("langgraph_auth_user")
+    user: BaseUser | None = None
+    if auth_user_data is not None:
+        if isinstance(auth_user_data, BaseUser) or hasattr(auth_user_data, "identity"):
+            user = cast(BaseUser, auth_user_data)
+
+    if assistant_id is not None or graph_id is not None or user is not None:
+        return ServerInfo(
+            assistant_id=str(assistant_id) if assistant_id else "",
+            graph_id=str(graph_id) if graph_id else "",
+            user=user,
+        )
+    return None
+
+
+def _coerce_context(
+    context_schema: type[ContextT] | None, context: Any
+) -> ContextT | None:
+    """Coerce context input to the appropriate schema type.
+
+    If context is a dict and context_schema is a dataclass or pydantic model, we coerce.
+    Else, we return the context as-is.
+
+    Args:
+        context_schema: The schema type to coerce to (BaseModel, dataclass, or TypedDict)
+        context: The context value to coerce
+
+    Returns:
+        The coerced context value or None if context is None
+    """
+    if context is None:
+        return None
+
+    if context_schema is None:
+        return context
+
+    schema_is_class = issubclass(context_schema, BaseModel) or is_dataclass(
+        context_schema
+    )
+    if isinstance(context, dict) and schema_is_class:
+        return context_schema(**context)  # type: ignore[misc]
+
+    return cast(ContextT, context)

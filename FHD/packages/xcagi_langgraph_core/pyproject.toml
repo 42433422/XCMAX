@@ -86,6 +86,12 @@ line-length = 88
 indent-width = 4
 target-version = "py310"
 
+[tool.ty.src]
+exclude = [
+    "langgraph/pregel/main_body_*.py",
+    "langgraph/pregel/main.py",
+]
+
 [tool.ty.rules]
 call-non-callable = "ignore"
 deprecated = "ignore"

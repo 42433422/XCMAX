@@ -3,19 +3,19 @@
   "schema_version": 2,
   "updated_at": "2026-10-25",
   "oversized_files": {
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 2390,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
       "stack": "modstore_backend",
-      "lines": 2297,
+      "lines": 2498,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod1.py": {
       "stack": "modstore_backend",
-      "lines": 2270,
+      "lines": 2437,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": {
+      "stack": "modstore_backend",
+      "lines": 2390,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": {
@@ -28,14 +28,14 @@
       "lines": 2176,
       "soft_cap": 800
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod1_r1.py": {
+      "stack": "modstore_backend",
+      "lines": 2035,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": {
       "stack": "modstore_backend",
       "lines": 2006,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod1_r1.py": {
-      "stack": "modstore_backend",
-      "lines": 1946,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py": {
@@ -83,6 +83,11 @@
       "lines": 1205,
       "soft_cap": 800
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
+      "stack": "modstore_backend",
+      "lines": 1205,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "stack": "modstore_backend",
       "lines": 1205,
@@ -118,11 +123,6 @@
       "lines": 1069,
       "soft_cap": 800
     },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
-      "stack": "modstore_backend",
-      "lines": 1031,
-      "soft_cap": 800
-    },
     "FHD/app/application/shipment_excel_etl_security.py": {
       "stack": "fhd_backend",
       "lines": 970,
@@ -138,14 +138,14 @@
       "lines": 949,
       "soft_cap": 800
     },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod2.py": {
+      "stack": "modstore_backend",
+      "lines": 886,
+      "soft_cap": 800
+    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": {
       "stack": "modstore_backend",
       "lines": 850,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod2.py": {
-      "stack": "modstore_backend",
-      "lines": 846,
       "soft_cap": 800
     }
   },
