@@ -47,7 +47,7 @@ from .admin_control.market_gateway import MarketGateway
 from .admin_control.operations import Operations
 from .admin_control.profile_store import profile_repository
 from .admin_control.profiles import UserProfiles
-from .admin_control.routes import register_routes
+from .admin_control.admin_control_routes import register_routes
 from .admin_control.synchronization import Synchronization
 from .admin_control.usage_sources import UsageSources
 from .admin_control.usage_summary import UsageSummary
