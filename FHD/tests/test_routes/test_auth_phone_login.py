@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    from app.fastapi_routes.domains.auth.routes import router
+    from app.fastapi_routes.domains.auth.auth_routes import router
 
     app = FastAPI()
     app.include_router(router)

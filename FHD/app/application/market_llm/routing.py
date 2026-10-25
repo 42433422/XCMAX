@@ -14,7 +14,7 @@ from app.infrastructure.llm.modstore_chat_failover import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import Connection, Payload, Route, SyncClientFactory
+from .protocols import Connection, Payload, Route, SyncClientFactory
 from .responses import _response_status_code
 
 

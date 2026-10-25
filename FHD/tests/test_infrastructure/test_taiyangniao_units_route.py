@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.attendance_reference_data import attendance_unit_names
+from app.domain.catalog.attendance_reference_data import attendance_unit_names
 
 
 def test_host_attendance_units_merge_private_db_and_host_data(tmp_path, monkeypatch) -> None:
@@ -20,7 +20,7 @@ def test_host_attendance_units_merge_private_db_and_host_data(tmp_path, monkeypa
         conn.execute("CREATE TABLE attendance_employees (department TEXT)")
         conn.execute("INSERT INTO attendance_employees VALUES ('生产部')")
     monkeypatch.setattr(
-        "app.application.attendance_reference_data.resolve_mod_private_sqlite_path",
+        "app.domain.catalog.attendance_reference_data.resolve_mod_private_sqlite_path",
         lambda _name: db_path,
     )
 

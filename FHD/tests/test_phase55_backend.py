@@ -15,11 +15,11 @@ import pytest
 from sqlalchemy.engine import Engine
 
 import app.db as db_mod
-import app.services.user_memory_service as ums
+import app.domain.shared_services.user_memory_service as ums
 import app.utils.resilience.rate_limiter as redis_client_mod
 from app.application.finance_app_service import FinanceAppService, _parse_dt, _to_float
 from app.middleware.security_headers import SecurityHeadersMiddleware
-from app.services.user_memory_service import (
+from app.domain.shared_services.user_memory_service import (
     ActionPattern,
     ContextSummary,
     FeedbackRecord,

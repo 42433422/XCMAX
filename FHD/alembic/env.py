@@ -17,7 +17,7 @@ try:
 except ImportError:
     pass
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

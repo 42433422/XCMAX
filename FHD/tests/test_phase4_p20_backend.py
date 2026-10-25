@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services import service_optimizers as so
-from app.services.service_optimizers import (
+from app.domain.shared_services.service_optimizers import (
     AIOptimizedService,
     CustomerServiceOptimizer,
     ShipmentServiceOptimizer,

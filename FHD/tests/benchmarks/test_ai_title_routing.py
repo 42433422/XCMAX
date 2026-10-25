@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.application.chat_business_safety_core import classify_business_chat_intent
+from app.domain.ops_rules.chat_business_safety_core import classify_business_chat_intent
 from app.application.intent_recognition_app import recognize_intents
 
 

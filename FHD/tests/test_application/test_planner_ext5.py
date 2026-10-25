@@ -990,7 +990,7 @@ class TestFallbackPlanBranches:
             LLMWorkflowPlanner,
             WorkflowNode,
         )
-        from app.application.workflow.types import PlanGraph
+        from app.application.workflow.workflow_types import PlanGraph
 
         # Build a plan with a high-risk node to test risk_level propagation.
         # _fallback_plan itself doesn't produce high-risk nodes, but we test the logic.

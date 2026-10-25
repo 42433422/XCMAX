@@ -931,7 +931,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)
@@ -980,7 +980,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)
@@ -1046,7 +1046,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)
@@ -1090,7 +1090,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)
@@ -1134,7 +1134,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)
@@ -1198,7 +1198,7 @@ class TestExtractTextWithOcr:
 
         sys.modules["cv2"] = cv2_mock
         try:
-            with patch("app.services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
+            with patch("app.domain.shared_services.ocr_service.get_ocr_service", return_value=mock_ocr_svc):
                 result = extract_text_with_ocr(img_path)
         finally:
             sys.modules.pop("cv2", None)

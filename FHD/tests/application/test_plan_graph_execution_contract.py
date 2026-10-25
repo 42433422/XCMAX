@@ -7,7 +7,7 @@ import pytest
 from app.application.agent_orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 
 def node(name, deps=()):

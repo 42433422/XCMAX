@@ -813,12 +813,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_invalid_format_defaults_to_docx(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -831,12 +831,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_xlsx_format(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.xlsx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -848,7 +848,7 @@ class TestExecuteWorkflowToolGenerateOffice:
 
     def test_recoverable_error(self) -> None:
         with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
+            "app.domain.kitten_ai_document.generate.generate_office_file",
             side_effect=OSError("disk full"),
             create=True,
         ):
@@ -861,12 +861,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_prompt_alias_for_user_request(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -926,7 +926,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
                 create=True,
             ),

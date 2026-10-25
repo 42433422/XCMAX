@@ -1457,7 +1457,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "product", "payload": "{}"},
             ),
             patch(
@@ -1478,7 +1478,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value=None,
             ),
             patch(
@@ -1498,7 +1498,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "unknown", "payload": "{}"},
             ),
             patch(
@@ -1537,7 +1537,7 @@ class TestResolveConflictAdditional:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.mark_inbox_skipped",
+                "app.domain.shared_services.admin_sync_service.mark_inbox_skipped",
             ) as mock_skip,
         ):
             response = client.post(

@@ -169,13 +169,13 @@ def _indexes(url: str, table: str) -> list[dict]:
 
 class TestBaseMetadataRegistration:
     def test_base_metadata_contains_all_erp_tables(self) -> None:
-        from app.db.base import Base
+        from app.db.db_base import Base
 
         names = {t.name for t in Base.metadata.sorted_tables}
         assert names >= _ERP_TABLES
 
     def test_receivable_allocation_registered(self) -> None:
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.models import ReceivableAllocation
 
         assert "receivable_allocations" in {t.name for t in Base.metadata.sorted_tables}

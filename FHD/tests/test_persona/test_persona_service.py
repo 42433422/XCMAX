@@ -9,7 +9,7 @@ import pytest
 
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
-from app.services.persona.persona_service import PersonaService
+from app.domain.persona.services_runtime.persona_service import PersonaService
 
 
 class TestPersonaService:
@@ -61,7 +61,7 @@ class TestPersonaService:
         mock_repo.find_by_user_id = AsyncMock(return_value=stored)
 
         # mock L1 推断
-        from app.services.persona.rule_inferencer import RuleInferResult
+        from app.domain.persona.services_runtime.rule_inferencer import RuleInferResult
 
         service._rule_inferencer.infer = MagicMock(
             return_value=RuleInferResult(
@@ -90,7 +90,7 @@ class TestPersonaService:
         stored = PersonaProfile.create("user-1", "零售业")
         mock_repo.find_by_user_id = AsyncMock(return_value=stored)
 
-        from app.services.persona.rule_inferencer import RuleInferResult
+        from app.domain.persona.services_runtime.rule_inferencer import RuleInferResult
 
         service._rule_inferencer.infer = MagicMock(
             return_value=RuleInferResult(axes=PersonaAxes(), confidence=0.0, signals=[])
@@ -109,7 +109,7 @@ class TestPersonaService:
         stored = PersonaProfile.create("user-1", "零售业")
         mock_repo.find_by_user_id = AsyncMock(return_value=stored)
 
-        from app.services.persona.rule_inferencer import RuleInferResult
+        from app.domain.persona.services_runtime.rule_inferencer import RuleInferResult
 
         service._rule_inferencer.infer = MagicMock(
             return_value=RuleInferResult(axes=PersonaAxes(), confidence=0.0, signals=[])

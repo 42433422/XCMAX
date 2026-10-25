@@ -3,7 +3,7 @@
 import pytest
 
 from app.application.normal_chat_dispatch import route_normal_mode_message
-from app.application.sales_app_service import SalesAppService
+from app.domain.sales_app_service import SalesAppService
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_services.test_erp_absorb_e2e import (
     EXACT_SENTENCE,

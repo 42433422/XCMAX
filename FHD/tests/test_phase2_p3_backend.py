@@ -17,7 +17,7 @@ from app.infrastructure.documents.price_list_export import (
 )
 from app.infrastructure.llm import client as llm_client
 from app.infrastructure.mods.manifest import _check_xcagi_version, _compare_versions
-from app.services.deepseek_intent_service import cn_to_number, get_deepseek_api_key
+from app.domain.shared_services.deepseek_intent_service import cn_to_number, get_deepseek_api_key
 
 # ---------------------------------------------------------------------------
 # price_list_export

@@ -23,7 +23,7 @@ async def run(config: dict) -> dict:
     import httpx
     from app.application.mod_delivery_receipt_outbox import retry_delivery_receipts
     from app.application.private_mod_delivery_artifacts import install_custom_delivery_artifact
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.tenant import Tenant
     from app.db.models.user import Session, User
     from app.fastapi_routes.delivery_sync_routes import router as sync_router

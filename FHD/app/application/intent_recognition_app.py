@@ -6,6 +6,6 @@ from typing import Any
 
 
 def recognize_intents(message: str) -> dict[str, Any]:
-    from app.services.intent_service import recognize_intents as _recognize
+    from app.domain.shared_services.intent_service import recognize_intents as _recognize
 
     return _recognize(message)

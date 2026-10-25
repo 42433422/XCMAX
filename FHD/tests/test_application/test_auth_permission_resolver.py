@@ -71,7 +71,7 @@ def test_enterprise_custom_tenant_role_uses_persisted_permissions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "app.services.auth_service.get_auth_service",
+        "app.domain.shared_services.auth_service.get_auth_service",
         lambda: SimpleNamespace(get_user_permissions=lambda _user: ["employee.invoke"]),
     )
     user = SimpleNamespace(account_kind="enterprise", role="tenant:42:operator", tenant_id=42)
@@ -89,7 +89,7 @@ def test_enterprise_custom_tenant_role_uses_persisted_permissions(
 def test_admin_employee_execute_is_allowed_off_desktop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", lambda: False)
+    monkeypatch.setattr("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", lambda: False)
     decision = permissions.resolve_permissions(
         user=SimpleNamespace(account_kind="admin"),
         route="/api/employees/demo/execute",
@@ -105,7 +105,7 @@ def test_admin_desktop_detection_failure_falls_back_to_shell(
     def fail_detection() -> bool:
         raise RuntimeError("runtime probe unavailable")
 
-    monkeypatch.setattr("app.application.desktop_admin_gate.is_desktop_runtime", fail_detection)
+    monkeypatch.setattr("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", fail_detection)
     blocked = permissions.resolve_permissions(
         user=SimpleNamespace(account_kind="admin"),
         session_meta={"shell": "desktop"},

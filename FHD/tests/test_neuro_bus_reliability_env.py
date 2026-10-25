@@ -7,7 +7,7 @@ import pytest
 import app.neuro_bus.dead_letter_queue as dead_letter_queue_mod
 from app.neuro_bus.bus import NeuroBus, _neuro_env_flag
 from app.neuro_bus.dead_letter_queue import get_dead_letter_queue
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 

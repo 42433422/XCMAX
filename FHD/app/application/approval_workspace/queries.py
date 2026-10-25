@@ -13,7 +13,7 @@ from app.db.models.approval import ApprovalFlow, ApprovalRequest, ApprovalStatus
 from app.db.models.user import User
 
 from .access import AI_WORKFLOW_NODE_NAME
-from .ports import ApprovalAccess, RequestView, WorkspaceResponse
+from .protocols import ApprovalAccess, RequestView, WorkspaceResponse
 from .repository import ApprovalRepository
 
 

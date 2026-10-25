@@ -26,14 +26,14 @@ if TYPE_CHECKING:
     from app.application.template_app_service import TemplateApplicationService
     from app.application.unit_products_import_app_service import UnitProductsImportService
     from app.application.workflow.ports import CheckpointStore, WorkflowRuntime
-    from app.services.auth_service import AuthService
-    from app.services.extract_log_service import ExtractLogService
-    from app.services.materials_service import MaterialsService
-    from app.services.product_import_service import ProductImportService
-    from app.services.products_service import ProductsService
-    from app.services.session_service import SessionService
-    from app.services.user_preference_service import UserPreferenceService
-    from app.services.user_service import UserService
+    from app.domain.shared_services.auth_service import AuthService
+    from app.domain.shared_services.extract_log_service import ExtractLogService
+    from app.domain.shared_services.materials_service import MaterialsService
+    from app.domain.shared_services.product_import_service import ProductImportService
+    from app.domain.shared_services.products_service import ProductsService
+    from app.domain.shared_services.session_service import SessionService
+    from app.domain.shared_services.user_preference_service import UserPreferenceService
+    from app.domain.shared_services.user_service import UserService
 
 _lock = threading.RLock()
 _registry: Optional[ServiceContainer] = None
@@ -102,25 +102,25 @@ class ServiceContainer:
 
     @property
     def session_service(self) -> SessionService:
-        from app.services.session_service import SessionService
+        from app.domain.shared_services.session_service import SessionService
 
         return cast("SessionService", self._lazy("_session_service", SessionService))
 
     @property
     def auth_service(self) -> AuthService:
-        from app.services.auth_service import AuthService
+        from app.domain.shared_services.auth_service import AuthService
 
         return cast("AuthService", self._lazy("_auth_service", AuthService))
 
     @property
     def user_service(self) -> UserService:
-        from app.services.user_service import UserService
+        from app.domain.shared_services.user_service import UserService
 
         return cast("UserService", self._lazy("_user_service", UserService))
 
     @property
     def user_preference_service(self) -> UserPreferenceService:
-        from app.services.user_preference_service import UserPreferenceService
+        from app.domain.shared_services.user_preference_service import UserPreferenceService
 
         return cast(
             "UserPreferenceService", self._lazy("_user_preference_service", UserPreferenceService)
@@ -201,7 +201,7 @@ class ServiceContainer:
             from app.infrastructure.repositories.material_repository_impl import (
                 SQLAlchemyMaterialRepository,
             )
-            from app.services.materials_service import MaterialsService
+            from app.domain.shared_services.materials_service import MaterialsService
 
             return MaterialsService(SQLAlchemyMaterialRepository())
 
@@ -211,7 +211,7 @@ class ServiceContainer:
     def products_service(self) -> ProductsService:
         def _factory() -> ProductsService:
             from app.mod_sdk.erp_repository_registry import resolve_products_repository
-            from app.services.products_service import ProductsService
+            from app.domain.shared_services.products_service import ProductsService
 
             repo, _provider = resolve_products_repository()
             return ProductsService(repo)
@@ -220,13 +220,13 @@ class ServiceContainer:
 
     @property
     def extract_log_service(self) -> ExtractLogService:
-        from app.services.extract_log_service import ExtractLogService
+        from app.domain.shared_services.extract_log_service import ExtractLogService
 
         return cast("ExtractLogService", self._lazy("_extract_log_service", ExtractLogService))
 
     @property
     def product_import_service(self) -> ProductImportService:
-        from app.services.product_import_service import ProductImportService
+        from app.domain.shared_services.product_import_service import ProductImportService
 
         return cast(
             "ProductImportService",

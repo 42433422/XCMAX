@@ -16,7 +16,7 @@ from app.application.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .common import _relay_wt_lock
-from .ports import DevelopmentPorts, WorktreePorts
+from .protocols import DevelopmentPorts, WorktreePorts
 from .profiles import SuperEmployeeToolProfile
 
 logger = logging.getLogger(__name__)

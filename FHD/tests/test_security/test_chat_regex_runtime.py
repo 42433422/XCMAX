@@ -31,7 +31,7 @@ from unittest.mock import patch
 from app.application.normal_chat_dispatch import route_normal_mode_message
 from app.application.workflow.planner import LLMWorkflowPlanner
 message = sys.stdin.read()
-with patch('app.application.llm_intent_gate.llm_route_message', return_value=None):
+with patch('app.domain.ops_rules.llm_intent_gate.llm_route_message', return_value=None):
     if sys.argv[1] == 'chat':
         assert route_normal_mode_message(message)['intent'] == 'unknown'
     else:
@@ -62,5 +62,5 @@ with patch('app.application.llm_intent_gate.llm_route_message', return_value=Non
     ],
 )
 def test_model_and_quantity_semantics_are_preserved(message, intent):
-    with patch("app.application.llm_intent_gate.llm_route_message", return_value=None):
+    with patch("app.domain.ops_rules.llm_intent_gate.llm_route_message", return_value=None):
         assert route_normal_mode_message(message)["intent"] == intent

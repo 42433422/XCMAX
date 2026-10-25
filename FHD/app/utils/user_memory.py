@@ -30,7 +30,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS as RECOVERABLE_ERROR
 from app.utils.process_lock import exclusive_file_lock
 
 if TYPE_CHECKING:
-    from app.application.user_memory.ports import MemoryStore
+    from app.application.user_memory.protocols import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class UserMemoryService:
             return
         from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
         from app.application.user_memory.patterns import ActionMemory, PatternPorts
-        from app.application.user_memory.ports import MemoryAccess, late_callback
+        from app.application.user_memory.protocols import MemoryAccess, late_callback
         from app.application.user_memory.preferences import PreferenceMemory
 
         self._store = UserMemoryStore(storage_type=storage_type)

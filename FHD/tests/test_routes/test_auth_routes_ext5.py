@@ -1,4 +1,4 @@
-"""Tests for app.fastapi_routes.domains.auth.routes — additional coverage (ext5).
+"""Tests for app.fastapi_routes.domains.auth.auth_routes — additional coverage (ext5).
 
 Focus: _user_public_dict, _session_meta_for_response, _market_user_email_from_raw
 additional branches, _normalize_auth_email, _jit_create_local_user_for_enterprise,
@@ -26,7 +26,7 @@ class TestUserPublicDict:
     """Cover _user_public_dict directly."""
 
     def test_basic_user(self):
-        from app.fastapi_routes.domains.auth.routes import _user_public_dict
+        from app.fastapi_routes.domains.auth.auth_routes import _user_public_dict
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -51,7 +51,7 @@ class TestUserPublicDict:
         assert result["avatar_url"] == "/avatars/1.png"
 
     def test_user_no_avatar(self):
-        from app.fastapi_routes.domains.auth.routes import _user_public_dict
+        from app.fastapi_routes.domains.auth.auth_routes import _user_public_dict
 
         mock_user = MagicMock()
         mock_user.id = 2
@@ -72,7 +72,7 @@ class TestUserPublicDict:
         assert result["is_active"] is False
 
     def test_user_with_none_avatar(self):
-        from app.fastapi_routes.domains.auth.routes import _user_public_dict
+        from app.fastapi_routes.domains.auth.auth_routes import _user_public_dict
 
         mock_user = MagicMock()
         mock_user.id = 3
@@ -101,35 +101,35 @@ class TestSessionMetaForResponse:
     """Cover _session_meta_for_response directly."""
 
     def test_no_sid(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
             return_value=None,
         ):
             result = _session_meta_for_response(request)
         assert result == {}
 
     def test_no_sid_empty_string(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
             return_value="",
         ):
             result = _session_meta_for_response(request)
         assert result == {}
 
     def test_with_user(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         mock_user = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid123",
             ),
             patch(
@@ -143,12 +143,12 @@ class TestSessionMetaForResponse:
         mock_enrich.assert_called_once_with("sid123", mock_user)
 
     def test_without_user_loads_meta(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid456",
             ),
             patch(
@@ -162,12 +162,12 @@ class TestSessionMetaForResponse:
         mock_load.assert_called_once_with("sid456")
 
     def test_without_user_meta_empty(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid789",
             ),
             patch(
@@ -179,12 +179,12 @@ class TestSessionMetaForResponse:
         assert result == {}
 
     def test_without_user_meta_returns_empty_dict(self):
-        from app.fastapi_routes.domains.auth.routes import _session_meta_for_response
+        from app.fastapi_routes.domains.auth.auth_routes import _session_meta_for_response
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid000",
             ),
             patch(
@@ -205,7 +205,7 @@ class TestMarketUserEmailFromRawAdditional:
     """Cover _market_user_email_from_raw additional branches."""
 
     def test_non_dict_input(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         assert _market_user_email_from_raw("not a dict") == ""
         assert _market_user_email_from_raw(None) == ""
@@ -213,61 +213,61 @@ class TestMarketUserEmailFromRawAdditional:
         assert _market_user_email_from_raw(42) == ""
 
     def test_user_dict_no_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"user": {"name": "alice"}}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_user_dict_empty_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"user": {"email": ""}}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_user_dict_whitespace_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"user": {"email": "  "}}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_user_dict_valid_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"user": {"email": "alice@example.com"}}
         assert _market_user_email_from_raw(raw) == "alice@example.com"
 
     def test_user_dict_email_with_whitespace(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"user": {"email": "  alice@example.com  "}}
         assert _market_user_email_from_raw(raw) == "alice@example.com"
 
     def test_data_user_dict_valid_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"data": {"user": {"email": "bob@example.com"}}}
         assert _market_user_email_from_raw(raw) == "bob@example.com"
 
     def test_data_user_dict_no_email(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"data": {"user": {"name": "bob"}}}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_data_not_dict(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"data": "not a dict"}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_data_user_not_dict(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"data": {"user": "not a dict"}}
         assert _market_user_email_from_raw(raw) == ""
 
     def test_no_user_no_data(self):
-        from app.fastapi_routes.domains.auth.routes import _market_user_email_from_raw
+        from app.fastapi_routes.domains.auth.auth_routes import _market_user_email_from_raw
 
         raw = {"other": "value"}
         assert _market_user_email_from_raw(raw) == ""
@@ -282,27 +282,27 @@ class TestNormalizeAuthEmail:
     """Cover _normalize_auth_email directly."""
 
     def test_basic(self):
-        from app.fastapi_routes.domains.auth.routes import _normalize_auth_email
+        from app.fastapi_routes.domains.auth.auth_routes import _normalize_auth_email
 
         assert _normalize_auth_email("Alice@Example.COM") == "alice@example.com"
 
     def test_with_whitespace(self):
-        from app.fastapi_routes.domains.auth.routes import _normalize_auth_email
+        from app.fastapi_routes.domains.auth.auth_routes import _normalize_auth_email
 
         assert _normalize_auth_email("  Alice@Example.COM  ") == "alice@example.com"
 
     def test_empty(self):
-        from app.fastapi_routes.domains.auth.routes import _normalize_auth_email
+        from app.fastapi_routes.domains.auth.auth_routes import _normalize_auth_email
 
         assert _normalize_auth_email("") == ""
 
     def test_none(self):
-        from app.fastapi_routes.domains.auth.routes import _normalize_auth_email
+        from app.fastapi_routes.domains.auth.auth_routes import _normalize_auth_email
 
         assert _normalize_auth_email(None) == ""
 
     def test_already_lower(self):
-        from app.fastapi_routes.domains.auth.routes import _normalize_auth_email
+        from app.fastapi_routes.domains.auth.auth_routes import _normalize_auth_email
 
         assert _normalize_auth_email("alice@example.com") == "alice@example.com"
 
@@ -320,7 +320,7 @@ class TestJitCreateLocalUserForEnterprise:
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_create_success(self, mock_user_model, mock_get_db, mock_hash, mock_time):
-        from app.fastapi_routes.domains.auth.routes import (
+        from app.fastapi_routes.domains.auth.auth_routes import (
             _jit_create_local_user_for_enterprise,
         )
 
@@ -338,7 +338,7 @@ class TestJitCreateLocalUserForEnterprise:
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_user_already_exists(self, mock_user_model, mock_get_db, mock_hash):
-        from app.fastapi_routes.domains.auth.routes import (
+        from app.fastapi_routes.domains.auth.auth_routes import (
             _jit_create_local_user_for_enterprise,
         )
 
@@ -355,7 +355,7 @@ class TestJitCreateLocalUserForEnterprise:
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_infra_transient(self, mock_user_model, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import (
+        from app.fastapi_routes.domains.auth.auth_routes import (
             _jit_create_local_user_for_enterprise,
         )
 
@@ -369,7 +369,7 @@ class TestJitCreateLocalUserForEnterprise:
     @patch("app.db.session.get_db")
     @patch("app.db.models.user.User")
     def test_create_no_email(self, mock_user_model, mock_get_db, mock_hash):
-        from app.fastapi_routes.domains.auth.routes import (
+        from app.fastapi_routes.domains.auth.auth_routes import (
             _jit_create_local_user_for_enterprise,
         )
 
@@ -391,28 +391,28 @@ class TestAttachSessionCookie:
     """Cover _attach_session_cookie directly."""
 
     def test_empty_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
         result = _attach_session_cookie(resp, "")
         assert result is resp
 
     def test_none_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
         result = _attach_session_cookie(resp, None)
         assert result is resp
 
     def test_whitespace_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
         result = _attach_session_cookie(resp, "   ")
         assert result is resp
 
     def test_valid_session_id_default_cookie(self):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
         result = _attach_session_cookie(resp, "session123")
@@ -421,7 +421,7 @@ class TestAttachSessionCookie:
         assert "set-cookie" in result.headers
 
     def test_custom_cookie_name(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_NAME", "custom_session")
         resp = JSONResponse({"success": True})
@@ -429,7 +429,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_custom_max_age(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_MAX_AGE", "3600")
         resp = JSONResponse({"success": True})
@@ -437,7 +437,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_httponly_disabled(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "0")
         resp = JSONResponse({"success": True})
@@ -445,7 +445,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_httponly_false(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "false")
         resp = JSONResponse({"success": True})
@@ -453,7 +453,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_secure_enabled(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "1")
         resp = JSONResponse({"success": True})
@@ -461,7 +461,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_secure_true(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
         resp = JSONResponse({"success": True})
@@ -469,7 +469,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_secure_yes(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "yes")
         resp = JSONResponse({"success": True})
@@ -477,7 +477,7 @@ class TestAttachSessionCookie:
         assert result is resp
 
     def test_custom_samesite(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
+        from app.fastapi_routes.domains.auth.auth_routes import _attach_session_cookie
 
         monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "Strict")
         resp = JSONResponse({"success": True})
@@ -494,7 +494,7 @@ class TestRuntimeProductSku:
     """Cover runtime_product_sku directly."""
 
     def test_enterprise_sku(self):
-        from app.fastapi_routes.domains.auth.routes import runtime_product_sku
+        from app.fastapi_routes.domains.auth.auth_routes import runtime_product_sku
 
         with patch(
             "app.mod_sdk.product_skus.resolve_product_sku",
@@ -506,7 +506,7 @@ class TestRuntimeProductSku:
         assert result["data"]["is_enterprise_edition"] is True
 
     def test_generic_sku(self):
-        from app.fastapi_routes.domains.auth.routes import runtime_product_sku
+        from app.fastapi_routes.domains.auth.auth_routes import runtime_product_sku
 
         with patch(
             "app.mod_sdk.product_skus.resolve_product_sku",
@@ -518,7 +518,7 @@ class TestRuntimeProductSku:
         assert result["data"]["is_enterprise_edition"] is False
 
     def test_empty_sku_defaults_to_generic(self):
-        from app.fastapi_routes.domains.auth.routes import runtime_product_sku
+        from app.fastapi_routes.domains.auth.auth_routes import runtime_product_sku
 
         with patch(
             "app.mod_sdk.product_skus.resolve_product_sku",
@@ -530,7 +530,7 @@ class TestRuntimeProductSku:
         assert result["data"]["is_enterprise_edition"] is False
 
     def test_none_sku_defaults_to_generic(self):
-        from app.fastapi_routes.domains.auth.routes import runtime_product_sku
+        from app.fastapi_routes.domains.auth.auth_routes import runtime_product_sku
 
         with patch(
             "app.mod_sdk.product_skus.resolve_product_sku",
@@ -551,7 +551,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_no_file(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -561,7 +561,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_file_no_filename(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = ""
@@ -573,7 +573,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_file_none_filename(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = None
@@ -585,7 +585,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_value_error_on_save(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "avatar.png"
@@ -606,7 +606,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_os_error_on_save(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "avatar.png"
@@ -627,7 +627,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_success_no_ext(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "avatar"  # no extension
@@ -653,7 +653,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_success_with_ext(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "photo.jpg"
@@ -678,7 +678,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_success_user_not_found_in_db(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "avatar.png"
@@ -701,7 +701,7 @@ class TestAuthProfileAvatarUploadAdditional:
 
     @pytest.mark.asyncio
     async def test_secure_filename_returns_empty(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_upload
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_upload
 
         mock_file = MagicMock()
         mock_file.filename = "../../etc/passwd"
@@ -735,7 +735,7 @@ class TestAuthProfileAvatarGetAdditional:
     """Cover auth_profile_avatar_get additional branches."""
 
     def test_no_avatar_set(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_get
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_get
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -745,7 +745,7 @@ class TestAuthProfileAvatarGetAdditional:
         assert result.status_code == 404
 
     def test_avatar_exists(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_get
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_get
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -764,7 +764,7 @@ class TestAuthProfileAvatarGetAdditional:
         assert result.media_type == "image/png"
 
     def test_avatar_jpg(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_avatar_get
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_avatar_get
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -793,7 +793,7 @@ class TestAuthQrIssueAdditional:
 
     @pytest.mark.asyncio
     async def test_client_hint_from_body(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_issue
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_issue
 
         request = MagicMock()
         request.headers = {"User-Agent": "browser-agent"}
@@ -807,7 +807,7 @@ class TestAuthQrIssueAdditional:
 
     @pytest.mark.asyncio
     async def test_client_hint_from_user_agent(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_issue
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_issue
 
         request = MagicMock()
         request.headers = {"User-Agent": "Mozilla/5.0"}
@@ -821,7 +821,7 @@ class TestAuthQrIssueAdditional:
 
     @pytest.mark.asyncio
     async def test_client_hint_empty_no_user_agent(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_issue
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_issue
 
         request = MagicMock()
         request.headers = {}
@@ -835,7 +835,7 @@ class TestAuthQrIssueAdditional:
 
     @pytest.mark.asyncio
     async def test_client_hint_truncated(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_issue
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_issue
 
         request = MagicMock()
         long_hint = "x" * 500
@@ -860,13 +860,13 @@ class TestAuthSessionValidateAdditional:
 
     @pytest.mark.asyncio
     async def test_non_enterprise_sku(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -880,11 +880,11 @@ class TestAuthSessionValidateAdditional:
                 return_value=["mod1"],
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -898,13 +898,13 @@ class TestAuthSessionValidateAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_market_check_infra_transient(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -922,11 +922,11 @@ class TestAuthSessionValidateAdditional:
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -939,13 +939,13 @@ class TestAuthSessionValidateAdditional:
 
     @pytest.mark.asyncio
     async def test_entitlements_sync_infra_transient(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -959,11 +959,11 @@ class TestAuthSessionValidateAdditional:
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -976,13 +976,13 @@ class TestAuthSessionValidateAdditional:
 
     @pytest.mark.asyncio
     async def test_with_session_meta(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -996,11 +996,11 @@ class TestAuthSessionValidateAdditional:
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={
                     "account_kind": "enterprise",
                     "company_brand": "Acme",
@@ -1033,13 +1033,13 @@ class TestAuthSessionValidateAdditional:
 
     @pytest.mark.asyncio
     async def test_no_entitled_mod_ids_no_session_meta(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -1053,11 +1053,11 @@ class TestAuthSessionValidateAdditional:
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -1079,7 +1079,7 @@ class TestAuthMeAdditional:
     """Cover auth_me with session_meta branches."""
 
     def test_with_session_meta(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         mock_user = MagicMock()
@@ -1092,11 +1092,11 @@ class TestAuthMeAdditional:
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={
                     "account_kind": "enterprise",
                     "company_brand": "Acme",
@@ -1130,7 +1130,7 @@ class TestAuthMeAdditional:
         assert result["data"]["impersonating_username"] == "admin"
 
     def test_with_empty_session_meta(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         mock_user = MagicMock()
@@ -1143,11 +1143,11 @@ class TestAuthMeAdditional:
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -1169,7 +1169,7 @@ class TestAuthMeAdditional:
         assert result["data"]["impersonating_username"] == ""
 
     def test_with_tenant_name_fallback(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         mock_user = MagicMock()
@@ -1182,11 +1182,11 @@ class TestAuthMeAdditional:
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={
                     "company_brand": "Fallback Brand",
                     # tenant_name missing -> should fallback to company_brand
@@ -1211,12 +1211,12 @@ class TestAuthLogoutAdditional:
     """Cover auth_logout with entitlements clear failure."""
 
     def test_logout_with_entitlements_clear_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_logout
+        from app.fastapi_routes.domains.auth.auth_routes import auth_logout
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -1233,13 +1233,13 @@ class TestAuthLogoutAdditional:
         assert isinstance(result, JSONResponse)
 
     def test_logout_with_entitlements_import_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_logout
+        from app.fastapi_routes.domains.auth.auth_routes import auth_logout
         from app.utils.operational_errors import INFRA_TRANSIENT
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -1266,7 +1266,7 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_no_market_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -1282,12 +1282,12 @@ class TestAuthRegisterAdditional:
                 ),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -1305,7 +1305,7 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_with_refresh_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -1330,13 +1330,13 @@ class TestAuthRegisterAdditional:
                 new=AsyncMock(return_value={"success": True}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save,
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -1355,13 +1355,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_with_market_sync_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get_user,
@@ -1371,7 +1371,7 @@ class TestAuthRegisterAdditional:
                 new=AsyncMock(side_effect=RuntimeError("market down")),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -1392,13 +1392,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_market_login_no_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get_user,
@@ -1408,7 +1408,7 @@ class TestAuthRegisterAdditional:
                 new=AsyncMock(return_value={"success": False}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -1429,13 +1429,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_market_login_success_no_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get_user,
@@ -1446,7 +1446,7 @@ class TestAuthRegisterAdditional:
             ),
             patch("app.fastapi_routes.market_account.save_session_market_token") as mock_save,
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -1469,13 +1469,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_create_user_failure_with_unique(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get,
@@ -1492,13 +1492,13 @@ class TestAuthRegisterAdditional:
 
     @pytest.mark.asyncio
     async def test_local_create_user_failure_with_already_exists(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get,
@@ -1524,7 +1524,7 @@ class TestAuthOidcCallbackAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_sku(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok", "account_kind": "enterprise"}
@@ -1567,7 +1567,7 @@ class TestAuthOidcCallbackAdditional:
 
     @pytest.mark.asyncio
     async def test_no_username_in_auth_result(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
@@ -1609,7 +1609,7 @@ class TestAuthOidcCallbackAdditional:
 
     @pytest.mark.asyncio
     async def test_no_session_id_in_auth_result(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
@@ -1660,7 +1660,7 @@ class TestAuthLoginAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_sku(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with (
@@ -1679,7 +1679,7 @@ class TestAuthLoginAdditional:
 
     @pytest.mark.asyncio
     async def test_with_account_kind_enterprise(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with (
@@ -1703,7 +1703,7 @@ class TestAuthLoginAdditional:
 
     @pytest.mark.asyncio
     async def test_with_account_kind_personal(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with (
@@ -1726,7 +1726,7 @@ class TestAuthLoginAdditional:
 
     @pytest.mark.asyncio
     async def test_result_none(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with (
@@ -1754,7 +1754,7 @@ class TestAuthLoginWithPhoneCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_enterprise_sku(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         with (
@@ -1779,7 +1779,7 @@ class TestAuthLoginWithPhoneCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_with_username(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         with (
@@ -1806,7 +1806,7 @@ class TestAuthLoginWithPhoneCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_result_none(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         with (
@@ -1840,7 +1840,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_with_verification_code_field(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         with (
             patch(
@@ -1848,7 +1848,7 @@ class TestAuthForgotPasswordResetAdditional:
                 new=AsyncMock(return_value={"success": True}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._sync_local_password_for_email",
+                "app.fastapi_routes.domains.auth.auth_routes._sync_local_password_for_email",
                 return_value=1,
             ),
         ):
@@ -1864,7 +1864,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_with_password_field(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         with (
             patch(
@@ -1872,7 +1872,7 @@ class TestAuthForgotPasswordResetAdditional:
                 new=AsyncMock(return_value={"success": True}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._sync_local_password_for_email",
+                "app.fastapi_routes.domains.auth.auth_routes._sync_local_password_for_email",
                 return_value=0,
             ),
         ):
@@ -1888,7 +1888,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_empty_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         result = await auth_forgot_password_reset({"email": "", "new_password": "newpass123"})
         assert isinstance(result, JSONResponse)
@@ -1896,7 +1896,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_no_at_in_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         result = await auth_forgot_password_reset(
             {"email": "notanemail", "new_password": "newpass123"}
@@ -1906,7 +1906,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_empty_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         result = await auth_forgot_password_reset({"email": "a@b.com", "new_password": ""})
         assert isinstance(result, JSONResponse)
@@ -1914,7 +1914,7 @@ class TestAuthForgotPasswordResetAdditional:
 
     @pytest.mark.asyncio
     async def test_market_reset_no_message(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         with patch(
             "app.fastapi_routes.market_account.reset_market_password_with_code",
@@ -1937,11 +1937,11 @@ class TestAuthForgotPasswordSendCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_success_with_message(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[],
             ),
             patch(
@@ -1962,11 +1962,11 @@ class TestAuthForgotPasswordSendCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_success_no_message(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[],
             ),
             patch(
@@ -1980,11 +1980,11 @@ class TestAuthForgotPasswordSendCodeAdditional:
 
     @pytest.mark.asyncio
     async def test_failure_no_message(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[],
             ),
             patch(
@@ -2006,35 +2006,35 @@ class TestAuthForgotAccountAdditional:
     """Cover auth_forgot_account additional branches."""
 
     def test_no_at_in_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         result = auth_forgot_account({"email": "notanemail"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
     def test_none_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         result = auth_forgot_account({"email": None})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
     def test_no_email_key(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         result = auth_forgot_account({})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
     def test_users_with_empty_username(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         mock_user1 = MagicMock()
         mock_user1.username = "alice"
         mock_user2 = MagicMock()
         mock_user2.username = ""  # empty username should be filtered out
         with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
             return_value=[mock_user1, mock_user2],
         ):
             result = auth_forgot_account({"email": "alice@example.com"})
@@ -2043,12 +2043,12 @@ class TestAuthForgotAccountAdditional:
         assert result["data"]["found"] is True
 
     def test_users_with_none_username(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         mock_user = MagicMock()
         mock_user.username = None
         with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
             return_value=[mock_user],
         ):
             result = auth_forgot_account({"email": "alice@example.com"})
@@ -2071,14 +2071,14 @@ class TestAuthSubscriptionStatusAdditional:
     """Cover auth_subscription_status additional branches."""
 
     def test_with_user_id_zero(self):
-        from app.fastapi_routes.domains.auth.routes import auth_subscription_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_subscription_status
 
         request = MagicMock()
         mock_user = MagicMock()
         mock_user.id = 0
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
@@ -2102,7 +2102,7 @@ class TestAuthQrStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_qr_confirmed_with_login_payload(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with (
             patch(
@@ -2131,7 +2131,7 @@ class TestAuthQrStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_qr_confirmed_no_login_payload(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with (
             patch(
@@ -2151,7 +2151,7 @@ class TestAuthQrStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_qr_confirmed_consume_returns_none(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with (
             patch(
@@ -2169,7 +2169,7 @@ class TestAuthQrStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_qr_status_other(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with patch(
             "app.security.auth_qr_login.poll_auth_qr",
@@ -2180,7 +2180,7 @@ class TestAuthQrStatusAdditional:
 
     @pytest.mark.asyncio
     async def test_qr_status_empty_dict_returns_404(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with patch(
             "app.security.auth_qr_login.poll_auth_qr",
@@ -2201,7 +2201,7 @@ class TestAuthPasswordChangeAdditional:
     """Cover auth_password_change additional branches."""
 
     def test_only_old_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         result = auth_password_change(
@@ -2211,7 +2211,7 @@ class TestAuthPasswordChangeAdditional:
         assert result.status_code == 400
 
     def test_only_new_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         result = auth_password_change(
@@ -2221,7 +2221,7 @@ class TestAuthPasswordChangeAdditional:
         assert result.status_code == 400
 
     def test_no_body_fields(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         result = auth_password_change(body={}, user=mock_user)
@@ -2238,7 +2238,7 @@ class TestUsersListAdditional:
     """Cover users_list additional branches."""
 
     def test_list_include_inactive_uppercase(self):
-        from app.fastapi_routes.domains.auth.routes import users_list
+        from app.fastapi_routes.domains.auth.auth_routes import users_list
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2253,7 +2253,7 @@ class TestUsersListAdditional:
         assert result["data"]["count"] == 2
 
     def test_list_empty_users(self):
-        from app.fastapi_routes.domains.auth.routes import users_list
+        from app.fastapi_routes.domains.auth.auth_routes import users_list
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2265,7 +2265,7 @@ class TestUsersListAdditional:
         assert result["data"]["users"] == []
 
     def test_list_users_no_is_active_key(self):
-        from app.fastapi_routes.domains.auth.routes import users_list
+        from app.fastapi_routes.domains.auth.auth_routes import users_list
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2288,7 +2288,7 @@ class TestUsersCreateAdditional:
     """Cover users_create additional branches."""
 
     def test_create_admin_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2306,7 +2306,7 @@ class TestUsersCreateAdditional:
         assert result.status_code == 201
 
     def test_create_operator_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2324,7 +2324,7 @@ class TestUsersCreateAdditional:
         assert result.status_code == 201
 
     def test_create_default_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2342,7 +2342,7 @@ class TestUsersCreateAdditional:
         assert result.status_code == 201
 
     def test_create_with_display_name_and_email(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2374,7 +2374,7 @@ class TestUsersUpdateAdditional:
     """Cover users_update additional branches."""
 
     def test_update_no_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2392,7 +2392,7 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_valid_admin_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2406,7 +2406,7 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_valid_operator_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2420,7 +2420,7 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_valid_viewer_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2434,7 +2434,7 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_empty_body(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2448,7 +2448,7 @@ class TestUsersUpdateAdditional:
         assert result["success"] is True
 
     def test_update_with_is_active(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -2471,7 +2471,7 @@ class TestUsersResetPasswordAdditional:
     """Cover users_reset_password additional branches."""
 
     def test_reset_no_body(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         result = users_reset_password(user_id=1, body={}, _user=mock_admin)
@@ -2479,7 +2479,7 @@ class TestUsersResetPasswordAdditional:
         assert result.status_code == 400
 
     def test_reset_empty_password(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         result = users_reset_password(user_id=1, body={"new_password": ""}, _user=mock_admin)
@@ -2487,7 +2487,7 @@ class TestUsersResetPasswordAdditional:
         assert result.status_code == 400
 
     def test_reset_exact_6_chars(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
@@ -2500,7 +2500,7 @@ class TestUsersResetPasswordAdditional:
         assert result["success"] is True
 
     def test_reset_5_chars(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         result = users_reset_password(user_id=1, body={"new_password": "12345"}, _user=mock_admin)

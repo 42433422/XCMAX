@@ -17,7 +17,7 @@ from app.application.inventory_default_warehouse import (
     ensure_default_warehouse,
     warehouse_setup_status,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Warehouse
 from app.infrastructure.tenant_scope import tenant_scope
 

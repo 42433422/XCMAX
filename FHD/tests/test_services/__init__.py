@@ -10,7 +10,7 @@ class TestProductsService:
 
     def test_service_import(self):
         """测试服务类可以导入"""
-        from app.services.products_service import ProductsService
+        from app.domain.shared_services.products_service import ProductsService
 
         service = ProductsService()
         assert service is not None
@@ -31,7 +31,7 @@ class TestOCRService:
 
     def test_service_import(self):
         """测试服务类可以导入"""
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         service = OCRService()
         assert service is not None
@@ -42,7 +42,7 @@ class TestPrinterService:
 
     def test_service_import(self):
         """测试服务类可以导入"""
-        from app.services.printer_service import PrinterService
+        from app.domain.shared_services.printer_service import PrinterService
 
         service = PrinterService()
         assert service is not None

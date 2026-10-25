@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_payload_legacy — deep coverage for remaining uncovered branches.
+"""Tests for app.domain.shared_services.tools_payload_legacy — deep coverage for remaining uncovered branches.
 
 Focus: customers tool (delete, supplement, create), shipment_generate, print,
 printer_list, materials, wechat, excel_decompose, excel_analyzer, and other
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
 def _json_fn(data, status=200):
@@ -39,7 +39,7 @@ def _unwrap(result):
 
 class TestCustomersToolDelete:
     def test_delete_by_id(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 1
             result = _unwrap(
                 dispatch_legacy_tool_payload(
@@ -55,7 +55,7 @@ class TestCustomersToolDelete:
         assert result["deleted_count"] == 1
 
     def test_delete_by_name(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 1
             result = _unwrap(
                 dispatch_legacy_tool_payload(
@@ -70,7 +70,7 @@ class TestCustomersToolDelete:
         assert result["success"] is True
 
     def test_delete_not_found(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 0
             with patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
@@ -90,7 +90,7 @@ class TestCustomersToolDelete:
         assert result["deleted_count"] == 0
 
     def test_delete_with_resolve_fallback(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.side_effect = [0, 1]  # First try fails, resolved try succeeds
             mock_resolved = Mock()
             mock_resolved.unit_name = "公司A全称"
@@ -111,7 +111,7 @@ class TestCustomersToolDelete:
         assert result["success"] is True
 
     def test_delete_with_order_text_name_extraction(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 1
             result = _unwrap(
                 dispatch_legacy_tool_payload(
@@ -126,7 +126,7 @@ class TestCustomersToolDelete:
         assert result["success"] is True
 
     def test_delete_resolve_error(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 0
             with patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
@@ -157,7 +157,7 @@ class TestCustomersToolSupplement:
         mock_customer.contact_phone = None
         mock_customer.address = None
         with (
-            patch("app.services.unified_query_service.query_service") as mock_qs,
+            patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs,
             patch("app.db.session.get_db"),
             patch("app.services.get_task_context_service") as mock_ctx,
         ):
@@ -199,7 +199,7 @@ class TestCustomersToolSupplement:
 
     def test_supplement_customer_not_found(self):
         with (
-            patch("app.services.unified_query_service.query_service") as mock_qs,
+            patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs,
             patch("app.services.get_task_context_service") as mock_ctx,
         ):
             mock_qs.get_first.return_value = None
@@ -264,7 +264,7 @@ class TestCustomersToolCreate:
         with (
             patch("app.application.get_customer_app_service", return_value=mock_svc),
             patch(
-                "app.services.unified_query_service.find_purchase_unit", return_value=mock_exists
+                "app.domain.shared_services.unified_query_service.find_purchase_unit", return_value=mock_exists
             ),
         ):
             result = _unwrap(
@@ -363,7 +363,7 @@ class TestShipmentGenerateToolDeep:
         mock_svc = Mock()
         mock_svc.execute.return_value = ({"success": True}, 200)
         with patch(
-            "app.services.shipment_number_mode_service.ShipmentNumberModeService",
+            "app.domain.shared_services.shipment_number_mode_service.ShipmentNumberModeService",
             return_value=mock_svc,
         ):
             result = _unwrap(
@@ -393,7 +393,7 @@ class TestShipmentGenerateToolDeep:
 
     def test_generate_exception(self):
         with patch(
-            "app.services.shipment_number_mode_service.ShipmentNumberModeService",
+            "app.domain.shared_services.shipment_number_mode_service.ShipmentNumberModeService",
             side_effect=RuntimeError("fail"),
         ):
             result = _unwrap(

@@ -73,10 +73,10 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
 
     from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import AIConversation, User
     from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.database_service import DatabaseService
+    from app.domain.shared_services.database_service import DatabaseService
 
     live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
     engine = create_engine(f"sqlite:///{live}")
@@ -207,7 +207,7 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                     "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
                     return_value=repo,
                 ),
-                patch("app.services.conversation_service.get_db", side_effect=lambda: sessions()),
+                patch("app.domain.conversation.legacy_services_service.get_db", side_effect=lambda: sessions()),
                 patch("app.application.approval_workspace_app_service.notify_mobile_user"),
                 tenant_scope(1),
             ):

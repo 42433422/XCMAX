@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
-from app.services.persona.llm_inferencer import LlmInferencer, LlmInferResult
+from app.domain.persona.services_runtime.llm_inferencer import LlmInferencer, LlmInferResult
 
 
 class TestLlmInferencer:

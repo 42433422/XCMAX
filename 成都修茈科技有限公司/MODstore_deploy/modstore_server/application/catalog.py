@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 from modman.manifest_util import read_manifest
 from modman.store import iter_mod_dirs
 from modstore_server import catalog_store
-from modstore_server.domain.catalog.ports import CatalogRepository
-from modstore_server.domain.catalog.types import CatalogItem as CatalogDomainItem
-from modstore_server.domain.catalog.types import ModShellUiRow
+from modstore_server.domain.ports import CatalogRepository
+from modstore_server.domain.catalog.catalog_types import CatalogItem as CatalogDomainItem
+from modstore_server.domain.catalog.catalog_types import ModShellUiRow
 from modstore_server.eventing.bus import NeuroBus
 from modstore_server.eventing.contracts import CATALOG_PACKAGE_PUBLISHED
 from modstore_server.eventing.events import new_event

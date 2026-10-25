@@ -32,7 +32,7 @@ class ProfileChange:
 
     @classmethod
     def parse(cls, payload: JsonObject, valid_tiers: set[str]) -> ProfileChange | JSONResponse:
-        from app.application.account_tier_derivation import (
+        from app.domain.catalog.account_tier_derivation import (
             VALID_ACCOUNT_TIERS,
             normalize_account_tier,
         )
@@ -63,7 +63,7 @@ class ProfileChange:
         )
 
     def values_for(self, user: User | None) -> JsonObject | JSONResponse:
-        from app.application.account_tier_derivation import should_have_account_tier
+        from app.domain.catalog.account_tier_derivation import should_have_account_tier
         from app.application.entitled_industries_init import (
             merge_entitled_industries,
             validate_industry_in_entitled,

@@ -25,12 +25,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.accounting_services as acct_svc_mod
-import app.services.inventory_service as inv_svc_mod
-import app.services.manufacturing_service as mrp_svc_mod
-import app.services.purchase_service as purchase_svc_mod
+import app.domain.shared_services.accounting_services as acct_svc_mod
+import app.domain.shared_services.inventory_service as inv_svc_mod
+import app.domain.shared_services.manufacturing_service as mrp_svc_mod
+import app.domain.shared_services.purchase_service as purchase_svc_mod
 from app.application.customer_app_service import CustomerApplicationService
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import (
     Customer,
     CustomerAddress,
@@ -43,14 +43,14 @@ from app.db.models import (
 )
 from app.db.models.mrp import ManufacturingOrder
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.accounting_services import (
+from app.domain.shared_services.accounting_services import (
     create_journal_entry,
     journal_entry_reverse,
     seed_default_chart_of_accounts,
 )
-from app.services.inventory_service import InventoryService
-from app.services.manufacturing_service import ManufacturingService
-from app.services.purchase_service import PurchaseService
+from app.domain.shared_services.inventory_service import InventoryService
+from app.domain.shared_services.manufacturing_service import ManufacturingService
+from app.domain.shared_services.purchase_service import PurchaseService
 
 
 @pytest.fixture(scope="function")

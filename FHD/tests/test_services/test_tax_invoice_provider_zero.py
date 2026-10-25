@@ -1,5 +1,5 @@
 # mypy: disable-error-code="var-annotated"
-"""Tests for app.services.tax_invoice_provider."""
+"""Tests for app.domain.shared_services.tax_invoice_provider."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.tax_invoice_provider import (
+from app.domain.shared_services.tax_invoice_provider import (
     _now_iso,
     issue_crm_invoice_for_pipeline,
 )
@@ -32,7 +32,7 @@ class TestIssueCrmInvoiceForPipeline:
 
     def test_basic_invoice(self) -> None:
         mock_create = MagicMock(return_value={"id": 42, "invoice_no": "INV-001"})
-        with patch("app.services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
+        with patch("app.domain.shared_services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
             doc = {
                 "market_user_id": "100",
                 "payment": {"contract_amount_cents": 50000},
@@ -46,7 +46,7 @@ class TestIssueCrmInvoiceForPipeline:
 
     def test_missing_fields_use_defaults(self) -> None:
         mock_create = MagicMock(return_value={"id": 1, "invoice_no": "INV-002"})
-        with patch("app.services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
+        with patch("app.domain.shared_services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
             doc = {}
             result = issue_crm_invoice_for_pipeline(doc)
             mock_create.assert_called_once_with(
@@ -58,7 +58,7 @@ class TestIssueCrmInvoiceForPipeline:
 
     def test_payment_not_dict(self) -> None:
         mock_create = MagicMock(return_value={"id": 1, "invoice_no": "INV-003"})
-        with patch("app.services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
+        with patch("app.domain.shared_services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
             doc = {"market_user_id": "50", "payment": "not a dict"}
             result = issue_crm_invoice_for_pipeline(doc)
             mock_create.assert_called_once_with(
@@ -70,7 +70,7 @@ class TestIssueCrmInvoiceForPipeline:
 
     def test_crm_opportunity_id_zero_becomes_none(self) -> None:
         mock_create = MagicMock(return_value={"id": 1, "invoice_no": "INV-004"})
-        with patch("app.services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
+        with patch("app.domain.shared_services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
             doc = {"crm_opportunity_id": "0"}
             result = issue_crm_invoice_for_pipeline(doc)
             mock_create.assert_called_once()
@@ -79,7 +79,7 @@ class TestIssueCrmInvoiceForPipeline:
 
     def test_does_not_mutate_original(self) -> None:
         mock_create = MagicMock(return_value={"id": 1, "invoice_no": "INV-005"})
-        with patch("app.services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
+        with patch("app.domain.shared_services.user_cs_crm_store.create_crm_invoice_for_pipeline", mock_create):
             doc = {"market_user_id": "10"}
             original_keys = set(doc.keys())
             result = issue_crm_invoice_for_pipeline(doc)

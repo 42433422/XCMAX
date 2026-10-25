@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
-from app.neuro_bus.events.base import EventPriority
+from app.neuro_bus.events.events_base import EventPriority
 
 
 class _DemoService(NeuroEventPublisherMixin):

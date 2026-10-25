@@ -8,7 +8,7 @@ from typing import Any
 
 from starlette.types import ASGIApp
 
-from .ports import CursorHub, ToolCall
+from .protocols import CursorHub, ToolCall
 from .runtime import RuntimeState
 
 

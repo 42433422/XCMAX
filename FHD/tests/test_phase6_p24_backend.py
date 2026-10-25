@@ -73,8 +73,8 @@ from app.neuro_bus.routing.policy_router import (
     decide_processor_with_policy,
 )
 from app.services import session_service as session_service_mod
-from app.services.session_service import SessionService
-from app.services.xcmax_sync_service import (
+from app.domain.shared_services.session_service import SessionService
+from app.domain.shared_services.xcmax_sync_service import (
     _ENTITY_APPLIERS,
     apply_inbox,
     push_outbox,
@@ -134,7 +134,7 @@ class TestSessionServiceCreateSession:
         mock_db.add.return_value = None
         mock_db.commit.return_value = None
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().create_session(user_id=42)
 
         assert result["success"] is True
@@ -148,7 +148,7 @@ class TestSessionServiceCreateSession:
 
         with (
             pytest.raises(RuntimeError, match="db down"),
-            patch("app.services.session_service.get_db", _mock_get_db(mock_db)),
+            patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)),
         ):
             SessionService().create_session(user_id=42)
 
@@ -181,7 +181,7 @@ class TestSessionServiceGetSessionInfo:
         user_session.created_at = utc_now_naive()
         mock_db.query.return_value.filter.return_value.first.return_value = user_session
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("sess-1")
 
         assert result is not None
@@ -192,7 +192,7 @@ class TestSessionServiceGetSessionInfo:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("missing")
 
         assert result is None
@@ -209,7 +209,7 @@ class TestSessionServiceGetSessionInfo:
         user_session.created_at = utc_now_naive()
         mock_db.query.return_value.filter.return_value.first.return_value = user_session
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().get_session_info("expired")
 
         assert result is None
@@ -221,7 +221,7 @@ class TestSessionServiceDeleteSession:
         user_session = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = user_session
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().delete_session("sess-1")
 
         assert result is True
@@ -232,7 +232,7 @@ class TestSessionServiceDeleteSession:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.first.return_value = None
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().delete_session("missing")
 
         assert result is False
@@ -244,7 +244,7 @@ class TestSessionServiceCleanupSessions:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.delete.return_value = 3
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().delete_user_sessions(user_id=42)
 
         assert result == 3
@@ -253,7 +253,7 @@ class TestSessionServiceCleanupSessions:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.delete.return_value = 5
 
-        with patch("app.services.session_service.get_db", _mock_get_db(mock_db)):
+        with patch("app.domain.shared_services.session_service.get_db", _mock_get_db(mock_db)):
             result = SessionService().cleanup_expired_sessions()
 
         assert result == 5
@@ -264,7 +264,7 @@ class TestSessionServiceSingleton:
         mock_registry = MagicMock()
         mock_registry.session_service = MagicMock()
 
-        with patch("app.services.session_service.get_service_registry", return_value=mock_registry):
+        with patch("app.domain.shared_services.session_service.get_service_registry", return_value=mock_registry):
             result = session_service_mod.get_session_service()
 
         assert result is mock_registry.session_service
@@ -1248,7 +1248,7 @@ class TestXcmaxSyncPushOutbox:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.xcmax_sync_service.urllib.request.urlopen",
+                "app.domain.shared_services.xcmax_sync_service.urllib.request.urlopen",
                 side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
             ),
         ):
@@ -1266,7 +1266,7 @@ class TestXcmaxSyncPushOutbox:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.xcmax_sync_service.urllib.request.urlopen",
+                "app.domain.shared_services.xcmax_sync_service.urllib.request.urlopen",
                 side_effect=urllib.error.HTTPError("url", 503, "Busy", {}, None),
             ),
         ):
@@ -1421,7 +1421,7 @@ class TestXcmaxSyncEntityAppliers:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _write_sync_meta
 
             _write_sync_meta(
                 "im_read_state:1:1",

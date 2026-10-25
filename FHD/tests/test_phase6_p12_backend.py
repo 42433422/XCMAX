@@ -46,14 +46,14 @@ from app.fastapi_routes.service_bridge import (
 )
 from app.services import distilled_intent_service as dis_svc
 from app.services import modstore_library_sync as mls
-from app.services.distilled_intent_service import (
+from app.domain.shared_services.distilled_intent_service import (
     DEFAULT_INTENT_LABELS,
     DistilledIntentRecognizer,
     get_distilled_recognizer,
     is_distilled_model_available,
     use_distilled_model,
 )
-from app.services.modstore_library_sync import (
+from app.domain.shared_services.modstore_library_sync import (
     download_modstore_export_zip,
     fetch_modstore_library_mod_ids,
     sync_modstore_library_to_local,
@@ -1143,7 +1143,7 @@ class TestSyncModstoreLibraryToLocal:
     async def test_default_base_url_when_empty(self) -> None:
         # Empty base_url → defaults to https://xiu-ci.com; fetch returns empty → noop
         with patch(
-            "app.services.modstore_library_sync.fetch_modstore_library_mod_ids",
+            "app.domain.shared_services.modstore_library_sync.fetch_modstore_library_mod_ids",
             return_value=[],
         ) as mock_fetch:
             result = await sync_modstore_library_to_local(
@@ -1161,11 +1161,11 @@ class TestSyncModstoreLibraryToLocal:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
-            patch("app.services.modstore_library_sync.normalize_package_zip_path") as mock_norm,
+            patch("app.domain.shared_services.modstore_library_sync.normalize_package_zip_path") as mock_norm,
         ):
             # normalize returns the same temp path so cleanup is a no-op
             mock_norm.side_effect = lambda p: p
@@ -1189,12 +1189,12 @@ class TestSyncModstoreLibraryToLocal:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):
@@ -1214,12 +1214,12 @@ class TestSyncModstoreLibraryToLocal:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 side_effect=RuntimeError("net down"),
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):
@@ -1241,16 +1241,16 @@ class TestSyncModstoreLibraryToLocal:
 
         with (
             patch(
-                "app.services.modstore_library_sync.fetch_modstore_library_mod_ids",
+                "app.domain.shared_services.modstore_library_sync.fetch_modstore_library_mod_ids",
                 return_value=["m1", "m2"],
             ) as mock_fetch,
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):
@@ -1274,12 +1274,12 @@ class TestSyncModstoreLibraryToLocal:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch("app.infrastructure.mods.mod_manager.get_mod_manager", return_value=mock_mm),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):
@@ -1784,7 +1784,7 @@ class TestDistilledModuleFunctions:
         dis_svc._distilled_recognizer = None
         DistilledIntentRecognizer._instance = None
         with patch(
-            "app.services.distilled_intent_service.get_distillation_checkpoints_dir",
+            "app.domain.shared_services.distilled_intent_service.get_distillation_checkpoints_dir",
             return_value=str(tmp_path),
         ):
             available = is_distilled_model_available()
@@ -1800,7 +1800,7 @@ class TestDistilledModuleFunctions:
         dis_svc._distilled_recognizer = None
         DistilledIntentRecognizer._instance = None
         with patch(
-            "app.services.distilled_intent_service.get_distillation_checkpoints_dir",
+            "app.domain.shared_services.distilled_intent_service.get_distillation_checkpoints_dir",
             return_value=str(tmp_path),
         ):
             assert use_distilled_model() is False
@@ -1815,7 +1815,7 @@ class TestDistilledModuleFunctions:
         dis_svc._distilled_recognizer = None
         DistilledIntentRecognizer._instance = None
         with patch(
-            "app.services.distilled_intent_service.get_distillation_checkpoints_dir",
+            "app.domain.shared_services.distilled_intent_service.get_distillation_checkpoints_dir",
             return_value=str(tmp_path),
         ):
             assert use_distilled_model() is False

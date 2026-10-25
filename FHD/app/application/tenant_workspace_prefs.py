@@ -76,7 +76,7 @@ def get_workspace_prefs(owner_id: str) -> dict[str, Any]:
     if not owner:
         return {}
     try:
-        from app.services.user_preference_service import get_user_preference_service
+        from app.domain.shared_services.user_preference_service import get_user_preference_service
 
         raw = get_user_preference_service().get_preference(owner, WORKSPACE_PREFS_KEY)
         if not raw:
@@ -92,7 +92,7 @@ def _save_workspace_prefs(owner_id: str, prefs: dict[str, Any]) -> None:
     owner = str(owner_id or "").strip()
     if not owner:
         return
-    from app.services.user_preference_service import get_user_preference_service
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
     get_user_preference_service().set_preference(
         owner,
@@ -106,7 +106,7 @@ _OWNER_PREF_PREFIX = "user_pref:"
 
 def get_owner_preferences(owner_id: str) -> dict[str, str]:
     """设置页等零散键值偏好，与工作区偏好同库、按工作区归属隔离。"""
-    from app.services.user_preference_service import get_user_preference_service
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
     rows = get_user_preference_service().get_all_preferences(owner_id)
     n = len(_OWNER_PREF_PREFIX)
@@ -114,7 +114,7 @@ def get_owner_preferences(owner_id: str) -> dict[str, str]:
 
 
 def set_owner_preference(owner_id: str, key: str, value: str) -> None:
-    from app.services.user_preference_service import get_user_preference_service
+    from app.domain.shared_services.user_preference_service import get_user_preference_service
 
     get_user_preference_service().set_preference(owner_id, _OWNER_PREF_PREFIX + key, value)
 

@@ -8,7 +8,7 @@ from threading import RLock
 from typing import Any
 
 from app.application.user_memory.models import UserMemory
-from app.application.user_memory.ports import (
+from app.application.user_memory.protocols import (
     CandidateGovernance,
     CandidateProposal,
     JsonObject,

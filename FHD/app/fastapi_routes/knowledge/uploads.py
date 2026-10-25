@@ -12,7 +12,7 @@ from pathlib import Path
 from fastapi import Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.knowledge.ports import DatasetAction
+from app.application.knowledge.protocols import DatasetAction
 
 
 def _accepted_input(response: JSONResponse) -> bool:

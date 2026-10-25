@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
-from app.application.workflow.types import PlanGraph, RiskLevel, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, RiskLevel, WorkflowNode
 
 from .ports import AgentRunView, Payload, ProductAgentRuntime
 

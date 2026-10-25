@@ -14,7 +14,7 @@ from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uniqu
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 class TutorialWorkspace(Base):

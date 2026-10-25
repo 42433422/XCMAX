@@ -65,7 +65,7 @@ from app.mod_sdk.customer_service.models import (
 from app.mod_sdk.customer_service.models import (
     WechatSendBody as WechatSendBody,
 )
-from app.mod_sdk.customer_service.ports import Employee, Environment
+from app.application.customer_service.protocols import Employee, Environment
 from app.mod_sdk.errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 
 logger = logging.getLogger(__name__)

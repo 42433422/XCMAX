@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from app.application.ai_group_chat_service import AiGroupChatService
-from app.application.group_chat.ports import EmployeeProviders, MessageStore, MobileRelay, Row, Rows
+from app.application.group_chat.protocols import EmployeeProviders, MessageStore, MobileRelay, Row, Rows
 from app.application.group_chat.progress import ProgressSync
 from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.work_dispatch import WorkDispatch

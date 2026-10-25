@@ -7,7 +7,7 @@ that rule.
 """
 
 from .ports import NotificationRepository, RealtimePusher
-from .types import Notification, NotificationType, OutboundNotification
+from .notification_types import Notification, NotificationType, OutboundNotification
 
 __all__ = [
     "Notification",

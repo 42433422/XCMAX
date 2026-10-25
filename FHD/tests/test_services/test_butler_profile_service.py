@@ -20,10 +20,10 @@ from app.application.butler_identity_catalog import (
     derive_four_axes,
     derive_mbti_type,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.user import User
-from app.services.butler_profile_service import ButlerProfileService
+from app.domain.shared_services.butler_profile_service import ButlerProfileService
 
 
 @pytest.fixture

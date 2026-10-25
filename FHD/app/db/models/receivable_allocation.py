@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import IntegerPrimaryKeyMixin, TenantScopedMixin, TimestampMixin
 
 RECEIVABLE_STATUS_UNPAID = "unpaid"

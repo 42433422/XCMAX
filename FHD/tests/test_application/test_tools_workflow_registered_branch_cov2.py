@@ -1,4 +1,4 @@
-"""测试 app.services.tools_workflow_registered 的分支覆盖。
+"""测试 app.domain.shared_services.tools_workflow_registered 的分支覆盖。
 
 覆盖目标：
 - _registered_router_normal_slot_dispatch（product_query / shipment_preview / 未知动作）

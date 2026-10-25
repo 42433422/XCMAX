@@ -51,7 +51,7 @@ from app.application.trae_super_employee_service import (
 )
 from app.fastapi_routes.mobile_api import get_mobile_user as get_mobile_user
 from app.fastapi_routes.mobile_extensions import backends as backends
-from app.fastapi_routes.mobile_extensions import ports as contracts
+from app.application.contracts import ports as contracts
 from app.fastapi_routes.mobile_extensions.access import MobileAccess as MobileAccess
 from app.fastapi_routes.mobile_extensions.access import MobileAccessPorts as MobileAccessPorts
 from app.fastapi_routes.mobile_extensions.admin_helpers import (

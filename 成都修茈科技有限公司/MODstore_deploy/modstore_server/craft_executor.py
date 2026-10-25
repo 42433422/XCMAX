@@ -154,7 +154,7 @@ def _record_craft_execution(
     error: str = "",
 ) -> None:
     try:
-        from modstore_server.db.base import get_session_factory
+        from modstore_server.db.db_base import get_session_factory
         from modstore_server.models import EmployeeExecutionMetric
 
         sf = get_session_factory()

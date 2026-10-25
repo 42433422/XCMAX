@@ -85,7 +85,7 @@ else:
     from .cvm_adapter import CvmAutonomyAdapter
     from .impact_predictor import predict
     from .policies import ALL_POLICIES
-    from .types import (
+    from .autonomy_types import (
         Action,
         ActionResult,
         ActionTracker,

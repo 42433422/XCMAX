@@ -3,7 +3,7 @@ import asyncio
 import pytest
 
 from app.neuro_bus.command_gateway import CommandGateway
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
 
 @pytest.mark.asyncio

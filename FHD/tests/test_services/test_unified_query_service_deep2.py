@@ -1,5 +1,5 @@
 # mypy: disable-error-code="method-assign"
-"""Tests for app.services.unified_query_service — coverage ramp deep2.
+"""Tests for app.domain.shared_services.unified_query_service — coverage ramp deep2.
 
 Focuses on ``_parse_filter`` lookup operators (``__gte``/``__gt``/``__lte``/
 ``__lt``/``__ne``/``__in``/``__like``/``__ilike``), default-eq and list-``in_``
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services import unified_query_service as uqs_mod
-from app.services.unified_query_service import (
+from app.domain.shared_services.unified_query_service import (
     UnifiedQueryService,
     check_purchase_unit_exists,
     delete_purchase_unit,

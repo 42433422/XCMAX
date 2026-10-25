@@ -37,7 +37,7 @@ async def test_desktop_claims_installs_and_reports_paid_asset_command() -> None:
         )
     )
     with (
-        patch("app.desktop_runtime.paths.is_desktop_mode", return_value=True),
+        patch("app.desktop_runtime.desktop_runtime_paths.is_desktop_mode", return_value=True),
         patch(
             "app.application.desktop_delivery_receipt.desktop_installation_id",
             return_value="desktop-installation-1",
@@ -67,6 +67,6 @@ async def test_desktop_claims_installs_and_reports_paid_asset_command() -> None:
 
 @pytest.mark.asyncio
 async def test_asset_install_poll_is_desktop_only() -> None:
-    with patch("app.desktop_runtime.paths.is_desktop_mode", return_value=False):
+    with patch("app.desktop_runtime.desktop_runtime_paths.is_desktop_mode", return_value=False):
         result = await poll_asset_install_commands_once()
     assert result == {"processed": 0, "reason": "not_desktop"}

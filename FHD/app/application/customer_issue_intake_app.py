@@ -7,7 +7,7 @@ import json
 from typing import Any
 
 from app.application.private_mod_delivery_app import custom_delivery_remote_json
-from app.services.user_cs_change_request import bind_change_request_intake, create_change_request
+from app.domain.shared_services.user_cs_change_request import bind_change_request_intake, create_change_request
 
 
 async def submit_private_rework(

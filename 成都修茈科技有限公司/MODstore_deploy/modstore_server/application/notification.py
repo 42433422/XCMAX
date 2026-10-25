@@ -10,8 +10,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from modstore_server.domain.notification.ports import NotificationRepository, RealtimePusher
-from modstore_server.domain.notification.types import (
+from modstore_server.domain.ports import NotificationRepository, RealtimePusher
+from modstore_server.domain.notification.notification_types import (
     Notification,
     NotificationType,
     OutboundNotification,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from app.application.private_mod_delivery_state import (
+from app.domain.ops_rules.private_mod_delivery_state import (
     _STATE_LOCK,
     HAPPY_PATH,
     STAGE_LABELS,

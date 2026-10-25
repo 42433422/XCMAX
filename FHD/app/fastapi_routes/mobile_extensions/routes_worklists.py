@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     DatabaseCall,
     EmployeeSsotPayloadCall,
     MobilePrincipal,

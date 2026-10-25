@@ -21,7 +21,7 @@ from app.application.tutorial_v2.service import (
     TutorialServiceError,
     TutorialV2Service,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.accounting import JournalEntry
 from app.db.models.agent import AgentRunRecord, AgentTaskExecutionRecord, AgentTaskRecord
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRecord, ApprovalRequest

@@ -55,7 +55,7 @@ def _check_ai_service() -> dict[str, Any]:
     """
 
     try:
-        from app.domain.services.unified_intent_recognizer import (
+        from app.domain.conversation.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 
@@ -260,7 +260,7 @@ def capabilities_diagnostics():
     # intent_engines 单独取一份快照，便于前端渲染"哪些引擎已落地"。
     intent_engines: dict[str, Any] = {}
     try:
-        from app.domain.services.unified_intent_recognizer import (
+        from app.domain.conversation.unified_intent_recognizer import (
             get_unified_intent_recognizer,
         )
 

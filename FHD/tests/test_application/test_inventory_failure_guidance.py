@@ -10,9 +10,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.agent_orchestrator.public_step_errors import public_step_error
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.inventory_service import InventoryService
 from tests.test_application.ai_chat_test_helpers import (
     _make_node_result,
     _make_plan,
@@ -89,7 +89,7 @@ def test_real_inventory_failure_has_safe_actionable_response(inventory_db, condi
     def session():
         yield db
 
-    with patch("app.services.inventory_service.get_db", session):
+    with patch("app.domain.shared_services.inventory_service.get_db", session):
         result = InventoryService().inventory_out(product.id, "default_warehouse", 2)
     assert result["success"] is False
     assert db.query(InventoryTransaction).count() == 0

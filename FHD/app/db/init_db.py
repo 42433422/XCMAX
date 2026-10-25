@@ -18,7 +18,7 @@ from typing import Any, cast
 from sqlalchemy import Table
 from sqlalchemy.engine import Engine
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.bootstrap import locations, seeding
 from app.db.bootstrap.column_repairs import LegacyColumnRepairs
 from app.db.bootstrap.engine_selection import EngineSelection

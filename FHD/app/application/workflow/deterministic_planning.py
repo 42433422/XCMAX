@@ -9,7 +9,7 @@ from typing import Any
 
 from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.onboarding_slots import _onboarding_first_order_slots
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _INTENT_TOOL_KEY_TO_WORKFLOW: dict[str, tuple[str, str]] = {
@@ -27,7 +27,7 @@ def _route_by_intent_service(message: str, tool_registry: dict[str, Any]):
     """
     try:
         # 延迟 import：intent_service 依赖链较重，且避免模块级 application↔services 环。
-        from app.services.intent_service import recognize_intents
+        from app.domain.shared_services.intent_service import recognize_intents
 
         result = recognize_intents(message)
     except RECOVERABLE_ERRORS:

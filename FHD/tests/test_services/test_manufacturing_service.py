@@ -16,13 +16,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.inventory_service as inv_svc_mod
-import app.services.manufacturing_service as mrp_svc_mod
-from app.db.base import Base
+import app.domain.shared_services.inventory_service as inv_svc_mod
+import app.domain.shared_services.manufacturing_service as mrp_svc_mod
+from app.db.db_base import Base
 from app.db.models.inventory import InventoryLedger, Warehouse
 from app.db.models.mrp import Bom, BomLine, ManufacturingOrder, ManufacturingOrderLine
 from app.db.models.product import Product
-from app.services.manufacturing_service import ManufacturingService
+from app.domain.shared_services.manufacturing_service import ManufacturingService
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 

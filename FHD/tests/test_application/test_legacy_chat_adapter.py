@@ -526,7 +526,7 @@ class TestChatStreamSseEvents:
     [(True, "missing"), (False, "missing"), (True, "explicit"), (True, "fragmented")],
 )
 def test_market_complete_tool_calls_without_indices_preserve_arguments(monkeypatch, native, mode):
-    from app.services.conversation.modstore_adapter import ModstoreOpenAICompatibleClient
+    from app.domain.conversation.legacy_services.modstore_adapter import ModstoreOpenAICompatibleClient
 
     expected = {
         "business_db_read": {"entity": "customers", "name": "Mac393验收客户"},

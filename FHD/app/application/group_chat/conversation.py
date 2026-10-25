@@ -10,7 +10,7 @@ from app.application.group_chat.employee_registry import (
     _normalize_branch_context,
     _with_required_group_members,
 )
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     ConversationActions,
     GroupStore,
     MessageFactory,

@@ -14,7 +14,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     SyncPullBody,
     SyncPushBody,
 )
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     AiCircleEmployeeProfilesCall,
     AiCircleUserCall,
     AiConversationChangesCall,

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     AdminDutyModItemCall,
     AdminDutyRecordsFromRosterCall,
     AdminEmployeeItemsCall,

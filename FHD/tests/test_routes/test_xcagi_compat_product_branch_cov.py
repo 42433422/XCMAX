@@ -893,8 +893,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="create", params={}, route_path="/p"
@@ -916,8 +916,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="create", params={}, route_path="/p"
@@ -942,8 +942,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="delete", params={"message": "hi"}, route_path="/p"

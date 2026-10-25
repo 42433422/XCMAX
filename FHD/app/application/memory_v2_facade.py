@@ -6,7 +6,7 @@ from typing import Any
 
 
 def get_user_memory_service() -> Any:
-    from app.services.user_memory_service import get_user_memory_service as _get_service
+    from app.domain.shared_services.user_memory_service import get_user_memory_service as _get_service
 
     return _get_service()
 

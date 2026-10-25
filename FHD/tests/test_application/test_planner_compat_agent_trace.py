@@ -46,7 +46,7 @@ def durable_compat_history(tmp_path, monkeypatch):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
     from app.db.models import AIConversation, AIConversationSession, User
-    from app.services.conversation_service import ConversationService
+    from app.domain.conversation.legacy_services_service import ConversationService
 
     engine = create_engine(f"sqlite:///{tmp_path / 'history.db'}")
     User.__table__.create(engine)
@@ -67,8 +67,8 @@ def durable_compat_history(tmp_path, monkeypatch):
     service._pending_workflows = {}
     monkeypatch.setattr("app.application.get_ai_chat_app_service", lambda: service)
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)
-    monkeypatch.setattr("app.services.conversation_service.get_db", db)
-    monkeypatch.setattr("app.services.conversation_service.notify_user", lambda **kwargs: None)
+    monkeypatch.setattr("app.domain.conversation.legacy_services_service.get_db", db)
+    monkeypatch.setattr("app.domain.conversation.legacy_services_service.notify_user", lambda **kwargs: None)
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user",
         lambda req: SimpleNamespace(id=2),

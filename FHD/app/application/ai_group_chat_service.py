@@ -101,7 +101,7 @@ from app.application.group_chat.employee_registry import (
 from app.application.group_chat.employee_transport import EmployeeTransport
 from app.application.group_chat.evidence import ExecutionResultPolicy
 from app.application.group_chat.message_formatting import ChatFormatting
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     ConversationActions,
     DirectoryActions,
     EmployeeProviders,

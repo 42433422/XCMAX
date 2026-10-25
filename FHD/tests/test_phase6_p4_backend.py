@@ -20,9 +20,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.conversation.context import ConversationContext
-from app.services.conversation.handlers import HandlersMixin
-from app.services.conversation.intent import IntentMixin
+from app.domain.conversation.legacy_services.context import ConversationContext
+from app.domain.conversation.legacy_services.handlers import HandlersMixin
+from app.domain.conversation.legacy_services.intent import IntentMixin
 
 # ---------------------------------------------------------------------------
 # Test host classes — combine Mixin with manually-injected dependencies

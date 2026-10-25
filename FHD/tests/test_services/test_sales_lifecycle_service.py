@@ -13,14 +13,14 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.application.sales_lifecycle_service import (
+from app.domain.sales_lifecycle_service import (
     SalesLifecycleCancelBlocked,
     SalesLifecycleInvalidTransition,
     SalesLifecycleNotFound,
     SalesLifecycleService,
     SalesLifecycleTenantMismatch,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import SalesOrder, SalesOrderItem
 
 _FIXED_DAY = date(2026, 8, 10)

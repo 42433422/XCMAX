@@ -42,13 +42,13 @@ from app.infrastructure.persistence.compat_db.writes import (
 from app.infrastructure.rag.citation_tracker import CitationTracker
 from app.infrastructure.rag.hybrid_retriever import HybridRetriever, RetrievedChunk
 from app.infrastructure.rag.semantic_chunker import SemanticChunker
-from app.services.conversation.handlers import HandlersMixin
-from app.services.kitten_report.docx_export import _html_to_plain, build_kitten_docx
-from app.services.kitten_report.financial_plugins import (
+from app.domain.conversation.legacy_services.handlers import HandlersMixin
+from app.domain.kitten_report.docx_export import _html_to_plain, build_kitten_docx
+from app.domain.kitten_report.financial_plugins import (
     FinancialReportPlugin,
     InventoryValuationPlugin,
 )
-from app.services.kitten_report.service import KittenReportExportService
+from app.domain.kitten_report.service import KittenReportExportService
 
 # ---------------------------------------------------------------------------
 # conversation handlers (hard rules + greeting/goodbye/help)

@@ -20,7 +20,7 @@ from app.db.models.approval import (
 )
 
 from .access import FINAL_STATUSES, normalize_statuses
-from .ports import ApprovalAccess, AuditWriter, JsonObject, RequestView, WorkspaceResponse
+from .protocols import ApprovalAccess, AuditWriter, JsonObject, RequestView, WorkspaceResponse
 from .repository import ApprovalRepository
 
 

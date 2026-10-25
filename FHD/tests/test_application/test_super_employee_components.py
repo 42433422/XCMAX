@@ -19,7 +19,7 @@ from app.application.super_employee import cli as cli_module
 from app.application.super_employee.cli import CliExecutor
 from app.application.super_employee.devices import DeviceSelection
 from app.application.super_employee.messages import MessageSynchronizer
-from app.application.super_employee.ports import CliPorts, MessageSyncPorts
+from app.application.super_employee.protocols import CliPorts, MessageSyncPorts
 from app.application.super_employee.profiles import CODEX_PROFILE
 from app.application.super_employee_service import CLAUDE_PROFILE, SuperEmployeeService
 

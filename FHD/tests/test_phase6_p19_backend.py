@@ -586,17 +586,17 @@ class TestDistillationCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_samples_unknown_intent_skipped(self):
-        from app.services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
 
         mock_intent_result = {"intent": "unknown_intent", "slots": {}, "confidence": 0.9}
         with (
-            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
             patch(
-                "app.services.distillation_data_collector.call_deepseek_intent",
+                "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=mock_intent_result,
             ),
-            patch("app.services.distillation_data_collector.save_distillation_sample") as mock_save,
+            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample") as mock_save,
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         # unknown_intent is not in INTENT_LABELS, so no samples saved
@@ -604,33 +604,33 @@ class TestDistillationCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_samples_invalid_result_skipped(self):
-        from app.services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
 
         with (
-            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
             patch(
-                "app.services.distillation_data_collector.call_deepseek_intent",
+                "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
-            patch("app.services.distillation_data_collector.save_distillation_sample"),
+            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample"),
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count == 0
 
     @pytest.mark.asyncio
     async def test_collect_samples_valid_intent_saved(self):
-        from app.services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import collect_samples_via_deepseek
 
         mock_result = {"intent": "greet", "slots": {}, "confidence": 0.9}
         with (
-            patch("app.services.distillation_data_collector.get_sample_count", return_value=0),
+            patch("app.domain.shared_services.distillation_data_collector.get_sample_count", return_value=0),
             patch(
-                "app.services.distillation_data_collector.call_deepseek_intent",
+                "app.domain.shared_services.distillation_data_collector.call_deepseek_intent",
                 new_callable=AsyncMock,
                 return_value=mock_result,
             ),
-            patch("app.services.distillation_data_collector.save_distillation_sample") as mock_save,
+            patch("app.domain.shared_services.distillation_data_collector.save_distillation_sample") as mock_save,
         ):
             count = await collect_samples_via_deepseek("test-key", target_count=10)
         assert count > 0
@@ -642,24 +642,24 @@ class TestDistillationMain:
 
     @pytest.mark.asyncio
     async def test_main_init_flag(self):
-        from app.services.distillation_data_collector import main
+        from app.domain.shared_services.distillation_data_collector import main
 
         with (
             patch("sys.argv", ["prog", "--init"]),
-            patch("app.services.distillation_data_collector.init_distillation_db") as mock_init,
+            patch("app.domain.shared_services.distillation_data_collector.init_distillation_db") as mock_init,
         ):
             await main()
         mock_init.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_main_stats_flag(self):
-        from app.services.distillation_data_collector import main
+        from app.domain.shared_services.distillation_data_collector import main
 
         with (
             patch("sys.argv", ["prog", "--stats"]),
-            patch("app.services.distillation_data_collector.init_distillation_db"),
+            patch("app.domain.shared_services.distillation_data_collector.init_distillation_db"),
             patch(
-                "app.services.distillation_data_collector.get_sample_stats",
+                "app.domain.shared_services.distillation_data_collector.get_sample_stats",
                 return_value={"greet": 5},
             ),
         ):
@@ -667,13 +667,13 @@ class TestDistillationMain:
 
     @pytest.mark.asyncio
     async def test_main_collect_no_key(self):
-        from app.services.distillation_data_collector import main
+        from app.domain.shared_services.distillation_data_collector import main
 
         with (
             patch("sys.argv", ["prog", "--collect"]),
-            patch("app.services.distillation_data_collector.init_distillation_db"),
+            patch("app.domain.shared_services.distillation_data_collector.init_distillation_db"),
             patch(
-                "app.services.distillation_data_collector.get_deepseek_api_key",
+                "app.domain.shared_services.distillation_data_collector.get_deepseek_api_key",
                 return_value="",
             ),
         ):
@@ -1948,13 +1948,13 @@ class TestFcmEnabled:
     """Cover ``_fcm_enabled``."""
 
     def test_enabled(self, monkeypatch):
-        from app.services.mobile_push import _fcm_enabled
+        from app.domain.shared_services.mobile_push import _fcm_enabled
 
         monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT_JSON", "/path/to/sa.json")
         assert _fcm_enabled() is True
 
     def test_disabled(self, monkeypatch):
-        from app.services.mobile_push import _fcm_enabled
+        from app.domain.shared_services.mobile_push import _fcm_enabled
 
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON", raising=False)
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT", raising=False)
@@ -1965,12 +1965,12 @@ class TestSendFcm:
     """Cover ``send_fcm``."""
 
     def test_empty_tokens_returns_false(self):
-        from app.services.mobile_push import send_fcm
+        from app.domain.shared_services.mobile_push import send_fcm
 
         assert send_fcm([], "title", "body") is False
 
     def test_disabled_returns_false(self, monkeypatch):
-        from app.services.mobile_push import send_fcm
+        from app.domain.shared_services.mobile_push import send_fcm
 
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT_JSON", raising=False)
         monkeypatch.delenv("FIREBASE_SERVICE_ACCOUNT", raising=False)
@@ -1989,7 +1989,7 @@ class TestSendFcm:
         assert result is False
 
     def test_cred_path_not_file(self, monkeypatch):
-        from app.services.mobile_push import send_fcm
+        from app.domain.shared_services.mobile_push import send_fcm
 
         monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT_JSON", "/nonexistent/path.json")
         # Mock the google modules to exist (so we get past ImportError check)
@@ -2010,30 +2010,30 @@ class TestSendToUserDevices:
 
     def test_routes_fcm_only_non_fcm_skipped(self):
         # 极光移除后:fcm 设备走 FCM;其它 provider(走自建推送)在此处不发,被跳过。
-        from app.services.mobile_push import send_to_user_devices
+        from app.domain.shared_services.mobile_push import send_to_user_devices
 
         devices = [
             {"push_provider": "fcm", "push_token": "fcm1"},
             {"push_provider": "selfpush", "push_token": "sp1"},
         ]
-        with patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm:
+        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=True) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["fcm1"], "title", "body", None)
         assert result == {"fcm": True}
 
     def test_empty_token_skipped(self):
-        from app.services.mobile_push import send_to_user_devices
+        from app.domain.shared_services.mobile_push import send_to_user_devices
 
         devices = [{"push_provider": "fcm", "push_token": ""}]
-        with patch("app.services.mobile_push.send_fcm", return_value=False) as mock_fcm:
+        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=False) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with([], "title", "body", None)
 
     def test_legacy_fcm_token_field(self):
-        from app.services.mobile_push import send_to_user_devices
+        from app.domain.shared_services.mobile_push import send_to_user_devices
 
         devices = [{"push_provider": "fcm", "fcm_token": "legacy1"}]
-        with patch("app.services.mobile_push.send_fcm", return_value=True) as mock_fcm:
+        with patch("app.domain.shared_services.mobile_push.send_fcm", return_value=True) as mock_fcm:
             result = send_to_user_devices(devices, "title", "body")
         mock_fcm.assert_called_once_with(["legacy1"], "title", "body", None)
 
@@ -2042,7 +2042,7 @@ class TestNotifyUser:
     """Cover ``notify_user``."""
 
     def test_notify_user_queries_devices(self):
-        from app.services.mobile_push import notify_user
+        from app.domain.shared_services.mobile_push import notify_user
 
         mock_row = SimpleNamespace(push_provider="fcm", push_token="tok1", fcm_token="tok1")
         mock_db = MagicMock()
@@ -2050,17 +2050,17 @@ class TestNotifyUser:
 
         with (
             patch("app.db.session.get_db") as mock_get_db,
-            patch("app.services.mobile_push.sa_inspect") as mock_inspect,
+            patch("app.domain.shared_services.mobile_push.sa_inspect") as mock_inspect,
         ):
             mock_inspect.return_value.has_table.return_value = True
             mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
             mock_get_db.return_value.__exit__ = MagicMock(return_value=False)
             with (
                 patch(
-                    "app.services.mobile_push.send_to_user_devices",
+                    "app.domain.shared_services.mobile_push.send_to_user_devices",
                     return_value={"fcm": True},
                 ),
-                patch("app.services.mobile_push.enqueue_outbox", return_value=True),
+                patch("app.domain.shared_services.mobile_push.enqueue_outbox", return_value=True),
             ):
                 result = notify_user(1, "title", "body")
 

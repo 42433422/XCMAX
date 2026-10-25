@@ -16,7 +16,7 @@ from app.desktop_runtime.database_profile import (
     save_profile,
 )
 from app.desktop_runtime.model_downloader import load_manifest
-from app.desktop_runtime.paths import (
+from app.desktop_runtime.desktop_runtime_paths import (
     configure_desktop_environment,
     ensure_desktop_dirs,
     sqlite_database_url,

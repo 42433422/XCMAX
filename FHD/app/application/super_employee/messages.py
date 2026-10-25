@@ -13,7 +13,7 @@ from .common import (
     _coerce_list,
     _utc_now,
 )
-from .ports import MessageSyncPorts
+from .protocols import MessageSyncPorts
 from .profiles import SuperEmployeeToolProfile
 
 

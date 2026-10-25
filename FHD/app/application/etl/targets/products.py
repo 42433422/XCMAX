@@ -11,7 +11,7 @@ from app.application.etl.product_identity import (
     database_model_ambiguity_issue,
     product_name_key,
 )
-from app.application.etl.targets.base import (
+from app.application.etl.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,

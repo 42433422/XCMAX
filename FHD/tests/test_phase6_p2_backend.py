@@ -18,7 +18,7 @@ from app.application.workflow.approval_gated_engine import (
 )
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,

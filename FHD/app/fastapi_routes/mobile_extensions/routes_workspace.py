@@ -14,7 +14,7 @@ from app.fastapi_routes.mobile_extensions.navigation_constants import (
     _CORE_NAV_ITEMS,
     _ROLE_VISIBLE_KEYS,
 )
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     GrantEntitlementsCall,
     IndustryCatalogCall,
     IndustryPlanCall,

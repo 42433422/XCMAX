@@ -58,7 +58,7 @@ def delivery(tmp_path, monkeypatch, request):
     from modstore_server.customer_delivery_build import prepare_private_artifact
     from modstore_server.customer_issue_api import router as issues_router
     from modstore_server.customer_service_delivery_api import router
-    from modstore_server.db.base import Base
+    from modstore_server.db.db_base import Base
     from modstore_server.mod_sync_catalog_api import router as catalog_router
     from modstore_server.models import User
     from modstore_server.models_cs import CustomerServiceSession, CustomerServiceTicket

@@ -22,7 +22,7 @@ from app.infrastructure.printing.label_dispatch_guard import (
     write_label_job,
 )
 from app.infrastructure.printing.template_label_renderer import render_template_label
-from app.services.document_templates.crud import _build_template_payload_from_row
+from app.domain.document_templates.crud import _build_template_payload_from_row
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 

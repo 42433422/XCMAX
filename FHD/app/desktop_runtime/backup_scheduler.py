@@ -32,7 +32,7 @@ from .backup_retention import (
     cleanup_local_backups,
 )
 from .migrate import backup_database
-from .paths import ensure_desktop_dirs, is_desktop_mode
+from .desktop_runtime_paths import ensure_desktop_dirs, is_desktop_mode
 
 logger = logging.getLogger(__name__)
 

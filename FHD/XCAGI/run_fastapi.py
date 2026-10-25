@@ -164,7 +164,7 @@ def _verify_frozen_critical_runtime() -> None:
     import faster_whisper
 
     # Validate string-loaded sync appliers that static PyInstaller analysis cannot discover.
-    from app.services.xcmax_sync_service import _ENTITY_APPLIERS
+    from app.domain.shared_services.xcmax_sync_service import _ENTITY_APPLIERS
     from pypdf import PdfReader
     from reportlab.lib.pagesizes import A4  # type: ignore[import-untyped]
     from reportlab.pdfbase import pdfmetrics  # type: ignore[import-untyped]
@@ -209,7 +209,7 @@ def _verify_frozen_critical_runtime() -> None:
             raise RuntimeError("frozen PDF runtime probe produced an invalid document")
 
         if _is_frozen():
-            from app.desktop_runtime.paths import configure_desktop_environment
+            from app.desktop_runtime.desktop_runtime_paths import configure_desktop_environment
 
             data_root = Path(tmp) / "desktop-data"
             configure_desktop_environment(data_root)
@@ -340,7 +340,7 @@ def main(argv: list[str] | None = None) -> None:
             migration_lock,
             run_alembic_upgrade,
         )
-        from app.desktop_runtime.paths import (
+        from app.desktop_runtime.desktop_runtime_paths import (
             configure_desktop_environment,
             ensure_desktop_dirs,
         )

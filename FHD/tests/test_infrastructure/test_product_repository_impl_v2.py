@@ -28,12 +28,12 @@ def test_mod_product_price_roundtrip_sqlite(monkeypatch, price):
     from sqlalchemy.orm import Session
     from sqlalchemy.pool import StaticPool
 
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import Product
     from app.infrastructure.mods.mod_manager import import_mod_backend_py
     from app.infrastructure.tenant_scope import tenant_scope
     from app.mod_sdk import erp_products_facade as facade
-    from app.services.products_service import ProductsService
+    from app.domain.shared_services.products_service import ProductsService
 
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}

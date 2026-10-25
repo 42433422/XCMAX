@@ -11,7 +11,7 @@ from app.application.agent_orchestrator.business_harness import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_context import apply_task_context
-from app.application.business_harness_projection import project_terminal_run_to_conversation
+from app.domain.ops_rules.business_harness_projection import project_terminal_run_to_conversation
 from app.fastapi_routes.domains.misc.helpers import _message_to_dict
 
 
@@ -228,7 +228,7 @@ def test_terminal_projection_closes_original_plan_without_reexecuting(
     from sqlalchemy.pool import StaticPool
 
     from app.application.workflow.plan_store import WorkflowPlanStore
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.db.models.workflow import WorkflowPlan
 
     engine = create_engine("sqlite:///:memory:", poolclass=StaticPool)

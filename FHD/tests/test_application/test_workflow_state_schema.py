@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 
 from app.application.workflow.engine import DEFAULT_STATE_SCHEMA, WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     PlanGraph,
     StateSchema,
     WorkflowNode,

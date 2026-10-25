@@ -242,7 +242,7 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
         lambda: _FakeShipmentSvc(),
     )
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     fp_db = tmp_path / "fps.sqlite3"
@@ -365,7 +365,7 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _FakeShipmentSvc())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setattr(
@@ -443,7 +443,7 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         lambda: _FakeShipmentSvc(),
     )
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported_count": len(records)},
     )
     monkeypatch.setattr(

@@ -41,7 +41,7 @@ import pytest
 from langgraph.graph.state import StateGraph
 
 from app.application.workflow.ports import StateUpdateEvent, WorkflowRuntime
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     Branch,
     NodeExecutionResult,
     PlanGraph,
@@ -495,7 +495,7 @@ class TestLegacyImportGuard:
         src = textwrap.dedent(
             """\
             from app.application.workflow.ports import WorkflowRuntime
-            from app.application.workflow.types import StateSchema
+            from app.application.workflow.workflow_types import StateSchema
             import json
             import os.path
             from app.application.workflow.ports import StateUpdateEvent

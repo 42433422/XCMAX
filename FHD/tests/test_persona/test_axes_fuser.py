@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
-from app.services.persona.axes_fuser import AxesFuser
+from app.domain.persona.services_runtime.axes_fuser import AxesFuser
 
 
 class TestAxesFuser:

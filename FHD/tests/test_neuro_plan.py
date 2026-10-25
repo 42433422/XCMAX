@@ -50,7 +50,7 @@ async def test_coordinator_exception_triggers_emit_intent_event():
 
 
 def test_neuro_domains_package_imports():
-    from app.neuro_domains import (
+    from app.domain.neuro_domains import (
         NeuroUnitOfWork,
         ShipmentNeuroDomain,
         get_processor_coordinator,

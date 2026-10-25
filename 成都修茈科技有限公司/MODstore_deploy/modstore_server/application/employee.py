@@ -6,7 +6,7 @@ import time
 from threading import Lock
 from typing import Any, Optional
 
-from modstore_server.domain.employee.ports import EmployeeRepository
+from modstore_server.domain.ports import EmployeeRepository
 from modstore_server.eventing.bus import NeuroBus
 from modstore_server.eventing.contracts import (
     EMPLOYEE_EXECUTION_COMPLETED,

@@ -51,8 +51,8 @@ from app.application.etl.service_support import (
 from app.application.etl.service_targets import TargetConfigServiceMixin
 from app.application.etl.service_templates import TemplateServiceMixin
 from app.application.etl.service_uploads import UploadServiceMixin
-from app.application.etl.targets.base import PreviewDecision, TargetField, json_safe
-from app.db.base import Base
+from app.application.etl.targets.targets_base import PreviewDecision, TargetField, json_safe
+from app.db.db_base import Base
 from app.db.models.etl import (
     EtlRun,
     EtlRunRow,

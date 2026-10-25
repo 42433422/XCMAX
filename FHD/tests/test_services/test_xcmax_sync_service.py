@@ -1,4 +1,4 @@
-"""Tests for app.services.xcmax_sync_service — sync service coverage ramp."""
+"""Tests for app.domain.shared_services.xcmax_sync_service — sync service coverage ramp."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
-from app.services.xcmax_sync_service import (
+from app.domain.shared_services.xcmax_sync_service import (
     _ENTITY_APPLIERS,
     _payload_updated_at_ms,
     apply_inbox,
@@ -86,7 +86,7 @@ class TestReadSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _read_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta
 
             result = _read_sync_meta("nonexistent_key")
         assert result == {}
@@ -97,7 +97,7 @@ class TestReadSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
 
             _write_sync_meta("test_key", {"foo": "bar"})
             result = _read_sync_meta("test_key")
@@ -109,7 +109,7 @@ class TestReadSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
 
             _write_sync_meta("bad_key", {"a": 1})
             conn = sqlite3.connect(str(db_path))
@@ -130,7 +130,7 @@ class TestWriteSyncMeta:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
 
             _write_sync_meta("k1", {"x": 1})
             _write_sync_meta("k1", {"x": 2})  # overwrite
@@ -216,10 +216,10 @@ class TestPushOutbox:
         opener = _mock_http_opener(mock_resp)
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = push_outbox(remote_host="127.0.0.1", remote_port=8080)
@@ -240,10 +240,10 @@ class TestPushOutbox:
         opener = _mock_http_opener(mock_resp)
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             push_outbox(remote_host="127.0.0.1", remote_port=8080)
@@ -269,10 +269,10 @@ class TestPushOutbox:
         )
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = push_outbox()
@@ -300,10 +300,10 @@ class TestPushOutbox:
         )
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = push_outbox()
@@ -326,10 +326,10 @@ class TestPushOutbox:
         opener = _mock_http_opener(side_effect=ConnectionError("refused"))
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = push_outbox()
@@ -363,10 +363,10 @@ class TestPushOutbox:
         opener = _mock_http_opener(mock_resp)
         with (
             patch(
-                "app.services.xcmax_sync_service._direct_cookie_opener",
+                "app.domain.shared_services.xcmax_sync_service._direct_cookie_opener",
                 return_value=(opener, MagicMock()),
             ),
-            patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
+            patch("app.domain.shared_services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = push_outbox()
@@ -404,7 +404,7 @@ class TestPullFromRemote:
 
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
             ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -422,7 +422,7 @@ class TestPullFromRemote:
         mock_resp.__exit__ = MagicMock(return_value=False)
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
             ) as opener,
             patch("app.db.xcmax_sync.SyncDb", return_value=MagicMock()),
         ):
@@ -442,7 +442,7 @@ class TestPullFromRemote:
 
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
             ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -456,7 +456,7 @@ class TestPullFromRemote:
 
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open",
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open",
                 side_effect=ConnectionError("timeout"),
             ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
@@ -477,7 +477,7 @@ class TestPullFromRemote:
 
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
             ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -496,7 +496,7 @@ class TestPullFromRemote:
 
         with (
             patch(
-                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+                "app.domain.shared_services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
             ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -904,7 +904,7 @@ class TestApplyImMessage:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _read_sync_meta, _write_sync_meta
 
             # Write a newer timestamp first
             _write_sync_meta("im_message:1", {"updated_at_ms": 2000, "id": 1})
@@ -945,7 +945,7 @@ class TestApplyImReadState:
             patch("app.db.xcmax_sync._resolve_db_path", return_value=db_path),
             patch("app.db.xcmax_sync._db_path", None),
         ):
-            from app.services.xcmax_sync_service import _write_sync_meta
+            from app.domain.shared_services.xcmax_sync_service import _write_sync_meta
 
             # Write a newer timestamp
             _write_sync_meta(

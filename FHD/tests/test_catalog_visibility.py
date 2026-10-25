@@ -1,6 +1,6 @@
 """远端 Catalog 可见性过滤。"""
 
-from app.services.catalog_visibility import is_planned_duty_employee_pack, is_public_catalog_row
+from app.domain.shared_services.catalog_visibility import is_planned_duty_employee_pack, is_public_catalog_row
 
 
 def test_duty_roster_employee_pack_hidden():

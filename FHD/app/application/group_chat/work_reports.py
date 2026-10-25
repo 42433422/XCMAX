@@ -7,7 +7,7 @@ from typing import Any
 from app.application.group_chat.constants import _XIAOC_ASSISTANT_ID
 from app.application.group_chat.evidence import ExecutionResultPolicy
 from app.application.group_chat.message_formatting import ChatFormatting
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     GroupStore,
     MessageFactory,
     MessageStore,

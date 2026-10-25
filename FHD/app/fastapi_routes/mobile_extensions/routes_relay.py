@@ -17,7 +17,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     RelayMobileBindAccountBody,
     RelayTaskCreateBody,
 )
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     MobilePrincipal,
     MobileRelayServiceFactory,
     MobileUserIdentityCall,

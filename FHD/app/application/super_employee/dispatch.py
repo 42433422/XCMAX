@@ -13,7 +13,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .common import _SUBTASK_LABELS
 from .devices import DeviceSelection
-from .ports import ExecutionContext, OutboxWriter, ParaPorts
+from .protocols import ExecutionContext, OutboxWriter, ParaPorts
 from .profiles import SuperEmployeeToolProfile
 
 

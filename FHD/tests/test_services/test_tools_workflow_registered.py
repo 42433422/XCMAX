@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_workflow_registered — registered workflow tool routers."""
+"""Tests for app.domain.shared_services.tools_workflow_registered — registered workflow tool routers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.tools_workflow_registered import (
+from app.domain.shared_services.tools_workflow_registered import (
     _REGISTERED_WORKFLOW_ROUTERS,
     _registered_router_business_docking_family,
     _registered_router_customers,
@@ -698,7 +698,7 @@ class TestErpRouterDispatch:
     """新 ERP 工具路由分发到对应服务。"""
 
     def test_sales_router_quotes_via_service(self):
-        from app.application.sales_app_service import SalesAppService
+        from app.domain.sales_app_service import SalesAppService
 
         with patch.object(SalesAppService, "quote", return_value={"success": True}) as mock:
             r = _registered_router_sales(
@@ -718,7 +718,7 @@ class TestErpRouterDispatch:
     @pytest.mark.parametrize("kind", ["sales", "inventory", "purchase"])
     def test_reports_summary_and_export_use_same_rows(self, kind):
         rows = [{"model_number": "P002", "total_quantity": 18}]
-        with patch("app.services.report_service.ReportService") as factory:
+        with patch("app.domain.shared_services.report_service.ReportService") as factory:
             svc = factory.return_value
             query = getattr(svc, f"get_{kind}_report")
             query.return_value = {"success": True, "data": rows}
@@ -735,7 +735,7 @@ class TestErpRouterDispatch:
 
     @pytest.mark.parametrize("report", [{"success": False, "message": "query failed"}, None])
     def test_reports_export_does_not_fabricate_empty_success(self, report):
-        with patch("app.services.report_service.ReportService") as factory:
+        with patch("app.domain.shared_services.report_service.ReportService") as factory:
             svc = factory.return_value
             svc.get_inventory_report.return_value = report
             params = {"report_type": "inventory"} if report else {}
@@ -776,7 +776,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.create_bom.return_value = {"success": True, "data": {"id": 1}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp(
                 "create_bom", {"product_id": 1, "lines": []}, {}, "shared", ""
@@ -788,7 +788,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.query_boms.return_value = {"success": True, "data": [], "total": 0}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp("query_boms", {}, {}, "shared", "")
         assert r["success"] is True
@@ -797,7 +797,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.get_bom.return_value = {"success": True, "data": {"id": 9}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp("get_bom", {"bom_id": 9}, {}, "shared", "")
         assert r["success"] is True
@@ -810,7 +810,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.create_order.return_value = {"success": True, "data": {"id": 1}}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp(
                 "create_order", {"bom_id": 1, "quantity": 2}, {}, "shared", ""
@@ -821,7 +821,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.confirm_order.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp("confirm_order", {"order_id": 1}, {}, "shared", "")
         assert r["success"] is True
@@ -830,7 +830,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.consume.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp(
                 "consume", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
@@ -842,7 +842,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.finish.return_value = {"success": True}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp(
                 "finish", {"order_id": 1, "warehouse_id": 2}, {}, "shared", ""
@@ -853,7 +853,7 @@ class TestMrpRouter:
         mock_svc = MagicMock()
         mock_svc.query_orders.return_value = {"success": True, "data": [], "total": 0}
         with patch(
-            "app.services.manufacturing_service.ManufacturingService", return_value=mock_svc
+            "app.domain.shared_services.manufacturing_service.ManufacturingService", return_value=mock_svc
         ):
             r = _registered_router_mrp("query_orders", {}, {}, "shared", "")
         assert r["success"] is True
@@ -899,7 +899,7 @@ class TestInventoryCountAndTransactionsRouter:
             "difference": 2,
             "confirmed": False,
         }
-        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+        with patch("app.domain.shared_services.inventory_service.InventoryService", return_value=mock_inv):
             r = _registered_router_inventory(
                 "inventory_count",
                 {"product_id": 1, "warehouse_id": 1, "actual_quantity": 10},
@@ -913,7 +913,7 @@ class TestInventoryCountAndTransactionsRouter:
     def test_query_transactions(self):
         mock_inv = MagicMock()
         mock_inv.query_transactions.return_value = {"success": True, "data": []}
-        with patch("app.services.inventory_service.InventoryService", return_value=mock_inv):
+        with patch("app.domain.shared_services.inventory_service.InventoryService", return_value=mock_inv):
             r = _registered_router_inventory(
                 "query_transactions", {"warehouse_id": 1}, {}, "shared", ""
             )

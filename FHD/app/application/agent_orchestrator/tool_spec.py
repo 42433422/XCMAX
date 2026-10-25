@@ -331,7 +331,7 @@ def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tu
         except ValueError as exc:
             return False, str(exc)
     if spec.tool_id == "sales" and spec.action in {"quote", "create_order"}:
-        from app.application.sales_quote_inputs import validated_quote_request
+        from app.domain.sales_quote_inputs import validated_quote_request
 
         try:
             validated_quote_request(params)

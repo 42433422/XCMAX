@@ -15,7 +15,7 @@ from app.desktop_runtime.migrate import (
     backup_database,
     recover_if_corrupt,
 )
-from app.desktop_runtime.paths import (
+from app.desktop_runtime.desktop_runtime_paths import (
     configure_desktop_environment,
     ensure_desktop_dirs,
 )

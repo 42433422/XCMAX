@@ -12,8 +12,8 @@ from typing import Any
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from modstore_server.domain.notification.types import Notification as DomainNotification
-from modstore_server.domain.notification.types import NotificationType, OutboundNotification
+from modstore_server.domain.notification.notification_types import Notification as DomainNotification
+from modstore_server.domain.notification.notification_types import NotificationType, OutboundNotification
 from modstore_server.models import Notification as NotificationRow
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

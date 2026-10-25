@@ -1,4 +1,4 @@
-"""Tests for app.services.unified_query_service — _parse_filter pure function."""
+"""Tests for app.domain.shared_services.unified_query_service — _parse_filter pure function."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.unified_query_service import UnifiedQueryService
+from app.domain.shared_services.unified_query_service import UnifiedQueryService
 
 # ========================= _parse_filter =================================
 

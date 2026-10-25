@@ -59,7 +59,7 @@ def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _write_gate(request: Request | None) -> dict | None:
-    from app.infrastructure.persistence.compat_db.base import (
+    from app.infrastructure.persistence.compat_db.compat_db_base import (
         _business_mod_json_block,
         _products_write_raise,
     )
@@ -145,7 +145,7 @@ def products_add(request: Request | None, body: dict[str, Any]) -> dict[str, Any
 
 
 def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -172,7 +172,7 @@ def products_update(request: Request | None, body: dict[str, Any]) -> dict[str, 
 
 
 def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:
@@ -192,7 +192,7 @@ def products_delete(request: Request | None, body: dict[str, Any]) -> dict[str, 
 
 
 def products_batch_delete(request: Request | None, body: dict[str, Any]) -> dict[str, Any]:
-    from app.infrastructure.persistence.compat_db.base import _product_parse_id
+    from app.infrastructure.persistence.compat_db.compat_db_base import _product_parse_id
 
     gate = _write_gate(request)
     if gate:

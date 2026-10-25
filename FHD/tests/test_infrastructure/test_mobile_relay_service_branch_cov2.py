@@ -1,5 +1,5 @@
 # mypy: disable-error-code="var-annotated"
-"""测试 app.services.mobile_relay_service 的辅助函数分支覆盖。
+"""测试 app.domain.shared_services.mobile_relay_service 的辅助函数分支覆盖。
 
 覆盖目标：
 - _utc_now / _utc_after（时间格式化 / 最小 60s 钳制）

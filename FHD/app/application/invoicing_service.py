@@ -24,7 +24,7 @@ from typing import Any, cast
 from app.db.models import JournalEntry, SalesOrder
 from app.db.session import get_db
 from app.infrastructure.tenant_scope import current_tenant_id
-from app.services.accounting_services import create_credit_note_entry, create_sale_invoice_entry
+from app.domain.shared_services.accounting_services import create_credit_note_entry, create_sale_invoice_entry
 
 __all__ = ["invoice", "credit_note"]
 

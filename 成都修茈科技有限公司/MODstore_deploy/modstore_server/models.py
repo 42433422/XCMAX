@@ -8,7 +8,7 @@ from __future__ import annotations
 import modstore_server.models_ai_accounts  # noqa: F401,E402
 import modstore_server.models_cs  # noqa: F401,E402
 from modstore_server.db.autonomy_decisions import *  # noqa: F403,F401
-from modstore_server.db.base import (  # noqa: F401
+from modstore_server.db.db_base import (  # noqa: F401
     Base,
     _add_column_if_missing,
     _engine,

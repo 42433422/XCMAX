@@ -10,7 +10,7 @@ import pytest
 from fastapi import Request
 
 from app.application.ai_chat_app_service import AIChatApplicationService
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 ISSUE_MESSAGE = "客户闭环验收客户 发货单：客户闭环测试商品A 数量24 单价3.5"
@@ -42,7 +42,7 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
     monkeypatch.setattr(
-        "app.services.conversation.modstore_adapter.create_modstore_openai_client_from_request",
+        "app.domain.conversation.legacy_services.modstore_adapter.create_modstore_openai_client_from_request",
         fail_if_called,
     )
     monkeypatch.setattr(

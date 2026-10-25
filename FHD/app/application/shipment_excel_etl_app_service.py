@@ -104,7 +104,7 @@ def _workbook_reader() -> WorkbookReader:
 
 
 def _import_product_records(records: list[dict[str, Any]]) -> dict[str, Any]:
-    from app.services.tools_workflow_registered import _execute_excel_import_records
+    from app.domain.shared_services.tools_workflow_registered import _execute_excel_import_records
 
     return _execute_excel_import_records(records)
 

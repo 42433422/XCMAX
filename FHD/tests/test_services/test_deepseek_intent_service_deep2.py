@@ -1,4 +1,4 @@
-"""Deep tests for ``app.services.deepseek_intent_service`` covering remaining uncovered branches."""
+"""Deep tests for ``app.domain.shared_services.deepseek_intent_service`` covering remaining uncovered branches."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-import app.services.deepseek_intent_service as ds
-from app.services.deepseek_intent_service import (
+import app.domain.shared_services.deepseek_intent_service as ds
+from app.domain.shared_services.deepseek_intent_service import (
     DeepSeekIntentRecognizer,
     HybridIntentWithDeepSeek,
     cn_to_number,
@@ -377,7 +377,7 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "greet", "is_greeting": True, "tool_key": "greet"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -391,7 +391,7 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True)
         rule = {"primary_intent": "products", "tool_key": "products"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -405,7 +405,7 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -426,7 +426,7 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.8)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -452,7 +452,7 @@ class TestHybridRecognizeDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=True, confidence_threshold=0.5)
         rule = {"primary_intent": "unk"}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -527,7 +527,7 @@ class TestRecognizeSyncDeep:
         h = HybridIntentWithDeepSeek(use_deepseek=False)
         rule = {"primary_intent": "greet", "is_greeting": True}
         with (
-            patch("app.services.intent_service.recognize_intents", return_value=dict(rule)),
+            patch("app.domain.shared_services.intent_service.recognize_intents", return_value=dict(rule)),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -541,7 +541,7 @@ class TestRecognizeSyncDeep:
         with (
             patch.object(h, "recognize", new=AsyncMock(side_effect=RuntimeError("sync fail"))),
             patch(
-                "app.services.intent_service.recognize_intents",
+                "app.domain.shared_services.intent_service.recognize_intents",
                 return_value={"primary_intent": "fallback"},
             ),
             patch(

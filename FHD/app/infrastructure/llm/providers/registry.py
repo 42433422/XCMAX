@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from app.infrastructure.llm.providers.base import LLMProvider
+from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import (
@@ -188,7 +188,7 @@ def _register_llm_port_source() -> None:
                 return _self.get_active_provider()
             conversation_service = None
             try:
-                from app.services.conversation.manager import (
+                from app.domain.conversation.legacy_services.manager import (
                     get_ai_conversation_service_if_ready,
                 )
 
@@ -205,7 +205,7 @@ def _register_llm_port_source() -> None:
                 try:
                     token = market_token_reader()
                     if token:
-                        from app.services.conversation.modstore_adapter import (
+                        from app.domain.conversation.legacy_services.modstore_adapter import (
                             ModstorePlatformAdapter,
                         )
 

@@ -36,7 +36,7 @@ from app.application.workflow.approval_persistence import (
     mark_durable_outcome,
     mark_durable_request_approved_and_load,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.approval import ApprovalRequest, ApprovalStatus
 
 SNAPSHOT_VERSION = 1

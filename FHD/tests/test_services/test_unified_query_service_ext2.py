@@ -1,4 +1,4 @@
-"""Tests for app.services.unified_query_service — coverage ramp ext2.
+"""Tests for app.domain.shared_services.unified_query_service — coverage ramp ext2.
 
 Covers ``UnifiedQueryService`` static methods (get_distinct_values / get_all /
 get_first / exists / count / delete) and module-level helpers
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services import unified_query_service as uqs_mod
-from app.services.unified_query_service import (
+from app.domain.shared_services.unified_query_service import (
     UnifiedQueryService,
     check_purchase_unit_exists,
     delete_purchase_unit,

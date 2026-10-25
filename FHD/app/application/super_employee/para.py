@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 
 from .common import DEFAULT_PARA_API_URL
-from .ports import JsonObject, ParaPorts
+from .protocols import JsonObject, ParaPorts
 from .profiles import SuperEmployeeToolProfile
 
 

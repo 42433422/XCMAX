@@ -9,7 +9,7 @@ from typing import Any
 
 from app.application.group_chat.constants import _SUPER_EMPLOYEE_IDS, EmployeeExecutorFn
 from app.application.group_chat.evidence import ExecutionResultPolicy
-from app.application.group_chat.ports import InvokeSuperTask
+from app.application.group_chat.protocols import InvokeSuperTask
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

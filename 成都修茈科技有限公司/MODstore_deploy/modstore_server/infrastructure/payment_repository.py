@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.domain.payment_gateway.types import OrderRef
+from modstore_server.domain.payment_gateway.payment_gateway_types import OrderRef
 
 
 class InMemoryPaymentReadRepository:

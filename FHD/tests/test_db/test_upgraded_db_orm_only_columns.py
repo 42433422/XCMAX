@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from alembic import command
 from app.desktop_runtime import migrate
-from app.desktop_runtime.paths import ensure_desktop_dirs
+from app.desktop_runtime.desktop_runtime_paths import ensure_desktop_dirs
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _ALEMBIC_INI = _PROJECT_ROOT / "alembic.ini"
@@ -102,7 +102,7 @@ def _indexes(db: Path, table: str) -> set[str]:
 
 def _fresh_create_all_db(db: Path) -> None:
     import app.db.models  # noqa: F401
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     engine = sa.create_engine(_url(db))
     try:

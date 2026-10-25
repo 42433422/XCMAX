@@ -1,4 +1,4 @@
-"""Tests for app.services.document_templates.crud — comprehensive coverage."""
+"""Tests for app.domain.document_templates.crud — comprehensive coverage."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.document_templates.crud import (
+from app.domain.document_templates.crud import (
     _build_template_payload_from_row,
     _j,
     _normalize_db_template_id,
@@ -91,7 +91,7 @@ class TestEnsureTemplateTablesReady:
                 "app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"
             ) as mock_ensure,
         ):
-            from app.services.document_templates.crud import _ensure_template_tables_ready
+            from app.domain.document_templates.crud import _ensure_template_tables_ready
 
             _ensure_template_tables_ready()
             mock_init.assert_called_once()
@@ -99,7 +99,7 @@ class TestEnsureTemplateTablesReady:
 
     def test_handles_error_gracefully(self):
         with patch("app.db.init_db.init_template_tables", side_effect=RuntimeError("db error")):
-            from app.services.document_templates.crud import _ensure_template_tables_ready
+            from app.domain.document_templates.crud import _ensure_template_tables_ready
 
             # Should not raise
             _ensure_template_tables_ready()
@@ -251,7 +251,7 @@ class TestCreateTemplateWithPayload:
 
     def test_none_payload_uses_empty_dict(self):
         with patch(
-            "app.services.document_templates.crud._create_template_with_payload_inner"
+            "app.domain.document_templates.crud._create_template_with_payload_inner"
         ) as mock_inner:
             mock_inner.return_value = MagicMock()
             create_template_with_payload(None)
@@ -284,7 +284,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -317,7 +317,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -341,7 +341,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -370,7 +370,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -393,7 +393,7 @@ class TestCreateTemplateWithPayload:
         with (
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(False, ["产品型号", "数量"]),
             ),
         ):
@@ -432,7 +432,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -457,7 +457,7 @@ class TestCreateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -479,7 +479,7 @@ class TestUpdateTemplateWithPayload:
 
     def test_none_payload_uses_empty_dict(self):
         with patch(
-            "app.services.document_templates.crud._update_template_with_payload_inner"
+            "app.domain.document_templates.crud._update_template_with_payload_inner"
         ) as mock_inner:
             mock_inner.return_value = MagicMock()
             update_template_with_payload(None)
@@ -542,7 +542,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -608,7 +608,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(False, ["产品型号"]),
             ),
         ):
@@ -660,7 +660,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -706,7 +706,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -746,7 +746,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -786,7 +786,7 @@ class TestUpdateTemplateWithPayload:
             patch("app.db.session.get_db") as mock_get_db,
             patch("app.db.init_db.init_template_tables"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):

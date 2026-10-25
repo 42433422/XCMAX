@@ -6,7 +6,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from app.application.workflow.ports import CheckpointStore, StateEventPublisher, StateUpdateEvent
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,

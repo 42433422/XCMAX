@@ -1324,7 +1324,7 @@ def test_execute_dry_run_with_duplicates(monkeypatch, delivery_profile, tmp_path
 def test_execute_product_import_failed(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "导入失败"},
     )
     res = execute_shipment_excel_etl(

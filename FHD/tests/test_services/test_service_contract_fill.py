@@ -18,8 +18,8 @@ from fastapi.testclient import TestClient
 
 from app.services import service_contract_fill as contracts
 from app.services import user_cs_pipeline as pipelines
-from app.services.kitten_ai_document import generate as document_renderer
-from app.services.service_contract_fill import (
+from app.domain.kitten_ai_document import generate as document_renderer
+from app.domain.shared_services.service_contract_fill import (
     FIELD_SCHEMA,
     build_contract_wechat_hint,
     build_merged_fields,
@@ -148,7 +148,7 @@ class TestBuildMergedFields:
             "username": "张三",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch("app.domain.shared_services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
             result = build_merged_fields(100, username="张三")
             for field in FIELD_SCHEMA:
                 assert field["key"] in result
@@ -160,7 +160,7 @@ class TestBuildMergedFields:
             "erp_customer_name": "原公司",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch("app.domain.shared_services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
             result = build_merged_fields(101)
             assert result["party_a_name"] == "覆盖公司"
 
@@ -170,7 +170,7 @@ class TestBuildMergedFields:
             "erp_customer_name": "管道公司",
             "contract_fields": {"party_a_name": "存储公司"},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch("app.domain.shared_services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
             result = build_merged_fields(102)
             assert result["party_a_name"] == "存储公司"
 
@@ -180,13 +180,13 @@ class TestBuildMergedFields:
             "erp_customer_name": "ERP公司",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch("app.domain.shared_services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
             result = build_merged_fields(103)
             assert result["party_a_name"] == "ERP公司"
 
     def test_sign_date_auto_filled(self, _tmp_roots):
         mock_pipeline = {"contract_fields": {}}
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch("app.domain.shared_services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
             result = build_merged_fields(100)
             assert result["sign_date"] != ""
 

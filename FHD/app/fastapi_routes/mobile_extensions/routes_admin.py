@@ -12,7 +12,7 @@ import httpx
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.fastapi_routes.mobile_extensions.constants import ADMIN_MOBILE_FEATURES
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     AdminEmployeeItemsCall,
     CompactTextCall,
     ImServiceCall,

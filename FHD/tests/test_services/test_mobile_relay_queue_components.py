@@ -194,7 +194,7 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
         from sqlalchemy.orm import sessionmaker
 
         forbidden = {
-            'app.services.mobile_relay_service',
+            'app.domain.shared_services.mobile_relay_service',
             'app.application.facades.mobile_relay_facade',
         }
         class NoFacade(importlib.abc.MetaPathFinder):
@@ -206,8 +206,8 @@ def test_pairing_and_queue_work_without_importing_the_service_facade(tmp_path):
             raise AssertionError('independent relay components attempted network IO')
         socket.socket.connect = no_network
 
-        from app.services.mobile_relay_pairing import RelayPairing
-        from app.services.mobile_relay_tasks import RelayTaskQueue
+        from app.domain.shared_services.mobile_relay_pairing import RelayPairing
+        from app.domain.shared_services.mobile_relay_tasks import RelayTaskQueue
         from app.application.mobile_relay_ports import PairingPorts, TaskPorts
         from app.infrastructure.mobile_relay import repository
 

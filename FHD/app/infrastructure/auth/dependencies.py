@@ -117,7 +117,7 @@ def resolve_session_user(request: Request) -> Any | None:
         return None
     # 桌面进程：存量 admin 会话一律作废（管理端仅网页）
     try:
-        from app.application.desktop_admin_gate import assert_desktop_allows_session_id
+        from app.domain.ops_rules.desktop_admin_gate import assert_desktop_allows_session_id
 
         if assert_desktop_allows_session_id(sid) is not None:
             return None

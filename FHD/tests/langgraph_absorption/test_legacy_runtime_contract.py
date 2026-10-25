@@ -27,7 +27,7 @@ import pytest
 
 from app.application.workflow.checkpointer import WorkflowCheckpointer
 from app.application.workflow.engine import DEFAULT_STATE_SCHEMA, WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     ApprovalStatus,
     Branch,
     PlanGraph,
@@ -676,7 +676,7 @@ class TestInterruptApproval:
             ApprovalGatedEngine,
             GatedPlanDecision,
         )
-        from app.application.workflow.types import ApprovalRequest
+        from app.application.workflow.workflow_types import ApprovalRequest
 
         class FakeApproval:
             def __init__(self):

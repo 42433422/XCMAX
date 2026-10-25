@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.application.agent_task_context import scoped_conversation_user_id
-from app.services.conversation.api import ApiMixin
-from app.services.conversation.context import ConversationContext
-from app.services.conversation.prompts import PromptsMixin
+from app.domain.conversation.legacy_services.api import ApiMixin
+from app.domain.conversation.legacy_services.context import ConversationContext
+from app.domain.conversation.legacy_services.prompts import PromptsMixin
 
 
 @pytest.mark.parametrize("action", ["新增", "修改", "更新", "删除"])
@@ -35,7 +35,7 @@ def test_state_scope_binds_owner_tenant_mod_and_conversation():
 
 def test_follow_up_cannot_replace_a_pending_write_plan():
     from app.application.ai_chat_app_service import AIChatApplicationService
-    from app.application.workflow.types import PlanGraph
+    from app.application.workflow.workflow_types import PlanGraph
 
     service = AIChatApplicationService.__new__(AIChatApplicationService)
     pending = {
@@ -106,7 +106,7 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
 @pytest.mark.asyncio
 async def test_follow_up_cache_separates_owners_history_and_models(monkeypatch):
     from app.infrastructure.llm.client import llm_client_scope
-    from app.services.conversation import api
+    from app.domain.conversation.legacy_services import api
 
     cache = {}
     monkeypatch.setattr(
@@ -172,7 +172,7 @@ async def test_json_chat_routes_bind_request_credentials_lazily(monkeypatch, suf
 
 def test_platform_worker_scope_keeps_model_and_credentials_out_of_environment(monkeypatch):
     from app.infrastructure.llm import client as routing
-    from app.services.conversation.modstore_adapter import (
+    from app.domain.conversation.legacy_services.modstore_adapter import (
         ModstoreOpenAICompatibleClient,
         ModstorePlatformAdapter,
     )

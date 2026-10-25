@@ -7,7 +7,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 from .sqlite import SQLiteOwner, StorageRuntime, fetch_rows
 

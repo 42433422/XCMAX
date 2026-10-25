@@ -1,5 +1,5 @@
 # mypy: disable-error-code="return-value"
-"""Tests for app.services.tts_service — coverage ramp C3.3-b.
+"""Tests for app.domain.shared_services.tts_service — coverage ramp C3.3-b.
 
 Covers:
 * ``TtsRequest`` frozen dataclass.
@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services import tts_service as tts
-from app.services.tts_service import (
+from app.domain.shared_services.tts_service import (
     _EDGE_VOICE_RE,
     DEFAULT_EDGE_VOICE,
     TtsRequest,
@@ -44,7 +44,7 @@ def _reset_tts_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tts, "_TTS_CACHE", tts.OrderedDict())
     monkeypatch.setattr(tts, "_WARMUP_STARTED", False)
     monkeypatch.setattr(
-        "app.services.mimo_tts_service.is_configured",
+        "app.domain.shared_services.mimo_tts_service.is_configured",
         lambda: False,
     )
 

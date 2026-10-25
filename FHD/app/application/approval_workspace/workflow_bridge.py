@@ -15,10 +15,10 @@ from app.application.workflow.approval_persistence import (
     closed_loop_setup_failure_code,
 )
 
-from .ports import JsonObject, PendingApprovals, WorkflowBackends
+from .protocols import JsonObject, PendingApprovals, WorkflowBackends
 
 if TYPE_CHECKING:
-    from app.application.workflow.types import PlanGraph
+    from app.application.workflow.workflow_types import PlanGraph
 
 
 class WorkflowApprovalBridge:

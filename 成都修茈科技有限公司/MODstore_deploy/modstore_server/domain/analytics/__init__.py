@@ -1,7 +1,7 @@
 """Analytics bounded context (read models)."""
 
-from modstore_server.domain.analytics.ports import AnalyticsRepository
-from modstore_server.domain.analytics.types import (
+from modstore_server.domain.ports import AnalyticsRepository
+from modstore_server.domain.analytics.analytics_types import (
     AnalyticsDashboard,
     CatalogMetrics,
     CommerceMetrics,

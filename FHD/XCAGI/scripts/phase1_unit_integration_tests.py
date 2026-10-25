@@ -116,7 +116,7 @@ class Phase1TestRunner:
 
         coverage_commands = [
             (
-                "pytest tests/neuro_optimization/ --cov=app.neuro_domains --cov-report=term-missing",
+                "pytest tests/neuro_optimization/ --cov=app.domain.neuro_domains --cov-report=term-missing",
                 "神经域模块覆盖率",
             ),
             (

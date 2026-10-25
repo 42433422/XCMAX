@@ -7,14 +7,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # load_pipeline / save_pipeline are imported inside function bodies via
-# "from app.services.user_cs_pipeline import ..." — so we patch the source module.
-PIPELINE_MOD = "app.services.user_cs_pipeline"
-BASE = "app.services.user_cs_enterprise_credentials"
+# "from app.domain.shared_services.user_cs_pipeline import ..." — so we patch the source module.
+PIPELINE_MOD = "app.domain.shared_services.user_cs_pipeline"
+BASE = "app.domain.shared_services.user_cs_enterprise_credentials"
 
 
 class TestNowIso:
     def test_returns_iso_string(self):
-        from app.services.user_cs_enterprise_credentials import _now_iso
+        from app.domain.shared_services.user_cs_enterprise_credentials import _now_iso
 
         s = _now_iso()
         assert isinstance(s, str)
@@ -23,7 +23,7 @@ class TestNowIso:
 
 class TestBasePayload:
     def test_from_enterprise_login_username(self):
-        from app.services.user_cs_enterprise_credentials import _base_payload
+        from app.domain.shared_services.user_cs_enterprise_credentials import _base_payload
 
         doc = {
             "enterprise_login_username": "admin",
@@ -39,20 +39,20 @@ class TestBasePayload:
         assert p["password_recorded"] is True
 
     def test_fallback_to_username_field(self):
-        from app.services.user_cs_enterprise_credentials import _base_payload
+        from app.domain.shared_services.user_cs_enterprise_credentials import _base_payload
 
         doc = {"username": "bob"}
         p = _base_payload(doc)
         assert p["username"] == "bob"
 
     def test_fallback_to_caller_username(self):
-        from app.services.user_cs_enterprise_credentials import _base_payload
+        from app.domain.shared_services.user_cs_enterprise_credentials import _base_payload
 
         p = _base_payload({}, username="charlie")
         assert p["username"] == "charlie"
 
     def test_empty_doc(self):
-        from app.services.user_cs_enterprise_credentials import _base_payload
+        from app.domain.shared_services.user_cs_enterprise_credentials import _base_payload
 
         p = _base_payload({})
         assert p["username"] == ""
@@ -62,7 +62,7 @@ class TestBasePayload:
 
 class TestGetEnterpriseCredentials:
     def test_no_market_base_url(self):
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {
             "enterprise_login_username": "user1",
@@ -81,7 +81,7 @@ class TestGetEnterpriseCredentials:
         assert "market_fetch_error" in result
 
     def test_with_market_base_url_success(self):
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {
             "enterprise_login_username": "user1",
@@ -108,7 +108,7 @@ class TestGetEnterpriseCredentials:
         assert result["is_enterprise"] is True
 
     def test_with_market_base_url_http_error(self):
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {
             "enterprise_login_username": "u",
@@ -129,7 +129,7 @@ class TestGetEnterpriseCredentials:
         assert "HTTP 404" in result["market_fetch_error"]
 
     def test_with_market_base_url_network_error(self):
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {"enterprise_login_username": "u"}
 
@@ -145,7 +145,7 @@ class TestGetEnterpriseCredentials:
 
     def test_market_response_flat_dict(self):
         """Response is a flat dict (no nested 'data' key)."""
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {"enterprise_login_username": "u", "enterprise_login_email": "old@x.com"}
         market_resp = MagicMock()
@@ -164,7 +164,7 @@ class TestGetEnterpriseCredentials:
 
     def test_market_response_non_dict(self):
         """Response body is not a dict — payload unchanged."""
-        from app.services.user_cs_enterprise_credentials import get_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import get_enterprise_credentials
 
         doc = {"enterprise_login_username": "u"}
         market_resp = MagicMock()
@@ -183,7 +183,7 @@ class TestGetEnterpriseCredentials:
 
 class TestIssueEnterpriseCredentials:
     def test_issue_with_auto_password(self):
-        from app.services.user_cs_enterprise_credentials import issue_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import issue_enterprise_credentials
 
         doc = {"username": "alice", "enterprise_auto_provisioned_at": "2026-01-01"}
 
@@ -198,7 +198,7 @@ class TestIssueEnterpriseCredentials:
         mock_save.assert_called_once()
 
     def test_issue_with_explicit_password(self):
-        from app.services.user_cs_enterprise_credentials import issue_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import issue_enterprise_credentials
 
         doc = {"username": "bob"}
 
@@ -211,7 +211,7 @@ class TestIssueEnterpriseCredentials:
         assert result["password"] == "mypassword"
 
     def test_issue_uses_fallback_username(self):
-        from app.services.user_cs_enterprise_credentials import issue_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import issue_enterprise_credentials
 
         # No username in doc, no caller username → user{uid}
         doc = {}
@@ -225,7 +225,7 @@ class TestIssueEnterpriseCredentials:
         assert result["username"] == "user99"
 
     def test_issue_preserves_existing_provisioned_at(self):
-        from app.services.user_cs_enterprise_credentials import issue_enterprise_credentials
+        from app.domain.shared_services.user_cs_enterprise_credentials import issue_enterprise_credentials
 
         original_ts = "2025-01-01T00:00:00+00:00"
         doc = {"username": "u", "enterprise_auto_provisioned_at": original_ts}

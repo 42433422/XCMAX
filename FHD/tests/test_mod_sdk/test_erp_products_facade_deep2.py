@@ -407,7 +407,7 @@ class TestProductsUpdateDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=1,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -418,7 +418,7 @@ class TestProductsUpdateDeep:
     def test_name_with_only_whitespace_raises(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=1,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -428,7 +428,7 @@ class TestProductsUpdateDeep:
     def test_id_none_raises(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=None,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -438,7 +438,7 @@ class TestProductsUpdateDeep:
     def test_missing_id_raises(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=None,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -448,7 +448,7 @@ class TestProductsUpdateDeep:
     def test_extra_fields_preserved(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=1,
         ):
             pf.products_update(req, {"id": 1, "name": "P", "price": 10, "spec": "s"})
@@ -469,7 +469,7 @@ class TestProductsDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=1,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -480,7 +480,7 @@ class TestProductsDeleteDeep:
     def test_id_none_raises(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=None,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -494,7 +494,7 @@ class TestProductsDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             return_value=1,
         ):
             result = pf.products_delete(req, {"id": 1})
@@ -513,7 +513,7 @@ class TestProductsBatchDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2]})
@@ -527,7 +527,7 @@ class TestProductsBatchDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2]})
@@ -540,7 +540,7 @@ class TestProductsBatchDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, 2, 3]})
@@ -552,7 +552,7 @@ class TestProductsBatchDeleteDeep:
         }
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -563,7 +563,7 @@ class TestProductsBatchDeleteDeep:
     def test_product_ids_key_used(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             pf.products_batch_delete(req, {"product_ids": [10, 20]})
@@ -573,7 +573,7 @@ class TestProductsBatchDeleteDeep:
     def test_ids_precedence_over_product_ids(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             pf.products_batch_delete(req, {"ids": [1], "product_ids": [2, 3]})
@@ -583,7 +583,7 @@ class TestProductsBatchDeleteDeep:
     def test_mixed_valid_invalid_ids(self, fake_service) -> None:
         req = MagicMock(spec=Request)
         with patch(
-            "app.infrastructure.persistence.compat_db.base._product_parse_id",
+            "app.infrastructure.persistence.compat_db.compat_db_base._product_parse_id",
             side_effect=lambda x: int(x) if str(x).isdigit() else None,
         ):
             result = pf.products_batch_delete(req, {"ids": [1, "invalid", 2, "also_invalid"]})
@@ -660,15 +660,15 @@ class TestWriteGateDeep:
             return {"blocked": True}
 
         monkeypatch.setattr(
-            "app.infrastructure.persistence.compat_db.base._products_write_raise",
+            "app.infrastructure.persistence.compat_db.compat_db_base._products_write_raise",
             fake_raise,
         )
         monkeypatch.setattr(
-            "app.infrastructure.persistence.compat_db.base._business_mod_json_block",
+            "app.infrastructure.persistence.compat_db.compat_db_base._business_mod_json_block",
             fake_block,
         )
         # Restore the real _write_gate function
-        from app.infrastructure.persistence.compat_db.base import (
+        from app.infrastructure.persistence.compat_db.compat_db_base import (
             _business_mod_json_block,
             _products_write_raise,
         )
@@ -680,14 +680,14 @@ class TestWriteGateDeep:
 
     def test_write_gate_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
-            "app.infrastructure.persistence.compat_db.base._products_write_raise",
+            "app.infrastructure.persistence.compat_db.compat_db_base._products_write_raise",
             lambda req: None,
         )
         monkeypatch.setattr(
-            "app.infrastructure.persistence.compat_db.base._business_mod_json_block",
+            "app.infrastructure.persistence.compat_db.compat_db_base._business_mod_json_block",
             lambda: None,
         )
-        from app.infrastructure.persistence.compat_db.base import (
+        from app.infrastructure.persistence.compat_db.compat_db_base import (
             _business_mod_json_block,
         )
 

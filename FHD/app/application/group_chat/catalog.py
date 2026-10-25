@@ -11,7 +11,7 @@ from app.application.group_chat.employee_registry import (
     _utc_now,
     _with_required_group_members,
 )
-from app.application.group_chat.ports import DirectoryActions, GroupStore, MessageStore
+from app.application.group_chat.protocols import DirectoryActions, GroupStore, MessageStore
 from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.storage import GroupChatRepository
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 
-from app.application.account_tier_derivation import (
+from app.domain.catalog.account_tier_derivation import (
     derive_account_tier,
     should_have_account_tier,
 )

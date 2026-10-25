@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.utils.time import utc_now_naive
 
 

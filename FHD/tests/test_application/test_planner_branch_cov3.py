@@ -44,7 +44,7 @@ from app.application.workflow.planner import (
     _execute_template_extract_tool,
     execute_tool,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1919,7 +1919,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = {"keyword": "ABC"}
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -1960,7 +1960,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
             with patch(
-                "app.services.task_agent.TaskAgent",
+                "app.domain.shared_services.task_agent.TaskAgent",
                 side_effect=ImportError("no module"),
             ):
                 with patch(
@@ -2003,7 +2003,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
             with patch(
-                "app.services.task_agent.TaskAgent",
+                "app.domain.shared_services.task_agent.TaskAgent",
                 side_effect=RuntimeError("init fail"),
             ):
                 with patch(
@@ -2045,7 +2045,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2085,7 +2085,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         )
         mock_task_agent = MagicMock()
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2297,7 +2297,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = ImportError("no module")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2338,7 +2338,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.side_effect = RuntimeError("fail")
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -2379,7 +2379,7 @@ class TestPlanWithReactMultiagentProbeOutputs:
         mock_task_agent = MagicMock()
         mock_task_agent._extract_customer_query_slots.return_value = "not a dict"
         with patch.object(planner, "_plan_with_llm", side_effect=[candidate, final_plan]):
-            with patch("app.services.task_agent.TaskAgent", return_value=mock_task_agent):
+            with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=mock_task_agent):
                 with patch(
                     "app.application.facades.tools_facade.execute_registered_workflow_tool"
                 ) as mock_exec:
@@ -3520,7 +3520,7 @@ class TestPlanIntegrationAdditional:
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
-                        "app.services.user_memory_service.get_user_memory_service",
+                        "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
                     ):
                         result = planner.plan(
@@ -3553,7 +3553,7 @@ class TestPlanIntegrationAdditional:
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
                     with patch(
-                        "app.services.user_memory_service.get_user_memory_service",
+                        "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         return_value=mock_memory,
                     ):
                         result = planner.plan(

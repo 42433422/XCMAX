@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 from datetime import datetime
 from typing import Any, Protocol
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 from .event_records import Snapshot, StoredEvent, WrongExpectedVersionError
 from .sqlite import StorageRuntime

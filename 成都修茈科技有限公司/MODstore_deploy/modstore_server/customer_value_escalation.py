@@ -67,7 +67,7 @@ def _digest(snapshot: Mapping[str, Any]) -> str:
 def _session_factory(factory: Callable[..., Any] | None) -> Callable[..., Any]:
     if factory is not None:
         return factory
-    from modstore_server.db.base import get_session_factory
+    from modstore_server.db.db_base import get_session_factory
 
     return get_session_factory
 

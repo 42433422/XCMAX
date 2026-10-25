@@ -11,8 +11,8 @@ from unittest.mock import Mock, patch
 import pytest
 from sqlalchemy.engine import make_url
 
-import app.services.database_service as db_mod
-from app.services.database_service import DatabaseService
+import app.domain.shared_services.database_service as db_mod
+from app.domain.shared_services.database_service import DatabaseService
 
 
 @pytest.fixture
@@ -110,7 +110,7 @@ class TestRestoreDatabase:
         from sqlalchemy import create_engine, select
         from sqlalchemy.orm import Session
 
-        from app.db.base import Base
+        from app.db.db_base import Base
         from app.db.models import User
         from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalRequest
         from app.db.models.workflow import WorkflowDefinition, WorkflowRun, WorkflowRunStep
@@ -484,7 +484,7 @@ class TestDeleteBackup:
 class TestServiceReExportGuard:
     def test_reexports_services_version_not_utils(self):
         import app.services as services_pkg
-        import app.services.database_service as correct_mod
+        import app.domain.shared_services.database_service as correct_mod
 
         assert services_pkg.get_database_service is correct_mod.get_database_service
         assert isinstance(services_pkg.get_database_service(), DatabaseService)

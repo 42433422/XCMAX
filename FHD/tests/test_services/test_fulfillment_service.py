@@ -1,5 +1,5 @@
 # mypy: disable-error-code="no-any-return"
-"""Tests for app.services.fulfillment_service — 履行/预留/backorder/return 模块（ODOO-W1-03）。
+"""Tests for app.domain.shared_services.fulfillment_service — 履行/预留/backorder/return 模块（ODOO-W1-03）。
 
 用真实 sqlite :memory:（StaticPool 复用同一引擎），patch inventory_service 与
 fulfillment_service 的 get_db 指向同一持久会话，并在 tenant_scope(1) 内执行，
@@ -18,9 +18,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-import app.services.fulfillment_service as fulfill_mod
-import app.services.inventory_service as inv_mod
-from app.db.base import Base
+import app.domain.shared_services.fulfillment_service as fulfill_mod
+import app.domain.shared_services.inventory_service as inv_mod
+from app.db.db_base import Base
 from app.db.models import (
     InventoryLedger,
     InventoryTransaction,
@@ -30,8 +30,8 @@ from app.db.models import (
     Warehouse,
 )
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.fulfillment_service import FulfillmentService
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.fulfillment_service import FulfillmentService
+from app.domain.shared_services.inventory_service import InventoryService
 
 
 @pytest.fixture(scope="function")

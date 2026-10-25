@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from app.neuro_bus.event_store import EventStoreMode
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 from app.neuro_bus.health_monitor_types import (
     INCIDENT_REPORTED,
     REASON_EVENT_STORE_UNAVAILABLE,

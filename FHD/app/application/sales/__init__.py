@@ -1,1 +1,2 @@
-"""Sales application components with explicit transaction and domain service ports."""
+"""Compat shim — canonical at app.domain.sales."""
+from app.domain.sales import *  # noqa: F403

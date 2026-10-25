@@ -80,7 +80,7 @@ def test_legacy_route_dataclass() -> None:
     r = LegacyRoute(
         filename="domain:auth",
         target_domain="auth",
-        target_module="app.fastapi_routes.domains.auth.routes",
+        target_module="app.fastapi_routes.domains.auth.auth_routes",
         note="test",
     )
     assert r.target_domain == "auth"

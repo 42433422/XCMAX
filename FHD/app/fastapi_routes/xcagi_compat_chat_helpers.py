@@ -29,7 +29,7 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.agent_orchestrator.chat_trace import (
     start_legacy_chat_run as start_legacy_chat_run,
 )
-from app.application.chat_reply_safety import (
+from app.domain.ops_rules.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
 )
 from app.application.conversation import chat_stream_sse_events

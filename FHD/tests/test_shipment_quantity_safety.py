@@ -169,7 +169,7 @@ def test_sqlite_old_fact_read_and_status_write_never_recalculate(tmp_path, monke
     from sqlalchemy.orm import sessionmaker
 
     from app.application.shipment_app_service import ShipmentApplicationService
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import ShipmentRecord
     from app.infrastructure.repositories import shipment_repository_impl as module
 
@@ -223,7 +223,7 @@ def test_sqlite_old_fact_read_and_status_write_never_recalculate(tmp_path, monke
 
 def test_event_and_customer_write_are_not_emitted_for_invalid_second_line():
     from app.application.shipment_business_record import remember_business_shipment
-    from app.services.tools_workflow_shipments_docs import _registered_router_business_event
+    from app.domain.shared_services.tools_workflow_shipments_docs import _registered_router_business_event
 
     payload = {
         "unit_name": "customer",
@@ -263,7 +263,7 @@ def test_real_kg_document_and_record_keep_null_spec(tmp_path, monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import ShipmentRecord
     from app.infrastructure.persistence import shipment_record_store_impl as module
     from app.legacy.documents.legacy_shipment_document import (

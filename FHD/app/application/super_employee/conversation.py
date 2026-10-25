@@ -13,7 +13,7 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .output import CliOutput
-from .ports import ConversationPorts
+from .protocols import ConversationPorts
 from .profiles import SuperEmployeeToolProfile
 
 logger = logging.getLogger(__name__)

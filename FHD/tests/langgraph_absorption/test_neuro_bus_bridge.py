@@ -23,7 +23,7 @@ from app.application.workflow.ports import (
     StateUpdatePayload,
 )
 from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
 # Reviewed with the production NeuroBus delivery SLI instrumentation.  Any

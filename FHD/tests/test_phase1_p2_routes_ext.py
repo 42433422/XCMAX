@@ -77,7 +77,7 @@ def auth_client() -> TestClient:
 @patch("app.application.auth_app_service.get_auth_app_service")
 def test_auth_session_validate_no_session(mock_get: MagicMock, auth_client: TestClient) -> None:
     with patch.object(
-        __import__("app.fastapi_routes.domains.auth.routes", fromlist=["routes"]),
+        __import__("app.fastapi_routes.domains.auth.auth_routes", fromlist=["routes"]),
         "session_id_from_request",
         return_value=None,
     ):
@@ -160,7 +160,7 @@ def test_preferences_persist_per_workspace_owner(misc_client: TestClient) -> Non
         patch(
             "app.application.tenant_workspace_prefs.session_workspace_owner_id", return_value="t:7"
         ),
-        patch("app.services.user_preference_service.get_user_preference_service", return_value=svc),
+        patch("app.domain.shared_services.user_preference_service.get_user_preference_service", return_value=svc),
     ):
         for key, value in (("aiMode", "offline"), ("pack", {"a": 1})):
             r = misc_client.post("/preferences", json={"key": key, "value": value})
@@ -186,7 +186,7 @@ def test_memory_v2_routes_lifecycle_and_preference_sync(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
     monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
@@ -275,7 +275,7 @@ def test_memory_v2_routes_govern_blocked_source(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
     monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
@@ -373,7 +373,7 @@ def customer_client() -> TestClient:
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.routes._customer_find_by_id")
+@patch("app.fastapi_routes.domains.customer.customer_routes._customer_find_by_id")
 def test_customers_get_by_id(
     mock_find: MagicMock, _mock_erp: MagicMock, customer_client: TestClient
 ) -> None:
@@ -385,13 +385,13 @@ def test_customers_get_by_id(
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
 def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: TestClient) -> None:
-    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
         r = customer_client.post("/customers", json={})
     assert r.status_code == 400
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.routes._customer_pg_insert")
+@patch("app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert")
 def test_customers_post_ok(
     mock_insert: MagicMock,
     _mock_erp: MagicMock,
@@ -399,7 +399,7 @@ def test_customers_post_ok(
     local_tools,
 ) -> None:
     mock_insert.return_value = {"id": 5, "name": "丙公司"}
-    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
         r = customer_client.post(
             "/customers",
             json={"name": "丙公司", "contact_person": "李"},

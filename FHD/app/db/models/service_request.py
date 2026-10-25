@@ -8,7 +8,7 @@ from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func as sql_func
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 
 class ServiceRequestStatus(str, Enum):

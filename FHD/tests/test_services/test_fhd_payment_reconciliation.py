@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.services import reconciliation_scheduler as scheduler
-from app.services.fhd_payment_reconciliation import _parse_dt, compute_fhd_period_snapshot
+from app.domain.shared_services.fhd_payment_reconciliation import _parse_dt, compute_fhd_period_snapshot
 
 NOW = datetime.now(UTC)
 

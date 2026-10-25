@@ -1,4 +1,4 @@
-"""Tests for app.services.distillation_trainer — extended coverage (ext4).
+"""Tests for app.domain.shared_services.distillation_trainer — extended coverage (ext4).
 
 Focus: DistillationDataset.__len__, DistillationTrainer.prepare_data with
 stratified vs non-stratified split, train_epoch, evaluate, train full flow
@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services import distillation_trainer as _distillation_module
-from app.services.distillation_trainer import (
+from app.domain.shared_services.distillation_trainer import (
     ID_TO_LABEL,
     INTENT_LABELS,
     LABEL_TO_ID,
@@ -63,11 +63,11 @@ class TestDistillationTrainerPrepareData:
 
         trainer = DistillationTrainer(device="cpu")
         with (
-            patch("app.services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
             patch(
-                "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification.from_pretrained"
             ) as mock_model_cls,
-            patch("app.services.distillation_trainer.DataLoader") as mock_dl,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as mock_dl,
         ):
             mock_tok.return_value = MagicMock()
             mock_model = MagicMock()
@@ -91,12 +91,12 @@ class TestDistillationTrainerPrepareData:
 
         trainer = DistillationTrainer(device="cpu")
         with (
-            patch("app.services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer.from_pretrained") as mock_tok,
             patch(
-                "app.services.distillation_trainer.BertForSequenceClassification.from_pretrained"
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification.from_pretrained"
             ) as mock_model_cls,
-            patch("app.services.distillation_trainer.DataLoader") as mock_dl,
-            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as mock_dl,
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as mock_split,
         ):
             mock_split.return_value = (
                 texts[:16],
@@ -183,7 +183,7 @@ class TestDistillationTrainerEvaluate:
         trainer.model.return_value = mock_output
         trainer.val_loader = [batch]
 
-        with patch("app.services.distillation_trainer.accuracy_score", return_value=1.0):
+        with patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0):
             result = trainer.evaluate()
         assert "val_loss" in result
         assert "val_accuracy" in result
@@ -265,14 +265,14 @@ class TestDistillationTrainerTrainFullFlow:
         trainer.model.parameters.return_value = iter([torch.zeros(2, 2, requires_grad=True)])
 
         with (
-            patch("app.services.distillation_trainer.AdamW") as mock_adamw,
+            patch("app.domain.shared_services.distillation_trainer.AdamW") as mock_adamw,
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup"
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup"
             ) as mock_scheduler,
             patch.object(trainer, "prepare_data") as mock_prepare,
             patch.object(trainer, "save_checkpoint") as mock_save,
-            patch("app.services.distillation_trainer.accuracy_score", return_value=1.0),
-            patch("app.services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0),
+            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
         ):
             mock_prepare.return_value = None
             # Re-set the loaders since prepare_data is mocked
@@ -366,7 +366,7 @@ class TestMainCLIWithOutput:
                 "1",
             ],
         ):
-            with patch("app.services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
+            with patch("app.domain.shared_services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 
@@ -402,7 +402,7 @@ class TestMainCLIWithOutput:
                 "128",
             ],
         ):
-            with patch("app.services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
+            with patch("app.domain.shared_services.distillation_trainer.DistillationTrainer") as mock_trainer_cls:
                 mock_trainer = MagicMock()
                 mock_trainer_cls.return_value = mock_trainer
 

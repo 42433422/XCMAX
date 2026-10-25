@@ -222,7 +222,7 @@ class TestWorkingMemory:
         ]
         wm = WorkingMemory(session_id="sess1", user_id="")
         with patch(
-            "app.services.conversation_service.ConversationService.get_session_messages",
+            "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
             return_value=mock_rows,
         ):
             snapshot = wm.recall("查询")
@@ -239,7 +239,7 @@ class TestWorkingMemory:
         ]
         wm = WorkingMemory(session_id="sess1")
         with patch(
-            "app.services.conversation_service.ConversationService.get_session_messages",
+            "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
             return_value=mock_rows,
         ):
             snapshot = wm.recall()
@@ -253,7 +253,7 @@ class TestWorkingMemory:
         ]
         wm = WorkingMemory(session_id="sess1")
         with patch(
-            "app.services.conversation_service.ConversationService.get_session_messages",
+            "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
             return_value=mock_rows,
         ):
             snapshot = wm.recall()
@@ -265,7 +265,7 @@ class TestWorkingMemory:
         """ConversationService 异常时返回空。"""
         wm = WorkingMemory(session_id="sess1")
         with patch(
-            "app.services.conversation_service.ConversationService.get_session_messages",
+            "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
             side_effect=RuntimeError("db down"),
         ):
             snapshot = wm.recall()
@@ -290,7 +290,7 @@ class TestWorkingMemory:
         wm = WorkingMemory(session_id="sess1", user_id="u1", enable_long_term=True)
         with (
             patch(
-                "app.services.conversation_service.ConversationService.get_session_messages",
+                "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
                 return_value=[],
             ),
             patch(
@@ -322,7 +322,7 @@ class TestWorkingMemory:
         wm = WorkingMemory(session_id="sess1", user_id="u1", enable_long_term=True)
         with (
             patch(
-                "app.services.conversation_service.ConversationService.get_session_messages",
+                "app.domain.conversation.legacy_services_service.ConversationService.get_session_messages",
                 return_value=[],
             ),
             patch(
@@ -346,7 +346,7 @@ class TestWorkingMemory:
         """remember 调用 ConversationService.save_message。"""
         wm = WorkingMemory(session_id="sess1", user_id="u1")
         with patch(
-            "app.services.conversation_service.ConversationService.save_message"
+            "app.domain.conversation.legacy_services_service.ConversationService.save_message"
         ) as mock_save:
             wm.remember("user", "hello", metadata={"k": "v"})
         # save_message(session_id, user_id, role, content, metadata=json_str)
@@ -364,7 +364,7 @@ class TestWorkingMemory:
         """remember 异常时不抛出。"""
         wm = WorkingMemory(session_id="sess1")
         with patch(
-            "app.services.conversation_service.ConversationService.save_message",
+            "app.domain.conversation.legacy_services_service.ConversationService.save_message",
             side_effect=RuntimeError("db down"),
         ):
             wm.remember("user", "hello")  # 不应抛异常

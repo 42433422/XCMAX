@@ -59,7 +59,7 @@ class TestShipmentRecordsUnits:
                 return_value={"success": True, "data": [{"name": "销售部"}]},
             ),
             patch(
-                "app.application.attendance_reference_data.attendance_unit_names",
+                "app.domain.catalog.attendance_reference_data.attendance_unit_names",
                 return_value=["生产部", "销售部"],
             ),
         ):

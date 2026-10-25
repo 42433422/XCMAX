@@ -19,7 +19,7 @@ from modstore_server import quota_middleware as qm
 @pytest.fixture(autouse=True)
 def _init_db():
     """建表（直连 session 的测试不经 app 启动，需手动初始化 schema）。"""
-    from modstore_server.db.base import init_db
+    from modstore_server.db.db_base import init_db
 
     init_db()
     yield

@@ -111,7 +111,7 @@ def capture_worker_llm_scope(context: dict[str, Any] | None = None) -> dict[str,
 def restore_worker_llm_client(config: dict[str, Any]) -> tuple[Any, str]:
     client: Any
     if config["kind"] in {"modstore", "account"}:
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.conversation.legacy_services.modstore_adapter import (
             ModstoreOpenAICompatibleClient,
             ModstorePlatformAdapter,
         )

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.application.im_employee_mixin import ImEmployeeMixin
 from app.application.im_employee_peer import EmployeePeerMixin
-from app.application.im_read_state_mixin import ImReadStateMixin
+from app.domain.ops_rules.im_read_state_mixin import ImReadStateMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -374,7 +374,7 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
         if cs_id is None or int(cs_id) not in [int(m) for m in member_ids]:
             return
         try:
-            from app.services.mobile_push import notify_user
+            from app.domain.shared_services.mobile_push import notify_user
         except ImportError:
             return
         preview = (text or "").strip()[:120]
@@ -417,7 +417,7 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
 
     @staticmethod
     def _record_im_message_change(message: dict[str, Any], *, actor: str) -> int:
-        from app.services.xcmax_sync_service import record_change, utc_now_ms
+        from app.domain.shared_services.xcmax_sync_service import record_change, utc_now_ms
 
         updated_at_ms = utc_now_ms()
         record_change(
@@ -437,7 +437,7 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
         *,
         actor: str,
     ) -> int:
-        from app.services.xcmax_sync_service import record_change, utc_now_ms
+        from app.domain.shared_services.xcmax_sync_service import record_change, utc_now_ms
 
         updated_at_ms = utc_now_ms()
         record_change(

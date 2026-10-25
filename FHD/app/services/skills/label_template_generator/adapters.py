@@ -28,6 +28,6 @@ def load_grid_detector() -> Callable[[Image.Image], Grid]:
 
 
 def get_ocr_service() -> OCRService:
-    from app.services.ocr_service import get_ocr_service as resolve_service
+    from app.domain.shared_services.ocr_service import get_ocr_service as resolve_service
 
     return resolve_service()

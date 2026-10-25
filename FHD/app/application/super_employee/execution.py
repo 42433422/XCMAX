@@ -10,7 +10,7 @@ from typing import Any
 from app.application.execution_scope import FACTORY_TOKEN_ENV
 from app.application.workspaces import WorkspaceError
 
-from .ports import ExecutionContext, WorkspacePorts
+from .protocols import ExecutionContext, WorkspacePorts
 from .profiles import SuperEmployeeToolProfile
 
 

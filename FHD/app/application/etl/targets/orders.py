@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app.application.etl.errors import EtlError
-from app.application.etl.targets.base import (
+from app.application.etl.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,

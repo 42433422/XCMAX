@@ -1,8 +1,8 @@
 # mypy: disable-error-code="attr-defined"
 """Shared torch/transformers stubs for tests/test_services/.
 
-The source modules under test (app.services.intent_trainer,
-app.services.distillation_trainer, app.services.train_intent) import
+The source modules under test (app.domain.shared_services.intent_trainer,
+app.domain.shared_services.distillation_trainer, app.domain.shared_services.train_intent) import
 ``torch`` and ``transformers`` at module top-level. These heavy ML deps are
 intentionally excluded from the CI/test venv — see requirements-server-api.txt
 which comments "与 XCAGI/requirements.txt 相比去掉 torch 等大包". Without these

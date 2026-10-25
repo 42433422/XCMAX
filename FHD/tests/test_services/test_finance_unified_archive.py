@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.finance_unified_archive import (
+from app.domain.shared_services.finance_unified_archive import (
     _ledger_item_from_invoice,
     list_ledger,
     summarize_ledger,
@@ -82,9 +82,9 @@ class TestListLedger:
     """测试 list_ledger 函数。"""
 
     def test_empty_ledger(self):
-        with patch("app.services.finance_unified_archive._items_from_db", return_value=[]):
+        with patch("app.domain.shared_services.finance_unified_archive._items_from_db", return_value=[]):
             with patch(
-                "app.services.finance_unified_archive._items_from_pipeline",
+                "app.domain.shared_services.finance_unified_archive._items_from_pipeline",
                 return_value=[],
             ):
                 result = list_ledger()
@@ -93,7 +93,7 @@ class TestListLedger:
     def test_db_items_returned_first(self):
         db_items = [{"source_type": "financial_transaction", "amount_cents": 100}]
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=db_items,
         ):
             result = list_ledger()
@@ -102,11 +102,11 @@ class TestListLedger:
 
     def test_limit_capped_at_2000(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ):
             with patch(
-                "app.services.finance_unified_archive._items_from_pipeline",
+                "app.domain.shared_services.finance_unified_archive._items_from_pipeline",
                 return_value=[],
             ) as mock_pipeline:
                 list_ledger(limit=5000)
@@ -115,11 +115,11 @@ class TestListLedger:
 
     def test_limit_minimum_1(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ):
             with patch(
-                "app.services.finance_unified_archive._items_from_pipeline",
+                "app.domain.shared_services.finance_unified_archive._items_from_pipeline",
                 return_value=[],
             ) as mock_pipeline:
                 list_ledger(limit=0)
@@ -129,16 +129,16 @@ class TestListLedger:
 
     def test_fallback_to_crm_invoices(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ):
             with patch(
-                "app.services.finance_unified_archive.list_crm_invoices",
+                "app.domain.shared_services.finance_unified_archive.list_crm_invoices",
                 return_value={"items": [{"id": 1, "amount_cents": 500}]},
                 create=True,
             ):
                 with patch(
-                    "app.services.finance_unified_archive._items_from_pipeline",
+                    "app.domain.shared_services.finance_unified_archive._items_from_pipeline",
                     return_value=[],
                 ):
                     result = list_ledger()
@@ -146,7 +146,7 @@ class TestListLedger:
 
     def test_market_user_id_filter(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ) as mock_db:
             list_ledger(market_user_id=42)
@@ -158,7 +158,7 @@ class TestSummarizeLedger:
     """测试 summarize_ledger 函数。"""
 
     def test_empty_summary(self):
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=[]):
+        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=[]):
             result = summarize_ledger()
             assert result == {}
 
@@ -168,7 +168,7 @@ class TestSummarizeLedger:
             {"track": "contract", "amount_cents": 200},
             {"track": "manual", "amount_cents": 50},
         ]
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
+        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert result["contract"]["count"] == 2
             assert result["contract"]["amount_cents"] == 300
@@ -177,12 +177,12 @@ class TestSummarizeLedger:
 
     def test_summary_missing_track_defaults_to_manual(self):
         items = [{"amount_cents": 100}]
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
+        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert "manual" in result
 
     def test_summary_missing_amount_cents(self):
         items = [{"track": "contract"}]
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
+        with patch("app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items):
             result = summarize_ledger()
             assert result["contract"]["amount_cents"] == 0

@@ -1216,7 +1216,7 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
 
     from sqlalchemy import text
 
-    from modstore_server.db.base import get_engine
+    from modstore_server.db.db_base import get_engine
     from modstore_server.models_cs import CustomerServiceAuditLog
 
     customer, admin = (

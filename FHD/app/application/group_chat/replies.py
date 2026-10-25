@@ -6,7 +6,7 @@ import asyncio
 from typing import Any
 
 from app.application.group_chat.constants import _SUPER_EMPLOYEE_IDS, CONTEXT_TURNS, CompletionFn
-from app.application.group_chat.ports import AiReply, EmployeeProviders
+from app.application.group_chat.protocols import AiReply, EmployeeProviders
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

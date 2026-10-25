@@ -39,11 +39,11 @@ def _mock_intent_stack(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_rec = MagicMock()
     mock_rec.recognize.return_value = []
     monkeypatch.setattr(
-        "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+        "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
         lambda: mock_rec,
     )
     monkeypatch.setattr(
-        "app.services.unified_intent_recognizer.get_unified_intent_recognizer",
+        "app.domain.shared_services.unified_intent_recognizer.get_unified_intent_recognizer",
         lambda: mock_rec,
     )
 
@@ -181,19 +181,19 @@ def report_client(mock_report_svc: MagicMock) -> TestClient:
 @pytest.fixture
 def ops_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(
-        "app.services.operations_line_bridge.compute_operations_health",
+        "app.domain.shared_services.operations_line_bridge.compute_operations_health",
         lambda: {"status": "ok", "checks": []},
     )
     monkeypatch.setattr(
-        "app.services.contract_lifecycle.run_contract_expiry_scan",
+        "app.domain.shared_services.contract_lifecycle.run_contract_expiry_scan",
         lambda **kwargs: {"scanned": 2, "expiring": 0, **kwargs},
     )
     monkeypatch.setattr(
-        "app.services.user_cs_delivery_signoff.signoff_backend_info",
+        "app.domain.shared_services.user_cs_delivery_signoff.signoff_backend_info",
         lambda: {"enabled": True},
     )
     monkeypatch.setattr(
-        "app.services.reconciliation_scheduler.get_reconciliation_status",
+        "app.domain.shared_services.reconciliation_scheduler.get_reconciliation_status",
         lambda: {"last_run": "2026-06-01", "success": True},
     )
     app = FastAPI()
@@ -665,7 +665,7 @@ def test_operations_reconciliation_run_preview(
     ops_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.services.reconciliation_scheduler.run_reconciliation_preview_cycle",
+        "app.domain.shared_services.reconciliation_scheduler.run_reconciliation_preview_cycle",
         lambda: {"success": True, "mode": "preview"},
     )
     body = ops_client.post(
@@ -680,7 +680,7 @@ def test_operations_reconciliation_run_failure(
     ops_client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        "app.services.reconciliation_scheduler.run_reconciliation_full_cycle",
+        "app.domain.shared_services.reconciliation_scheduler.run_reconciliation_full_cycle",
         lambda: {"success": False, "error": "ledger mismatch"},
     )
     body = ops_client.post(

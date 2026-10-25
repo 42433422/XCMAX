@@ -30,7 +30,7 @@ class FixtureExecutor(AgentToolExecutor):
             from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
             from app.application.workflow.planner import LLMWorkflowPlanner
             from app.application.workflow.planner_llm_gateway import request_planner_completion
-            from app.application.workflow.types import PlanGraph
+            from app.application.workflow.workflow_types import PlanGraph
 
             planner = request_planner_completion(ai_service=None, context={}, messages=[])
             agent = run_employee_agent_loop(
@@ -254,7 +254,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
         thread.start()
 
         def execute(owner):
-            from app.services.conversation.modstore_adapter import (
+            from app.domain.conversation.legacy_services.modstore_adapter import (
                 ModstoreOpenAICompatibleClient,
                 ModstorePlatformAdapter,
             )

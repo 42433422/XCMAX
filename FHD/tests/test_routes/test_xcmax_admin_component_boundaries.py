@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import xcmax_admin
 from app.utils.time import utc_now_naive
@@ -169,7 +169,7 @@ def entitlements_client(tmp_path, monkeypatch):
     import app.db as database
     from app.db import session as session_database
     from app.db import xcmax_sync
-    from app.services.xcmax_sync_service import _write_sync_meta
+    from app.domain.shared_services.xcmax_sync_service import _write_sync_meta
 
     engine = create_engine(
         f"sqlite:///{tmp_path / 'accounts.sqlite3'}", connect_args={"check_same_thread": False}

@@ -208,7 +208,7 @@ class TestTestDomains:
 
         with (
             patch(
-                "app.neuro_bus.domains.base.get_domain_registry",
+                "app.neuro_bus.domains.domains_base.get_domain_registry",
                 return_value=mock_registry,
             ),
             patch(
@@ -232,7 +232,7 @@ class TestTestDomains:
 
         with (
             patch(
-                "app.neuro_bus.domains.base.get_domain_registry",
+                "app.neuro_bus.domains.domains_base.get_domain_registry",
                 return_value=mock_registry,
             ),
             patch(
@@ -245,7 +245,7 @@ class TestTestDomains:
     def test_domains_error_returns_false(self):
         """异常时返回 False"""
         with patch(
-            "app.neuro_bus.domains.base.get_domain_registry",
+            "app.neuro_bus.domains.domains_base.get_domain_registry",
             side_effect=RuntimeError("registry failed"),
         ):
             result = test_domains()

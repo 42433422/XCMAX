@@ -1,4 +1,4 @@
-from modstore_server.domain.refund.ports import RefundRepository
-from modstore_server.domain.refund.types import RefundRequestRef, RefundStatus
+from modstore_server.domain.ports import RefundRepository
+from modstore_server.domain.refund.refund_types import RefundRequestRef, RefundStatus
 
 __all__ = ["RefundRepository", "RefundRequestRef", "RefundStatus"]

@@ -85,7 +85,7 @@ def _write_artifacts(tmp_path: Path, *, verdict: str = "pass") -> None:
                 "wo_id": "WO-kbtest",
                 "kind": "module_import",
                 "status": "generated",
-                "scenario": {"module": "app.services.work_order_state"},
+                "scenario": {"module": "app.domain.work_order.state"},
             },
             ensure_ascii=False,
         ),

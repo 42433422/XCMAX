@@ -1,0 +1,65 @@
+{
+  "1_app_domain": {
+    "app_files": 613,
+    "domain_files": 334,
+    "ratio": 1.835,
+    "app_py": 612,
+    "domain_py": 333,
+    "ratio_py": 1.838
+  },
+  "2_ports": 12,
+  "3_layers": [
+    "application",
+    "domain",
+    "infrastructure"
+  ],
+  "4_fastapi_ports": 0,
+  "5_domain_services": false,
+  "6_security": {
+    "files": 47,
+    "mb": 0.218
+  },
+  "7_neuro_bus_files": 115,
+  "9_blueprints": 27,
+  "10_legacy": 47,
+  "11": {
+    "types.py": 7,
+    "base.py": 8,
+    "routes.py": 0,
+    "paths.py": 13,
+    "convert.py": 15
+  },
+  "12_merged_top": [
+    [
+      89.9,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py"
+    ],
+    [
+      89.3,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py"
+    ],
+    [
+      84.3,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py"
+    ],
+    [
+      83.5,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py"
+    ],
+    [
+      73.1,
+      "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py"
+    ]
+  ],
+  "13_gt100kb": [],
+  "14_fastapi_routes_py": 301,
+  "15_pregel_kb": 0.2,
+  "16_xcagi_files": 260,
+  "18_run_py": [
+    "FHD/run.py",
+    "FHD/XCAGI/run.py"
+  ],
+  "19_version_pointer": true,
+  "20_pyproject": 12,
+  "20_package_json": 10
+}

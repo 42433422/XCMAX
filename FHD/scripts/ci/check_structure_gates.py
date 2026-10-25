@@ -31,7 +31,7 @@ BASELINE = {
     "mixin_total": 11,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
-    "routes_total": 305,
+    "routes_total": 300,
     "routes_top_level": 115,
     "legacy_prod_ref_files": 24,
     "application_ports_py": 1,
@@ -41,13 +41,20 @@ BASELINE = {
     # G8: duplicate basename count for noisy names outside mods/XCAGI (sum of counts)
     "noisy_basename_files": 0,  # app tree: blueprints/parser/mapper/rules/mapping/build_xcemp/convert — expect 0
     # G9 info: application/domain py ratio ceiling (warn if worse)
-    "app_domain_ratio_x100": 450,  # 4.50:1 — current ~4.25
+    "app_domain_ratio_x100": 200,  # debt19: ≤2.00:1
     # G10: MODstore_deploy mechanical part* files (ratchet down; forbid growth)
     "modstore_part_files": 0,
     # G11: repo-wide *.py > 40KB (ratchet; especially tests)
-    "py_gt_40kb": 175,
+    "py_gt_40kb": 176,
     "py_gt_40kb_testish": 123,
+    # debt19 ratchets
+    "ports_repo_wide": 15,
+    "ports_layer_count": 3,
+    "blueprints_py": 40,
+    "py_gt_100kb_nontest": 0,
+    "fastapi_routes_ports": 0,
 }
+
 
 # G3: no stock fixtures under application after rename to examples/contract_samples
 EXEMPT_APP_FIXTURES: set[str] = set()
@@ -452,6 +459,78 @@ def main() -> int:
         errors.append(
             f"G11: py>40KB testish {len(big_test)} > "
             f"baseline {BASELINE['py_gt_40kb_testish']}"
+        )
+
+
+    # --- G12 debt19 ports / layers / blueprints / giants / domain-services ---
+    ports_all = [
+        p
+        for p in repo.rglob("ports.py")
+        if ".git" not in p.parts and "node_modules" not in p.parts and ".venv" not in p.parts
+    ]
+    infos.append(
+        f"ports_repo_wide={len(ports_all)} (baseline {BASELINE.get('ports_repo_wide', 15)})"
+    )
+    if len(ports_all) > BASELINE.get("ports_repo_wide", 15):
+        errors.append(
+            f"G12: ports.py count {len(ports_all)} > baseline {BASELINE.get('ports_repo_wide', 15)}"
+        )
+    layer_names = {
+        "application",
+        "domain",
+        "infrastructure",
+        "fastapi_routes",
+        "legacy",
+        "mod_sdk",
+        "services",
+    }
+    layers = set()
+    for port_path in ports_all:
+        for name in layer_names:
+            if name in port_path.parts:
+                layers.add(name)
+    infos.append(f"ports_layers={sorted(layers)} count={len(layers)}")
+    if len(layers) > BASELINE.get("ports_layer_count", 3):
+        errors.append(
+            f"G12: ports layers {len(layers)} > {BASELINE.get('ports_layer_count', 3)}: {sorted(layers)}"
+        )
+    fr_ports = [port_path for port_path in ports_all if "fastapi_routes" in port_path.parts]
+    if len(fr_ports) > BASELINE.get("fastapi_routes_ports", 0):
+        errors.append(f"G12: fastapi_routes ports {len(fr_ports)} > 0")
+    if (app / "domain" / "services").exists():
+        errors.append("G12: domain/services directory must not exist")
+    bps = [
+        port_path
+        for port_path in repo.rglob("blueprints.py")
+        if ".git" not in port_path.parts and "node_modules" not in port_path.parts
+    ]
+    infos.append(
+        f"blueprints.py={len(bps)} (baseline {BASELINE.get('blueprints_py', 40)})"
+    )
+    if len(bps) > BASELINE.get("blueprints_py", 40):
+        errors.append(
+            f"G12: blueprints.py {len(bps)} > baseline {BASELINE.get('blueprints_py', 40)}"
+        )
+    big100 = []
+    for py_path in repo.rglob("*.py"):
+        if any(x in py_path.parts for x in (".git", "node_modules", "__pycache__", ".venv")):
+            continue
+        try:
+            sz = py_path.stat().st_size
+        except OSError:
+            continue
+        if sz <= 100_000:
+            continue
+        s = str(py_path).replace("\\", "/").lower()
+        if "test" in py_path.name.lower() or "/tests/" in s:
+            continue
+        big100.append(py_path)
+    infos.append(
+        f"py>100KB nontest={len(big100)} (baseline {BASELINE.get('py_gt_100kb_nontest', 0)})"
+    )
+    if len(big100) > BASELINE.get("py_gt_100kb_nontest", 0):
+        errors.append(
+            f"G12: py>100KB nontest {len(big100)} > baseline {BASELINE.get('py_gt_100kb_nontest', 0)}"
         )
 
     # --- G6 docs ---

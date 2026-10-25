@@ -82,7 +82,7 @@ class EmployeeMemoryManager:
         if not sid:
             return []
         try:
-            from app.services.conversation_service import ConversationService
+            from app.domain.conversation.legacy_services_service import ConversationService
 
             rows = ConversationService().get_session_messages(sid, limit=50)
         except RECOVERABLE_ERRORS:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
@@ -163,7 +163,7 @@ class EmployeeMemoryManager:
         meta = json.dumps({"employee_id": self.scope.employee_id}, ensure_ascii=False)
         uid = str(user_id if user_id is not None else "")
         try:
-            from app.services.conversation_service import ConversationService
+            from app.domain.conversation.legacy_services_service import ConversationService
 
             svc = ConversationService()
             if task:

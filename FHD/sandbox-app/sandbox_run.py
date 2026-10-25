@@ -44,7 +44,7 @@ def _bootstrap_runtime() -> None:
     from sandbox_app.sandbox_settings import RUNTIME_ROOT, SANDBOX_RESET_ON_BOOT, default_mods_root
 
     from app.desktop_runtime.migrate import _should_bootstrap_sqlite, bootstrap_sqlite_schema
-    from app.desktop_runtime.paths import configure_desktop_environment
+    from app.desktop_runtime.desktop_runtime_paths import configure_desktop_environment
 
     runtime = str(RUNTIME_ROOT)
     configure_desktop_environment(runtime)

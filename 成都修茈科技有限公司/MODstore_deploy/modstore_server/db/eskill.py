@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class ESkill(Base):

@@ -11,7 +11,7 @@ from app.application.workflow.planner import (
     execute_tool,
     get_tool_registry,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 
 # ========================= get_tool_registry =============================
 
@@ -238,7 +238,7 @@ class TestLLMWorkflowPlanner:
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             patch(
-                "app.services.user_memory_service.get_user_memory_service",
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
                 return_value=mock_memory,
             ),
         ):
@@ -525,7 +525,7 @@ def test_online_sales_planner_preserves_explicit_fields_before_model(llm_variant
             return_value="full",
         ),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
-        patch("app.services.user_memory_service.get_user_memory_service", return_value=memory),
+        patch("app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory),
         patch("app.application.workflow.planner.execute_tool") as execute,
     ):
         for attempt in range(2):

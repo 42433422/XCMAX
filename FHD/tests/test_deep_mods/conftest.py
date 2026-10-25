@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 def mod_accounts(tmp_path, monkeypatch):
     import app.db as database
     import app.db.session as db_session
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.tenant import Tenant
     from app.db.models.user import Session, User
     from app.utils.time import utc_now_naive

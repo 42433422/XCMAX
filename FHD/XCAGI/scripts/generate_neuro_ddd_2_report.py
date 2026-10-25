@@ -333,7 +333,7 @@ def generate_neuro_ddd_2_report():
 
     print("\n8.1 强化学习决策")
     print("   ```python")
-    print("   from app.neuro_domains.rl_optimizer import get_decision_engine")
+    print("   from app.domain.neuro_domains.rl_optimizer import get_decision_engine")
     print("")
     print("   engine = get_decision_engine()")
     print("   decision = await engine.make_decision(")
@@ -348,7 +348,7 @@ def generate_neuro_ddd_2_report():
 
     print("\n8.2 多模态处理")
     print("   ```python")
-    print("   from app.neuro_domains.multimodal_ai import get_multimodal_service, MultimodalInput")
+    print("   from app.domain.neuro_domains.multimodal_ai import get_multimodal_service, MultimodalInput")
     print("")
     print("   service = get_multimodal_service()")
     print("   input_data = MultimodalInput(")
@@ -362,7 +362,7 @@ def generate_neuro_ddd_2_report():
 
     print("\n8.3 预测性维护")
     print("   ```python")
-    print("   from app.neuro_domains.rl_optimizer import PredictiveMaintenance")
+    print("   from app.domain.neuro_domains.rl_optimizer import PredictiveMaintenance")
     print("")
     print("   maintenance = PredictiveMaintenance()")
     print("   maintenance.record_health_metric(")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.conversation.api import _make_ai_response_cache_key
+from app.domain.conversation.legacy_services.api import _make_ai_response_cache_key
 
 
 def test_ai_response_cache_key_normalizes() -> None:

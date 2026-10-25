@@ -1,4 +1,4 @@
-"""Tests for app.services.conversation.api (ApiMixin)."""
+"""Tests for app.domain.conversation.legacy_services.api (ApiMixin)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.conversation.api import (
+from app.domain.conversation.legacy_services.api import (
     ApiMixin,
     _make_ai_response_cache_key,
 )
-from app.services.conversation.context import ConversationContext
+from app.domain.conversation.legacy_services.context import ConversationContext
 
 
 # ---------------------------------------------------------------------------
@@ -274,7 +274,7 @@ class TestExecuteOrGenerateResponse:
         svc._build_context_prompt = MagicMock(return_value="")
 
         with (
-            patch("app.services.conversation.api._ai_response_cache") as mock_cache,
+            patch("app.domain.conversation.legacy_services.api._ai_response_cache") as mock_cache,
             patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value={"choices": []}),
         ):
             mock_cache.get.return_value = None
@@ -741,7 +741,7 @@ class TestCallAi:
         svc._metadata_cache_hash = MagicMock(return_value="hash")
         svc.model = "test-model"
 
-        with patch("app.services.conversation.api._ai_response_cache") as mock_cache:
+        with patch("app.domain.conversation.legacy_services.api._ai_response_cache") as mock_cache:
             mock_cache.get.return_value = "cached reply"
             ctx = ConversationContext(user_id="u1", metadata={})
             result = await svc._call_ai("hello", ctx, {"final_intent": "greeting"})
@@ -758,7 +758,7 @@ class TestCallAi:
         svc.model = "test-model"
 
         with (
-            patch("app.services.conversation.api._ai_response_cache") as mock_cache,
+            patch("app.domain.conversation.legacy_services.api._ai_response_cache") as mock_cache,
             patch.object(svc, "call_llm_api", new_callable=AsyncMock, return_value=None),
         ):
             mock_cache.get.return_value = None

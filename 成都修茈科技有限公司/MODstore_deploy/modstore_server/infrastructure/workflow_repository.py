@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.domain.workflow.types import Workflow, WorkflowExecution
+from modstore_server.domain.workflow.workflow_types import Workflow, WorkflowExecution
 
 
 class InMemoryWorkflowRepository:

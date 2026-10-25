@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_trainer import (
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -366,13 +366,13 @@ class TestTrainIntentModel:
         mock_trainer_instance.save_model.side_effect = _save_model
 
         with (
-            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
-            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
-            patch("app.services.intent_trainer.Trainer") as MockTrainer,
-            patch("app.services.intent_trainer.DataCollatorWithPadding") as MockCollator,
-            patch("app.services.intent_trainer.EarlyStoppingCallback"),
-            patch("app.services.intent_trainer.TrainingArguments") as MockTrainingArgs,
+            patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding") as MockCollator,
+            patch("app.domain.shared_services.intent_trainer.EarlyStoppingCallback"),
+            patch("app.domain.shared_services.intent_trainer.TrainingArguments") as MockTrainingArgs,
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -417,13 +417,13 @@ class TestTrainIntentModel:
         mock_trainer_instance.save_model.side_effect = _save_model
 
         with (
-            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
-            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
-            patch("app.services.intent_trainer.Trainer") as MockTrainer,
-            patch("app.services.intent_trainer.DataCollatorWithPadding"),
-            patch("app.services.intent_trainer.EarlyStoppingCallback"),
-            patch("app.services.intent_trainer.TrainingArguments"),
+            patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding"),
+            patch("app.domain.shared_services.intent_trainer.EarlyStoppingCallback"),
+            patch("app.domain.shared_services.intent_trainer.TrainingArguments"),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -467,12 +467,12 @@ class TestTrainIntentModel:
         mock_trainer_instance.save_model.side_effect = _save_model
 
         with (
-            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
-            patch("app.services.intent_trainer.AutoConfig") as MockConfig,
-            patch("app.services.intent_trainer.Trainer") as MockTrainer,
-            patch("app.services.intent_trainer.DataCollatorWithPadding"),
-            patch("app.services.intent_trainer.TrainingArguments"),
+            patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.domain.shared_services.intent_trainer.AutoConfig") as MockConfig,
+            patch("app.domain.shared_services.intent_trainer.Trainer") as MockTrainer,
+            patch("app.domain.shared_services.intent_trainer.DataCollatorWithPadding"),
+            patch("app.domain.shared_services.intent_trainer.TrainingArguments"),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockConfig.from_pretrained.return_value = MagicMock()
@@ -512,9 +512,9 @@ class TestExportToOnnx:
         mock_model = MagicMock()
 
         with (
-            patch("app.services.intent_trainer.AutoTokenizer") as MockTokenizer,
-            patch("app.services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
-            patch("app.services.intent_trainer.torch.onnx.export") as mock_export,
+            patch("app.domain.shared_services.intent_trainer.AutoTokenizer") as MockTokenizer,
+            patch("app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification") as MockModel,
+            patch("app.domain.shared_services.intent_trainer.torch.onnx.export") as mock_export,
             patch.dict("sys.modules", {"onnxruntime": MagicMock()}),
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
@@ -557,7 +557,7 @@ class TestMain:
                 ["intent_trainer", "--data", data_path, "--epochs", "1"],
             ),
             patch(
-                "app.services.intent_trainer.train_intent_model",
+                "app.domain.shared_services.intent_trainer.train_intent_model",
                 return_value=Path("/fake/output/final"),
             ) as mock_train,
         ):
@@ -590,10 +590,10 @@ class TestMain:
                 ["intent_trainer", "--data", data_path, "--export_onnx"],
             ),
             patch(
-                "app.services.intent_trainer.train_intent_model",
+                "app.domain.shared_services.intent_trainer.train_intent_model",
                 return_value=Path("/fake/output/final"),
             ),
-            patch("app.services.intent_trainer.export_to_onnx") as mock_export,
+            patch("app.domain.shared_services.intent_trainer.export_to_onnx") as mock_export,
         ):
             main()
             mock_export.assert_called_once_with(
@@ -636,7 +636,7 @@ class TestMain:
                 ],
             ),
             patch(
-                "app.services.intent_trainer.train_intent_model",
+                "app.domain.shared_services.intent_trainer.train_intent_model",
                 return_value=Path("/custom/output/final"),
             ) as mock_train,
         ):

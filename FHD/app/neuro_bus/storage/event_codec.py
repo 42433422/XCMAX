@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 from .event_records import StoredEvent, UpcasterRegistry
 from .sqlite import StorageRuntime

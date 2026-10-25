@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.workflow.clarification_node import build_clarify_node, needs_clarification
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 
 
 def filter_registry_for_profile(tool_registry: dict[str, Any], profile: str) -> dict[str, Any]:

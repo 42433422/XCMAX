@@ -315,7 +315,7 @@ class TestRouteNormalModeMessageProductQuery:
     def test_generic_query_defers_to_intent_gate(self, message):
         predicted = {"intent": "clarify", "slots": {}, "question": "请说明查询对象"}
         with patch(
-            "app.application.llm_intent_gate.llm_route_message", return_value=predicted
+            "app.domain.ops_rules.llm_intent_gate.llm_route_message", return_value=predicted
         ) as gate:
             assert route_normal_mode_message(message) == predicted
         gate.assert_called_once_with(message)
@@ -1253,7 +1253,7 @@ class TestBuildSalesQueryResponseDict:
 
     def test_no_orders(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
-        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
+        with patch("app.domain.sales_app_service.SalesAppService") as mock_cls:
             mock_cls.return_value.query.return_value = {
                 "success": True,
                 "data": [],
@@ -1265,7 +1265,7 @@ class TestBuildSalesQueryResponseDict:
 
     def test_with_orders(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
-        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
+        with patch("app.domain.sales_app_service.SalesAppService") as mock_cls:
             mock_cls.return_value.query.return_value = {
                 "success": True,
                 "data": [
@@ -1286,7 +1286,7 @@ class TestBuildSalesQueryResponseDict:
     def test_service_failure(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
         with patch(
-            "app.application.sales_app_service.SalesAppService",
+            "app.domain.sales_app_service.SalesAppService",
             side_effect=RuntimeError("boom"),
         ):
             result = build_sales_query_response_dict(route)
@@ -1304,7 +1304,7 @@ class TestBuildReportsQueryResponseDict:
 
     def test_sales_report_default(self):
         route = {"intent": "reports_query", "slots": {}}
-        with patch("app.services.report_service.ReportService") as mock_cls:
+        with patch("app.domain.shared_services.report_service.ReportService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_sales_report.return_value = {
                 "success": True,
@@ -1318,7 +1318,7 @@ class TestBuildReportsQueryResponseDict:
 
     def test_inventory_report(self):
         route = {"intent": "reports_query", "slots": {}}
-        with patch("app.services.report_service.ReportService") as mock_cls:
+        with patch("app.domain.shared_services.report_service.ReportService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_inventory_report.return_value = {
                 "success": True,
@@ -1331,7 +1331,7 @@ class TestBuildReportsQueryResponseDict:
 
     def test_purchase_report(self):
         route = {"intent": "reports_query", "slots": {}}
-        with patch("app.services.report_service.ReportService") as mock_cls:
+        with patch("app.domain.shared_services.report_service.ReportService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_purchase_report.return_value = {
                 "success": True,
@@ -1344,7 +1344,7 @@ class TestBuildReportsQueryResponseDict:
 
     def test_dashboard_report(self):
         route = {"intent": "reports_query", "slots": {}}
-        with patch("app.services.report_service.ReportService") as mock_cls:
+        with patch("app.domain.shared_services.report_service.ReportService") as mock_cls:
             mock_svc = mock_cls.return_value
             mock_svc.get_dashboard_summary.return_value = {
                 "success": True,
@@ -1358,7 +1358,7 @@ class TestBuildReportsQueryResponseDict:
     def test_service_failure(self):
         route = {"intent": "reports_query", "slots": {}}
         with patch(
-            "app.services.report_service.ReportService",
+            "app.domain.shared_services.report_service.ReportService",
             side_effect=RuntimeError("boom"),
         ):
             result = build_reports_query_response_dict(route, message="报表")
@@ -1376,7 +1376,7 @@ class TestBuildReplenishmentSuggestResponseDict:
     def test_no_suggestions(self):
         route = {"intent": "replenishment_suggest", "slots": {}}
         with patch(
-            "app.services.replenishment_service.suggest_replenishment",
+            "app.domain.shared_services.replenishment_service.suggest_replenishment",
             return_value={"success": True, "data": [], "summary": {}},
         ):
             result = build_replenishment_suggest_response_dict(route)
@@ -1386,7 +1386,7 @@ class TestBuildReplenishmentSuggestResponseDict:
     def test_with_suggestions(self):
         route = {"intent": "replenishment_suggest", "slots": {}}
         with patch(
-            "app.services.replenishment_service.suggest_replenishment",
+            "app.domain.shared_services.replenishment_service.suggest_replenishment",
             return_value={
                 "success": True,
                 "data": [
@@ -1408,7 +1408,7 @@ class TestBuildReplenishmentSuggestResponseDict:
     def test_service_failure(self):
         route = {"intent": "replenishment_suggest", "slots": {}}
         with patch(
-            "app.services.replenishment_service.suggest_replenishment",
+            "app.domain.shared_services.replenishment_service.suggest_replenishment",
             side_effect=RuntimeError("boom"),
         ):
             result = build_replenishment_suggest_response_dict(route)

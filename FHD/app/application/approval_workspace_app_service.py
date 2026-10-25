@@ -48,7 +48,7 @@ from app.application.approval_workspace.access import (
 from app.application.approval_workspace.decisions import ApprovalDecisions, advance_request
 from app.application.approval_workspace.flow_catalog import FlowCatalog
 from app.application.approval_workspace.outcomes import persist_outcome, safe_node_count
-from app.application.approval_workspace.ports import (
+from app.application.approval_workspace.protocols import (
     AgentContinuation,
     ApprovalAccess,
     ApprovalNodes,
@@ -85,7 +85,7 @@ from app.utils.time import utc_now_naive
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
-    from app.application.workflow.types import WorkflowRunResult
+    from app.application.workflow.workflow_types import WorkflowRunResult
 
 logger = logging.getLogger(__name__)
 _FINAL_STATUSES = FINAL_STATUSES
@@ -238,7 +238,7 @@ def _drop_pending_ai_workflow_after_rejection(*, request_no: str, reason: str) -
 
 
 def _project_workflow(run_id: str, request_id: str) -> None:
-    from app.application.business_harness_projection import project_terminal_run_to_conversation
+    from app.domain.ops_rules.business_harness_projection import project_terminal_run_to_conversation
 
     project_terminal_run_to_conversation(run_id, approval_request_id=request_id)
 

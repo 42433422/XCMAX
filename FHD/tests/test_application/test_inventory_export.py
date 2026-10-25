@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
 from app.fastapi_routes import inventory, inventory_exports
 from app.infrastructure.tenant_scope import tenant_scope
@@ -37,7 +37,7 @@ def inventory_http(monkeypatch):
         with factory() as db:
             yield db
 
-    monkeypatch.setattr("app.services.inventory_service.get_db", isolated_db)
+    monkeypatch.setattr("app.domain.shared_services.inventory_service.get_db", isolated_db)
     with factory() as db:
         for tenant_id in (1, 2):
             with tenant_scope(tenant_id):
@@ -236,7 +236,7 @@ def test_empty_export_returns_error_without_download(inventory_http, params):
 
 def test_export_limit_rejects_instead_of_silently_truncating(inventory_http, monkeypatch):
     client, _factory, _engine = inventory_http
-    monkeypatch.setattr("app.services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+    monkeypatch.setattr("app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
     response = client.get("/api/inventory/export.xlsx")
     assert response.status_code == 413
     assert response.json()["error_code"] == "INVENTORY_EXPORT_LIMIT"
@@ -378,7 +378,7 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     client, _factory, _engine = inventory_http
     params = {"keyword": "不存在"} if kind == "empty" else {}
     if kind == "limit":
-        monkeypatch.setattr("app.services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+        monkeypatch.setattr("app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
     if kind == "failure":
         service = MagicMock()
         service.export_inventory.side_effect = RuntimeError("private detail")

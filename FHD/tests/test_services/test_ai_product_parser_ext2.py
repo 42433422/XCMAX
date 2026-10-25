@@ -1,4 +1,4 @@
-"""Extended tests for ``app.services.ai_product_parser`` covering low-coverage branches."""
+"""Extended tests for ``app.domain.shared_services.ai_product_parser`` covering low-coverage branches."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.ai_product_parser import (
+from app.domain.shared_services.ai_product_parser import (
     AIProductParser,
     _get_product_parse_cache,
     _product_parse_cache,
@@ -341,11 +341,11 @@ class TestCachedCallAiApiExtended:
         mock_cache.get_or_compute.return_value = expected
         with (
             patch(
-                "app.services.ai_product_parser._get_product_parse_cache",
+                "app.domain.shared_services.ai_product_parser._get_product_parse_cache",
                 return_value=mock_cache,
             ),
             patch(
-                "app.services.ai_product_parser.get_request_active_mod_id",
+                "app.domain.shared_services.ai_product_parser.get_request_active_mod_id",
                 return_value="mod1",
                 create=True,
             ),
@@ -363,7 +363,7 @@ class TestCachedCallAiApiExtended:
         parser = AIProductParser()
         with (
             patch(
-                "app.services.ai_product_parser._get_product_parse_cache",
+                "app.domain.shared_services.ai_product_parser._get_product_parse_cache",
                 side_effect=RuntimeError("cache down"),
             ),
             patch.object(
@@ -379,7 +379,7 @@ class TestCallAiApiExtended:
     def test_call_ai_api_no_api_key_returns_none(self) -> None:
         parser = AIProductParser()
         with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
+            "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
             return_value="",
         ):
             result = parser._call_ai_api("text")
@@ -388,7 +388,7 @@ class TestCallAiApiExtended:
     def test_call_ai_api_recoverable_error_returns_none(self) -> None:
         parser = AIProductParser()
         with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
+            "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
             side_effect=RuntimeError("api error"),
         ):
             result = parser._call_ai_api("text")
@@ -420,7 +420,7 @@ class TestCallAiApiExtended:
 
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
@@ -454,7 +454,7 @@ class TestCallAiApiExtended:
 
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
@@ -482,14 +482,14 @@ class TestCallAiApiExtended:
 
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
                 "app.infrastructure.llm.invoke.chat_completion_openai_format",
                 new=AsyncMock(return_value=api_response),
             ),
-            patch("app.services.deepseek_intent_service.cn_to_number", return_value=3),
+            patch("app.domain.shared_services.deepseek_intent_service.cn_to_number", return_value=3),
         ):
             result = parser._call_ai_api("text")
         assert result is not None
@@ -499,7 +499,7 @@ class TestCallAiApiExtended:
         parser = AIProductParser()
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
@@ -514,7 +514,7 @@ class TestCallAiApiExtended:
         parser = AIProductParser()
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
@@ -529,7 +529,7 @@ class TestCallAiApiExtended:
         parser = AIProductParser()
         with (
             patch(
-                "app.services.deepseek_intent_service.get_deepseek_api_key",
+                "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
                 return_value="key",
             ),
             patch(
@@ -546,7 +546,7 @@ class TestGetProductParseCacheExtended:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # Reset the singleton
-        import app.services.ai_product_parser as mod
+        import app.domain.shared_services.ai_product_parser as mod
 
         original = mod._product_parse_cache
         mod._product_parse_cache = None

@@ -10,7 +10,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
-from app.fastapi_routes.knowledge.ports import AccessResolver, MemoryResponse
+from app.application.knowledge.protocols import AccessResolver, MemoryResponse
 from app.fastapi_routes.knowledge.schemas import PersyMemoryMutationRequest, PersyMemoryQueryRequest
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

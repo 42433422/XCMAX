@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from .output import CliOutput
-from .ports import CliPorts
+from .protocols import CliPorts
 from .profiles import SuperEmployeeToolProfile
 
 

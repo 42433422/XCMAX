@@ -32,7 +32,7 @@ def _ready(view: dict[str, Any]) -> bool:
 
 
 def list_owner_work_orders(limit: int = 200, *, is_owner: bool = False) -> list[dict[str, Any]]:
-    from app.services.work_order_ssot import list_work_orders
+    from app.domain.work_order.ssot import list_work_orders
 
     items = []
     for view in list_work_orders(limit=max(1, min(int(limit), 500))):
@@ -52,8 +52,8 @@ def list_owner_work_orders(limit: int = 200, *, is_owner: bool = False) -> list[
 def decide_owner_work_order(
     wo_id: str, decision: str, *, local_user_id: int, actor: str, note: str = ""
 ) -> dict[str, Any]:
-    from app.services.work_order_gate import record_gate
-    from app.services.work_order_ssot import get_work_order
+    from app.domain.work_order.gate import record_gate
+    from app.domain.work_order.ssot import get_work_order
 
     view = get_work_order(wo_id)
     if not view:

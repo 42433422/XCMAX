@@ -670,7 +670,7 @@ def _local_employee_execute_session_patches():
             return_value={"tenant_id": 1, "account_kind": "admin"},
         ),
         patch(
-            "app.application.auth_permission_resolver.require_allowed",
+            "app.domain.ops_rules.auth_permission_resolver.require_allowed",
             return_value=None,
         ),
     ]
@@ -702,11 +702,11 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
         ):
@@ -729,15 +729,15 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
                 return_value="pro",
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
                 return_value=False,
             ),
             patch(
@@ -769,15 +769,15 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
@@ -830,15 +830,15 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
@@ -863,15 +863,15 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.application.account_tier_derivation.normalize_account_tier",
+                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.application.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal"},
             ),
             patch(
-                "app.application.account_tier_derivation.should_have_account_tier",
+                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
@@ -1510,7 +1510,7 @@ class TestSyncEndpoints:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
             patch(
-                "app.services.admin_sync_service.fetch_inbox_row",
+                "app.domain.shared_services.admin_sync_service.fetch_inbox_row",
                 return_value={"entity_type": "product", "id": 1},
             ),
             patch(
@@ -1529,7 +1529,7 @@ class TestSyncEndpoints:
 
     def test_sync_resolve_conflict_skip_action(self, client: TestClient):
         """Lines 1807-1810: action='skip' → mark_inbox_skipped called."""
-        with patch("app.services.admin_sync_service.mark_inbox_skipped") as mock_skip:
+        with patch("app.domain.shared_services.admin_sync_service.mark_inbox_skipped") as mock_skip:
             resp = client.post(
                 "/api/xcmax/sync/conflicts/5/resolve",
                 json={"action": "skip"},

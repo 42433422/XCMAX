@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.application.workflow_definition_app_service import (
     WorkflowDefinitionAppService,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.workflow import (
     WorkflowRunStatus,
     WorkflowRunStepStatus,
@@ -314,7 +314,7 @@ class TestPlanGraphIntegration:
     def test_persist_plan_graph_extracts_nodes_and_edges(
         self, service: WorkflowDefinitionAppService
     ):
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         plan = PlanGraph(
             plan_id="plan-1",

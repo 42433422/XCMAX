@@ -246,7 +246,7 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
@@ -306,7 +306,7 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     fp = tmp_path / "fp2.sqlite3"

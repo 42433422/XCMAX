@@ -66,7 +66,7 @@ def live_para_evidence(*, goal_id: str, loop_run_id: str, para_task_id: str) -> 
     council = _council_module()
     goal_status = ""
     try:
-        from modstore_server.db.base import get_session_factory
+        from modstore_server.db.db_base import get_session_factory
         from modstore_server.db.strategic import StrategicDecision
 
         with get_session_factory()() as session:

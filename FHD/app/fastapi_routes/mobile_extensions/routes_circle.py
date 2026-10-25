@@ -12,7 +12,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     AiCircleCommentBody,
     AiCirclePostBody,
 )
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     AddCommentCall,
     AiCircleEmployeeProfilesCall,
     AiCircleUserCall,

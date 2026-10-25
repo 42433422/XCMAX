@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.shipment_number_mode_service import ShipmentNumberModeService
+from app.domain.shared_services.shipment_number_mode_service import ShipmentNumberModeService
 
 
 class TestShipmentNumberModeHelpers:

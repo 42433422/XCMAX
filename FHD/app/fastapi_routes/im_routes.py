@@ -119,7 +119,7 @@ def _include_enterprise_dedicated_cs(request: Request, db) -> bool:
 
 
 def _require_admin_customer_service_session(request: Request, db) -> JSONResponse | None:
-    from app.application.desktop_admin_gate import forbidden_payload, is_desktop_runtime
+    from app.domain.ops_rules.desktop_admin_gate import forbidden_payload, is_desktop_runtime
 
     if is_desktop_runtime():
         return JSONResponse(forbidden_payload(), status_code=403)

@@ -10,7 +10,7 @@ from app.application.agent_orchestrator.tool_executor import (
     AgentToolExecutor,
     execute_with_tool_deadline,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.infrastructure.tenant_scope import current_tenant_id, tenant_scope
 
@@ -40,7 +40,7 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(
             yield db
             db.commit()
 
-    monkeypatch.setattr("app.services.inventory_service.get_db", business_session)
+    monkeypatch.setattr("app.domain.shared_services.inventory_service.get_db", business_session)
     step = AgentStep(
         node_id="stock",
         tool_id="inventory",

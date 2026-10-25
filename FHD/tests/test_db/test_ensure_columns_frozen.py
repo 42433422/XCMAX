@@ -44,7 +44,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.db.models  # noqa: F401  (registers every ORM table on Base.metadata)
 from app.db import init_db
-from app.db.base import Base
+from app.db.db_base import Base
 
 INIT_DB_PATH = Path(init_db.__file__)
 

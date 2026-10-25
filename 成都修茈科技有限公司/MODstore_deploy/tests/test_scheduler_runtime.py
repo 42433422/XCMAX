@@ -12,7 +12,7 @@ import pytest
 @pytest.fixture
 def db_ready():
     import modstore_server.models  # noqa: F401  (registers JobRun on Base.metadata)
-    from modstore_server.db.base import init_db
+    from modstore_server.db.db_base import init_db
 
     init_db()
     yield

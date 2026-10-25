@@ -114,7 +114,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
     expired = service.register_desktop(label="过期设备码", device_id="expired-mac", ttl_seconds=60)
     with monkeypatch.context() as future:
         future.setattr(
-            "app.services.mobile_relay_pairing._utc_now", lambda: "9999-01-01T00:00:00+00:00"
+            "app.domain.shared_services.mobile_relay_pairing._utc_now", lambda: "9999-01-01T00:00:00+00:00"
         )
         assert (
             service.bind_mobile_by_account(
@@ -130,7 +130,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
             {"id": expired["relay_id"]},
         )
     monkeypatch.setattr(
-        "app.services.mobile_relay_pairing.secrets.randbelow",
+        "app.domain.shared_services.mobile_relay_pairing.secrets.randbelow",
         lambda _limit: int(expired["pairing_code"]) - 100000,
     )
     recycled = service.register_desktop(label="回收设备码", device_id="new-mac")
@@ -140,7 +140,7 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):
     """直接覆盖完成推送的状态/正文分支,避免新增旁路拖低全量 branch ratchet。"""
     relay = _load_mobile_relay_service_module()
-    import app.services.mobile_push as mobile_push
+    import app.domain.shared_services.mobile_push as mobile_push
 
     calls: list[tuple] = []
     monkeypatch.setattr(
@@ -190,7 +190,7 @@ def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypa
 
 def test_completion_push_static_helper_skips_invalid_uid_and_unknown_status(monkeypatch):
     relay = _load_mobile_relay_service_module()
-    import app.services.mobile_push as mobile_push
+    import app.domain.shared_services.mobile_push as mobile_push
 
     calls: list[tuple] = []
     monkeypatch.setattr(
@@ -221,7 +221,7 @@ def test_completion_push_static_helper_skips_invalid_uid_and_unknown_status(monk
 
 def test_completion_push_static_helper_swallows_push_exception(monkeypatch):
     relay = _load_mobile_relay_service_module()
-    import app.services.mobile_push as mobile_push
+    import app.domain.shared_services.mobile_push as mobile_push
 
     def boom(*_args, **_kwargs):
         raise RuntimeError("push down")

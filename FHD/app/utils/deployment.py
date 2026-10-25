@@ -59,11 +59,11 @@ def redis_url_from_env() -> str:
 def is_desktop_mode() -> bool:
     """是否桌面运行时。
 
-    优先复用 ``app.desktop_runtime.paths.is_desktop_mode``；该模块不可用（如精简打包/导入失败）
+    优先复用 ``app.desktop_runtime.desktop_runtime_paths.is_desktop_mode``；该模块不可用（如精简打包/导入失败）
     时回退到 ``XCAGI_DESKTOP_MODE`` 环境变量。
     """
     try:
-        from app.desktop_runtime.paths import is_desktop_mode as _desktop_mode
+        from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode as _desktop_mode
 
         return bool(_desktop_mode())
     except ImportError:

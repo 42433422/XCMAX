@@ -224,7 +224,7 @@ def _create_schema_before_any_test():
     ``checkfirst=True`` 幂等，与 ``app`` fixture 内的建表共存。
     """
     from app.db import engine
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     Base.metadata.create_all(engine, checkfirst=True)
 
@@ -233,7 +233,7 @@ def _create_schema_before_any_test():
 def app():
     """FastAPI 应用实例（整机装配，走 ``get_test_fastapi_app()``）。"""
     from app.db import engine
-    from app.db.base import Base
+    from app.db.db_base import Base
     from tests.fixtures.app_factory import get_test_fastapi_app
 
     # The session app uses the isolated SQLite URL declared above.  Production

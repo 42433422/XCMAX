@@ -21,7 +21,7 @@ from app.utils.time import utc_now_naive
 from .backup_retention import cleanup_local_backups
 from .db import integrity_check_ok as _integrity_check_ok
 from .db import quick_check_ok as _quick_check_ok
-from .paths import configure_desktop_environment, ensure_desktop_dirs
+from .desktop_runtime_paths import configure_desktop_environment, ensure_desktop_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -443,7 +443,7 @@ def bootstrap_sqlite_schema(data_dir: str | os.PathLike[str] | None = None) -> N
     # Import model modules so Base.metadata contains the full schema.
     import app.db.models  # noqa: F401
     from app.db import dispose_and_recreate_engine, get_runtime_engine
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     dispose_and_recreate_engine()
     Base.metadata.create_all(bind=get_runtime_engine())

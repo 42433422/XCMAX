@@ -12,7 +12,7 @@ import pytest
 
 from app.application.workflow.clarification_node import build_clarify_node, insert_clarify_node
 from app.application.workflow.planner import LLMWorkflowPlanner
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, validate_plan_graph
 from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
 
@@ -82,7 +82,7 @@ class TestPlannerConditionalEdges:
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             patch(
-                "app.services.user_memory_service.get_user_memory_service",
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
                 side_effect=ImportError,
             ),
         ):
@@ -113,7 +113,7 @@ class TestPlannerConditionalEdges:
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             patch(
-                "app.services.user_memory_service.get_user_memory_service",
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
                 side_effect=ImportError,
             ),
         ):
@@ -142,7 +142,7 @@ class TestPlannerClarifyNode:
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             patch(
-                "app.services.user_memory_service.get_user_memory_service",
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
                 side_effect=ImportError,
             ),
         ):
@@ -185,7 +185,7 @@ class TestPlannerClarifyNode:
             ),
             patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
             patch(
-                "app.services.user_memory_service.get_user_memory_service",
+                "app.domain.shared_services.user_memory_service.get_user_memory_service",
                 side_effect=ImportError,
             ),
         ):

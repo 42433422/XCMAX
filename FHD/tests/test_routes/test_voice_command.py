@@ -23,7 +23,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 import app.application  # noqa: F401 — 先加载 app.application 打破 app.services 循环导入
-import app.services.intent_service  # noqa: F401 — 注册子模块，使 patch("app.services.intent_service.recognize_intents") 能解析
+import app.domain.shared_services.intent_service  # noqa: F401 — 注册子模块，使 patch("app.domain.shared_services.intent_service.recognize_intents") 能解析
 from app.fastapi_routes.voice_routes import (
     HIGH_RISK_INTENTS,
     INTENT_CONFIDENCE_THRESHOLD,
@@ -117,7 +117,7 @@ class TestRecognizeIntentHelper:
             "slots": {"unit_name": "ABC公司"},
         }
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value=mock_rule_result,
         ):
             result = _recognize_intent("给ABC公司开5桶货")
@@ -142,7 +142,7 @@ class TestRecognizeIntentHelper:
             "slots": {},
         }
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value=mock_rule_result,
         ):
             result = _recognize_intent("今天天气真好")
@@ -164,7 +164,7 @@ class TestRecognizeIntentHelper:
             "slots": {},
         }
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value=mock_rule_result,
         ):
             result = _recognize_intent("短句")
@@ -176,7 +176,7 @@ class TestRecognizeIntentHelper:
     def test_recognize_intents_import_error_falls_back_to_unclear(self):
         # 模拟 intent_service 不可用：通过 patch 抛 RECOVERABLE_ERRORS
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             side_effect=RuntimeError("intent service unavailable"),
         ):
             result = _recognize_intent("任意文本")
@@ -199,7 +199,7 @@ class TestRecognizeIntentHelper:
             "slots": {},
         }
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value=mock_rule_result,
         ):
             result = _recognize_intent("不要发货")

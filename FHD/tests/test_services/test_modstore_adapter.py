@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.conversation.modstore_adapter import (
+from app.domain.conversation.legacy_services.modstore_adapter import (
     ModstoreOpenAICompatibleClient,
     ModstorePlatformAdapter,
     ModstoreProxyAdapter,
@@ -486,7 +486,7 @@ def chat_discovery_http(monkeypatch):
     import httpx
 
     monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
-    monkeypatch.setattr("app.services.conversation.modstore_adapter._CATALOG_CACHE", {})
+    monkeypatch.setattr("app.domain.conversation.legacy_services.modstore_adapter._CATALOG_CACHE", {})
     calls = []
     real_client = httpx.Client
 

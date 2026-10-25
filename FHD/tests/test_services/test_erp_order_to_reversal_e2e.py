@@ -25,12 +25,12 @@ from sqlalchemy.pool import StaticPool
 
 import app.application.invoicing_service as invoicing_mod
 import app.application.payment_service as payment_mod
-import app.services.accounting_services as asvc
-import app.services.fulfillment_service as fulfill_mod
-import app.services.inventory_service as inv_mod
+import app.domain.shared_services.accounting_services as asvc
+import app.domain.shared_services.fulfillment_service as fulfill_mod
+import app.domain.shared_services.inventory_service as inv_mod
 from app.application import invoicing_service, payment_service
 from app.application.invoicing_service import invoice as post_invoice
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import (
     InventoryLedger,
     InventoryTransaction,
@@ -42,9 +42,9 @@ from app.db.models import (
     Warehouse,
 )
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.accounting_services import seed_default_chart_of_accounts
-from app.services.fulfillment_service import FulfillmentService
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.accounting_services import seed_default_chart_of_accounts
+from app.domain.shared_services.fulfillment_service import FulfillmentService
+from app.domain.shared_services.inventory_service import InventoryService
 
 ORDER_TOTAL = Decimal("1000.00")
 ORDER_QTY = 10

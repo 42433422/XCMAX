@@ -214,12 +214,12 @@ class CustomerRelationshipMixin:
         self, status: str | None = None, keyword: str | None = None
     ) -> dict[str, Any]:
         """供应商查询薄封装，复用 purchase_service 的 PurchaseService。"""
-        from app.services.purchase_service import PurchaseService
+        from app.domain.shared_services.purchase_service import PurchaseService
 
         return PurchaseService().get_suppliers(status=status, keyword=keyword)
 
     def get_supplier(self, supplier_id: int) -> dict[str, Any]:
         """供应商详情薄封装，复用 purchase_service 的 PurchaseService。"""
-        from app.services.purchase_service import PurchaseService
+        from app.domain.shared_services.purchase_service import PurchaseService
 
         return PurchaseService().get_supplier(supplier_id)

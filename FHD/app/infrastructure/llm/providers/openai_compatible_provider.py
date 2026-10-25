@@ -34,7 +34,7 @@ class OpenAICompatibleProvider:
             resolve_default_openai_provider,
             resolve_openai_env_credentials,
         )
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.conversation.legacy_services.llm_adapter import OpenAICompatibleAdapter
 
         provider = resolve_default_openai_provider()
         api_key, base_url = resolve_openai_env_credentials()
@@ -92,7 +92,7 @@ class XiaomiMimoProvider(OpenAICompatibleProvider):
         if self._adapter is not None:
             return self._adapter
 
-        from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
+        from app.domain.conversation.legacy_services.llm_adapter import OpenAICompatibleAdapter
 
         adapter = OpenAICompatibleAdapter(provider="xiaomi")
         if not adapter.is_configured:

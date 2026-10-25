@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
-from app.services.persona.param_mapper import PersonaParamMapper
+from app.domain.persona.services_runtime.param_mapper import PersonaParamMapper
 
 
 class TestPersonaParamMapper:

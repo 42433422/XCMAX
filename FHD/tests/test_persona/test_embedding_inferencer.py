@@ -8,7 +8,7 @@ import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
 from app.infrastructure.persona.embedding_client import EmbeddingClient
-from app.services.persona.embedding_inferencer import EmbeddingInferencer, EmbeddingInferResult
+from app.domain.persona.services_runtime.embedding_inferencer import EmbeddingInferencer, EmbeddingInferResult
 
 
 class TestEmbeddingInferencer:

@@ -6,7 +6,7 @@
 
 from typing import Any, cast
 
-from app.application.starter_template_catalog import merge_starter_templates
+from app.domain.catalog.starter_template_catalog import merge_starter_templates
 from app.di.registry import get_service_registry
 
 

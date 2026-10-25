@@ -43,7 +43,7 @@ def _bearer(token: str) -> str:
 
 async def poll_asset_install_commands_once() -> dict[str, Any]:
     from app.application.desktop_delivery_receipt import desktop_installation_id
-    from app.desktop_runtime.paths import is_desktop_mode
+    from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
     from app.fastapi_routes.market_account import _proxy_json, latest_session_market_token
 
     if not is_desktop_mode():
@@ -165,7 +165,7 @@ def start_asset_install_scheduler() -> None:
     global _task, _stop_event
     if not _enabled() or "PYTEST_CURRENT_TEST" in os.environ:
         return
-    from app.desktop_runtime.paths import is_desktop_mode
+    from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
 
     if not is_desktop_mode():
         return

@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.distillation_trainer import (
+from app.domain.shared_services.distillation_trainer import (
     CHECKPOINT_DIR,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -62,7 +62,7 @@ class TestMain:
         mock_trainer_instance = MagicMock()
         with (
             patch(
-                "app.services.distillation_trainer.DistillationTrainer",
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer",
                 return_value=mock_trainer_instance,
             ) as MockTrainer,
             patch(
@@ -78,7 +78,7 @@ class TestMain:
         """main() uses default data path when --data not provided."""
         with (
             patch(
-                "app.services.distillation_trainer.get_distillation_training_data_path",
+                "app.domain.shared_services.distillation_trainer.get_distillation_training_data_path",
                 return_value="/nonexistent/default.jsonl",
             ),
             patch("sys.argv", ["distillation_trainer"]),
@@ -103,7 +103,7 @@ class TestMain:
         mock_trainer_instance = MagicMock()
         with (
             patch(
-                "app.services.distillation_trainer.DistillationTrainer",
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer",
                 return_value=mock_trainer_instance,
             ),
             patch(
@@ -132,7 +132,7 @@ class TestMain:
         mock_trainer_instance = MagicMock()
         with (
             patch(
-                "app.services.distillation_trainer.DistillationTrainer",
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer",
                 return_value=mock_trainer_instance,
             ) as MockTrainer,
             patch(
@@ -285,14 +285,14 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.services.distillation_trainer.classification_report", return_value="report"),
-            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
+            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -339,14 +339,14 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.services.distillation_trainer.classification_report", return_value="report"),
-            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
+            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -390,14 +390,14 @@ class TestDistillationTrainerTrainBranches:
         trainer.save_checkpoint = MagicMock()
 
         with (
-            patch("app.services.distillation_trainer.AdamW", return_value=MagicMock()),
+            patch("app.domain.shared_services.distillation_trainer.AdamW", return_value=MagicMock()),
             patch(
-                "app.services.distillation_trainer.get_linear_schedule_with_warmup",
+                "app.domain.shared_services.distillation_trainer.get_linear_schedule_with_warmup",
                 return_value=MagicMock(),
             ),
-            patch("app.services.distillation_trainer.classification_report", return_value="report"),
-            patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
-            patch("app.services.distillation_trainer.LOG_DIR", log_dir),
+            patch("app.domain.shared_services.distillation_trainer.classification_report", return_value="report"),
+            patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir),
+            patch("app.domain.shared_services.distillation_trainer.LOG_DIR", log_dir),
         ):
             trainer.train(data_path, output_dir=ckpt_dir)
 
@@ -422,10 +422,10 @@ class TestDistillationTrainerPrepareDataStratify:
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
         with (
-            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
-            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
-            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
-            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch("app.domain.shared_services.distillation_trainer.BertForSequenceClassification") as MockModel,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as MockDataLoader,
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as mock_split,
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
@@ -448,7 +448,7 @@ class TestDistillationTrainerDeviceSelection:
 
     def test_auto_device_cpu_when_no_cuda(self):
         """When CUDA is not available, device should default to cpu."""
-        with patch("app.services.distillation_trainer.torch") as mock_torch:
+        with patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = False
             trainer = DistillationTrainer()
             assert trainer.device == "cpu"
@@ -478,7 +478,7 @@ class TestDistillationTrainerSaveCheckpointEdgeCases:
         os.makedirs(checkpoint_path, exist_ok=True)
         os.makedirs(ckpt_dir, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir):
+        with patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir):
             trainer.save_checkpoint(checkpoint_path, epoch=1, best=True)
 
         config_path = os.path.join(checkpoint_path, "train_config.json")
@@ -499,7 +499,7 @@ class TestDistillationTrainerSaveCheckpointEdgeCases:
         os.makedirs(checkpoint_path, exist_ok=True)
         os.makedirs(ckpt_dir, exist_ok=True)
 
-        with patch("app.services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir):
+        with patch("app.domain.shared_services.distillation_trainer.CHECKPOINT_DIR", ckpt_dir):
             trainer.save_checkpoint(checkpoint_path, epoch=5, best=False)
 
         config_path = os.path.join(checkpoint_path, "train_config.json")
@@ -589,8 +589,8 @@ class TestDistillationTrainerEvaluateEdgeCases:
         # whether distillation_trainer imported real torch or the stub torch.
         preds_ft = _FT([0])
         with (
-            patch("app.services.distillation_trainer.torch") as mock_torch,
-            patch("app.services.distillation_trainer.accuracy_score", return_value=1.0),
+            patch("app.domain.shared_services.distillation_trainer.torch") as mock_torch,
+            patch("app.domain.shared_services.distillation_trainer.accuracy_score", return_value=1.0),
         ):
             mock_torch.argmax.return_value = preds_ft
             result = trainer.evaluate()
