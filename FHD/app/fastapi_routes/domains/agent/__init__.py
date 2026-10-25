@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
-from app.fastapi_routes.domains.agent.agent_routes import router
+from . import agent_routes as routes
+from .agent_routes import router
 
-__all__ = ["router"]
+__all__ = ["router", "routes"]
