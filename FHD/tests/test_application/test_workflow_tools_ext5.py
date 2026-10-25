@@ -494,9 +494,11 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
-        result = execute_workflow_tool(
-            "products_bulk_import", {"file_path": "x.xlsx"}, db_write_token="wrong"
-        )
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as importer:
+            result = execute_workflow_tool(
+                "products_bulk_import", {"file_path": "x.xlsx"}, db_write_token="wrong"
+            )
+        importer.assert_not_called()
         parsed = json.loads(result)
         assert parsed.get("error") == "unauthorized"
 

@@ -6,6 +6,18 @@
 
 能力、交付、覆盖率及外部对标的当前证据见生成视图 [`PRODUCT_LINES_STATUS.md`](PRODUCT_LINES_STATUS.md) 与 [`AUDIT_BENCHMARK_SSOT.md`](AUDIT_BENCHMARK_SSOT.md)；本文不复制分级、测试数量或阶段矩阵。
 
+## PR #2631 架构治理的边界
+
+本次整理模块位置、兼容入口、端口、扩展目录及版本入口，不等于 19 项架构债务全部消除。结构指标由 `scripts/ci/check_structure_gates.py` 从当前源码计算，不维护第二份手写测量快照。
+
+- 原清单 1–5、9–11、14、16、18–21：结构调整及兼容入口已实现；目录、文件数量和命名收敛不能替代语义分层与端侧验收。
+- 原清单 6–7：增加安全模块和总线组件，不据此宣称权限统一或业务恢复闭环。
+- 原清单 12–13：仍有三个超过 100 KiB 的第一方非测试 Python 模块，当前 G12 基线为 3，并非清零。
+- 原清单 15：LangGraph `pregel/main.py` 保留上游实现，结构门禁按第三方依赖排除，并未完成该文件拆分。
+- `scripts/dev/layer_ratchet_baseline.json` 中仍有迁移过渡反向依赖白名单；后续应通过显式端口逐步替换，不能把移动目录视为消除依赖。
+
+失效的 `DEBT19_CLOSEOUT.md`、`DEBT19_MEASUREMENT.json` 已合并到本节；原件及 SHA256 留存仓库外归档 `~/XCMAX-runtime/artifact-archive/pr2631-20261025/receipt.json`。发布、真实 macOS 运行及 76 项 Harness 验收另行验证，不由本 PR 的结构门禁代替。
+
 ## 仍未解决（别假装）
 
 2026-10-21 九项审计追踪（仅登记未闭环事项，不代表交付或关单；保留历史 1.0.0.6 验收，不改写生产及客户数据）：

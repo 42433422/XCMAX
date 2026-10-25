@@ -391,7 +391,7 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     assert "private detail" not in response.text
 
 
-def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypatch):
+def test_csv_mod_declares_new_host_requirement_in_canonical_tree(monkeypatch):
     import json
     from pathlib import Path
 
@@ -400,7 +400,8 @@ def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypat
     root = Path(__file__).resolve().parents[2]
     source = root / "mods/xcagi-erp-domain-bridge/manifest.json"
     exported = root / "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json"
-    assert source.read_bytes() == exported.read_bytes()
+    assert source.is_file()
+    assert not exported.exists()
     data = json.loads(source.read_text())
     assert data["version"] == "1.0.0.7"
     required = data["dependencies"]["xcagi"]

@@ -3,10 +3,7 @@
 ## Unreleased
 
 ### Changed
-- **debt19 CI 红修**：同步 import-linter 夹具到 domain.shared_services；ERP/客服/太阳鸟测例改走 FHD/mods SSOT；user_memory BASE_DIR 与 utils 对齐。
-- **debt19 CI 红修**：恢复 ports/blueprints 兼容路径；修复 spawn 子进程被 `app.http` 阴影标准库 `http` 导致的工具超时；agent_routes 导出 `_enqueue_run`；维护/记忆路由接受 202。
-- **debt19**: 一次性收口 19 条架构/技术债（ports≤12/3 层、app:domain≈1.84、domain/services 消除、security/neuro_bus 加厚、blueprints 111→27、巨文件拆分、XCAGI mods 去重、版本/入口 SSOT、G12 门禁）。业务语义不变；不部署。
-
+- 整理模块职责、兼容入口及扩展目录，减少重复源码；扩展发现默认读取统一的 FHD/mods，保留显式配置和旧目录兼容。修复独立工具进程的标准库路径冲突，保持原接口与审批行为。仍有巨型模块、过渡依赖和真实端侧验收待完成，当前不代表全部架构债务闭环。
 
 - 工程债收口：合并 Mod 商店机械拆分文件、外置大体积验收媒体、压缩巨型矩阵测试，并诚实安置工具契约样例；结构门禁加严。用户侧功能与操作路径不变。
 - 架构分层收口：领域端口归位、对话/出货/产品领域服务归域，并收紧结构门禁（用户无感）。

@@ -126,6 +126,7 @@ def _default_enterprise_tenant_scope_for_tests(request):
     if request.node.fspath.basename in {
         "test_tenant_scope.py",
         "test_document_templates_tenant_isolation.py",
+        "test_inventory_background_tenant.py",
     }:
         yield
         return

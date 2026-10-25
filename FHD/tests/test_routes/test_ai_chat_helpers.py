@@ -486,9 +486,17 @@ class TestUnifiedChatSinglePayload:
                 "app.application.normal_chat_dispatch.build_product_query_response_dict",
                 return_value=None,
             ),
+            patch("app.application.get_ai_chat_app_service") as get_service,
         ):
+            get_service.return_value.process_chat.return_value = {
+                "success": True,
+                "response": "planning fallback",
+            }
             result = unified_chat_single_payload("查询产品", "user1", "127.0.0.1", "normal", None)
-            assert "success" in result
+            assert result == {"success": True, "response": "planning fallback"}
+            get_service.return_value.process_chat.assert_called_once_with(
+                user_id="user1", message="查询产品", context=None, source="pro", file_context={}
+            )
 
     def test_other_intent_runs_planning(self):
         # 全局启用多步编排后：unified_chat 对普通消息兜底走 process_chat(source="pro")，

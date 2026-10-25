@@ -1,27 +1,15 @@
 from __future__ import annotations
 
-import importlib.util
 from contextlib import contextmanager
-from pathlib import Path
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from app.domain.shared_services import mobile_relay_service as relay
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 
-def _load_mobile_relay_service_module():
-    path = Path(__file__).resolve().parents[1] / "app" / "services" / "mobile_relay_service.py"
-    spec = importlib.util.spec_from_file_location("mobile_relay_service_under_test", path)
-    assert spec and spec.loader
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
 def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
-    relay = _load_mobile_relay_service_module()
-
     engine = create_engine(f"sqlite:///{tmp_path / 'relay-account.db'}")
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -140,7 +128,6 @@ def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):
 
 def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypatch):
     """直接覆盖完成推送的状态/正文分支,避免新增旁路拖低全量 branch ratchet。"""
-    relay = _load_mobile_relay_service_module()
     import app.domain.shared_services.mobile_push as mobile_push
 
     calls: list[tuple] = []
@@ -190,7 +177,6 @@ def test_completion_push_static_helper_covers_statuses_and_body_sources(monkeypa
 
 
 def test_completion_push_static_helper_skips_invalid_uid_and_unknown_status(monkeypatch):
-    relay = _load_mobile_relay_service_module()
     import app.domain.shared_services.mobile_push as mobile_push
 
     calls: list[tuple] = []
@@ -221,7 +207,6 @@ def test_completion_push_static_helper_skips_invalid_uid_and_unknown_status(monk
 
 
 def test_completion_push_static_helper_swallows_push_exception(monkeypatch):
-    relay = _load_mobile_relay_service_module()
     import app.domain.shared_services.mobile_push as mobile_push
 
     def boom(*_args, **_kwargs):
