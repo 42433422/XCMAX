@@ -22,9 +22,8 @@ def git(root, *args):
 def commit_main(root, message):
     git(root, "add", "FHD")
     git(root, "commit", "-qm", message)
-    sha = git(root, "rev-parse", "HEAD")
-    git(root, "update-ref", "refs/remotes/origin/main", sha)
-    return sha
+    git(root, "update-ref", "refs/remotes/origin/main", "HEAD")
+    return git(root, "rev-parse", "HEAD")
 
 
 def write_mod(root, source, version="1.0.0"):
@@ -69,7 +68,9 @@ def test_changed_path_uses_package_root_not_parent_of_leaf(path, expected):
 
 def test_exact_main_ancestor_and_all_source_roots(repository):
     for source in (
-        "FHD/mods/_employees/employee-one", "FHD/mods/host-one", "FHD/XCAGI/mods/industry-one",
+        "FHD/mods/_employees/employee-one",
+        "FHD/mods/host-one",
+        "FHD/XCAGI/mods/industry-one",
     ):
         write_mod(repository, source, "1.0.1")
     canonical = "FHD/mods/xcagi-customer-service-bridge"
