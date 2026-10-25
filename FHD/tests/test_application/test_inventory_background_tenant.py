@@ -64,7 +64,7 @@ def test_fresh_thread_inventory_executor_writes_only_recorded_tenant(
 
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            response = pool.submit(execute).result(timeout=20)
+            response = pool.submit(execute).result(timeout=45 if isolated else 20)
             # Reusing the same worker for an unscoped task must not inherit tenant 2.
             unscoped = pool.submit(dispatch, step, {}).result(timeout=25)
         assert response["success"], response

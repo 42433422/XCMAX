@@ -25,13 +25,15 @@ def test_migrate_only_refuses_to_continue_when_existing_database_backup_fails(
     database.parent.mkdir(parents=True)
     database.write_bytes(b"sqlite")
 
-    from app.desktop_runtime import migrate, paths
+    import app.desktop_runtime.desktop_runtime_paths as desktop_paths
+    from app.desktop_runtime import migrate
 
-    monkeypatch.setattr(paths, "configure_desktop_environment", lambda _path: None)
+    # run_fastapi imports configure/ensure from desktop_runtime_paths (not paths).
+    monkeypatch.setattr(desktop_paths, "configure_desktop_environment", lambda _path: None)
     monkeypatch.setattr(
-        paths,
+        desktop_paths,
         "ensure_desktop_dirs",
-        lambda _path: {"data": database.parent},
+        lambda _path: {"data": database.parent, "backups": database.parent.parent / "backups"},
     )
     monkeypatch.setattr(migrate, "backup_database", lambda *_args, **_kwargs: None)
     upgrade = Mock()
@@ -56,13 +58,14 @@ def test_migrate_only_emits_machine_readable_backup_path(
     backup.parent.mkdir(parents=True)
     backup.write_bytes(b"backup")
 
-    from app.desktop_runtime import migrate, paths
+    import app.desktop_runtime.desktop_runtime_paths as desktop_paths
+    from app.desktop_runtime import migrate
 
-    monkeypatch.setattr(paths, "configure_desktop_environment", lambda _path: None)
+    monkeypatch.setattr(desktop_paths, "configure_desktop_environment", lambda _path: None)
     monkeypatch.setattr(
-        paths,
+        desktop_paths,
         "ensure_desktop_dirs",
-        lambda _path: {"data": database.parent},
+        lambda _path: {"data": database.parent, "backups": backup.parent},
     )
     monkeypatch.setattr(migrate, "backup_database", lambda *_args, **_kwargs: backup)
     upgrade = Mock()
