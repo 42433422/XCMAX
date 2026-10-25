@@ -10,7 +10,7 @@ from typing import Any, Dict, cast
 from fastapi import APIRouter
 from fastapi import Request as Request
 
-from app.application.customer_service.protocols import Employee, Environment
+from app.mod_sdk.customer_service.customer_service_ports import Employee, Environment
 from app.mod_sdk.customer_service.assembly import register_routes
 from app.mod_sdk.customer_service.models import (
     AnalyzePipelineBody as AnalyzePipelineBody,

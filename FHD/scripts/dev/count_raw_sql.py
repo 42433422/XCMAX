@@ -26,6 +26,7 @@ ALLOWLIST_SUFFIXES = (
     "app/infrastructure/skills/template_manager/template_manager.py",
     "app/infrastructure/templates/template_store_impl.py",
     "app/services/document_templates/crud.py",
+    "app/domain/shared_services/document_templates/crud.py",
     # 迁移后 legacy compat 保有其原始 DDL 引导豁免。
     "app/legacy/routes/document_templates_compat.py",
     # init_db 拆分 part 与其母文件同类（schema/列引导 DDL）。

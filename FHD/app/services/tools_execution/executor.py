@@ -9,8 +9,8 @@ from app.services.tools_execution.registry import (
     _validate_required_params,
     get_workflow_tool_registry,
 )
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.services.tools_workflow_registered import execute_registered_workflow_tool
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -9,7 +9,7 @@ from PIL import Image
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .label_template_ports import ImageAnalysisPorts
+from .ports import ImageAnalysisPorts
 
 
 def analyze_image(

@@ -6,7 +6,7 @@ import keyword
 from pprint import pformat
 from string import Template
 
-from .label_template_ports import CodePorts, Payload, TemplateDescription
+from .ports import CodePorts, Payload, TemplateDescription
 
 
 def generate_template_code(

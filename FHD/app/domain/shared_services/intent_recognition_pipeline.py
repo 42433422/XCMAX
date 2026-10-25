@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any, cast
 
-from app.services import intent_service as facade
-
 
 def recognize_intents_impl(message: str) -> dict[str, Any]:
     """
@@ -24,6 +22,9 @@ def recognize_intents_impl(message: str) -> dict[str, Any]:
         - is_likely_unclear: 短句且无任何意图匹配
         - all_matched_tools: 所有匹配到的 (intent_id, tool_key) 列表
     """
+    # Lazy import: helpers live in intent_service; avoid import cycle.
+    from app.domain.shared_services import intent_service as facade
+
     _normalize = facade._normalize
     _make_intent_cache_key = facade._make_intent_cache_key
     _intent_cache = facade._intent_cache
