@@ -41,7 +41,7 @@ from app.application.claude_super_employee_service import (
 from app.application.codex_super_employee_service import (
     CodexSuperEmployeeService as CodexSuperEmployeeService,
 )
-from app.application.contracts import ports as contracts
+from app.application.mobile_extensions import protocols as contracts
 from app.application.cursor_super_employee_service import (
     CursorSuperEmployeeService as CursorSuperEmployeeService,
 )

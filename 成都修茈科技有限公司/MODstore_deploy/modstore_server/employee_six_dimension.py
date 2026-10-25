@@ -16,9 +16,7 @@ from modstore_server.employee_six_dimension_report import dim_entry as _dim_entr
 from modstore_server.employee_six_dimension_report import (
     finalize_dimension_report as _finalize_dimension_report,
 )
-from modstore_server.employee_six_dimension_report import (
-    score_to_grade as score_to_grade,
-)
+from modstore_server.employee_six_dimension_report import score_to_grade as score_to_grade
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 
 

@@ -19,14 +19,12 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, cast
 
 from modstore_server.integrations.repository_packages import load_repository_module
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
-from modstore_server.strategic_council_live import (
-    live_para_evidence as _live_para_evidence,
-)
-from modstore_server.strategic_council_live import (
-    live_persy_evidence as _live_persy_evidence,
-)
+from modstore_server.strategic_council_live import live_para_evidence as _live_para_evidence
+from modstore_server.strategic_council_live import live_persy_evidence as _live_persy_evidence
 from modstore_server.strategic_council_live import live_veto_state as _live_veto_state
-from modstore_server.strategic_council_live import strategic_council_status
+from modstore_server.strategic_council_live import (
+    strategic_council_status,
+)
 
 SCHEMA_VERSION = "xcmax.strategic_council_receipt/v1"
 STATUS_SCHEMA_VERSION = "xcmax.strategic_council_status/v1"

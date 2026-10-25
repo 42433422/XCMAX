@@ -8,6 +8,9 @@ from __future__ import annotations
 import modstore_server.models_ai_accounts  # noqa: F401,E402
 import modstore_server.models_cs  # noqa: F401,E402
 from modstore_server.db.autonomy_decisions import *  # noqa: F403,F401
+from modstore_server.db.billing import *  # noqa: F403,F401
+from modstore_server.db.catalog import *  # noqa: F403,F401
+from modstore_server.db.customer_value import *  # noqa: F403,F401
 from modstore_server.db.db_base import (  # noqa: F401
     Base,
     _add_column_if_missing,
@@ -21,9 +24,6 @@ from modstore_server.db.db_base import (  # noqa: F401
     init_db,
     init_default_plan_templates,
 )
-from modstore_server.db.billing import *  # noqa: F403,F401
-from modstore_server.db.catalog import *  # noqa: F403,F401
-from modstore_server.db.customer_value import *  # noqa: F403,F401
 from modstore_server.db.delivery_commerce import *  # noqa: F403,F401
 from modstore_server.db.dev_platform import *  # noqa: F403,F401
 from modstore_server.db.employee_ops import *  # noqa: F403,F401

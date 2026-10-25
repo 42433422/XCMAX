@@ -27,9 +27,7 @@ from modstore_server.file_retention_support import (
 from modstore_server.file_retention_support import (
     record_retention_runtime as _record_retention_runtime,
 )
-from modstore_server.file_retention_support import (
-    resolve_admin_user_id as _resolve_admin_user_id,
-)
+from modstore_server.file_retention_support import resolve_admin_user_id as _resolve_admin_user_id
 from modstore_server.file_retention_support import write_metric as _write_metric
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 

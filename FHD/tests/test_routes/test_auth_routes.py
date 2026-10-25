@@ -1,4 +1,4 @@
-"""Comprehensive tests for app.fastapi_routes.domains.auth.auth_routes.
+"""Comprehensive tests for app.fastapi_routes.domains.auth.routes.
 
 Covers: helper functions and route validation/error paths.
 Route tests that require DB are tested via direct function calls with mocked dependencies.
@@ -128,7 +128,7 @@ class TestFindLocalUsersByEmail:
 class TestSyncLocalPasswordForEmail:
     def test_no_users(self, auth_mod):
         with patch(
-            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
+            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
             return_value=[],
         ):
             result = auth_mod._sync_local_password_for_email("a@b.com", "newpass")
@@ -141,7 +141,7 @@ class TestSyncLocalPasswordForEmail:
         mock_auth.reset_password.return_value = {"success": True}
         with (
             patch(
-                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
                 return_value=[mock_user],
             ),
             patch("app.application.auth_app_service.get_auth_app_service", return_value=mock_auth),
@@ -222,7 +222,7 @@ class TestSessionMetaForResponse:
         # active in the full suite, load_session_account_meta receives a
         # MagicMock sid and raises sqlite3.ProgrammingError.
         with patch(
-            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request", return_value=None
+            "app.fastapi_routes.domains.auth.routes.session_id_from_request", return_value=None
         ):
             result = auth_mod._session_meta_for_response(mock_req)
             assert result == {}
@@ -232,7 +232,7 @@ class TestSessionMetaForResponse:
         mock_user = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
                 return_value="sid-1",
             ),
             patch(
@@ -247,7 +247,7 @@ class TestSessionMetaForResponse:
         mock_req = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
                 return_value="sid-1",
             ),
             patch(
@@ -262,7 +262,7 @@ class TestSessionMetaForResponse:
         mock_req = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
                 return_value="sid-1",
             ),
             patch(

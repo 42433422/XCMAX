@@ -22,9 +22,7 @@ from modstore_server.agent_butler_models import (
     butler_orchestrate_steps as _butler_orchestrate_steps,
 )
 from modstore_server.agent_butler_targets import default_mod_focus as _default_mod_focus
-from modstore_server.agent_butler_targets import (
-    locate_employee_mod as _locate_employee_mod,
-)
+from modstore_server.agent_butler_targets import locate_employee_mod as _locate_employee_mod
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

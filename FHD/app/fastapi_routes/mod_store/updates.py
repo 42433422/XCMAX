@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 from fastapi import HTTPException, Request
 
-from .ports import CatalogInstall, Payload
+from .port_contracts import CatalogInstall, Payload
 from .schemas import ModStoreInstallResult, ModStoreUpdatesResponse
 
 

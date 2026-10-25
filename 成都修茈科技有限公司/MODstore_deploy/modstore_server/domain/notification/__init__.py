@@ -10,6 +10,7 @@ from modstore_server.domain.notification.port_contracts import (
     NotificationRepository,
     RealtimePusher,
 )
+
 from .notification_types import Notification, NotificationType, OutboundNotification
 
 __all__ = [

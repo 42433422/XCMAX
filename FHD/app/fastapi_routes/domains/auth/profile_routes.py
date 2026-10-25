@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Depends, File, Request, UploadFile
 from app.db.models.user import User
 
 from .account_profile import AccountProfile
-from .ports import JsonObject
+from .port_contracts import JsonObject
 
 
 class ProfileRoutes:

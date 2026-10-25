@@ -77,7 +77,7 @@ def auth_client() -> TestClient:
 @patch("app.application.auth_app_service.get_auth_app_service")
 def test_auth_session_validate_no_session(mock_get: MagicMock, auth_client: TestClient) -> None:
     with patch.object(
-        __import__("app.fastapi_routes.domains.auth.auth_routes", fromlist=["routes"]),
+        __import__("app.fastapi_routes.domains.auth.routes", fromlist=["routes"]),
         "session_id_from_request",
         return_value=None,
     ):

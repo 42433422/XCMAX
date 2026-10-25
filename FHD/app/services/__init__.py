@@ -85,6 +85,10 @@ from app.domain.shared_services.user_preference_service import (
     get_user_preference_service,
 )
 
+# Submodule-compat (debt19): `from app.services import user_memory_service`
+from app.domain.shared_services import user_memory_service as user_memory_service
+from app.domain.shared_services import printer_service as printer_service
+
 if TYPE_CHECKING:
     from app.domain.shared_services.materials_service import MaterialsService
     from app.domain.shared_services.printer_service import PrinterService
@@ -127,7 +131,7 @@ def get_products_service() -> ProductsService:
 
 def get_printer_service() -> PrinterService:
     """获取打印机服务单例 (lazy to avoid circular imports)"""
-    from .printer_service import PrinterService
+    from app.domain.shared_services.printer_service import PrinterService
 
     return PrinterService()
 
@@ -169,6 +173,8 @@ __all__ = [
     "get_database_service",
     "get_system_service",
     "get_user_memory_service",
+    "user_memory_service",
+    "printer_service",
     "UserMemoryService",
     "ProductImportService",
     "get_product_import_service",

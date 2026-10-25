@@ -50,9 +50,7 @@ def apply_employee_change_request(
         workspace_policy_from_manifest,
     )
     from modstore_server.incident_bus import publish
-    from modstore_server.integrations.ops_action_handlers import (
-        repo_root as mod_repo_root,
-    )
+    from modstore_server.integrations.ops_action_handlers import repo_root as mod_repo_root
     from modstore_server.models import EmployeeChangeRequest, get_session_factory
 
     risk_level_snapshot = ""

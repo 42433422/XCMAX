@@ -33,9 +33,7 @@ def _workspace_repo_root_candidates() -> List[Path]:
     else:
         seeds = []
         try:
-            from modstore_server.integrations.ops_action_handlers import (
-                repo_root as _ops_rr,
-            )
+            from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
 
             seeds.append(Path(_ops_rr()))
         except RECOVERABLE_ERRORS:

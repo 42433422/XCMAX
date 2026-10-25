@@ -87,9 +87,7 @@ from modstore_server.workbench.intent import CANVAS_SKILL_INTENT as CANVAS_SKILL
 from modstore_server.workbench.intent import (
     _canonical_workbench_intent as _canonical_workbench_intent,
 )
-from modstore_server.workbench.intent import (
-    _contains_uploaded_docx as _contains_uploaded_docx,
-)
+from modstore_server.workbench.intent import _contains_uploaded_docx as _contains_uploaded_docx
 from modstore_server.workbench.intent import _default_steps as _default_steps
 from modstore_server.workbench.intent import (
     _employee_asset_publish_catalog_from_env as _employee_asset_publish_catalog_from_env,
@@ -110,44 +108,28 @@ from modstore_server.workbench.planning import _planning_record as _planning_rec
 from modstore_server.workbench.planning import (
     _resolve_default_llm_for_pipeline as _resolve_default_llm_for_pipeline,
 )
-from modstore_server.workbench.planning import (
-    _script_workflow_brief as _script_workflow_brief,
-)
+from modstore_server.workbench.planning import _script_workflow_brief as _script_workflow_brief
 from modstore_server.workbench.planning import _strip_json_fence as _strip_json_fence
 from modstore_server.workbench.schemas import DispatchRequest as DispatchRequest
 from modstore_server.workbench.schemas import EmployeeAiDraftBody as EmployeeAiDraftBody
 from modstore_server.workbench.schemas import (
     EmployeeAiRefinePromptBody as EmployeeAiRefinePromptBody,
 )
-from modstore_server.workbench.schemas import (
-    EmployeeBenchRequest as EmployeeBenchRequest,
-)
+from modstore_server.workbench.schemas import EmployeeBenchRequest as EmployeeBenchRequest
 from modstore_server.workbench.schemas import EmployeeExportBody as EmployeeExportBody
-from modstore_server.workbench.schemas import (
-    EmployeePublishRequest as EmployeePublishRequest,
-)
+from modstore_server.workbench.schemas import EmployeePublishRequest as EmployeePublishRequest
 from modstore_server.workbench.schemas import EmployeeSaveBody as EmployeeSaveBody
-from modstore_server.workbench.schemas import (
-    EmployeeSyncTestRequest as EmployeeSyncTestRequest,
-)
-from modstore_server.workbench.schemas import (
-    WorkbenchEdgeTtsBody as WorkbenchEdgeTtsBody,
-)
-from modstore_server.workbench.schemas import (
-    WorkbenchResearchBody as WorkbenchResearchBody,
-)
+from modstore_server.workbench.schemas import EmployeeSyncTestRequest as EmployeeSyncTestRequest
+from modstore_server.workbench.schemas import WorkbenchEdgeTtsBody as WorkbenchEdgeTtsBody
+from modstore_server.workbench.schemas import WorkbenchResearchBody as WorkbenchResearchBody
 from modstore_server.workbench.schemas import (
     WorkbenchSessionCreateBody as WorkbenchSessionCreateBody,
 )
-from modstore_server.workbench.schemas import (
-    WorkbenchUnifiedTtsBody as WorkbenchUnifiedTtsBody,
-)
+from modstore_server.workbench.schemas import WorkbenchUnifiedTtsBody as WorkbenchUnifiedTtsBody
 from modstore_server.workbench.schemas import (
     WorkbenchVibeCodeSkillBody as WorkbenchVibeCodeSkillBody,
 )
-from modstore_server.workbench.schemas import (
-    WorkbenchWebSearchBody as WorkbenchWebSearchBody,
-)
+from modstore_server.workbench.schemas import WorkbenchWebSearchBody as WorkbenchWebSearchBody
 from modstore_server.workbench.schemas import (
     _parse_workbench_session_create as _parse_workbench_session_create,
 )
@@ -157,12 +139,8 @@ from modstore_server.workbench.script_delivery import (
 from modstore_server.workbench.script_delivery import (
     _embed_script_workflow_in_employee_pack as _embed_script_workflow_in_employee_pack,
 )
-from modstore_server.workbench.speech_api import (
-    _edge_tts_rate_str as _edge_tts_rate_str,
-)
-from modstore_server.workbench.speech_api import (
-    _edge_tts_stream_chunks as _edge_tts_stream_chunks,
-)
+from modstore_server.workbench.speech_api import _edge_tts_rate_str as _edge_tts_rate_str
+from modstore_server.workbench.speech_api import _edge_tts_stream_chunks as _edge_tts_stream_chunks
 from modstore_server.workbench.suite_pipeline import (
     _cleanup_mod_pipeline_resources as _cleanup_mod_pipeline_resources,
 )

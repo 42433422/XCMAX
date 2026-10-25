@@ -5,7 +5,6 @@ import { SHELL_ROUTES } from './routes/shell'
 import { BUSINESS_ROUTES } from './routes/business'
 import { modRoutes, modMenu } from '../../../mods/xcagi-planner-bridge/frontend/routes.js'
 import manifest from '../../../mods/xcagi-planner-bridge/manifest.json'
-import mirrorManifest from '../../../XCAGI/mods/xcagi-planner-bridge/manifest.json'
 import { modPhysicalViewGlob } from '@/constants/modPhysicalViewGlob.full'
 import { modPhysicalViewGlob as minimalViews } from '@/constants/modPhysicalViewGlob.minimal'
 import { hostViewGlob } from '@/constants/hostViewGlob'
@@ -48,7 +47,7 @@ describe('retired brain developer page', () => {
     expect(modMenu.map((item) => item.id)).toEqual(['mod-planner-chat', 'mod-planner-ai-ecosystem'])
     expect(modRoutes.map((route) => route.name)).toContain('mod-planner-chat')
     expect(modRoutes.map((route) => route.name)).toContain('mod-planner-ai-ecosystem')
-    for (const source of [manifest, mirrorManifest]) {
+    for (const source of [manifest]) {
       expect(source.frontend.menu.map((item) => item.id)).toEqual(['mod-planner-chat', 'mod-planner-ai-ecosystem'])
       expect(source.config.physical_views).toContain('ChatView.vue')
       expect(source.config.physical_views).toContain('AIEcosystemView.vue')

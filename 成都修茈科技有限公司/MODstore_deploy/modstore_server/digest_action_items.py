@@ -22,9 +22,7 @@ from typing import Any, Dict, List, Optional
 from modstore_server.digest_action_status import (
     find_matching_item_ids,
 )
-from modstore_server.digest_action_status import (
-    normalize_match_text as _normalize_match_text,
-)
+from modstore_server.digest_action_status import normalize_match_text as _normalize_match_text
 from modstore_server.digest_action_status import (
     set_status,
     set_status_if_advanced,

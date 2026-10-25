@@ -59,7 +59,7 @@ from .super_employee.messages import MessageSynchronizer
 from .super_employee.output import CliOutput
 from .super_employee.para import ParaClient
 from .super_employee.policy import EmployeePolicy
-from .super_employee.ports import (
+from .super_employee.protocols import (
     CliPorts,
     ConversationPorts,
     DevelopmentPorts,

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from PIL import Image
 
 from .grid import detect_grid
-from .ports import Grid, OCRService
+from .label_template_ports import Grid, OCRService
 
 
 def load_grid_detector() -> Callable[[Image.Image], Grid]:

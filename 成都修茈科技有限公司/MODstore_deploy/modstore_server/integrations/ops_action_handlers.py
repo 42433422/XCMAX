@@ -16,9 +16,7 @@ from modstore_server.integrations.ops_action_specs import (
 from modstore_server.integrations.ops_action_specs import (
     OPS_COMMAND_REGISTRY as OPS_COMMAND_REGISTRY,
 )
-from modstore_server.integrations.ops_action_specs import (
-    OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS,
-)
+from modstore_server.integrations.ops_action_specs import OPS_EMPLOYEE_IDS as OPS_EMPLOYEE_IDS
 from modstore_server.integrations.ops_action_specs import CommandSpec as CommandSpec
 from modstore_server.models import OpsActionAuditLog, get_session_factory
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -368,9 +366,7 @@ def dispatch_ops_handler(
     force_real_run: bool = False,
 ) -> Dict[str, Any]:
     """Execute a white-listed operation through the split dispatch implementation."""
-    from modstore_server.integrations.ops_action_dispatch import (
-        dispatch_ops_handler as _impl,
-    )
+    from modstore_server.integrations.ops_action_dispatch import dispatch_ops_handler as _impl
 
     return _impl(
         handler,

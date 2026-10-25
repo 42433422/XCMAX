@@ -25,9 +25,7 @@ from modstore_server.telemetry_backlog_metrics import (
 from modstore_server.telemetry_backlog_quality import (
     _scan_coverage_ratchet_gap as _scan_coverage_ratchet_gap,
 )
-from modstore_server.telemetry_backlog_quality import (
-    _scan_workflow_drift as _scan_workflow_drift,
-)
+from modstore_server.telemetry_backlog_quality import _scan_workflow_drift as _scan_workflow_drift
 
 logger = logging.getLogger(__name__)
 

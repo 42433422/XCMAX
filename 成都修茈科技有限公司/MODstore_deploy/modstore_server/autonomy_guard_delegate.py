@@ -163,9 +163,7 @@ def request_action(
     source: str,
 ):
     ensure_fhd_on_path()
-    from app.application.autonomy.approval_resume import (
-        request_action as application_request,
-    )
+    from app.application.autonomy.approval_resume import request_action as application_request
 
     return application_request(
         action,

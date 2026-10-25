@@ -35,7 +35,7 @@ from .credential_login import CredentialLogin
 from .credential_routes import CredentialRoutes
 from .federated_login import FederatedLogin
 from .federated_routes import FederatedRoutes
-from .ports import JsonObject
+from .port_contracts import JsonObject
 from .profile_routes import ProfileRoutes
 from .recovery_routes import RecoveryRoutes
 from .registration import Registration, open_registration_allowed

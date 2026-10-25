@@ -133,9 +133,7 @@ def orchestrate_incident(event_id: int) -> Dict[str, Any]:
         #  runner 内部已自增 IncidentEvent.dispatched_count 并写 JSONL audit）
         if scope == "website":
             try:
-                from modstore_server.website_runner import (
-                    dispatch_incident as _website_dispatch,
-                )
+                from modstore_server.website_runner import dispatch_incident as _website_dispatch
 
                 runner_report = _website_dispatch(event_id=int(event_id))
                 plan["website_runner"] = runner_report.to_dict()

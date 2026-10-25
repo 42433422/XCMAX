@@ -29,9 +29,7 @@ def resolve_craft_step_id(step_or_employee: str) -> Tuple[str, Optional[str]]:
 
 def _load_yuangon_employee_meta(employee_id: str) -> Dict[str, Any]:
     try:
-        from modstore_server.all_hands_report import (
-            _load_yuangon_employee_meta as _load,
-        )
+        from modstore_server.all_hands_report import _load_yuangon_employee_meta as _load
 
         return _load(employee_id)
     except BOUNDARY_ERRORS:  # noqa: BLE001

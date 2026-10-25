@@ -24,15 +24,9 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
-from modstore_server.employee_duty_business_inputs import (
-    enterprise_input as _enterprise_input,
-)
-from modstore_server.employee_duty_business_inputs import (
-    llm_ops_input as _llm_ops_input,
-)
-from modstore_server.employee_duty_business_inputs import (
-    payment_input as _payment_input,
-)
+from modstore_server.employee_duty_business_inputs import enterprise_input as _enterprise_input
+from modstore_server.employee_duty_business_inputs import llm_ops_input as _llm_ops_input
+from modstore_server.employee_duty_business_inputs import payment_input as _payment_input
 
 DEFAULT_RECEIPT_NAME = "employee_duty_input_receipts.jsonl"
 _MAX_ROWS = 500

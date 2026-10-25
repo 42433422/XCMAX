@@ -24,21 +24,11 @@ from typing import Any, Callable, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from modstore_server.employee_skill_steps import brief_skill_steps as _brief_skill_steps
-from modstore_server.employee_skill_steps import (
-    extract_function_name as _extract_function_name,
-)
-from modstore_server.employee_skill_steps import (
-    fallback_step_script as _fallback_step_script,
-)
-from modstore_server.employee_skill_steps import (
-    make_vibe_skill_id as _make_vibe_skill_id,
-)
-from modstore_server.employee_skill_steps import (
-    manifest_skill_steps as _manifest_skill_steps,
-)
-from modstore_server.employee_skill_steps import (
-    sanitize_identifier as _sanitize_identifier,
-)
+from modstore_server.employee_skill_steps import extract_function_name as _extract_function_name
+from modstore_server.employee_skill_steps import fallback_step_script as _fallback_step_script
+from modstore_server.employee_skill_steps import make_vibe_skill_id as _make_vibe_skill_id
+from modstore_server.employee_skill_steps import manifest_skill_steps as _manifest_skill_steps
+from modstore_server.employee_skill_steps import sanitize_identifier as _sanitize_identifier
 from modstore_server.models import ESkill, ESkillVersion, User
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -50,9 +40,7 @@ _MAX_STEPS = 6
 
 def get_vibe_coder(**kwargs: Any) -> Any:
     """Patchable shim around the shared vibe adapter."""
-    from modstore_server.integrations.vibe_adapter import (
-        get_vibe_coder as _get_vibe_coder,
-    )
+    from modstore_server.integrations.vibe_adapter import get_vibe_coder as _get_vibe_coder
 
     return _get_vibe_coder(**kwargs)
 

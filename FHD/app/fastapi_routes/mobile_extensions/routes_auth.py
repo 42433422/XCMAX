@@ -24,7 +24,7 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
     from app.application.auth_app_service import get_auth_app_service
     from app.application.enterprise_login_flow import run_market_first_login
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.auth_routes import (
+    from app.fastapi_routes.domains.auth.routes import (
         _jit_create_local_user_for_enterprise,
         _market_user_email_from_raw,
     )

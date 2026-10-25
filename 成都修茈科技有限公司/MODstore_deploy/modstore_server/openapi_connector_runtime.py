@@ -57,12 +57,8 @@ _OAUTH_LOCK = threading.Lock()
 _TIMEOUT_MIN = 1.0
 _TIMEOUT_MAX = 60.0
 
-from modstore_server.openapi_connector_runtime_merged import (
-    CredentialPayload as CredentialPayload,
-)
-from modstore_server.openapi_connector_runtime_merged import (
-    OutboundBlocked as OutboundBlocked,
-)
+from modstore_server.openapi_connector_runtime_merged import CredentialPayload as CredentialPayload
+from modstore_server.openapi_connector_runtime_merged import OutboundBlocked as OutboundBlocked
 from modstore_server.openapi_connector_runtime_merged import (
     PinnedOutboundTarget as PinnedOutboundTarget,
 )
@@ -73,9 +69,7 @@ from modstore_server.openapi_connector_runtime_merged import (
 from modstore_server.openapi_connector_runtime_merged import (
     _format_path_value as _format_path_value,
 )
-from modstore_server.openapi_connector_runtime_merged import (
-    _ip_is_blocked as _ip_is_blocked,
-)
+from modstore_server.openapi_connector_runtime_merged import _ip_is_blocked as _ip_is_blocked
 from modstore_server.openapi_connector_runtime_merged import (
     _load_runtime_context as _load_runtime_context,
 )
@@ -83,18 +77,10 @@ from modstore_server.openapi_connector_runtime_merged import (
     _oauth_client_credentials_token as _oauth_client_credentials_token,
 )
 from modstore_server.openapi_connector_runtime_merged import _record_log as _record_log
-from modstore_server.openapi_connector_runtime_merged import (
-    _redact_headers as _redact_headers,
-)
-from modstore_server.openapi_connector_runtime_merged import (
-    _resolve_full_url as _resolve_full_url,
-)
-from modstore_server.openapi_connector_runtime_merged import (
-    _safe_timeout as _safe_timeout,
-)
-from modstore_server.openapi_connector_runtime_merged import (
-    _split_params as _split_params,
-)
+from modstore_server.openapi_connector_runtime_merged import _redact_headers as _redact_headers
+from modstore_server.openapi_connector_runtime_merged import _resolve_full_url as _resolve_full_url
+from modstore_server.openapi_connector_runtime_merged import _safe_timeout as _safe_timeout
+from modstore_server.openapi_connector_runtime_merged import _split_params as _split_params
 from modstore_server.openapi_connector_runtime_merged import (
     _summarize_request as _summarize_request,
 )

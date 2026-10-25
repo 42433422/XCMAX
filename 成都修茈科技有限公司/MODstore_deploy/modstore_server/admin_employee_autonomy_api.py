@@ -14,9 +14,7 @@ from modstore_server.admin_employee_autonomy_helpers import (
 from modstore_server.admin_employee_autonomy_helpers import (
     _has_valid_internal_api_key as _has_valid_internal_api_key,
 )
-from modstore_server.admin_employee_autonomy_helpers import (
-    _internal_api_key as _internal_api_key,
-)
+from modstore_server.admin_employee_autonomy_helpers import _internal_api_key as _internal_api_key
 from modstore_server.admin_employee_autonomy_helpers import _jloads as _jloads
 from modstore_server.admin_employee_autonomy_helpers import (
     _require_admin_or_internal as _require_admin_or_internal,

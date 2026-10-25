@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.public_company_hall_config import DEPARTMENT_ORDER
 from modstore_server.public_company_hall_config import (
-    WORKING_STATUSES as _WORKING_STATUSES,
+    DEPARTMENT_ORDER,
 )
+from modstore_server.public_company_hall_config import WORKING_STATUSES as _WORKING_STATUSES
 from modstore_server.public_company_hall_text import _clean, _iso
 
 logger = logging.getLogger(__name__)

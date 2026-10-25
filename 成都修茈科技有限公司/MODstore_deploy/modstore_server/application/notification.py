@@ -10,12 +10,12 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from modstore_server.domain.ports import NotificationRepository, RealtimePusher
 from modstore_server.domain.notification.notification_types import (
     Notification,
     NotificationType,
     OutboundNotification,
 )
+from modstore_server.domain.ports import NotificationRepository, RealtimePusher
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

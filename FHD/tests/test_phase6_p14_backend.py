@@ -926,7 +926,7 @@ class TestMobileAuthLogin:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
         )
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
@@ -955,7 +955,7 @@ class TestMobileAuthLogin:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
         )
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
@@ -984,7 +984,7 @@ class TestMobileAuthLogin:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
         )
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
@@ -1007,7 +1007,7 @@ class TestMobileAuthLogin:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
         )
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
@@ -1039,7 +1039,7 @@ class TestMobileAuthLogin:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
         )
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
@@ -1069,7 +1069,7 @@ class TestMobileAuthLoginWithPhoneCode:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login_with_phone_code",
+            "app.fastapi_routes.domains.auth.routes.auth_login_with_phone_code",
             fake_phone_login,
         )
         r = mobile_client.post(
@@ -1097,7 +1097,7 @@ class TestMobileAuthLoginWithPhoneCode:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login_with_phone_code",
+            "app.fastapi_routes.domains.auth.routes.auth_login_with_phone_code",
             fake_phone_login,
         )
         r = mobile_client.post(
@@ -1125,7 +1125,7 @@ class TestMobileAuthLoginWithPhoneCode:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login_with_phone_code",
+            "app.fastapi_routes.domains.auth.routes.auth_login_with_phone_code",
             fake_phone_login,
         )
         r = mobile_client.post(
@@ -1155,7 +1155,7 @@ class TestMobileAuthLoginWithPhoneCode:
             )
 
         monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.auth_routes.auth_login_with_phone_code",
+            "app.fastapi_routes.domains.auth.routes.auth_login_with_phone_code",
             fake_phone_login,
         )
         r = mobile_client.post(

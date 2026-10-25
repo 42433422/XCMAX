@@ -172,7 +172,7 @@ def test_unsafe_origin_is_rejected(origin, tmp_path):
 def test_real_logout_route_boolean_contract(deleted, monkeypatch):
     from types import SimpleNamespace
 
-    from app.fastapi_routes.domains.auth.auth_routes import auth_logout
+    from app.fastapi_routes.domains.auth.routes import auth_logout
     from starlette.requests import Request
 
     from app.application import auth_app_service

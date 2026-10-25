@@ -23,12 +23,8 @@ from modstore_server.mod_employee_impl_generation import (
 from modstore_server.mod_employee_impl_generation import (
     SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR as SYSTEM_PROMPT_EMPLOYEE_IMPL_REPAIR,
 )
-from modstore_server.mod_employee_impl_generation import (
-    _behavior_check as _behavior_check,
-)
-from modstore_server.mod_employee_impl_generation import (
-    _compile_check as _compile_check,
-)
+from modstore_server.mod_employee_impl_generation import _behavior_check as _behavior_check
+from modstore_server.mod_employee_impl_generation import _compile_check as _compile_check
 from modstore_server.mod_employee_impl_generation import (
     _employee_brief_lines as _employee_brief_lines,
 )
@@ -38,12 +34,8 @@ from modstore_server.mod_employee_impl_generation import (
 from modstore_server.mod_employee_impl_generation import (
     _generate_one_employee_py as _generate_one_employee_py,
 )
-from modstore_server.mod_employee_impl_generation import (
-    _security_check as _security_check,
-)
-from modstore_server.mod_employee_impl_generation import (
-    _strip_code_fence as _strip_code_fence,
-)
+from modstore_server.mod_employee_impl_generation import _security_check as _security_check
+from modstore_server.mod_employee_impl_generation import _strip_code_fence as _strip_code_fence
 from modstore_server.mod_employee_impl_generation import (
     generate_mod_employee_impls_async as generate_mod_employee_impls_async,
 )

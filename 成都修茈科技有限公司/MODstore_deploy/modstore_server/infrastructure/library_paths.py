@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, cast
 
-from modman.repo_config import RepoConfig
+from modman.repo_config import (
+    RepoConfig,
+)
 from modman.repo_config import load_config as _default_load_config
 from modman.repo_config import (
     resolved_library,

@@ -54,7 +54,7 @@ from .mutation_flow import ProductMutations, mutation_preflight, response_status
 from .mutation_flow import _http_exception_result as _http_exception_result
 from .mutation_flow import _normalize_products_create_payload as _normalize_products_create_payload
 from .mutation_routes import ProductMutationRoutes
-from .ports import (
+from .port_contracts import (
     create_product_agent,
     load_business_visibility,
     load_price_preview,

@@ -383,9 +383,7 @@ async def run_vibe_agent_loop(
     max_iterations: int = DEFAULT_MAX_ITERATIONS,
 ) -> AsyncIterator[AgentEvent]:
     """Delegate the vibe-coding loop while preserving this module's patch points."""
-    from modstore_server.script_agent.agent_loop_vibe import (
-        run_vibe_agent_loop as _impl,
-    )
+    from modstore_server.script_agent.agent_loop_vibe import run_vibe_agent_loop as _impl
 
     async for event in _impl(
         brief,

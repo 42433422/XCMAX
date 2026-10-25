@@ -10,9 +10,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
-from modstore_server.customer_value_classification import (
-    parse_datetime as _parse_datetime,
-)
+from modstore_server.customer_value_classification import parse_datetime as _parse_datetime
 from modstore_server.customer_value_classification import text as _text
 from modstore_server.models import CustomerValueReceipt, UpdateInstallationReceipt
 from modstore_server.standard_delivery_api import configured_internal_installation_ids

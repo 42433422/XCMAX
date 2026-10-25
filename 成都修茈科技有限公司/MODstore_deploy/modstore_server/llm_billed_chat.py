@@ -12,9 +12,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from modstore_server.llm_billed_once import (
-    run_billed_llm_chat_once as _run_billed_llm_chat_once,
-)
+from modstore_server.llm_billed_once import run_billed_llm_chat_once as _run_billed_llm_chat_once
 from modstore_server.llm_billing import (
     JavaWalletClient,
     WalletHold,

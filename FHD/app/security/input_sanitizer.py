@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-_SCRIPT = re.compile(r"<\s*script[^>]*>.*?<\s*/\s*script\s*>", re.I | re.S)
+_SCRIPT = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script(?:\s[^>]*)?>", re.I | re.S)
 
 
 def strip_control_chars(value: str) -> str:

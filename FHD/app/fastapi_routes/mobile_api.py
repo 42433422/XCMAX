@@ -148,7 +148,7 @@ def _mobile_auth_error_response(
 async def mobile_auth_register(body: MobileRegisterRequest):
     """移动端注册：复用桌面 ``/api/auth/register``，成功后直接签发 mobile JWT。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.auth_routes import auth_register
+    from app.fastapi_routes.domains.auth.routes import auth_register
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()
@@ -205,7 +205,7 @@ async def mobile_auth_register(body: MobileRegisterRequest):
 async def mobile_auth_login(body: MobileLoginRequest):
     """与 Web ``POST /api/auth/login`` 共用认证逻辑（市场校验、JIT、account_kind、市场 token）。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.auth_routes import auth_login
+    from app.fastapi_routes.domains.auth.routes import auth_login
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()
@@ -279,7 +279,7 @@ async def mobile_auth_login(body: MobileLoginRequest):
 async def mobile_auth_login_with_phone(body: dict):
     """与 Web ``POST /api/auth/login-with-phone-code`` 共用逻辑。"""
     from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
+    from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
     from app.mod_sdk.product_skus import resolve_product_sku
 
     sku = resolve_product_sku()

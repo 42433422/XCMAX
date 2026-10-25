@@ -13,16 +13,12 @@ from datetime import UTC, datetime
 from typing import Any, Dict, List, Sequence, Tuple
 
 from modstore_server.digest_daily_phase_chain import PHASE_A_LINES as PHASE_A_LINES
-from modstore_server.digest_daily_phase_chain import (
-    PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP,
-)
+from modstore_server.digest_daily_phase_chain import PHASE_B_LINES_NO_APP as PHASE_B_LINES_NO_APP
 from modstore_server.digest_daily_phase_chain import (
     PHASE_B_LINES_WITH_APP as PHASE_B_LINES_WITH_APP,
 )
 from modstore_server.digest_daily_phase_chain import _env_bool as _env_bool
-from modstore_server.digest_daily_phase_chain import (
-    _merge_phase_block as _merge_phase_block,
-)
+from modstore_server.digest_daily_phase_chain import _merge_phase_block as _merge_phase_block
 from modstore_server.digest_daily_phase_chain import (
     execute_phase_a_line_chain as execute_phase_a_line_chain,
 )
@@ -32,9 +28,7 @@ from modstore_server.digest_daily_phase_chain import (
 from modstore_server.digest_daily_phase_chain import (
     trigger_strategic_layer_dispatch as trigger_strategic_layer_dispatch,
 )
-from modstore_server.digest_daily_phase_chain import (
-    wait_for_phase_a as wait_for_phase_a,
-)
+from modstore_server.digest_daily_phase_chain import wait_for_phase_a as wait_for_phase_a
 from modstore_server.digest_line_executor import (
     _load_digest_execute_context,
     _read_execute_meta,

@@ -22,7 +22,7 @@ from .analysis import _estimate_sections as _estimate_sections
 from .fields import _classify_field as _classify_field
 from .fields import _extract_fields_by_pattern as _extract_fields_by_pattern
 from .fields import _identify_fields as _identify_fields
-from .ports import CodePorts, ImageAnalysisPorts, OCRPorts, SkillPorts, TemplateDescription
+from .label_template_ports import CodePorts, ImageAnalysisPorts, OCRPorts, SkillPorts, TemplateDescription
 
 logger = logging.getLogger(__name__)
 

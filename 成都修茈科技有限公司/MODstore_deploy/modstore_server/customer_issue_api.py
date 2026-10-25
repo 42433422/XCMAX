@@ -24,16 +24,12 @@ from modstore_server.customer_issue_delivery_contract import (
     repair_verification,
 )
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
-from modstore_server.customer_issue_shared_repairs import (
-    router as shared_repairs_router,
-)
+from modstore_server.customer_issue_shared_repairs import router as shared_repairs_router
+from modstore_server.customer_service_customer_view import customer_issue_row as _issue_row
 from modstore_server.customer_service_customer_view import (
-    customer_issue_row as _issue_row,
+    customer_ticket_row,
 )
-from modstore_server.customer_service_customer_view import customer_ticket_row
-from modstore_server.customer_service_orchestrator import (
-    CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED,
-)
+from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
 from modstore_server.models import User, UserMod
 from modstore_server.models_cs import (

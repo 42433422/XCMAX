@@ -15,9 +15,7 @@ from modstore_server.autonomy_guard_delegate import ensure_fhd_on_path
 
 def assess_risk(manifest: Dict[str, Any], handlers: Iterable[str]) -> Tuple[str, str]:
     ensure_fhd_on_path()
-    from app.application.employee_runtime.risk_gate import (
-        assess_risk as domain_assess_risk,
-    )
+    from app.application.employee_runtime.risk_gate import assess_risk as domain_assess_risk
 
     return domain_assess_risk(manifest, handlers)
 

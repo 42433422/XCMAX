@@ -12,12 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from modstore_server.customer_issue_intake import _persist_incident
-from modstore_server.employee_executor import (
-    execute_employee_task as execute_employee_task,
-)
-from modstore_server.incident_dispatch import (
-    _dispatch_incident_body as _dispatch_incident_body,
-)
+from modstore_server.employee_executor import execute_employee_task as execute_employee_task
+from modstore_server.incident_dispatch import _dispatch_incident_body as _dispatch_incident_body
 from modstore_server.incident_dispatch import (
     _dispatch_intake_routing_plan as _dispatch_intake_routing_plan,
 )
@@ -102,9 +98,7 @@ def _publish_stream_shadow(
 ) -> None:
     """Best-effort dual-write into Redis Streams (for real-time subscribers)."""
     try:
-        from modstore_server.eventing.redis_stream_bus import (
-            publish_event as publish_stream_event,
-        )
+        from modstore_server.eventing.redis_stream_bus import publish_event as publish_stream_event
 
         out = publish_stream_event(
             event_type=event_type,

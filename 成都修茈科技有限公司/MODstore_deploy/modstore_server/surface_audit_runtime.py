@@ -16,9 +16,7 @@ from modstore_server.infrastructure.private_asset_storage import (
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.surface_audit_paths import fhd_root as _fhd_root
-from modstore_server.surface_audit_paths import (
-    runtime_state_root as _runtime_state_root,
-)
+from modstore_server.surface_audit_paths import runtime_state_root as _runtime_state_root
 
 logger = logging.getLogger(__name__)
 

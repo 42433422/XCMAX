@@ -13,9 +13,7 @@ from modman.manifest_util import validate_manifest_dict
 from modman.scaffold import template_dir
 from modstore_server.mod_ai_manifest import extract_json_text as _extract_json_text
 from modstore_server.mod_ai_manifest import normalize_mod_id as normalize_mod_id
-from modstore_server.mod_ai_manifest import (
-    parse_llm_manifest_json as parse_llm_manifest_json,
-)
+from modstore_server.mod_ai_manifest import parse_llm_manifest_json as parse_llm_manifest_json
 from modstore_server.mod_ai_manifest import strip_json_fence as _strip_json_fence
 from modstore_server.mod_ai_scaffold_merged import (
     _ensure_suite_manifest_fields as _ensure_suite_manifest_fields,
@@ -32,13 +30,9 @@ from modstore_server.mod_ai_scaffold_merged import (
 from modstore_server.mod_ai_scaffold_merged import (
     _normalize_frontend_menu as _normalize_frontend_menu,
 )
-from modstore_server.mod_ai_scaffold_merged import (
-    _sanitize_industry as _sanitize_industry,
-)
+from modstore_server.mod_ai_scaffold_merged import _sanitize_industry as _sanitize_industry
 from modstore_server.mod_ai_scaffold_merged import _sub_template as _sub_template
-from modstore_server.mod_ai_scaffold_merged import (
-    build_scaffold_zip as build_scaffold_zip,
-)
+from modstore_server.mod_ai_scaffold_merged import build_scaffold_zip as build_scaffold_zip
 from modstore_server.mod_ai_scaffold_merged import (
     merge_employees_for_blueprint_routes as merge_employees_for_blueprint_routes,
 )

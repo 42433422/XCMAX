@@ -8,9 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server import (
-    self_maintenance_retort_change_evidence as retort_change_evidence,
-)
+from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 from . import config, store

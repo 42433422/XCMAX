@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 
 from app.db.models.user import User
 
-from .ports import JsonObject
+from .port_contracts import JsonObject
 from .user_administration import UserAdministration
 
 

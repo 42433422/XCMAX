@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import FoundationInstall
+from .port_contracts import FoundationInstall
 from .schemas import ModStoreInstallResult, ModStoreSimpleResponse
 
 

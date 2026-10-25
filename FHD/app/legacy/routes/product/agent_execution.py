@@ -9,7 +9,7 @@ from fastapi import Request
 
 from app.application.workflow.workflow_types import PlanGraph, RiskLevel, WorkflowNode
 
-from .ports import AgentRunView, Payload, ProductAgentRuntime
+from .port_contracts import AgentRunView, Payload, ProductAgentRuntime
 
 
 def _agent_node_output(run: AgentRunView, node_id: str) -> Payload:

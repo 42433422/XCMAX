@@ -299,9 +299,7 @@ def maybe_auto_approve(
             row.risk_level = risk
             session.commit()
 
-        from modstore_server.autonomy_guard_delegate import (
-            evaluate_risk as evaluate_action_risk,
-        )
+        from modstore_server.autonomy_guard_delegate import evaluate_risk as evaluate_action_risk
 
         risk_decision = evaluate_action_risk(
             {"action": "code_write", "risk_level": risk},

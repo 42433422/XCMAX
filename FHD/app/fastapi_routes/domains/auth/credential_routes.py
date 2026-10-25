@@ -9,7 +9,7 @@ from fastapi import APIRouter, Body, Request
 from fastapi.background import BackgroundTasks
 
 from .credential_login import CredentialLogin
-from .ports import JsonObject
+from .port_contracts import JsonObject
 from .registration import Registration
 
 

@@ -20,9 +20,7 @@ from fastapi import (
 )
 from pydantic import BaseModel, Field
 
-from modstore_server.api.catalog_public_helpers import (
-    authorize_upload as _authorize_upload,
-)
+from modstore_server.api.catalog_public_helpers import authorize_upload as _authorize_upload
 from modstore_server.api.catalog_public_helpers import (
     invalidate_catalog_list_caches as _invalidate_catalog_list_caches,
 )

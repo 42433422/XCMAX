@@ -40,9 +40,7 @@ from modstore_server import payment_orders as _po
 from modstore_server.api.auth_deps import require_user
 from modstore_server.models import ReconciliationReport, User, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.reconciliation_snapshot import (
-    build_skill_payload as _build_skill_payload,
-)
+from modstore_server.reconciliation_snapshot import build_skill_payload as _build_skill_payload
 from modstore_server.reconciliation_snapshot import (
     compute_period_snapshot as _compute_period_snapshot,
 )

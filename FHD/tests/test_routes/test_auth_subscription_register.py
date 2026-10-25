@@ -34,7 +34,7 @@ def test_subscription_status_trial(client: TestClient, monkeypatch: pytest.Monke
 
     with (
         patch(
-            "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
+            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
             return_value=fake_user,
         ),
         patch(

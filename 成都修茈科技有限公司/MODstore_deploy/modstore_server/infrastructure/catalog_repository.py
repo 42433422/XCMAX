@@ -9,9 +9,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from modstore_server import catalog_store
-from modstore_server.domain.catalog.catalog_types import (
-    CatalogItem as CatalogDomainItem,
-)
+from modstore_server.domain.catalog.catalog_types import CatalogItem as CatalogDomainItem
 from modstore_server.models import CatalogItem as CatalogItemRow
 
 

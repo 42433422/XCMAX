@@ -15,18 +15,16 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
-from modstore_server.duty_workforce_evidence import (
-    ALLOWED_REASON_CODES as _ALLOWED_REASON_CODES,
-)
+from modstore_server.duty_workforce_evidence import ALLOWED_REASON_CODES as _ALLOWED_REASON_CODES
 from modstore_server.duty_workforce_evidence import EMPLOYEE_ID_RE as _EMPLOYEE_ID_RE
 from modstore_server.duty_workforce_evidence import audit_path as _audit_path
-from modstore_server.duty_workforce_evidence import (
-    canonical_sha256 as _canonical_sha256,
-)
+from modstore_server.duty_workforce_evidence import canonical_sha256 as _canonical_sha256
 from modstore_server.duty_workforce_evidence import iso_now as _iso_now
 from modstore_server.duty_workforce_evidence import load_audit_rows as _load_audit_rows
 from modstore_server.duty_workforce_evidence import resolved_pairs as _resolved_pairs
-from modstore_server.duty_workforce_evidence import workforce_gap_path
+from modstore_server.duty_workforce_evidence import (
+    workforce_gap_path,
+)
 from modstore_server.llm_crypto import decrypt_secret, encrypt_secret
 from modstore_server.self_evolution_knowledge import kb_root, record_code_pattern
 

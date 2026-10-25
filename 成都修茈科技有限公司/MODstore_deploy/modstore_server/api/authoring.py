@@ -66,12 +66,8 @@ from modstore_server.api.authoring_merged import (
 from modstore_server.api.authoring_merged import (
     api_export_workflow_employee_pack as api_export_workflow_employee_pack,
 )
-from modstore_server.api.authoring_merged import (
-    api_list_mod_snapshots as api_list_mod_snapshots,
-)
-from modstore_server.api.authoring_merged import (
-    api_mod_ai_scaffold as api_mod_ai_scaffold,
-)
+from modstore_server.api.authoring_merged import api_list_mod_snapshots as api_list_mod_snapshots
+from modstore_server.api.authoring_merged import api_mod_ai_scaffold as api_mod_ai_scaffold
 from modstore_server.api.authoring_merged import (
     api_mod_authoring_summary as api_mod_authoring_summary,
 )

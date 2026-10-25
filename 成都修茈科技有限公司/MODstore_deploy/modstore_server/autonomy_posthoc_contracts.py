@@ -20,9 +20,7 @@ from modstore_server.autonomy_posthoc_helpers import (
     failed_merge_request_attempt as _failed_merge_request_attempt,
 )
 from modstore_server.autonomy_posthoc_helpers import payload as _payload
-from modstore_server.autonomy_posthoc_helpers import (
-    recorded_at_or_after as _recorded_at_or_after,
-)
+from modstore_server.autonomy_posthoc_helpers import recorded_at_or_after as _recorded_at_or_after
 from modstore_server.autonomy_posthoc_helpers import safe_repo_path as _safe_repo_path
 from modstore_server.autonomy_posthoc_helpers import utc as _utc
 from modstore_server.db.employee_ops import (

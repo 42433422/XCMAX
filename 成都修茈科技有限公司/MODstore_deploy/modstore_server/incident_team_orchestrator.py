@@ -13,9 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.incident_bus import _incident_payload as _payload  # noqa: F401
-from modstore_server.incident_team_dispatch import (
-    dispatch_incident_team as dispatch_incident_team,
-)
+from modstore_server.incident_team_dispatch import dispatch_incident_team as dispatch_incident_team
 from modstore_server.incident_team_handler_digest import handler_output_digest
 from modstore_server.incident_team_handoff import format_role_handoff
 from modstore_server.llm_failure_classifier import FAILURE_KIND_ROLE_TIMEOUT

@@ -33,21 +33,13 @@ from modstore_server.release_train_versions import (
 
 logger = logging.getLogger(__name__)
 
-from modstore_server.release_train_merged import (
-    _digest_calendar_day as _digest_calendar_day,
-)
+from modstore_server.release_train_merged import _digest_calendar_day as _digest_calendar_day
 from modstore_server.release_train_merged import (
     _snapshot_state_to_history as _snapshot_state_to_history,
 )
-from modstore_server.release_train_merged import (
-    active_backup_guard as active_backup_guard,
-)
-from modstore_server.release_train_merged import (
-    bump_release_train as bump_release_train,
-)
-from modstore_server.release_train_merged import (
-    clear_backup_guard as clear_backup_guard,
-)
+from modstore_server.release_train_merged import active_backup_guard as active_backup_guard
+from modstore_server.release_train_merged import bump_release_train as bump_release_train
+from modstore_server.release_train_merged import clear_backup_guard as clear_backup_guard
 from modstore_server.release_train_merged import default_state as default_state
 from modstore_server.release_train_merged import history_dir as history_dir
 from modstore_server.release_train_merged import (
@@ -63,9 +55,7 @@ from modstore_server.release_train_merged import (
 from modstore_server.release_train_merged import (
     release_train_context_for_digest as release_train_context_for_digest,
 )
-from modstore_server.release_train_merged import (
-    rollback_release_train as rollback_release_train,
-)
+from modstore_server.release_train_merged import rollback_release_train as rollback_release_train
 from modstore_server.release_train_merged import save_state as save_state
 from modstore_server.release_train_merged import set_backup_guard as set_backup_guard
 from modstore_server.release_train_merged import snapshot_public as snapshot_public
