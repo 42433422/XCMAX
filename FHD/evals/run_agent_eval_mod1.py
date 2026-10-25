@@ -230,7 +230,7 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                 env_patch.update(
                     {
                         "LLM_PROVIDER": "xcauto",
-                        "XCAUTO_API_KEY": "eval-xcauto-token",
+                        "XCAUTO_API_KEY": "eval-xcauto-token",  # credential-guard: allow eval fixture
                     }
                 )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
