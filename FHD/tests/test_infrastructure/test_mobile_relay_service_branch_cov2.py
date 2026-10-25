@@ -26,7 +26,7 @@ import pytest
 
 
 def _load_mobile_relay_service_module():
-    path = Path(__file__).resolve().parents[2] / "app" / "services" / "mobile_relay_service.py"
+    path = Path(__file__).resolve().parents[2] / "app" / "domain" / "shared_services" / "mobile_relay_service.py"
     spec = importlib.util.spec_from_file_location("mobile_relay_service_under_test", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
