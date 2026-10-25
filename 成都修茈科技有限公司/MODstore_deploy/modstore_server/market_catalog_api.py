@@ -456,6 +456,7 @@ def api_admin_review_catalog_complaint(
             "resolution": complaint.resolution,
         }
 
+
 # Browse list/detail/facets live in market_catalog_browse_routes_merged and
 # decorate this module's router at import time. Eager-load so create_app
 # include_router(market_catalog_api.router) mounts /market/catalog.
