@@ -249,7 +249,7 @@ def generate_final_report():
     print("\n7.1 Mamba-BERT 推理")
     print("   ```python")
     print(
-        "   from app.domain.neuro_domains.deep_learning_service import create_default_hybrid_model, ModelInput"
+        "   from app.neuro_domains.deep_learning_service import create_default_hybrid_model, ModelInput"
     )
     print("")
     print("   service = create_default_hybrid_model()")
@@ -260,8 +260,8 @@ def generate_final_report():
 
     print("\n7.2 多模态融合")
     print("   ```python")
-    print("   from app.domain.neuro_domains.mamba_multimodal import get_enhanced_multimodal_service")
-    print("   from app.domain.neuro_domains.mamba_multimodal import MultimodalMambaInput")
+    print("   from app.neuro_domains.mamba_multimodal import get_enhanced_multimodal_service")
+    print("   from app.neuro_domains.mamba_multimodal import MultimodalMambaInput")
     print("")
     print("   service = get_enhanced_multimodal_service()")
     print("   input_data = MultimodalMambaInput(")
@@ -273,7 +273,7 @@ def generate_final_report():
 
     print("\n7.3 MLOps 训练流水线")
     print("   ```python")
-    print("   from app.domain.neuro_domains.mlops_platform import get_mlops_platform")
+    print("   from app.neuro_domains.mlops_platform import get_mlops_platform")
     print("")
     print("   platform = get_mlops_platform()")
     print("   job_id = platform.training_pipeline.submit_job(")
@@ -286,8 +286,8 @@ def generate_final_report():
 
     print("\n7.4 支付域")
     print("   ```python")
-    print("   from app.domain.neuro_domains.extended_domains import get_extended_neuro_domains")
-    print("   from app.domain.neuro_domains.extended_domains import PaymentRequest, PaymentMethod")
+    print("   from app.neuro_domains.extended_domains import get_extended_neuro_domains")
+    print("   from app.neuro_domains.extended_domains import PaymentRequest, PaymentMethod")
     print("")
     print("   domains = get_extended_neuro_domains()")
     print("   request = PaymentRequest(")

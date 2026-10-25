@@ -41,7 +41,7 @@ if str(_FHD_ROOT) not in sys.path:
 from app.domain.shared_services.capability_proposal_recorder import (  # noqa: E402
     list_pending_proposals,
 )
-from app.domain.work_order.ssot import derive_wo_id  # noqa: E402
+from app.domain.shared_services.ssot import derive_wo_id  # noqa: E402
 from app.utils.operational_errors import BOUNDARY_ERRORS  # noqa: E402
 
 _DIAGNOSIS_DIR = Path(

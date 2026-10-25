@@ -114,7 +114,7 @@ from app.application.dataset_rag.vector_index import _embedding_metadata as _emb
 from app.application.dataset_rag.vector_index import (
     _semantic_embedding_available as _semantic_embedding_available,
 )
-from app.application.dataset_rag_queue import DatasetStateLock
+from app.domain.app_pure.dataset_rag_queue import DatasetStateLock
 from app.infrastructure.rag import (
     HybridRetriever,
     RetrievedChunk,
@@ -706,7 +706,7 @@ def get_dataset_rag_app_service() -> DatasetRagApplicationService:
 
 
 def reset_dataset_rag_app_service_for_tests() -> None:
-    from app.application.dataset_rag_queue import stop_host_workers
+    from app.domain.app_pure.dataset_rag_queue import stop_host_workers
 
     global _dataset_rag_app_service
     if not stop_host_workers():

@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import Request, UploadFile
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.application.workflow.types import normalize_workflow_risk
 from app.fastapi_routes.tools_execute import (
     tool_route_agent_payload as _tool_route_agent_payload,
 )
@@ -24,7 +24,7 @@ async def run_templates_analyze_agent(
     template_scope: str,
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.utils.path_io.upload_helpers import save_upload_file
 
     saved_path = await save_upload_file(file, subdir="template-analysis")
@@ -97,7 +97,7 @@ def run_system_maintenance_agent(
     route_path: str,
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
 
     data = dict(params or {})
@@ -170,7 +170,7 @@ def run_document_template_agent(
     authenticated_actor_id: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
     from app.infrastructure.tenant_scope import current_tenant_id
 
@@ -217,7 +217,7 @@ def run_document_template_agent(
         if template_id.startswith("fs:") and template_id.split(":", 1)[1].strip():
             try:
                 # Keep the historical patch point on the public route module.
-                from app.fastapi_routes.domains.system import system_routes as route_facade
+                from app.fastapi_routes.domains.system import routes as route_facade
 
                 runtime_context["template_base_dir"] = route_facade.get_base_dir()
             except RECOVERABLE_ERRORS:

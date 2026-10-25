@@ -15,7 +15,7 @@ from app.application.normal_chat_dispatch import (
     build_sales_query_response_dict,
     route_normal_mode_message,
 )
-from app.domain.sales_app_service import SalesAppService
+from app.application.sales_app_service import SalesAppService
 from app.db.db_base import Base
 from app.db.models import Customer, Product, SalesOrder
 from app.infrastructure.tenant_scope import tenant_scope
@@ -69,8 +69,8 @@ class TestFacadeDelegationExactlyOnce:
 
     def test_confirm_delegates_to_lifecycle_service(self):
         with (
-            patch("app.domain.sales_app_service.get_db", _fake_get_db),
-            patch("app.domain.sales_app_service.SalesLifecycleService") as lc,
+            patch("app.application.sales_app_service.get_db", _fake_get_db),
+            patch("app.application.sales_app_service.SalesLifecycleService") as lc,
         ):
             lc.return_value.confirm.return_value = _order("SO-001", "confirmed")
             result = SalesAppService().confirm(5)
@@ -80,8 +80,8 @@ class TestFacadeDelegationExactlyOnce:
 
     def test_cancel_delegates_to_lifecycle_service(self):
         with (
-            patch("app.domain.sales_app_service.get_db", _fake_get_db),
-            patch("app.domain.sales_app_service.SalesLifecycleService") as lc,
+            patch("app.application.sales_app_service.get_db", _fake_get_db),
+            patch("app.application.sales_app_service.SalesLifecycleService") as lc,
         ):
             lc.return_value.cancel.return_value = _order("SO-001", "cancel")
             result = SalesAppService().cancel(5)
@@ -109,7 +109,7 @@ class TestFacadeDelegationExactlyOnce:
         )
 
     def test_deliver_delegates_to_fulfillment_service(self):
-        with patch("app.domain.sales_app_service.FulfillmentService") as fs:
+        with patch("app.application.sales_app_service.FulfillmentService") as fs:
             fs.return_value.deliver.return_value = {"success": True}
             result = SalesAppService().deliver(1, 2, 3.0, warehouse_id=9)
         assert result["success"] is True
@@ -120,7 +120,7 @@ class TestFacadeDelegationExactlyOnce:
 
     def test_invoice_delegates_to_invoicing_service(self):
         with patch(
-            "app.domain.sales_app_service.invoice", return_value={"success": True}
+            "app.application.sales_app_service.invoice", return_value={"success": True}
         ) as m:
             result = SalesAppService().invoice(1)
         assert result["success"] is True
@@ -129,7 +129,7 @@ class TestFacadeDelegationExactlyOnce:
 
     def test_credit_note_delegates_to_invoicing_service(self):
         with patch(
-            "app.domain.sales_app_service.credit_note", return_value={"success": True}
+            "app.application.sales_app_service.credit_note", return_value={"success": True}
         ) as m:
             result = SalesAppService().credit_note(1)
         assert result["success"] is True
@@ -139,7 +139,7 @@ class TestFacadeDelegationExactlyOnce:
     @pytest.mark.parametrize("key", [None, "receipt-retry-1"])
     def test_payment_delegates_to_payment_service(self, key):
         with patch(
-            "app.domain.sales_app_service.payment", return_value={"success": True}
+            "app.application.sales_app_service.payment", return_value={"success": True}
         ) as m:
             result = SalesAppService().payment(1, 100.0, idempotency_key=key)
         assert result["success"] is True
@@ -150,7 +150,7 @@ class TestFacadeDelegationExactlyOnce:
         assert kwargs["idempotency_key"] == key
 
     def test_refund_delegates_to_payment_service(self):
-        with patch("app.domain.sales_app_service.refund", return_value={"success": True}) as m:
+        with patch("app.application.sales_app_service.refund", return_value={"success": True}) as m:
             result = SalesAppService().refund(7)
         assert result["success"] is True
         m.assert_called_once()
@@ -272,7 +272,7 @@ class TestSalesKeywordRouting:
     """显式销售短语路由到结构化结果；裸词「销售」不再误命中。"""
 
     def test_sales_order_keyword_routes_to_structured_result(self):
-        with patch("app.domain.sales_app_service.SalesAppService") as mock_cls:
+        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
             mock_cls.return_value.query.return_value = {
                 "success": True,
                 "total": 1,
@@ -464,7 +464,7 @@ class TestFacadeSessionForwarding:
 
     def test_quote_uses_supplied_session_without_get_db(self):
         mock_db = MagicMock()
-        with patch("app.domain.sales_app_service.get_db") as g:
+        with patch("app.application.sales_app_service.get_db") as g:
             g.side_effect = AssertionError("带 db 时不得调用 get_db")
             result = SalesAppService().quote(
                 {
@@ -485,8 +485,8 @@ class TestFacadeSessionForwarding:
     def test_confirm_forwards_supplied_session_to_lifecycle(self):
         mock_db = MagicMock()
         with (
-            patch("app.domain.sales_app_service.get_db") as g,
-            patch("app.domain.sales_app_service.SalesLifecycleService") as lc,
+            patch("app.application.sales_app_service.get_db") as g,
+            patch("app.application.sales_app_service.SalesLifecycleService") as lc,
         ):
             g.side_effect = AssertionError("带 db 时不得调用 get_db")
             lc.return_value.confirm.return_value = _order("SO-001", "confirmed")
@@ -501,7 +501,7 @@ class TestFacadeSessionForwarding:
 
     def test_deliver_forwards_supplied_session_exactly_once(self):
         mock_db = MagicMock()
-        with patch("app.domain.sales_app_service.FulfillmentService") as fs:
+        with patch("app.application.sales_app_service.FulfillmentService") as fs:
             fs.return_value.deliver.return_value = {"success": True}
             result = SalesAppService().deliver(1, 2, 3.0, warehouse_id=9, db=mock_db)
         assert result["success"] is True
@@ -511,7 +511,7 @@ class TestFacadeSessionForwarding:
     def test_invoice_forwards_supplied_session_exactly_once(self):
         mock_db = MagicMock()
         with patch(
-            "app.domain.sales_app_service.invoice", return_value={"success": True}
+            "app.application.sales_app_service.invoice", return_value={"success": True}
         ) as m:
             result = SalesAppService().invoice(1, db=mock_db)
         assert result["success"] is True
@@ -521,7 +521,7 @@ class TestFacadeSessionForwarding:
     def test_payment_forwards_supplied_session_exactly_once(self):
         mock_db = MagicMock()
         with patch(
-            "app.domain.sales_app_service.payment", return_value={"success": True}
+            "app.application.sales_app_service.payment", return_value={"success": True}
         ) as m:
             result = SalesAppService().payment(1, 100.0, db=mock_db)
         assert result["success"] is True
@@ -565,7 +565,7 @@ class TestQuoteCallerOwnedSession:
     def test_create_confirmed_order_commits_all_or_rolls_back(
         self, _facade_file_db, monkeypatch, confirmation_fails, model_field
     ):
-        from app.domain.sales_order_creation import create_confirmed_order
+        from app.application.sales_order_creation import create_confirmed_order
         from app.db.models import PurchaseUnit, SalesOrderItem
 
         db = _facade_file_db
@@ -766,7 +766,7 @@ class TestQuoteCallerOwnedSession:
         fresh = db.info["session_factory"]()
 
         with (
-            patch("app.domain.sales_app_service.get_db") as g,
+            patch("app.application.sales_app_service.get_db") as g,
             patch.object(db, "commit", wraps=db.commit) as commit_spy,
             patch.object(db, "rollback", wraps=db.rollback) as rollback_spy,
             patch.object(db, "close", wraps=db.close) as close_spy,
@@ -806,7 +806,7 @@ class TestQuoteCallerOwnedSession:
         customer, product = _seed_quote_owner_db(db)
         fresh = db.info["session_factory"]()
 
-        with patch("app.domain.sales_app_service.get_db") as g:
+        with patch("app.application.sales_app_service.get_db") as g:
             result = SalesAppService().quote(
                 {
                     "customer_id": customer.id,

@@ -1,6 +1,6 @@
 """工单状态机核心（纯逻辑，无 I/O）：共享宿主侧的 Work Order SSOT 判定。
 
-与 FHD ``app.domain.work_order.ssot`` 保持同一状态集合 / 迁移表 / 轨道分类 /
+与 FHD ``app.domain.shared_services.ssot`` 保持同一状态集合 / 迁移表 / 轨道分类 /
 wo_id 派生算法（同源镜像，一测防漂移：FHD tests/test_services/test_work_order_core_parity.py
 断言两侧行为一致）。事件只在这里做折叠与校验，直接由 work_order_api 落库。
 

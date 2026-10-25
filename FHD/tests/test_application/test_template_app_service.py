@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from app.domain.catalog.starter_template_catalog import STARTER_TEMPLATES
+from app.application.starter_template_catalog import STARTER_TEMPLATES
 from app.application.template_app_service import TemplateApplicationService
 
 

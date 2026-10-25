@@ -373,7 +373,7 @@ def customer_client() -> TestClient:
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.customer_routes._customer_find_by_id")
+@patch("app.fastapi_routes.domains.customer.routes._customer_find_by_id")
 def test_customers_get_by_id(
     mock_find: MagicMock, _mock_erp: MagicMock, customer_client: TestClient
 ) -> None:
@@ -385,13 +385,13 @@ def test_customers_get_by_id(
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
 def test_customers_post_missing_name(_mock_erp: MagicMock, customer_client: TestClient) -> None:
-    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
         r = customer_client.post("/customers", json={})
     assert r.status_code == 400
 
 
 @patch("app.mod_sdk.erp_customers_facade.is_erp_customers_via_service_enabled", return_value=False)
-@patch("app.fastapi_routes.domains.customer.customer_routes._customer_pg_insert")
+@patch("app.fastapi_routes.domains.customer.routes._customer_pg_insert")
 def test_customers_post_ok(
     mock_insert: MagicMock,
     _mock_erp: MagicMock,
@@ -399,7 +399,7 @@ def test_customers_post_ok(
     local_tools,
 ) -> None:
     mock_insert.return_value = {"id": 5, "name": "丙公司"}
-    with patch("app.fastapi_routes.domains.customer.customer_routes._customers_write_raise"):
+    with patch("app.fastapi_routes.domains.customer.routes._customers_write_raise"):
         r = customer_client.post(
             "/customers",
             json={"name": "丙公司", "contact_person": "李"},

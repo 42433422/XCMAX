@@ -10,17 +10,17 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from app.application.founder_autonomy_alignment_summary import build_alignment_live_summary
-from app.application.founder_autonomy_employee_summary import build_employee_live_summary
-from app.domain.ops_rules.founder_autonomy_primary_gates import build_primary_gate_sets
-from app.domain.ops_rules.founder_autonomy_projection import (
+from app.domain.app_pure.founder_autonomy_alignment_summary import build_alignment_live_summary
+from app.domain.app_pure.founder_autonomy_employee_summary import build_employee_live_summary
+from app.domain.app_pure.founder_autonomy_primary_gates import build_primary_gate_sets
+from app.domain.app_pure.founder_autonomy_projection import (
     build_public_founder_autonomy_projection,
     write_public_founder_autonomy_projection,
 )
-from app.domain.ops_rules.founder_autonomy_resilience_gates import (
+from app.domain.app_pure.founder_autonomy_resilience_gates import (
     build_resilience_gate_sets,
 )
-from app.application.founder_autonomy_support import (
+from app.domain.app_pure.founder_autonomy_support import (
     ScoreGate,
     _as_dict,
     _as_float,

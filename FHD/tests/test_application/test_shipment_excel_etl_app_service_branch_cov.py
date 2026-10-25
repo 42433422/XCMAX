@@ -48,7 +48,7 @@ from app.application.shipment_excel_etl_app_service import (
 
 MOD = "app.application.shipment_excel_etl_app_service"
 SEC = "app.application.shipment_excel_etl_security"
-KB = "app.application.excel_etl_kb"
+KB = "app.domain.app_pure.excel_etl_kb"
 LLM = "app.application.shipment_excel_etl_llm"
 FP = "app.application.shipment_excel_etl_fingerprint_store"
 

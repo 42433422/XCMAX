@@ -10,8 +10,8 @@ from app.domain.persona.value_objects import (
     PersonaIdentity,
     RapportScore,
 )
-from app.domain.persona.services_runtime.identity_resolver import IdentityResolver
-from app.domain.persona.services_runtime.prompt_builder import PersonaPromptBuilder
+from app.domain.shared_services.persona.identity_resolver import IdentityResolver
+from app.domain.shared_services.persona.prompt_builder import PersonaPromptBuilder
 
 
 class TestPersonaPromptBuilder:

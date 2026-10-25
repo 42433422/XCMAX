@@ -1,4 +1,4 @@
-from app.domain.ops_rules.chat_reply_safety import sanitize_model_chat_reply
+from app.domain.app_pure.chat_reply_safety import sanitize_model_chat_reply
 
 
 def test_sanitize_model_chat_reply_keeps_visible_text_and_removes_tool_protocol() -> None:

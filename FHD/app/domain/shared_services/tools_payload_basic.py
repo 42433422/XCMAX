@@ -98,7 +98,7 @@ def dispatch_basic_tool_payload(
                 return _j(
                     {"success": False, "message": "缺少参数：file_path（Excel文件路径）"}, 400
                 )
-            from app.domain.document_templates_service import (
+            from app.domain.shared_services.document_templates_service import (
                 _extract_excel_grid_preview,
                 _extract_structured_excel_preview,
                 _list_excel_sheet_names,

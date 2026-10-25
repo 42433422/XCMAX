@@ -70,7 +70,7 @@ from app.utils.async_task.task_context import TaskContextService, get_task_conte
 
 
 from app.domain.shared_services.ai_product_parser import AIProductParser
-from app.domain.conversation.legacy_services_service import ConversationService, get_conversation_service
+from app.domain.shared_services.conversation_service import ConversationService, get_conversation_service
 from app.domain.shared_services.session_service import SessionService, get_session_service
 from app.domain.shared_services.system_service import SystemService, get_system_service
 from app.domain.shared_services.tts_service import synthesize_to_data_uri

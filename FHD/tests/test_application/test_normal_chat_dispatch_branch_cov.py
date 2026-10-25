@@ -315,7 +315,7 @@ class TestRouteNormalModeMessageProductQuery:
     def test_generic_query_defers_to_intent_gate(self, message):
         predicted = {"intent": "clarify", "slots": {}, "question": "请说明查询对象"}
         with patch(
-            "app.domain.ops_rules.llm_intent_gate.llm_route_message", return_value=predicted
+            "app.application.llm_intent_gate.llm_route_message", return_value=predicted
         ) as gate:
             assert route_normal_mode_message(message) == predicted
         gate.assert_called_once_with(message)
@@ -764,7 +764,7 @@ class TestRunNormalSlotShipmentPreview:
             },
         ):
             with patch(
-                "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
+                "app.domain.app_pure.ai_chat_helpers.build_shipment_preview_response_dict",
                 return_value={"success": True, "response": "预览完成"},
             ):
                 result = run_normal_slot_shipment_preview("七彩乐园2桶A001规格25")
@@ -781,7 +781,7 @@ class TestRunNormalSlotShipmentPreview:
             },
         ):
             with patch(
-                "app.application.ai_chat_helpers.build_shipment_preview_response_dict",
+                "app.domain.app_pure.ai_chat_helpers.build_shipment_preview_response_dict",
                 return_value={"success": True, "response": "空产品"},
             ):
                 result = run_normal_slot_shipment_preview("七彩乐园")
@@ -1253,7 +1253,7 @@ class TestBuildSalesQueryResponseDict:
 
     def test_no_orders(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
-        with patch("app.domain.sales_app_service.SalesAppService") as mock_cls:
+        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
             mock_cls.return_value.query.return_value = {
                 "success": True,
                 "data": [],
@@ -1265,7 +1265,7 @@ class TestBuildSalesQueryResponseDict:
 
     def test_with_orders(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
-        with patch("app.domain.sales_app_service.SalesAppService") as mock_cls:
+        with patch("app.application.sales_app_service.SalesAppService") as mock_cls:
             mock_cls.return_value.query.return_value = {
                 "success": True,
                 "data": [
@@ -1286,7 +1286,7 @@ class TestBuildSalesQueryResponseDict:
     def test_service_failure(self):
         route = {"intent": "sales_query", "slots": {"keyword": ""}}
         with patch(
-            "app.domain.sales_app_service.SalesAppService",
+            "app.application.sales_app_service.SalesAppService",
             side_effect=RuntimeError("boom"),
         ):
             result = build_sales_query_response_dict(route)

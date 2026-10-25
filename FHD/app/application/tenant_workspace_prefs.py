@@ -194,7 +194,7 @@ def bind_selected_industry_for_user(
     uid = _safe_positive_int(getattr(user, "id", None))
     try:
         if uid is not None:
-            from app.application.entitled_industries_init import init_entitled_industries_for_user
+            from app.domain.app_pure.entitled_industries_init import init_entitled_industries_for_user
             from app.db.models.user import User
             from app.db.session import get_db
 

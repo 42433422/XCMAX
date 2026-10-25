@@ -2350,7 +2350,7 @@ class TestMobileExtSyncRoutes:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
             patch(
-                "app.application.employee_circle_sync.sync_modstore_reports",
+                "app.domain.app_pure.employee_circle_sync.sync_modstore_reports",
                 new_callable=AsyncMock,
                 return_value={},
             ) as report_sync,

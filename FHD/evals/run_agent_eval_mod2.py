@@ -358,7 +358,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.system_routes import router
+    from app.fastapi_routes.domains.system.routes import router
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "set_default_printer").strip().lower()
@@ -622,7 +622,7 @@ def _run_memory_v2_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.misc.misc_routes import router
+    from app.fastapi_routes.domains.misc.routes import router
     from app.services import user_memory_service as memory_mod
 
     expected = dict(task.get("expected") or {})
@@ -1251,7 +1251,7 @@ def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    import app.application.excel_imports as excel_imports
+    import app.domain.app_pure.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.legacy.routes.product import compat_routes as product_compat_routes
 
@@ -1820,7 +1820,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.system_routes import router
+    from app.fastapi_routes.domains.system.routes import router
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     expected = dict(task.get("expected") or {})
@@ -1907,7 +1907,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.system_routes import router
+    from app.fastapi_routes.domains.system.routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -1932,7 +1932,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             )
             stack.enter_context(
                 patch(
-                    "app.domain.document_templates_service._extract_structured_excel_preview",
+                    "app.domain.shared_services.document_templates_service._extract_structured_excel_preview",
                     return_value=dict(
                         task.get("mock_structured_result")
                         or {
@@ -1944,7 +1944,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             )
             stack.enter_context(
                 patch(
-                    "app.domain.document_templates_service._extract_excel_grid_preview",
+                    "app.domain.shared_services.document_templates_service._extract_excel_grid_preview",
                     return_value=dict(
                         task.get("mock_grid_preview") or {"rows": [["客户"], ["ACME Trading"]]}
                     ),
@@ -1952,19 +1952,19 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             )
             stack.enter_context(
                 patch(
-                    "app.domain.document_templates_service._extract_excel_grid_style_cache",
+                    "app.domain.shared_services.document_templates_service._extract_excel_grid_style_cache",
                     return_value=dict(task.get("mock_style_cache") or {"cells": {}}),
                 )
             )
             stack.enter_context(
                 patch(
-                    "app.domain.document_templates_service._extract_excel_all_sheets_preview",
+                    "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview",
                     return_value=list(task.get("mock_sheets") or [{"sheet_name": "出货"}]),
                 )
             )
             stack.enter_context(
                 patch(
-                    "app.domain.document_templates_service._list_excel_sheet_names",
+                    "app.domain.shared_services.document_templates_service._list_excel_sheet_names",
                     return_value=list(task.get("mock_sheet_names") or ["出货"]),
                 )
             )
@@ -2026,7 +2026,7 @@ def _run_excel_skill_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
     from openpyxl import Workbook
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.excel.excel_routes import router
+    from app.fastapi_routes.domains.excel.routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -2104,7 +2104,7 @@ def _run_label_template_route_agent_task(task: dict[str, Any]) -> dict[str, Any]
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.excel.excel_routes import router
+    from app.fastapi_routes.domains.excel.routes import router
 
     expected = dict(task.get("expected") or {})
     repo = InMemoryAgentRunRepository()
@@ -2204,7 +2204,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
     from fastapi.testclient import TestClient
 
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
-    from app.fastapi_routes.domains.system.system_routes import router
+    from app.fastapi_routes.domains.system.routes import router
 
     expected = dict(task.get("expected") or {})
     action = str(task.get("route_action") or "create").strip().lower() or "create"

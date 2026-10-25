@@ -38,7 +38,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.application.execution_scope import CapabilityGrant, ExecutionScope
+from app.domain.app_pure.execution_scope import CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,

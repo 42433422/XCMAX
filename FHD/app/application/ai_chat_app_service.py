@@ -286,7 +286,7 @@ class AIChatApplicationService(
             assert control_response is not None
             return _finalize(control_response)
 
-        from app.domain.ops_rules.chat_business_safety import try_handle_business_chat_action
+        from app.domain.app_pure.chat_business_safety import try_handle_business_chat_action
 
         business_payload = try_handle_business_chat_action(
             message, runtime_context=ctx, user_id=user_id

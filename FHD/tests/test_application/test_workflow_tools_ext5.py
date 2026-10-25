@@ -504,7 +504,7 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.setenv("FHD_DB_WRITE_TOKEN", "secret")
-        with patch("app.application.excel_imports.run_bulk_import") as mock_run:
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as mock_run:
             mock_run.return_value = {"success": True, "imported": 5}
             result = execute_workflow_tool(
                 "products_bulk_import",
@@ -518,7 +518,7 @@ class TestExecuteWorkflowToolProductsBulkImport:
         from app.application.tools.workflow import execute_workflow_tool
 
         monkeypatch.delenv("FHD_DB_WRITE_TOKEN", raising=False)
-        with patch("app.application.excel_imports.run_bulk_import") as mock_run:
+        with patch("app.domain.app_pure.excel_imports.run_bulk_import") as mock_run:
             mock_run.return_value = {"success": True}
             result = execute_workflow_tool("products_bulk_import", {"file_path": "x.xlsx"})
         parsed = json.loads(result)
@@ -618,15 +618,15 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):
@@ -646,15 +646,15 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
             patch(
                 "app.mod_sdk.planner_native_tools.try_execute_native_planner_tool",
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):
@@ -674,8 +674,8 @@ class TestExecuteWorkflowToolGenerateOffice:
         from app.application.tools.workflow import execute_workflow_tool
 
         with (
-            patch("app.domain.kitten_ai_document.generate.generate_office_file") as mock_gen,
-            patch("app.domain.kitten_ai_document.pickup.store_document_pickup") as mock_store,
+            patch("app.domain.shared_services.kitten_ai_document.generate.generate_office_file") as mock_gen,
+            patch("app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup") as mock_store,
         ):
             mock_gen.return_value = (b"content", "out.docx")
             mock_store.return_value = "tok789"

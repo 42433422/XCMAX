@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.domain.kitten_report.plugins import (
+from app.domain.shared_services.kitten_report.plugins import (
     ForecastHeuristicPlugin,
     IndustryStrategyPlugin,
     RuleStatsPlugin,

@@ -158,7 +158,7 @@ def search_cases(tool: str = "", code: str = "") -> list[dict[str, Any]]:
 def close_work_order(wo_id: str) -> bool:
     """重测通过后推进状态机 verifying→closed；非法迁移/远端不可达 fail-open。"""
     try:
-        from app.domain.work_order.ssot import record_transition
+        from app.domain.shared_services.ssot import record_transition
 
         res = record_transition(
             wo_id,

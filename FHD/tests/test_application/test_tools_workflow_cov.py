@@ -229,7 +229,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -251,7 +251,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -307,7 +307,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -333,7 +333,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -355,7 +355,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),

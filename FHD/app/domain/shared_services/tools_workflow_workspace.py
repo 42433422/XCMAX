@@ -50,7 +50,7 @@ def _registered_router_template_preview(
         from sqlalchemy import text
 
         from app.db.session import get_db
-        from app.domain.document_templates_service import (
+        from app.domain.shared_services.document_templates_service import (
             _ensure_template_tables_ready,
             _infer_business_scope,
             _validate_required_terms,

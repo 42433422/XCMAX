@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.application.workflow.workflow_types import normalize_workflow_risk
+from app.application.workflow.types import normalize_workflow_risk
 
 
 def agent_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -51,7 +51,7 @@ def run_memory_v2_agent(
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.memory_v2_facade import get_memory_v2_action_meta
-    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+    from app.application.workflow.types import PlanGraph, WorkflowNode
 
     data = dict(params or {})
     user_id = user_id_from_request(request, data)

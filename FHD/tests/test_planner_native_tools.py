@@ -113,11 +113,11 @@ def test_native_generate_office_document(monkeypatch):
 
     mod = import_mod_backend_py(str(MOD_DIR), "xcagi-planner-excel-tools", "tool_handlers")
     monkeypatch.setattr(
-        "app.domain.kitten_ai_document.generate.generate_office_file",
+        "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
         lambda req, fmt: (b"fake", "test.docx"),
     )
     monkeypatch.setattr(
-        "app.domain.kitten_ai_document.pickup.store_document_pickup",
+        "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
         lambda content, fname, mime: "tok-test-123",
     )
     raw = mod.run_native_tool(

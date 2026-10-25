@@ -66,7 +66,7 @@ def ensure_industries_selectable(catalog: dict[str, Any], industry_ids: set[str]
 def delivery_statuses_for_session(session_id: str) -> dict[str, str]:
     """Read only this session's entitled, identity-matched private delivery stages."""
     from app.application.private_mod_delivery_progress import overall_status
-    from app.domain.ops_rules.private_mod_delivery_state import STAGES, account_projects
+    from app.application.private_mod_delivery_state import STAGES, account_projects
     from app.enterprise.private_delivery_binding import load_session_private_delivery_binding
     from app.mod_sdk.customer_delivery import delivery_for_account_custom_mod
     from app.utils.operational_errors import RECOVERABLE_ERRORS

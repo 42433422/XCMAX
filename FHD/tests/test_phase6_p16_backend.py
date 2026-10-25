@@ -1633,7 +1633,7 @@ class TestKittenReportCollectPluginResults:
     """Cover ``KittenReportExportService.collect_plugin_results``."""
 
     def test_collect_plugin_results_empty_payload(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         results = service.collect_plugin_results({})
@@ -1643,7 +1643,7 @@ class TestKittenReportCollectPluginResults:
         assert "financial_report" in keys
 
     def test_collect_plugin_results_with_dataset(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1659,7 +1659,7 @@ class TestKittenReportCollectPluginResults:
         assert "10" in rule_stats["summary"]
 
     def test_collect_plugin_results_with_none_values(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {"dataset": None, "messages": None, "result": None}
@@ -1667,8 +1667,8 @@ class TestKittenReportCollectPluginResults:
         assert len(results) == 6
 
     def test_plugin_to_dict_conversion(self):
-        from app.domain.kitten_report.plugins import PluginResult
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.plugins import PluginResult
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         item = PluginResult(
             key="test",
@@ -1691,7 +1691,7 @@ class TestKittenReportBuildReport:
     """Cover ``KittenReportExportService.build_report``."""
 
     def test_build_report_minimal_payload(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         result = service.build_report({})
@@ -1703,7 +1703,7 @@ class TestKittenReportBuildReport:
         assert len(result["plugins"]) == 6
 
     def test_build_report_with_full_payload(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1727,7 +1727,7 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_with_html_content(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1742,7 +1742,7 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_empty_messages(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {"messages": []}
@@ -1754,30 +1754,30 @@ class TestKittenReportHtmlToText:
     """Cover ``_html_to_text`` static method."""
 
     def test_html_to_text_br_replacement(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("a<br>b<br/>c<br />d")
         assert text == "a\nb\nc\nd"
 
     def test_html_to_text_strong_removal(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("<strong>bold</strong>")
         assert text == "bold"
 
     def test_html_to_text_entity_replacement(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("a&nbsp;b&amp;c")
         assert text == "a b&c"
 
     def test_html_to_text_empty_string(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         assert KittenReportExportService._html_to_text("") == ""
 
     def test_html_to_text_no_html(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         assert KittenReportExportService._html_to_text("plain text") == "plain text"
 
@@ -1786,11 +1786,11 @@ class TestKittenReportFinancialSheet:
     """Cover ``_add_financial_sheet`` indirectly via build_report."""
 
     def test_build_report_with_financial_plugin_data(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         # Patch FinancialReportPlugin to return rich data
-        with patch("app.domain.kitten_report.service.FinancialReportPlugin") as MockFinancial:
+        with patch("app.domain.shared_services.kitten_report.service.FinancialReportPlugin") as MockFinancial:
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="financial_report",
                 title="财务报表分析",
@@ -1831,10 +1831,10 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_with_inventory_plugin_data(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
-        with patch("app.domain.kitten_report.service.InventoryValuationPlugin") as MockInv:
+        with patch("app.domain.shared_services.kitten_report.service.InventoryValuationPlugin") as MockInv:
             MockInv.return_value.run.return_value = SimpleNamespace(
                 key="inventory_valuation",
                 title="库存价值评估",
@@ -1857,13 +1857,13 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_no_financial_no_inventory(self):
-        from app.domain.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         # Both plugins return non-matching keys -> _add_financial_sheet returns early
         with (
-            patch("app.domain.kitten_report.service.FinancialReportPlugin") as MockFinancial,
-            patch("app.domain.kitten_report.service.InventoryValuationPlugin") as MockInv,
+            patch("app.domain.shared_services.kitten_report.service.FinancialReportPlugin") as MockFinancial,
+            patch("app.domain.shared_services.kitten_report.service.InventoryValuationPlugin") as MockInv,
         ):
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="other",
@@ -2238,7 +2238,7 @@ class TestProcessingResult:
 @pytest.fixture
 def excel_client() -> TestClient:
     app = FastAPI()
-    from app.fastapi_routes.domains.excel.excel_routes import router as excel_router
+    from app.fastapi_routes.domains.excel.routes import router as excel_router
 
     app.include_router(excel_router)
     return TestClient(app, raise_server_exceptions=False)
@@ -2383,7 +2383,7 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_with_file(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir),
+            patch("app.fastapi_routes.domains.excel.routes.get_upload_dir", return_value=tmp_dir),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,
@@ -2404,7 +2404,7 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_file_analysis_error_returns_500(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir),
+            patch("app.fastapi_routes.domains.excel.routes.get_upload_dir", return_value=tmp_dir),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,

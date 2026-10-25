@@ -61,8 +61,8 @@ from app.infrastructure.mods.mod_manager import (
     import_mod_backend_py,
     is_mods_disabled,
 )
-from app.domain.conversation.legacy_services.context import ConversationContext
-from app.domain.conversation.legacy_services.manager import (
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.manager import (
     AIConversationService,
     get_ai_conversation_service,
     init_ai_conversation_service,
@@ -586,13 +586,13 @@ class TestGetAiConversationServiceSingleton:
         would otherwise pollute later tests that call ``get_ai_conversation_service()``.
         """
         yield
-        import app.domain.conversation.legacy_services.manager as _manager_mod
+        import app.domain.shared_services.conversation.manager as _manager_mod
 
         _manager_mod._ai_conversation_service = None
 
     def test_get_ai_conversation_service_returns_singleton(self) -> None:
         with patch(
-            "app.domain.conversation.legacy_services.manager.AIConversationService.__init__",
+            "app.domain.shared_services.conversation.manager.AIConversationService.__init__",
             return_value=None,
         ):
             svc1 = get_ai_conversation_service()
@@ -601,7 +601,7 @@ class TestGetAiConversationServiceSingleton:
 
     def test_init_ai_conversation_service_creates_new_instance(self) -> None:
         with patch(
-            "app.domain.conversation.legacy_services.manager.AIConversationService.__init__",
+            "app.domain.shared_services.conversation.manager.AIConversationService.__init__",
             return_value=None,
         ):
             svc = init_ai_conversation_service()

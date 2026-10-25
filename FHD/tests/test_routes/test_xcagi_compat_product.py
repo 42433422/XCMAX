@@ -21,14 +21,14 @@ def client() -> TestClient:
 
 
 def _install_lost_parse_price():
-    """Temporarily install _parse_price on app.application.excel_imports.
+    """Temporarily install _parse_price on app.domain.app_pure.excel_imports.
 
     The module uses __getattr__ to raise ImportError for _LOST_LEGACY_SYMBOLS,
     which prevents ``patch(..., create=True)`` from working.  We inject a stub
     directly into the module dict so that the lazy ``from … import _parse_price``
     inside route handlers succeeds.
     """
-    import app.application.excel_imports as _ei
+    import app.domain.app_pure.excel_imports as _ei
 
     _ei._parse_price = MagicMock(return_value=0.0)
     return _ei

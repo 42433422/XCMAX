@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import (
     ShipmentEtlProfileError,
     clear_profile_cache,

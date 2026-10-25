@@ -1,4 +1,4 @@
-from app.domain.conversation.legacy_services import (
+from app.domain.shared_services.conversation import (
     AIConversationService,
     ConversationContext,
     close_ai_conversation_service,

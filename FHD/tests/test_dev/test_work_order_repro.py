@@ -68,10 +68,10 @@ class TestGenerateRepro:
         assert spec is not None
         assert spec["kind"] == "module_import"
         assert spec["status"] == "generated"
-        assert spec["scenario"]["module"] == "app.domain.work_order.state"
+        assert spec["scenario"]["module"] == "app.domain.shared_services.state"
         test_path = Path(spec["scenario"]["test_path"])
         assert test_path.is_file()
-        assert "app.domain.work_order.state" in test_path.read_text(encoding="utf-8")
+        assert "app.domain.shared_services.state" in test_path.read_text(encoding="utf-8")
 
     def test_missing_target_needs_scenario(self, tmp_path: Path) -> None:
         out = tmp_path / "repro"
@@ -96,7 +96,7 @@ class TestRunRepro:
     def test_green_when_module_importable(self, tmp_path: Path) -> None:
         spec = _diagnosis(tmp_path, "app/services/work_order_state.py")
         spec["kind"] = "module_import"
-        spec["scenario"] = {"module": "app.domain.work_order.state"}
+        spec["scenario"] = {"module": "app.domain.shared_services.state"}
         out = tmp_path / "repro"
         out.mkdir()
         repro._REPRO_DIR = out

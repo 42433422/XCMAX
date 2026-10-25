@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from app.services import service_contract_fill as contracts
 from app.services import user_cs_pipeline as pipelines
-from app.domain.kitten_ai_document import generate as document_renderer
+from app.domain.shared_services.kitten_ai_document import generate as document_renderer
 from app.domain.shared_services.service_contract_fill import (
     FIELD_SCHEMA,
     build_contract_wechat_hint,

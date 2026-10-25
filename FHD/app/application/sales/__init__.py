@@ -1,2 +1,2 @@
-"""Compat shim — canonical at app.domain.sales."""
-from app.domain.sales import *  # noqa: F403
+"""Compat shim — canonical at app.application.sales."""
+from app.application.sales import *  # noqa: F403

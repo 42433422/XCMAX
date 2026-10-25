@@ -24,7 +24,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
 )
-from app.domain.ops_rules.chat_reply_safety import (
+from app.domain.app_pure.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
 )
 from app.application.conversation import (

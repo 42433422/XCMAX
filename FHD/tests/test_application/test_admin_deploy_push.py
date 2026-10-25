@@ -1,4 +1,4 @@
-"""Tests for app.application.admin_deploy_push — additional coverage ramp."""
+"""Tests for app.domain.app_pure.admin_deploy_push — additional coverage ramp."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from app.application.admin_deploy_push import (
+from app.domain.app_pure.admin_deploy_push import (
     DeployJob,
     DeployStep,
     _build_steps,
@@ -57,7 +57,7 @@ class TestHubRemoteDir:
 
 
 class TestFetchJsonUrl:
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_success(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps({"key": "value"}).encode()
@@ -67,13 +67,13 @@ class TestFetchJsonUrl:
         result = _fetch_json_url("http://example.com/manifest.json")
         assert result == {"key": "value"}
 
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_network_error(self, mock_urlopen):
         mock_urlopen.side_effect = OSError("connection refused")
         result = _fetch_json_url("http://example.com/manifest.json")
         assert result is None
 
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_invalid_json(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.read.return_value = b"not json"
@@ -83,7 +83,7 @@ class TestFetchJsonUrl:
         result = _fetch_json_url("http://example.com/manifest.json")
         assert result is None
 
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_non_dict_json(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps([1, 2, 3]).encode()
@@ -98,7 +98,7 @@ class TestFetchJsonUrl:
 
 
 class TestProbeEnterpriseRuntime:
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_reachable(self, mock_urlopen):
         mock_resp = MagicMock()
         mock_resp.read.return_value = json.dumps(
@@ -113,7 +113,7 @@ class TestProbeEnterpriseRuntime:
         assert result["deploy_sha256"] == "abc123"
         assert "latency_ms" in result
 
-    @patch("app.application.admin_deploy_push.urllib.request.urlopen")
+    @patch("app.domain.app_pure.admin_deploy_push.urllib.request.urlopen")
     def test_unreachable(self, mock_urlopen):
         mock_urlopen.side_effect = OSError("timeout")
         result = _probe_enterprise_runtime()
@@ -246,12 +246,12 @@ class TestGetDeployJob:
 
 
 class TestCheckDeployUpdates:
-    @patch("app.application.admin_deploy_push._probe_enterprise_runtime")
-    @patch("app.application.admin_deploy_push._fetch_json_url")
-    @patch("app.application.admin_deploy_push._read_local_manifest")
-    @patch("app.application.admin_deploy_push._local_version")
-    @patch("app.application.admin_deploy_push._local_git_sha")
-    @patch("app.application.admin_deploy_push._fhd_root")
+    @patch("app.domain.app_pure.admin_deploy_push._probe_enterprise_runtime")
+    @patch("app.domain.app_pure.admin_deploy_push._fetch_json_url")
+    @patch("app.domain.app_pure.admin_deploy_push._read_local_manifest")
+    @patch("app.domain.app_pure.admin_deploy_push._local_version")
+    @patch("app.domain.app_pure.admin_deploy_push._local_git_sha")
+    @patch("app.domain.app_pure.admin_deploy_push._fhd_root")
     def test_full_check(self, mock_root, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_probe):
         mock_root.return_value = Path("/tmp/fhd")
         mock_sha.return_value = "abc123def456"
@@ -273,12 +273,12 @@ class TestCheckDeployUpdates:
         assert result["flags"]["up_to_date"] is True
         assert result["flags"]["needs_push"] is False
 
-    @patch("app.application.admin_deploy_push._probe_enterprise_runtime")
-    @patch("app.application.admin_deploy_push._fetch_json_url")
-    @patch("app.application.admin_deploy_push._read_local_manifest")
-    @patch("app.application.admin_deploy_push._local_version")
-    @patch("app.application.admin_deploy_push._local_git_sha")
-    @patch("app.application.admin_deploy_push._fhd_root")
+    @patch("app.domain.app_pure.admin_deploy_push._probe_enterprise_runtime")
+    @patch("app.domain.app_pure.admin_deploy_push._fetch_json_url")
+    @patch("app.domain.app_pure.admin_deploy_push._read_local_manifest")
+    @patch("app.domain.app_pure.admin_deploy_push._local_version")
+    @patch("app.domain.app_pure.admin_deploy_push._local_git_sha")
+    @patch("app.domain.app_pure.admin_deploy_push._fhd_root")
     def test_needs_push(self, mock_root, mock_sha, mock_ver, mock_manifest, mock_fetch, mock_probe):
         mock_root.return_value = Path("/tmp/fhd")
         mock_sha.return_value = "newsha123456"
@@ -296,8 +296,8 @@ class TestCheckDeployUpdates:
 
 
 class TestStartDeployPush:
-    @patch("app.application.admin_deploy_push.asyncio.create_task")
-    @patch("app.application.admin_deploy_push._JOB_LOCK")
+    @patch("app.domain.app_pure.admin_deploy_push.asyncio.create_task")
+    @patch("app.domain.app_pure.admin_deploy_push._JOB_LOCK")
     async def test_start_push_creates_job(self, mock_lock, mock_create_task):
         mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)
@@ -308,9 +308,9 @@ class TestStartDeployPush:
         assert job.status == "queued"
         assert len(job.steps) > 0
 
-    @patch("app.application.admin_deploy_push.asyncio.create_task")
-    @patch("app.application.admin_deploy_push._JOB_LOCK")
-    @patch("app.application.admin_deploy_push._ACTIVE_JOB", None)
+    @patch("app.domain.app_pure.admin_deploy_push.asyncio.create_task")
+    @patch("app.domain.app_pure.admin_deploy_push._JOB_LOCK")
+    @patch("app.domain.app_pure.admin_deploy_push._ACTIVE_JOB", None)
     async def test_start_push_default_options(self, mock_lock, mock_create_task):
         mock_create_task.side_effect = _consume_scheduled_coroutine
         mock_lock.__aenter__ = AsyncMock(return_value=None)

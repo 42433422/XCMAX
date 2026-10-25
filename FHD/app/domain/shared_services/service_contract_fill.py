@@ -105,7 +105,7 @@ def generate_contract_docx(
     username: str = "",
     field_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    from app.domain.kitten_ai_document.generate import build_docx_bytes
+    from app.domain.shared_services.kitten_ai_document.generate import build_docx_bytes
 
     values = field_values or build_merged_fields(int(market_user_id), username=username)
     party_a = str(values.get("party_a_name") or username or f"客户{market_user_id}")

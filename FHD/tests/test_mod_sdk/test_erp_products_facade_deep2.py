@@ -71,10 +71,10 @@ def _patch_service(fake_service, monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture(autouse=True)
 def _patch_norm_model(monkeypatch: pytest.MonkeyPatch):
     """Patch the _norm_model symbol so _map_create_body works."""
-    fake_module = types.ModuleType("app.application.excel_imports")
+    fake_module = types.ModuleType("app.domain.app_pure.excel_imports")
     fake_module._norm_model = lambda *a, **k: "GEN123"  # type: ignore[attr-defined]
     try:
-        real_module = sys.modules.get("app.application.excel_imports")
+        real_module = sys.modules.get("app.domain.app_pure.excel_imports")
         if real_module is not None:
             for attr in dir(real_module):
                 if not attr.startswith("_") or attr == "_norm_model":
@@ -85,7 +85,7 @@ def _patch_norm_model(monkeypatch: pytest.MonkeyPatch):
                     pass
     except BOUNDARY_ERRORS:
         pass
-    monkeypatch.setitem(sys.modules, "app.application.excel_imports", fake_module)
+    monkeypatch.setitem(sys.modules, "app.domain.app_pure.excel_imports", fake_module)
     return fake_module
 
 

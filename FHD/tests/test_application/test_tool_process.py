@@ -254,7 +254,7 @@ def test_spawned_planner_agent_and_cognition_keep_each_requests_model_and_creden
         thread.start()
 
         def execute(owner):
-            from app.domain.conversation.legacy_services.modstore_adapter import (
+            from app.domain.shared_services.conversation.modstore_adapter import (
                 ModstoreOpenAICompatibleClient,
                 ModstorePlatformAdapter,
             )

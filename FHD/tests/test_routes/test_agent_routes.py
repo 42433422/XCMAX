@@ -301,7 +301,7 @@ def test_runtime_active_count_excludes_other_accounts_and_mods():
         "active": active,
     }
     with patch(
-        "app.fastapi_routes.domains.agent.task_routes.get_agent_task_dispatcher",
+        "app.fastapi_routes.domains.agent.routes.get_agent_task_dispatcher",
         return_value=dispatcher,
     ):
         response = _client(mod_authorization={"mod_id": "a"}).get("/api/agent/task-runtime")

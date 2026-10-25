@@ -260,7 +260,7 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
 @router.get("/auth/permission-matrix", response_model=dict[str, object])
 async def platform_shell_permission_matrix(request: Request):
     """Resolve the signed-in account's effective platform-shell permissions."""
-    from app.domain.ops_rules.auth_permission_resolver import resolve_permissions
+    from app.domain.app_pure.auth_permission_resolver import resolve_permissions
     from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request
 

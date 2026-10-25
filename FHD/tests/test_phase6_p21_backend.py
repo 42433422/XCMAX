@@ -67,8 +67,8 @@ from app.fastapi_routes.service_bridge import (
 from app.infrastructure.payment import order_store
 from app.infrastructure.skills.template_manager import template_manager as tm
 from app.services import distilled_intent_service as dis_svc
-from app.domain.conversation.legacy_services.context import ConversationContext
-from app.domain.conversation.legacy_services.handlers import HandlersMixin
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.handlers import HandlersMixin
 from app.domain.shared_services.distilled_intent_service import (
     DEFAULT_INTENT_LABELS,
     DistilledIntentRecognizer,

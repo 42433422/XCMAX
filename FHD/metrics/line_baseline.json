@@ -1,5 +1,5 @@
 {
-  "lines": 2248233,
+  "lines": 2303178,
   "updated": "2026-10-25",
-  "note": "debt19: 19项架构债一次性收口——ports/分层/domain迁入/security·neuro编排/blueprints收敛/巨文件拆分/XCAGI去重/门禁G12；净增主要为迁移动与拆分产物+安全编排实模块，业务语义不变"
+  "note": "debt19 CI修红：恢复routes、shared_services/app_pure迁移与白名单、治理基线、langgraph _types"
 }

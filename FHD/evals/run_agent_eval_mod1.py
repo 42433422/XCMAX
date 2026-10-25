@@ -437,7 +437,7 @@ def _resolve_active_provider_id() -> str:
 
 
 def _run_llm_trace_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.domain.conversation.legacy_services.api import ApiMixin
+    from app.domain.shared_services.conversation.api import ApiMixin
 
     class EvalApi(ApiMixin):
         def __init__(self) -> None:
@@ -2097,13 +2097,13 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
                 )
                 stack.enter_context(
                     patch(
-                        "app.domain.kitten_ai_document.generate.generate_office_file",
+                        "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                         return_value=(content, file_name),
                     )
                 )
                 stack.enter_context(
                     patch(
-                        "app.domain.kitten_ai_document.pickup.store_document_pickup",
+                        "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                         return_value=pickup_token,
                     )
                 )

@@ -1318,7 +1318,7 @@ class TestBuildDispatchRequest:
         assert req["scope"] == "product"
 
     def test_workspace_root_factory_scope_resolves(self, tmp_path):
-        from app.application.execution_scope import CapabilityGrant, ExecutionScope
+        from app.domain.app_pure.execution_scope import CapabilityGrant, ExecutionScope
 
         svc = _make_svc(tmp_path)
         svc._grant = CapabilityGrant(ExecutionScope.FACTORY, "xcmax")

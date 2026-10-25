@@ -1,5 +1,5 @@
 """
-调用 ``app.domain.document_templates_service`` 中的模板 API 实现（纯 Python，
+调用 ``app.domain.shared_services.document_templates_service`` 中的模板 API 实现（纯 Python，
 不依赖 werkzeug）。
 
 Phase 2C: 本模块由历史模板兼容层更名而来,

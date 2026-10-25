@@ -222,11 +222,11 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
 
         with (
             patch(
-                "app.domain.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "risk-summary.docx"),
             ),
             patch(
-                "app.domain.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="doc-token",
             ),
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
@@ -235,7 +235,7 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):

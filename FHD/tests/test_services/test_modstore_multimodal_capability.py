@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.conversation.legacy_services.modstore_adapter import _catalog_model_vision_support
+from app.domain.shared_services.conversation.modstore_adapter import _catalog_model_vision_support
 
 
 def test_catalog_marks_regular_llm_as_text_only() -> None:

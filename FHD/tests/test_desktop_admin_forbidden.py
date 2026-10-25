@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.domain.ops_rules.desktop_admin_gate import (
+from app.application.desktop_admin_gate import (
     DESKTOP_ADMIN_FORBIDDEN_CODE,
     DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
     assert_desktop_allows_session,
@@ -51,7 +51,7 @@ def test_reject_admin_on_desktop_deletes_session() -> None:
 def test_assert_desktop_allows_session_deletes_admin() -> None:
     sm = MagicMock()
     with (
-        patch("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", return_value=True),
+        patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=True),
         patch("app.infrastructure.session.get_session_manager", return_value=sm),
     ):
         denied = assert_desktop_allows_session({"account_kind": "admin"}, session_id="legacy-admin")
@@ -63,7 +63,7 @@ def test_assert_desktop_allows_session_deletes_admin() -> None:
 def test_assert_desktop_allows_session_id_loads_meta() -> None:
     sm = MagicMock()
     with (
-        patch("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", return_value=True),
+        patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=True),
         patch(
             "app.application.session_account_meta.load_session_account_meta",
             return_value={"account_kind": "admin"},
@@ -76,9 +76,9 @@ def test_assert_desktop_allows_session_id_loads_meta() -> None:
 
 
 def test_auth_permission_admin_shell_blocked_on_desktop_mode() -> None:
-    from app.domain.ops_rules.auth_permission_resolver import resolve_permissions
+    from app.domain.app_pure.auth_permission_resolver import resolve_permissions
 
-    with patch("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", return_value=True):
+    with patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=True):
         decision = resolve_permissions(
             user=MagicMock(account_kind="admin", tier="admin", role="admin"),
             account_kind="admin",
@@ -104,5 +104,5 @@ def test_forbidden_payload_shape() -> None:
 
 
 def test_gate_reject_alias() -> None:
-    with patch("app.domain.ops_rules.desktop_admin_gate.is_desktop_runtime", return_value=False):
+    with patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=False):
         assert reject_admin_on_desktop(session_id="s", account_kind="admin") is None

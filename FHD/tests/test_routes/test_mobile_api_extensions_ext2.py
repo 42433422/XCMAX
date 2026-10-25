@@ -31,7 +31,7 @@ def _fake_market_profiles(monkeypatch):
 def _fake_circle_report_transport(monkeypatch):
     # Sync projections exercise local data; the upstream MODstore feed is external.
     monkeypatch.setattr(
-        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
     )
 
 

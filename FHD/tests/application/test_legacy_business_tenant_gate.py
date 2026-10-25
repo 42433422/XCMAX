@@ -14,7 +14,7 @@ from app.infrastructure.auth import business_scope_gate as gate
 @pytest.fixture
 def client(monkeypatch):
     from app.fastapi_routes.ai_assistant import router as ai_router
-    from app.fastapi_routes.domains.customer.customer_routes import router as customer_router
+    from app.fastapi_routes.domains.customer.routes import router as customer_router
     from app.fastapi_routes.domains.shipment.shipment_orders import router as shipment_router
     from app.fastapi_routes.excel_extract import router as excel_router
     from app.fastapi_routes.materials import router as material_router

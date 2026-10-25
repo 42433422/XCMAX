@@ -14,7 +14,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.application.execution_scope import CapabilityGrant
+from app.domain.app_pure.execution_scope import CapabilityGrant
 from app.application.workspaces import WorkspaceRegistry
 
 JsonObject = dict[str, Any]

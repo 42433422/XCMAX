@@ -30,7 +30,7 @@ class AgentToolExecutor:
             and step.action == "rebuild_index"
             and step.params.get("background", True)
         ):
-            from app.application.dataset_rag_queue import ensure_host_worker
+            from app.domain.app_pure.dataset_rag_queue import ensure_host_worker
 
             ensure_host_worker()
         return execute_isolated(self, step, runtime_context, deadline_monotonic)

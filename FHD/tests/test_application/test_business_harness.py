@@ -11,7 +11,7 @@ from app.application.agent_orchestrator.business_harness import (
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, ToolCall
 from app.application.agent_orchestrator.task_context import apply_task_context
-from app.domain.ops_rules.business_harness_projection import project_terminal_run_to_conversation
+from app.application.business_harness_projection import project_terminal_run_to_conversation
 from app.fastapi_routes.domains.misc.helpers import _message_to_dict
 
 

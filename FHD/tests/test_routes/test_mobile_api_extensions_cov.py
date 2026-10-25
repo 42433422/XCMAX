@@ -21,7 +21,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def _fake_circle_report_transport(monkeypatch):
     monkeypatch.setattr(
-        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
     )
 
 

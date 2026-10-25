@@ -188,7 +188,7 @@ def _register_llm_port_source() -> None:
                 return _self.get_active_provider()
             conversation_service = None
             try:
-                from app.domain.conversation.legacy_services.manager import (
+                from app.domain.shared_services.conversation.manager import (
                     get_ai_conversation_service_if_ready,
                 )
 
@@ -205,7 +205,7 @@ def _register_llm_port_source() -> None:
                 try:
                     token = market_token_reader()
                     if token:
-                        from app.domain.conversation.legacy_services.modstore_adapter import (
+                        from app.domain.shared_services.conversation.modstore_adapter import (
                             ModstorePlatformAdapter,
                         )
 

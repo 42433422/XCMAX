@@ -44,7 +44,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.application.ai_chat_app_service import AIChatApplicationService
 from app.application.normal_chat_dispatch import route_normal_mode_message
-from app.domain.sales_app_service import SalesAppService
+from app.application.sales_app_service import SalesAppService
 from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.engine import WorkflowEngine

@@ -42,13 +42,13 @@ logger = logging.getLogger(__name__)
 
 
 def _llm_route(text: str) -> JsonObject | None:
-    from app.domain.ops_rules.llm_intent_gate import llm_route_message
+    from app.application.llm_intent_gate import llm_route_message
 
     return llm_route_message(text)
 
 
 def _label_slots(text: str) -> JsonObject:
-    from app.application.label_print_inputs import extract_label_print_slots
+    from app.domain.app_pure.label_print_inputs import extract_label_print_slots
 
     return extract_label_print_slots(text)
 
@@ -113,7 +113,7 @@ def run_normal_slot_shipment_preview(order_text: str) -> dict[str, Any]:
         return cast(JsonObject, _parse_order_text(text))
 
     def build_preview(unit: str, products: list[JsonObject], text: str) -> JsonObject:
-        from app.application.ai_chat_helpers import build_shipment_preview_response_dict
+        from app.domain.app_pure.ai_chat_helpers import build_shipment_preview_response_dict
 
         return build_shipment_preview_response_dict(unit, products, text)
 
@@ -488,7 +488,7 @@ def build_sales_query_response_dict(route_result: dict[str, Any]) -> dict[str, A
     keyword = _keyword(route_result)
 
     def fetch() -> JsonObject:
-        from app.domain.sales_app_service import SalesAppService
+        from app.application.sales_app_service import SalesAppService
 
         return SalesAppService().query(keyword=keyword or None, page=1, per_page=20)
 

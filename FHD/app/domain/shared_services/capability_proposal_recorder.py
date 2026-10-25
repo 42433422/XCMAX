@@ -197,7 +197,7 @@ def record_capability_proposal(
     logger.info("capability_proposal recorded: reason=%s key=%s", reason, key[:12])
     # 主线接线：有效需求候选升级为唯一工单（Work Order SSOT），幂等不重复建单
     try:
-        from app.domain.work_order.ssot import upsert_candidate
+        from app.domain.shared_services.ssot import upsert_candidate
 
         upsert_candidate(
             source=source,

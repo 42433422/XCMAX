@@ -48,18 +48,18 @@ def apply_clarification_answer(run: AgentRun, *, step_id: str, parameters: dict[
         if target.params.get(key) in (None, "", [], {})
     }
     if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.domain.sales_quote_inputs import missing_quote_fields
+        from app.application.sales_quote_inputs import missing_quote_fields
 
         missing = set(missing_quote_fields(target.params))
     if (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import missing_stock_in_fields
+        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
         missing = set(missing_stock_in_fields(target.params))
     if not parameters or not set(parameters) <= missing:
         raise ClarificationAnswerError("答案只能补充当前目标缺失的必填参数")
     candidate = {**deepcopy(target.params), **deepcopy(parameters)}
     if target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.domain.sales_quote_inputs import quote_answer_candidate
+        from app.application.sales_quote_inputs import quote_answer_candidate
 
         candidate = quote_answer_candidate(target.params, parameters)
     validation = validate_tool_call(target.tool_id, target.action, candidate)
@@ -138,11 +138,11 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
     properties = spec.input_schema.get("properties", {}) if spec else {}
     required_fields = spec.required_params if spec else []
     if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.domain.sales_quote_inputs import missing_quote_fields
+        from app.application.sales_quote_inputs import missing_quote_fields
 
         required_fields = missing_quote_fields(target.params)
     if target and (target.tool_id, target.action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import missing_stock_in_fields
+        from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
         required_fields = missing_stock_in_fields(target.params)
     step.output["fields"] = [
@@ -155,7 +155,7 @@ def pause_for_clarification(run: AgentRun, step: AgentStep, outputs: dict | None
         if target is not None and target.params.get(key) in (None, "", [], {})
     ]
     if target and target.tool_id == "sales" and target.action in {"quote", "create_order"}:
-        from app.domain.sales_quote_inputs import quote_question_fields
+        from app.application.sales_quote_inputs import quote_question_fields
 
         step.output["fields"] = quote_question_fields(target.params)
     run.final_output = {"clarification": {"step_id": step.step_id, **step.output}}

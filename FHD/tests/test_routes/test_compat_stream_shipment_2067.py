@@ -42,7 +42,7 @@ def _no_llm(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(chat_helpers, "_xcagi_guarded_planner_stream_events", fail_if_called)
     monkeypatch.setattr(
-        "app.domain.conversation.legacy_services.modstore_adapter.create_modstore_openai_client_from_request",
+        "app.domain.shared_services.conversation.modstore_adapter.create_modstore_openai_client_from_request",
         fail_if_called,
     )
     monkeypatch.setattr(

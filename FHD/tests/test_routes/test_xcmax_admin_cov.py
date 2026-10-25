@@ -670,7 +670,7 @@ def _local_employee_execute_session_patches():
             return_value={"tenant_id": 1, "account_kind": "admin"},
         ),
         patch(
-            "app.domain.ops_rules.auth_permission_resolver.require_allowed",
+            "app.domain.app_pure.auth_permission_resolver.require_allowed",
             return_value=None,
         ),
     ]
@@ -702,11 +702,11 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
         ):
@@ -729,23 +729,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value="pro",
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=False,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["通用"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -769,23 +769,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro", "max", "ultra"},
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["行业A"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=False,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -830,23 +830,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal", "pro"},
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=["通用", "行业A"],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", return_value=mock_db),
@@ -863,23 +863,23 @@ class TestAdminSetUserProfile:
         with (
             _admin_session_ok(),
             patch(
-                "app.domain.catalog.account_tier_derivation.normalize_account_tier",
+                "app.domain.app_pure.account_tier_derivation.normalize_account_tier",
                 return_value=None,
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.VALID_ACCOUNT_TIERS",
+                "app.domain.app_pure.account_tier_derivation.VALID_ACCOUNT_TIERS",
                 {"normal"},
             ),
             patch(
-                "app.domain.catalog.account_tier_derivation.should_have_account_tier",
+                "app.domain.app_pure.account_tier_derivation.should_have_account_tier",
                 return_value=True,
             ),
             patch(
-                "app.application.entitled_industries_init.merge_entitled_industries",
+                "app.domain.app_pure.entitled_industries_init.merge_entitled_industries",
                 return_value=[],
             ),
             patch(
-                "app.application.entitled_industries_init.validate_industry_in_entitled",
+                "app.domain.app_pure.entitled_industries_init.validate_industry_in_entitled",
                 return_value=True,
             ),
             patch("app.db.session.get_db", side_effect=RuntimeError("db down")),

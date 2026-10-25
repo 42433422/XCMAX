@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, ".")
 
 print("🔍 测试增强版 ModstorePlatformAdapter...")
-from app.domain.conversation.legacy_services.modstore_adapter import (
+from app.domain.shared_services.conversation.modstore_adapter import (
     ModstorePlatformAdapter,
     create_modstore_adapter_from_env,
 )

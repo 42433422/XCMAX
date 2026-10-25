@@ -20,7 +20,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import market_account as market
-from app.domain.conversation.legacy_services import modstore_adapter as facade
+from app.domain.shared_services.conversation import modstore_adapter as facade
 from app.utils.time import utc_now_naive
 
 
@@ -457,7 +457,7 @@ def test_capabilities_import_without_importing_public_adapter():
             "[importlib.import_module(prefix+'market_llm.'+name) for name in "
             "('ports','authentication','catalog','multimodal','responses','routing',"
             "'completions','streaming','account_queries')]; "
-            "importlib.import_module('app.legacy.market_llm.openai_compat'); assert 'app.domain.conversation.legacy_services.modstore_adapter' not in sys.modules",
+            "importlib.import_module('app.legacy.market_llm.openai_compat'); assert 'app.domain.shared_services.conversation.modstore_adapter' not in sys.modules",
         ],
         cwd=Path(__file__).resolve().parents[2],
         capture_output=True,

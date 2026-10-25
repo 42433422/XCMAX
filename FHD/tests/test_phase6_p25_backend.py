@@ -61,7 +61,7 @@ class TestConversationServiceUncoveredBranches:
     """补充 ``ConversationService`` 的异常/边界分支（p1 已覆盖 happy path）。"""
 
     def test_save_message_existing_session_with_intent_and_metadata(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -78,12 +78,12 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.domain.conversation.legacy_services_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=7),
             patch(
-                "app.domain.conversation.legacy_services_service.AIConversation",
+                "app.domain.shared_services.conversation_service.AIConversation",
                 return_value=conversation,
             ),
         ):
@@ -98,7 +98,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.commit.assert_called_once()
 
     def test_save_message_user_id_none_stores_none(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -111,12 +111,12 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.domain.conversation.legacy_services_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
             patch(
-                "app.domain.conversation.legacy_services_service.AIConversation",
+                "app.domain.shared_services.conversation_service.AIConversation",
                 return_value=conversation,
             ),
         ):
@@ -125,7 +125,7 @@ class TestConversationServiceUncoveredBranches:
         assert conversation.user_id is None
 
     def test_save_message_db_rollback_on_flush_error(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -134,18 +134,18 @@ class TestConversationServiceUncoveredBranches:
 
         with (
             patch(
-                "app.domain.conversation.legacy_services_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=1),
-            patch("app.domain.conversation.legacy_services_service.AIConversation"),
+            patch("app.domain.shared_services.conversation_service.AIConversation"),
         ):
             with pytest.raises(RuntimeError, match="flush failed"):
                 svc.save_message("s", "1", "user", "hi")
         mock_db.rollback.assert_called_once()
 
     def test_get_session_messages_limit_zero(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -154,7 +154,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.domain.conversation.legacy_services_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_session_messages("s1", limit=0)
@@ -162,7 +162,7 @@ class TestConversationServiceUncoveredBranches:
         assert result == []
 
     def test_get_sessions_user_id_empty_string_no_filter(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -171,7 +171,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.domain.conversation.legacy_services_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.get_sessions(user_id="", limit=10)
@@ -180,19 +180,19 @@ class TestConversationServiceUncoveredBranches:
         mock_query.filter.assert_not_called()
 
     def test_get_sessions_query_error_rollback_not_called(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
 
         with patch(
-            "app.domain.conversation.legacy_services_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             side_effect=ValueError("bad db"),
         ):
             with pytest.raises(ValueError, match="bad db"):
                 svc.get_sessions()
 
     def test_update_session_title_empty_title_commits(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -202,7 +202,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.domain.conversation.legacy_services_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.update_session_title("s1", "")
@@ -211,7 +211,7 @@ class TestConversationServiceUncoveredBranches:
         assert session.title == ""
 
     def test_delete_session_no_messages_still_deletes_session(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
@@ -220,7 +220,7 @@ class TestConversationServiceUncoveredBranches:
         mock_db.query.return_value = mock_query
 
         with patch(
-            "app.domain.conversation.legacy_services_service.get_db",
+            "app.domain.shared_services.conversation_service.get_db",
             return_value=_mock_db_ctx(mock_db),
         ):
             result = svc.delete_session("s1")
@@ -230,14 +230,14 @@ class TestConversationServiceUncoveredBranches:
         mock_db.commit.assert_called_once()
 
     def test_create_session_title_none(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
 
         with (
             patch(
-                "app.domain.conversation.legacy_services_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=3),
@@ -247,14 +247,14 @@ class TestConversationServiceUncoveredBranches:
         assert isinstance(sid, str)
 
     def test_create_session_empty_user_id_normalized_none(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         mock_db = MagicMock()
 
         with (
             patch(
-                "app.domain.conversation.legacy_services_service.get_db",
+                "app.domain.shared_services.conversation_service.get_db",
                 return_value=_mock_db_ctx(mock_db),
             ),
             patch.object(svc, "_normalize_user_id", return_value=None),
@@ -264,18 +264,18 @@ class TestConversationServiceUncoveredBranches:
         assert isinstance(sid, str)
 
     def test_normalize_user_id_negative_numeric_string(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         assert ConversationService._normalize_user_id("-5") is None
 
     def test_normalize_user_id_float_like_string(self):
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         assert ConversationService._normalize_user_id("12.0") is None
 
     def test_get_conversation_service_resets_singleton(self):
         from app.services import conversation_service as mod
-        from app.domain.conversation.legacy_services_service import get_conversation_service
+        from app.domain.shared_services.conversation_service import get_conversation_service
 
         with patch.object(mod, "_conversation_service", None):
             svc1 = get_conversation_service()

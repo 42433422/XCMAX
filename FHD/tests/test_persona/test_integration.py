@@ -9,13 +9,13 @@ import pytest
 
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes, RapportScore
-from app.domain.persona.services_runtime.axes_fuser import AxesFuser
-from app.domain.persona.services_runtime.identity_resolver import IdentityResolver
-from app.domain.persona.services_runtime.param_mapper import PersonaParamMapper
-from app.domain.persona.services_runtime.persona_service import PersonaService
-from app.domain.persona.services_runtime.prompt_builder import PersonaPromptBuilder
-from app.domain.persona.services_runtime.rapport_calculator import RapportCalculator
-from app.domain.persona.services_runtime.rule_inferencer import RuleInferencer
+from app.domain.shared_services.persona.axes_fuser import AxesFuser
+from app.domain.shared_services.persona.identity_resolver import IdentityResolver
+from app.domain.shared_services.persona.param_mapper import PersonaParamMapper
+from app.domain.shared_services.persona.persona_service import PersonaService
+from app.domain.shared_services.persona.prompt_builder import PersonaPromptBuilder
+from app.domain.shared_services.persona.rapport_calculator import RapportCalculator
+from app.domain.shared_services.persona.rule_inferencer import RuleInferencer
 
 
 class TestPersonaIntegration:

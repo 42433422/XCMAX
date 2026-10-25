@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 
 class DesktopAdminForbiddenMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        from app.domain.ops_rules.desktop_admin_gate import (
+        from app.application.desktop_admin_gate import (
             forbidden_payload,
             is_desktop_admin_api_path,
             is_desktop_runtime,

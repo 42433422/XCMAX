@@ -36,7 +36,7 @@ def _service():
 
 
 def _map_create_body(body: dict[str, Any]) -> dict[str, Any]:
-    from app.application.excel_imports import _norm_model
+    from app.domain.app_pure.excel_imports import _norm_model
 
     name = str(body.get("name") or "").strip()
     spec = str(body.get("specification") or "").strip()

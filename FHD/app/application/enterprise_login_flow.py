@@ -9,14 +9,14 @@ from typing import Any
 from fastapi import BackgroundTasks
 from fastapi.responses import JSONResponse
 
-from app.domain.ops_rules.desktop_admin_gate import (
+from app.application.desktop_admin_gate import (
     DESKTOP_ADMIN_FORBIDDEN_CODE,
     DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
     delete_session_quiet,
     forbidden_payload,
     is_admin_account_kind,
 )
-from app.domain.ops_rules.desktop_admin_gate import (
+from app.application.desktop_admin_gate import (
     is_desktop_runtime as _gate_is_desktop_runtime,
 )
 from app.application.enterprise_login_finalize import finalize_enterprise_login

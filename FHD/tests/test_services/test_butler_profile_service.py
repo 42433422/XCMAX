@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.application.butler_identity_catalog import (
+from app.domain.app_pure.butler_identity_catalog import (
     DEFAULT_MBTI_EI,
     DEFAULT_MBTI_JP,
     DEFAULT_MBTI_SN,

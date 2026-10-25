@@ -1431,7 +1431,7 @@ class TestServicePreview:
 
     def test_suggest_mappings_static(self, etl_db, svc, fake_adapter, monkeypatch):
         monkeypatch.setattr(
-            "app.application.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
             lambda: SimpleNamespace(synonyms=lambda: {"order_number": ["订单号"]}),
         )
         ds = _FakeDataset()
@@ -1546,7 +1546,7 @@ class TestServicePreview:
             ),
         )
         monkeypatch.setattr(
-            "app.application.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         svc._preview_worker(run.id, 1)
@@ -1567,7 +1567,7 @@ class TestServicePreview:
             default_match_keys = ()
 
         monkeypatch.setattr(
-            "app.application.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         ds = _FakeDataset()
@@ -1587,7 +1587,7 @@ class TestServicePreview:
             default_match_keys = ()
 
         monkeypatch.setattr(
-            "app.application.excel_etl_kb.get_excel_etl_kb",
+            "app.domain.app_pure.excel_etl_kb.get_excel_etl_kb",
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         ds = _FakeDataset()
@@ -1605,7 +1605,7 @@ class TestServicePreview:
         def _boom(*a, **k):
             raise RuntimeError("boom")
 
-        monkeypatch.setattr("app.application.excel_etl_kb.get_excel_etl_kb", _boom)
+        monkeypatch.setattr("app.domain.app_pure.excel_etl_kb.get_excel_etl_kb", _boom)
         ds = _FakeDataset()
         ds.headers = ["order_number"]
         mappings = svc._suggest_mappings(ds, fake_adapter)

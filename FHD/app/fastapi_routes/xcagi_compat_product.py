@@ -271,7 +271,7 @@ def shipment_records_units() -> dict:
 @router.get("/mod/taiyangniao-pro/shipment/shipment-records/units/")
 def taiyangniao_shipment_records_units_host_alias() -> dict:
     """Stable host alias for desktop clients with independently updated private Mods."""
-    from app.domain.catalog.attendance_reference_data import attendance_unit_names
+    from app.domain.app_pure.attendance_reference_data import attendance_unit_names
 
     units = attendance_unit_names(_products_units_for_select())
     return {"success": True, "data": units, "units": units, "source": "host_compat"}

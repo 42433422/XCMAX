@@ -114,7 +114,7 @@ class TestTemplateExtractTool:
         with (
             patch("os.path.exists", return_value=True),
             patch(
-                "app.domain.document_templates_service._list_excel_sheet_names",
+                "app.domain.shared_services.document_templates_service._list_excel_sheet_names",
                 side_effect=RuntimeError("fail"),
             ),
         ):

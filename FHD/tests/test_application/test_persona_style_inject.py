@@ -8,7 +8,7 @@ from app.application import persona_style_inject as inj
 from app.application.employee_runtime.agent import EmployeeAgent
 from app.domain.persona.entities import PersonaProfile
 from app.domain.persona.value_objects import PersonaAxes, PersonaIdentity
-from app.domain.persona.services_runtime.prompt_builder import persona_style_section
+from app.domain.shared_services.persona.prompt_builder import persona_style_section
 
 
 def _profile(warmth=0.8, detail=0.8, proactivity=0.8, structure=0.8) -> PersonaProfile:

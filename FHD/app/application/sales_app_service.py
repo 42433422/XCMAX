@@ -14,13 +14,13 @@ from typing import Any
 
 from app.application.invoicing_service import credit_note, invoice
 from app.application.payment_service import payment, refund
-from app.domain.sales import idempotency, references, validation
-from app.domain.sales.closed_loop import ClosedLoopRunner
-from app.domain.sales.contracts import ClosedLoopExecutionError as ClosedLoopExecutionError
-from app.domain.sales.contracts import FingerprintPorts, ReferencePorts, SalesOperations
-from app.domain.sales.quotes import SalesQuotes, generate_order_no
-from app.domain.sales.validation import to_decimal as _to_decimal
-from app.domain.sales_lifecycle_service import SalesLifecycleError, SalesLifecycleService
+from app.application.sales import idempotency, references, validation
+from app.application.sales.closed_loop import ClosedLoopRunner
+from app.application.sales.contracts import ClosedLoopExecutionError as ClosedLoopExecutionError
+from app.application.sales.contracts import FingerprintPorts, ReferencePorts, SalesOperations
+from app.application.sales.quotes import SalesQuotes, generate_order_no
+from app.application.sales.validation import to_decimal as _to_decimal
+from app.application.sales_lifecycle_service import SalesLifecycleError, SalesLifecycleService
 from app.db.models import SalesOrder
 from app.db.models.sales import SALES_ORDER_STATUS_FLOW
 from app.db.session import get_db

@@ -322,11 +322,11 @@ def _registered_router_purchase(
 def _registered_router_sales(
     action: str, params: dict, runtime_context: dict, profile: str, user_message: str
 ) -> dict:
-    from app.domain.sales_app_service import SalesAppService
+    from app.application.sales_app_service import SalesAppService
 
     svc = SalesAppService()
     if action == "create_order":
-        from app.domain.sales_order_creation import create_confirmed_order
+        from app.application.sales_order_creation import create_confirmed_order
 
         return create_confirmed_order(dict(params or {}))
     if action in ("query", "list", "get_orders"):

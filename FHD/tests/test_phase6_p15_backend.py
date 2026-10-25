@@ -2632,18 +2632,18 @@ class TestTWRBusinessDocking:
         f.write_bytes(b"fake")
         with (
             patch(
-                "app.domain.document_templates_service._extract_structured_excel_preview"
+                "app.domain.shared_services.document_templates_service._extract_structured_excel_preview"
             ) as mock_struct,
             patch(
-                "app.domain.document_templates_service._extract_excel_grid_preview"
+                "app.domain.shared_services.document_templates_service._extract_excel_grid_preview"
             ) as mock_grid,
             patch(
-                "app.domain.document_templates_service._extract_excel_grid_style_cache"
+                "app.domain.shared_services.document_templates_service._extract_excel_grid_style_cache"
             ) as mock_style,
             patch(
-                "app.domain.document_templates_service._extract_excel_all_sheets_preview"
+                "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview"
             ) as mock_all,
-            patch("app.domain.document_templates_service._list_excel_sheet_names") as mock_names,
+            patch("app.domain.shared_services.document_templates_service._list_excel_sheet_names") as mock_names,
         ):
             mock_struct.return_value = {"fields": [], "sample_rows": []}
             mock_grid.return_value = {}

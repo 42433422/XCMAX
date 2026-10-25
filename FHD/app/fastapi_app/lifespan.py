@@ -91,7 +91,7 @@ async def lifespan(app: FastAPI):
     start_paid_asset_installs()
 
     try:
-        from app.domain.ops_rules.desktop_admin_gate import purge_admin_sessions_on_desktop
+        from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
 
         purged = await asyncio.to_thread(purge_admin_sessions_on_desktop)
         if purged:

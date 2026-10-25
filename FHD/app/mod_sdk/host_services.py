@@ -137,10 +137,10 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.user_cs_delivery_signoff",
         "create_signoff_request",
     ),
-    "customers_create": ("app.fastapi_routes.domains.customer.customer_routes", "customers_create"),
-    "customers_delete": ("app.fastapi_routes.domains.customer.customer_routes", "customers_delete"),
-    "customers_get_one": ("app.fastapi_routes.domains.customer.customer_routes", "customers_get_one"),
-    "customers_update": ("app.fastapi_routes.domains.customer.customer_routes", "customers_update"),
+    "customers_create": ("app.fastapi_routes.domains.customer.routes", "customers_create"),
+    "customers_delete": ("app.fastapi_routes.domains.customer.routes", "customers_delete"),
+    "customers_get_one": ("app.fastapi_routes.domains.customer.routes", "customers_get_one"),
+    "customers_update": ("app.fastapi_routes.domains.customer.routes", "customers_update"),
     "diagnostics": ("app.fastapi_routes.model_payment", "diagnostics"),
     "ensure_delivery_on_doc": ("app.domain.shared_services.user_cs_delivery", "ensure_delivery_on_doc"),
     "entitlements": ("app.fastapi_routes.model_payment", "entitlements"),
@@ -156,7 +156,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.domain.shared_services.service_contract_fill",
         "generate_contract_docx",
     ),
-    "generate_office_file": ("app.domain.kitten_ai_document.generate", "generate_office_file"),
+    "generate_office_file": ("app.domain.shared_services.kitten_ai_document.generate", "generate_office_file"),
     "generated_contracts_dir": (
         "app.domain.shared_services.service_contract_fill",
         "generated_contracts_dir",
@@ -265,7 +265,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "orders_next_number_under_api",
     ),
     "products_add": ("app.legacy.routes.product.compat_routes", "products_add"),
-    "products_batch": ("app.fastapi_routes.domains.product.product_routes", "products_batch"),
+    "products_batch": ("app.fastapi_routes.domains.product.routes", "products_batch"),
     "products_batch_delete": (
         "app.legacy.routes.product.compat_routes",
         "products_batch_delete",
@@ -274,18 +274,18 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "app.legacy.routes.product.compat_routes",
         "products_delete",
     ),
-    "products_export_xlsx": ("app.fastapi_routes.domains.product.product_routes", "products_export_xlsx"),
+    "products_export_xlsx": ("app.fastapi_routes.domains.product.routes", "products_export_xlsx"),
     "products_export_docx": ("app.fastapi_routes.xcagi_compat_product", "products_export_docx"),
     "products_get_by_id": (
         "app.legacy.routes.product.compat_routes",
         "products_get_by_id",
     ),
     "products_product_names": (
-        "app.fastapi_routes.domains.product.product_routes",
+        "app.fastapi_routes.domains.product.routes",
         "products_product_names",
     ),
     "products_product_names_search": (
-        "app.fastapi_routes.domains.product.product_routes",
+        "app.fastapi_routes.domains.product.routes",
         "products_product_names_search",
     ),
     "products_update": (
@@ -346,7 +346,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "revoke_allowlist_endpoint",
     ),
     "revoke_key_endpoint": ("app.fastapi_routes.lan_admin_routes", "revoke_key_endpoint"),
-    "run_bulk_import": ("app.application.excel_imports", "run_bulk_import"),
+    "run_bulk_import": ("app.domain.app_pure.excel_imports", "run_bulk_import"),
     "run_user_cs_employee": (
         "app.domain.shared_services.user_cs_employee_runner",
         "run_user_cs_employee",
@@ -369,7 +369,7 @@ _EXPORTS: dict[str, tuple[str, str]] = {
         "shipment_records_units",
     ),
     "status": ("app.fastapi_routes.lan_routes", "status"),
-    "store_document_pickup": ("app.domain.kitten_ai_document.pickup", "store_document_pickup"),
+    "store_document_pickup": ("app.domain.shared_services.kitten_ai_document.pickup", "store_document_pickup"),
     "svc": ("app.application.approval_workspace_app_service", ""),
     "sync_crm_from_pipeline_doc": (
         "app.domain.shared_services.user_cs_crm_store",

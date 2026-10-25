@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 
 def require_market_admin_session(request: Request) -> JSONResponse | None:
-    from app.domain.ops_rules.desktop_admin_gate import (
+    from app.application.desktop_admin_gate import (
         assert_desktop_allows_session,
         forbidden_payload,
         is_desktop_runtime,

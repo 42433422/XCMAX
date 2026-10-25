@@ -698,7 +698,7 @@ class TestErpRouterDispatch:
     """新 ERP 工具路由分发到对应服务。"""
 
     def test_sales_router_quotes_via_service(self):
-        from app.domain.sales_app_service import SalesAppService
+        from app.application.sales_app_service import SalesAppService
 
         with patch.object(SalesAppService, "quote", return_value={"success": True}) as mock:
             r = _registered_router_sales(

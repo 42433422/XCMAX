@@ -158,7 +158,7 @@ class TestLocalDutyGraphRoutes:
                 return_value={"tenant_id": 1, "account_kind": "admin"},
             ),
             patch(
-                "app.domain.ops_rules.auth_permission_resolver.require_allowed",
+                "app.domain.app_pure.auth_permission_resolver.require_allowed",
                 return_value=None,
             ),
             patch(

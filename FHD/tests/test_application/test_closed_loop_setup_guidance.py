@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from app.application.approval_workspace_app_service import (
     _approve_ai_workflow_request_without_node,
 )
-from app.domain.sales_app_service import ClosedLoopExecutionError, SalesAppService
+from app.application.sales_app_service import ClosedLoopExecutionError, SalesAppService
 from app.application.workflow.approval_persistence import (
     INVENTORY_NOT_READY_CODE,
     WAREHOUSE_NOT_INITIALIZED_CODE,

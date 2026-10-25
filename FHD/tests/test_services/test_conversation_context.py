@@ -1,4 +1,4 @@
-"""Tests for app.domain.conversation.legacy_services.context — ContextMixin & ConversationContext."""
+"""Tests for app.domain.shared_services.conversation.context — ContextMixin & ConversationContext."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.conversation.legacy_services.context import ContextMixin, ConversationContext
+from app.domain.shared_services.conversation.context import ContextMixin, ConversationContext
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -234,7 +234,7 @@ class TestGetOrCreateContextAsync:
     async def test_enriches_with_web_search(self, host):
         ctx_input = {"kitten_analyzer": True, "kitten_web_search": True}
         with patch(
-            "app.domain.conversation.legacy_services.context.kitten_web_search",
+            "app.domain.shared_services.conversation.context.kitten_web_search",
             new_callable=AsyncMock,
             create=True,
         ) as mock_ws:

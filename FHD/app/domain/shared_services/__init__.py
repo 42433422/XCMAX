@@ -1,1 +1,1 @@
-"""Shared domain services migrated from app.services"""
+"""Domain-hosted shared services (debt19 migration)."""

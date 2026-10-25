@@ -296,7 +296,7 @@ def _registered_router_business_docking_family(
     file_path = str(params.get("file_path") or "").strip()
     if not file_path:
         return {"success": False, "message": "缺少参数：file_path"}
-    from app.domain.document_templates_service import (
+    from app.domain.shared_services.document_templates_service import (
         _extract_excel_all_sheets_preview,
         _extract_excel_grid_preview,
         _extract_excel_grid_style_cache,

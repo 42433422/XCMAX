@@ -1,4 +1,4 @@
-"""Tests for app.domain.conversation.legacy_services.intent — IntentMixin pure methods."""
+"""Tests for app.domain.shared_services.conversation.intent — IntentMixin pure methods."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.domain.conversation.legacy_services.intent import IntentMixin
+from app.domain.shared_services.conversation.intent import IntentMixin
 
 # ========================= _is_pro_source ================================
 

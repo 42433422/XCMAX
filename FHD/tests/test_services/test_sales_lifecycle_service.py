@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.domain.sales_lifecycle_service import (
+from app.application.sales_lifecycle_service import (
     SalesLifecycleCancelBlocked,
     SalesLifecycleInvalidTransition,
     SalesLifecycleNotFound,

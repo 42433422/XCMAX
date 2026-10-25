@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.catalog.account_tier_derivation import (
+from app.domain.app_pure.account_tier_derivation import (
     derive_account_tier,
     should_have_account_tier,
 )
-from app.application.entitled_industries_init import init_entitled_industries_for_user
+from app.domain.app_pure.entitled_industries_init import init_entitled_industries_for_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -34,7 +34,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
-from app.application.feature_flag_app import FeatureFlagName, is_enabled
+from app.domain.app_pure.feature_flag_app import FeatureFlagName, is_enabled
 from app.db.models import User
 from app.errors import ErrorCode
 from app.exceptions import (

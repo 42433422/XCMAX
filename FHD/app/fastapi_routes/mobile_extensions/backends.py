@@ -309,7 +309,7 @@ def set_account_industry(username: str, industry_id: str) -> None:
 
 
 async def sync_circle() -> object:
-    from app.application.employee_circle_sync import sync_modstore_reports as operation
+    from app.domain.app_pure.employee_circle_sync import sync_modstore_reports as operation
 
     return await operation()
 

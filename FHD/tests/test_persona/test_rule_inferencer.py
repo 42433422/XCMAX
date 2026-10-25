@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.domain.persona.services_runtime.rule_inferencer import RuleInferencer, RuleInferResult
+from app.domain.shared_services.persona.rule_inferencer import RuleInferencer, RuleInferResult
 
 
 class TestRuleInferencer:

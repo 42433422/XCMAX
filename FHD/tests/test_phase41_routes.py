@@ -419,7 +419,7 @@ def test_compat_customer_update_via_service(compat_customer_client: TestClient) 
 def test_compat_customer_export_not_implemented() -> None:
     from fastapi import HTTPException
 
-    from app.fastapi_routes.domains.customer.customer_routes import customers_export_stub
+    from app.fastapi_routes.domains.customer.routes import customers_export_stub
 
     with pytest.raises(HTTPException) as exc:
         customers_export_stub()
@@ -454,7 +454,7 @@ def test_compat_tools_list_role_filter(tools_client: TestClient) -> None:
         ],
     }
     with patch(
-        "app.fastapi_routes.domains.misc.misc_routes.get_tools_payload",
+        "app.fastapi_routes.domains.misc.routes.get_tools_payload",
         return_value=payload,
     ):
         r = tools_client.get("/tools", params={"role": "admin"})
@@ -465,7 +465,7 @@ def test_compat_tools_list_role_filter(tools_client: TestClient) -> None:
 
 def test_compat_tool_categories_list(tools_client: TestClient) -> None:
     with patch(
-        "app.fastapi_routes.domains.misc.misc_routes.get_tool_categories_payload",
+        "app.fastapi_routes.domains.misc.routes.get_tool_categories_payload",
         return_value={"categories": [{"id": "erp", "label": "ERP"}]},
     ):
         r = tools_client.get("/tool-categories/")

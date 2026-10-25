@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
-from app.application.execution_scope import (
+from app.domain.app_pure.execution_scope import (
     FACTORY_TOKEN_ENV,
     CapabilityGrant,
     ExecutionScope,

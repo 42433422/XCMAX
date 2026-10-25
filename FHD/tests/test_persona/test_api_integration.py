@@ -18,7 +18,7 @@ class TestApiPersonaIntegration:
     @pytest.mark.asyncio
     async def test_persona_service_injected_into_conversation_service(self):
         """AIConversationService 可注入 PersonaService。"""
-        from app.domain.conversation.legacy_services.manager import AIConversationService
+        from app.domain.shared_services.conversation.manager import AIConversationService
 
         try:
             service = AIConversationService()
@@ -30,14 +30,14 @@ class TestApiPersonaIntegration:
 
     def test_legacy_base_prompt_constant_exists(self):
         """旧 base_prompt 作为 fallback 常量保留。"""
-        from app.domain.conversation.legacy_services.api import LEGACY_BASE_PROMPT
+        from app.domain.shared_services.conversation.api import LEGACY_BASE_PROMPT
 
         assert "专业的业务助手" in LEGACY_BASE_PROMPT
 
     @pytest.mark.asyncio
     async def test_build_system_prompt_with_persona(self):
         """注入 persona 时使用 persona prompt。"""
-        from app.domain.conversation.legacy_services.api import ApiMixin
+        from app.domain.shared_services.conversation.api import ApiMixin
 
         # 创建 mock persona service
         mock_persona_service = MagicMock()

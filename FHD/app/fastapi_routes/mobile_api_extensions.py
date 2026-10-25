@@ -44,7 +44,7 @@ from app.application.codex_super_employee_service import (
 from app.application.cursor_super_employee_service import (
     CursorSuperEmployeeService as CursorSuperEmployeeService,
 )
-from app.application.execution_scope import factory_context as factory_context
+from app.domain.app_pure.execution_scope import factory_context as factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService as MobileRelayService
 from app.application.trae_super_employee_service import (
     TraeSuperEmployeeService as TraeSuperEmployeeService,

@@ -27,7 +27,7 @@ from app.application.codex_super_employee_service import (
 from app.application.cursor_super_employee_service import (
     CursorSuperEmployeeService as CursorSuperEmployeeService,
 )
-from app.application.execution_scope import factory_context as factory_context
+from app.domain.app_pure.execution_scope import factory_context as factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.trae_super_employee_service import (
     TraeSuperEmployeeService as TraeSuperEmployeeService,
@@ -119,7 +119,7 @@ def _include_enterprise_dedicated_cs(request: Request, db) -> bool:
 
 
 def _require_admin_customer_service_session(request: Request, db) -> JSONResponse | None:
-    from app.domain.ops_rules.desktop_admin_gate import forbidden_payload, is_desktop_runtime
+    from app.application.desktop_admin_gate import forbidden_payload, is_desktop_runtime
 
     if is_desktop_runtime():
         return JSONResponse(forbidden_payload(), status_code=403)

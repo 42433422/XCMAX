@@ -40,7 +40,7 @@ def persona_style_for_user(user_id: int) -> str:
             return ""
 
         from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
-        from app.domain.persona.services_runtime.prompt_builder import persona_style_section
+        from app.domain.shared_services.persona.prompt_builder import persona_style_section
 
         repo = PersonaRepositoryImpl()
         profile = asyncio.run(repo.find_by_user_id(str(uid)))

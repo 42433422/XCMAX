@@ -26,9 +26,9 @@ from typing import Any
 
 import httpx
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant
-from app.application.execution_scope import FACTORY_TOKEN_ENV as FACTORY_TOKEN_ENV
-from app.application.git_workspace_manager import GitWorkspaceManager
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant
+from app.domain.app_pure.execution_scope import FACTORY_TOKEN_ENV as FACTORY_TOKEN_ENV
+from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.message_repository import _safe_json_line as _safe_json_line
 from app.application.relay_workspace import resolve_verified_relay_workspace_root

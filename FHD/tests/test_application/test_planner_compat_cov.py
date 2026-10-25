@@ -810,7 +810,7 @@ async def test_stream_user_id_from_header():
         svc_mock = MagicMock()
         svc_mock.persona_service = None
         conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
-        with _patch_modules({"app.domain.conversation.legacy_services.manager": conv_mod}):
+        with _patch_modules({"app.domain.shared_services.conversation.manager": conv_mod}):
             chunks = []
             async for chunk in compat_chat_stream_async(req, body):
                 chunks.append(chunk)
@@ -847,7 +847,7 @@ async def test_stream_persona_industry_from_ctx():
     conv_mod.get_ai_conversation_service = MagicMock(return_value=svc_mock)
 
     with (
-        _patch_modules({"app.domain.conversation.legacy_services.manager": conv_mod}),
+        _patch_modules({"app.domain.shared_services.conversation.manager": conv_mod}),
         patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
         patch.object(_pcs, "_xcagi_planner_stream_bytes_async", side_effect=_fake_stream),
     ):
@@ -896,7 +896,7 @@ async def test_stream_persona_industry_from_derive():
     with (
         _patch_modules(
             {
-                "app.domain.conversation.legacy_services.manager": conv_mod,
+                "app.domain.shared_services.conversation.manager": conv_mod,
                 "app.fastapi_routes.domains.misc.helpers": helpers_mod,
                 "app.application.session_account_meta": meta_mod,
             },

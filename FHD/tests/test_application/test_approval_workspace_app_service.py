@@ -207,7 +207,7 @@ def test_restore_approval_survives_restoring_snapshot_before_request(
                     "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
                     return_value=repo,
                 ),
-                patch("app.domain.conversation.legacy_services_service.get_db", side_effect=lambda: sessions()),
+                patch("app.domain.shared_services.conversation_service.get_db", side_effect=lambda: sessions()),
                 patch("app.application.approval_workspace_app_service.notify_mobile_user"),
                 tenant_scope(1),
             ):

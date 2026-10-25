@@ -10,7 +10,7 @@ class OrderCreationRejected(ValueError):
 
 
 def create_confirmed_order(data: dict[str, Any]) -> dict[str, Any]:
-    from app.domain.sales_app_service import SalesAppService
+    from app.application.sales_app_service import SalesAppService
 
     service = SalesAppService()
     try:

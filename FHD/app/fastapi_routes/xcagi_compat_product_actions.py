@@ -58,7 +58,7 @@ def execute_product_action(
         logger.debug("products compat via service skipped", exc_info=True)
 
     if action == "create":
-        from app.application.excel_imports import _parse_price
+        from app.domain.app_pure.excel_imports import _parse_price
 
         try:
             new_id = insert_row(
@@ -75,7 +75,7 @@ def execute_product_action(
             return {"success": False, "message": f"添加失败：{exc}", "error_code": "tool_exception"}
 
     if action == "update":
-        from app.application.excel_imports import _parse_price
+        from app.domain.app_pure.excel_imports import _parse_price
 
         product_id = parse_id(data.get("id"))
         if product_id is None:

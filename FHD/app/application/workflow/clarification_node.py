@@ -132,11 +132,11 @@ def needs_clarification(
         missing += missing_shipment_call_fields(node.tool_id, node.action, params)
         missing = list(dict.fromkeys(missing))
         if (node.tool_id, node.action) == ("inventory", "stock_in"):
-            from app.application.inventory_inputs import missing_stock_in_fields
+            from app.domain.app_pure.inventory_inputs import missing_stock_in_fields
 
             missing = missing_stock_in_fields(params)
         if node.tool_id == "sales" and node.action in {"quote", "create_order"}:
-            from app.domain.sales_quote_inputs import missing_quote_fields
+            from app.application.sales_quote_inputs import missing_quote_fields
 
             missing = missing_quote_fields(params)
         if missing:

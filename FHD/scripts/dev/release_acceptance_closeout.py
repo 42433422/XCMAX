@@ -195,7 +195,7 @@ def _record_verdict_local(
         return True
     # 降级：本地事件流（best-effort；服务端运行时持久）
     try:
-        from app.domain.work_order.ssot import record_acceptance_verdict
+        from app.domain.shared_services.ssot import record_acceptance_verdict
 
         record_acceptance_verdict(
             issue_number=issue_number,

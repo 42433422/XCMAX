@@ -10,10 +10,10 @@ import logging
 
 from fastapi import APIRouter
 
-from app.fastapi_routes.domains.customer.customer_routes import router as customer_router
-from app.fastapi_routes.domains.misc.misc_routes import router as misc_router
-from app.fastapi_routes.domains.product.product_routes import router as product_legacy_router
-from app.fastapi_routes.domains.template.template_routes import router as template_router
+from app.fastapi_routes.domains.customer.routes import router as customer_router
+from app.fastapi_routes.domains.misc.routes import router as misc_router
+from app.fastapi_routes.domains.product.routes import router as product_legacy_router
+from app.fastapi_routes.domains.template.routes import router as template_router
 from app.legacy.routes.conversation.compat_extra import router as conversation_extra_router
 from app.legacy.routes.conversation.compat_routes import router as chat_router
 from app.legacy.routes.product.compat_routes import router as product_compat_router

@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
-from app.application.butler_identity_catalog import (
+from app.domain.app_pure.butler_identity_catalog import (
     DEFAULT_MBTI_EI,
     DEFAULT_MBTI_JP,
     DEFAULT_MBTI_SN,

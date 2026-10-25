@@ -645,7 +645,7 @@ def test_session_provider_chat_completion_success(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", FakeClient)
     monkeypatch.setattr(
-        "app.domain.conversation.legacy_services.modstore_adapter.ModstorePlatformAdapter", FakeAdapter
+        "app.domain.shared_services.conversation.modstore_adapter.ModstorePlatformAdapter", FakeAdapter
     )
     prov = SessionMarketProvider(1, "tok", timeout_seconds=4.0)
     out = asyncio.run(

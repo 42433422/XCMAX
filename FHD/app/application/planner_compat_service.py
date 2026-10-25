@@ -83,7 +83,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 from app.infrastructure.llm.client import llm_client_factory_scope
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
-from app.domain.conversation.legacy_services.modstore_adapter import create_modstore_openai_client_from_request
+from app.domain.shared_services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -208,7 +208,7 @@ async def _client_issue_payload(
 def _business_action(
     message: str, *, runtime_context: Context, user_id: str | None, request: Request
 ) -> Payload | None:
-    from app.domain.ops_rules.chat_business_safety import try_handle_business_chat_action
+    from app.domain.app_pure.chat_business_safety import try_handle_business_chat_action
 
     return try_handle_business_chat_action(
         message, runtime_context=runtime_context, user_id=user_id, request=request
@@ -236,7 +236,7 @@ async def _kitten_context(context: Context, message: str) -> tuple[Context, Payl
 
 
 def _conversation_service() -> ConversationService:
-    from app.domain.conversation.legacy_services.manager import get_ai_conversation_service
+    from app.domain.shared_services.conversation.manager import get_ai_conversation_service
 
     return get_ai_conversation_service()
 

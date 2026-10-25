@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from app.application.excel_etl_kb import (
+from app.domain.app_pure.excel_etl_kb import (
     ExcelEtlKnowledgeBase,
     TemplateMemory,
     sheet_layout_fingerprint,

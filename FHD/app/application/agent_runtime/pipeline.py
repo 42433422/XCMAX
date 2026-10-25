@@ -213,7 +213,7 @@ def _remember_short_term(
     *, session_id: str, user_id: str, task: str, summary: str, metadata_json: str
 ) -> bool:
     try:
-        from app.domain.conversation.legacy_services_service import ConversationService
+        from app.domain.shared_services.conversation_service import ConversationService
 
         svc = ConversationService()
         if task:

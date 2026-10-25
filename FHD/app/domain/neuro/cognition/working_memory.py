@@ -128,7 +128,7 @@ class WorkingMemory:
         try:
             import json
 
-            from app.domain.conversation.legacy_services_service import ConversationService
+            from app.domain.shared_services.conversation_service import ConversationService
 
             ConversationService().save_message(
                 self._session_id,
@@ -148,7 +148,7 @@ class WorkingMemory:
         if not sid:
             return []
         try:
-            from app.domain.conversation.legacy_services_service import ConversationService
+            from app.domain.shared_services.conversation_service import ConversationService
 
             rows = ConversationService().get_session_messages(sid, limit=50)
         except RECOVERABLE_ERRORS:

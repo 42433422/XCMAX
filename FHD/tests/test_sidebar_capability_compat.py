@@ -126,7 +126,7 @@ def test_customers_all_delegates_to_list() -> None:
             return_value=[{"id": 9, "customer_name": "闭环组织"}],
         ),
         patch(
-            "app.fastapi_routes.domains.customer.customer_routes.verify_db_read_token_header",
+            "app.fastapi_routes.domains.customer.routes.verify_db_read_token_header",
             return_value=None,
         ),
     ):

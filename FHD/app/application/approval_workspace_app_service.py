@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.application.approval_notifications import completed_workflow_notification
+from app.domain.app_pure.approval_notifications import completed_workflow_notification
 from app.application.approval_workspace.access import (
     AI_WORKFLOW_BUSINESS_TYPE as AI_WORKFLOW_BUSINESS_TYPE,
 )
@@ -238,7 +238,7 @@ def _drop_pending_ai_workflow_after_rejection(*, request_no: str, reason: str) -
 
 
 def _project_workflow(run_id: str, request_id: str) -> None:
-    from app.domain.ops_rules.business_harness_projection import project_terminal_run_to_conversation
+    from app.application.business_harness_projection import project_terminal_run_to_conversation
 
     project_terminal_run_to_conversation(run_id, approval_request_id=request_id)
 

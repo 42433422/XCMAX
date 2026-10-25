@@ -3077,7 +3077,7 @@ class TestMobileAiCirclePostsBranchCov:
     @pytest.fixture
     def report_sync(self, monkeypatch):
         sync = AsyncMock(return_value={})
-        monkeypatch.setattr("app.application.employee_circle_sync.sync_modstore_reports", sync)
+        monkeypatch.setattr("app.domain.app_pure.employee_circle_sync.sync_modstore_reports", sync)
         return sync
 
     @pytest.mark.asyncio

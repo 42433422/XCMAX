@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.application.excel_etl_kb import get_excel_etl_kb
+from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 from app.application.shipment_etl import (
     batching,
     catalog,

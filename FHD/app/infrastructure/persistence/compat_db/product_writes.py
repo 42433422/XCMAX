@@ -110,7 +110,7 @@ def products_pg_insert_row(
     parse_quantity,
     parse_is_active,
 ) -> int:
-    from app.application.excel_imports import _norm_model
+    from app.domain.app_pure.excel_imports import _norm_model
 
     compat = _compat_module()
     engine = compat.get_sync_engine()

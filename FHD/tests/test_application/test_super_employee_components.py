@@ -13,7 +13,7 @@ from typing import Any, NoReturn
 import httpx
 import pytest
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY
 from app.application.message_repository import MessageRepository
 from app.application.super_employee import cli as cli_module
 from app.application.super_employee.cli import CliExecutor

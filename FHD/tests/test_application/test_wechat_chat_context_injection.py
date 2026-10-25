@@ -15,7 +15,7 @@ from app.application.wechat_chat_context import resolve_wechat_chat_context
 from app.db.db_base import Base
 from app.db.models.customer import Customer
 from app.db.models.wechat_sync import WechatContact, WechatMessage
-from app.domain.conversation.legacy_services.prompts import PromptsMixin
+from app.domain.shared_services.conversation.prompts import PromptsMixin
 
 
 @pytest.fixture()

@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.fastapi_routes.domains.genai_traces.genai_traces_routes import router
+from app.fastapi_routes.domains.genai_traces.routes import router
 from app.infrastructure.auth.dependencies import get_logged_in_user
 
 

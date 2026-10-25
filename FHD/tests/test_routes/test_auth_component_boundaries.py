@@ -57,12 +57,12 @@ def fake_account(
     monkeypatch.setattr(routes, "resolve_session_user", lambda _request: principal)
     monkeypatch.setattr("app.db.session.get_db", lambda: nullcontext(db))
     monkeypatch.setattr(
-        "app.application.account_security.generate_totp_secret", lambda: "replacement-secret"
+        "app.domain.app_pure.account_security.generate_totp_secret", lambda: "replacement-secret"
     )
     monkeypatch.setattr(
-        "app.application.account_security.provisioning_uri", lambda *_args: "otpauth://fake"
+        "app.domain.app_pure.account_security.provisioning_uri", lambda *_args: "otpauth://fake"
     )
-    monkeypatch.setattr("app.application.account_security.verify_totp", lambda *_args: True)
+    monkeypatch.setattr("app.domain.app_pure.account_security.verify_totp", lambda *_args: True)
     return principal, db
 
 
@@ -123,7 +123,7 @@ async def test_session_validity_keeps_none_compatibility_and_blocks_disabled_use
     }
     monkeypatch.setattr("app.application.auth_app_service.get_auth_app_service", lambda: service)
     monkeypatch.setattr(
-        "app.domain.ops_rules.desktop_admin_gate.assert_desktop_allows_session_id", lambda _sid: None
+        "app.application.desktop_admin_gate.assert_desktop_allows_session_id", lambda _sid: None
     )
     monkeypatch.setattr("app.mod_sdk.product_skus.resolve_product_sku", lambda: "generic")
     monkeypatch.setattr(
@@ -519,7 +519,7 @@ def test_session_projection_uses_helpers_replaced_after_assembly(
     monkeypatch.setattr(routes, "resolve_session_user", lambda _request: principal)
     monkeypatch.setattr(routes, "session_id_from_request", lambda _request: "late-session")
     monkeypatch.setattr("app.application.auth_app_service.get_auth_app_service", lambda: backend)
-    monkeypatch.setattr("app.domain.ops_rules.desktop_admin_gate.assert_desktop_allows_session_id", gate)
+    monkeypatch.setattr("app.application.desktop_admin_gate.assert_desktop_allows_session_id", gate)
     monkeypatch.setattr(
         routes, "_session_meta_for_response", lambda *_args: {"company_brand": "late-company"}
     )

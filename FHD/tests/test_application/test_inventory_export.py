@@ -343,7 +343,7 @@ def test_csv_protects_all_text_columns_without_corrupting_numbers(prefix, formul
     import csv
     from io import StringIO
 
-    from app.application.inventory_export import render_inventory_csv
+    from app.domain.app_pure.inventory_export import render_inventory_csv
 
     text_fields = ("product_name", "product_code", "warehouse_name", "batch_no", "unit")
     row = dict.fromkeys(text_fields, prefix + formula)
@@ -360,7 +360,7 @@ def test_csv_quotes_chinese_commas_newlines_and_empty_values():
     import csv
     from io import StringIO
 
-    from app.application.inventory_export import render_inventory_csv
+    from app.domain.app_pure.inventory_export import render_inventory_csv
 
     value = '中文,"引号"\r\n第二行'
     rows = list(
