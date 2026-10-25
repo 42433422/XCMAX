@@ -132,7 +132,7 @@ hiddenimports.extend(
         "app.mod_sdk.edition_policy",
         "app.mod_sdk.edition_bootstrap",
         "app.mod_sdk.product_skus",
-        "app.fastapi_routes.domains.admin_audit.routes",
+        "app.fastapi_routes.domains.admin_audit.admin_audit_routes",
         "app.application.attendance_reference_data",
         "app.application.chat_business_safety",
         "app.domain.shared_services.ai_action_audit_service",
@@ -143,6 +143,23 @@ hiddenimports.extend(
         "app.domain.shared_services.xcmax_sync_basic_appliers",
         "app.domain.shared_services.xcmax_sync_extended_appliers",
         "app.runtime_integrity",
+        # debt19: application/*/ports.py → protocols.py; contracts/ports.py loads these via importlib
+        "app.application.admin_control.protocols",
+        "app.application.aiopen.protocols",
+        "app.application.approval_workspace.protocols",
+        "app.application.customer_service.protocols",
+        "app.application.desktop_relay.protocols",
+        "app.application.employee_tools.protocols",
+        "app.application.group_chat.protocols",
+        "app.application.knowledge.protocols",
+        "app.application.market_bridge.protocols",
+        "app.application.market_llm.protocols",
+        "app.application.mobile_extensions.protocols",
+        "app.application.mod_store.protocols",
+        "app.application.planner_compat.protocols",
+        "app.application.shipment_etl.protocols",
+        "app.application.super_employee.protocols",
+        "app.application.user_memory.protocols",
     ]
 )
 

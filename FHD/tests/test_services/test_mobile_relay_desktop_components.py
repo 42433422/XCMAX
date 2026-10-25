@@ -636,7 +636,7 @@ class DenyRoot(importlib.abc.MetaPathFinder):
             raise AssertionError('component imported its composition root')
 
 sys.meta_path.insert(0, DenyRoot())
-for name in ('ports', 'configuration', 'registration', 'lifecycle', 'polling', 'execution', 'messages', 'cleanup'):
+for name in ('protocols', 'configuration', 'registration', 'lifecycle', 'polling', 'execution', 'messages', 'cleanup'):
     importlib.import_module('app.application.desktop_relay.' + name)
 """
     result = subprocess.run(
