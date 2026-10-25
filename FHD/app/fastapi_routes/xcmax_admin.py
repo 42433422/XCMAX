@@ -44,7 +44,7 @@ from .admin_control.maintenance import SelfMaintenance
 from .admin_control.market_accounts import MarketAccounts
 from .admin_control.market_gateway import MarketGateway
 from .admin_control.operations import Operations
-from .admin_control.ports import ErrorPolicy, JsonObject, LocalProxy, MarketProxy
+from .admin_control.port_contracts import ErrorPolicy, JsonObject, LocalProxy, MarketProxy
 from .admin_control.profile_store import profile_repository
 from .admin_control.profiles import UserProfiles
 from .admin_control.routes import register_routes

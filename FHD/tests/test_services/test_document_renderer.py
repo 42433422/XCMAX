@@ -9,7 +9,7 @@ from __future__ import annotations
 import openpyxl
 import pytest
 
-from app.services.document_templates.renderer import (
+from app.domain.shared_services.document_templates.renderer import (
     _extract_excel_all_sheets_preview,
     _extract_excel_grid_preview,
     _extract_excel_grid_style_cache,

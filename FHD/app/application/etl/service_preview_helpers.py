@@ -70,7 +70,7 @@ def suggest_mappings(dataset: ParsedDataset, adapter: TargetAdapter) -> list[dic
             for header in dataset.headers
         ]
     try:
-        from app.application.excel_etl_kb import get_excel_etl_kb
+        from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 
         shared_synonyms = get_excel_etl_kb().synonyms()
     except RECOVERABLE_ERRORS:

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_confirmation_service import (
+from app.domain.shared_services.intent_confirmation_service import (
     FALLBACK_QUESTIONS,
     INTENT_REQUIRED_SLOTS,
     IntentConfirmationService,
@@ -169,7 +169,7 @@ class TestIntentConfirmationServiceCheckAndBuild:
                 return_value=orchestrator,
             ),
             patch(
-                "app.services.intent_confirmation_service.record_capability_proposal"
+                "app.domain.shared_services.intent_confirmation_service.record_capability_proposal"
             ) as recorder,
         ):
             result = self.svc.check_and_build_prompt(
@@ -231,7 +231,7 @@ class TestIntentConfirmationServiceCheckAndBuild:
                 return_value=orchestrator,
             ),
             patch(
-                "app.services.intent_confirmation_service.record_capability_proposal"
+                "app.domain.shared_services.intent_confirmation_service.record_capability_proposal"
             ) as recorder,
         ):
             result = self.svc.check_and_build_prompt(

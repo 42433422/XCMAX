@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_payload_legacy — uncovered branches (ext3).
+"""Tests for app.domain.shared_services.tools_payload_legacy — uncovered branches (ext3).
 
 Focus: template_extract tool, excel_toolkit tool, shipment_template tool,
 template_preview tool, settings tool, tools_table tool, other_tools tool,
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
 def _json_fn(data, status=200):
@@ -114,7 +114,7 @@ class TestTemplateExtractTool:
         with (
             patch("os.path.exists", return_value=True),
             patch(
-                "app.services.document_templates_service._list_excel_sheet_names",
+                "app.domain.shared_services.document_templates_service._list_excel_sheet_names",
                 side_effect=RuntimeError("fail"),
             ),
         ):
@@ -388,7 +388,7 @@ class TestSettingsTool:
 class TestToolsTableTool:
     def test_list(self):
         with patch(
-            "app.services.tools_execution_service.get_workflow_tool_registry",
+            "app.domain.shared_services.tools_execution_service.get_workflow_tool_registry",
             return_value={"products": {}, "customers": {}},
         ):
             result = _unwrap(
@@ -406,7 +406,7 @@ class TestToolsTableTool:
 
     def test_query(self):
         with patch(
-            "app.services.tools_execution_service.get_workflow_tool_registry",
+            "app.domain.shared_services.tools_execution_service.get_workflow_tool_registry",
             return_value={"products": {}},
         ):
             result = _unwrap(
@@ -993,7 +993,7 @@ class TestCustomersSearchKeywordFromParams:
         with (
             patch("app.application.get_customer_app_service", return_value=mock_svc),
             patch("app.services.get_task_context_service") as mock_ctx,
-            patch("app.services.unified_query_service.query_service"),
+            patch("app.domain.shared_services.unified_query_service.query_service"),
             patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",
                 return_value=None,
@@ -1014,7 +1014,7 @@ class TestCustomersSearchKeywordFromParams:
         assert result["success"] is True
 
     def test_search_with_del_verb_not_redirected(self):
-        with patch("app.services.unified_query_service.query_service") as mock_qs:
+        with patch("app.domain.shared_services.unified_query_service.query_service") as mock_qs:
             mock_qs.delete.return_value = 0
             with patch(
                 "app.infrastructure.lookups.purchase_unit_resolver.resolve_purchase_unit",

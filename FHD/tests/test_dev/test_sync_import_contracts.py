@@ -16,7 +16,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("violation", [None, "direct_driver", "reverse_dependency"])
 def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
-    for package in ("app", "app/db", "app/services", "app/application"):
+    for package in (
+        "app",
+        "app/db",
+        "app/domain",
+        "app/domain/shared_services",
+        "app/application",
+        "app/services",
+    ):
         directory = tmp_path / package
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "__init__.py").write_text("")
@@ -26,7 +33,8 @@ def test_sync_contracts_allow_dal_but_reject_bypasses(tmp_path, violation):
         service += "import sqlite3\n"
     if violation == "reverse_dependency":
         dao += "from app.helpers import action\n"
-    (tmp_path / "app/services/xcmax_sync_service.py").write_text(service)
+    # debt19: import-linter contract targets domain.shared_services (not app.services)
+    (tmp_path / "app/domain/shared_services/xcmax_sync_service.py").write_text(service)
     (tmp_path / "app/db/xcmax_sync.py").write_text(dao)
     (tmp_path / "app/helpers.py").write_text("from app.application.service import action\n")
     (tmp_path / "app/application/service.py").write_text("def action(): pass\n")

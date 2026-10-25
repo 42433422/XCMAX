@@ -172,7 +172,9 @@ class TestOpenRegistrationAllowed:
 class TestJitCreateLocalUserForEnterprise:
     @patch("app.db.session.get_db")
     def test_create_success(self, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import _jit_create_local_user_for_enterprise
+        from app.fastapi_routes.domains.auth.routes import (
+            _jit_create_local_user_for_enterprise,
+        )
 
         mock_db = MagicMock()
         mock_get_db.return_value.__enter__ = MagicMock(return_value=mock_db)
@@ -182,7 +184,9 @@ class TestJitCreateLocalUserForEnterprise:
 
     @patch("app.db.session.get_db")
     def test_create_failure(self, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import _jit_create_local_user_for_enterprise
+        from app.fastapi_routes.domains.auth.routes import (
+            _jit_create_local_user_for_enterprise,
+        )
 
         mock_get_db.side_effect = RuntimeError("DB error")
         result = _jit_create_local_user_for_enterprise("newuser", "password123", "test@example.com")

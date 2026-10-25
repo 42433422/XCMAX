@@ -12,8 +12,8 @@ from app.application.dataset_rag_app_service import (
     DatasetRagApplicationService,
 )
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
+from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
 from app.fastapi_routes.knowledge_v1 import router as knowledge_router
-from app.services.user_memory_service import UserMemoryService, UserMemoryStore
 
 
 @pytest.fixture(autouse=True)

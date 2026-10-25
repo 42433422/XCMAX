@@ -208,7 +208,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "agent",
-        lambda: __import__("app.fastapi_routes.domains.agent.routes", fromlist=["router"]).router,
+        lambda: (
+            __import__("app.fastapi_routes.domains.agent.agent_routes", fromlist=["router"]).router
+        ),
         priority=12,
     )
     _mount(
@@ -305,7 +307,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "control",
-        lambda: __import__("app.control.routes", fromlist=["router"]).router,
+        lambda: __import__("app.control.control_routes", fromlist=["router"]).router,
         prefix="/api/control",
         tags=["control"],
     )

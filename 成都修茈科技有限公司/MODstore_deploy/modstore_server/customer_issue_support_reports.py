@@ -76,7 +76,10 @@ def record_support_report(
             session_id=ticket.session_id,
             actor=owner,
             actor_type="user",
-            detail={"support_bundle_sha256": report["support_bundle_sha256"], "event_id": event_id},
+            detail={
+                "support_bundle_sha256": report["support_bundle_sha256"],
+                "event_id": event_id,
+            },
         )
         db.commit()
         db.refresh(ticket)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modstore_server.domain.wallet.types import WalletBalance
+from modstore_server.domain.wallet.wallet_types import WalletBalance
 
 
 class InMemoryWalletRepository:

@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from .ports import DatasetAction
+from .port_contracts import DatasetAction
 from .read_views import DatasetViews
 from .schemas import DatasetRebuildRequest, DatasetRollbackRequest, DatasetVersionDiffRequest
 

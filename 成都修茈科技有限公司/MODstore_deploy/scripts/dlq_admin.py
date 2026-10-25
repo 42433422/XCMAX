@@ -29,7 +29,11 @@ def main() -> int:
             for r in rows:
                 print(r.id, r.event_id, r.event_name, (r.last_error or "")[:120])
         else:
-            row = db.query(OutboxDeadLetter).filter(OutboxDeadLetter.id == args.row_id).first()
+            row = (
+                db.query(OutboxDeadLetter)
+                .filter(OutboxDeadLetter.id == args.row_id)
+                .first()
+            )
             if not row:
                 print("not found")
                 return 1

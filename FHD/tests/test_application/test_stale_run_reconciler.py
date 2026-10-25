@@ -17,7 +17,7 @@ from app.application.agent_orchestrator.run_repository import (
 from app.application.agent_orchestrator.task_execution_sql_repository import (
     SQLAlchemyTaskExecutionRepository,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 
 reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
 task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
@@ -86,7 +86,7 @@ def test_restore_keeps_completed_backup_receipt_and_later_tasks(tmp_path, monkey
     import sqlite3
 
     from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
-    from app.services.database_service import DatabaseService
+    from app.domain.shared_services.database_service import DatabaseService
 
     engine, factory, repo = _make_repo(tmp_path, "restore-audit.db")
     service = DatabaseService()

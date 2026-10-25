@@ -24,7 +24,7 @@ from .deployment_modes import (
     resolve_effective_mode_id,
     save_deployment_profile,
 )
-from .paths import (
+from .desktop_runtime_paths import (
     configure_desktop_environment,
     ensure_desktop_dirs,
     get_desktop_data_dir,

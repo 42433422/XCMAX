@@ -6,12 +6,12 @@ from dataclasses import dataclass
 
 from fastapi import Request
 
+from .customer_service_ports import ChangesServices, Environment, Payload, PipelineRepository
 from .models import (
     ChangeRequestCreateBody,
     ChangeRequestNotifyBody,
     ChangeRequestStatusBody,
 )
-from .ports import ChangesServices, Environment, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

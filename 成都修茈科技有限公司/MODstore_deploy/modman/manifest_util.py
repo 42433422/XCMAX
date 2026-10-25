@@ -7,7 +7,11 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from modman.artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normalize_artifact
+from modman.artifact_constants import (
+    ARTIFACT_BUNDLE,
+    ARTIFACT_EMPLOYEE_PACK,
+    normalize_artifact,
+)
 
 _PRIVATE_KEY_RE = re.compile(
     r"(?:^|[_-])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|"

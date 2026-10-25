@@ -2963,7 +2963,7 @@ class TestTryHandleDynamicWorkflow:
     ):
         from app.application.workflow.clarification_node import needs_clarification
         from app.application.workflow.planner import LLMWorkflowPlanner
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         svc = _make_svc()
         svc.workflow_engine.run = Mock(side_effect=AssertionError("must await approval"))
@@ -3022,7 +3022,7 @@ class TestTryHandleDynamicWorkflow:
     @pytest.mark.parametrize("complete", [False, True])
     def test_sales_missing_inputs_replan_before_approval(self, complete):
         from app.application.workflow.clarification_node import needs_clarification
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         svc = _make_svc()
         original = "请创建销售订单，必须先人工审批。"
@@ -3083,7 +3083,7 @@ class TestTryHandleDynamicWorkflow:
         svc = _make_svc()
         svc.workflow_planner.plan.return_value = None
         with patch(
-            "app.services.tools_workflow_registered.get_recent_business_db_target",
+            "app.domain.shared_services.tools_workflow_registered.get_recent_business_db_target",
             return_value=target,
         ) as recent:
             result = svc._try_handle_dynamic_workflow_after_excel(

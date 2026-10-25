@@ -10,9 +10,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.domain.shared_services.mod_zip_normalize import normalize_package_zip_path
 from app.fastapi_routes.mod_store_routes import router as mod_store_router
 from app.services import catalog_client
-from app.services.mod_zip_normalize import normalize_package_zip_path
 
 
 def test_catalog_base_url_default():

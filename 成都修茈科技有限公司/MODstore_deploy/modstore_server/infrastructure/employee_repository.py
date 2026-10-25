@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from modstore_server.domain.employee.types import EmployeeExecution, EmployeePack
+from modstore_server.domain.employee.employee_types import (
+    EmployeeExecution,
+    EmployeePack,
+)
 
 
 class InMemoryEmployeeRepository:

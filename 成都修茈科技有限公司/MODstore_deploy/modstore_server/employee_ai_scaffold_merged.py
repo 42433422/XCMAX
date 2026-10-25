@@ -514,7 +514,12 @@ def parse_employee_pack_llm_json(
         )
     else:
         manifest["employee_config_v2"] = _facade()._default_employee_config_v2(
-            pid=pid, name=name, description=desc, employee_id=eid, label=label, capabilities=caps
+            pid=pid,
+            name=name,
+            description=desc,
+            employee_id=eid,
+            label=label,
+            capabilities=caps,
         )
     hp_raw = data.get("xcagi_host_profile")
     hp_norm, hp_errs = _facade().normalize_xcagi_host_profile(hp_raw)
@@ -600,7 +605,9 @@ def _normalize_employee_config_v2_for_canvas(
             ),
             "role": role,
             "behavior_rules": _facade()._normalize_behavior_rules(
-                agent.get("behavior_rules"), label=label or name, description=description
+                agent.get("behavior_rules"),
+                label=label or name,
+                description=description,
             ),
             "few_shot_examples": (
                 agent.get("few_shot_examples")
@@ -752,12 +759,17 @@ def _default_employee_config_v2(
                 "default_use_personnel_roster": True,
             },
         },
-        "metadata": {"framework_version": "2.0.0", "created_by": "employee_ai_scaffold"},
+        "metadata": {
+            "framework_version": "2.0.0",
+            "created_by": "employee_ai_scaffold",
+        },
     }
 
 
 def append_employee_stub_files_to_zip(
-    zf: _facade().zipfile.ZipFile, pack_id: str, manifest: _facade().Dict[str, _facade().Any]
+    zf: _facade().zipfile.ZipFile,
+    pack_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
 ) -> None:
     """写入 ``backend/employee_stubs`` 占位模块（与 workflow 脚手架一致，供安装包浏览 / XCAGI 对齐）。"""
     emp_id = pack_id
@@ -772,7 +784,10 @@ def append_employee_stub_files_to_zip(
 
 
 def build_employee_pack_zip(
-    pack_id: str, manifest: _facade().Dict[str, _facade().Any], *, include_runtime: bool = True
+    pack_id: str,
+    manifest: _facade().Dict[str, _facade().Any],
+    *,
+    include_runtime: bool = True,
 ) -> bytes:
     """manifest.zip：含 manifest.json；可选 ``backend/blueprints.py`` + ``backend/employees`` 运行时（与 FHD 挂载契约对齐）。"""
     import copy

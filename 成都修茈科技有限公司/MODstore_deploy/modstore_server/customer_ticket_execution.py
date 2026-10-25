@@ -138,7 +138,11 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
         row.get("kind") == "escalation" and row.get("accepted") and not row.get("completed")
         for row in receipts
     ):
-        return "await_review", "跟进已受理的复核任务，并核对执行结果", "review_in_progress"
+        return (
+            "await_review",
+            "跟进已受理的复核任务，并核对执行结果",
+            "review_in_progress",
+        )
     if resolution.get("state") == "awaiting_customer_verification":
         return (
             "customer_confirmation",
@@ -146,7 +150,11 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
             "customer_confirmation",
         )
     if resolution.get("repair_verified") is True:
-        return "deliver_repair", "核验包含本单修复的正式发布并绑定客户目标", "release_binding"
+        return (
+            "deliver_repair",
+            "核验包含本单修复的正式发布并绑定客户目标",
+            "release_binding",
+        )
     current_waiting = (
         claim_verified
         and len(rows) == 3
@@ -162,10 +170,22 @@ def _next_step(ticket, resolution, rows, receipts, *, claim_verified=False):
         and resolution.get("state")
         in {"repair_failed", "awaiting_manual_review", "dispatch_failed"}
     ):
-        return "review_failure", "核对失败环节及接手回执，按已有恢复流程继续", "execution_failed"
+        return (
+            "review_failure",
+            "核对失败环节及接手回执，按已有恢复流程继续",
+            "execution_failed",
+        )
     if rows:
-        return "follow_execution", "跟进当前环节；前序完成后继续后续环节", "execution_pending"
-    return "confirm_assignment", "核对派单记录并确认实际执行接单", "assignment_unconfirmed"
+        return (
+            "follow_execution",
+            "跟进当前环节；前序完成后继续后续环节",
+            "execution_pending",
+        )
+    return (
+        "confirm_assignment",
+        "核对派单记录并确认实际执行接单",
+        "assignment_unconfirmed",
+    )
 
 
 def _last_progress(resolution, actions, receipts):
@@ -210,7 +230,11 @@ def ticket_execution_overview(db, ticket) -> dict:
         .all()
     )
     code, label, blocker = _next_step(
-        ticket, resolution, rows, receipts, claim_verified=event_id is not None and bool(claim_rows)
+        ticket,
+        resolution,
+        rows,
+        receipts,
+        claim_verified=event_id is not None and bool(claim_rows),
     )
     current = next((row for row in rows if row.get("ok") is not True), {})
     assignee = db.get(User, ticket.assigned_admin_id) if ticket.assigned_admin_id else None
@@ -227,7 +251,11 @@ def ticket_execution_overview(db, ticket) -> dict:
     elif code == "customer_confirmation":
         responsible = {"kind": "customer", "label": "原工单客户", "id": ticket.user_id}
     elif accepted_review:
-        responsible = {"kind": "reviewer", "label": accepted_review["employee_id"], "id": None}
+        responsible = {
+            "kind": "reviewer",
+            "label": accepted_review["employee_id"],
+            "id": None,
+        }
     elif current.get("employee_id"):
         responsible = {
             "kind": "employee",
@@ -236,7 +264,11 @@ def ticket_execution_overview(db, ticket) -> dict:
             "id": None,
         }
     elif assignee:
-        responsible = {"kind": "admin", "label": _reader_text(assignee.username), "id": assignee.id}
+        responsible = {
+            "kind": "admin",
+            "label": _reader_text(assignee.username),
+            "id": assignee.id,
+        }
     else:
         responsible = {"kind": "unassigned", "label": "暂无当前责任人记录", "id": None}
     return {

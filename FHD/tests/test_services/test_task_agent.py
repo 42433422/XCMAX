@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.task_agent import SLOT_LABELS, TaskAgent, _cn_number
+from app.domain.shared_services.task_agent import SLOT_LABELS, TaskAgent, _cn_number
 
 
 class TestCnNumber:
@@ -52,7 +52,7 @@ class TestTaskAgent:
 
     @pytest.fixture
     def agent(self):
-        with patch("app.services.task_agent.get_task_context_service"):
+        with patch("app.domain.shared_services.task_agent.get_task_context_service"):
             return TaskAgent()
 
     def test_agent_init(self, agent):

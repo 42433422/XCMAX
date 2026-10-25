@@ -16,7 +16,12 @@ async def test_fresh_employee_pipeline_enters_generation_without_resume(monkeypa
 
     sid = "a" * 32
     sessions = {
-        sid: {"id": sid, "status": "running", "user_id": 1, "steps": api._default_steps("employee")}
+        sid: {
+            "id": sid,
+            "status": "running",
+            "user_id": 1,
+            "steps": api._default_steps("employee"),
+        }
     }
     monkeypatch.setattr(api, "WORKBENCH_SESSIONS", sessions)
     monkeypatch.setattr(api, "_workbench_session_store_dir", lambda: tmp_path)
@@ -225,22 +230,39 @@ async def test_employee_delivery_requires_critical_quality_evidence(
     seen = []
 
     async def scaffold(*args, **kwargs):
-        return {"ok": True, "id": "employee-pack", "path": str(pack_dir), "manifest": manifest}
+        return {
+            "ok": True,
+            "id": "employee-pack",
+            "path": str(pack_dir),
+            "manifest": manifest,
+        }
 
     async def craft(step, **kwargs):
         seen.append(step)
         if step == "employee_plan":
             return {
-                "employee_plan": {"employee_name": "任务整理员", "employee_brief": "整理内部任务"}
+                "employee_plan": {
+                    "employee_name": "任务整理员",
+                    "employee_brief": "整理内部任务",
+                }
             }
         if step == "validate":
             return {"validate_warnings": [], "validate_errors": []}
         if step == "mod_sandbox":
-            return {"emp_mod_sandbox": {"ok": True, "checks": []}, "mod_sb_msg": "fixture checked"}
+            return {
+                "emp_mod_sandbox": {"ok": True, "checks": []},
+                "mod_sb_msg": "fixture checked",
+            }
         if step == "standalone_smoke":
-            return {"standalone_smoke_ok": True, "standalone_smoke_msg": "fixture checked"}
+            return {
+                "standalone_smoke_ok": True,
+                "standalone_smoke_msg": "fixture checked",
+            }
         if step == "host_check":
-            return {"host_probe": {"skipped": True}, "host_check_msg": "fixture has no host"}
+            return {
+                "host_probe": {"skipped": True},
+                "host_check_msg": "fixture has no host",
+            }
         if step == "six_dim_gate":
             return {
                 "six_dimension_report": {

@@ -107,7 +107,7 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
     from sqlalchemy import create_engine
     from sqlalchemy.orm import Session
 
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.approval import ApprovalFlow, ApprovalRecord
     from app.db.models.user import User
     from app.infrastructure.tenant_scope import tenant_scope
@@ -187,7 +187,7 @@ def test_reused_query_component_resolves_current_mod_database_and_tenant(monkeyp
 
 @pytest.mark.parametrize("agent_run", [False, True])
 def test_bridge_preserves_bound_context_and_resolves_backend_per_call(agent_run):
-    from app.application.approval_workspace.ports import WorkflowBackends
+    from app.application.approval_workspace.protocols import WorkflowBackends
     from app.application.approval_workspace.workflow_bridge import WorkflowApprovalBridge
 
     contexts = [

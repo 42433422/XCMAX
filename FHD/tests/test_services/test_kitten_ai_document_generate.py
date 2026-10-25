@@ -8,7 +8,7 @@ from zipfile import ZipFile
 
 import pytest
 
-from app.services.kitten_ai_document.generate import (
+from app.domain.shared_services.kitten_ai_document.generate import (
     _document_spec_timeout_sec,
     _extract_first_json_object,
     _strip_json_fence,
@@ -24,7 +24,9 @@ def test_document_uses_scoped_authenticated_client(monkeypatch, account):
 
     fallback = object()
     monkeypatch.setattr(llm, "get_llm_client", lambda: fallback)
-    monkeypatch.setattr("app.services.kitten_ai_document.generate.resolve_mode", lambda: "online")
+    monkeypatch.setattr(
+        "app.domain.shared_services.kitten_ai_document.generate.resolve_mode", lambda: "online"
+    )
     spec = {"title": account, "sections": [{"paragraphs": ["唯一标记", "文档内容读回"]}]}
     create = MagicMock(
         return_value=SimpleNamespace(

@@ -1,4 +1,4 @@
-"""Deep coverage tests for app.services.ai_product_parser.
+"""Deep coverage tests for app.domain.shared_services.ai_product_parser.
 
 Targets remaining uncovered branches:
 - _extract_unit with various patterns
@@ -21,7 +21,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.ai_product_parser import (
+from app.domain.shared_services.ai_product_parser import (
     AIProductParser,
     _get_product_parse_cache,
     _product_parse_cache,
@@ -344,7 +344,7 @@ class TestCallAiApiDeep:
     def test_no_api_key_returns_none(self):
         parser = AIProductParser()
         with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
+            "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
             return_value="",
         ):
             result = parser._call_ai_api("text")
@@ -353,7 +353,7 @@ class TestCallAiApiDeep:
     def test_no_api_key_none_returns_none(self):
         parser = AIProductParser()
         with patch(
-            "app.services.deepseek_intent_service.get_deepseek_api_key",
+            "app.domain.shared_services.deepseek_intent_service.get_deepseek_api_key",
             return_value=None,
         ):
             result = parser._call_ai_api("text")
@@ -440,7 +440,7 @@ class TestParseSingleDeep:
 class TestGetProductParseCacheDeep:
     def test_returns_singleton(self):
         # Reset singleton
-        import app.services.ai_product_parser as mod
+        import app.domain.shared_services.ai_product_parser as mod
 
         mod._product_parse_cache = None
         cache1 = _get_product_parse_cache()
@@ -450,7 +450,7 @@ class TestGetProductParseCacheDeep:
         mod._product_parse_cache = None
 
     def test_uses_env_version(self, monkeypatch):
-        import app.services.ai_product_parser as mod
+        import app.domain.shared_services.ai_product_parser as mod
 
         mod._product_parse_cache = None
         monkeypatch.setenv("XCAGI_PRODUCT_PARSE_CACHE_VERSION", "2")
@@ -460,7 +460,7 @@ class TestGetProductParseCacheDeep:
         mod._product_parse_cache = None
 
     def test_uses_env_ttl(self, monkeypatch):
-        import app.services.ai_product_parser as mod
+        import app.domain.shared_services.ai_product_parser as mod
 
         mod._product_parse_cache = None
         monkeypatch.setenv("XCAGI_PRODUCT_PARSE_CACHE_TTL", "7200")

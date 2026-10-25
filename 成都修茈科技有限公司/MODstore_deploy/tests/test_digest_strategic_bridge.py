@@ -7,7 +7,7 @@ import json
 import pytest
 from sqlalchemy import select, text
 
-from modstore_server.db.base import get_session_factory, init_db
+from modstore_server.db.db_base import get_session_factory, init_db
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
 from modstore_server.digest_action_items import (
     list_action_items,

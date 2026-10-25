@@ -16,9 +16,9 @@ from app.application.workflow.planner import (
     _filter_tool_registry_for_profile,
     get_tool_registry,
 )
-from app.services.purchase_service import PurchaseService
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.services.tools_workflow_registered import _registered_router_customers
+from app.domain.shared_services.purchase_service import PurchaseService
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_workflow_registered import _registered_router_customers
 
 # ---------------------------------------------------------------------------
 # DB mock helpers
@@ -54,7 +54,7 @@ def _contact_row(**kw):
 # ---------------------------------------------------------------------------
 
 
-@patch("app.services.purchase_service.get_db")
+@patch("app.domain.shared_services.purchase_service.get_db")
 def test_purchase_get_suppliers(mock_get_db: MagicMock) -> None:
     db = MagicMock()
     q = MagicMock()
@@ -68,7 +68,7 @@ def test_purchase_get_suppliers(mock_get_db: MagicMock) -> None:
     assert out["count"] == 0
 
 
-@patch("app.services.purchase_service.get_db")
+@patch("app.domain.shared_services.purchase_service.get_db")
 def test_purchase_get_supplier_missing(mock_get_db: MagicMock) -> None:
     db = MagicMock()
     q = MagicMock()

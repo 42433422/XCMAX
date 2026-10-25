@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
-from .ports import ErrorPolicy
+from .port_contracts import ErrorPolicy
 
 
 class LocalEmployees:

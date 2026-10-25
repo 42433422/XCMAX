@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi.responses import JSONResponse
 
-from .ports import ProxyJSON
+from .port_contracts import ProxyJSON
 
 
 @dataclass

@@ -10,7 +10,7 @@ import httpx
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import Connection, Payload
+from .protocols import Connection, Payload
 from .responses import _response_status_code
 
 

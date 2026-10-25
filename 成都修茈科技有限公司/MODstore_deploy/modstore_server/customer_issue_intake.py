@@ -126,7 +126,9 @@ def enqueue_issue(
 
 def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
     """Consume original lineage; intact incidents and private runs stay idempotent."""
-    from modstore_server.duty_workforce_contracts import enrich_customer_ticket_publish_payload
+    from modstore_server.duty_workforce_contracts import (
+        enrich_customer_ticket_publish_payload,
+    )
     from modstore_server.incident_bus import publish
 
     raw_payload = event.get("data")
@@ -148,7 +150,9 @@ def dispatch_issue_event(event: dict[str, Any]) -> dict[str, Any]:
         if active_shared_repair(db, ticket):
             return {"ok": True, "skipped": True, "reason": "shared_repair_reused"}
     if payload.get("intake_source") == "private_mod_rework":
-        from modstore_server.customer_issue_private_factory import dispatch_private_rework
+        from modstore_server.customer_issue_private_factory import (
+            dispatch_private_rework,
+        )
 
         return dispatch_private_rework(event_id, payload)
     fingerprint = hashlib.sha256(event_id.encode()).hexdigest()

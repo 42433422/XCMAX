@@ -73,7 +73,7 @@ def _resolve_sync_db_path() -> Path:
         p = Path(raw).expanduser().resolve()
     else:
         try:
-            from modstore_server.db.base import default_db_path
+            from modstore_server.db.db_base import default_db_path
 
             p = default_db_path().parent / "xcmax_sync.db"
         except RECOVERABLE_ERRORS:

@@ -8,8 +8,8 @@ from datetime import datetime
 
 from fastapi.responses import JSONResponse
 
+from app.application.shipment_etl.protocols import InputPath, OutputPath, ShipmentApplication
 from app.application.shipment_excel_etl_security import ShipmentEtlPathError
-from app.fastapi_routes.shipment_etl.ports import InputPath, OutputPath, ShipmentApplication
 from app.fastapi_routes.shipment_etl.responses import EtlResponses
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

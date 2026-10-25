@@ -437,7 +437,7 @@ def _resolve_active_provider_id() -> str:
 
 
 def _run_llm_trace_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.services.conversation.api import ApiMixin
+    from app.domain.shared_services.conversation.api import ApiMixin
 
     class EvalApi(ApiMixin):
         def __init__(self) -> None:
@@ -3554,10 +3554,10 @@ def _run_products_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_products_compat_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+    import app.application.excel_imports as excel_imports
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    import app.application.excel_imports as excel_imports
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.legacy.routes.product import compat_routes as product_compat_routes
 
@@ -4671,7 +4671,7 @@ def _run_agent_run_memory_trace_task(task: dict[str, Any]) -> dict[str, Any]:
 
 def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.services import user_memory_service as memory_module
-    from app.services.user_memory_service import UserMemoryService, reset_user_memory_service
+    from app.domain.shared_services.user_memory_service import UserMemoryService, reset_user_memory_service
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -4799,8 +4799,9 @@ def _run_memory_v2_lifecycle_task(task: dict[str, Any]) -> dict[str, Any]:
 
 
 def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
+
+    from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
@@ -4841,7 +4842,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             return_value="full",
         ),
         patch(
-            "app.services.user_memory_service.get_user_memory_service", return_value=memory_service
+            "app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory_service
         ),
     ):
         planner = LLMWorkflowPlanner()
@@ -4901,7 +4902,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
 
 def _run_memory_v2_governance_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.services import user_memory_service as memory_module
-    from app.services.user_memory_service import UserMemoryService, reset_user_memory_service
+    from app.domain.shared_services.user_memory_service import UserMemoryService, reset_user_memory_service
 
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []

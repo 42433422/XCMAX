@@ -18,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
-from modstore_server.db.base import Base, get_session_factory
+from modstore_server.db.db_base import Base, get_session_factory
 
 
 class CatalogItem(Base):

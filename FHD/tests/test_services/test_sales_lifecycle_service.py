@@ -20,7 +20,7 @@ from app.application.sales_lifecycle_service import (
     SalesLifecycleService,
     SalesLifecycleTenantMismatch,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import SalesOrder, SalesOrderItem
 
 _FIXED_DAY = date(2026, 8, 10)

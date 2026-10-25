@@ -9,7 +9,7 @@ from typing import Any, Protocol, TypeVar
 
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
-from .ports import ChatBody, Context, Payload, ReplyFormatter
+from .protocols import ChatBody, Context, Payload, ReplyFormatter
 
 T = TypeVar("T")
 

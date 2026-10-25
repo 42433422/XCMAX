@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import DemoPayload, JsonObject, NormalizeAuth, ProxyJSON
+from .port_contracts import DemoPayload, JsonObject, NormalizeAuth, ProxyJSON
 
 
 @dataclass

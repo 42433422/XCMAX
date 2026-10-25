@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from .ports import ErrorPolicy, JsonObject
+from .port_contracts import ErrorPolicy, JsonObject
 
 
 class ModuleCatalog:

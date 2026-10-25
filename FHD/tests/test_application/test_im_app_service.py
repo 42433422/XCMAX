@@ -386,8 +386,8 @@ class TestListContacts:
 class TestRecordChanges:
     def test_record_im_message_change(self):
         with (
-            patch("app.services.xcmax_sync_service.record_change") as mock_rc,
-            patch("app.services.xcmax_sync_service.utc_now_ms", return_value=1000),
+            patch("app.domain.shared_services.xcmax_sync_service.record_change") as mock_rc,
+            patch("app.domain.shared_services.xcmax_sync_service.utc_now_ms", return_value=1000),
         ):
             result = ImApplicationService._record_im_message_change(
                 {"id": 1, "body": "hi"}, actor="1"
@@ -397,8 +397,8 @@ class TestRecordChanges:
 
     def test_record_im_read_change(self):
         with (
-            patch("app.services.xcmax_sync_service.record_change") as mock_rc,
-            patch("app.services.xcmax_sync_service.utc_now_ms", return_value=2000),
+            patch("app.domain.shared_services.xcmax_sync_service.record_change") as mock_rc,
+            patch("app.domain.shared_services.xcmax_sync_service.utc_now_ms", return_value=2000),
         ):
             result = ImApplicationService._record_im_read_change(
                 conversation_id=1, user_id=1, last_read_message_id=5, actor="1"

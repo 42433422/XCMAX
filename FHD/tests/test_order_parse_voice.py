@@ -19,7 +19,7 @@ def test_parse_order_text_voice_shipment_generate():
 
 
 def test_intent_recognition_shipment_generate_from_voice_style():
-    from app.services.intent_service import recognize_intents
+    from app.domain.shared_services.intent_service import recognize_intents
 
     text = "七彩乐园的一桶酒吧零三的规格28"
     result = recognize_intents(text)
@@ -40,7 +40,7 @@ def test_parse_order_text_missing_bucket_should_ask():
 
 
 def test_intent_recognition_print_model_spec_missing_bucket():
-    from app.services.intent_service import recognize_intents
+    from app.domain.shared_services.intent_service import recognize_intents
 
     text = "打印一下七彩乐园的9803规格28"
     result = recognize_intents(text)
@@ -74,7 +74,7 @@ def test_parse_order_text_missing_spec_should_ask():
 
 
 def test_intent_recognition_colloquial_should_prefer_shipment():
-    from app.services.intent_service import recognize_intents
+    from app.domain.shared_services.intent_service import recognize_intents
 
     text = "给我打印七彩乐园发货单，编号9803，规格二十八，一共三桶"
     result = recognize_intents(text)

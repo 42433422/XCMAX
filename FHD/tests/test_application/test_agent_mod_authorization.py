@@ -14,7 +14,7 @@ from app.application.agent_orchestrator.runtime_context import (
     merge_runtime_context,
 )
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
 from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context

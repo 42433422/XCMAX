@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.user_cs_change_request import (
+from app.domain.shared_services.user_cs_change_request import (
     _CHANGE_TYPES,
     _STATUS_LABELS,
     _decorate,

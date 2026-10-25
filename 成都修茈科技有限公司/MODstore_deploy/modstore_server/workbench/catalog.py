@@ -78,7 +78,10 @@ def _refresh_employee_pack_catalog_zip(db: Session, user: User, pack_dir: Path) 
     writing workflow_id into employee_config_v2).  The catalog runtime reads the
     stored .xcemp, not the library folder, so rebuild and re-register that file.
     """
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.employee_asset_pipeline import reconcile_employee_pack_manifest
 
     raw = _load_registry_aligned_employee_manifest(pack_dir, pack_dir.name)
@@ -92,7 +95,9 @@ def _refresh_employee_pack_catalog_zip(db: Session, user: User, pack_dir: Path) 
     except RECOVERABLE_ERRORS:
         pass
     try:
-        from modstore_server.employee_asset_pipeline import build_employee_pack_zip_for_library
+        from modstore_server.employee_asset_pipeline import (
+            build_employee_pack_zip_for_library,
+        )
 
         raw_zip = build_employee_pack_zip_for_library(pack_id, raw, pack_dir=pack_dir)
     except RECOVERABLE_ERRORS:
@@ -127,13 +132,17 @@ def _refresh_employee_pack_catalog_zip(db: Session, user: User, pack_dir: Path) 
         )
         db.commit()
         try:
-            from modstore_server.api.catalog_public_routes import _invalidate_catalog_list_caches
+            from modstore_server.api.catalog_public_routes import (
+                _invalidate_catalog_list_caches,
+            )
 
             _invalidate_catalog_list_caches(pack_id, row.version)
         except RECOVERABLE_ERRORS:
             pass
         try:
-            from modstore_server.employee_asset_pipeline import mirror_catalog_file_to_market_files
+            from modstore_server.employee_asset_pipeline import (
+                mirror_catalog_file_to_market_files,
+            )
 
             mirror_catalog_file_to_market_files(row.stored_filename)
         except RECOVERABLE_ERRORS:

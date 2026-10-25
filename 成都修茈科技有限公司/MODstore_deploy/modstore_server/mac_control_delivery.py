@@ -187,12 +187,23 @@ def delivery_trace(db, task, customer=None):
         try:
             observed = release_facts(receipt, github, health_payload())
             error = observed.get("error", "")
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        except (
+            httpx.HTTPError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+        ) as exc:
             observed = {
                 "source_commit": receipt["commit_sha"],
                 "error": type(exc).__name__,
                 "stages": [
-                    stage("code", "recorded", "executor_git_readback", receipt["commit_sha"])
+                    stage(
+                        "code",
+                        "recorded",
+                        "executor_git_readback",
+                        receipt["commit_sha"],
+                    )
                 ]
                 + [stage(k) for k in ("tests", "approval", "merged", "deployed")],
             }
@@ -224,7 +235,8 @@ def delivery_trace(db, task, customer=None):
         )
     )
     result.setdefault(
-        "stages", [stage(k) for k in ("code", "tests", "approval", "merged", "deployed")]
+        "stages",
+        [stage(k) for k in ("code", "tests", "approval", "merged", "deployed")],
     )
     tickets = (customer or {}).get("tickets") or []
     verified = [

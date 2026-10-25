@@ -138,7 +138,10 @@ def review_input(event_id: int, payload: dict, receipt: dict) -> dict:
         "wait_for_para": False,
         "title": "Incident escalation review",
         "prompt": prompt,
-        "incident": {"summary": compact, "issue_domain": safe_text(payload.get("issue_domain"))},
+        "incident": {
+            "summary": compact,
+            "issue_domain": safe_text(payload.get("issue_domain")),
+        },
     }
 
 

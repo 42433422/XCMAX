@@ -54,7 +54,7 @@ class BulkServiceMigrator:
             # 插入 NeuroBus 导入
             neuro_imports = [
                 "from app.neuro_bus.bus import get_neuro_bus\n",
-                "from app.neuro_bus.events.base import NeuroEvent, EventPriority\n",
+                "from app.neuro_bus.events.events_base import NeuroEvent, EventPriority\n",
                 "\n",
             ]
 

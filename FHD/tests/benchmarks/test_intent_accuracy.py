@@ -31,11 +31,11 @@ def _load_golden() -> list[dict]:
 def _match_case(result: dict, case: dict, text: str) -> bool:
     check = case.get("check")
     if check == "greeting":
-        from app.services.intent_service import is_greeting
+        from app.domain.shared_services.intent_service import is_greeting
 
         return is_greeting(text)
     if check == "goodbye":
-        from app.services.intent_service import is_goodbye
+        from app.domain.shared_services.intent_service import is_goodbye
 
         return is_goodbye(text)
 
@@ -61,7 +61,7 @@ def golden_cases():
     reason="需要完整意图栈/DB；本地设 INTENT_BENCHMARK_RUN=1 再跑（见 intent-benchmark.yml）",
 )
 def test_intent_golden_set_accuracy(golden_cases):
-    from app.services.intent_service import recognize_intents
+    from app.domain.shared_services.intent_service import recognize_intents
 
     correct = 0
     failures: list[dict] = []

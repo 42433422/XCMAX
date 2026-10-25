@@ -10,7 +10,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any
 
-from .ports import ErrorPolicy, JsonObject
+from .port_contracts import ErrorPolicy, JsonObject
 
 
 class RemoteHealth:

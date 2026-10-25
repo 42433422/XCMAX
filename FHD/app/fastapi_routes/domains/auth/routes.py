@@ -15,7 +15,7 @@ from fastapi import Query as Query
 from fastapi import UploadFile as UploadFile
 from fastapi.background import BackgroundTasks as BackgroundTasks
 
-import app.application.enterprise_registration_response as registration_response
+import app.domain.app_pure.enterprise_registration_response as registration_response
 from app.db.models.user import User
 from app.infrastructure.auth.dependencies import (
     get_logged_in_user,
@@ -35,7 +35,7 @@ from .credential_login import CredentialLogin
 from .credential_routes import CredentialRoutes
 from .federated_login import FederatedLogin
 from .federated_routes import FederatedRoutes
-from .ports import JsonObject
+from .port_contracts import JsonObject
 from .profile_routes import ProfileRoutes
 from .recovery_routes import RecoveryRoutes
 from .registration import Registration, open_registration_allowed

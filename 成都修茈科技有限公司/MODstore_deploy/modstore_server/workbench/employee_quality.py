@@ -96,7 +96,9 @@ async def evaluate_employee_quality(
         if _sd_result and _sd_result.get("six_dimension_report"):
             state.six_dimension_report = _sd_result["six_dimension_report"]
         else:
-            from modstore_server.employee_six_dimension import compute_six_dimension_report
+            from modstore_server.employee_six_dimension import (
+                compute_six_dimension_report,
+            )
 
             state.six_dimension_report = compute_six_dimension_report(
                 pack_dir=state.pack_dir,
@@ -143,7 +145,9 @@ async def evaluate_employee_quality(
         if _sd_pass:
             _sd_msg += "；6/6 维达标，可在完成步查看雷达图"
         else:
-            from modstore_server.employee_six_dimension_report import DIMENSION_LABELS_ZH
+            from modstore_server.employee_six_dimension_report import (
+                DIMENSION_LABELS_ZH,
+            )
 
             _sd_msg += (
                 "；未通过：" + "、".join((DIMENSION_LABELS_ZH.get(k, k) for k in _sd_failed[:4]))

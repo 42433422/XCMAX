@@ -159,7 +159,12 @@ async def list_admin_commerce_orders(
         offset=offset,
     )
     all_rows, _ = payment_orders.list_orders(user_id=0, status=None, limit=100000, offset=0)
-    return {"items": rows, "total": total, "summary": _summary(all_rows), "source": "python_json"}
+    return {
+        "items": rows,
+        "total": total,
+        "summary": _summary(all_rows),
+        "source": "python_json",
+    }
 
 
 def _close_provider_order(order: dict[str, Any]) -> None:
@@ -170,7 +175,8 @@ def _close_provider_order(order: dict[str, Any]) -> None:
         closed = alipay_service.close_order(out_trade_no=str(order.get("out_trade_no") or ""))
         if not closed.get("ok"):
             raise HTTPException(
-                409, f"支付平台关单失败，未修改本地订单：{closed.get('message') or '未知错误'}"
+                409,
+                f"支付平台关单失败，未修改本地订单：{closed.get('message') or '未知错误'}",
             )
 
 
@@ -314,7 +320,10 @@ async def reprice_admin_order(
             replacement_no, status="failed", provider_error=pay.get("message")
         )
         payment_orders.merge_fields(
-            order_no, status="closed", replacement_failed=True, replaced_by=replacement_no
+            order_no,
+            status="closed",
+            replacement_failed=True,
+            replaced_by=replacement_no,
         )
         after = {
             "ok": False,

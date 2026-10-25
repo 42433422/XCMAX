@@ -75,7 +75,7 @@ def test_agent_task_migration_creates_ssot_and_command_ledger(database_url: str)
 def test_migration_accepts_runtime_auto_created_task_tables(database_url: str) -> None:
     command.upgrade(_config(), _PREVIOUS_REVISION)
 
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.agent import (
         AgentTaskCommandRecord,
         AgentTaskExecutionRecord,

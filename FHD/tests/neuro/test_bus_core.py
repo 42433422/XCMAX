@@ -18,7 +18,7 @@ from app.neuro_bus.bus import (
     _neuro_trace_sample_rate,
     _should_trace_event,
 )
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 

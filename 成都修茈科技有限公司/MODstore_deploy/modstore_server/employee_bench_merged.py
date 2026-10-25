@@ -1075,8 +1075,13 @@ async def run_and_score_bench(
     six_dimension_llm_meta: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
     if bench_llm_override:
         try:
-            from modstore_server.catalog_quality import pipeline_label_from_pack, run_pack_validate
-            from modstore_server.employee_six_dimension import compute_six_dimension_report
+            from modstore_server.catalog_quality import (
+                pipeline_label_from_pack,
+                run_pack_validate,
+            )
+            from modstore_server.employee_six_dimension import (
+                compute_six_dimension_report,
+            )
             from modstore_server.employee_six_dimension_llm import (
                 enrich_six_dimension_report_with_llm,
             )

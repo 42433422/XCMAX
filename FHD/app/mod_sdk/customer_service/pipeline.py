@@ -5,12 +5,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from .customer_service_ports import (
+    Employee,
+    Environment,
+    Payload,
+    PipelineRepository,
+    PipelineServices,
+)
 from .models import (
     AnalyzePipelineBody,
     EnterpriseCredentialsIssueBody,
     PipelineBody,
 )
-from .ports import Employee, Environment, Payload, PipelineRepository, PipelineServices
 
 
 @dataclass(frozen=True, eq=False)

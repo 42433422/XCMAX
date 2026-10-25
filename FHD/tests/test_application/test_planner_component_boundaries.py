@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from app.application.workflow.llm_plan_generation import LlmPlanGeneration
 from app.application.workflow.planning_graph_policy import validate_required_params
 from app.application.workflow.planning_loop import PlanningLoop
-from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 
 
 def test_generation_uses_injected_transport_and_retains_request_evidence():
@@ -80,7 +80,7 @@ def test_refinement_never_probes_writes_or_nodes_with_missing_required_input():
     probe = Mock(return_value={"success": True, "data": [{"stock": 20}]})
     loop = PlanningLoop(generate, repair, probe, validate_plan_graph, validate_required_params)
 
-    with patch("app.services.task_agent.TaskAgent", return_value=None):
+    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
         result = loop.plan("plan-1", "owner", "查询库存", registry, {"session_id": "same"})
 
     assert result is final
@@ -102,7 +102,7 @@ def test_invalid_critic_output_is_rejected_after_one_repair_attempt():
     probe = Mock()
     loop = PlanningLoop(generate, repair, probe, validate_plan_graph, validate_required_params)
 
-    with patch("app.services.task_agent.TaskAgent", return_value=None):
+    with patch("app.domain.shared_services.task_agent.TaskAgent", return_value=None):
         result = loop.plan("plan-1", "owner", "查询库存", {}, {})
 
     assert result is None

@@ -23,8 +23,8 @@ def _reset_llm_env(monkeypatch, tmp_path):
     monkeypatch.setenv("FHD_EXCEL_ETL_HEURISTIC", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     monkeypatch.delenv("FHD_EXCEL_ETL_ALLOW_BUILTIN", raising=False)
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
     from app.application.shipment_etl_profile import clear_profile_cache
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
     clear_profile_cache()

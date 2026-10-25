@@ -11,7 +11,7 @@ from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import NullPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.sqlite_mod_paths import mod_suffix_token, sqlite_filename_with_mod_suffix
 from app.request_active_mod_ctx import get_request_active_mod_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS

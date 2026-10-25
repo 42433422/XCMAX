@@ -1891,7 +1891,9 @@ async def api_admin_align_single_employee_llm_to_auto(
 
     用于「无密钥」修复路径：管理员在 dg-stats 上直接点单条「改为自动」时调用。
     """
-    from modstore_server.employee_pack_deepseek_align import align_single_employee_pack_llm_to_auto
+    from modstore_server.employee_pack_deepseek_align import (
+        align_single_employee_pack_llm_to_auto,
+    )
 
     result = await align_single_employee_pack_llm_to_auto(user, pkg_id, dry_run=dry_run)
     if not result.get("ok"):

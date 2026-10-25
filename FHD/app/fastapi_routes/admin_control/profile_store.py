@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Protocol
 
-from .ports import JsonObject
+from .port_contracts import JsonObject
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session

@@ -36,7 +36,7 @@ from app.neuro_bus.event_store import (
     replay_events,
     store_event,
 )
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.health_monitor import (
     Alert,
     AlertLevel,

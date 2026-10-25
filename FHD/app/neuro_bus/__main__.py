@@ -104,7 +104,7 @@ async def test_neurobus():
 
     try:
         from app.neuro_bus.bus import get_neuro_bus
-        from app.neuro_bus.events.base import EventPriority, NeuroEvent
+        from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
         bus = get_neuro_bus()
 
@@ -155,7 +155,7 @@ def test_domains():
     print("\n[4/5] Testing NeuroDomains...")
 
     try:
-        from app.neuro_bus.domains.base import get_domain_registry
+        from app.neuro_bus.domains.domains_base import get_domain_registry
         from app.neuro_bus.domains.intent_domain import get_intent_domain
         from app.neuro_bus.domains.order_domain import get_order_domain
         from app.neuro_bus.domains.payment_domain import get_payment_domain

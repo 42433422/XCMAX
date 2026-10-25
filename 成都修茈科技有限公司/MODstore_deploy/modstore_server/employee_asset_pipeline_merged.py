@@ -389,7 +389,9 @@ def build_rule_spec(
     *,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.employee_pipeline_routing import confident_word_full_extract_routing
+    from modstore_server.employee_pipeline_routing import (
+        confident_word_full_extract_routing,
+    )
 
     if confident_word_full_extract_routing(brief):
         return _facade().build_word_extract_rule_spec(brief)
@@ -487,7 +489,10 @@ def build_rule_spec(
                 a.get("filename") for a in (asset_manifest.get("expected_outputs") or [])[:5]
             ],
             "rules": [
-                {"filename": a.get("filename"), "preview": str(a.get("preview") or "")[:1000]}
+                {
+                    "filename": a.get("filename"),
+                    "preview": str(a.get("preview") or "")[:1000],
+                }
                 for a in (asset_manifest.get("rules") or [])[:5]
             ],
         },
@@ -564,7 +569,9 @@ def _slug_from_brief(brief: str) -> str:
 def _employee_name_from_brief(brief: str, fallback: str = "文件处理员工") -> str:
     text = (brief or "").strip()
     explicit = _facade().re.search(
-        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})", text, _facade().re.I
+        "(?:员工名称|员工名|name)\\s*[:：=]\\s*([^\\n\\r,，。；;]{2,40})",
+        text,
+        _facade().re.I,
     )
     if explicit:
         return explicit.group(1).strip()
@@ -1405,7 +1412,9 @@ async def enrich_manifest_productivity_fields(
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
     """轻量 LLM：仅补 description / panel_summary / behavior_rules，与模板落盘并行，不阻塞 convert。"""
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if not is_direct_python_template_runtime(runtime_kind):
@@ -1489,7 +1498,9 @@ async def design_asset_employee_manifest(
     provider: _facade().Optional[str],
     model: _facade().Optional[str],
 ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, _facade().Any]]:
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
 
     runtime_kind = str(rule_spec.get("runtime_kind") or "")
     if is_direct_python_template_runtime(runtime_kind):
@@ -2431,12 +2442,16 @@ async def run_asset_employee_scaffold_async(
     force_llm_codegen: bool = False,
     payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().Dict[str, _facade().Any]:
-    from modstore_server.artifact_generator_blueprint import artifact_generator_preflight
+    from modstore_server.artifact_generator_blueprint import (
+        artifact_generator_preflight,
+    )
     from modstore_server.craft_failure_signals import (
         _employee_trigger_limits,
         emit_craft_step_failure,
     )
-    from modstore_server.employee_pipeline_routing import is_direct_python_template_runtime
+    from modstore_server.employee_pipeline_routing import (
+        is_direct_python_template_runtime,
+    )
     from modstore_server.vibecoding_convert_loop import (
         is_llm_codegen_source,
         run_vibecoding_codegen_loop,

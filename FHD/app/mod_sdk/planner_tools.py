@@ -204,7 +204,7 @@ def execute_planner_workflow_tool(
         return native_raw
 
     try:
-        from app.application.employee_pack_runner import try_execute_employee_planner_tool
+        from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
 
         emp_raw = try_execute_employee_planner_tool(
             name,

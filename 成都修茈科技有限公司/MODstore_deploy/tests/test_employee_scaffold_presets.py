@@ -1,5 +1,8 @@
 from modstore_server.employee_ai_scaffold import _default_capabilities
-from modstore_server.employee_scaffold_presets import list_preset_keys, resolve_preset_capabilities
+from modstore_server.employee_scaffold_presets import (
+    list_preset_keys,
+    resolve_preset_capabilities,
+)
 
 
 def test_resolve_preset_engineering():

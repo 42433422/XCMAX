@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.services.tools_workflow_common import _result_record_id as _nested_id
+from app.domain.shared_services.tools_workflow_common import _result_record_id as _nested_id
 
 
 def _normalized_fields(payload: dict[str, Any]) -> dict[str, Any]:

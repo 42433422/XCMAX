@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_payload_legacy — coverage ramp."""
+"""Tests for app.domain.shared_services.tools_payload_legacy — coverage ramp."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
 def _json_fn(data, status=200):

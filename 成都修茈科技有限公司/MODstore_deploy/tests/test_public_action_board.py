@@ -23,7 +23,10 @@ def test_build_public_board_has_no_internal_fields(monkeypatch):
     monkeypatch.setenv("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL", "1")
     from sqlalchemy import text
 
-    from modstore_server.digest_action_items import ensure_table, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        ensure_table,
+        parse_and_store_action_items,
+    )
     from modstore_server.models import get_engine
 
     ensure_table()

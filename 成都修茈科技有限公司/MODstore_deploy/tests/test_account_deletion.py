@@ -34,7 +34,10 @@ def test_account_delete_revokes_access_and_refresh_without_touching_other_user(c
     with get_session_factory()() as session:
         session.add(
             DeveloperToken(
-                user_id=first_user["id"], name="delete-test", token_prefix=prefix, token_hash=digest
+                user_id=first_user["id"],
+                name="delete-test",
+                token_prefix=prefix,
+                token_hash=digest,
             )
         )
         session.commit()
@@ -121,7 +124,12 @@ def test_account_delete_revokes_existing_websocket(client, monkeypatch, path, fi
         )
         assert deleted.status_code == 200, deleted.text
         ws.send_json(
-            {"type": "utterance", "text": "hello", "provider": "openai", "model": "test"}
+            {
+                "type": "utterance",
+                "text": "hello",
+                "provider": "openai",
+                "model": "test",
+            }
             if path.endswith("/s2s/ws")
             else {"type": "ping"}
         )

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException, Request
 from fastapi.responses import Response
 
-from .ports import BusinessVisibility, Payload
+from .port_contracts import BusinessVisibility, Payload
 
 
 @dataclass(frozen=True)

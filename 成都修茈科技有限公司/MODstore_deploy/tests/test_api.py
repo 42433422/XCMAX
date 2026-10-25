@@ -416,10 +416,16 @@ def test_admin_reset_user_password_then_login(client, monkeypatch):
         ("/api/mods/shared/snapshots/synthetic/restore", None),
         ("/api/mods/shared/manifest/bump-patch-version", None),
         ("/api/mods/shared/frontend/regenerate", {}),
-        ("/api/mods/shared/workflow-employees/scaffold", {"id": "synthetic", "label": "Synthetic"}),
+        (
+            "/api/mods/shared/workflow-employees/scaffold",
+            {"id": "synthetic", "label": "Synthetic"},
+        ),
         ("/api/mods/shared/snapshots", {}),
         ("/api/mods/shared/attach-catalog-employee", {"pkg_id": "synthetic"}),
-        ("/api/mods/ai-scaffold", {"brief": "synthetic", "_manifest_override": {"id": "shared"}}),
+        (
+            "/api/mods/ai-scaffold",
+            {"brief": "synthetic", "_manifest_override": {"id": "shared"}},
+        ),
     ],
 )
 def test_real_member_jwt_cannot_enter_shared_authoring(

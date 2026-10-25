@@ -228,7 +228,10 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         with sf() as session:
             rows = (
                 session.query(AIEmployeeAccount)
-                .filter(AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active")
+                .filter(
+                    AIEmployeeAccount.platform == "qq",
+                    AIEmployeeAccount.status == "active",
+                )
                 .all()
             )
         for row in rows:
@@ -248,7 +251,8 @@ def _all_known_app_secrets() -> _facade().Dict[str, str]:
         if secret:
             if result.get(aid) and result[aid] != secret:
                 _facade().logger.info(
-                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）", aid
+                    "QQ AppSecret 覆盖：app_id=%s 以 ENV/老员工专用解析为准（账号池值已忽略）",
+                    aid,
                 )
             result[aid] = secret
     return result
@@ -295,7 +299,8 @@ async def get_access_token(force_refresh: bool = False) -> str:
             raise _facade().HTTPException(503, "BUTLER_QQ_APP_ID / BUTLER_QQ_APP_SECRET 未配置")
         async with _facade().httpx.AsyncClient(timeout=15.0) as client:
             r = await client.post(
-                _facade()._qq_token_endpoint(), json={"appId": app_id, "clientSecret": app_secret}
+                _facade()._qq_token_endpoint(),
+                json={"appId": app_id, "clientSecret": app_secret},
             )
             if r.status_code >= 400:
                 raise _facade().HTTPException(
@@ -453,7 +458,10 @@ class _BotContext:
         base = self.api_base()
         if kind == "group":
             url = f"{base}/v2/groups/{target_id}/messages"
-            body: _facade().Dict[str, _facade().Any] = {"content": content, "msg_type": 0}
+            body: _facade().Dict[str, _facade().Any] = {
+                "content": content,
+                "msg_type": 0,
+            }
         elif kind == "c2c":
             url = f"{base}/v2/users/{target_id}/messages"
             body = {"content": content, "msg_type": 0}
@@ -535,7 +543,8 @@ async def _get_bot_ctx(app_id: str) -> _facade().Optional[_BotContext]:
                     rows = (
                         session.query(AIEmployeeAccount)
                         .filter(
-                            AIEmployeeAccount.platform == "qq", AIEmployeeAccount.status == "active"
+                            AIEmployeeAccount.platform == "qq",
+                            AIEmployeeAccount.status == "active",
                         )
                         .all()
                     )
@@ -719,7 +728,10 @@ async def dispatch_to_employee(
         await ctx.send(kind, target_id, reply, msg_id=msg_id)
     except RECOVERABLE_ERRORS:
         _facade().logger.exception(
-            "QQ 出站失败 kind=%s target=%s employee=%s", kind, target_id, ctx.employee_id
+            "QQ 出站失败 kind=%s target=%s employee=%s",
+            kind,
+            target_id,
+            ctx.employee_id,
         )
 
 
@@ -819,7 +831,12 @@ async def _employee_chat(user_text: str, *, employee_id: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=600
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=600,
     )
     return str(result.get("content") or "").strip()
 
@@ -903,7 +920,12 @@ async def _butler_chat(user_text: str) -> str:
         {"role": "user", "content": user_text},
     ]
     result = await chat_dispatch(
-        provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=800
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
+        messages=msgs,
+        max_tokens=800,
     )
     return str(result.get("content") or "").strip()
 
@@ -1199,7 +1221,9 @@ async def _qq_webhook_impl(
             _facade().logger.exception("op=13 签名失败 app_id=%s", inbound_app_id_13)
             raise _facade().HTTPException(500, f"签名失败: {exc}")
         _facade().logger.info(
-            "op=13 握手成功 app_id=%s chosen_secret=%s", inbound_app_id_13 or "unknown", chosen_for
+            "op=13 握手成功 app_id=%s chosen_secret=%s",
+            inbound_app_id_13 or "unknown",
+            chosen_for,
         )
         return _facade().JSONResponse({"plain_token": plain_token, "signature": sig_bytes.hex()})
     secrets_map = _facade()._all_known_app_secrets()
@@ -1240,12 +1264,18 @@ async def _qq_webhook_impl(
 async def qq_push(body: _PushDTO, request: _facade().Request) -> _facade().Dict[str, _facade().Any]:
     _facade()._check_admin(request)
     return await _facade()._send(
-        body.kind, body.target_id, body.content, msg_id=body.msg_id, msg_seq=body.msg_seq
+        body.kind,
+        body.target_id,
+        body.content,
+        msg_id=body.msg_id,
+        msg_seq=body.msg_seq,
     )
 
 
 @_facade().router.post("/cache/reload")
-async def qq_reload_cache(request: _facade().Request) -> _facade().Dict[str, _facade().Any]:
+async def qq_reload_cache(
+    request: _facade().Request,
+) -> _facade().Dict[str, _facade().Any]:
     """让凭证 / BotContext 缓存立刻失效；admin CRUD 之后会自动调，
     这里也提供手动触发（运维侧排障用）。"""
     _facade()._check_admin(request)

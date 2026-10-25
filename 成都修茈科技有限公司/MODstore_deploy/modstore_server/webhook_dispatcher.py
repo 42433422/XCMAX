@@ -28,7 +28,11 @@ from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from modstore_server.eventing import new_event
-from modstore_server.eventing.contracts import canonical_event_name, event_version, validate_payload
+from modstore_server.eventing.contracts import (
+    canonical_event_name,
+    event_version,
+    validate_payload,
+)
 from modstore_server.eventing.global_bus import neuro_bus
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

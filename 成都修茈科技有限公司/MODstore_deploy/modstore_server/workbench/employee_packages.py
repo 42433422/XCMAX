@@ -16,7 +16,10 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.workbench.catalog import _write_workflow_reference_report, store_catalog_row
+from modstore_server.workbench.catalog import (
+    _write_workflow_reference_report,
+    store_catalog_row,
+)
 from modstore_server.workbench.schemas import EmployeeExportBody, EmployeeSaveBody
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
@@ -38,7 +41,10 @@ async def employee_save_impl(
     import tempfile as _tmp
     import zipfile as _zipfile
 
-    from modstore_server.catalog_store import append_package, package_manifest_alignment_errors
+    from modstore_server.catalog_store import (
+        append_package,
+        package_manifest_alignment_errors,
+    )
     from modstore_server.catalog_sync import upsert_catalog_item_from_xc_package_dict
 
     mf = body.manifest
@@ -69,14 +75,16 @@ async def employee_save_impl(
             embed_workflow_bundles_in_manifest(db_ref, mf)
         except RECOVERABLE_ERRORS as _bundle_exc:
             _LOG.warning(
-                "employee_save: embed bundles failed error_type=%s", type(_bundle_exc).__name__
+                "employee_save: embed bundles failed error_type=%s",
+                type(_bundle_exc).__name__,
             )
             ref_warnings = _write_workflow_reference_report(db_ref, user, mf)
     from modman.artifact_constants import normalize_artifact
 
     if normalize_artifact(mf) != "employee_pack":
         raise HTTPException(
-            400, f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}"
+            400,
+            f"manifest 规范化后 artifact 仍无效；校验详情: {'; '.join(registry_errs)}",
         )
     from modstore_server.employee_asset_pipeline import (
         DIRECT_PYTHON_RUNTIME_MISSING_MSG,
@@ -136,13 +144,18 @@ async def employee_save_impl(
                 mf = json.loads(mf_path_rh.read_text(encoding="utf-8"))
     except RECOVERABLE_ERRORS as _rh_exc:
         _LOG.warning(
-            "employee_save: rehydrate bundles failed error_type=%s", type(_rh_exc).__name__
+            "employee_save: rehydrate bundles failed error_type=%s",
+            type(_rh_exc).__name__,
         )
     eskill_result: Dict[str, Any] = {"registered": 0, "skipped": False, "error": ""}
     if body.register_skills:
         try:
-            from modstore_server.employee_skill_register import register_employee_pack_as_eskills
-            from modstore_server.mod_scaffold_runner import resolve_llm_provider_model_auto
+            from modstore_server.employee_skill_register import (
+                register_employee_pack_as_eskills,
+            )
+            from modstore_server.mod_scaffold_runner import (
+                resolve_llm_provider_model_auto,
+            )
 
             sf_reg = ports.database()
             with sf_reg() as db_reg:
@@ -216,7 +229,8 @@ async def employee_save_impl(
                     mf["employee_config_v2"] = v2
                     mf_path = pack_dir / "manifest.json"
                     mf_path.write_text(
-                        json.dumps(mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                        json.dumps(mf, ensure_ascii=False, indent=2) + "\n",
+                        encoding="utf-8",
                     )
         except RECOVERABLE_ERRORS as exc:
             _LOG.warning("employee_save: Skill registration failed; saving continues")
@@ -358,12 +372,17 @@ async def employee_export(
         raise HTTPException(400, DIRECT_PYTHON_RUNTIME_MISSING_MSG)
     try:
         if body.standalone:
-            from modstore_server.employee_pack_export import _build_employee_pack_zip_with_source
+            from modstore_server.employee_pack_export import (
+                _build_employee_pack_zip_with_source,
+            )
 
             zip_bytes = _build_employee_pack_zip_with_source(pack_id, mf, None)
         else:
             zip_bytes = build_employee_pack_zip_for_library(
-                pack_id, mf, pack_dir=_lib_pack if _lib_pack.is_dir() else None, brief=_export_brief
+                pack_id,
+                mf,
+                pack_dir=_lib_pack if _lib_pack.is_dir() else None,
+                brief=_export_brief,
             )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

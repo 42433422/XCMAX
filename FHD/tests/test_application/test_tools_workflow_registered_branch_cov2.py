@@ -1,4 +1,4 @@
-"""测试 app.services.tools_workflow_registered 的分支覆盖。
+"""测试 app.domain.shared_services.tools_workflow_registered 的分支覆盖。
 
 覆盖目标：
 - _registered_router_normal_slot_dispatch（product_query / shipment_preview / 未知动作）
@@ -38,7 +38,11 @@ import pytest
 
 _spec = importlib.util.spec_from_file_location(
     "_twr_module",
-    Path(__file__).resolve().parents[2] / "app" / "services" / "tools_workflow_registered.py",
+    Path(__file__).resolve().parents[2]
+    / "app"
+    / "domain"
+    / "shared_services"
+    / "tools_workflow_registered.py",
 )
 assert _spec is not None and _spec.loader is not None
 _twr = importlib.util.module_from_spec(_spec)

@@ -52,7 +52,8 @@ def main() -> int:
     user = (os.environ.get("DATABASE_USER") or "modstore_pay").strip()
     password = (os.environ.get("DATABASE_PASSWORD") or "").strip()
     jdbc = (
-        os.environ.get("JAVA_DATABASE_URL") or "jdbc:postgresql://127.0.0.1:5432/payment_db"
+        os.environ.get("JAVA_DATABASE_URL")
+        or "jdbc:postgresql://127.0.0.1:5432/payment_db"
     ).strip()
     if not mod_url:
         print("DATABASE_URL missing", file=sys.stderr)
@@ -81,7 +82,9 @@ def main() -> int:
         )
         if args.dry_run:
             with pay.connect() as pc:
-                pay_ids = {int(r[0]) for r in pc.execute(text("select user_id from wallets"))}
+                pay_ids = {
+                    int(r[0]) for r in pc.execute(text("select user_id from wallets"))
+                }
             missing = [
                 (int(r["user_id"]), float(r["balance"] or 0))
                 for r in mod_w
@@ -95,7 +98,9 @@ def main() -> int:
             return 0
 
         with pay.begin() as pc:
-            pay_ids = {int(r[0]) for r in pc.execute(text("select user_id from wallets"))}
+            pay_ids = {
+                int(r[0]) for r in pc.execute(text("select user_id from wallets"))
+            }
             pay_users = {int(r[0]) for r in pc.execute(text("select id from users"))}
             for row in mod_w:
                 uid = int(row["user_id"])
@@ -143,7 +148,9 @@ def main() -> int:
                             "username": uname,
                             "email": email,
                             "is_admin": bool(u["is_admin"]),
-                            "created_at": u["created_at"].isoformat() if u["created_at"] else None,
+                            "created_at": u["created_at"].isoformat()
+                            if u["created_at"]
+                            else None,
                         },
                     )
                     pay_users.add(uid)

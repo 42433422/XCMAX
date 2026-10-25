@@ -24,7 +24,10 @@ def test_auto_dispatch_explicit_off(monkeypatch):
 def test_production_requires_explicit_envs(monkeypatch):
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY", "1")
     monkeypatch.setenv("MODSTORE_SELF_MAINTENANCE_AUTO_DISPATCH_DEPLOY_ENVS", "staging,production")
-    assert _maintenance_deployment._auto_dispatch_deploy_envs() == ["staging", "production"]
+    assert _maintenance_deployment._auto_dispatch_deploy_envs() == [
+        "staging",
+        "production",
+    ]
 
 
 def test_force_remote_trigger_outlives_para_wait_budget():

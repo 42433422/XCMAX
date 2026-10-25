@@ -15,7 +15,7 @@ def test_english_to_adjacent_buyer(tmp_path, monkeypatch):
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
 
@@ -43,7 +43,7 @@ def test_pi_bill_to_not_buyer_po(tmp_path, monkeypatch):
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
 
@@ -64,7 +64,7 @@ def test_purchase_unit_label(tmp_path, monkeypatch):
     monkeypatch.setenv("FHD_SHIPMENT_ETL_LLM", "0")
     monkeypatch.setenv("FHD_EXCEL_ETL_KB_PATH", str(tmp_path / "kb.json"))
     clear_profile_cache()
-    from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
+    from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
     reset_excel_etl_kb_for_tests(tmp_path / "kb.json")
 

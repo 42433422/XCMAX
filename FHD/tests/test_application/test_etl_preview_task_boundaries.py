@@ -27,7 +27,7 @@ from app.application.etl.service import EtlService
 from app.application.etl.service_support import load_json
 from app.application.etl.targets import get_adapter
 from app.db import session as db_session
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Product, PurchaseUnit
 from app.db.models.etl import EtlRun, EtlRunRow
 from app.db.models.user import Session as UserSession

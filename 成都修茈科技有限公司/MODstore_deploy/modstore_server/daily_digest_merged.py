@@ -88,7 +88,10 @@ def _notify_daily_digest_in_app(subject: str, digest_delivered: bool) -> None:
     if not ids:
         return
     try:
-        from modstore_server.notification_service import NotificationType, create_notification
+        from modstore_server.notification_service import (
+            NotificationType,
+            create_notification,
+        )
 
         body = f"MODstore 每日摘要邮件已投递：{subject}。也可在邮箱中查看全文。"
         for uid in ids:
@@ -332,7 +335,9 @@ def _run_scheduled_digest_vibe_prep(
 
             rt_after = ""
             try:
-                from modstore_server.release_train import release_train_context_for_digest
+                from modstore_server.release_train import (
+                    release_train_context_for_digest,
+                )
 
                 rt_after = str(
                     (release_train_context_for_digest(record_id) or {}).get("release_train_after")
@@ -362,7 +367,9 @@ def _run_scheduled_digest_vibe_prep(
                     "collab report (action items) failed record_id=%s", record_id
                 )
             try:
-                from modstore_server.public_action_board import write_public_action_board
+                from modstore_server.public_action_board import (
+                    write_public_action_board,
+                )
 
                 pub = write_public_action_board(day=day)
                 _facade().logger.info(
@@ -379,7 +386,9 @@ def _run_scheduled_digest_vibe_prep(
                 "daily digest: action items store failed record_id=%s", record_id
             )
     if result.get("ok"):
-        from modstore_server.digest_vibe_line_dispatch import dispatch_vibe_prep_to_production_lines
+        from modstore_server.digest_vibe_line_dispatch import (
+            dispatch_vibe_prep_to_production_lines,
+        )
 
         dispatch = dispatch_vibe_prep_to_production_lines(record_id, result)
         if dispatch.get("ok"):
@@ -417,7 +426,9 @@ def _repo_root() -> _facade().Path:
     if env:
         return _facade().Path(env).resolve()
     try:
-        from modstore_server.integrations.ops_action_handlers import repo_root as _ops_rr
+        from modstore_server.integrations.ops_action_handlers import (
+            repo_root as _ops_rr,
+        )
 
         return _facade().Path(_ops_rr())
     except RECOVERABLE_ERRORS:
@@ -436,7 +447,9 @@ def _consistency_check_html(repo_root: _facade().Path) -> str:
     if raw in ("0", "false", "no", "off"):
         return ""
     try:
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         result = run_full_consistency_check(repo_root)
     except RECOVERABLE_ERRORS as exc:
@@ -1668,7 +1681,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         return {"ok": False, "delivered": False, "reason": "no_valid_recipient_emails"}
     try:
         try:
-            from modstore_server.inbox_poller import poll_fail_streak as _poll_fail_streak
+            from modstore_server.inbox_poller import (
+                poll_fail_streak as _poll_fail_streak,
+            )
 
             _streak = _poll_fail_streak()
         except RECOVERABLE_ERRORS:
@@ -1713,7 +1728,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
             "yes",
         ):
             try:
-                from modstore_server.daily_employee_briefs import build_daily_brief_html_sync
+                from modstore_server.daily_employee_briefs import (
+                    build_daily_brief_html_sync,
+                )
 
                 employee_briefs_html = build_daily_brief_html_sync()
             except RECOVERABLE_ERRORS:
@@ -1736,7 +1753,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         surface_ppt_meta: _facade().Dict[str, _facade().Any] = {}
         if surface_audit_bundle.get("ok"):
             try:
-                from modstore_server.daily_digest_surface_ppt import build_surface_audit_pptx
+                from modstore_server.daily_digest_surface_ppt import (
+                    build_surface_audit_pptx,
+                )
 
                 surface_ppt_meta = build_surface_audit_pptx(surface_audit_report)
                 if surface_ppt_meta.get("ok") and (not surface_ppt_meta.get("skipped")):
@@ -1816,7 +1835,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
         )
         if record_id and meeting_minutes_html:
             try:
-                from modstore_server.employee_collab_reporter import report_meeting_minutes
+                from modstore_server.employee_collab_reporter import (
+                    report_meeting_minutes,
+                )
 
                 report_meeting_minutes(
                     record_id=int(record_id), day=day, minutes_html=meeting_minutes_html
@@ -1901,7 +1922,9 @@ def run_daily_digest_email() -> _facade().Dict[str, _facade().Any]:
     finally:
         if stop_ephemeral_after:
             try:
-                from modstore_server.surface_audit_deps import stop_surface_audit_ephemeral
+                from modstore_server.surface_audit_deps import (
+                    stop_surface_audit_ephemeral,
+                )
 
                 stopped = stop_surface_audit_ephemeral()
                 _facade().logger.info(
@@ -1934,7 +1957,13 @@ def _prune_zombie_pending_staged_changes() -> int:
                     continue
                 try:
                     proc = subprocess.run(
-                        ["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"],
+                        [
+                            "git",
+                            "rev-parse",
+                            "--verify",
+                            "--quiet",
+                            f"refs/heads/{branch}",
+                        ],
                         cwd=root,
                         capture_output=True,
                         text=True,

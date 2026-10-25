@@ -30,7 +30,7 @@ class AgentToolExecutor:
             and step.action == "rebuild_index"
             and step.params.get("background", True)
         ):
-            from app.application.dataset_rag_queue import ensure_host_worker
+            from app.domain.app_pure.dataset_rag_queue import ensure_host_worker
 
             ensure_host_worker()
         return execute_isolated(self, step, runtime_context, deadline_monotonic)
@@ -195,7 +195,9 @@ def execute_with_tool_deadline(
                 and result.get("success") is True
                 and isinstance(step.params.get("payload"), dict)
             ):
-                from app.services.tools_workflow_common import _remember_business_db_target
+                from app.domain.shared_services.tools_workflow_common import (
+                    _remember_business_db_target,
+                )
 
                 _remember_business_db_target(
                     context,

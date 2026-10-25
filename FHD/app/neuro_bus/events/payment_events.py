@@ -6,7 +6,7 @@ Payment 领域事件定义
 
 from dataclasses import dataclass
 
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 
 
 @dataclass

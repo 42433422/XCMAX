@@ -30,7 +30,10 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
     ):
         try:
             await ports.progress.set_step(
-                state.session_id, "complete", "running", "登记未通过，正在重试 manifest 对齐…"
+                state.session_id,
+                "complete",
+                "running",
+                "登记未通过，正在重试 manifest 对齐…",
             )
             _retry_mf = state.result["manifest"]
             _retry_pid = str(_retry_mf.get("id") or state.result.get("id") or "").strip()
@@ -38,7 +41,8 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
                 _raw_mf = json.loads((state.pack_dir / "manifest.json").read_text(encoding="utf-8"))
                 _aligned_mf, _ = normalize_editor_manifest_for_registry(_raw_mf, _retry_pid)
                 (state.pack_dir / "manifest.json").write_text(
-                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
                 )
                 state.registration_missing = False
                 for qi in state.quality_items:
@@ -47,7 +51,8 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
                         qi["note"] = "重试 manifest 对齐成功（未自动上架）"
         except RECOVERABLE_ERRORS as _retry_exc:
             _LOG.warning(
-                "register_pack local retry failed error_type=%s", type(_retry_exc).__name__
+                "register_pack local retry failed error_type=%s",
+                type(_retry_exc).__name__,
             )
             for qi in state.quality_items:
                 if qi["check"] == "员工包登记":
@@ -82,7 +87,10 @@ async def deliver_employee(state: EmployeeBuildState, *, ports: EmployeeDelivery
     if state.critical_failed:
         _complete_msg_parts.insert(0, "⚠️ 关键质量项未通过，员工包不可用")
     await ports.progress.set_step(
-        state.session_id, "complete", _complete_status, "；".join(_complete_msg_parts)[:480]
+        state.session_id,
+        "complete",
+        _complete_status,
+        "；".join(_complete_msg_parts)[:480],
     )
     if state.critical_failed:
         await ports.progress.fail(

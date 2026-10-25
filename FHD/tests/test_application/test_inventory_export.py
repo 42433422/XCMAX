@@ -16,7 +16,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, Product, Warehouse
 from app.fastapi_routes import inventory, inventory_exports
 from app.infrastructure.tenant_scope import tenant_scope
@@ -37,7 +37,7 @@ def inventory_http(monkeypatch):
         with factory() as db:
             yield db
 
-    monkeypatch.setattr("app.services.inventory_service.get_db", isolated_db)
+    monkeypatch.setattr("app.domain.shared_services.inventory_service.get_db", isolated_db)
     with factory() as db:
         for tenant_id in (1, 2):
             with tenant_scope(tenant_id):
@@ -236,7 +236,7 @@ def test_empty_export_returns_error_without_download(inventory_http, params):
 
 def test_export_limit_rejects_instead_of_silently_truncating(inventory_http, monkeypatch):
     client, _factory, _engine = inventory_http
-    monkeypatch.setattr("app.services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+    monkeypatch.setattr("app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
     response = client.get("/api/inventory/export.xlsx")
     assert response.status_code == 413
     assert response.json()["error_code"] == "INVENTORY_EXPORT_LIMIT"
@@ -343,7 +343,7 @@ def test_csv_protects_all_text_columns_without_corrupting_numbers(prefix, formul
     import csv
     from io import StringIO
 
-    from app.application.inventory_export import render_inventory_csv
+    from app.domain.app_pure.inventory_export import render_inventory_csv
 
     text_fields = ("product_name", "product_code", "warehouse_name", "batch_no", "unit")
     row = dict.fromkeys(text_fields, prefix + formula)
@@ -360,7 +360,7 @@ def test_csv_quotes_chinese_commas_newlines_and_empty_values():
     import csv
     from io import StringIO
 
-    from app.application.inventory_export import render_inventory_csv
+    from app.domain.app_pure.inventory_export import render_inventory_csv
 
     value = '中文,"引号"\r\n第二行'
     rows = list(
@@ -378,7 +378,9 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     client, _factory, _engine = inventory_http
     params = {"keyword": "不存在"} if kind == "empty" else {}
     if kind == "limit":
-        monkeypatch.setattr("app.services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2)
+        monkeypatch.setattr(
+            "app.domain.shared_services.inventory_lookup.INVENTORY_EXPORT_ROW_LIMIT", 2
+        )
     if kind == "failure":
         service = MagicMock()
         service.export_inventory.side_effect = RuntimeError("private detail")
@@ -389,7 +391,7 @@ def test_csv_errors_never_download_partial_file(inventory_http, monkeypatch, kin
     assert "private detail" not in response.text
 
 
-def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypatch):
+def test_csv_mod_declares_new_host_requirement_in_canonical_tree(monkeypatch):
     import json
     from pathlib import Path
 
@@ -398,7 +400,8 @@ def test_csv_mod_declares_new_host_requirement_and_export_copy_matches(monkeypat
     root = Path(__file__).resolve().parents[2]
     source = root / "mods/xcagi-erp-domain-bridge/manifest.json"
     exported = root / "XCAGI/mods/xcagi-erp-domain-bridge/manifest.json"
-    assert source.read_bytes() == exported.read_bytes()
+    assert source.is_file()
+    assert not exported.exists()
     data = json.loads(source.read_text())
     assert data["version"] == "1.0.0.7"
     required = data["dependencies"]["xcagi"]

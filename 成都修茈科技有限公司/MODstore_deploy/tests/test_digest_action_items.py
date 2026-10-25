@@ -16,7 +16,10 @@ def test_parse_skips_low_signal_action_items(monkeypatch):
     monkeypatch.delenv("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL", raising=False)
     _reset_action_items_table()
 
-    from modstore_server.digest_action_items import list_action_items, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        list_action_items,
+        parse_and_store_action_items,
+    )
 
     updates = """
 # Vibe 预备 · 更新清单

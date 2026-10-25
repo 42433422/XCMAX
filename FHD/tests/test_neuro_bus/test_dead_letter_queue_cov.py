@@ -29,7 +29,7 @@ from app.neuro_bus.dead_letter_queue import (
     get_dead_letter_queue,
     get_dlq_stats,
 )
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 # ---------------------------------------------------------------------------
 # Helpers

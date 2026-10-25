@@ -59,7 +59,10 @@ async def test_platform_catalog_parallel_providers_leave_wallet_connection_free(
     assert sorted(arrivals) == ["deepseek", "openai"]
     assert isinstance(results[0], dict)
     assert results[0]["configured_count"] == 2
-    assert [row["provider"] for row in results[0]["providers"]] == ["openai", "deepseek"]
+    assert [row["provider"] for row in results[0]["providers"]] == [
+        "openai",
+        "deepseek",
+    ]
 
 
 @pytest.mark.asyncio

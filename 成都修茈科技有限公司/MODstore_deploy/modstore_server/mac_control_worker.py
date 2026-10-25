@@ -9,7 +9,7 @@ import uuid
 
 from sqlalchemy.exc import IntegrityError
 
-from modstore_server.db.base import get_session_factory
+from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.mac_control import (
     MacControlObservation,
     MacControlSyncLease,

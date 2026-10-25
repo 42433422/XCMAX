@@ -14,7 +14,7 @@ from app.application.tools import workflow
 
 @pytest.fixture
 def dispatch_ports(monkeypatch):
-    from app.application import employee_pack_runner
+    from app.domain.app_pure import employee_pack_runner
     from app.mod_sdk import employee_tool_registry, planner_native_tools
     from app.services import tools_workflow_registered
 

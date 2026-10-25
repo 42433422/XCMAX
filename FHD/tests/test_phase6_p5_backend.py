@@ -356,7 +356,7 @@ class TestModEmployeeComplete:
                 new=AsyncMock(return_value=None),
             ),
             patch(
-                "app.services.ai_conversation_service.get_ai_conversation_service",
+                "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
                 return_value=mock_svc,
             ),
             patch(
@@ -400,7 +400,7 @@ class TestModEmployeeComplete:
         mock_svc.api_key = None
         with (
             patch(
-                "app.services.ai_conversation_service.get_ai_conversation_service",
+                "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
                 return_value=mock_svc,
             ),
             patch(
@@ -420,7 +420,7 @@ class TestModEmployeeComplete:
         mock_svc.api_key = "sk-host"
         mock_svc.call_deepseek_api = AsyncMock(return_value=None)
         with patch(
-            "app.services.ai_conversation_service.get_ai_conversation_service",
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
             out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
@@ -437,7 +437,7 @@ class TestModEmployeeComplete:
         mock_svc.api_key = "sk-host"
         mock_svc.call_deepseek_api = AsyncMock(side_effect=ConnectionError("db down"))
         with patch(
-            "app.services.ai_conversation_service.get_ai_conversation_service",
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
             out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
@@ -454,7 +454,7 @@ class TestModEmployeeComplete:
             return_value={"choices": [{"message": {"content": "host-reply"}}]}
         )
         with patch(
-            "app.services.ai_conversation_service.get_ai_conversation_service",
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
             return_value=mock_svc,
         ):
             out = await mod_employee_llm.mod_employee_complete(
@@ -473,14 +473,16 @@ class TestModEmployeeComplete:
     ) -> None:
         monkeypatch.delenv("XCAGI_LLM_PROVIDER", raising=False)
 
-        # 模拟 `from app.services.ai_conversation_service import get_ai_conversation_service`
+        # 模拟 `from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service`
         # 抛 ImportError：让模块缺少该属性，Python 会把 AttributeError 转为 ImportError。
         import sys
         import types
 
-        fake_mod = types.ModuleType("app.services.ai_conversation_service")
+        fake_mod = types.ModuleType("app.domain.shared_services.ai_conversation_service")
         # 不设置 get_ai_conversation_service 属性
-        monkeypatch.setitem(sys.modules, "app.services.ai_conversation_service", fake_mod)
+        monkeypatch.setitem(
+            sys.modules, "app.domain.shared_services.ai_conversation_service", fake_mod
+        )
 
         out = await mod_employee_llm.mod_employee_complete([{"role": "user", "content": "hi"}])
         assert out["success"] is False

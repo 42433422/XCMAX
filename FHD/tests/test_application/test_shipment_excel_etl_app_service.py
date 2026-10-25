@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import clear_profile_cache
 from app.application.shipment_excel_etl_app_service import (
     batch_execute_shipment_excel_etl,
@@ -19,6 +18,7 @@ from app.application.shipment_excel_etl_app_service import (
     write_delivery_note_workbook,
     write_ledger_workbook,
 )
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 SAMPLE_DIR = Path("/Users/a4243342/Desktop/新建文件夹 (4)/产品文件夹/发货单")
 
@@ -242,7 +242,7 @@ def test_execute_idempotent_skips_second_run(tmp_path, monkeypatch):
         lambda: _FakeShipmentSvc(),
     )
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     fp_db = tmp_path / "fps.sqlite3"
@@ -365,7 +365,7 @@ def test_batch_preview_and_execute(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _FakeShipmentSvc())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setattr(
@@ -443,7 +443,7 @@ def test_execute_creates_shipment(tmp_path, monkeypatch):
         lambda: _FakeShipmentSvc(),
     )
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported_count": len(records)},
     )
     monkeypatch.setattr(

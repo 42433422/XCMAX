@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from app.neuro_bus.events.base import (
+from app.neuro_bus.events.events_base import (
     DomainEvent,
     EventMetadata,
     EventPriority,
@@ -147,7 +147,7 @@ def test_domain_event_classes_have_expected_event_types() -> None:
         payment_events,
         shipment_events,
     )
-    from app.neuro_bus.events.base import NeuroEvent
+    from app.neuro_bus.events.events_base import NeuroEvent
 
     # Representative event classes from four domains, with their expected
     # event_type prefix. This verifies the class definitions are real and

@@ -213,8 +213,12 @@ def _has_non_ascii(path: str) -> bool:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0] if __doc__ else "")
-    parser.add_argument("--max-show", type=int, default=200, help="Cap orphan listing size.")
+    parser = argparse.ArgumentParser(
+        description=__doc__.splitlines()[0] if __doc__ else ""
+    )
+    parser.add_argument(
+        "--max-show", type=int, default=200, help="Cap orphan listing size."
+    )
     parser.add_argument("--show-ignored", action="store_true")
     args = parser.parse_args()
 
@@ -247,7 +251,9 @@ def main() -> int:
     if len(orphans) > args.max_show:
         print(f"  ... and {len(orphans) - args.max_show} more")
     print()
-    print("Fix: either (a) add an owning employee scope_glob, or (b) extend DEFAULT_IGNORES")
+    print(
+        "Fix: either (a) add an owning employee scope_glob, or (b) extend DEFAULT_IGNORES"
+    )
     print("     and the §五 explicit-ignore table in yuangon/_shared/OWNERSHIP.md.")
     return 1
 

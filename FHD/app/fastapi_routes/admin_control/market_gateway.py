@@ -9,7 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .common import read_json_object
-from .ports import AdminGate, ErrorPolicy, LocalProxy, MarketProxy, MarketTransport
+from .port_contracts import AdminGate, ErrorPolicy, LocalProxy, MarketProxy, MarketTransport
 
 
 class MarketGateway:

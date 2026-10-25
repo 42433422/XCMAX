@@ -176,7 +176,9 @@ def test_execute_vibe_workflow_kind_runs_graph(monkeypatch):
         lambda logic, uid: None,
     )
 
-    from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_workflow_kind
+    from modstore_server.integrations.vibe_eskill_adapter import (
+        execute_vibe_workflow_kind,
+    )
 
     out = execute_vibe_workflow_kind(
         {"type": "vibe_workflow", "brief": "拆 {{topic}}"},

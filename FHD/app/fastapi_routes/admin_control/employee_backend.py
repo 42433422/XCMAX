@@ -9,7 +9,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from .employee_run import EmployeeWork
-from .ports import JsonObject
+from .port_contracts import JsonObject
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentStep

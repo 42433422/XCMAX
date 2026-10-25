@@ -10,7 +10,7 @@ from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse
 
 from .common import installation_payload
-from .ports import AdminGate, ErrorPolicy, JsonObject, MarketProxy
+from .port_contracts import AdminGate, ErrorPolicy, JsonObject, MarketProxy
 
 
 class Operations:

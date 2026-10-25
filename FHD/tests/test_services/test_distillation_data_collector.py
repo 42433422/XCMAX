@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.distillation_data_collector import (
+from app.domain.shared_services.distillation_data_collector import (
     INTENT_LABELS,
     SAMPLE_QUERIES,
     export_training_data,
@@ -78,7 +78,7 @@ class TestSaveDistillationSample:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             save_distillation_sample("你好", "greet", {}, 0.95, "manual")
 
         mock_conn.execute.assert_called_once()
@@ -89,7 +89,7 @@ class TestSaveDistillationSample:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             save_distillation_sample(
                 "给七彩乐园开单", "shipment_generate", {"unit_name": "七彩乐园"}, 0.9, "deepseek"
             )
@@ -106,9 +106,9 @@ class TestGenerateSamplesFromQueries:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
             ) as mock_save:
                 count = generate_samples_from_queries(SAMPLE_QUERIES)
 
@@ -121,9 +121,9 @@ class TestGenerateSamplesFromQueries:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
             ) as mock_save:
                 # 中文没有空格分隔，split()[0] 会取到"七彩乐园开单"
                 queries = {"shipment_generate": ["给 七彩乐园 开单"]}
@@ -140,9 +140,9 @@ class TestGenerateSamplesFromQueries:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
             ) as mock_save:
                 queries = {"shipment_generate": ["3桶规格20的PE白底漆"]}
                 count = generate_samples_from_queries(queries)
@@ -158,9 +158,9 @@ class TestGenerateSamplesFromQueries:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
             ) as mock_save:
                 queries = {"shipment_generate": ["3桶规格20的PE白底漆"]}
                 count = generate_samples_from_queries(queries)
@@ -171,8 +171,10 @@ class TestGenerateSamplesFromQueries:
         assert slots.get("tin_spec") == 20.0
 
     def test_generate_samples_empty_queries(self):
-        with patch("app.services.distillation_data_collector.ENGINE", MagicMock()):
-            with patch("app.services.distillation_data_collector.save_distillation_sample"):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", MagicMock()):
+            with patch(
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
+            ):
                 count = generate_samples_from_queries({})
         assert count == 0
 
@@ -183,9 +185,9 @@ class TestGenerateSamplesFromQueries:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             with patch(
-                "app.services.distillation_data_collector.save_distillation_sample"
+                "app.domain.shared_services.distillation_data_collector.save_distillation_sample"
             ) as mock_save:
                 queries = {"shipment_generate": ["给 a 开单"]}
                 count = generate_samples_from_queries(queries)
@@ -209,7 +211,7 @@ class TestGetSampleCount:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = get_sample_count()
         assert result == 42
 
@@ -222,7 +224,7 @@ class TestGetSampleCount:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = get_sample_count(intent="greet")
         assert result == 10
 
@@ -235,7 +237,7 @@ class TestGetSampleCount:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = get_sample_count()
         assert result == 0
 
@@ -253,7 +255,7 @@ class TestGetSampleStats:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = get_sample_stats()
         assert result == {"greet": 10, "shipment_generate": 20}
 
@@ -272,7 +274,7 @@ class TestExportTrainingData:
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
         output_path = str(tmp_path / "training.jsonl")
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = export_training_data(output_path=output_path, format="jsonl")
 
         assert result == output_path
@@ -294,7 +296,7 @@ class TestExportTrainingData:
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
         output_path = str(tmp_path / "training.jsonl")
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             result = export_training_data(output_path=output_path, format="bert")
 
         bert_path = str(tmp_path / "training_bert.tsv")
@@ -311,8 +313,10 @@ class TestExportTrainingData:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
-            with patch("app.services.distillation_data_collector.DISTILL_DIR", str(tmp_path)):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
+            with patch(
+                "app.domain.shared_services.distillation_data_collector.DISTILL_DIR", str(tmp_path)
+            ):
                 result = export_training_data(format="jsonl")
         assert result.endswith("training_data.jsonl")
 
@@ -326,14 +330,14 @@ class TestMarkSamplesAsUsed:
         mock_engine.begin.return_value.__enter__ = MagicMock(return_value=mock_conn)
         mock_engine.begin.return_value.__exit__ = MagicMock(return_value=False)
 
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             mark_samples_as_used([1, 2, 3])
 
         mock_conn.execute.assert_called_once()
 
     def test_mark_samples_as_used_empty(self):
         mock_engine = MagicMock()
-        with patch("app.services.distillation_data_collector.ENGINE", mock_engine):
+        with patch("app.domain.shared_services.distillation_data_collector.ENGINE", mock_engine):
             mark_samples_as_used([])
         mock_engine.begin.assert_not_called()
 
@@ -343,14 +347,14 @@ class TestCallDeepseekIntent:
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_no_api_key(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         result = await call_deepseek_intent("", "你好")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_success(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         mock_result = {
             "choices": [{"message": {"content": json.dumps({"intent": "greet", "slots": {}})}}]
@@ -368,7 +372,7 @@ class TestCallDeepseekIntent:
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_api_failure(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         with patch(
             "app.infrastructure.llm.invoke.chat_completion_openai_format",
@@ -381,7 +385,7 @@ class TestCallDeepseekIntent:
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_invalid_json(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         mock_result = {"choices": [{"message": {"content": "not valid json"}}]}
         with patch(
@@ -395,7 +399,7 @@ class TestCallDeepseekIntent:
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_empty_choices(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         mock_result = {"choices": []}
         with patch(
@@ -409,7 +413,7 @@ class TestCallDeepseekIntent:
 
     @pytest.mark.asyncio
     async def test_call_deepseek_intent_none_result(self):
-        from app.services.distillation_data_collector import call_deepseek_intent
+        from app.domain.shared_services.distillation_data_collector import call_deepseek_intent
 
         with patch(
             "app.infrastructure.llm.invoke.chat_completion_openai_format",
@@ -426,10 +430,12 @@ class TestCollectSamplesViaDeepseek:
 
     @pytest.mark.asyncio
     async def test_collect_already_satisfied(self):
-        from app.services.distillation_data_collector import collect_samples_via_deepseek
+        from app.domain.shared_services.distillation_data_collector import (
+            collect_samples_via_deepseek,
+        )
 
         with patch(
-            "app.services.distillation_data_collector.get_sample_count",
+            "app.domain.shared_services.distillation_data_collector.get_sample_count",
             return_value=600,
         ):
             result = await collect_samples_via_deepseek("test-key", target_count=500)

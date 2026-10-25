@@ -96,7 +96,12 @@ def test_current_bound_receipts_project_waiting_without_rewriting_history(
         output["task_id"] = ""
     payload["_team_claim"] = {
         "team": [
-            {"role": "scout", "employee_id": "scout", "status": "completed", "ok": True},
+            {
+                "role": "scout",
+                "employee_id": "scout",
+                "status": "completed",
+                "ok": True,
+            },
             {
                 "role": "fix",
                 "employee_id": "fixer",
@@ -104,7 +109,12 @@ def test_current_bound_receipts_project_waiting_without_rewriting_history(
                 "ok": False,
                 "handler_outputs": {"outputs": [output]},
             },
-            {"role": "verify", "employee_id": "verifier", "status": "planned", "ok": False},
+            {
+                "role": "verify",
+                "employee_id": "verifier",
+                "status": "planned",
+                "ok": False,
+            },
         ]
     }
     with get_session_factory()() as db:
@@ -131,7 +141,9 @@ def test_current_bound_receipts_project_waiting_without_rewriting_history(
         assert ticket.status == "processing" and ticket.closed_at is None
 
 
-def test_requested_review_is_not_acceptance_and_fresh_receipt_updates_overview(execution_case):
+def test_requested_review_is_not_acceptance_and_fresh_receipt_updates_overview(
+    execution_case,
+):
     from modstore_server.customer_ticket_execution import ticket_execution_overview
     from modstore_server.models import IncidentEvent, get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
@@ -190,7 +202,9 @@ def test_stale_or_unconfirmed_review_never_becomes_real_acceptance(execution_cas
             assert overview["next_step"]["code"] == "reconcile_task"
 
 
-def test_original_customer_decision_does_not_close_earlier_product_work_order(execution_case):
+def test_original_customer_decision_does_not_close_earlier_product_work_order(
+    execution_case,
+):
     from modstore_server.customer_ticket_execution import ticket_execution_overview
     from modstore_server.models import get_session_factory
     from modstore_server.models_cs import CustomerServiceTicket
@@ -303,6 +317,14 @@ def test_incomplete_execution_receipt_cannot_claim_completion(missing):
     else:
         output["outcome"] = "unknown"
     receipts = _receipts(
-        {"team": [{"role": "fix", "status": "completed", "handler_outputs": {"outputs": [output]}}]}
+        {
+            "team": [
+                {
+                    "role": "fix",
+                    "status": "completed",
+                    "handler_outputs": {"outputs": [output]},
+                }
+            ]
+        }
     )
     assert receipts[0]["completed"] is False

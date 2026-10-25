@@ -11,7 +11,7 @@ from typing import Any, Protocol
 from app.application.product_query_context import inject_product_query_fallback
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .types import NodeExecutionResult, WorkflowNode
+from .workflow_types import NodeExecutionResult, WorkflowNode
 
 logger = logging.getLogger(__name__)
 

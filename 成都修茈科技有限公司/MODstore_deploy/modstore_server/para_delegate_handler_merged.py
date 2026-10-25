@@ -10,7 +10,9 @@ import json
 import re
 from typing import Any
 
-from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+)
 from modstore_server.dot_ticket_dispatch import prepare_dolt_ticket_payload
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.para_delegate_task_payloads import (
@@ -291,7 +293,12 @@ def _build_para_prompt(req: _facade().Dict[str, _facade().Any]) -> str:
             + _facade().json.dumps(
                 {
                     k: budget[k]
-                    for k in ("role", "context_chars", "output_tokens", "reasoning_effort")
+                    for k in (
+                        "role",
+                        "context_chars",
+                        "output_tokens",
+                        "reasoning_effort",
+                    )
                     if k in budget
                 },
                 ensure_ascii=False,
@@ -476,7 +483,9 @@ def _first_para_error(snapshot: _facade().Dict[str, _facade().Any]) -> str:
 
 from typing import Any
 
-from modstore_server.customer_issue_delivery_contract import execution_requires_reconciliation
+from modstore_server.customer_issue_delivery_contract import (
+    execution_requires_reconciliation,
+)
 
 
 def _fallback_order_tools() -> list[str]:
@@ -634,7 +643,10 @@ def _wait_for_para_task(
         if status in terminal:
             snapshot = _handler._task_result_snapshot(body)
             ok = para_task_succeeded(
-                task, task_id, req.get("required_subtask_ids"), req.get("planned_devices")
+                task,
+                task_id,
+                req.get("required_subtask_ids"),
+                req.get("planned_devices"),
             )
             incomplete = status in {"completed", "merged"} and not ok
             return {
@@ -1368,7 +1380,10 @@ def _post_para_api_once(
                 device_id = str(device["id"])
                 if task_id:
                     payload["task_id"] = task_id
-                from modstore_server.node_coordinator import assert_incident_claim, current_claim
+                from modstore_server.node_coordinator import (
+                    assert_incident_claim,
+                    current_claim,
+                )
 
                 claim = current_claim()
                 if claim:

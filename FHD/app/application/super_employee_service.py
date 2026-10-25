@@ -26,14 +26,14 @@ from typing import Any
 
 import httpx
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant
-from app.application.execution_scope import FACTORY_TOKEN_ENV as FACTORY_TOKEN_ENV
-from app.application.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.message_repository import _safe_json_line as _safe_json_line
 from app.application.relay_workspace import resolve_verified_relay_workspace_root
 from app.application.workspaces import WorkspaceError as WorkspaceError
 from app.application.workspaces import get_workspace_registry
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant
+from app.domain.app_pure.execution_scope import FACTORY_TOKEN_ENV as FACTORY_TOKEN_ENV
+from app.domain.app_pure.git_workspace_manager import GitWorkspaceManager
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
@@ -59,16 +59,6 @@ from .super_employee.messages import MessageSynchronizer
 from .super_employee.output import CliOutput
 from .super_employee.para import ParaClient
 from .super_employee.policy import EmployeePolicy
-from .super_employee.ports import (
-    CliPorts,
-    ConversationPorts,
-    DevelopmentPorts,
-    ExecutionContext,
-    MessageSyncPorts,
-    ParaPorts,
-    WorkspacePorts,
-    WorktreePorts,
-)
 from .super_employee.profiles import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -80,6 +70,16 @@ from .super_employee.profiles import _claude_cli_command as _claude_cli_command
 from .super_employee.profiles import _codex_cli_command as _codex_cli_command
 from .super_employee.profiles import _cursor_cli_command as _cursor_cli_command
 from .super_employee.profiles import _trae_cli_command as _trae_cli_command
+from .super_employee.protocols import (
+    CliPorts,
+    ConversationPorts,
+    DevelopmentPorts,
+    ExecutionContext,
+    MessageSyncPorts,
+    ParaPorts,
+    WorkspacePorts,
+    WorktreePorts,
+)
 
 logger = logging.getLogger(__name__)
 

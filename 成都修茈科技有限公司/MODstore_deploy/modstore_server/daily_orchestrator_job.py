@@ -83,7 +83,10 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
         }
 
     from modstore_server.employee_orchestrator import plan_and_dispatch
-    from modstore_server.integrations.ops_action_handlers import dispatch_ops_handler, repo_root
+    from modstore_server.integrations.ops_action_handlers import (
+        dispatch_ops_handler,
+        repo_root,
+    )
     from modstore_server.models import OpsStagedChange, get_session_factory
 
     root = str(repo_root())
@@ -284,7 +287,9 @@ def run_daily_orchestrator_job(*, bypass_digest_gate: bool = False) -> Dict[str,
                     "reason": "slo_halt_auto_merge",
                 }
             else:
-                from modstore_server.ops_staged_auto_approve import try_auto_deploy_staged_change
+                from modstore_server.ops_staged_auto_approve import (
+                    try_auto_deploy_staged_change,
+                )
 
                 auto = try_auto_deploy_staged_change(int(staged_id))
                 if auto is not None:

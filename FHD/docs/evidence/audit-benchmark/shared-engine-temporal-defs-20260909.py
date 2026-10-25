@@ -1,9 +1,9 @@
 # Temporal 基准被测定义（workflow/activity 放独立可导入模块，满足 sandbox 重导入要求）
 import asyncio
+from datetime import timedelta
 
 from temporalio import activity, workflow
 from temporalio.common import RetryPolicy
-from datetime import timedelta
 
 TASK_QUEUE = "r22-tq"
 side_effects: list = []

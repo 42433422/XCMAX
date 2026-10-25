@@ -76,7 +76,10 @@ async def dispatch_craft_step(
     step_id: str,
     **kwargs: Any,
 ) -> Any:
-    from modstore_server.craft_failure_signals import emit_craft_step_failure, resolve_craft_step_id
+    from modstore_server.craft_failure_signals import (
+        emit_craft_step_failure,
+        resolve_craft_step_id,
+    )
 
     resolved_step, employee_id = resolve_craft_step_id(step_id)
     fn = _step_registry.get(resolved_step)
@@ -154,7 +157,7 @@ def _record_craft_execution(
     error: str = "",
 ) -> None:
     try:
-        from modstore_server.db.base import get_session_factory
+        from modstore_server.db.db_base import get_session_factory
         from modstore_server.models import EmployeeExecutionMetric
 
         sf = get_session_factory()

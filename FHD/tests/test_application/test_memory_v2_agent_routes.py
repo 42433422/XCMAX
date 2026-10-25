@@ -27,7 +27,7 @@ def _patch_agent_repo(repo: InMemoryAgentRunRepository):
 
 
 def _configure_runtime(monkeypatch, tmp_path) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
     monkeypatch.setenv("XCAGI_USER_MEMORY_DIR", str(memory_dir))
@@ -74,7 +74,7 @@ def test_memory_v2_lifecycle_routes_execute_through_agent(
     tmp_path,
     monkeypatch,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     repo = InMemoryAgentRunRepository()
     _configure_runtime(monkeypatch, tmp_path)
@@ -154,7 +154,7 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
     tmp_path,
     monkeypatch,
 ) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     repo = InMemoryAgentRunRepository()
     _configure_runtime(monkeypatch, tmp_path)
@@ -201,7 +201,7 @@ def test_memory_v2_blocked_source_confirm_route_records_failed_agent_run(
 
 
 def test_memory_store_keeps_concurrent_same_and_other_user_writes(tmp_path, monkeypatch) -> None:
-    import app.services.user_memory_service as memory_mod
+    import app.domain.shared_services.user_memory_service as memory_mod
 
     memory_dir = tmp_path / "memory"
     memory_path = memory_dir / "memory_store.json"

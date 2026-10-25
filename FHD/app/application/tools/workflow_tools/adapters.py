@@ -48,7 +48,7 @@ def native(call: ToolCall) -> str | None:
 
 
 def legacy_employee(call: ToolCall) -> str | None:
-    from app.application.employee_pack_runner import try_execute_employee_planner_tool
+    from app.domain.app_pure.employee_pack_runner import try_execute_employee_planner_tool
 
     return try_execute_employee_planner_tool(
         call.name, call.args, call.workspace_root, db_write_token=call.db_write_token
@@ -56,7 +56,9 @@ def legacy_employee(call: ToolCall) -> str | None:
 
 
 def template(call: ToolCall) -> str:
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     action = str(call.args.get("action") or "view").strip() or "view"
     return json.dumps(
@@ -144,13 +146,13 @@ def shipment_writer() -> ShipmentWriter:
 
 
 def find_customer(unit_name: str) -> Payload | None:
-    from app.services.unified_query_service import find_purchase_unit
+    from app.domain.shared_services.unified_query_service import find_purchase_unit
 
     return find_purchase_unit(unit_name=unit_name)
 
 
 def bulk_import(args: Payload) -> Payload:
-    from app.application.excel_imports import run_bulk_import
+    from app.domain.app_pure.excel_imports import run_bulk_import
 
     return run_bulk_import(args)
 
@@ -164,12 +166,12 @@ def ingest_vector(*, file_path: str, index_name: str | None, index_id: str | Non
 
 
 def generate_document(request: str, output_format: Literal["docx", "xlsx"]) -> tuple[bytes, str]:
-    from app.services.kitten_ai_document.generate import generate_office_file
+    from app.domain.shared_services.kitten_ai_document.generate import generate_office_file
 
     return generate_office_file(request, output_format)
 
 
 def store_document(content: bytes, name: str, mime: str) -> str:
-    from app.services.kitten_ai_document.pickup import store_document_pickup
+    from app.domain.shared_services.kitten_ai_document.pickup import store_document_pickup
 
     return store_document_pickup(content, name, mime)

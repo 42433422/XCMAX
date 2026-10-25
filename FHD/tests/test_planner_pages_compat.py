@@ -43,13 +43,12 @@ def test_retired_developer_page_is_not_advertised_or_packaged():
     assert (
         "/mod/xcagi-planner-bridge/brain" not in LEGACY_BRIDGE_MOD_HOST_APIS["xcagi-planner-bridge"]
     )
-    for root in (REPO / "mods", REPO / "XCAGI/mods"):
-        mod_dir = root / "xcagi-planner-bridge"
-        manifest = json.loads((mod_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert "BrainView.vue" not in manifest["config"]["physical_views"]
-        assert "/brain" not in manifest["config"]["legacy_host_page_paths"]
-        assert not (mod_dir / "frontend/views/BrainView.vue").exists()
-        assert not (mod_dir / "frontend/views/brain").exists()
+    manifest = json.loads((MOD_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert "BrainView.vue" not in manifest["config"]["physical_views"]
+    assert "/brain" not in manifest["config"]["legacy_host_page_paths"]
+    assert not (MOD_DIR / "frontend/views/BrainView.vue").exists()
+    assert not (MOD_DIR / "frontend/views/brain").exists()
+    assert not (REPO / "XCAGI/mods/xcagi-planner-bridge").exists()
 
 
 def test_host_profile_api_preserves_planner_apis_without_retired_page(monkeypatch):

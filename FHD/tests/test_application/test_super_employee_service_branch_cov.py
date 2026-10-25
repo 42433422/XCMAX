@@ -32,7 +32,6 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.application.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
 from app.application.super_employee_service import (
     CLAUDE_PROFILE,
     CODEX_PROFILE,
@@ -51,6 +50,7 @@ from app.application.super_employee_service import (
     _trae_cli_command,
     _utc_now,
 )
+from app.domain.app_pure.execution_scope import CONTEXT_TOKEN_KEY, CapabilityGrant, ExecutionScope
 
 # ─────────────────────────── helpers ────────────────────────────
 

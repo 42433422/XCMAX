@@ -29,7 +29,7 @@ from typing import Any
 from app.domain.neuro.cognition.attention_selector import AttentionSelector, get_attention_selector
 from app.domain.neuro.cognition.llm_port import LLMPort, get_llm_port
 from app.domain.neuro.cognition.working_memory import WorkingMemory, get_working_memory
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

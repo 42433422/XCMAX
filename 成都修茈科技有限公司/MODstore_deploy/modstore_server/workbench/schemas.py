@@ -6,7 +6,14 @@ import logging
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from modstore_server.workbench.intent import CANVAS_SKILL_INTENT
 
@@ -65,7 +72,8 @@ class WorkbenchSessionCreateBody(BaseModel):
         True, description="为 mod intent 时是否生成 Mod + 员工 + 工作流绑定的一体化套件"
     )
     generate_frontend: bool = Field(
-        True, description="为 mod intent 时是否生成定制 Vue 前端页面；false 时仅保留最小前端占位"
+        True,
+        description="为 mod intent 时是否生成定制 Vue 前端页面；false 时仅保留最小前端占位",
     )
     planning_messages: List[Dict[str, Any]] = Field(default_factory=list)
     execution_checklist: List[str] = Field(default_factory=list)
@@ -208,7 +216,8 @@ class EmployeePublishRequest(BaseModel):
 class EmployeeSyncTestRequest(BaseModel):
     employee_id: str = Field(..., description="员工包 ID（同 pack_id）")
     fhd_base_url: Optional[str] = Field(
-        None, description="宿主 fhd-sandbox-runtime 的 base URL，如 http://localhost:9999"
+        None,
+        description="宿主 fhd-sandbox-runtime 的 base URL，如 http://localhost:9999",
     )
     provider: Optional[str] = Field(None)
     model: Optional[str] = Field(None)
@@ -225,7 +234,9 @@ class EmployeeSaveBody(BaseModel):
         ..., description="员工完整 manifest（employee_config_v2 结构）"
     )
     employee_id: Optional[str] = Field(
-        None, max_length=128, description="已有员工ID；为空时从 manifest.identity.id 读取"
+        None,
+        max_length=128,
+        description="已有员工ID；为空时从 manifest.identity.id 读取",
     )
     provider: Optional[str] = Field(
         None,

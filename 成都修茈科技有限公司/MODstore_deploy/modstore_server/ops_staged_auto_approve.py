@@ -121,7 +121,9 @@ def should_auto_approve_staged(
         logger.info("ops staged auto-approve blocked: diff summary path evidence is incomplete")
         return False
     try:
-        from modstore_server.self_maintenance_policy import should_block_marker_only_diff_summary
+        from modstore_server.self_maintenance_policy import (
+            should_block_marker_only_diff_summary,
+        )
 
         policy = should_block_marker_only_diff_summary(diff_summary)
         if policy.get("blocked"):

@@ -11,7 +11,7 @@ import pytest
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, PROJECT_ROOT)
 
-from app.services.product_import_service import ProductImportService
+from app.domain.shared_services.product_import_service import ProductImportService
 
 
 class TestProductImportService:
@@ -121,8 +121,8 @@ class TestProductImportService:
     class TestCheckDuplicates:
         """check_duplicates 方法测试"""
 
-        @patch("app.services.product_import_service.Product")
-        @patch("app.services.product_import_service.get_db")
+        @patch("app.domain.shared_services.product_import_service.Product")
+        @patch("app.domain.shared_services.product_import_service.get_db")
         def test_check_duplicates_with_duplicates(self, mock_get_db, mock_product_class, service):
             """测试有重复产品"""
             mock_db = MagicMock()
@@ -146,8 +146,8 @@ class TestProductImportService:
             assert len(duplicates) == 2
             assert len(new_data) == 0
 
-        @patch("app.services.product_import_service.Product")
-        @patch("app.services.product_import_service.get_db")
+        @patch("app.domain.shared_services.product_import_service.Product")
+        @patch("app.domain.shared_services.product_import_service.get_db")
         def test_check_duplicates_no_duplicates(self, mock_get_db, mock_product_class, service):
             """测试无重复产品"""
             mock_db = MagicMock()
@@ -175,8 +175,8 @@ class TestProductImportService:
     class TestImportData:
         """import_data 方法测试"""
 
-        @patch("app.services.product_import_service.Product")
-        @patch("app.services.product_import_service.get_db")
+        @patch("app.domain.shared_services.product_import_service.Product")
+        @patch("app.domain.shared_services.product_import_service.get_db")
         def test_import_data_normal(self, mock_get_db, mock_product_class, service):
             """测试正常导入"""
             mock_db = MagicMock()
@@ -193,8 +193,8 @@ class TestProductImportService:
             assert result["skipped"] == 0
             assert result["failed"] == 0
 
-        @patch("app.services.product_import_service.Product")
-        @patch("app.services.product_import_service.get_db")
+        @patch("app.domain.shared_services.product_import_service.Product")
+        @patch("app.domain.shared_services.product_import_service.get_db")
         def test_import_data_skip_duplicates(self, mock_get_db, mock_product_class, service):
             """测试跳过重复产品"""
             mock_db = MagicMock()
@@ -236,8 +236,8 @@ class TestProductImportService:
             assert result["skipped"] == 0
             assert result["failed"] == 0
 
-        @patch("app.services.product_import_service.Product")
-        @patch("app.services.product_import_service.get_db")
+        @patch("app.domain.shared_services.product_import_service.Product")
+        @patch("app.domain.shared_services.product_import_service.get_db")
         def test_import_data_batch_import(self, mock_get_db, mock_product_class, service):
             """测试批量导入"""
             mock_db = MagicMock()
@@ -293,8 +293,8 @@ class TestProductImportServiceIntegration:
             {"product_code": "P003", "product_name": "产品C", "unit_price": 150, "unit": "个"},
         ]
 
-    @patch("app.services.product_import_service.Product")
-    @patch("app.services.product_import_service.get_db")
+    @patch("app.domain.shared_services.product_import_service.Product")
+    @patch("app.domain.shared_services.product_import_service.get_db")
     def test_full_import_workflow(self, mock_get_db, mock_product_class, sample_product_data):
         """测试完整导入工作流"""
         service = ProductImportService()
@@ -312,8 +312,8 @@ class TestProductImportServiceIntegration:
         assert result["skipped"] == 0
         assert result["failed"] == 0
 
-    @patch("app.services.product_import_service.Product")
-    @patch("app.services.product_import_service.get_db")
+    @patch("app.domain.shared_services.product_import_service.Product")
+    @patch("app.domain.shared_services.product_import_service.get_db")
     def test_import_with_validation_and_duplicates(self, mock_get_db, mock_product_class):
         """测试带验证和重复检查的导入"""
         service = ProductImportService()
@@ -340,8 +340,8 @@ class TestProductImportServiceIntegration:
         assert result["imported"] == 0
         assert result["skipped"] == 2
 
-    @patch("app.services.product_import_service.Product")
-    @patch("app.services.product_import_service.get_db")
+    @patch("app.domain.shared_services.product_import_service.Product")
+    @patch("app.domain.shared_services.product_import_service.get_db")
     def test_import_without_validation(self, mock_get_db, mock_product_class):
         """测试不验证直接导入"""
         service = ProductImportService()

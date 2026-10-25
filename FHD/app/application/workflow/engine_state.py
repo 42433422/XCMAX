@@ -11,7 +11,7 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .types import NodeExecutionResult, StateSchema, apply_state_schema
+from .workflow_types import NodeExecutionResult, StateSchema, apply_state_schema
 
 logger = logging.getLogger(__name__)
 StateEventCallback = Callable[[dict[str, Any]], object]

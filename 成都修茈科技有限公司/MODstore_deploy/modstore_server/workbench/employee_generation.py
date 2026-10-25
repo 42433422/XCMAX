@@ -84,7 +84,9 @@ async def generate_employee(state: EmployeeBuildState, *, ports: EmployeeGenerat
                 )
             )
         elif state.use_assets:
-            from modstore_server.employee_asset_pipeline import run_asset_employee_scaffold_async
+            from modstore_server.employee_asset_pipeline import (
+                run_asset_employee_scaffold_async,
+            )
 
             _gen_result = await ports.craft_step(
                 "generate",
@@ -104,7 +106,9 @@ async def generate_employee(state: EmployeeBuildState, *, ports: EmployeeGenerat
                 else await run_asset_employee_scaffold_async(ports.db, ports.user, **_scaffold_kw)
             )
         elif state.needs_llm_reasoning and state.uploaded_docx:
-            from modstore_server.employee_asset_pipeline import run_asset_employee_scaffold_async
+            from modstore_server.employee_asset_pipeline import (
+                run_asset_employee_scaffold_async,
+            )
 
             _gen_result = await ports.craft_step(
                 "generate",

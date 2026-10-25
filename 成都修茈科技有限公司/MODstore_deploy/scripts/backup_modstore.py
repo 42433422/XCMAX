@@ -28,7 +28,9 @@ def run_to_file(command: list[str], output: Path) -> None:
 def run(command: list[str]) -> None:
     proc = subprocess.run(command, cwd=ROOT)
     if proc.returncode != 0:
-        raise RuntimeError(f"{' '.join(command)} failed with exit code {proc.returncode}")
+        raise RuntimeError(
+            f"{' '.join(command)} failed with exit code {proc.returncode}"
+        )
 
 
 def compose_service_running(service: str) -> bool:
@@ -53,7 +55,19 @@ def docker_tar(service: str, container_path: str, output: Path) -> None:
     parent = str(Path(container_path).parent)
     name = Path(container_path).name
     run_to_file(
-        ["docker", "compose", "exec", "-T", service, "tar", "czf", "-", "-C", parent, name],
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            service,
+            "tar",
+            "czf",
+            "-",
+            "-C",
+            parent,
+            name,
+        ],
         output,
     )
 
@@ -63,7 +77,19 @@ def backup_postgres(output_dir: Path) -> Path:
     user = os.environ.get("POSTGRES_USER", "modstore")
     output = output_dir / "postgres.dump"
     run_to_file(
-        ["docker", "compose", "exec", "-T", "postgres", "pg_dump", "-Fc", "-U", user, "-d", db],
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "postgres",
+            "pg_dump",
+            "-Fc",
+            "-U",
+            user,
+            "-d",
+            db,
+        ],
         output,
     )
     return output
@@ -74,7 +100,19 @@ def backup_redis(output_dir: Path) -> Path:
         raise SystemExit("REDIS_PASSWORD 未设置：请从密钥库注入，不再使用默认密码")
     # 经 REDISCLI_AUTH 传入，避免密码出现在进程参数里。
     os.environ["REDISCLI_AUTH"] = os.environ["REDIS_PASSWORD"]
-    run(["docker", "compose", "exec", "-T", "-e", "REDISCLI_AUTH", "redis", "redis-cli", "SAVE"])
+    run(
+        [
+            "docker",
+            "compose",
+            "exec",
+            "-T",
+            "-e",
+            "REDISCLI_AUTH",
+            "redis",
+            "redis-cli",
+            "SAVE",
+        ]
+    )
     output = output_dir / "redis-data.tar.gz"
     docker_tar("redis", "/data", output)
     return output
@@ -125,7 +163,9 @@ def main() -> int:
     args = parser.parse_args()
 
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    output_dir = Path(args.output_dir) if args.output_dir else ROOT / "backups" / timestamp
+    output_dir = (
+        Path(args.output_dir) if args.output_dir else ROOT / "backups" / timestamp
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     selected = [item.strip() for item in args.components.split(",") if item.strip()]

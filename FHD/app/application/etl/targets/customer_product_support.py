@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
-from app.application.etl.targets.base import json_safe
+from app.application.etl.targets.targets_base import json_safe
 from app.db.models.purchase_unit import PurchaseUnit
 from app.infrastructure.tenant_scope import apply_tenant_filter
 

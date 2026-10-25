@@ -218,7 +218,12 @@ class AllHandsBench:
             factory = self.session_provider()
             with factory() as session:
                 result = await self.dispatch(
-                    session, int(user_id or 0), provider, model, messages, max_tokens=max_tokens
+                    session,
+                    int(user_id or 0),
+                    provider,
+                    model,
+                    messages,
+                    max_tokens=max_tokens,
                 )
         except RECOVERABLE_ERRORS as exc:
             logger.exception("all_hands bench dispatch failed")

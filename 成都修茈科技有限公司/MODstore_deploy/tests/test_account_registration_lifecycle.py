@@ -9,7 +9,13 @@ from pathlib import Path
 from modstore_server.account_license_plans import ACCOUNT_LICENSE_PLANS
 from modstore_server.account_lifecycle import mark_pending_payment
 from modstore_server.api.app_factory import _iter_route_method_signatures
-from modstore_server.models import Entitlement, PlanTemplate, User, UserPlan, get_session_factory
+from modstore_server.models import (
+    Entitlement,
+    PlanTemplate,
+    User,
+    UserPlan,
+    get_session_factory,
+)
 from modstore_server.payment_fulfilment import FulfilContext, PlanFulfilStrategy
 
 

@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.application.workflow.types import PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, normalize_workflow_risk
 
 logger = logging.getLogger(__name__)
 

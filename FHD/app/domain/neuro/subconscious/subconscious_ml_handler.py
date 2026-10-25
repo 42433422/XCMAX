@@ -38,7 +38,7 @@ from app.domain.neuro.subconscious.pattern_predictor import (
     PatternPredictor,
     get_pattern_predictor,
 )
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -151,7 +151,9 @@ async def record_self_maintenance_deployment_receipt(
         raise HTTPException(401, "invalid_deployment_receipt_token")
 
     from modstore_server.deploy_context import health_payload
-    from modstore_server.maintenance_loop.deployment import _record_verified_deploy_employee_metric
+    from modstore_server.maintenance_loop.deployment import (
+        _record_verified_deploy_employee_metric,
+    )
     from modstore_server.maintenance_loop.store import (
         _append_governance_audit,
         _append_ledger,

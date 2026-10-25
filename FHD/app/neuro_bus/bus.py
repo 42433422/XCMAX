@@ -31,7 +31,7 @@ from app.neuro_bus.bus_primitives import _deployment_is_staging as _deployment_i
 from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trace_sample_rate
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
 from app.neuro_bus.delivery_metrics import record_delivery_metric
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

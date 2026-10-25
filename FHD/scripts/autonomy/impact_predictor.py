@@ -21,7 +21,7 @@ import os
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .types import Action, ActionType, Prediction, RuntimeTruthSnapshot
+from .autonomy_types import Action, ActionType, Prediction, RuntimeTruthSnapshot
 
 # 磁盘清理触发阈值默认值（可被 adaptive_thresholds 覆盖）
 DISK_CLEAN_THRESHOLD = 70

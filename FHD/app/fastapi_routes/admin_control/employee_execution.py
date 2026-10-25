@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from .employee_backend import EmployeePrincipal, trusted_tenant
 from .employee_run import EmployeeWork
-from .ports import ErrorPolicy, JsonObject
+from .port_contracts import ErrorPolicy, JsonObject
 
 
 class EmployeeExecution:
@@ -32,7 +32,7 @@ class EmployeeExecution:
         body: dict[str, Any] = Body(default_factory=dict),
     ):
         """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
-        from app.application.auth_permission_resolver import require_allowed
+        from app.domain.app_pure.auth_permission_resolver import require_allowed
 
         principal = self._identity(request)
         if isinstance(principal, JSONResponse):

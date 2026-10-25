@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.application.group_chat.constants import _SUPER_EMPLOYEE_RELAY_KINDS
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     CreateRelayTask,
     EmployeeProviders,
     MobileRelay,
@@ -162,7 +162,7 @@ class EmployeeTransport:
 
     @staticmethod
     def mobile_relay_service() -> MobileRelay:
-        from app.services.mobile_relay_service import MobileRelayService
+        from app.domain.shared_services.mobile_relay_service import MobileRelayService
 
         return MobileRelayService()
 

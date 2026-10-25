@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 logger = logging.getLogger(__name__)
 

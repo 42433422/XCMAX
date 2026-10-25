@@ -31,7 +31,11 @@ def _site(tmp: Path, ver: str) -> Path:
     }
     stale["release_root"] = "https://xiu-ci.com/xcagi-v1.0.0.1"
     (site / "download-release.json").write_text(json.dumps(stale))
-    ssot = {"version_lock": ver, "download_version": ver, "release_history": _history(ver)}
+    ssot = {
+        "version_lock": ver,
+        "download_version": ver,
+        "release_history": _history(ver),
+    }
     (tmp / "ssot.json").write_text(json.dumps(ssot))
     return site
 
@@ -44,13 +48,19 @@ def test_stale_git_copy_is_replaced_from_ssot_for_every_mirror(tmp_path: Path) -
         site / "MODstore_deploy/market/public/download-release.json",
     ):
         d = json.loads(path.read_text())
-        assert (d["version_lock"], d["release_history"][0]["version"], d["primary_sku"]) == (
+        assert (
+            d["version_lock"],
+            d["release_history"][0]["version"],
+            d["primary_sku"],
+        ) == (
             "1.0.0.6",
         ) * 2 + ("enterprise",)
     assert not (site / "corp-butler/download-release.json").exists()
 
 
-def test_release_managed_pointer_wins_and_version_mismatch_fails_closed(tmp_path: Path) -> None:
+def test_release_managed_pointer_wins_and_version_mismatch_fails_closed(
+    tmp_path: Path,
+) -> None:
     site = _site(tmp_path, "1.0.0.6")
     build = tmp_path / "www/update/releases/builds/1.0.0.6/" / ("b" * 40)
     build.mkdir(parents=True)
@@ -88,7 +98,9 @@ def _accept(tmp: Path, payload: bytes, recorded: bytes) -> None:
     (vdir / "manual-download-manifest.json").write_text(json.dumps(record))
 
 
-def test_ssot_fallback_recomputes_release_urls_and_gates_release_ready(tmp_path: Path) -> None:
+def test_ssot_fallback_recomputes_release_urls_and_gates_release_ready(
+    tmp_path: Path,
+) -> None:
     site = _site(tmp_path, "1.0.0.6")
     _accept(tmp_path, b"x" * 3 * 1048576, b"y" * 3 * 1048576)  # same size, wrong hash
     assert _run(tmp_path, "1.0.0.6").returncode == 0

@@ -24,7 +24,9 @@ from modstore_server.api.dto import (
     WorkflowEmployeeClosureDTO,
 )
 from modstore_server.application.catalog import get_default_catalog_application_service
-from modstore_server.application.employee import get_default_employee_application_service
+from modstore_server.application.employee import (
+    get_default_employee_application_service,
+)
 from modstore_server.authoring_frontend import regenerate_frontend
 from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
 from modstore_server.infrastructure import library_paths

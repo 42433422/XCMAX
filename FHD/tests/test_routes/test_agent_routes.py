@@ -1473,7 +1473,7 @@ def test_task_control_command_survives_process_local_control_reset() -> None:
 
 def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
     from app.application.workflow.clarification_node import build_clarify_node
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id="input",
@@ -1526,7 +1526,7 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
 
     from app.application.agent_orchestrator.artifact_files import artifact_path
     from app.application.agent_orchestrator.run_models import artifact_from_dict
-    from app.services.tools_workflow_erp import _registered_router_reports
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     run = AgentRun(user_id="u1", message="导出销售报表", status="completed")
@@ -1561,12 +1561,12 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
 
     import app.di.registry as _di_registry
     from app.application.agent_orchestrator.run_models import artifact_from_dict
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import Product, PurchaseUnit
-    from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.tools_workflow_shipments_docs import (
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
         _registered_router_shipment_orders,
     )
+    from app.infrastructure.tenant_scope import tenant_scope
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")

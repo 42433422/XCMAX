@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
 def _j(data, status=200):

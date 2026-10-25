@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 
-from .ports import Messages, Route
+from .protocols import Messages, Route
 
 
 def prepare_sync(

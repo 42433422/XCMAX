@@ -9,7 +9,7 @@ from fastapi import HTTPException, Request
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import CatalogInstall, InstalledMods, LibrarySync
+from .port_contracts import CatalogInstall, InstalledMods, LibrarySync
 from .schemas import ModStoreInstallResult, ModStoreSimpleResponse
 
 

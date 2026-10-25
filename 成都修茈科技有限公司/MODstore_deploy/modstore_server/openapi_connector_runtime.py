@@ -40,7 +40,13 @@ _MAX_REQUEST_SUMMARY = 1500
 _MAX_RESPONSE_SUMMARY = 2000
 _MAX_RESPONSE_BYTES = 256 * 1024
 _DEFAULT_TIMEOUT = 30.0
-SUPPORTED_AUTH_TYPES = ("none", "api_key", "bearer", "basic", "oauth2_client_credentials")
+SUPPORTED_AUTH_TYPES = (
+    "none",
+    "api_key",
+    "bearer",
+    "basic",
+    "oauth2_client_credentials",
+)
 _SENSITIVE_HEADER_PATTERNS = re.compile(
     "(authorization|api[-_]?key|x[-_]?api[-_]?key|x[-_]?auth[-_]?token|cookie|set-cookie|secret|token)",
     re.IGNORECASE,

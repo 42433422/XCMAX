@@ -8,8 +8,8 @@ from typing import Any, cast
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from app.application.workflow.types import PlanGraph, WorkflowNode, normalize_workflow_risk
-from app.fastapi_routes.knowledge.ports import AgentRuntime, RecallMerger
+from app.application.knowledge.protocols import AgentRuntime, RecallMerger
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, normalize_workflow_risk
 from app.fastapi_routes.knowledge.serialization import _public_dataset_payload
 
 

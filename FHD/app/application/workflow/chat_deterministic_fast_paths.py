@@ -50,7 +50,7 @@ _SMALLTALK_REPLIES: dict[str, str] = {
 def _try_smalltalk_reply(text: str) -> dict[str, str] | None:
     """纯问候/再见/求助短路；含业务意图时返回 None 交给后续链路。"""
     try:
-        from app.services.intent_service import recognize_intents
+        from app.domain.shared_services.intent_service import recognize_intents
 
         flags = recognize_intents(text)
     except RECOVERABLE_ERRORS:

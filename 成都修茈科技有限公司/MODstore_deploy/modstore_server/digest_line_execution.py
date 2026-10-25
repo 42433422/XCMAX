@@ -277,7 +277,9 @@ def execute_digest_line_work_units(
 
         if run_payload.get("ok") and not dry_run:
             try:
-                from modstore_server.digest_action_items import sync_dispatched_for_work_units
+                from modstore_server.digest_action_items import (
+                    sync_dispatched_for_work_units,
+                )
 
                 run_payload["action_items_writeback"] = sync_dispatched_for_work_units(
                     int(record_id), units
@@ -287,7 +289,9 @@ def execute_digest_line_work_units(
                         _mark_local_verified_action_items_merged(local_results)
                     )
                 try:
-                    from modstore_server.public_action_board import write_public_action_board
+                    from modstore_server.public_action_board import (
+                        write_public_action_board,
+                    )
 
                     write_public_action_board()
                 except RECOVERABLE_ERRORS:

@@ -120,7 +120,10 @@ def test_same_text_twice_creates_two_tasks(notify_calls):
 
 
 def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
-    from modstore_server.boss_im_inbound import dispatch_boss_im_task, enqueue_boss_im_task
+    from modstore_server.boss_im_inbound import (
+        dispatch_boss_im_task,
+        enqueue_boss_im_task,
+    )
 
     seen_exec: Dict[str, Any] = {}
 
@@ -164,7 +167,10 @@ def test_dispatch_boss_im_task_executes_and_replies(monkeypatch, notify_calls):
 
 
 def test_dispatch_boss_im_task_failure_still_replies(monkeypatch, notify_calls, caplog):
-    from modstore_server.boss_im_inbound import dispatch_boss_im_task, enqueue_boss_im_task
+    from modstore_server.boss_im_inbound import (
+        dispatch_boss_im_task,
+        enqueue_boss_im_task,
+    )
 
     def _boom(*args, **kwargs):
         raise RuntimeError("LLM 配额用尽")

@@ -15,3 +15,7 @@
 | 风险 | 长期维护成本；安全补丁需重放 |
 
 本轮提供校验脚本钩子（缺失 metadata 时 WARN）。
+
+## debt19
+
+`pregel/main.py` split into `main_mod*` / mixins to drop >100KB singleton.

@@ -45,17 +45,17 @@ import pytest
 from fastapi import BackgroundTasks
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
 )
+from app.domain.shared_services.ocr_service import OCRResult, OCRService
 from app.infrastructure.repositories.product_repository_impl import (
     TRIVIAL_MEASURE_UNITS,
     SQLAlchemyProductRepository,
 )
 from app.mod_sdk import industry_seed as industry_seed_mod
-from app.services.ocr_service import OCRResult, OCRService
 
 # ===========================================================================
 # Shared helpers / fixtures
@@ -740,9 +740,12 @@ class TestOCRServiceInit:
     def test_init_auto_backend_no_engines(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
-            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):
             svc = OCRService()
         assert svc._paddle_enabled is False
@@ -751,15 +754,23 @@ class TestOCRServiceInit:
 
     def test_init_paddle_backend_unavailable_logs_error(self, monkeypatch, caplog):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
-        with patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False):
+        with patch(
+            "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+            return_value=False,
+        ):
             svc = OCRService()
         assert svc._paddle_enabled is False
 
     def test_init_paddle_backend_available(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "paddle")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=True),
-            patch("app.services.paddle_ocr_runner.get_paddle_ocr_instance") as mock_inst,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=True,
+            ),
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.get_paddle_ocr_instance"
+            ) as mock_inst,
         ):
             svc = OCRService()
         assert svc._paddle_enabled is True
@@ -768,8 +779,11 @@ class TestOCRServiceInit:
     def test_init_easyocr_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "easyocr")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr") as mock_eo,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr") as mock_eo,
         ):
             svc = OCRService()
         mock_eo.assert_called_once()
@@ -777,9 +791,12 @@ class TestOCRServiceInit:
     def test_init_tesseract_backend(self, monkeypatch):
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "tesseract")
         with (
-            patch("app.services.paddle_ocr_runner.check_paddle_available", return_value=False),
-            patch("app.services.ocr_service.OCRService._init_easyocr"),
-            patch("app.services.ocr_service.OCRService._init_tesseract") as mock_ts,
+            patch(
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
+                return_value=False,
+            ),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract") as mock_ts,
         ):
             svc = OCRService()
         mock_ts.assert_called()
@@ -788,11 +805,11 @@ class TestOCRServiceInit:
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         with (
             patch(
-                "app.services.paddle_ocr_runner.check_paddle_available",
+                "app.domain.shared_services.paddle_ocr_runner.check_paddle_available",
                 side_effect=RuntimeError("paddle init fail"),
             ),
-            patch("app.services.ocr_service.OCRService._init_easyocr"),
-            patch("app.services.ocr_service.OCRService._init_tesseract"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_easyocr"),
+            patch("app.domain.shared_services.ocr_service.OCRService._init_tesseract"),
         ):
             svc = OCRService()
         assert svc._paddle_enabled is False
@@ -918,7 +935,7 @@ class TestOCRServiceRecognize:
         image.convert.return_value = image
         with (
             patch(
-                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
                 return_value=[{"text": "hello"}, {"text": "world"}],
             ),
             patch("numpy.array", return_value=np.zeros((10, 10, 3))),
@@ -1005,7 +1022,7 @@ class TestOCRServiceRecognizeTextBlocks:
         image.convert.return_value = image
         with (
             patch(
-                "app.services.paddle_ocr_runner.predict_to_text_blocks",
+                "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
                 return_value=[{"text": "x"}],
             ),
             patch("numpy.array", return_value=np.zeros((10, 10, 3))),
@@ -2350,7 +2367,7 @@ class TestMobileExtSyncRoutes:
         with (
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_sync),
             patch(
-                "app.application.employee_circle_sync.sync_modstore_reports",
+                "app.domain.app_pure.employee_circle_sync.sync_modstore_reports",
                 new_callable=AsyncMock,
                 return_value={},
             ) as report_sync,

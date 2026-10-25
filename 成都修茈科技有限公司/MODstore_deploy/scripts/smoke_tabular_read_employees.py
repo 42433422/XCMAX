@@ -50,7 +50,9 @@ def _simulate_execute_file(
     from modstore_server.services.employee import get_default_employee_client
 
     repo_root = MODSTORE_ROOT
-    session_dir = repo_root / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    session_dir = (
+        repo_root / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    )
     session_dir.mkdir(parents=True, exist_ok=True)
     dest = session_dir / filename
     dest.write_bytes(payload)
@@ -70,7 +72,9 @@ def _simulate_execute_file(
         if not isinstance(result, dict):
             return {"ok": False, "error": "result not dict", "raw": str(result)[:500]}
         llm_text = _collect_llm_context_text(session_dir, result)
-        downloads = _persist_employee_outputs_for_download(user_id, session_dir, dest, result)
+        downloads = _persist_employee_outputs_for_download(
+            user_id, session_dir, dest, result
+        )
         out = dict(result)
         out["llm_context_chars"] = len(llm_text or "")
         out["llm_context_preview"] = (llm_text or "")[:400]
@@ -78,7 +82,9 @@ def _simulate_execute_file(
         inner = result.get("result") if isinstance(result.get("result"), dict) else {}
         outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
         dp_ok = any(
-            isinstance(o, dict) and o.get("handler") == "direct_python" and o.get("ok") is True
+            isinstance(o, dict)
+            and o.get("handler") == "direct_python"
+            and o.get("ok") is True
             for o in outputs
         )
         has_real_context = bool(llm_text.strip()) and "### outputs/" in llm_text
@@ -110,7 +116,9 @@ def main() -> int:
         try:
             payload = _fixture_bytes(kind)
         except RECOVERABLE_ERRORS as exc:
-            rows.append({"pack_id": pack_id, "ok": False, "stage": "fixture", "error": str(exc)})
+            rows.append(
+                {"pack_id": pack_id, "ok": False, "stage": "fixture", "error": str(exc)}
+            )
             all_ok = False
             continue
         res = _simulate_execute_file(pack_id, payload, fname)

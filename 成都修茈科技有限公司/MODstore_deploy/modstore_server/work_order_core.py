@@ -1,6 +1,6 @@
 """工单状态机核心（纯逻辑，无 I/O）：共享宿主侧的 Work Order SSOT 判定。
 
-与 FHD ``app.services.work_order_ssot`` 保持同一状态集合 / 迁移表 / 轨道分类 /
+与 FHD ``app.domain.shared_services.ssot`` 保持同一状态集合 / 迁移表 / 轨道分类 /
 wo_id 派生算法（同源镜像，一测防漂移：FHD tests/test_services/test_work_order_core_parity.py
 断言两侧行为一致）。事件只在这里做折叠与校验，直接由 work_order_api 落库。
 
@@ -194,7 +194,12 @@ def acceptance_plan(
 ) -> dict[str, Any]:
     """验收判定计划：返回 {ok, target?, reason, note?, ref?} 供 API 落库。"""
     if verdict == "pending":
-        return {"ok": False, "reason": "verdict_pending", "target": "", "status": current}
+        return {
+            "ok": False,
+            "reason": "verdict_pending",
+            "target": "",
+            "status": current,
+        }
     if verdict not in ("accepted", "rejected"):
         return {"ok": False, "reason": "unknown_verdict", "target": ""}
     version = str(release_version or "").strip()
@@ -211,7 +216,10 @@ def acceptance_plan(
             "recorded_release_version": seen_version,
         }
 
-    ref: dict[str, Any] = {"issue_number": int(issue_number), "release_version": version}
+    ref: dict[str, Any] = {
+        "issue_number": int(issue_number),
+        "release_version": version,
+    }
     if evidence:
         ref["evidence"] = evidence
 
@@ -243,7 +251,11 @@ def acceptance_plan(
                     if int(stats.get("failed") or 0) == 0:
                         healthy.append(p)
         if len(healthy) < 2:
-            return {"ok": False, "reason": "missing_acceptance_evidence", "healthy": healthy}
+            return {
+                "ok": False,
+                "reason": "missing_acceptance_evidence",
+                "healthy": healthy,
+            }
         return {
             "ok": True,
             "target": "closed",

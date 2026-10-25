@@ -48,7 +48,7 @@ from app.application.shipment_excel_etl_app_service import (
 
 MOD = "app.application.shipment_excel_etl_app_service"
 SEC = "app.application.shipment_excel_etl_security"
-KB = "app.application.excel_etl_kb"
+KB = "app.domain.app_pure.excel_etl_kb"
 LLM = "app.application.shipment_excel_etl_llm"
 FP = "app.application.shipment_excel_etl_fingerprint_store"
 
@@ -1324,7 +1324,7 @@ def test_execute_dry_run_with_duplicates(monkeypatch, delivery_profile, tmp_path
 def test_execute_product_import_failed(monkeypatch, delivery_profile, tmp_path):
     _patch_execute(monkeypatch, tmp_path, delivery_profile)
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": False, "message": "导入失败"},
     )
     res = execute_shipment_excel_etl(

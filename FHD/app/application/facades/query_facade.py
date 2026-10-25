@@ -1,4 +1,4 @@
-from app.services.unified_query_service import (
+from app.domain.shared_services.unified_query_service import (
     find_product,
     find_purchase_unit,
     get_product_names,

@@ -55,7 +55,9 @@ def _bootstrap_one(*, brief: str, extra_files: dict | None = None) -> Path:
             if isinstance(content, bytes):
                 p.write_bytes(content)
             elif isinstance(content, dict):
-                p.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+                p.write_text(
+                    json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
             else:
                 p.write_text(str(content), encoding="utf-8")
             asset_manifest["assets"].append(

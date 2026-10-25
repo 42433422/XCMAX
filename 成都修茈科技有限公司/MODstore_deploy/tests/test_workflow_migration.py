@@ -42,7 +42,12 @@ def _seed_legacy_workflow(user_id: int, with_nodes: bool = True) -> int:
     """造一份还没迁移的旧节点图工作流。"""
     import json
 
-    from modstore_server.models import Workflow, WorkflowEdge, WorkflowNode, get_session_factory
+    from modstore_server.models import (
+        Workflow,
+        WorkflowEdge,
+        WorkflowNode,
+        get_session_factory,
+    )
 
     sf = get_session_factory()
     with sf() as session:

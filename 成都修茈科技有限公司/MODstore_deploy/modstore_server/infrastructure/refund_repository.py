@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from modstore_server.domain.refund.types import RefundRequestRef
+from modstore_server.domain.refund.refund_types import RefundRequestRef
 
 
 class InMemoryRefundRepository:

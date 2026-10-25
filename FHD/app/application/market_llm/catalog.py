@@ -13,7 +13,7 @@ import httpx
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import CacheKey, Connection, Payload, SyncClientFactory
+from .protocols import CacheKey, Connection, Payload, SyncClientFactory
 
 _VISION_HINT_RE = re.compile(
     r"vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|"

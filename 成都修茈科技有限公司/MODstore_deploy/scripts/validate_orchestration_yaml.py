@@ -37,7 +37,9 @@ def _load_schema(filename: str) -> Dict[str, Any]:
         return json.load(f)
 
 
-def _validate_schema(instance: Dict[str, Any], schema: Dict[str, Any], label: str) -> None:
+def _validate_schema(
+    instance: Dict[str, Any], schema: Dict[str, Any], label: str
+) -> None:
     Draft202012Validator(schema).validate(instance)
     print(f"[ok] schema: {label}")
 
@@ -103,7 +105,9 @@ def main() -> int:
 
     dt = _load_yaml(dt_path)
     cp = _load_yaml(cp_path)
-    _validate_schema(dt, _load_schema("deploy_topology.schema.json"), "deploy_topology.yaml")
+    _validate_schema(
+        dt, _load_schema("deploy_topology.schema.json"), "deploy_topology.yaml"
+    )
     _validate_schema(cp, _load_schema("ci_pipeline.schema.json"), "ci_pipeline.yaml")
     _deploy_topology_dag_and_refs(dt)
     _workflow_files_exist(cp)

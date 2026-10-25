@@ -129,8 +129,8 @@ def test_employee_agent_defaults_to_xcauto_credentials(monkeypatch):
     from unittest.mock import AsyncMock, Mock
 
     from app.application.employee_runtime.agent_runner import _chat_completion
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
     from app.infrastructure.llm.providers import registry
-    from app.services.conversation.llm_adapter import OpenAICompatibleAdapter
 
     response = Mock()
     response.json.return_value = {"choices": [{"message": {"content": "ok"}}]}

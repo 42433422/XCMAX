@@ -10,7 +10,7 @@ from app.application.persy_memory_app_service import (
     extract_explicit_memories,
     merge_memory_graph,
 )
-from app.services.user_memory_service import UserMemoryService, UserMemoryStore
+from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
 
 
 def _access(actor: str = "7", tenant: str = "2") -> DatasetAccessContext:

@@ -368,7 +368,7 @@ class TestExecuteWorkflowToolJoinCompare:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -536,7 +536,7 @@ class TestExecuteWorkflowToolProphet:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -639,7 +639,7 @@ class TestExecuteWorkflowToolSchemaUnderstand:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -704,7 +704,7 @@ class TestExecuteWorkflowToolBulkAndVector:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -713,7 +713,7 @@ class TestExecuteWorkflowToolBulkAndVector:
 
     def test_products_bulk_import_dispatches(self) -> None:
         with patch(
-            "app.application.excel_imports.run_bulk_import",
+            "app.domain.app_pure.excel_imports.run_bulk_import",
             return_value={"success": True},
             create=True,
         ):
@@ -795,7 +795,7 @@ class TestExecuteWorkflowToolGenerateOffice:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -813,12 +813,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_invalid_format_defaults_to_docx(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -831,12 +831,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_xlsx_format(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.xlsx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -848,7 +848,7 @@ class TestExecuteWorkflowToolGenerateOffice:
 
     def test_recoverable_error(self) -> None:
         with patch(
-            "app.services.kitten_ai_document.generate.generate_office_file",
+            "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
             side_effect=OSError("disk full"),
             create=True,
         ):
@@ -861,12 +861,12 @@ class TestExecuteWorkflowToolGenerateOffice:
     def test_prompt_alias_for_user_request(self) -> None:
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "file.docx"),
                 create=True,
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="token123",
                 create=True,
             ),
@@ -897,7 +897,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -921,12 +921,12 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
             patch(
-                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
                 create=True,
             ),
@@ -948,7 +948,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value='{"emp": true}',
                 create=True,
             ),
@@ -969,7 +969,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -991,7 +991,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("fail"),
                 create=True,
             ),

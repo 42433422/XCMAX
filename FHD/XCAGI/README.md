@@ -8,3 +8,7 @@
 - **Mod 来源**：常规编辑源为 [`../mods`](../mods)，本目录 `mods/` 为构建导出。例外只由 [`mods_ssot.py`](../scripts/dev/mods_ssot.py) 的 `EXPORT_ONLY_MODS` / `SOURCE_ONLY_MODS` 定义；当前考勤引擎以本目录 `mods/attendance-industry` 为正本，禁止再建手工同步副本。
 
 环境变量清单见仓库根 [`.env.example`](../.env.example)。
+
+## debt19 converge
+
+Runtime SSOT is `FHD/app` + `FHD/run.py`. Duplicate `mods/*` copies removed.

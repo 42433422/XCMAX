@@ -171,7 +171,7 @@ def test_orchestrator_enriches_unknown_intent():
 
 
 def test_intent_confirmation_uses_skill_candidate():
-    from app.services.intent_confirmation_service import IntentConfirmationService
+    from app.domain.shared_services.intent_confirmation_service import IntentConfirmationService
 
     svc = IntentConfirmationService()
     result = svc.check_and_build_prompt(

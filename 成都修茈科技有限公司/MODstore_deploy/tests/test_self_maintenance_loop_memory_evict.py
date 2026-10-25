@@ -19,7 +19,10 @@ from modstore_server.maintenance_loop.config import (
 )
 from modstore_server.maintenance_loop.memory import evict_loop_memory_items
 from modstore_server.maintenance_loop.outcomes import _update_loop_memory
-from modstore_server.maintenance_loop.store import _load_loop_memory, _read_governance_audit
+from modstore_server.maintenance_loop.store import (
+    _load_loop_memory,
+    _read_governance_audit,
+)
 
 
 def _seed_memory_file(memory_path, *, open_items, evicted_items=None):

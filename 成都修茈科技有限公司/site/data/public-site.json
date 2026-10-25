@@ -215,14 +215,14 @@
   "capabilities": {
     "total": 157,
     "by_status": {
-      "verified": 132,
-      "partial": 18,
+      "verified": 106,
+      "partial": 15,
       "implemented": 3,
-      "planned": 4
+      "planned": 33
     },
     "domains": 10,
     "modules": 28,
-    "completion": 93,
+    "completion": 75,
     "catalog_version": "2026-09-16",
     "platforms": [
       {

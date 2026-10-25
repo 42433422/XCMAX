@@ -8,12 +8,17 @@ from typing import Any
 
 def stable_version(value: Any) -> tuple[int, ...]:
     text = str(value or "").strip()
-    if not re.fullmatch(
-        r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*))?", text
-    ):
+    parts_text = text.split(".")
+    if len(parts_text) not in (3, 4):
         raise ValueError("自动发布须使用三段或四段数字稳定版本；源码变更须提升 manifest.version")
-    parts = tuple(int(part) for part in text.split("."))
-    return parts + (0,) * (4 - len(parts))
+    parts: list[int] = []
+    for part in parts_text:
+        if not part.isdigit() or (len(part) > 1 and part.startswith("0")):
+            raise ValueError(
+                "自动发布须使用三段或四段数字稳定版本；源码变更须提升 manifest.version"
+            )
+        parts.append(int(part))
+    return tuple(parts) + (0,) * (4 - len(parts))
 
 
 def is_private_package(record: dict[str, Any]) -> bool:

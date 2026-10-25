@@ -527,7 +527,9 @@ def dispatch_suggestion(
         source="suggestion_dispatcher",
     )
     try:
-        from modstore_server.employee_collab_reporter import report_suggestion_dispatched
+        from modstore_server.employee_collab_reporter import (
+            report_suggestion_dispatched,
+        )
 
         report_suggestion_dispatched(suggestion_id=sid)
     except RECOVERABLE_ERRORS:
@@ -1013,7 +1015,10 @@ def run_employee_evolution_scan(
             "quota_failures": quota_fail_total,
         }
     from modstore_server.employee_ai_pipeline import refine_system_prompt
-    from modstore_server.employee_runtime import load_employee_pack, parse_employee_config_v2
+    from modstore_server.employee_runtime import (
+        load_employee_pack,
+        parse_employee_config_v2,
+    )
     from modstore_server.runtime_async import run_coro_sync
 
     created = 0
@@ -1021,7 +1026,9 @@ def run_employee_evolution_scan(
     for employee_id, fail_count in candidates:
         processed += 1
         try:
-            from modstore_server.employee_runtime_policy import record_employee_degradation
+            from modstore_server.employee_runtime_policy import (
+                record_employee_degradation,
+            )
 
             record_employee_degradation(
                 employee_id=employee_id,
@@ -1115,7 +1122,9 @@ def run_employee_evolution_scan(
             evolution_record_id = int(rec.id or 0)
         if status == "suggested" and improved:
             try:
-                from modstore_server.prompt_evolution_ab import maybe_auto_apply_prompt_evolution
+                from modstore_server.prompt_evolution_ab import (
+                    maybe_auto_apply_prompt_evolution,
+                )
 
                 apply_meta = maybe_auto_apply_prompt_evolution(
                     employee_id=employee_id,

@@ -50,7 +50,9 @@ def admin_or_shared_secret(env_name: str, header_name: str) -> Callable[..., Any
 
 def require_admin_or_internal(request: Request, authorization: Optional[str] = Header(None)) -> Any:
     """Read-only bridge: the FHD internal API key or an admin bearer token."""
-    from modstore_server.admin_employee_autonomy_helpers import _has_valid_internal_api_key
+    from modstore_server.admin_employee_autonomy_helpers import (
+        _has_valid_internal_api_key,
+    )
 
     if _has_valid_internal_api_key(request):
         return None

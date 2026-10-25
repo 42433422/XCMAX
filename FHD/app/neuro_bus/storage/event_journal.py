@@ -6,7 +6,7 @@ import json
 import sqlite3
 from dataclasses import dataclass, field
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 from .event_codec import EventCodec
 from .event_records import Snapshot, StoredEvent, WrongExpectedVersionError

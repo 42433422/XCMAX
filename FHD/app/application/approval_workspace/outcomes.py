@@ -8,7 +8,7 @@ from typing import Any, TypedDict
 from app.application.workflow.approval_persistence import canonical_workflow_outcome
 from app.db.models.approval import ApprovalRequest, ApprovalStatus
 
-from .ports import JsonObject
+from .protocols import JsonObject
 
 
 class WorkflowOutcome(TypedDict):

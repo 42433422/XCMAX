@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.neuro_bus.bus import NeuroBus
-    from app.neuro_bus.events.base import NeuroEvent
+    from app.neuro_bus.events.events_base import NeuroEvent
 
 STREAM_KEY = "neurobus:events"
 DLQ_KEY = "neurobus:dlq"
