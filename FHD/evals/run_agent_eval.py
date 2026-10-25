@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins as _builtins
 from pathlib import Path as _Path
 
 _parts = (
@@ -12,8 +13,8 @@ _parts = (
 _src = "".join(
     (_Path(__file__).with_name(name)).read_text(encoding="utf-8") for name in _parts
 )
-exec(compile(_src, str(_Path(__file__).resolve()), "exec"), globals())
-del _Path, _parts, _src
+_builtins.exec(compile(_src, str(_Path(__file__).resolve()), "exec"), globals())
+del _builtins, _Path, _parts, _src
 
 if __name__ == "__main__":
     raise SystemExit(main())
