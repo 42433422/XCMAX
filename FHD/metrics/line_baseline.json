@@ -1,5 +1,5 @@
 {
-  "lines": 2329735,
+  "lines": 2329744,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 红修16：services/application 懒加载兼容 + agent_routes shim + kitten pickup；净增属门禁收口"
+  "note": "debt19 #2631 CI 红修18：跟进 tip 5e0482b1 facade _get_printer_service 行数；SSOT net-deletion"
 }
