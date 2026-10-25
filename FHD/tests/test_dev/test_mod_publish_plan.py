@@ -80,14 +80,30 @@ def test_exact_main_ancestor_and_all_source_roots(repository):
 
 
 def test_source_only_change_requires_version_bump(repository):
-    source = repository / "FHD/XCAGI/mods/industry-one/backend/worker.py"
-    source.write_text("fixed source\n")
+    canonical = "FHD/mods/xcagi-customer-service-bridge"
+    mirror = "FHD/XCAGI/mods/xcagi-customer-service-bridge"
+    for source in (canonical, mirror):
+        write_mod(repository, source, "1.0.0.0")
+    git(repository, "add", "FHD")
+    git(repository, "commit", "-qm", "customer service Mod baseline")
+    for source in (canonical, mirror):
+        (repository / source / "backend/worker.py").write_text("fixed source\n")
     git(repository, "add", "FHD")
     git(repository, "commit", "-qm", "missing version bump")
     sha = git(repository, "rev-parse", "HEAD")
     git(repository, "update-ref", "refs/remotes/origin/main", sha)
     with pytest.raises(ValueError, match="strictly higher manifest.version"):
         plan.discover(repository, sha)
+
+    manifest = repository / canonical / "manifest.json"
+    manifest.write_text(json.dumps({"id": "xcagi-customer-service-bridge", "version": "1.0.0.1"}))
+    git(repository, "add", "FHD")
+    git(repository, "commit", "-qm", "bump canonical Mod release version")
+    sha = git(repository, "rev-parse", "HEAD")
+    git(repository, "update-ref", "refs/remotes/origin/main", sha)
+    assert plan.discover(repository, sha) == [
+        {"id": "xcagi-customer-service-bridge", "source": canonical, "version": "1.0.0.1"}
+    ]
 
 
 def test_branch_only_source_rejected(repository):
