@@ -10,9 +10,7 @@ import importlib.util
 from pathlib import Path
 
 _TARGET = Path(__file__).with_name("autonomy_gap_analyst_convert.py")
-_spec = importlib.util.spec_from_file_location(
-    "autonomy_gap_analyst_convert_impl", _TARGET
-)
+_spec = importlib.util.spec_from_file_location("autonomy_gap_analyst_convert_impl", _TARGET)
 assert _spec is not None and _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
