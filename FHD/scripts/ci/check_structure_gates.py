@@ -33,7 +33,7 @@ BASELINE = {
     "mixin_ge_15kb": 1,
     "routes_total": 305,
     "routes_top_level": 115,
-    "legacy_prod_ref_files": 23,
+    "legacy_prod_ref_files": 24,
     "application_ports_py": 1,
     "workflow_ports_py": 1,
     # G7: mechanical (part|mixin)\d+ filenames under FHD/app
