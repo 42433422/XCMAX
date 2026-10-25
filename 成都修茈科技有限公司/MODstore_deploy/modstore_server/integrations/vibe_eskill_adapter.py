@@ -73,7 +73,7 @@ def _resolve_project_root(logic: Dict[str, Any], user_id: int) -> Optional[str]:
             read_only=False,
         )
         if trusted:
-            return trusted
+            return str(trusted)
         validated = ensure_within_workspace(raw, user_id=int(user_id or 0))
         return str(validated)
     except RECOVERABLE_ERRORS:  # VibePathError or any OS error — re-raise so caller can surface it
