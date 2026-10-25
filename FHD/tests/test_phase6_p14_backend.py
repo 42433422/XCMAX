@@ -925,9 +925,7 @@ class TestMobileAuthLogin:
                 status_code=401,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "wrong"},
@@ -954,9 +952,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -983,9 +979,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -1006,9 +1000,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},
@@ -1038,9 +1030,7 @@ class TestMobileAuthLogin:
                 status_code=200,
             )
 
-        monkeypatch.setattr(
-            "app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login
-        )
+        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
         r = mobile_client.post(
             "/api/mobile/v1/auth/login",
             json={"username": "alice", "password": "secret"},

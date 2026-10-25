@@ -89,6 +89,8 @@ from app.domain.shared_services.user_preference_service import (
 from app.domain.shared_services import user_memory_service as user_memory_service
 from app.domain.shared_services import printer_service as printer_service
 from app.domain.shared_services import tools_workflow_common as tools_workflow_common
+from app.domain.shared_services import kitten_ai_document as kitten_ai_document
+from app.domain.shared_services import document_templates_service as document_templates_service
 
 if TYPE_CHECKING:
     from app.domain.shared_services.materials_service import MaterialsService
@@ -122,6 +124,14 @@ def __getattr__(name: str):
         from app.application import private_mod_delivery_app
 
         return private_mod_delivery_app
+    if name == "kitten_ai_document":
+        from app.domain.shared_services import kitten_ai_document as mod
+
+        return mod
+    if name == "document_templates_service":
+        from app.domain.shared_services import document_templates_service as mod
+
+        return mod
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -177,6 +187,7 @@ __all__ = [
     "user_memory_service",
     "printer_service",
     "tools_workflow_common",
+    "kitten_ai_document",
     "UserMemoryService",
     "ProductImportService",
     "get_product_import_service",
