@@ -47,7 +47,7 @@ from modstore_server.services.llm import chat_dispatch_via_session
 
 logger = logging.getLogger(__name__)
 
-from modstore_server.employee_executor_merged import (
+from modstore_server.employee_executor_merged import (  # type: ignore[attr-defined]
     _emp_im_notify_boss as _emp_im_notify_boss,
     _is_all_hands_cognition_context as _is_all_hands_cognition_context,
     _build_all_hands_cognition_user_message as _build_all_hands_cognition_user_message,
