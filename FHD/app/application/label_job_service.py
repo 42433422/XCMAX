@@ -16,13 +16,13 @@ from typing import Callable, Iterator
 from sqlalchemy import text
 
 from app.db.session import get_db
+from app.domain.shared_services.document_templates.crud import _build_template_payload_from_row
 from app.infrastructure.printing.label_dispatch_guard import (
     authorized_label_dispatch,
     label_job_lock,
     write_label_job,
 )
 from app.infrastructure.printing.template_label_renderer import render_template_label
-from app.domain.shared_services.document_templates.crud import _build_template_payload_from_row
 from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 

@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
+from app.application.shipment_etl_profile import (
+    ShipmentEtlProfile,
+)
 from app.domain.app_pure.excel_etl_kb import (
     ExcelEtlKnowledgeBase,
     TemplateMemory,
     sheet_layout_fingerprint,
-)
-from app.application.shipment_etl_profile import (
-    ShipmentEtlProfile,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

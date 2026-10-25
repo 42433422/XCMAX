@@ -31,8 +31,8 @@ from .backup_retention import (
     WEEKLY_MARKER,
     cleanup_local_backups,
 )
-from .migrate import backup_database
 from .desktop_runtime_paths import ensure_desktop_dirs, is_desktop_mode
+from .migrate import backup_database
 
 logger = logging.getLogger(__name__)
 

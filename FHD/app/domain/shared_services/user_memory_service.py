@@ -33,8 +33,8 @@ from app.application.user_memory.models import FeedbackRecord as FeedbackRecord
 from app.application.user_memory.models import UserMemory as UserMemory
 from app.application.user_memory.patterns import ActionMemory, PatternPorts
 from app.application.user_memory.policy import MemoryPolicy, PolicyPorts
-from app.application.user_memory.protocols import MemoryAccess, MemoryStore, late_callback
 from app.application.user_memory.preferences import PreferenceMemory
+from app.application.user_memory.protocols import MemoryAccess, MemoryStore, late_callback
 from app.application.user_memory.queries import MemoryQueries, QueryPorts
 from app.infrastructure.user_memory.json_storage import JsonMemoryStorage
 from app.infrastructure.user_memory.persistence import MemoryRepository

@@ -14,8 +14,8 @@ from typing import Any, Protocol
 
 import httpx
 
-from app.domain.app_pure.execution_scope import CapabilityGrant
 from app.application.workspaces import WorkspaceRegistry
+from app.domain.app_pure.execution_scope import CapabilityGrant
 
 JsonObject = dict[str, Any]
 CliResult = tuple[int, str, str, str]

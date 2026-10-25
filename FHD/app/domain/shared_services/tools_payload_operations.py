@@ -41,7 +41,9 @@ def dispatch_operational_tool_payload(
 
             logger.info("收到发货单生成请求：order_text=%s", order_text)
 
-            from app.domain.shared_services.shipment_number_mode_service import ShipmentNumberModeService
+            from app.domain.shared_services.shipment_number_mode_service import (
+                ShipmentNumberModeService,
+            )
 
             number_mode_service = ShipmentNumberModeService()
             payload, status_code = number_mode_service.execute(
@@ -314,7 +316,9 @@ def dispatch_operational_tool_payload(
 
     elif tool_id == "tools_table":
         if action in ("list", "query"):
-            from app.domain.shared_services.tools_execution_service import get_workflow_tool_registry
+            from app.domain.shared_services.tools_execution_service import (
+                get_workflow_tool_registry,
+            )
 
             return _j(
                 {"success": True, "tool_ids": list(get_workflow_tool_registry().keys())},

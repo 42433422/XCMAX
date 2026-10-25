@@ -1,10 +1,10 @@
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from app.infrastructure.llm.client import resolve_chat_model
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.conversation.api_llm import ConversationLlmMixin
 from app.domain.shared_services.conversation.context import ConversationContext
+from app.infrastructure.llm.client import resolve_chat_model
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.performance.cache_manager import get_ai_response_cache
 
 logger = logging.getLogger(__name__)

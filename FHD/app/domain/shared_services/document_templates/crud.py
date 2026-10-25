@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 
-from app.http.json_response import json_response
 from app.domain.shared_services.document_templates.renderer import (
     _parse_json_dict,
     _parse_json_list,
@@ -12,6 +11,7 @@ from app.domain.shared_services.document_templates.variables import (
     _infer_business_scope,
     _validate_required_terms,
 )
+from app.http.json_response import json_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

@@ -9,18 +9,18 @@ from typing import Any
 from sqlalchemy import or_
 
 from app.application.etl.errors import EtlError
-from app.application.etl.targets.targets_base import (
-    PreviewDecision,
-    TargetAdapter,
-    TargetField,
-    json_safe,
-)
 from app.application.etl.targets.helpers import (
     assert_snapshot_unchanged,
     decimal_or_zero,
     issue,
     optional_text,
     parse_date,
+)
+from app.application.etl.targets.targets_base import (
+    PreviewDecision,
+    TargetAdapter,
+    TargetField,
+    json_safe,
 )
 from app.db.models.product import Product
 from app.db.models.purchase import PurchaseOrder, PurchaseOrderItem, Supplier

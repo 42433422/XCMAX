@@ -7,7 +7,10 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import text
 
-from app.infrastructure.persistence.compat_db.compat_db_base import _sql_ident, _sql_insert_returning
+from app.infrastructure.persistence.compat_db.compat_db_base import (
+    _sql_ident,
+    _sql_insert_returning,
+)
 
 
 def _compat_module() -> Any:

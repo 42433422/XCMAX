@@ -9,11 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_extensions.models import (
-    SyncAckBody,
-    SyncPullBody,
-    SyncPushBody,
-)
 from app.application.mobile_extensions.protocols import (
     AiCircleEmployeeProfilesCall,
     AiCircleUserCall,
@@ -31,6 +26,11 @@ from app.application.mobile_extensions.protocols import (
     SyncConnectionCall,
     SyncDatabaseCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    SyncAckBody,
+    SyncPullBody,
+    SyncPushBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

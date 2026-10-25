@@ -56,7 +56,9 @@ def legacy_employee(call: ToolCall) -> str | None:
 
 
 def template(call: ToolCall) -> str:
-    from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     action = str(call.args.get("action") or "view").strip() or "view"
     return json.dumps(

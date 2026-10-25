@@ -56,7 +56,9 @@ def _registered_router_customers(
         params.get("unit_name") or params.get("customer_name") or params.get("name") or ""
     ).strip()
     if action in {"create", "ensure_exists", "upsert"}:
-        from app.domain.shared_services.business_db_customer_mutations import execute_customer_create_like
+        from app.domain.shared_services.business_db_customer_mutations import (
+            execute_customer_create_like,
+        )
 
         return execute_customer_create_like(
             action, params, svc=svc, resolve_targets=_resolve_target_candidates()

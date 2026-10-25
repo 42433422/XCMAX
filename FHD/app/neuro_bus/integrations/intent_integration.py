@@ -104,7 +104,9 @@ class NeuroIntentRecognizer:
         reflex_arc: IntentReflexArc | None = None,
         base_recognizer: Any | None = None,
     ):
-        from app.domain.shared_services.unified_intent_recognizer import get_unified_intent_recognizer
+        from app.domain.shared_services.unified_intent_recognizer import (
+            get_unified_intent_recognizer,
+        )
 
         self._reflex = reflex_arc or get_reflex_arc()
         self._base = base_recognizer or get_unified_intent_recognizer()

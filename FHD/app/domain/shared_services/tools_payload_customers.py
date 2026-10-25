@@ -170,8 +170,8 @@ def dispatch_customer_tool_payload(
         if should_supplement:
             from app.db.models import PurchaseUnit
             from app.db.session import get_db
-            from app.services import get_task_context_service
             from app.domain.shared_services.unified_query_service import query_service
+            from app.services import get_task_context_service
 
             ctx = get_task_context_service()
             user_id = params.get("user_id") or _hdr("X-User-ID", "default")

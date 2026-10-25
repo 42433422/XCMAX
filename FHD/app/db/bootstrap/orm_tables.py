@@ -10,8 +10,8 @@ from typing import Literal
 from sqlalchemy import MetaData, Table
 from sqlalchemy.engine import Engine
 
-from app.db.db_base import Base
 from app.db.bootstrap.contracts import InspectorFactory
+from app.db.db_base import Base
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 GroupName = Literal[

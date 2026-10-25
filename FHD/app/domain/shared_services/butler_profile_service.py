@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.db.models.butler_profile import ButlerUserProfile
 from app.domain.app_pure.butler_identity_catalog import (
     DEFAULT_MBTI_EI,
     DEFAULT_MBTI_JP,
@@ -23,7 +24,6 @@ from app.domain.app_pure.butler_identity_catalog import (
     get_identity_affinities,
     pick_primary_identity,
 )
-from app.db.models.butler_profile import ButlerUserProfile
 
 logger = logging.getLogger(__name__)
 

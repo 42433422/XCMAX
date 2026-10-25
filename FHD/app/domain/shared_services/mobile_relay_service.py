@@ -9,7 +9,6 @@ from typing import Any, cast
 
 from app.application.mobile_relay_ports import PairingPorts, TaskPorts
 from app.db.session import get_db
-from app.infrastructure.mobile_relay import repository
 from app.domain.shared_services.mobile_relay_pairing import RelayPairing
 from app.domain.shared_services.mobile_relay_tasks import RelayTaskQueue
 from app.domain.shared_services.mobile_relay_utils import _epoch_from_iso as _epoch_from_iso
@@ -20,6 +19,7 @@ from app.domain.shared_services.mobile_relay_utils import _row_dict as _row_dict
 from app.domain.shared_services.mobile_relay_utils import _token_hash as _token_hash
 from app.domain.shared_services.mobile_relay_utils import _utc_after as _utc_after
 from app.domain.shared_services.mobile_relay_utils import _utc_now as _utc_now
+from app.infrastructure.mobile_relay import repository
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

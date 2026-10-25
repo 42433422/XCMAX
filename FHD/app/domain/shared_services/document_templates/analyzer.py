@@ -9,7 +9,6 @@ import zipfile
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from app.http.json_response import json_response
 from app.domain.shared_services.document_templates.renderer import (
     _extract_excel_grid_preview,
     _extract_structured_excel_preview,
@@ -18,6 +17,7 @@ from app.domain.shared_services.document_templates.variables import (
     _get_template_scope_required_terms,
     _validate_required_terms,
 )
+from app.http.json_response import json_response
 from app.template_analysis_progress import (
     clear_template_analysis_progress,
     set_template_analysis_progress,

@@ -380,7 +380,9 @@ class WorkflowSession:
         candidates = item.get("candidates") or []
         confirmed = resolve_confirmed_target(text, candidates)
         if confirmed is None and target.tool_id == "business_db" and (not candidates):
-            from app.domain.shared_services.tools_workflow_registered import prepare_business_db_write_target
+            from app.domain.shared_services.tools_workflow_registered import (
+                prepare_business_db_write_target,
+            )
 
             entity = str(target.params.get("entity") or "")
             selector: dict[str, Any]

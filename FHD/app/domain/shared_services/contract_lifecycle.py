@@ -93,11 +93,11 @@ def notify_contract_expiry_items(
     dry_run: bool = False,
     push: bool = False,
 ) -> dict[str, int]:
+    from app.domain.shared_services.user_cs_intake_notice import _primary_contact_name
+    from app.domain.shared_services.user_cs_pipeline import load_pipeline
     from app.infrastructure.persistence.contract_expiry_notification_repository import (
         get_contract_expiry_notification_repository,
     )
-    from app.domain.shared_services.user_cs_intake_notice import _primary_contact_name
-    from app.domain.shared_services.user_cs_pipeline import load_pipeline
 
     notified = pushed = failed = 0
     repo = get_contract_expiry_notification_repository()

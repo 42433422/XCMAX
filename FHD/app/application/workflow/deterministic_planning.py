@@ -9,7 +9,12 @@ from typing import Any
 
 from app.application.workflow.clarification_node import build_clarify_node
 from app.application.workflow.onboarding_slots import _onboarding_first_order_slots
-from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk
+from app.application.workflow.workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    normalize_workflow_risk,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _INTENT_TOOL_KEY_TO_WORKFLOW: dict[str, tuple[str, str]] = {

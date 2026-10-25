@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.infrastructure.llm.providers.deepseek_legacy import DeepSeekLegacyProvider
 from app.infrastructure.llm.providers.modstore_provider import ModstoreProvider
 from app.infrastructure.llm.providers.openai_compatible_provider import (
@@ -13,6 +12,7 @@ from app.infrastructure.llm.providers.openai_compatible_provider import (
     XiaomiMimoProvider,
 )
 from app.infrastructure.llm.providers.openai_sdk_provider import OpenAISdkProvider
+from app.infrastructure.llm.providers.providers_base import LLMProvider
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 _DEFAULT_ORDER = ("modstore", "openai_compatible", "deepseek_legacy", "openai_sdk")

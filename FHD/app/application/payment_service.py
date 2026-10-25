@@ -23,8 +23,8 @@ from app.db.models.receivable_allocation import (
     RECEIVABLE_STATUS_UNPAID,
 )
 from app.db.session import get_db
-from app.infrastructure.tenant_scope import apply_tenant_filter
 from app.domain.shared_services.accounting_services import create_journal_entry
+from app.infrastructure.tenant_scope import apply_tenant_filter
 
 CASH_ACCOUNT_CODE = "1001"
 RECEIVABLE_ACCOUNT_CODE = "1122"

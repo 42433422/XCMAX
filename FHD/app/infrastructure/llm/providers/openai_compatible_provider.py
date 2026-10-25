@@ -29,12 +29,12 @@ class OpenAICompatibleProvider:
         if self._adapter is not None:
             return self._adapter
 
+        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
         from app.infrastructure.llm.providers.credentials import (
             resolve_default_chat_model,
             resolve_default_openai_provider,
             resolve_openai_env_credentials,
         )
-        from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
         provider = resolve_default_openai_provider()
         api_key, base_url = resolve_openai_env_credentials()

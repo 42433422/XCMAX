@@ -8,7 +8,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.domain.shared_services.fhd_payment_reconciliation import _parse_dt, compute_fhd_period_snapshot
+from app.domain.shared_services.fhd_payment_reconciliation import (
+    _parse_dt,
+    compute_fhd_period_snapshot,
+)
 
 
 def _state_path() -> Path:

@@ -29,7 +29,9 @@ def analyze_word_template(
     template_scope: str = "",
 ) -> Any:
     try:
-        from app.domain.shared_services.document_templates.analyzer import _extract_word_placeholder_fields
+        from app.domain.shared_services.document_templates.analyzer import (
+            _extract_word_placeholder_fields,
+        )
 
         _update_progress(task_id, 15, 1, "文件上传成功")
         _update_progress(task_id, 45, 2, "解析 Word 占位符...")

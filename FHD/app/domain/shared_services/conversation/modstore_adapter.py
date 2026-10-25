@@ -31,6 +31,10 @@ from app.application.market_llm.catalog import _VISION_HINT_RE as _VISION_HINT_R
 from app.application.market_llm.catalog import (
     _catalog_model_vision_support as _catalog_model_vision_support,
 )
+from app.application.market_llm.responses import _response_status_code as _status_code
+from app.application.market_llm.responses import (
+    neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip,
+)
 from app.application.mod_store.protocols import (
     ChatInput,
     CompletionPorts,
@@ -38,10 +42,6 @@ from app.application.mod_store.protocols import (
     OpenAIPorts,
     ResponsePorts,
     StreamPorts,
-)
-from app.application.market_llm.responses import _response_status_code as _status_code
-from app.application.market_llm.responses import (
-    neuro_notify_ai_model_roundtrip as neuro_notify_ai_model_roundtrip,
 )
 from app.infrastructure import modstore_transport as _transport
 from app.infrastructure.llm.modstore_chat_failover import is_market_chat_failoverable

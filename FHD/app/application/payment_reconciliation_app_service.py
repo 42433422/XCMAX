@@ -13,7 +13,9 @@ def parse_period_dt(value: str) -> datetime | None:
 
 
 def compute_fhd_period_snapshot(start: datetime, end: datetime) -> dict[str, Any]:
-    from app.domain.shared_services.fhd_payment_reconciliation import compute_fhd_period_snapshot as impl
+    from app.domain.shared_services.fhd_payment_reconciliation import (
+        compute_fhd_period_snapshot as impl,
+    )
 
     return impl(start, end)
 

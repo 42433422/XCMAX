@@ -13,8 +13,8 @@ from .common import (
     _coerce_list,
     _utc_now,
 )
-from .protocols import MessageSyncPorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import MessageSyncPorts
 
 
 class MessageSynchronizer:

@@ -11,7 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from app.application.desktop_relay.protocols import JsonObject, ReadConfig, RelayBinding, WriteConfig
+from app.application.desktop_relay.protocols import (
+    JsonObject,
+    ReadConfig,
+    RelayBinding,
+    WriteConfig,
+)
 
 
 @dataclass(frozen=True)

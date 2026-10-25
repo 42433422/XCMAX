@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from .output import CliOutput
-from .protocols import CliPorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import CliPorts
 
 
 class CliExecutor:

@@ -10,7 +10,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 from app.application.shipment_etl import (
     batching,
     catalog,
@@ -75,6 +74,7 @@ from app.application.shipment_etl.persistence import ShipmentWriter
 from app.application.shipment_etl.sheets import SheetParser, SheetParserPorts
 from app.application.shipment_etl.workbook import WorkbookPorts, WorkbookReader
 from app.application.shipment_etl_profile import ShipmentEtlProfile, get_shipment_etl_profile
+from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 
 logger = logging.getLogger(__name__)
 

@@ -13,12 +13,6 @@ from anyio import CancelScope
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from app.fastapi_routes.mobile_extensions.models import (
-    ClaudeSuperEmployeeMobileMessageBody,
-    CodexSuperEmployeeMobileMessageBody,
-    CursorSuperEmployeeMobileMessageBody,
-    TraeSuperEmployeeMobileMessageBody,
-)
 from app.application.mobile_extensions.protocols import (
     ClaudeSuperEmployeeServiceFactory,
     ClosableEventStream,
@@ -34,6 +28,12 @@ from app.application.mobile_extensions.protocols import (
     SuperEmployeePort,
     TraeSuperEmployeeServiceFactory,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    ClaudeSuperEmployeeMobileMessageBody,
+    CodexSuperEmployeeMobileMessageBody,
+    CursorSuperEmployeeMobileMessageBody,
+    TraeSuperEmployeeMobileMessageBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

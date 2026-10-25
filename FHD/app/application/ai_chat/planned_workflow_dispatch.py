@@ -293,7 +293,9 @@ class PlannedWorkflowDispatch:
         )
 
         if references_recent_business_record(str(message or "")):
-            from app.domain.shared_services.tools_workflow_registered import get_recent_business_db_target
+            from app.domain.shared_services.tools_workflow_registered import (
+                get_recent_business_db_target,
+            )
 
             recent_target = get_recent_business_db_target(user_id)
             if recent_target is None:

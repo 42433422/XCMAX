@@ -49,7 +49,10 @@ from app.application.persy_memory_utils import (
 from app.application.persy_memory_utils import (
     merge_memory_graph as merge_memory_graph,
 )
-from app.domain.shared_services.user_memory_service import UserMemoryService, get_user_memory_service
+from app.domain.shared_services.user_memory_service import (
+    UserMemoryService,
+    get_user_memory_service,
+)
 
 _SENSITIVE_PATTERN = re.compile(
     r"(?:password|passcode|api[_ -]?key|access[_ -]?token|secret|验证码|密码|密钥)",

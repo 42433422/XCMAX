@@ -10,11 +10,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_extensions.models import (
-    PairingExchangeBody,
-    PairingIssueBody,
-    PairingLookupBody,
-)
 from app.application.mobile_extensions.protocols import (
     CachedDesktopRelayForAccountBindingCall,
     CachedRelayCall,
@@ -39,6 +34,11 @@ from app.application.mobile_extensions.protocols import (
     RelayMobileAuthPayloadCall,
     TrustedDesktopPairingRequestCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    PairingExchangeBody,
+    PairingIssueBody,
+    PairingLookupBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

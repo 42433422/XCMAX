@@ -11,12 +11,6 @@ from app.application.etl.product_identity import (
     database_model_ambiguity_issue,
     product_name_key,
 )
-from app.application.etl.targets.targets_base import (
-    PreviewDecision,
-    TargetAdapter,
-    TargetField,
-    json_safe,
-)
 from app.application.etl.targets.customer_product_support import owned_query
 from app.application.etl.targets.helpers import (
     assert_created_row_unchanged,
@@ -26,6 +20,12 @@ from app.application.etl.targets.helpers import (
     optional_text,
 )
 from app.application.etl.targets.rollback_compare_swap import delete_created_row, restore_fields
+from app.application.etl.targets.targets_base import (
+    PreviewDecision,
+    TargetAdapter,
+    TargetField,
+    json_safe,
+)
 from app.db.models.product import Product
 from app.infrastructure.tenant_scope import tenant_id_for_write
 

@@ -5,6 +5,9 @@
 
 from __future__ import annotations
 
+from app.domain.shared_services.tools_workflow_registered import (
+    execute_registered_workflow_tool,  # noqa: F401
+)
 from app.services.tools_execution import (  # noqa: F401
     ACTION_ALIASES,
     ASR_MODEL_SEGMENT_MAP,
@@ -29,4 +32,3 @@ from app.services.tools_execution import (  # noqa: F401
     parse_cn_number,
     set_tool_execute_headers,
 )
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool  # noqa: F401

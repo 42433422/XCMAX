@@ -101,6 +101,8 @@ from app.application.group_chat.employee_registry import (
 from app.application.group_chat.employee_transport import EmployeeTransport
 from app.application.group_chat.evidence import ExecutionResultPolicy
 from app.application.group_chat.message_formatting import ChatFormatting
+from app.application.group_chat.progress import ProgressSync
+from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.protocols import (
     ConversationActions,
     DirectoryActions,
@@ -112,8 +114,6 @@ from app.application.group_chat.protocols import (
     ProgressSources,
     SuperEmployee,
 )
-from app.application.group_chat.progress import ProgressSync
-from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.replies import ChatReplies
 from app.application.group_chat.storage import GroupChatRepository
 from app.application.group_chat.work_dispatch import WorkDispatch

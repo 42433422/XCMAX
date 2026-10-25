@@ -139,8 +139,8 @@ class UserMemoryService:
             return
         from app.application.user_memory.feedback import FeedbackMemory, FeedbackPorts
         from app.application.user_memory.patterns import ActionMemory, PatternPorts
-        from app.application.user_memory.protocols import MemoryAccess, late_callback
         from app.application.user_memory.preferences import PreferenceMemory
+        from app.application.user_memory.protocols import MemoryAccess, late_callback
 
         self._store = UserMemoryStore(storage_type=storage_type)
         access = MemoryAccess(

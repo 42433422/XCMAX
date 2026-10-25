@@ -7,11 +7,11 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from app.domain.app_pure.execution_scope import FACTORY_TOKEN_ENV
 from app.application.workspaces import WorkspaceError
+from app.domain.app_pure.execution_scope import FACTORY_TOKEN_ENV
 
-from .protocols import ExecutionContext, WorkspacePorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import ExecutionContext, WorkspacePorts
 
 
 class ExecutionPolicy:

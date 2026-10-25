@@ -198,10 +198,10 @@ class ServiceContainer:
     @property
     def materials_service(self) -> MaterialsService:
         def _factory() -> MaterialsService:
+            from app.domain.shared_services.materials_service import MaterialsService
             from app.infrastructure.repositories.material_repository_impl import (
                 SQLAlchemyMaterialRepository,
             )
-            from app.domain.shared_services.materials_service import MaterialsService
 
             return MaterialsService(SQLAlchemyMaterialRepository())
 
@@ -210,8 +210,8 @@ class ServiceContainer:
     @property
     def products_service(self) -> ProductsService:
         def _factory() -> ProductsService:
-            from app.mod_sdk.erp_repository_registry import resolve_products_repository
             from app.domain.shared_services.products_service import ProductsService
+            from app.mod_sdk.erp_repository_registry import resolve_products_repository
 
             repo, _provider = resolve_products_repository()
             return ProductsService(repo)

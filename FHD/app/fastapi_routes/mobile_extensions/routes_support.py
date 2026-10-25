@@ -11,9 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import Table
 
-from app.fastapi_routes.mobile_extensions.models import (
-    MobileServiceBridgeRespondBody,
-)
 from app.application.mobile_extensions.protocols import (
     DatabaseCall,
     ImServiceCall,
@@ -26,6 +23,9 @@ from app.application.mobile_extensions.protocols import (
     SafeUserIdCall,
     SafeUserTextCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    MobileServiceBridgeRespondBody,
 )
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
 from app.utils.device_system.mobile_api import format_mobile_response, paginate_list

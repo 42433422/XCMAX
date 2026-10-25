@@ -11,9 +11,6 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import Table
 
-from app.fastapi_routes.mobile_extensions.models import (
-    DeviceRegisterBody,
-)
 from app.application.mobile_extensions.protocols import (
     DatabaseCall,
     EnsureMobileDeviceTableCall,
@@ -21,6 +18,9 @@ from app.application.mobile_extensions.protocols import (
     MobilePrincipal,
     NowCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    DeviceRegisterBody,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

@@ -12,8 +12,8 @@
 import logging
 from typing import Any, cast
 
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.capability_proposal_recorder import record_capability_proposal
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

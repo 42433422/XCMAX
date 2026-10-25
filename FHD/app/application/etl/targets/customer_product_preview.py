@@ -6,10 +6,10 @@ from typing import Any, cast
 
 from sqlalchemy.orm import Session
 
-from app.application.etl.targets.targets_base import json_safe
 from app.application.etl.targets.customer_product_support import customer_values, owned_query
 from app.application.etl.targets.helpers import model_values, optional_text
 from app.application.etl.targets.products import ProductAdapter
+from app.application.etl.targets.targets_base import json_safe
 from app.db.models.product import Product
 from app.db.models.purchase_unit import PurchaseUnit
 

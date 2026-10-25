@@ -9,8 +9,8 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.bert_intent_labels import ID_TO_LABEL, INTENT_LABELS, LABEL_TO_ID
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:

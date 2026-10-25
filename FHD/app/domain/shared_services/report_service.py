@@ -22,8 +22,8 @@ from app.db.models import (
     Supplier,
 )
 from app.db.session import get_db
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.report_export import export_report_to_excel
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 
 
 class ReportService(NeuroEventPublisherMixin):

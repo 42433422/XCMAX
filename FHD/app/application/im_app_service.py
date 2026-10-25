@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.application.im_employee_mixin import ImEmployeeMixin
 from app.application.im_employee_peer import EmployeePeerMixin
-from app.domain.app_pure.im_read_state_mixin import ImReadStateMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
+from app.domain.app_pure.im_read_state_mixin import ImReadStateMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.time import utc_now_naive
 

@@ -12,8 +12,8 @@ from typing import Any
 
 from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.mobile_push import notify_user
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

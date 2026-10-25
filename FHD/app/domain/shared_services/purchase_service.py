@@ -18,7 +18,6 @@ from app.db.models import (
     Supplier,
 )
 from app.db.session import get_db
-from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.domain.shared_services.inventory_service import InventoryService
 from app.domain.shared_services.purchase_service_supplier_mixin import (
     DATE_FIELDS,
@@ -27,6 +26,7 @@ from app.domain.shared_services.purchase_service_supplier_mixin import (
     items_without_product,
     page_result,
 )
+from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -366,7 +366,9 @@ class PurchaseService(PurchaseSupplierMixin, NeuroEventPublisherMixin):
                 # 采购入库 → 应付账款闭环：借：库存商品 / 贷：应付账款（复式记账）
                 if total_amount > 0:
                     try:
-                        from app.domain.shared_services.accounting_services import create_journal_entry
+                        from app.domain.shared_services.accounting_services import (
+                            create_journal_entry,
+                        )
 
                         supplier = getattr(inbound, "supplier", None)
                         journal_result = create_journal_entry(

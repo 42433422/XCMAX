@@ -48,7 +48,9 @@ def finalize_intake_submission(
     }
     if notify_wechat:
         try:
-            from app.domain.shared_services.user_cs_intake_notice import maybe_send_intake_form_notice
+            from app.domain.shared_services.user_cs_intake_notice import (
+                maybe_send_intake_form_notice,
+            )
 
             contact = str(intake.get("name") or company or username or "")
             out = maybe_send_intake_form_notice(

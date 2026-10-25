@@ -11,7 +11,6 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Query, Request
 
-from app.fastapi_routes.mobile_extensions.constants import ADMIN_MOBILE_FEATURES
 from app.application.mobile_extensions.protocols import (
     AdminEmployeeItemsCall,
     CompactTextCall,
@@ -26,6 +25,7 @@ from app.application.mobile_extensions.protocols import (
     SessionFactoryCall,
     UserDependency,
 )
+from app.fastapi_routes.mobile_extensions.constants import ADMIN_MOBILE_FEATURES
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

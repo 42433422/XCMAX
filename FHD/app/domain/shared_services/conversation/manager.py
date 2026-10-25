@@ -71,12 +71,14 @@ class AIConversationService(
 
             # 优先级2: 直连模式（OpenAI兼容适配器）
             if not self.modstore_adapter:
+                from app.domain.shared_services.conversation.llm_adapter import (
+                    OpenAICompatibleAdapter,
+                )
                 from app.infrastructure.llm.providers.credentials import (
                     resolve_default_chat_model,
                     resolve_default_openai_provider,
                     resolve_openai_env_credentials,
                 )
-                from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
 
                 llm_provider = resolve_default_openai_provider()
                 llm_model = resolve_default_chat_model()
@@ -150,7 +152,9 @@ class AIConversationService(
         from app.domain.shared_services.intent_confirmation_service import get_confirmation_service
         from app.domain.shared_services.intent_service import recognize_intents
         from app.domain.shared_services.task_agent import get_task_agent
-        from app.domain.shared_services.unified_intent_recognizer import get_unified_intent_recognizer
+        from app.domain.shared_services.unified_intent_recognizer import (
+            get_unified_intent_recognizer,
+        )
         from app.domain.shared_services.user_memory_service import get_user_memory_service
         from app.domain.shared_services.user_preference_service import get_user_preference_service
 
@@ -421,8 +425,6 @@ def _create_persona_service():
     - L2：EmbeddingInferencer；未配置 XCAGI_EMBEDDING_API_KEY 时返回中性值自动待命。
     - L3：LlmInferencer，复用主对话 LLM 客户端（PersonaLlmClient 适配器）。
     """
-    from app.infrastructure.persona.embedding_client import EmbeddingClient
-    from app.infrastructure.persona.llm_client_adapter import PersonaLlmClient
     from app.domain.shared_services.persona.axes_fuser import AxesFuser
     from app.domain.shared_services.persona.embedding_inferencer import EmbeddingInferencer
     from app.domain.shared_services.persona.identity_resolver import IdentityResolver
@@ -432,6 +434,8 @@ def _create_persona_service():
     from app.domain.shared_services.persona.prompt_builder import PersonaPromptBuilder
     from app.domain.shared_services.persona.rapport_calculator import RapportCalculator
     from app.domain.shared_services.persona.rule_inferencer import RuleInferencer
+    from app.infrastructure.persona.embedding_client import EmbeddingClient
+    from app.infrastructure.persona.llm_client_adapter import PersonaLlmClient
 
     identity_resolver = IdentityResolver()
     return PersonaService(

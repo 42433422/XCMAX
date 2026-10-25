@@ -115,7 +115,9 @@ def try_confirm_payment_and_invoice(
     outcome["payment"] = payment
     if not doc.get("invoice"):
         try:
-            from app.domain.shared_services.tax_invoice_provider import issue_crm_invoice_for_pipeline
+            from app.domain.shared_services.tax_invoice_provider import (
+                issue_crm_invoice_for_pipeline,
+            )
 
             doc = issue_crm_invoice_for_pipeline(doc)
             outcome["invoice"] = doc.get("invoice")

@@ -13,8 +13,8 @@ import httpx
 from app.domain.conversation.services.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
-from app.services import get_ai_conversation_service
 from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
+from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import ensure_fhd_repo_on_syspath
 
@@ -115,7 +115,13 @@ from .planning_graph_policy import (
     filter_registry_for_profile as _filter_tool_registry_for_profile,
 )
 from .planning_loop import PlanningLoop
-from .workflow_types import Branch, PlanGraph, WorkflowNode, normalize_workflow_risk, validate_plan_graph
+from .workflow_types import (
+    Branch,
+    PlanGraph,
+    WorkflowNode,
+    normalize_workflow_risk,
+    validate_plan_graph,
+)
 
 logger = logging.getLogger(__name__)
 _planner_http_client: httpx.Client | None = None

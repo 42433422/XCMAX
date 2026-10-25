@@ -3,12 +3,6 @@
 from __future__ import annotations
 
 from app.application.etl.errors import EtlError
-from app.application.etl.targets.targets_base import (
-    PreviewDecision,
-    TargetAdapter,
-    TargetField,
-    json_safe,
-)
 from app.application.etl.targets.customer_product_support import (
     CUSTOMER_MODEL_FIELDS,
     customer_image_matches,
@@ -17,6 +11,12 @@ from app.application.etl.targets.customer_product_support import (
 )
 from app.application.etl.targets.helpers import optional_text
 from app.application.etl.targets.rollback_compare_swap import delete_created_row, restore_fields
+from app.application.etl.targets.targets_base import (
+    PreviewDecision,
+    TargetAdapter,
+    TargetField,
+    json_safe,
+)
 from app.db.models.purchase_unit import PurchaseUnit
 from app.infrastructure.tenant_scope import tenant_id_for_write
 

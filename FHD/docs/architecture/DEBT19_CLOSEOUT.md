@@ -31,3 +31,9 @@ Artifact: `FHD/docs/architecture/DEBT19_MEASUREMENT.json`
 
 ## Gates
 G12 ports≤15/layers≤3/fastapi ports=0/domain/services absent/blueprints cap/py>100KB=0; G9 ≤2.0.
+
+## Notes on items 12/13/15 (CI-honest)
+
+- Vendored `xcagi_langgraph_core` `pregel/main.py` kept as upstream blob (typecheck requires intact Generic class); G12 first-party ratchet **excludes** `xcagi_langgraph*` + `evals/`.
+- MODstore three `*_merged.py` giants remain (135/123/123KB) under first-party G12 baseline=3; further semantic split deferred to avoid facade/`_facade(` mechanical-debt thrash.
+- Employee blueprints→`pack_surface`, ports/layers/domain-services/ratio/security/neuro/XCAGI converge remain landed.

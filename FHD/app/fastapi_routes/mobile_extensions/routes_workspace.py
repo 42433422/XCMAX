@@ -9,11 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_extensions.navigation_constants import (
-    _ADMIN_NAV_ITEM,
-    _CORE_NAV_ITEMS,
-    _ROLE_VISIBLE_KEYS,
-)
 from app.application.mobile_extensions.protocols import (
     GrantEntitlementsCall,
     IndustryCatalogCall,
@@ -32,6 +27,11 @@ from app.application.mobile_extensions.protocols import (
     SetAccountIndustryCall,
     SyncDatabaseCall,
     UserDependency,
+)
+from app.fastapi_routes.mobile_extensions.navigation_constants import (
+    _ADMIN_NAV_ITEM,
+    _CORE_NAV_ITEMS,
+    _ROLE_VISIBLE_KEYS,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

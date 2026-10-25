@@ -10,6 +10,7 @@ from app.application.group_chat.employee_registry import (
     _normalize_branch_context,
     _with_required_group_members,
 )
+from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.protocols import (
     ConversationActions,
     GroupStore,
@@ -17,7 +18,6 @@ from app.application.group_chat.protocols import (
     MessageStore,
     ProgressSources,
 )
-from app.application.group_chat.projections import ChatProjection
 from app.application.group_chat.storage import GroupChatRepository
 
 

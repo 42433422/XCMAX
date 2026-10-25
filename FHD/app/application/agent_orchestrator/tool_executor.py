@@ -195,7 +195,9 @@ def execute_with_tool_deadline(
                 and result.get("success") is True
                 and isinstance(step.params.get("payload"), dict)
             ):
-                from app.domain.shared_services.tools_workflow_common import _remember_business_db_target
+                from app.domain.shared_services.tools_workflow_common import (
+                    _remember_business_db_target,
+                )
 
                 _remember_business_db_target(
                     context,

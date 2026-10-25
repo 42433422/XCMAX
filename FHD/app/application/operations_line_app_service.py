@@ -24,7 +24,9 @@ def signoff_backend_info() -> dict[str, Any]:
 
 
 def get_reconciliation_status() -> dict[str, Any]:
-    from app.domain.shared_services.reconciliation_scheduler import get_reconciliation_status as impl
+    from app.domain.shared_services.reconciliation_scheduler import (
+        get_reconciliation_status as impl,
+    )
 
     return impl()
 

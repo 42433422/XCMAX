@@ -103,7 +103,11 @@ def confirm_signoff(
             "UPDATE delivery_signoffs SET status = 'confirmed', confirmed_at = ?, username = ? WHERE id = ?",
             (now, username, int(signoff_id)),
         )
-    from app.domain.shared_services.user_cs_pipeline import load_pipeline, save_pipeline, set_pipeline_stage
+    from app.domain.shared_services.user_cs_pipeline import (
+        load_pipeline,
+        save_pipeline,
+        set_pipeline_stage,
+    )
 
     doc = load_pipeline(int(market_user_id), username=username)
     doc = set_pipeline_stage(int(market_user_id), "delivered", username=username, source="signoff")

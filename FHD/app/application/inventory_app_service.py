@@ -17,7 +17,10 @@ class InventoryAppService:
         return self._facade.get_inventory(**kwargs)
 
     def export_inventory(self, *, output_format: str = "xlsx", **filters: Any) -> dict:
-        from app.domain.app_pure.inventory_export import render_inventory_csv, render_inventory_workbook
+        from app.domain.app_pure.inventory_export import (
+            render_inventory_csv,
+            render_inventory_workbook,
+        )
 
         renderer = {"xlsx": render_inventory_workbook, "csv": render_inventory_csv}[output_format]
 
