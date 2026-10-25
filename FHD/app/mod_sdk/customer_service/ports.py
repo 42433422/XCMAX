@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 from app.mod_sdk.customer_service.customer_service_ports import (  # noqa: F401
-    Payload,
+    ChangesServices,
+    ContractsServices,
+    CrmServices,
+    DeliveryServices,
     Employee,
     Environment,
+    IntakeServices,
     MessageSender,
+    MessagingServices,
+    Payload,
     PipelineRepository,
     PipelineServices,
-    IntakeServices,
-    CrmServices,
-    ChangesServices,
-    DeliveryServices,
-    ContractsServices,
-    MessagingServices,
 )
 
 __all__ = [

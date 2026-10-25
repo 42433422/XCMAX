@@ -379,7 +379,7 @@ def test_capability_modules_import_without_facade_or_optional_ocr_engines():
             "import importlib, sys; "
             "prefix = 'app.services.skills.label_template_generator.'; "
             "[importlib.import_module(prefix + part) for part in "
-            "('ports', 'analysis', 'fields', 'grid', 'adapters', 'ocr', 'codegen', 'skill')]; "
+            "('label_template_ports', 'analysis', 'fields', 'grid', 'adapters', 'ocr', 'codegen', 'skill')]; "
             "assert prefix + 'label_template_generator' not in sys.modules; "
             "assert 'cv2' not in sys.modules; assert 'paddleocr' not in sys.modules",
         ],

@@ -3,25 +3,25 @@
 from __future__ import annotations
 
 from app.application.approval_workspace.protocols import (  # noqa: F401
-    JsonObject,
-    WorkspaceResponse,
-    SessionFactory,
     ActorResolver,
-    RequestView,
-    AuditWriter,
     AdvanceRequest,
-    ApproveWithoutNode,
-    ResumeWorkflow,
-    RejectWorkflow,
+    AgentContinuation,
     ApprovalAccess,
     ApprovalNodes,
-    WorkflowActions,
+    ApproveWithoutNode,
+    AuditWriter,
     DecisionEffects,
-    PendingApprovals,
-    AgentContinuation,
-    WorkflowRunner,
+    JsonObject,
     LegacyApprovalTrace,
+    PendingApprovals,
+    RejectWorkflow,
+    RequestView,
+    ResumeWorkflow,
+    SessionFactory,
+    WorkflowActions,
     WorkflowBackends,
+    WorkflowRunner,
+    WorkspaceResponse,
 )
 
 __all__ = [

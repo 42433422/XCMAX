@@ -3,24 +3,24 @@
 from __future__ import annotations
 
 from app.application.desktop_relay.protocols import (  # noqa: F401
-    JsonObject,
-    ReadConfig,
-    WriteConfig,
-    late_callback,
-    RelayBinding,
-    ConditionalConfigUpdate,
     ApiUrlCall,
+    ClassifyResultCall,
+    CompletionCall,
+    ConditionalConfigUpdate,
     HttpClient,
     HttpClientFactory,
-    Worker,
-    WorkerFactory,
+    JsonObject,
+    PollBackoffCall,
+    ReadConfig,
+    RelayBinding,
     StopSignal,
-    CompletionCall,
     SuperEmployee,
     SuperEmployeeFactory,
     TerminalMessageCall,
-    ClassifyResultCall,
-    PollBackoffCall,
+    Worker,
+    WorkerFactory,
+    WriteConfig,
+    late_callback,
 )
 
 __all__ = [

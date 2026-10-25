@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 from app.application.market_bridge.protocols import (  # noqa: F401
-    JsonObject,
-    ProxyJSON,
-    SaveToken,
-    LatestToken,
-    NormalizeAuth,
+    CheckoutAuthorization,
     DemoPayload,
-    LocalUser,
     EnsureEnterprise,
+    JsonObject,
+    LatestToken,
+    LocalUser,
+    NormalizeAuth,
+    ProxyJSON,
     RefreshWallet,
     RequestAuthorization,
-    CheckoutAuthorization,
+    SaveToken,
 )
 
 __all__ = [

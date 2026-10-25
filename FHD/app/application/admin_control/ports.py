@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from app.application.admin_control.protocols import (  # noqa: F401
-    JsonObject,
-    AdminResult,
     AdminGate,
+    AdminResult,
     ErrorPolicy,
-    MarketProxy,
+    JsonObject,
     LocalProxy,
-    UpstreamRequest,
+    MarketProxy,
     MarketTransport,
-    SyncStore,
     RefreshEntitlements,
+    SyncStore,
+    UpstreamRequest,
 )
 
 __all__ = [

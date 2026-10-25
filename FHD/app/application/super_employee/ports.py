@@ -3,22 +3,22 @@
 from __future__ import annotations
 
 from app.application.super_employee.protocols import (  # noqa: F401
-    JsonObject,
+    CliPorts,
     CliResult,
     CliRunner,
-    IdleRunner,
+    ConversationPorts,
+    DevelopmentPorts,
     ExecutionContext,
     GitCall,
-    ParaRequest,
+    IdleRunner,
+    JsonObject,
+    MessageSyncPorts,
     OutboxWriter,
+    ParaPorts,
+    ParaRequest,
     ResultUpdater,
     WorkspacePorts,
-    CliPorts,
-    ConversationPorts,
     WorktreePorts,
-    DevelopmentPorts,
-    ParaPorts,
-    MessageSyncPorts,
 )
 
 __all__ = [

@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 from app.application.mod_store.protocols import (  # noqa: F401
-    Payload,
-    JsonGet,
     CatalogDownload,
-    RowFilter,
-    PageMapper,
-    MarketPage,
-    ModPackageWriter,
-    EmployeePackWriter,
-    InstalledMods,
     CatalogInstall,
+    EmployeePackWriter,
     FoundationInstall,
-    MarketProxy,
+    InstalledMods,
+    JsonGet,
     LibrarySync,
+    MarketPage,
+    MarketProxy,
+    ModPackageWriter,
+    PageMapper,
+    Payload,
+    RowFilter,
 )
 
 __all__ = [

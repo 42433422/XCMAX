@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from app.application.shipment_etl.protocols import (  # noqa: F401
+    DocumentPreview,
+    ExtractionHistory,
+    InputPath,
+    OutputPath,
     Payload,
     ShipmentApplication,
-    DocumentPreview,
-    TemplateIngest,
-    OutputPath,
-    InputPath,
-    ExtractionHistory,
     TemplateCapture,
+    TemplateIngest,
 )
 
 __all__ = [
