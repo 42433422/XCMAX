@@ -1,5 +1,5 @@
 {
-  "lines": 2329790,
+  "lines": 2329801,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 红修25：db_base 恢复为实现本体，base.py 薄 re-export；修 mypy attr-defined"
+  "note": "debt19 #2631 CI 红修27：XCAGI payment symlink + market_llm.ports shim + CS runner 路径 + CodeQL sanitizer"
 }

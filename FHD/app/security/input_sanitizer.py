@@ -6,7 +6,13 @@ import re
 from typing import Any
 
 _CTRL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
-_SCRIPT = re.compile(r"<\s*script\b[^>]*>.*?<\s*/\s*script(?:\s[^>]*)?>", re.I | re.S)
+# End tag must allow whitespace/attrs before '>' (e.g. </script\t\n bar>).
+# See CodeQL py/bad-tag-filter (alert #3918).
+_SCRIPT_PAIR = re.compile(
+    r"<\s*script\b[^>]*>.*?<\s*/\s*script[^>]*>",
+    re.IGNORECASE | re.DOTALL,
+)
+_SCRIPT_ORPHAN = re.compile(r"<\s*/?\s*script\b[^>]*>", re.IGNORECASE)
 
 
 def strip_control_chars(value: str) -> str:
@@ -14,7 +20,12 @@ def strip_control_chars(value: str) -> str:
 
 
 def strip_script_tags(value: str) -> str:
-    return _SCRIPT.sub("", value)
+    text = value or ""
+    prev = None
+    while prev != text:
+        prev = text
+        text = _SCRIPT_PAIR.sub("", text)
+    return _SCRIPT_ORPHAN.sub("", text)
 
 
 def sanitize_text(value: str, *, max_len: int = 10_000) -> str:

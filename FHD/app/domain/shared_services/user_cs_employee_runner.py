@@ -27,7 +27,7 @@ def _resolve_employee_mod_path() -> str:
     except (ImportError, AttributeError, OSError):
         logger.debug("user-cs employee registry lookup failed", exc_info=True)
 
-    repo_guess = Path(__file__).resolve().parents[2] / "mods" / "_employees" / EMPLOYEE_MOD_ID
+    repo_guess = Path(__file__).resolve().parents[3] / "mods" / "_employees" / EMPLOYEE_MOD_ID
     if repo_guess.is_dir():
         return str(repo_guess)
     return ""
