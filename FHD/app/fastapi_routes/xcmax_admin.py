@@ -24,6 +24,7 @@ from app.fastapi_routes.xcmax_admin_auth import (
 from app.fastapi_routes.xcmax_admin_core_modules import CORE_MODULES as CORE_MODULES
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+from .admin_control.admin_control_routes import register_routes
 from .admin_control.autonomy import AutonomyAdmin
 from .admin_control.backends import (
     load_market_transport,
@@ -47,7 +48,6 @@ from .admin_control.market_gateway import MarketGateway
 from .admin_control.operations import Operations
 from .admin_control.profile_store import profile_repository
 from .admin_control.profiles import UserProfiles
-from .admin_control.admin_control_routes import register_routes
 from .admin_control.synchronization import Synchronization
 from .admin_control.usage_sources import UsageSources
 from .admin_control.usage_summary import UsageSummary
