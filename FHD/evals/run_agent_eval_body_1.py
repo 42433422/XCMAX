@@ -230,7 +230,7 @@ def _run_agent_plan_task(task: dict[str, Any]) -> dict[str, Any]:
                 env_patch.update(
                     {
                         "LLM_PROVIDER": "xcauto",
-                        "XCAUTO_API_KEY": "eval-xcauto-token",  # credential-guard: allow eval fixture
+                        "XCAUTO_API_KEY": "eval-xcauto-token",
                     }
                 )
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
@@ -437,7 +437,7 @@ def _resolve_active_provider_id() -> str:
 
 
 def _run_llm_trace_task(task: dict[str, Any]) -> dict[str, Any]:
-    from app.domain.conversation.legacy_services.api import ApiMixin
+    from app.domain.shared_services.conversation.api import ApiMixin
 
     class EvalApi(ApiMixin):
         def __init__(self) -> None:
@@ -2097,13 +2097,13 @@ def _run_multimodal_autonomous_plan_task(task: dict[str, Any]) -> dict[str, Any]
                 )
                 stack.enter_context(
                     patch(
-                        "app.domain.kitten_ai_document.generate.generate_office_file",
+                        "app.services.kitten_ai_document.generate.generate_office_file",
                         return_value=(content, file_name),
                     )
                 )
                 stack.enter_context(
                     patch(
-                        "app.domain.kitten_ai_document.pickup.store_document_pickup",
+                        "app.services.kitten_ai_document.pickup.store_document_pickup",
                         return_value=pickup_token,
                     )
                 )
@@ -2345,6 +2345,195 @@ def _run_excel_vector_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
         {
             "response": payload,
             "run": run.to_dict() if run is not None else None,
+        },
+    )
+
+
+def _run_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.fastapi_routes.ocr import router
+
+    expected = dict(task.get("expected") or {})
+    action = str(task.get("route_action") or "recognize").strip().lower()
+    repo = InMemoryAgentRunRepository()
+    service = Mock()
+    service.recognize_file.return_value = dict(
+        task.get("mock_recognize_result")
+        or {
+            "success": True,
+            "message": "识别成功",
+            "text": "购货单位：ACME Trading",
+            "file_path": "/tmp/label.png",
+        }
+    )
+    service.extract_structured_data.return_value = dict(
+        task.get("mock_extract_result") or {"purchase_unit": "ACME Trading"}
+    )
+    service.analyze_text.return_value = dict(
+        task.get("mock_analyze_result") or {"text_type": "order", "confidence": 0.67}
+    )
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+        env_patch = {
+            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+            "MODEL_USAGE_WALLET_BACKEND": "audit",
+            "MODEL_USAGE_WALLET_REQUIRED": "",
+        }
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+            stack.enter_context(
+                patch(
+                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                    return_value=repo,
+                )
+            )
+            stack.enter_context(
+                patch("app.fastapi_routes.ocr._get_ocr_service", return_value=service)
+            )
+            if action == "analyze":
+                response = client.post(
+                    "/api/ocr/analyze",
+                    json=dict(
+                        task.get("body") or {"text": "订单编号：SO-1\n购货单位：ACME Trading"}
+                    ),
+                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
+                )
+            elif action == "extract":
+                response = client.post(
+                    "/api/ocr/extract",
+                    json=dict(task.get("body") or {"text": "购货单位：ACME Trading"}),
+                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
+                )
+            else:
+                path = (
+                    "/api/ocr/recognize-and-extract"
+                    if action == "recognize_and_extract"
+                    else "/api/ocr/recognize"
+                )
+                response = client.post(
+                    path,
+                    data=dict(task.get("form") or {"file_path": "/tmp/label.png"}),
+                    headers={"X-User-Id": str(task.get("user_id") or "eval-user")},
+                )
+
+    payload = response.json()
+    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+    checks: list[dict[str, Any]] = []
+    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+    _check_equal(
+        checks,
+        "payload.run_id_present",
+        bool(payload.get("run_id") and payload.get("agent_run_id")),
+        expected.get("run_id_present"),
+        skip_when_expected_missing=True,
+    )
+    _check_equal(checks, "run_attached", run is not None, True)
+    if run is not None:
+        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
+        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
+        _check_equal(
+            checks,
+            "artifact_count",
+            len(run.artifacts),
+            expected.get("artifact_count"),
+            skip_when_expected_missing=True,
+        )
+        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+    return _result(
+        task,
+        checks,
+        {
+            "response": payload,
+            "run": run.to_dict() if run is not None else None,
+        },
+    )
+
+
+def _run_business_ocr_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.application.agent_orchestrator import InMemoryAgentRunRepository
+    from app.fastapi_routes.business_api import router
+
+    expected = dict(task.get("expected") or {})
+    repo = InMemoryAgentRunRepository()
+    ocr_domain = Mock()
+    ocr_domain.emit_ocr_requested.return_value = bool(task.get("mock_publish_result", True))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+        env_patch = {
+            "FHD_BUSINESS_API_KEY": "",
+            "MODEL_USAGE_LEDGER_PATH": str(Path(tmp_dir) / "usage.json"),
+            "MODEL_USAGE_WALLET_BACKEND": "audit",
+            "MODEL_USAGE_WALLET_REQUIRED": "",
+        }
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
+            stack.enter_context(
+                patch(
+                    "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
+                    return_value=repo,
+                )
+            )
+            stack.enter_context(
+                patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr_domain)
+            )
+            response = client.post(
+                "/api/business/ocr/recognize",
+                json=dict(
+                    task.get("body")
+                    or {
+                        "request_id": "ocr-req-eval",
+                        "image_url": "https://example.invalid/label.png",
+                        "ocr_type": "invoice",
+                        "user_id": str(task.get("user_id") or "eval-user"),
+                    }
+                ),
+            )
+
+    payload = response.json()
+    run = repo.get(str(payload.get("run_id") or payload.get("agent_run_id") or ""))
+    checks: list[dict[str, Any]] = []
+    _check_equal(checks, "status_code", response.status_code, expected.get("status_code"))
+    _check_equal(checks, "payload.success", payload.get("success"), expected.get("success"))
+    _check_equal(checks, "payload.event", payload.get("event"), expected.get("event"))
+    _check_equal(checks, "payload.published", payload.get("published"), expected.get("published"))
+    _check_equal(
+        checks,
+        "payload.run_id_present",
+        bool(payload.get("run_id") and payload.get("agent_run_id")),
+        expected.get("run_id_present"),
+        skip_when_expected_missing=True,
+    )
+    _check_equal(checks, "run_attached", run is not None, True)
+    if run is not None:
+        _check_equal(checks, "run.status", run.status, expected.get("run_status"))
+        _check_equal(checks, "run.intent", run.intent, expected.get("intent"))
+        _check_equal(
+            checks, "tool_call_count", len(run.tool_calls), expected.get("tool_call_count")
+        )
+        _check_tool_calls(checks, run.tool_calls, list(expected.get("tool_calls") or []))
+    return _result(
+        task,
+        checks,
+        {
+            "response": payload,
+            "run": run.to_dict() if run is not None else None,
+            "publish_call_count": ocr_domain.emit_ocr_requested.call_count,
         },
     )
 

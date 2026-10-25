@@ -1,27 +1,19 @@
-"""Re-export / script entry for split eval modules (debt19)."""
+"""Agent eval entry (debt19 facade). Bodies concatenated into this namespace."""
 
 from __future__ import annotations
 
-import runpy
-import sys
 from pathlib import Path as _Path
 
-
-def _load_splits_into(g: dict) -> None:
-    here = _Path(__file__).resolve().parent
-    for name in (
-        "run_agent_eval_mod1.py",
-        "run_agent_eval_mod2.py",
-        "run_agent_eval_mod3.py",
-    ):
-        path = here / name
-        src = path.read_text(encoding="utf-8")
-        exec(compile(src, str(path), "exec"), g)
-
+_parts = (
+    "run_agent_eval_body_1.py",
+    "run_agent_eval_body_2.py",
+    "run_agent_eval_body_3.py",
+)
+_src = "".join(
+    (_Path(__file__).with_name(name)).read_text(encoding="utf-8") for name in _parts
+)
+exec(compile(_src, str(_Path(__file__).resolve()), "exec"), globals())
+del _Path, _parts, _src
 
 if __name__ == "__main__":
-    g = {"__name__": "__main__", "__file__": __file__}
-    _load_splits_into(g)
-    raise SystemExit(g["main"]())
-else:
-    _load_splits_into(globals())
+    raise SystemExit(main())

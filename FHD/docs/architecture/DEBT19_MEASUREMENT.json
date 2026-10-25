@@ -36,7 +36,7 @@
   ],
   "13_gt100kb": [],
   "14_fastapi_routes_py": 301,
-  "15_pregel_kb": 0.2,
+  "15_pregel_kb": 0.4,
   "20_package_json": 10,
   "1_app_domain": {
     "app_files": 592,
