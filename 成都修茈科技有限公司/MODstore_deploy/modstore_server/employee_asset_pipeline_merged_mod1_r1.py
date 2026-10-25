@@ -125,12 +125,6 @@ def _runtime_package_name(pack_id: str, employee_id: str = "") -> str:
 """Implementation extracted from the public facade module."""
 
 
-from modstore_server.infrastructure.private_asset_storage import (
-    draft_asset_directory,
-    reset_draft_directory,
-)
-
-
 def _infer_accepted_extensions(
     asset_manifest: _facade().Optional[_facade().Dict[str, _facade().Any]] = None,
 ) -> _facade().List[str]:
