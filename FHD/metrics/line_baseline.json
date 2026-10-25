@@ -1,5 +1,5 @@
 {
-  "lines": 2329838,
+  "lines": 2329892,
   "updated": "2026-10-25",
-  "note": "debt19 #2631 CI 红修28：去掉 XCAGI payment 导出；ports 显式 re-export；测例改指 FHD/mods"
+  "note": "debt19 #2631 CI 红修31：user_memory.ports + desktop_runtime.paths shim 与 bus SHA（跟进 tip f50dc2a）"
 }
