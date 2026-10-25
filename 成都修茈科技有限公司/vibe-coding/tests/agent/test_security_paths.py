@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
+
 from vibe_coding.agent.security.paths import (
     PathSafetyError,
     is_safe_relative,
