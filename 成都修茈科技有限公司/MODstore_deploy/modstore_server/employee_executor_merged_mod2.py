@@ -207,7 +207,7 @@ def _execute_employee_phase_01(state):
             "skipped_cognition": True,
         }
         state["recovery_meta"] = {}
-    elif _para_first_skip_cognition(
+    elif _facade()._para_first_skip_cognition(
         state["employee_id"],
         state["handler_list"],
         state["payload"] if isinstance(state["payload"], dict) else {},
