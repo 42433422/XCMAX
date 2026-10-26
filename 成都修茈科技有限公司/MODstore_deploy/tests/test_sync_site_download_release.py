@@ -335,6 +335,4 @@ def test_all_site_writers_share_one_lock_without_nested_acquisition() -> None:
     assert updater.index("flock -w 60 8") < updater.index("REPO_CHANGED=false")
     assert "restart_app_services\n)" in updater
     assert workflow.index("flock -w 60 8") < workflow.index('LIVE_SITE="$(readlink')
-    assert workflow.index("exec 8>&-") > workflow.index(
-        "[ok] live site chrome published"
-    )
+    assert workflow.index("exec 8>&-") > workflow.index("[ok] live site chrome published")
