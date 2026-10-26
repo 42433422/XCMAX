@@ -215,6 +215,7 @@ def test_product_report_does_not_continue_waiting_refund(client, monkeypatch, co
 
 def test_distinct_tickets_in_one_second_have_unique_numbers(client, monkeypatch):
     from datetime import datetime, timezone
+
     from modstore_server import customer_service_orchestrator as orchestrator
     from modstore_server.models_cs import CustomerServiceSession
 
@@ -1494,7 +1495,9 @@ def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope
 @pytest.mark.parametrize("always_collides", [False, True])
 def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_collides):
     from types import SimpleNamespace
+
     from sqlalchemy.exc import IntegrityError
+
     from modstore_server import customer_service_orchestrator as facade
     from modstore_server import customer_service_orchestrator_merged as implementation
     from modstore_server.models_cs import CustomerServiceSession
