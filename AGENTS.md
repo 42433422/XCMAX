@@ -14,6 +14,8 @@ Customer customization belongs in versioned Mods with account-scoped entitlement
 
 Read-only reviews, design proposals, and requests explicitly limited to a draft do not require merging or releasing.
 
+Version/release/download/client-update changes must follow `FHD/docs/architecture/PRODUCT_VERSION_SSOT.md`: edit the existing `FHD/config/download_release.json` catalog, regenerate derived views, and run `ssot_cli.py check version product-lines`. Count evolution records, not tags or version suffixes; preserve historical acceptance and each platform/channel artifact identity. Server/site deploys must never promote desktop candidates or replace their source SHA. Record unresolved evidence instead of inventing publication status.
+
 ## 合入顺序与快车道（2026-10-19 03:37 用户定）
 
 主序列 PR 按终极员工排定的顺序串行合入。快车道：小修复类 PR 可不进主序列串行合入，可优先于主序列其他 PR 合入。条件（全部满足）：

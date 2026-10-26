@@ -101,8 +101,26 @@ def catalog_payload(data: dict) -> str:
 
 _PUBLIC_PRIVATE_MARKERS = ("sunbird", "太阳鸟", "奇士美", "余额", "真实订单")
 _PUBLIC_REDACTION = "客户账户及业务数据已脱敏，详细内容不公开。"
+_PUBLIC_CREDENTIAL_FIELDS = {
+    "secret", "password", "token", "access_token", "refresh_token", "api_key",
+    "private_key", "mfa_secret", "otp_secret", "otpauth_uri", "recovery_codes",
+}
+_PUBLIC_CREDENTIAL_TEXT = re.compile(
+    r"otpauth://|-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
+    r'(?:secret|password|(?:access_|refresh_)?token|api_key)["\']?\s*[:=]\s*\S+',
+    re.IGNORECASE,
+)
 _PRIVATE_EVIDENCE_FEATURES = {"base-login", "ind-attendance", "erp-sales-order", "ind-szqsm"}
 _PUBLIC_EXCLUDED_FEATURES = {"ind-szqsm"}
+
+
+def _contains_credentials(value: object) -> bool:
+    if isinstance(value, dict):
+        return any(k.casefold() in _PUBLIC_CREDENTIAL_FIELDS or _contains_credentials(v)
+                   for k, v in value.items())
+    if isinstance(value, list):
+        return any(_contains_credentials(v) for v in value)
+    return isinstance(value, str) and bool(_PUBLIC_CREDENTIAL_TEXT.search(value))
 
 
 def public_projection(value: object, excluded: set[str]) -> object:
@@ -119,10 +137,11 @@ def public_projection(value: object, excluded: set[str]) -> object:
 
     def project(item: object) -> object:
         if isinstance(item, dict):
-            return {k: project(v) for k, v in item.items() if k != "public_excluded_media" and not hidden(v)}
+            return {k: project(v) for k, v in item.items() if k != "public_excluded_media" and k.casefold() not in _PUBLIC_CREDENTIAL_FIELDS and not hidden(v)}
         if isinstance(item, list):
             return [project(child) for child in item if not hidden(child)]
-        if isinstance(item, str) and any(x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *private_paths)):
+        if isinstance(item, str) and (_PUBLIC_CREDENTIAL_TEXT.search(item) or any(
+                x in item.casefold() for x in (*_PUBLIC_PRIVATE_MARKERS, *private_paths))):
             return _PUBLIC_REDACTION
         return item
 
@@ -153,13 +172,18 @@ def privacy_exclusions(evidence: dict, feature_id: str = "") -> set[str]:
                 body = e(value).read_text(encoding="utf-8")
             except (OSError, UnicodeError):
                 continue
-            if sensitive or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS):
+            parsed = None
+            if ext == ".json":
+                try:
+                    parsed = json.loads(body)
+                except ValueError:
+                    pass
+            if (sensitive or _PUBLIC_CREDENTIAL_TEXT.search(body)
+                    or any(marker in body.casefold() for marker in _PUBLIC_PRIVATE_MARKERS)
+                    or (parsed is not None and public_projection(parsed, set()) != parsed)):
                 excluded.add(value)
-                if ext == ".json":
-                    try:
-                        excluded.update(evidence_paths(json.loads(body)))
-                    except ValueError:
-                        pass
+                if parsed is not None:
+                    excluded.update(evidence_paths(parsed))
     # A private acceptance record also withdraws its companion identity, log and media.
     for profile in (evidence.get("platform_assets") or {}).values():
         paths = evidence_paths(profile)
@@ -1557,19 +1581,29 @@ def copy_evidence_assets(domains_full: list[dict]) -> list[str]:
     return copied
 
 
-def private_generated_assets(remove: bool = False) -> list[Path]:
-    if not EVIDENCE_ASSET_DIR.exists():
-        return []
-    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
-    private_names = set()
+def private_asset_names(*, preserve_approved: bool = False) -> set[str]:
+    """Withdraw aliases by source policy even when archive blobs are not mounted."""
+    private_names, private_sources = set(), set()
     catalog = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
     for domain in catalog["domains"]:
         for module in domain["modules"]:
             for feature in module["features"]:
                 for rel in privacy_exclusions(feature.get("evidence") or {}, feature["id"]):
+                    private_sources.add(rel)
                     private_names.add(evidence_asset_name(feature["id"], rel))
                     for platform in feature.get("platforms", []):
                         private_names.add(evidence_asset_name(feature["id"], rel, platform, {Path(rel).name}))
+    if preserve_approved:
+        private_names = {name for name in private_names if name not in _EVIDENCE_INDEX
+                         or _EVIDENCE_INDEX[name].get("source") in private_sources}
+    return private_names
+
+
+def private_generated_assets(remove: bool = False) -> list[Path]:
+    if not EVIDENCE_ASSET_DIR.exists():
+        return []
+    sensitive_prefixes = ("base-login-", "ind-attendance-", "erp-sales-order-", "ind-szqsm-")
+    private_names = private_asset_names()
     private = []
     for path in EVIDENCE_ASSET_DIR.iterdir():
         if not path.is_file():
@@ -1686,7 +1720,7 @@ def main() -> int:
         target.write_text(content, encoding="utf-8")
     copied = copy_evidence_assets(domains_full)
     removed_assets = private_generated_assets(remove=True)
-    _EVIDENCE_ASSETS["record"](REPO_ROOT, {}, {p.name for p in removed_assets})
+    _EVIDENCE_ASSETS["record"](REPO_ROOT, {}, private_asset_names(preserve_approved=True) | {p.name for p in removed_assets})
     removed = prune_stale_generated(outputs)
 
     s = data["stats"]

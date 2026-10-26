@@ -12,6 +12,9 @@ on:
       - 'scripts/evidence_assets.py'
       - 'styles.css'
       - 'main.js'
+      - 'release-data.js'
+      - 'scripts/download_releases.test.mjs'
+      - 'data/release-history.json'
       - 'assets/**'
       - 'new/**'
       - 'site/**'
@@ -27,6 +30,9 @@ on:
       - 'scripts/evidence_assets.py'
       - 'styles.css'
       - 'main.js'
+      - 'release-data.js'
+      - 'scripts/download_releases.test.mjs'
+      - 'data/release-history.json'
       - 'assets/**'
       - 'new/**'
       - 'site/**'
@@ -93,6 +99,9 @@ jobs:
           fi
           echo "Validating ${#files[@]} capability HTML file(s) with htmlhint..."
           htmlhint "${files[@]}"
+
+      - name: Download and history fail-closed contract
+        run: node --test scripts/download_releases.test.mjs
 
       - name: Rebuild checksum-pinned public evidence
         run: python3 scripts/evidence_assets.py materialize

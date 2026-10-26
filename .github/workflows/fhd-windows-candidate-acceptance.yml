@@ -14,6 +14,14 @@ on:
         description: "Exact 40-character source SHA embedded in the candidate"
         required: true
         type: string
+      baseline_version:
+        description: "Frozen official baseline; customer installed SHA must be verified separately"
+        required: true
+        default: "1.0.0.6"
+        type: choice
+        options:
+          - "1.0.0.6"
+          - "1.0.0.5"
       only:
         description: "Empty runs all five modes. Lifecycle runs Clean/Upgrade/Rollback. Rollback runs only rollback."
         required: false
@@ -83,7 +91,7 @@ jobs:
           github-token: ${{ github.token }}
           path: FHD/candidate
       - name: Fetch original immutable 1.0.0.5 artifact
-        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.5'
         uses: actions/download-artifact@v8
         with:
           name: xcagi-windows-installer-83939363ca2ccf7776c97f5c7895e29c1e5bc453
@@ -91,7 +99,7 @@ jobs:
           github-token: ${{ github.token }}
           path: FHD/old-candidate
       - name: Verify original installer provenance and bytes
-        if: matrix.mode == 'Upgrade' || matrix.mode == 'Rollback'
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.5'
         shell: pwsh
         run: |
           $receipt = Get-Content old-candidate/delivery-receipt.json -Raw | ConvertFrom-Json
@@ -99,6 +107,21 @@ jobs:
           $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($receipt.git_sha -ne '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -or $receipt.version -ne '1.0.0.5' -or $receipt.size -ne 250126772 -or $installer.Length -ne $receipt.size -or $hash -ne $receipt.sha256 -or $hash -ne '92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf') { throw 'Original 1.0.0.5 artifact provenance mismatch' }
           Move-Item -LiteralPath $installer.FullName -Destination candidate/old-installer.exe
+      - name: Fetch and verify published 1.0.0.6 upgrade and rollback baseline
+        if: (matrix.mode == 'Upgrade' || matrix.mode == 'Rollback') && inputs.baseline_version == '1.0.0.6'
+        shell: pwsh
+        run: |
+          # Frozen official download-windows-hotfix.json readback: 2026-10-26; not proof of customer installed identity.
+          $baseline = (Get-Content config/download_release.json -Raw | ConvertFrom-Json).windows_acceptance_baselines.'1.0.0.6'
+          $url = $baseline.url
+          $path = 'candidate/old-installer.exe'
+          Invoke-WebRequest -Uri $url -OutFile $path -TimeoutSec 900
+          $installer = Get-Item -LiteralPath $path
+          $hash = (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($installer.Length -ne $baseline.size -or $hash -ne $baseline.sha256) { throw 'Published 1.0.0.6 baseline bytes mismatch' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $path
+          if ($signature.Status -ne $baseline.authenticode) { throw "Frozen 1.0.0.6 baseline signature mismatch: $($signature.Status)" }
+          Write-Warning 'Historical 1.0.0.6 baseline is explicitly NotSigned; isolated CI acceptance only.'
       - uses: actions/setup-node@v7
         if: matrix.mode != 'Clean'
         with:
@@ -130,6 +153,7 @@ jobs:
           XCAGI_TEST_PASS: ${{ secrets.XCAGI_TEST_PASS }}
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           MODE: ${{ matrix.mode }}
+          BASELINE_VERSION: ${{ inputs.baseline_version }}
         run: |
           $ErrorActionPreference = 'Stop'
           $receipt = Get-Content candidate/delivery-receipt.json -Raw | ConvertFrom-Json
@@ -144,7 +168,7 @@ jobs:
             CandidateSha = $env:CANDIDATE_SHA
             EvidenceDir = "candidate/evidence-$env:MODE"
           }
-          if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path }
+          if ($env:MODE -in @('Upgrade','Rollback')) { $args.OldPath = (Resolve-Path candidate/old-installer.exe).Path; $args.BaselineVersion = $env:BASELINE_VERSION }
           scripts/package/accept-windows-candidate.ps1 @args
       - uses: actions/upload-artifact@v4
         if: always()

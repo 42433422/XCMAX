@@ -9,10 +9,10 @@
 
 | 口径 | 版本 | 用途 |
 |------|------|------|
-| **XCAGI 稳定产品版本** | `1.0.0.6` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
+| **XCAGI 稳定产品版本** | `1.0.0.7` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
 
-四段产品版本 `1.0.0.6` 是本轮候选目标，尚未发布；已发布版本只认线上 `/download-release.json`。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
+四段产品版本 `1.0.0.7` 是当前 Windows 测试候选目标，尚未构建/发布，不推进 stable OTA；同版本的历史交付与新候选按制品身份区分，不能一概称为未发布。发布口径遵循上方 `PRODUCT_VERSION_SSOT.md`；公开指针须与原制品清单交叉核验。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
 
 ## 🔗 必须同步的锚点
 
@@ -24,7 +24,7 @@
 
 每版 Windows x64、Mac arm64/x64 必须冻结同一 main 完整源码 SHA、产品版本与发布组合；各平台二进制 SHA-256 独立记录。先保留私有候选，再用原包跑实机安装、升级、业务、数据保留及失败恢复；证据齐全并获发布授权后才晋级原字节，禁止验收后重打包。
 Windows 使用 `release-desktop` 的 `windows_installer_only=true,candidate_only=true`；Mac 使用 `release-desktop-mac-ota` 的 `candidate_only=true` 分别原生构建两架构。不得用会部署生产的大编排代替候选构建。
-Windows 五模式必须同候选全部通过；未签名交付仍保持 stable OTA 关闭。历史制品、证据和发布记录不回写、不跨 SHA 继承；候选通过不等于客户验收或已发布。
+Windows 五模式必须同候选全部通过；五模式是隔离安装链检查，不能替代现场 15 项原场景及客户实际旧包升级验收；未签名交付仍保持 stable OTA 关闭。历史制品、证据和发布记录不回写、不跨 SHA 继承；候选通过不等于客户验收或已发布。
 
 任何版本变更都必须先修改本文件，再执行 `version_sync.py --apply` / `verify_version_anchors.py`，并同步 README、CHANGELOG、CI 发布约定、下载清单和 `specs/product-lines-3-plus-2.md`；未完成同步前不得发布。
 

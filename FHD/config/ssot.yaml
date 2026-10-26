@@ -67,6 +67,7 @@ domains:
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
       - FHD/scripts/package/build-installer.ps1#default-version
       - FHD/release/VERSION
+      - FHD/.github/workflows/release-orchestrator.yml#product_version
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本
@@ -423,6 +424,7 @@ domains:
     # 全部从各自权威源现算；阻断硬编码版本、未声明副本与生成物漂移。
     ssot: FHD/config/product_lines.yaml
     derived:
+      - 成都修茈科技有限公司/data/release-history.json
       - FHD/metrics/product_lines_status.generated.json
       - FHD/docs/PRODUCT_LINES_STATUS.md
     mode: generate

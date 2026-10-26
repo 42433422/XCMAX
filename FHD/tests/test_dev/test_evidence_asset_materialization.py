@@ -265,7 +265,7 @@ def test_guard_rejects_static_alias_even_when_it_differs_from_its_source(reposit
         ASSETS["guard"](root)
 
 
-@pytest.mark.parametrize("corrupt", [None, "evidence", "branding"])
+@pytest.mark.parametrize("corrupt", [None, "evidence", "branding", "history"])
 def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repository, corrupt):
     root, original, _, _ = repository
     site = root / ASSETS["SITE"]
@@ -295,15 +295,25 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
             }
         )
     )
+    (site / "data").mkdir(exist_ok=True)
+    for name in ("release-history.json", "release-presentation.json"):
+        (site / "data" / name).write_text('{"derived":"approved-source"}')
     (site / "index.html").write_text("new page")
     live = root / "live"
     live.mkdir()
     (live / "index.html").write_text("previous page")
     (live / "download-release.json").write_text('{"verified":true}')
+    (site / "download-release.json").write_text('{"candidate":"must-not-publish"}')
+    (site / "corp-butler").mkdir(exist_ok=True)
+    (site / "corp-butler/download-release.json").write_text('{"candidate":"stale-copy"}')
+    (live / "corp-butler").mkdir()
+    (live / "corp-butler/download-release.json").write_text('{"verified":true}')
     if corrupt == "evidence":
         original.write_bytes(b"changed after acceptance")
     elif corrupt == "branding":
         brand.write_bytes(b"unreviewed replacement")
+    elif corrupt == "history":
+        (site / "data/release-history.json").unlink()
     script = (
         ROOT / ASSETS["SITE"] / "MODstore_deploy/scripts/xcmax-site-auto-update.sh"
     ).read_text()
@@ -332,8 +342,17 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     else:
         assert run.returncode == 0, run.stderr
         assert (live / "index.html").read_text() == "new page"
+        assert (live / "data/release-history.json").read_bytes() == (
+            site / "data/release-history.json"
+        ).read_bytes()
+        assert (live / "data/release-presentation.json").read_bytes() == (
+            site / "data/release-presentation.json"
+        ).read_bytes()
         assert (
             live / "capabilities/assets/evidence/old-public-url.png"
         ).read_bytes() == original.read_bytes()
         assert (live / "corp-butler/brand.jpg").read_bytes() == brand.read_bytes()
         assert json.loads((live / "download-release.json").read_text()) == {"verified": True}
+        assert json.loads((live / "corp-butler/download-release.json").read_text()) == {
+            "verified": True
+        }

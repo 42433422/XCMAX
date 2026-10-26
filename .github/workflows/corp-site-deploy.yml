@@ -88,6 +88,10 @@ jobs:
             export XCMAX_GIT_BRANCH="${BRANCH}"
             export XCMAX_GIT_RESET_HARD=1
             # Bound each bootstrap command; retain configured SSH identity and host checks.
+            if [ "$(readlink -f "${REMOTE_ROOT}/成都修茈科技有限公司")" = "$(readlink -f /root/成都修茈科技有限公司)" ]; then
+              echo "[err] live site must be separate from the Git tree before reset" >&2
+              exit 1
+            fi
             SYNC_STAGE=fetch
             trap 'rc=$?; echo "[err] site stage=${SYNC_STAGE} exit=${rc}; stopped before further publication" >&2; exit "$rc"' ERR
             echo "[stage] fetch begin (180s limit)"
@@ -104,22 +108,21 @@ jobs:
               exit 1
             fi
             echo "[info] exact server worktree sha=${DEPLOY_SHA}"
-            # Always republish static chrome into the nginx live root (immutable
-            # release symlink). Git sync alone only updates /root/XCMAX.
-            export XCMAX_FORCE_SITE_PUBLISH=1
-            AUTO_SCRIPT="${REMOTE_ROOT}/成都修茈科技有限公司/MODstore_deploy/scripts/xcmax-site-auto-update.sh"
-            SYNC_STAGE=updater
-            echo "[stage] repository updater begin"
-            bash "${AUTO_SCRIPT}"
+            # This job publishes static content only; the general updater also rebuilds
+            # market/runtime dependencies and restarts services, outside this scope.
             SYNC_STAGE=publish
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            GIT_SITE="${SITE_ROOT}"
+            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
+            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
+            PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+            mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+            exec 8>"$PUBLICATION_LOCK"
+            flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
             LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
             if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
-            GIT_SITE="${SITE_ROOT}"
-            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
-            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -129,7 +132,7 @@ jobs:
               # git snapshots.  `fhd-release-desktop.yml` publishes the latter only
               # after both platform artifacts pass verification.
               for f in "${GIT_SITE}"/*.html "${GIT_SITE}/styles.css" "${GIT_SITE}/main.js" "${GIT_SITE}/contact-intake.js" \
-                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" \
+                       "${GIT_SITE}/contact-channels.js" "${GIT_SITE}/visualization.js" "${GIT_SITE}/release-data.js" \
                        "${GIT_SITE}/world-will.js" "${GIT_SITE}/world-will-ticker.js" \
                        "${GIT_SITE}/world-will-ticker.css" \
                        "${GIT_SITE}/download-action-board.js"; do
@@ -138,13 +141,8 @@ jobs:
                 chmod u+w "${LIVE_SITE}/${base}" 2>/dev/null || true
                 cp -f "$f" "${LIVE_SITE}/${base}"
               done
-              # Bootstrap an empty site once, but never roll a verified release back
-              # to the repository's historical fallback pointer on a later web deploy.
-              if [ ! -e "${LIVE_SITE}/download-release.json" ] && [ -f "${GIT_SITE}/download-release.json" ]; then
-                cp -f "${GIT_SITE}/download-release.json" "${LIVE_SITE}/download-release.json"
-              else
-                echo "[info] preserving release-managed download-release.json"
-              fi
+              # Only the desktop publisher may create or replace download pointers.
+              echo "[info] preserving release-managed download-release.json; no Git bootstrap"
               if [ -e "${LIVE_SITE}/download-windows-hotfix.json" ]; then
                 echo "[info] preserving release-managed download-windows-hotfix.json"
               fi
@@ -156,7 +154,9 @@ jobs:
               fi
               if [ -d "${GIT_SITE}/corp-butler" ]; then
                 mkdir -p "${LIVE_SITE}/corp-butler"
-                cp -af "${GIT_SITE}/corp-butler/." "${LIVE_SITE}/corp-butler/"
+                find "${GIT_SITE}/corp-butler" -mindepth 1 -maxdepth 1 \
+                  ! -name download-release.json ! -name download-windows-hotfix.json \
+                  -exec cp -af {} "${LIVE_SITE}/corp-butler/" \;
               fi
               # 产品能力中心（#1951）：整目录发布，漏发即线上 404。
               if [ -d "${GIT_SITE}/capabilities" ]; then
@@ -181,6 +181,7 @@ jobs:
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
+            exec 8>&-
             SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then
@@ -234,6 +235,10 @@ jobs:
             xc_curl https://xiu-ci.com/developer.html >/dev/null
             xc_curl https://xiu-ci.com/download >/dev/null
             xc_curl https://xiu-ci.com/download/releases >/dev/null
+            xc_curl -o /tmp/xc-release-history.json https://xiu-ci.com/data/release-history.json
+            cmp "${GIT_SITE}/data/release-history.json" /tmp/xc-release-history.json
+            xc_curl -o /tmp/xc-release-data.js https://xiu-ci.com/release-data.js
+            cmp "${GIT_SITE}/release-data.js" /tmp/xc-release-data.js
             xc_curl -L https://xiu-ci.com/market/download >/dev/null
             xc_curl https://xiu-ci.com/market/ >/dev/null
             echo "[verify] homepage nav present:"
