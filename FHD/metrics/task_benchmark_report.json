@@ -2,28 +2,28 @@
   "golden_set": "task_golden_set.json",
   "total_tasks": 22,
   "trials": 1,
-  "pass_1": 0.7727,
-  "pass_k": 0.7727,
-  "pass_at_k": 0.7727,
+  "pass_1": 0.3636,
+  "pass_k": 0.3636,
+  "pass_at_k": 0.3636,
   "by_domain": {
     "customers": {
-      "pass_k": 4,
+      "pass_k": 2,
       "total": 5
     },
     "finance": {
-      "pass_k": 2,
+      "pass_k": 0,
       "total": 2
     },
     "inventory": {
-      "pass_k": 2,
+      "pass_k": 1,
       "total": 2
     },
     "products": {
-      "pass_k": 4,
+      "pass_k": 3,
       "total": 4
     },
     "reports": {
-      "pass_k": 2,
+      "pass_k": 0,
       "total": 2
     },
     "safety": {
@@ -31,7 +31,7 @@
       "total": 2
     },
     "sales": {
-      "pass_k": 1,
+      "pass_k": 0,
       "total": 3
     },
     "shipment": {
@@ -40,6 +40,32 @@
     }
   },
   "failures": [
+    {
+      "task_id": "customers.query.by_name_003",
+      "instruction": "查一下客户 星光贸易 的信息",
+      "difficulty": "easy",
+      "failure": "returned records differ: customers.query",
+      "plan": [
+        {
+          "tool_id": "customers",
+          "action": "query"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "customers.query.list_004",
+      "instruction": "客户列表",
+      "difficulty": "easy",
+      "failure": "returned records differ: customers.query",
+      "plan": [
+        {
+          "tool_id": "customers",
+          "action": "query"
+        }
+      ],
+      "trials_failed": 1
+    },
     {
       "task_id": "customers.negation.no_create_005",
       "instruction": "不要新建客户",
@@ -54,10 +80,23 @@
       "trials_failed": 1
     },
     {
+      "task_id": "products.create.explicit_006",
+      "instruction": "新增产品 型号A100，单价25.5",
+      "difficulty": "medium",
+      "failure": "run status: expected completed, got failed; 产品创建失败，请稍后重试; DB 终态缺失：products {'model_number': 'A100', 'price': 25.5}",
+      "plan": [
+        {
+          "tool_id": "products",
+          "action": "create"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
       "task_id": "sales.order.create_010",
       "instruction": "给客户星光贸易下订单，产品A100，数量10",
       "difficulty": "medium",
-      "failure": "actions 不匹配：期望[clarify.ask,sales.create_order] 实际[clarify.ask,clarify.ask,sales.create_order]",
+      "failure": "actions 不匹配：期望[clarify.ask,sales.create_order] 实际[clarify.ask,clarify.ask,sales.create_order]; run status: expected completed, got failed; 缺少客户所属租户; DB 终态计数不符：sales_orders 期望1 实际0",
       "plan": [
         {
           "tool_id": "clarify",
@@ -78,7 +117,7 @@
       "task_id": "sales.quote.by_name_011",
       "instruction": "给星光贸易的产品A100报个价",
       "difficulty": "medium",
-      "failure": "actions 不匹配：期望[clarify.ask,sales.quote] 实际[clarify.ask,clarify.ask,sales.quote]",
+      "failure": "actions 不匹配：期望[clarify.ask,sales.quote] 实际[clarify.ask,clarify.ask,sales.quote]; run status: expected completed, got failed; 缺少客户所属租户; DB 终态计数不符：sales_orders 期望1 实际0",
       "plan": [
         {
           "tool_id": "clarify",
@@ -96,6 +135,58 @@
       "trials_failed": 1
     },
     {
+      "task_id": "sales.report.monthly_012",
+      "instruction": "本月销售汇总",
+      "difficulty": "easy",
+      "failure": "returned records differ: reports.sales_summary",
+      "plan": [
+        {
+          "tool_id": "reports",
+          "action": "sales_summary"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "inventory.query.by_product_014",
+      "instruction": "查一下 A100 的库存",
+      "difficulty": "easy",
+      "failure": "returned records differ: reports.inventory_summary",
+      "plan": [
+        {
+          "tool_id": "reports",
+          "action": "inventory_summary"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "finance.transaction.income_015",
+      "instruction": "记一笔收入 5000 元，来自星光贸易",
+      "difficulty": "medium",
+      "failure": "run status: expected completed, got failed; FinancialTransaction 写入缺少 tenant_id，已拒绝; DB 终态计数不符：financial_transactions 期望1 实际0",
+      "plan": [
+        {
+          "tool_id": "finance",
+          "action": "create_transaction"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "finance.ledger.query_016",
+      "instruction": "查询这个月的账本",
+      "difficulty": "easy",
+      "failure": "returned records differ: finance.ledger_query",
+      "plan": [
+        {
+          "tool_id": "finance",
+          "action": "ledger_query"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
       "task_id": "shipment.generate.full_slots_017",
       "instruction": "打印 七彩乐园 的发货单，编号9803，规格12，一共3桶",
       "difficulty": "medium",
@@ -104,6 +195,32 @@
         {
           "tool_id": "shipment_orders",
           "action": "generate"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "reports.dashboard_019",
+      "instruction": "看下运营看板",
+      "difficulty": "easy",
+      "failure": "returned records differ: reports.dashboard",
+      "plan": [
+        {
+          "tool_id": "reports",
+          "action": "dashboard"
+        }
+      ],
+      "trials_failed": 1
+    },
+    {
+      "task_id": "reports.export.sales_020",
+      "instruction": "导出销售报表",
+      "difficulty": "easy",
+      "failure": "spreadsheet content differs: sales",
+      "plan": [
+        {
+          "tool_id": "reports",
+          "action": "export"
         }
       ],
       "trials_failed": 1
