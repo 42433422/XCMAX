@@ -200,10 +200,34 @@ def test_frozen_pair_preserves_bytes_and_refuses_mismatch(tmp_path, fault):
     (previous / "manifest.json").write_text(json.dumps(old_manifest))
     env["XCAGI_PUBLIC_DOWNLOAD_SNAPSHOT_DIR"] = str(previous)
     env["PATH"] = str(Path(os.sys.executable).parent) + os.pathsep + env["PATH"]
+    # Exercise exact publisher source with a synthetic matching release catalog;
+    # the real catalog may prepare a Windows-only candidate and must stay unchanged.
+    source_root = tmp_path / "publisher"
+    for name in (
+        "scripts/package/publish-macos-download-center.sh",
+        "scripts/package/generate-download-manifest.py",
+        "scripts/release/prepare_mac_candidate_pair.py",
+        "desktop/desktop-config.ts",
+    ):
+        target = source_root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((FHD / name).read_bytes())
+    metadata = json.loads((FHD / "config/download_release.json").read_text())
+    metadata["release_history"] = [
+        {
+            "version": VERSION,
+            "date": "2026-10-26",
+            "title": "Synthetic Mac pair",
+            "channel": "fixture",
+            "notes": ["Synthetic acceptance only"],
+        }
+    ]
+    (source_root / "config").mkdir()
+    (source_root / "config/download_release.json").write_text(json.dumps(metadata))
     script = Path(
         env.get(
             "MAC_PAIR_PUBLISHER_UNDER_TEST",
-            FHD / "scripts/package/publish-macos-download-center.sh",
+            source_root / "scripts/package/publish-macos-download-center.sh",
         )
     )
     mode = "--publish" if fault else "--dry-run"

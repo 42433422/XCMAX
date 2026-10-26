@@ -5,9 +5,9 @@ on:
     inputs:
       product_version:
         required: true
-        default: "1.0.0.6"
+        default: "1.0.0.7"
         type: choice
-        options: ["1.0.0.6"]
+        options: ["1.0.0.7"]
       release_sha:
         description: "Full 40-character commit to freeze after required CI/security gates pass"
         required: true
