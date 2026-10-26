@@ -423,6 +423,7 @@ domains:
     # 全部从各自权威源现算；阻断硬编码版本、未声明副本与生成物漂移。
     ssot: FHD/config/product_lines.yaml
     derived:
+      - 成都修茈科技有限公司/data/release-history.json
       - FHD/metrics/product_lines_status.generated.json
       - FHD/docs/PRODUCT_LINES_STATUS.md
     mode: generate

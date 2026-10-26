@@ -123,7 +123,7 @@ sync_corp_pages_to_dist_fallback() {
     cp -af "$f" "${dist}/"
     n=$((n + 1))
   done
-  for f in styles.css main.js contact-intake.js contact-channels.js visualization.js; do
+  for f in styles.css main.js contact-intake.js contact-channels.js visualization.js release-data.js; do
     if [[ -f "${corp}/${f}" ]]; then
       cp -af "${corp}/${f}" "${dist}/"
       n=$((n + 1))
@@ -160,9 +160,6 @@ sync_corp_butler_assets() {
     log "corp-butler brand-xc-logo.jpg 已同步"
   else
     log "WARN: 缺少 ${logo_src}，AI 管家浮球 Logo 将 404"
-  fi
-  if [[ -f "${MODSTORE_ROOT}/market/public/download-release.json" ]]; then
-    cp -af "${MODSTORE_ROOT}/market/public/download-release.json" "${corp_dir}/download-release.json"
   fi
   if [[ -f "${MODSTORE_ROOT}/market/public/download-action-board.json" ]]; then
     cp -af "${MODSTORE_ROOT}/market/public/download-action-board.json" "${corp_dir}/download-action-board.json"
@@ -315,7 +312,7 @@ sync_site_static() {
   # 注意：download-action-board.json / download-company-hall.json 由运行时 DB 投影写出，
   # 不要从 git 快照覆盖 live，否则官网会冻在旧业务日。
   local paths=(
-    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'world-will.js'
+    '*.html' 'styles.css' 'main.js' 'contact-intake.js' 'contact-channels.js' 'visualization.js' 'release-data.js' 'world-will.js'
     'world-will-ticker.js' 'world-will-ticker.css'
     'sitemap.xml' 'baidu_urls.txt' 'download-action-board.js'
     'images' 'site' 'assets' 'corp-butler' 'partials'
@@ -340,6 +337,9 @@ publish_site_static_to_live() {
     log "WARN: git site tree missing: $git_site"
     return 0
   fi
+  for base in release-history.json release-presentation.json; do
+    [[ -f "$git_site/data/$base" ]] || { log "ERROR: missing release projection: $base"; return 1; }
+  done
   # Restore exact legacy URLs before exposing either the Git tree or a live copy.
   if ! python3 "$git_site/scripts/evidence_assets.py" materialize; then
     log "ERROR: evidence reconstruction failed; stop before publishing static pages"
@@ -364,7 +364,7 @@ publish_site_static_to_live() {
   local f base
   shopt -s nullglob
   for f in "$git_site"/*.html "$git_site"/styles.css "$git_site"/main.js "$git_site"/contact-intake.js \
-           "$git_site"/contact-channels.js \
+           "$git_site"/contact-channels.js "$git_site"/release-data.js \
            "$git_site"/visualization.js "$git_site"/world-will.js "$git_site"/world-will-ticker.js \
            "$git_site"/world-will-ticker.css \
            "$git_site"/sitemap.xml "$git_site"/baidu_urls.txt \
@@ -375,25 +375,9 @@ publish_site_static_to_live() {
     cp -f "$f" "$live_site/$base"
   done
   shopt -u nullglob
-  # The desktop release workflow owns this pointer and updates it atomically only
-  # after platform artifacts and public URLs are verified.  A website refresh may
-  # seed a missing file, but must never overwrite an already verified release.
-  # Seed order matters: the newest immutable release copy is authoritative, the
-  # git copy is a historical fallback that can lag behind a published release
-  # (2026-09-05 回退事故：快照轮转后从过期 git 种子播种了 1.0.0.0).
-  if [[ ! -e "$live_site/download-release.json" ]]; then
-    local seed_src
-    seed_src="$(printf '%s\n' /var/www/xcagi-v[0-9]*.*.*.*/download-release.json 2>/dev/null | sort -V | tail -1 || true)"
-    if [[ -n "$seed_src" && -f "$seed_src" ]]; then
-      cp -f "$seed_src" "$live_site/download-release.json"
-      log "download-release.json 从不可变发布副本播种: $seed_src"
-    elif [[ -f "$git_site/download-release.json" ]]; then
-      cp -f "$git_site/download-release.json" "$live_site/download-release.json"
-      log "download-release.json 从 git 副本播种（可能滞后，待 release 校准）"
-    fi
-  else
-    log "保留发布流程管理的 download-release.json"
-  fi
+  # Static deployments never bootstrap desktop pointers from Git or newest versions.
+  # Missing publication metadata remains unavailable until the desktop release flow repairs it.
+  log "保留发布流程管理的 download-release.json（缺失时不推断发布）"
   if [[ -e "$live_site/download-windows-hotfix.json" ]]; then
     log "保留发布流程管理的 download-windows-hotfix.json"
   fi
@@ -404,13 +388,20 @@ publish_site_static_to_live() {
     cp -af "$git_site/assets/." "$live_site/assets/"
   fi
   if [[ -d "$git_site/corp-butler" ]]; then
-    cp -af "$git_site/corp-butler/." "$live_site/corp-butler/"
+    find "$git_site/corp-butler" -mindepth 1 -maxdepth 1 \
+      ! -name download-release.json ! -name download-windows-hotfix.json \
+      -exec cp -af {} "$live_site/corp-butler/" \;
   fi
   for base in capabilities data/capabilities site/data; do
     if [[ -d "$git_site/$base" ]]; then
       mkdir -p "$live_site/$base"
       cp -af "$git_site/$base/." "$live_site/$base/"
     fi
+  done
+  mkdir -p "$live_site/data"
+  chmod u+w "$live_site/data"
+  for base in release-history.json release-presentation.json; do
+    cp -f "$git_site/data/$base" "$live_site/data/$base"
   done
   # Keep release root traversable for unprivileged nginx after chmod u+w above.
   chmod a+rx "$live_site" 2>/dev/null || true
@@ -524,6 +515,10 @@ elif [[ -f "${STATE_DIR}/modstore.sha" ]]; then
   OLD_XCMAX_SHA=""
 fi
 
+if [[ "$(readlink -f "${XCMAX_ROOT}/${SITE_SUBDIR}")" == "$(readlink -f "$SITE_ROOT")" ]]; then
+  log "ERROR: live site must be separate from Git before sync; preserve public pointers"
+  exit 1
+fi
 NEW_XCMAX_SHA=""
 if NEW_XCMAX_SHA="$(git_sync_repo "$XCMAX_ROOT" "XCMAX")"; then
   :

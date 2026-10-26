@@ -6,7 +6,7 @@
   - FHD/config/saas_plans.json            价格 SSOT
   - FHD/config/public_cases.json          公开案例 SSOT
   - data/capabilities.json                能力目录（build_capability_center.py 生成）
-  - download-release.json                 发布清单（发布流程生成）
+  - FHD/config/download_release.json     发布意图与历史（不是线上指针）
   - capabilities/assets/evidence/*.json   实机验收证据（run / visual-review）
 
 输出：
@@ -29,7 +29,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, prepare_evidence_assets, public_projection
+from build_capability_center import _PRIVATE_EVIDENCE_FEATURES, _contains_credentials, prepare_evidence_assets, public_projection
 
 SITE_ROOT = Path(__file__).resolve().parent.parent
 REPO_ROOT = SITE_ROOT.parent
@@ -194,7 +194,9 @@ def build_downloads(release: dict, version_ssot: dict) -> dict:
     return {
         "version_lock": release.get("version_lock"),
         "matches_version_ssot": release.get("version_lock") == version_ssot["version"],
-        "release_ready": bool(release.get("release_ready")),
+        "scope": "release_intent_not_publication",
+        "release_ready": False,
+        "public_pointer": "/download-release.json",
         "git_sha": release.get("git_sha"),
         "generated_at": release.get("generated_at"),
         "release_root": release.get("release_root"),
@@ -247,6 +249,16 @@ def build_evidence(cases_cfg: dict) -> dict:
     sensitive_features = _PRIVATE_EVIDENCE_FEATURES
 
     run_files = sorted(EVIDENCE_DIR.glob("*-run.json"))
+    # Withdrawal removes public raw copies, not the original acceptance identity.
+    for domain in catalog.get("domains", []):
+        for module in domain.get("modules", []):
+            for feature in module.get("features", []):
+                for rel in (feature.get("evidence") or {}).get("runs", []):
+                    source = REPO_ROOT / rel
+                    if feature["id"] not in sensitive_features and source.is_file():
+                        record = read_json(source)
+                        if _contains_credentials(record):
+                            run_files.append(source)
     if not run_files:
         die(f"证据目录无 run.json: {EVIDENCE_DIR}")
 
@@ -270,17 +282,17 @@ def build_evidence(cases_cfg: dict) -> dict:
         feat = d.get("feature")
         if not feat:
             die(f"run.json 缺少 feature 字段: {rf}")
+        private_run = feat in sensitive_features or public_projection(d, set()) != d
         platform = detect_platform(rf.stem)
         media_out = []
         for m in d.get("media", []):
-            if feat in sensitive_features or m.get("path") in excluded:
+            if private_run or m.get("path") in excluded:
                 continue
             name = Path(m.get("path", "")).name
             entry = {
                 "file": name,
                 "sha256": m.get("sha256"),
                 "visual_review": m.get("visual_review"),
-                "visible_result": m.get("visible_result"),
                 "kind": "video" if name.endswith((".mp4", ".webm", ".mov")) else "screenshot",
             }
             local = resolve_media_local(name, feat)
@@ -373,7 +385,7 @@ def build_evidence(cases_cfg: dict) -> dict:
         # 验收运行日志（run.log）：原文公开 + SHA256，供验证中心技术层引用
         log_entry = None
         log_candidates = sorted(set(EVIDENCE_DIR.glob(f"{feat}-run.log")) | set(EVIDENCE_DIR.glob(f"{feat}_run.log")))
-        if log_candidates:
+        if log_candidates and not private_run:
             lf = log_candidates[0]
             log_entry = {
                 "file": lf.name,
@@ -392,7 +404,8 @@ def build_evidence(cases_cfg: dict) -> dict:
             "app_git_sha": d.get("app_git_sha"),
             "media": media_out,
             "run_log": log_entry,
-            "source_run": f"/capabilities/assets/evidence/{rf.name}",
+            "acceptance_sha256": sha256_file(rf),
+            "source_run": None if private_run else f"/capabilities/assets/evidence/{rf.name}",
         }
         if cur is None or (item["verified_at"] or "") >= (cur["verified_at"] or ""):
             features[feat] = item
@@ -470,7 +483,7 @@ def build() -> dict:
     plans_cfg = read_json(FHD_ROOT / "config" / "saas_plans.json")
     cases_cfg = read_json(FHD_ROOT / "config" / "public_cases.json")
     caps = read_json(SITE_ROOT / "data" / "capabilities.json")
-    release = read_json(SITE_ROOT / "download-release.json")
+    release = read_json(FHD_ROOT / "config" / "download_release.json")
 
     configured_cases = cases_cfg.get("cases")
     if not isinstance(configured_cases, list):
@@ -501,7 +514,7 @@ def build() -> dict:
             "pricing": "FHD/config/saas_plans.json",
             "cases": "FHD/config/public_cases.json",
             "capabilities": "data/capabilities.json",
-            "release": "download-release.json",
+            "release": "FHD/config/download_release.json",
             "evidence": "capabilities/assets/evidence/",
         },
         "product": {

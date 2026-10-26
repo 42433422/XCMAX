@@ -4,7 +4,7 @@
      声明式输入：FHD/config/product_lines.yaml；本域登记在 FHD/config/ssot.yaml。
      数字漂移由 CI（ssot_cli.py gate → product-lines 域）阻断。 -->
 
-> 生成时间：2026-10-25 10:52 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
+> 生成时间：2026-10-26 00:52 UTC ｜ 生成器：`FHD/scripts/dev/product_lines_status.py`
 
 > 本文件是 XCMAX 三产品线状态（版本 / 发布 / 能力 / 三线成熟度）的**单一事实来源**，全部数字自动生成，禁止手改；任何文档引用这些数字都应指向本文件或原始权威源。
 
@@ -14,10 +14,11 @@
 
 | 口径 | 值 | 来源 |
 |------|----|------|
-| 稳定产品版本 | `1.0.0.6` | `FHD/VERSION.md` |
+| 源码候选版本 | `1.0.0.6` | `FHD/VERSION.md` |
 | 工具链兼容版本 | `1.0.0` | `FHD/VERSION.md` |
 | 发布火车 product_version | `1.0.0.6` | `release_train.json` |
 | 发布火车 current | `1.0.0.6` | `release_train.json` |
+| 版本演进世代（非正式发布次数） | 17 | `download_release.json#release_history` |
 | 下载清单 version_lock | `1.0.0.6` | `download_release.json` |
 | 下载清单 download_version | `1.0.0.6` | `download_release.json` |
 | 下载清单 marketing_version | `1.0.0.6` | `download_release.json` |
@@ -31,7 +32,7 @@
 
 | 级别 | 来源 | 事实 |
 |------|------|------|
-| 可见 | `download_release.release_ready=false` | 1.0.0.6 发布面未闭环：下载/更新指针未推进到产品版本 |
+| 可见 | `download_release.release_ready=false` | 1.0.0.6 源码发布意图未闭环；不否定同版本历史交付，当前各渠道需读回原制品证据 |
 | 可见 | `成都修茈科技有限公司/FHD/config/release_train.json` | 已声明镜像且版本身份字段与 canonical 一致（epoch, product_version, current）；MODstore 独立运行时的运行时 SSOT 路径，由日更对齐脚本从 canonical 覆写； 保留是有意决定，day_index / last_bump_at 为各自运行时状态，不参与身份比对 |
 
 ## 3. 三线成熟度（只列能力目录自有的证据分级计数 + Release Gate 结论）

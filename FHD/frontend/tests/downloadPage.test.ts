@@ -4,6 +4,7 @@ import { runInThisContext } from 'node:vm'
 import { afterEach, expect, it, vi } from 'vitest'
 
 const html = readFileSync(join(process.cwd(), '../../成都修茈科技有限公司/download.html'), 'utf8')
+const shared = readFileSync(join(process.cwd(), '../../成都修茈科技有限公司/release-data.js'), 'utf8')
 const script = html.split('<script>')[1].split('</script>')[0]
 const sha = 'a'.repeat(40)
 const digest = 'b'.repeat(64)
@@ -32,6 +33,7 @@ async function open(files: Record<string, unknown>, search = '') {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
     ok: url in files, headers: { get: () => 'application/json' }, json: async () => files[url],
   })))
+  runInThisContext(shared)
   runInThisContext(script)
   await new Promise((resolve) => setTimeout(resolve))
   const links = Array.from(document.querySelectorAll('.download-item'))
@@ -79,7 +81,8 @@ it('lists the Windows interim installer only at the path the release workflow pu
   const files = { '/download-release.json': pointer(false) }
   const valid = await open({ ...files, '/download-windows-hotfix.json': interim() })
   expect(valid['Windows 64 位 · 临时交付 v1.0.0.5']).toBe(interim().artifact.url)
-  expect(document.getElementById('download-note')?.textContent).toContain('macOS 稳定包暂未开放')
+  expect(valid['macOS · Apple Silicon']).toBeNull()
+  expect(document.getElementById('download-note')?.textContent).toContain('不进入稳定自动更新')
   const forged = await open({ ...files, '/download-windows-hotfix.json': interim(`https://example.com/${interimName}`) })
   expect(forged['Windows 64 位']).toBeNull()
 })
