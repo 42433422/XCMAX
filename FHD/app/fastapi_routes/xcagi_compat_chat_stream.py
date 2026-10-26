@@ -15,6 +15,7 @@ from app.application.agent_orchestrator.chat_trace import (
 )
 from app.infrastructure.chat_stream_lifetime import (
     StreamObservationTimeout,
+    StreamStopped,
     watch_stream_interruption,
     watch_stream_tool_records,
 )
@@ -312,7 +313,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         planner_runtime_context["run_id"] = pre_run.run_id
         planner_runtime_context["agent_run_id"] = pre_run.run_id
         watch_stream_interruption(
-            lambda **state: mark_legacy_chat_stream_interrupted(pre_run, **state)
+            lambda **state: mark_legacy_chat_stream_interrupted(pre_run, **state),
+            run_snapshot=pre_run,
         )
         watch_stream_tool_records(
             lambda **receipt: record_legacy_stream_tool_receipt(pre_run, **receipt)
@@ -329,6 +331,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         _facade().logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
 
     def finalize(payload):
+        if pre_run is None:
+            raise ValueError("cannot finalize a stream without its original run")
         return _facade().finalize_legacy_chat_run(
             pre_run.run_id,
             payload,
@@ -457,7 +461,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 channel="compat_chat_stream",
             )
         yield _facade()._sse_event_line({"type": "done", "result": payload})
-    except StreamObservationTimeout as observation_error:
+    except (StreamObservationTimeout, StreamStopped) as observation_error:
         # An observation deadline cannot settle execution as failed: the inner
         # worker may have committed a write and still be running. Persist the
         # existing reconciliation gate synchronously before exposing the 504.
@@ -471,7 +475,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             _facade()._sse_payload_with_run_id(
                 {
                     "type": "error",
-                    "message": str(observation_error),
+                    "message": str(observation_error)
+                    or "对话观察已中断，执行结果尚未确认，请核对任务，勿重复提交。",
                     "status_code": getattr(observation_error, "status_code", 504),
                     "execution_outcome": "unknown",
                     "requires_reconciliation": True,

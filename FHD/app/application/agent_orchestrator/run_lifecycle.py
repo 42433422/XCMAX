@@ -32,7 +32,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
 
         from app.application.agent_orchestrator.run_sql_repository import same_run_generation
 
-        while True:
+        for _attempt in range(8):
             previous = self._repo.get(expected.run_id)
             if previous is None:
                 return None
@@ -48,6 +48,7 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 )
             if self._repo.save_control_if_unchanged(run, previous):
                 return cast("AgentRun", self._repo.get(run.run_id))
+        raise RuntimeError("agent run changed repeatedly while recording control")
 
     def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
         run = self._repo.get(run_id)

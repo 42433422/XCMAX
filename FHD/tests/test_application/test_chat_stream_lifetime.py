@@ -94,6 +94,29 @@ async def test_normal_last_piece_and_exception():
 
 
 @pytest.mark.asyncio
+async def test_timeout_does_not_cancel_consumer_between_stream_pieces(monkeypatch):
+    helper = _entrypoint_modules["app.fastapi_routes.xcagi_compat_chat_helpers"]
+    monkeypatch.setattr(helper, "_xcagi_chat_timeout_seconds", lambda: 0.1)
+    stream = bridge(lambda *a, **k: iter([b"first", b"last"]))
+    assert await anext(stream) == b"first"
+    await asyncio.sleep(0.15)
+    assert json.loads(await anext(stream))["status_code"] == 504
+    await stream.aclose()
+
+
+@pytest.mark.parametrize("same_id", [False, True])
+def test_stream_timeout_identity_cannot_be_rebound_to_another_run(lifetime, same_id):
+    original = NS(run_id="first-run")
+    lifetime.observe(lambda **state: None, run_snapshot=original)
+    with pytest.raises(ValueError, match="different run"):
+        lifetime.observe(
+            lambda **state: None,
+            run_snapshot=NS(run_id="first-run" if same_id else "other-run"),
+        )
+    assert lifetime.run_snapshot is original
+
+
+@pytest.mark.asyncio
 async def test_cancel_blocked_read_closes_read_and_generator_on_owner_thread():
     entered, released, finished = threading.Event(), threading.Event(), threading.Event()
     thread_ids, close_calls = [], []
@@ -283,7 +306,8 @@ async def test_two_bridges_cancel_propagates_to_read(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_two_bridge_timeout_delivers_terminal_error(monkeypatch):
+@pytest.mark.parametrize("before_planner", [False, True])
+async def test_two_bridge_timeout_delivers_terminal_error(monkeypatch, before_planner):
     released = threading.Event()
 
     def events(*a, **k):
@@ -291,15 +315,69 @@ async def test_two_bridge_timeout_delivers_terminal_error(monkeypatch):
             assert released.wait(2)
             yield {"type": "token", "text": "late"}
 
-    result = await asyncio.wait_for(
-        _collect(bridge(lambda *a, **k: guarded(events, monkeypatch))), 2
+    helper = _entrypoint_modules["app.fastapi_routes.xcagi_compat_chat_helpers"]
+    monkeypatch.setattr(
+        helper, "_xcagi_chat_timeout_seconds", lambda: 3 if before_planner else 0.15
     )
+    monkeypatch.setattr(helper, "_xcagi_stream_first_token_timeout_seconds", lambda: 0.05)
+    factory = events if before_planner else lambda *a, **k: guarded(events, monkeypatch)
+    result = await asyncio.wait_for(_collect(bridge(factory)), 1)
     assert json.loads(result[-1])["type"] == "error"
+    await wait(released)
     assert released.is_set()
+    if before_planner:
+        assert "勿重复提交" in json.loads(result[-1])["message"]
 
 
 async def _collect(stream):
     return [item async for item in stream]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["storage", "programming", "timeout"])
+async def test_outer_timeout_storage_failure_stays_unknown_and_returns_without_replay(
+    monkeypatch, caplog, failure
+):
+    from app.application.agent_orchestrator import chat_trace
+
+    release, finished, storage_finished = (threading.Event() for _ in range(3))
+    helper = _entrypoint_modules["app.fastapi_routes.xcagi_compat_chat_helpers"]
+    monkeypatch.setattr(helper, "_xcagi_chat_timeout_seconds", lambda: 0.03)
+    monkeypatch.setattr(helper, "_STREAM_SAFETY_STORE_TIMEOUT", 0.03)
+    effects, stores = [], []
+
+    def persist(*args, **kwargs):
+        stores.append(kwargs)
+        try:
+            if failure == "timeout":
+                assert release.wait(2)
+            else:
+                raise (OSError if failure == "storage" else TypeError)("PRIVATE_DRIVER_DETAIL")
+        finally:
+            storage_finished.set()
+
+    def producer(*args, **kwargs):
+        life.watch_stream_interruption(lambda **state: None, run_snapshot=NS(run_id="owned-run"))
+        try:
+            effects.append("committed-once")
+            assert release.wait(2)
+            yield b"late"
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(chat_trace, "mark_legacy_chat_stream_interrupted", persist)
+    try:
+        chunks = await asyncio.wait_for(_collect(bridge(producer)), 1)
+        error = json.loads(chunks[-1])
+        assert error["status_code"] == 503 and error["run_id"] == "owned-run"
+        assert error["execution_outcome"] == "unknown" and error["requires_reconciliation"] is True
+        assert "PRIVATE_DRIVER_DETAIL" not in str(error) + caplog.text
+        assert effects == ["committed-once"] and len(stores) == 1
+        assert not finished.is_set()
+    finally:
+        release.set()
+        await wait(finished)
+        await wait(storage_finished)
 
 
 @pytest.mark.parametrize("cancel_when", ["before_tool", "during_tool", "none"])

@@ -41,6 +41,7 @@ class StreamLifetime:
         self._receipt_lock = threading.Lock()
         self._notify_lock = threading.Lock()
         self.reason = "consumer_closed"
+        self.run_snapshot = None
 
     def check(self):
         if self.stopped.is_set():
@@ -66,8 +67,12 @@ class StreamLifetime:
         if first:
             threading.Thread(target=self._notify, daemon=True).start()
 
-    def observe(self, callback):
+    def observe(self, callback, *, run_snapshot=None):
         with self._lock:
+            if run_snapshot is not None:
+                if self.run_snapshot is not None and self.run_snapshot is not run_snapshot:
+                    raise ValueError("stream already belongs to a different run")
+                self.run_snapshot = run_snapshot
             self._observers.append(callback)
         if self.stopped.is_set():
             self._notify()
@@ -183,10 +188,10 @@ def owned_model_read(read):
         yield read
 
 
-def watch_stream_interruption(callback):
+def watch_stream_interruption(callback, *, run_snapshot=None):
     lifetime = current_lifetime.get()
     if lifetime is not None:
-        lifetime.observe(callback)
+        lifetime.observe(callback, run_snapshot=run_snapshot)
 
 
 def watch_stream_tool_records(callback):
@@ -207,7 +212,7 @@ class StreamWorker:
     END = object()
 
     def __init__(self, factory, *, capacity=128):
-        self.queue = queue.Queue(maxsize=capacity)
+        self.queue: queue.Queue[object] = queue.Queue(maxsize=capacity)
         self.stopped = threading.Event()
         self.lifetime = current_lifetime.get()
         self.finished = threading.Event()

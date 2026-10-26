@@ -57,6 +57,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_STREAM_SAFETY_STORE_TIMEOUT = 5.0
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
@@ -368,13 +369,12 @@ def _xcagi_guarded_planner_stream_events(
     lifetime = current_lifetime.get() or StreamLifetime()
 
     def events():
-        from contextlib import closing
-
+        from app.infrastructure.chat_stream_lifetime import owned_model_read
         from app.infrastructure.tenant_scope import tenant_scope
 
         with (
             tenant_scope((runtime_context or {}).get("tenant_id")),
-            closing(
+            owned_model_read(
                 chat_stream_sse_events(
                     body.message,
                     runtime_context=runtime_context or None,
@@ -394,10 +394,8 @@ def _xcagi_guarded_planner_stream_events(
         current_lifetime.reset(token)
     completed = False
     total_timeout = _xcagi_chat_timeout_seconds()
-    first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    first_event_seen = True
     try:
         yield MODEL_STREAM_ACCEPTED_EVENT
 
@@ -411,10 +409,8 @@ def _xcagi_guarded_planner_stream_events(
                     f"对话观察超时（>{int(total_timeout)} 秒）。后台执行结果尚未确认，请到任务工作区核对，勿重复提交。"
                 )
 
-            wait_timeout = first_token_timeout if not first_event_seen else idle_notice_seconds
-            wait_timeout = max(0.2, min(wait_timeout, total_timeout - elapsed))
             try:
-                item = worker.queue.get(timeout=min(wait_timeout, 0.1))
+                item = worker.queue.get(timeout=min(total_timeout - elapsed, 0.1))
                 # A read-close error after disconnect is not a business failure.
                 lifetime.check()
             except queue.Empty:
@@ -422,11 +418,6 @@ def _xcagi_guarded_planner_stream_events(
                     continue
                 next_notice = time.monotonic() + idle_notice_seconds
                 elapsed_int = int(time.monotonic() - started_at)
-                if not first_event_seen:
-                    lifetime.cancel("observation_timeout")
-                    raise StreamObservationTimeout(
-                        f"对话首包观察超时（>{int(first_token_timeout)} 秒）。执行结果尚未确认，请核对任务，勿重复提交。"
-                    )
                 yield {
                     "type": "token",
                     "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
@@ -443,7 +434,6 @@ def _xcagi_guarded_planner_stream_events(
                 yield {"type": "error", "message": detail, "status_code": exc.status_code}
                 return
 
-            first_event_seen = True
             yield item
     finally:
         worker.close()
@@ -502,9 +492,14 @@ async def _xcagi_planner_stream_bytes_async(
         worker = StreamWorker(lambda: _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier))
     finally:
         current_lifetime.reset(token)
+    deadline = time.monotonic() + _xcagi_chat_timeout_seconds()
+    receive_deadline = min(deadline, time.monotonic() + _xcagi_stream_first_token_timeout_seconds())
     try:
         while True:
-            item = await worker.receive()
+            item = await asyncio.wait_for(
+                worker.receive(), timeout=max(0.0, receive_deadline - time.monotonic())
+            )
+            receive_deadline = deadline
             if item is worker.END:
                 break
             if isinstance(item, Exception):
@@ -513,6 +508,44 @@ async def _xcagi_planner_stream_bytes_async(
                 )
                 break
             yield item
+    except TimeoutError as error:
+        reason = getattr(error, "reason", "observation_timeout")
+        lifetime.cancel(reason)
+        status_code = getattr(error, "status_code", 504)
+        try:
+            if lifetime.run_snapshot is not None:
+                from app.application.agent_orchestrator.chat_trace import (
+                    mark_legacy_chat_stream_interrupted,
+                )
+
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        mark_legacy_chat_stream_interrupted,
+                        lifetime.run_snapshot,
+                        pending=True,
+                        reason=reason,
+                    ),
+                    timeout=_STREAM_SAFETY_STORE_TIMEOUT,
+                )
+        except BOUNDARY_ERRORS as persistence_error:  # Request boundary; preserve unknown outcome.
+            status_code = 503
+            logger.warning(
+                "stream interruption persistence unavailable (%s)",
+                type(persistence_error).__name__,
+            )
+        yield _sse_event_line(
+            _sse_payload_with_run_id(
+                {
+                    "type": "error",
+                    "status_code": status_code,
+                    "message": str(error)
+                    or "对话观察超时；后台执行结果尚未确认，请核对任务，勿重复提交。",
+                    "execution_outcome": "unknown",
+                    "requires_reconciliation": True,
+                },
+                getattr(lifetime.run_snapshot, "run_id", None),
+            )
+        )
     finally:
         lifetime.cancel()
         worker.close()

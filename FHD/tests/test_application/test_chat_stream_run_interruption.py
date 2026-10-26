@@ -126,6 +126,8 @@ def test_unknown_readback_preserves_receipt_cost_and_later_real_completion(repos
     assert current.metadata["cost_units_total"] == 17
     assert current.metadata["stream_interruption"]["business_outcome"] == "unknown"
     assert len(repo.list_events(expected.run_id)) == 2
+    mark(expected, pending=True, reason="consumer_closed")
+    assert repo.get(expected.run_id).metadata["stream_interruption"]["worker_pending"] is False
     current.status = "completed"
     current.final_output["confirmed_later"] = True
     repo.save(current)
@@ -497,7 +499,7 @@ async def test_actual_observation_timeout_is_not_business_failure_and_never_repl
             assert observed.wait(2)
         mark(run, **state)
 
-    def watch(callback):
+    def watch(callback, **identity):
         def ordered(**state):
             if notify_order == "foreground_first":
                 assert release_observer.wait(2)
@@ -508,7 +510,7 @@ async def test_actual_observation_timeout_is_not_business_failure_and_never_repl
             finally:
                 in_observer.active = False
 
-        life.watch_stream_interruption(ordered)
+        life.watch_stream_interruption(ordered, **identity)
 
     def capture_extract(path, name, namespace):
         if name == "_xcagi_planner_stream_bytes":
@@ -689,6 +691,43 @@ def receipt_writer(repo):
             "_trace_safe_value": _trace_safe_value,
         },
     )
+
+
+@pytest.mark.parametrize("operation", ["interruption", "receipt", "control"])
+def test_persistent_snapshot_contention_is_bounded_without_changing_execution(
+    repositories, monkeypatch, operation
+):
+    from app.application.agent_orchestrator.run_lifecycle import RunLifecycleMixin
+
+    repo = repositories[0]()
+    expected = initial(repo)
+    before, attempts = expected.to_dict(), []
+
+    def contention(*args):
+        attempts.append(1)
+        if len(attempts) > 8:
+            pytest.fail("snapshot contention must not spin indefinitely")
+        return False
+
+    seam = {
+        "interruption": "save_stream_interruption_if_unchanged",
+        "receipt": "save_stream_tool_audit_if_unchanged",
+        "control": "save_control_if_unchanged",
+    }[operation]
+    monkeypatch.setattr(repo, seam, contention)
+    runner = RunLifecycleMixin()
+    runner._repo = repo
+    with pytest.raises(RuntimeError, match="changed repeatedly"):
+        if operation == "interruption":
+            observer(repo)(expected, pending=True, reason="synthetic")
+        elif operation == "receipt":
+            receipt_writer(repo)(expected, sequence=1, record={"output": "synthetic"})
+        else:
+            runner.cancel_run(expected.run_id, requested_by="owner")
+    assert len(attempts) == 8
+    assert repo.get(expected.run_id).to_dict() == before
+    if operation == "control":
+        assert repo.latest_task_control(expected.run_id).status == "requested"
 
 
 def actual_append_tools(monkeypatch, execute, workers=1):

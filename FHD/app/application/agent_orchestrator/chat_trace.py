@@ -415,7 +415,7 @@ def mark_legacy_chat_stream_interrupted(expected: AgentRun, *, pending: bool, re
     from app.application.agent_orchestrator.run_sql_repository import same_run_generation
 
     repository = get_agent_run_repository()
-    while True:
+    for _attempt in range(8):
         previous = repository.get(expected.run_id)
         if previous is None or previous.status not in {
             "queued",
@@ -437,6 +437,8 @@ def mark_legacy_chat_stream_interrupted(expected: AgentRun, *, pending: bool, re
         existing = previous.metadata.get("stream_interruption")
         if previous.status == "blocked" and not existing:
             return
+        if existing and existing.get("worker_pending") is False:
+            pending = False
         state = {
             "reason": reason,
             "worker_pending": pending,
@@ -471,6 +473,7 @@ def mark_legacy_chat_stream_interrupted(expected: AgentRun, *, pending: bool, re
         run.add_event("run.observation_interrupted", message, state)
         if repository.save_stream_interruption_if_unchanged(run, previous):
             return
+    raise RuntimeError("agent run changed repeatedly while recording stream interruption")
 
 
 def record_legacy_stream_tool_receipt(
@@ -483,7 +486,7 @@ def record_legacy_stream_tool_receipt(
 
     repository = get_agent_run_repository()
     entry = {"sequence": sequence, "record": _trace_safe_value(record)}
-    while True:
+    for _attempt in range(8):
         previous = repository.get(expected.run_id)
         if previous is None or not same_run_generation(previous, expected):
             raise ValueError("stream tool receipt owner or generation changed")
@@ -502,3 +505,4 @@ def record_legacy_stream_tool_receipt(
         )
         if repository.save_stream_tool_audit_if_unchanged(run, previous):
             return
+    raise RuntimeError("agent run changed repeatedly while recording tool receipt")
