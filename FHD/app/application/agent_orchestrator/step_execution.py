@@ -150,17 +150,23 @@ class StepExecution:
         tool_call.output = copy.deepcopy(step.output)
         tool_call.finished_at = step.finished_at
         tool_call.duration_ms = step.duration_ms
+        success = bool(step.output.get("success", False))
+        step.status = tool_call.status = "completed" if success else "failed"
+        if not success:
+            step.error = str(
+                step.output.get("message") or step.output.get("error") or "tool failed"
+            )
+            tool_call.error = step.error
+        # Persist the executed call before optional artifact/observation work.
+        self.repository.save(run)
         self.attach_artifacts(
             run,
             step.output,
             source=f"{step.tool_id}.{step.action}",
             extra_metadata={"step_id": step.step_id, "call_id": tool_call.call_id},
         )
-        success = bool(step.output.get("success", False))
         observation = self.observe(run, step, tool_call=tool_call, success=success)
         if success:
-            step.status = "completed"
-            tool_call.status = "completed"
             self.usage.refresh_run_cost_metadata(run)
             node_outputs[step.node_id] = step.output
             run.add_event(
@@ -176,11 +182,8 @@ class StepExecution:
                     "observation_id": observation.get("observation_id"),
                 },
             )
+            self.repository.save(run)
             return
-        step.status = "failed"
-        step.error = str(step.output.get("message") or step.output.get("error") or "tool failed")
-        tool_call.status = "failed"
-        tool_call.error = step.error
         if (
             str(step.output.get("error_code") or "") != "tool_billing_blocked"
             and not step.output.get("reconciliation_required")
@@ -202,3 +205,4 @@ class StepExecution:
                 "observation_id": observation.get("observation_id"),
             },
         )
+        self.repository.save(run)

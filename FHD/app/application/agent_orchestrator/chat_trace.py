@@ -406,3 +406,99 @@ def attach_chat_trace_run(
         logger.exception("failed to attach AgentRun trace to chat response")
         return payload
     return _attach_run_id(payload, run.run_id)
+
+
+def mark_legacy_chat_stream_interrupted(expected: AgentRun, *, pending: bool, reason: str) -> None:
+    """Record lost observation using the original owner/generation, never settle tools."""
+    import copy
+
+    from app.application.agent_orchestrator.run_sql_repository import same_run_generation
+
+    repository = get_agent_run_repository()
+    while True:
+        previous = repository.get(expected.run_id)
+        if previous is None or previous.status not in {
+            "queued",
+            "planning",
+            "running",
+            "retrying",
+            "blocked",
+            "cancelled",
+            "paused",
+        }:
+            return
+        if not same_run_generation(previous, expected):
+            return
+        if (
+            previous.status in {"cancelled", "paused"}
+            and (previous.metadata.get("control") or {}).get("state") != previous.status
+        ):
+            return
+        existing = previous.metadata.get("stream_interruption")
+        if previous.status == "blocked" and not existing:
+            return
+        state = {
+            "reason": reason,
+            "worker_pending": pending,
+            "business_outcome": "unknown",
+            "replay_allowed": False,
+        }
+        recovery = previous.metadata.get("recovery")
+        recovery = recovery if isinstance(recovery, dict) else {}
+        if (
+            existing == state
+            and previous.metadata.get("non_retryable") is True
+            and recovery.get("state") == "manual_reconciliation_required"
+        ):
+            return
+        run = copy.deepcopy(previous)
+        run.metadata["stream_interruption"] = state
+        # Reuse the server-side retry/resume/recovery gate, not only a UI hint.
+        run.metadata["non_retryable"] = True
+        run.metadata["recovery"] = {
+            **recovery,
+            "state": "manual_reconciliation_required",
+            "stream_interruption": state,
+        }
+        run.final_output["stream_interruption"] = state
+        if previous.status not in {"cancelled", "paused"}:
+            run.status = "running" if pending else "blocked"
+        message = (
+            "对话观察已中断，后台工作尚未结束；请核对任务结果，勿重复提交。"
+            if pending
+            else "对话观察已中断，执行线程已退出但业务结果未确认；请核对任务与账本，勿重复提交。"
+        )
+        run.add_event("run.observation_interrupted", message, state)
+        if repository.save_stream_interruption_if_unchanged(run, previous):
+            return
+
+
+def record_legacy_stream_tool_receipt(
+    expected: AgentRun, *, sequence: int, record: dict[str, Any]
+) -> None:
+    """Append bounded evidence only: no execution, billing, enrichment or finalization."""
+    import copy
+
+    from app.application.agent_orchestrator.run_sql_repository import same_run_generation
+
+    repository = get_agent_run_repository()
+    entry = {"sequence": sequence, "record": _trace_safe_value(record)}
+    while True:
+        previous = repository.get(expected.run_id)
+        if previous is None or not same_run_generation(previous, expected):
+            raise ValueError("stream tool receipt owner or generation changed")
+        audit = previous.metadata.get("stream_tool_audit") or []
+        matched = next((item for item in audit if item.get("sequence") == sequence), None)
+        if matched is not None:
+            if matched != entry:
+                raise ValueError("stream tool receipt sequence already has different evidence")
+            return
+        run = copy.deepcopy(previous)
+        run.metadata["stream_tool_audit"] = [*audit, entry]
+        run.add_event(
+            "tool.receipt_observed",
+            "已保存工具返回回执；不代表整项任务完成或重新结算",
+            {"sequence": sequence},
+        )
+        if repository.save_stream_tool_audit_if_unchanged(run, previous):
+            return

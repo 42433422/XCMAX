@@ -361,3 +361,46 @@ def test_desktop_repository_persists_four_tasks_concurrently(tmp_path, monkeypat
         }
     finally:
         engine.dispose()
+
+
+def test_sql_plain_save_locks_before_reading_concurrently_returned_evidence(tmp_path, monkeypatch):
+    from sqlalchemy import event
+
+    from app.application.agent_orchestrator import chat_trace
+
+    url = f"sqlite:///{tmp_path / 'save-receipt-race.sqlite'}"
+    engines = [create_engine(url) for _ in range(2)]
+    repo, writer = [
+        SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=e)) for e in engines
+    ]
+    original = repo.save(AgentRun(user_id="owner", message="write", status="running"))
+    writer._ensure_schema()
+    stale = repo.get(original.run_id)
+    monkeypatch.setattr(chat_trace, "get_agent_run_repository", lambda: writer)
+    injected = []
+
+    def returned_before_write(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("UPDATE agent_runs") and not injected:
+            injected.append(True)
+            chat_trace.mark_legacy_chat_stream_interrupted(
+                original, pending=True, reason="consumer_closed"
+            )
+            chat_trace.record_legacy_stream_tool_receipt(
+                original, sequence=1, record={"receipt": "committed-once"}
+            )
+
+    event.listen(engines[0], "before_cursor_execute", returned_before_write)
+    try:
+        repo.save(stale)
+        final = writer.get(original.run_id)
+        assert injected == [True]
+        assert final.metadata["non_retryable"] is True
+        assert final.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        assert final.metadata["stream_tool_audit"][0]["record"]["receipt"] == "committed-once"
+        assert {item.event_type for item in final.events} >= {
+            "run.observation_interrupted",
+            "tool.receipt_observed",
+        }
+    finally:
+        for engine in engines:
+            engine.dispose()

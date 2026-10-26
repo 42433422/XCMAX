@@ -6,7 +6,7 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 
 from __future__ import annotations
 
-import asyncio
+import asyncio as asyncio
 import hashlib
 import json
 import logging
@@ -25,6 +25,12 @@ from app.application.agent_orchestrator.chat_trace import (
 )
 from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run as finalize_legacy_chat_run,
+)
+from app.application.agent_orchestrator.chat_trace import (
+    mark_legacy_chat_stream_interrupted as mark_legacy_chat_stream_interrupted,
+)
+from app.application.agent_orchestrator.chat_trace import (
+    record_legacy_stream_tool_receipt as record_legacy_stream_tool_receipt,
 )
 from app.application.agent_orchestrator.chat_trace import (
     start_legacy_chat_run as start_legacy_chat_run,
@@ -46,8 +52,15 @@ from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
+from app.infrastructure.chat_stream_lifetime import (
+    StreamLifetime,
+    StreamObservationTimeout,
+    StreamWorker,
+    current_lifetime,
+)
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
@@ -358,71 +371,90 @@ def _xcagi_guarded_planner_stream_events(
     workspace_root: str,
     client: Any,
 ):
-    event_queue: queue.Queue[Any] = queue.Queue()
-    done_marker = object()
+    lifetime = current_lifetime.get() or StreamLifetime()
 
-    def _worker() -> None:
-        try:
-            from app.infrastructure.tenant_scope import tenant_scope
+    def events():
+        from contextlib import closing
 
-            with tenant_scope((runtime_context or {}).get("tenant_id")):
-                for ev in chat_stream_sse_events(
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with (
+            tenant_scope((runtime_context or {}).get("tenant_id")),
+            closing(
+                chat_stream_sse_events(
                     body.message,
                     runtime_context=runtime_context or None,
                     system_prompt=body.system_prompt,
                     workspace_root=workspace_root,
                     db_write_token=body.db_write_token,
                     client=client,
-                ):
-                    event_queue.put(ev)
-        except BOUNDARY_ERRORS as exc:
-            event_queue.put(exc)
-        finally:
-            event_queue.put(done_marker)
+                )
+            ) as stream,
+        ):
+            yield from stream
 
-    threading.Thread(target=_worker, daemon=True, name="xcagi-chat-stream-guard").start()
-
+    token = current_lifetime.set(lifetime)
+    try:
+        worker = StreamWorker(events)
+    finally:
+        current_lifetime.reset(token)
+    completed = False
     total_timeout = _xcagi_chat_timeout_seconds()
     first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
     first_event_seen = True
-    yield MODEL_STREAM_ACCEPTED_EVENT
+    try:
+        yield MODEL_STREAM_ACCEPTED_EVENT
 
-    while True:
-        elapsed = time.monotonic() - started_at
-        if elapsed >= total_timeout:
-            raise TimeoutError(
-                f"流式对话总超时（>{int(total_timeout)} 秒）。请稍后重试，或缩短问题范围。"
-            )
-
-        wait_timeout = first_token_timeout if not first_event_seen else idle_notice_seconds
-        wait_timeout = max(0.2, min(wait_timeout, total_timeout - elapsed))
-        try:
-            item = event_queue.get(timeout=wait_timeout)
-        except queue.Empty:
-            elapsed_int = int(time.monotonic() - started_at)
-            if not first_event_seen:
-                raise TimeoutError(
-                    f"流式对话首包超时（>{int(first_token_timeout)} 秒）。模型服务暂未返回首个分片，请稍后重试。"
+        next_notice = time.monotonic() + idle_notice_seconds
+        while True:
+            lifetime.check()
+            elapsed = time.monotonic() - started_at
+            if elapsed >= total_timeout:
+                lifetime.cancel("observation_timeout")
+                raise StreamObservationTimeout(
+                    f"对话观察超时（>{int(total_timeout)} 秒）。后台执行结果尚未确认，请到任务工作区核对，勿重复提交。"
                 )
-            yield {
-                "type": "token",
-                "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
-                "ephemeral": True,
-            }
-            continue
 
-        if item is done_marker:
-            return
-        if isinstance(item, Exception):
-            exc = _xcagi_chat_http_exc(item)
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            yield {"type": "error", "message": detail, "status_code": exc.status_code}
-            return
+            wait_timeout = first_token_timeout if not first_event_seen else idle_notice_seconds
+            wait_timeout = max(0.2, min(wait_timeout, total_timeout - elapsed))
+            try:
+                item = worker.queue.get(timeout=min(wait_timeout, 0.1))
+                # A read-close error after disconnect is not a business failure.
+                lifetime.check()
+            except queue.Empty:
+                if time.monotonic() < next_notice:
+                    continue
+                next_notice = time.monotonic() + idle_notice_seconds
+                elapsed_int = int(time.monotonic() - started_at)
+                if not first_event_seen:
+                    lifetime.cancel("observation_timeout")
+                    raise StreamObservationTimeout(
+                        f"对话首包观察超时（>{int(first_token_timeout)} 秒）。执行结果尚未确认，请核对任务，勿重复提交。"
+                    )
+                yield {
+                    "type": "token",
+                    "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
+                    "ephemeral": True,
+                }
+                continue
 
-        first_event_seen = True
-        yield item
+            if item is worker.END:
+                completed = True
+                return
+            if isinstance(item, Exception):
+                exc = _xcagi_chat_http_exc(item)
+                detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+                yield {"type": "error", "message": detail, "status_code": exc.status_code}
+                return
+
+            first_event_seen = True
+            yield item
+    finally:
+        worker.close()
+        if not completed:
+            lifetime.cancel("upstream_stream_stopped")
 
 
 def _sse_event_line(payload: dict) -> bytes:
@@ -464,38 +496,32 @@ async def _xcagi_planner_stream_bytes_async(
 ):
     """Async generator wrapper around _xcagi_planner_stream_bytes.
 
-    Runs the sync generator in a background thread and feeds items through an
-    asyncio.Queue so the event loop is NEVER blocked.  This avoids the
+    Runs the sync generator in a bounded, request-owned background bridge.
+    Cancellation closes only owned model reads; executed tools are not undone.  This avoids the
     Starlette BaseHTTPMiddleware / anyio thread-pool deadlock that occurs when
     a sync StreamingResponse generator is iterated via iterate_in_threadpool
     while the middleware task-group is still open.
     """
-    _SENTINEL = object()
-    async_q: asyncio.Queue = asyncio.Queue(maxsize=128)
-    loop = asyncio.get_running_loop()
-
-    def _feed_queue() -> None:
-        try:
-            for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
-                asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BOUNDARY_ERRORS as exc:
-            err_msg = str(exc).strip() or exc.__class__.__name__
-            err_line = _sse_event_line({"type": "error", "message": err_msg})
-            try:
-                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except RECOVERABLE_ERRORS:
-                pass
-        finally:
-            asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
-
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
-    thread.start()
-
-    while True:
-        item = await async_q.get()
-        if item is _SENTINEL:
-            break
-        yield item
+    lifetime = StreamLifetime()
+    token = current_lifetime.set(lifetime)
+    try:
+        worker = StreamWorker(lambda: _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier))
+    finally:
+        current_lifetime.reset(token)
+    try:
+        while True:
+            item = await worker.receive()
+            if item is worker.END:
+                break
+            if isinstance(item, Exception):
+                yield _sse_event_line(
+                    {"type": "error", "message": str(item).strip() or item.__class__.__name__}
+                )
+                break
+            yield item
+    finally:
+        lifetime.cancel()
+        worker.close()
 
 
 from app.fastapi_routes.xcagi_compat_chat_stream import (

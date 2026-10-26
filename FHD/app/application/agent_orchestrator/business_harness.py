@@ -123,6 +123,12 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
 
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
+    metadata = getattr(run, "metadata", {}) or {}
+    if status in {"failed", "cancelled", "blocked", "paused"} and (
+        metadata.get("non_retryable")
+        or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
+    ):
+        return "任务已停止后续执行；已有调用的结果待核对，请勿重复提交"
     if status == "failed":
         return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":

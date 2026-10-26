@@ -204,6 +204,8 @@ class BackgroundTaskExecutionMixin:
         run = self._repo.get(run_id)
         if run is None:
             return None
+        if requires_retry_reconciliation(run):
+            return cast("AgentRun | None", run)
         if run.status not in {"queued", "running", "retrying"}:
             return cast("AgentRun | None", run)
         if recovered and not self._prepare_expired_execution_recovery(run):
@@ -246,6 +248,8 @@ class BackgroundTaskExecutionMixin:
         return cast("AgentRun | None", self._repo.save(run))
 
     def _prepare_expired_execution_recovery(self, run: AgentRun) -> bool:
+        if requires_retry_reconciliation(run):
+            return False
         from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
 
         running_steps = [step for step in run.steps if step.status == "running"]

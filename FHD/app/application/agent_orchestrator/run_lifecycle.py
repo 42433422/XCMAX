@@ -24,13 +24,37 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
 
     _repo: Any
 
+    def _persist_control(
+        self, expected: AgentRun, control: str, *, requested_by: str, command_id: str
+    ) -> AgentRun | None:
+        """Rebase control changes on the latest same-generation audit snapshot."""
+        import copy
+
+        from app.application.agent_orchestrator.run_sql_repository import same_run_generation
+
+        while True:
+            previous = self._repo.get(expected.run_id)
+            if previous is None:
+                return None
+            if not same_run_generation(previous, expected):
+                return cast("AgentRun", previous)
+            if previous.status in {"completed", "failed", "cancelled"}:
+                return cast("AgentRun", previous)
+            run = copy.deepcopy(previous)
+            self._mark_controlled(run, control, requested_by=requested_by, command_id=command_id)
+            if control == "pause":
+                run.metadata["control"]["resume_status"] = (
+                    "waiting_user" if previous.status == "waiting_user" else "running"
+                )
+            if self._repo.save_control_if_unchanged(run, previous):
+                return cast("AgentRun", self._repo.get(run.run_id))
+
     def pause_run(self, run_id: str, *, requested_by: str = "") -> AgentRun | None:
         run = self._repo.get(run_id)
         if run is None:
             return None
         if run.status in {"completed", "failed", "cancelled"}:
             return cast("AgentRun | None", run)
-        resume_status = "waiting_user" if run.status == "waiting_user" else "running"
         command = self._repo.request_task_control(run_id, "pause", requested_by=requested_by)
         execution = run.metadata.get("execution")
         execution_active = isinstance(execution, dict) and execution.get("state") == "active"
@@ -42,22 +66,15 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 "command_id": command.command_id,
             }
             return cast("AgentRun | None", run)
-        run.status = "paused"
-        run.metadata["control"] = {
-            "state": "paused",
-            "requested_by": requested_by,
-            "resume_status": resume_status,
-            "command_id": command.command_id,
-        }
-        run.add_event(
-            "run.paused",
-            "Agent run 已暂停",
-            {"requested_by": requested_by, "command_id": command.command_id},
+        stored = self._persist_control(
+            run, "pause", requested_by=requested_by, command_id=command.command_id
         )
-        stored = self._repo.save(run)
         self._repo.mark_task_control(
             command.command_id,
-            "applied",
+            "applied"
+            if stored is not None
+            and (stored.metadata.get("control") or {}).get("state") == "paused"
+            else "rejected",
             applied_at=utc_now_iso(),
         )
         return cast("AgentRun | None", stored)
@@ -79,16 +96,15 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
                 "command_id": command.command_id,
             }
             return cast("AgentRun | None", run)
-        self._mark_controlled(
-            run,
-            "cancel",
-            requested_by=requested_by,
-            command_id=command.command_id,
+        stored = self._persist_control(
+            run, "cancel", requested_by=requested_by, command_id=command.command_id
         )
-        stored = self._repo.save(run)
         self._repo.mark_task_control(
             command.command_id,
-            "applied",
+            "applied"
+            if stored is not None
+            and (stored.metadata.get("control") or {}).get("state") == "cancelled"
+            else "rejected",
             applied_at=utc_now_iso(),
         )
         return cast("AgentRun | None", stored)
@@ -208,34 +224,24 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
             or command.action not in {"pause", "cancel"}
         ):
             return False
-        if run.status in {"completed", "failed", "cancelled"}:
-            self._repo.mark_task_control(
-                command.command_id,
-                "rejected",
-                applied_at=utc_now_iso(),
-            )
-            return False
-        control = run.metadata.get("control")
-        last_command_id = str(control.get("command_id") or "") if isinstance(control, dict) else ""
-        if last_command_id == command.command_id and run.status in {"paused", "cancelled"}:
-            if command.status == "requested":
-                self._repo.mark_task_control(
-                    command.command_id,
-                    "applied",
-                    applied_at=utc_now_iso(),
-                )
-            return True
-        self._mark_controlled(
-            run,
-            command.action,
-            requested_by=command.requested_by,
-            command_id=command.command_id,
+        if run.status not in {"completed", "failed", "cancelled"}:
+            # Preserve execution facts held only by this worker before rebasing
+            # the control delta on the current same-generation snapshot.
+            self._repo.save(run)
+        stored = self._persist_control(
+            run, command.action, requested_by=command.requested_by, command_id=command.command_id
         )
-        self._repo.save(run)
+        if stored is None:
+            return False
+        import copy
+
+        run.__dict__.update(copy.deepcopy(stored.__dict__))
+        control = run.metadata.get("control") or {}
+        applied = control.get("command_id") == command.command_id and run.status == (
+            "cancelled" if command.action == "cancel" else "paused"
+        )
         self._repo.mark_task_control(
-            command.command_id,
-            "applied",
-            applied_at=utc_now_iso(),
+            command.command_id, "applied" if applied else "rejected", applied_at=utc_now_iso()
         )
         return True
 
@@ -247,13 +253,29 @@ class RunLifecycleMixin(DurableExecutionLeaseMixin):
         requested_by: str = "",
         command_id: str = "",
     ) -> None:
+        if run.metadata.get("trace_mode") in {
+            "legacy_planner_run",
+            "legacy_planner_run_with_tools",
+        } and run.status in {"planning", "running", "retrying"}:
+            # The observation callback may not have run yet. Persist the replay
+            # gate atomically with control while the original stream can write.
+            run.metadata["non_retryable"] = True
+            run.metadata["recovery"] = {
+                **(run.metadata.get("recovery") or {}),
+                "state": "manual_reconciliation_required",
+                "error_code": "legacy_stream_control_unsettled",
+            }
         if control == "cancel":
             for step in run.steps:
                 if step.status in {"pending", "retrying", "waiting_user"}:
                     step.status = "skipped"
                     step.error = "run cancelled before execution"
             run.status = "cancelled"
-            run.error = "run cancelled"
+            run.error = (
+                "任务已停止继续执行；已有调用结果仍需人工核对"
+                if requires_retry_reconciliation(run)
+                else "run cancelled"
+            )
             run.metadata["control"] = {
                 "state": "cancelled",
                 "requested_by": requested_by,

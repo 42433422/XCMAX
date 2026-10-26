@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
+from contextlib import closing
 from types import SimpleNamespace
 from typing import Any
 
 from app.domain.app_pure.document_employee_routing import forced_document_tool_choice
+from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
 from app.infrastructure.llm.client import llm_client_scope
 
 
@@ -255,6 +257,7 @@ def chat_stream_text(
         user_message, runtime_context, system_prompt, client, model
     )
     for _ in range(max_iterations):
+        check_stream_active()
         stream = cli.chat.completions.create(
             model=mdl,
             messages=messages,
@@ -265,35 +268,38 @@ def chat_stream_text(
         text_parts: list[str] = []
         tool_calls_by_idx: dict[int, Any] = {}
         finish_reason = None
-        for chunk in stream:
-            choices = getattr(chunk, "choices", None)
-            if not choices:  # Usage/accounting frames carry no assistant delta.
-                continue
-            choice = choices[0]
-            finish_reason = getattr(choice, "finish_reason", None)
-            delta = getattr(choice, "delta", None)
-            if delta is None:
-                continue
-            content = getattr(delta, "content", None)
-            if content:
-                text_parts.append(str(content))
-                if not backup_required:
-                    yield str(content)
-            tc_list = getattr(delta, "tool_calls", None) or []
-            for position, tc in enumerate(tc_list):
-                index = getattr(tc, "index", None)
-                idx = position if index is None else int(index)
-                cur = tool_calls_by_idx.setdefault(
-                    idx,
-                    {
-                        "id": getattr(tc, "id", None),
-                        "function": {"name": None, "arguments": ""},
-                    },
-                )
-                fn = getattr(tc, "function", None)
-                if fn_name := getattr(fn, "name", None):
-                    cur["function"]["name"] = fn_name
-                cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
+        with owned_model_read(stream):
+            for chunk in stream:
+                check_stream_active()
+                choices = getattr(chunk, "choices", None)
+                if not choices:  # Usage/accounting frames carry no assistant delta.
+                    continue
+                choice = choices[0]
+                finish_reason = getattr(choice, "finish_reason", None)
+                delta = getattr(choice, "delta", None)
+                if delta is None:
+                    continue
+                content = getattr(delta, "content", None)
+                if content:
+                    text_parts.append(str(content))
+                    if not backup_required:
+                        yield str(content)
+                tc_list = getattr(delta, "tool_calls", None) or []
+                for position, tc in enumerate(tc_list):
+                    index = getattr(tc, "index", None)
+                    idx = position if index is None else int(index)
+                    cur = tool_calls_by_idx.setdefault(
+                        idx,
+                        {
+                            "id": getattr(tc, "id", None),
+                            "function": {"name": None, "arguments": ""},
+                        },
+                    )
+                    fn = getattr(tc, "function", None)
+                    if fn_name := getattr(fn, "name", None):
+                        cur["function"]["name"] = fn_name
+                    cur["function"]["arguments"] += str(getattr(fn, "arguments", "") or "")
+        check_stream_active()
         if tool_calls_by_idx:
             for v in tool_calls_by_idx.values():
                 tool_name = str(v.get("function", {}).get("name", "") or "")
@@ -323,6 +329,7 @@ def chat_stream_text(
             messages.append(
                 {"role": "assistant", "content": "", "tool_calls": formatted_tool_calls}
             )
+            check_stream_active()
             with llm_client_scope(cli, mdl):
                 token_request = _facade().append_tool_messages(
                     messages,
@@ -331,6 +338,7 @@ def chat_stream_text(
                     runtime_context=runtime_context,
                     db_write_token=db_write_token,
                 )
+            check_stream_active()
             if token_request and token_request.get("requires_token"):
                 yield {
                     "_planner_sse": "requires_token",
@@ -392,36 +400,39 @@ def chat_stream_sse_events(
     model: str | None = None,
     client: Any | None = None,
 ):
-    for item in _facade().chat_stream_text(
-        user_message,
-        runtime_context=runtime_context,
-        system_prompt=system_prompt,
-        workspace_root=workspace_root,
-        max_iterations=max_iterations,
-        db_write_token=db_write_token,
-        model=model,
-        client=client,
-    ):
-        if isinstance(item, dict) and item.get("_planner_sse") == "error":
-            yield {
-                "type": "error",
-                "message": item["message"],
-                "error": item.get("error") or "planner_failed",
-                "result": _failed_reply(item["message"], item.get("error") or "planner_failed"),
-            }
-            return
-        if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
-            td = str(
-                item.get("token_description") or item.get("message") or "数据库写入授权令牌"
-            ).strip()
-            tn = str(item.get("token_name") or "DB_WRITE_TOKEN").strip()
-            yield {"type": "token", "text": f"\n[需要授权: {td}]\n"}
-            yield {
-                "type": "requires_token",
-                "token_name": tn,
-                "token_description": td,
-                "result": _facade()._attach_last_tool_records({}),
-            }
-            return
-        yield {"type": "token", "text": str(item)}
+    with closing(
+        _facade().chat_stream_text(
+            user_message,
+            runtime_context=runtime_context,
+            system_prompt=system_prompt,
+            workspace_root=workspace_root,
+            max_iterations=max_iterations,
+            db_write_token=db_write_token,
+            model=model,
+            client=client,
+        )
+    ) as stream:
+        for item in stream:
+            if isinstance(item, dict) and item.get("_planner_sse") == "error":
+                yield {
+                    "type": "error",
+                    "message": item["message"],
+                    "error": item.get("error") or "planner_failed",
+                    "result": _failed_reply(item["message"], item.get("error") or "planner_failed"),
+                }
+                return
+            if isinstance(item, dict) and item.get("_planner_sse") == "requires_token":
+                td = str(
+                    item.get("token_description") or item.get("message") or "数据库写入授权令牌"
+                ).strip()
+                tn = str(item.get("token_name") or "DB_WRITE_TOKEN").strip()
+                yield {"type": "token", "text": f"\n[需要授权: {td}]\n"}
+                yield {
+                    "type": "requires_token",
+                    "token_name": tn,
+                    "token_description": td,
+                    "result": _facade()._attach_last_tool_records({}),
+                }
+                return
+            yield {"type": "token", "text": str(item)}
     yield {"type": "done", "result": _facade()._attach_last_tool_records({})}
