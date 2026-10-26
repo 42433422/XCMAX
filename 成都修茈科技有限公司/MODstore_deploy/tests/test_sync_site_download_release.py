@@ -64,9 +64,7 @@ def test_preserves_exact_public_identity_and_history_not_newest_candidate(
         "release_history": [{"version": "1.0.0.6"}, {"version": "1.0.0.5"}],
     }
     content = json.dumps(published, indent=3).encode() + b"\n"
-    hotfix = (
-        b'{"version":"1.0.0.6","git_sha":"different-build","stable_auto_update":false}'
-    )
+    hotfix = b'{"version":"1.0.0.6","git_sha":"different-build","stable_auto_update":false}'
     for name, data in (
         ("download-release.json", content),
         ("download-windows-hotfix.json", hotfix),
@@ -123,11 +121,7 @@ def test_absent_public_hotfix_removes_stale_staged_copy(tmp_path: Path) -> None:
 def test_server_and_static_publishers_never_infer_desktop_publication() -> None:
     script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
     sync = script.index('python3 "$POINTER_SYNC" --site-root')
-    assert (
-        script.index("npm run build")
-        < sync
-        < script.index('chmod -R a-w "$BUILD_ROOT"')
-    )
+    assert script.index("npm run build") < sync < script.index('chmod -R a-w "$BUILD_ROOT"')
     assert '--published-site-root "$SITE_LINK"' in script[sync : sync + 300]
     assert "TARGET_SHA" not in script[sync : script.index("\n\n", sync)]
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text()
@@ -137,9 +131,7 @@ def test_server_and_static_publishers_never_infer_desktop_publication() -> None:
 
 
 @pytest.mark.parametrize("stale", ["root", "mirror", "hotfix", "symlink", None])
-def test_check_is_read_only_and_requires_exact_pointer_set(
-    tmp_path: Path, stale
-) -> None:
+def test_check_is_read_only_and_requires_exact_pointer_set(tmp_path: Path, stale) -> None:
     for name in ("live", "staged"):
         (tmp_path / name).mkdir()
     pointer = "download-release.json"
@@ -195,9 +187,7 @@ def test_publication_lock_serializes_switch_and_rechecks_waited_pointer(
     _assert_public_switch(tmp_path, rollback, changed_while_waiting, wait=True)
 
 
-def _assert_public_switch(
-    tmp_path: Path, rollback: bool, stale: bool, *, wait: bool
-) -> None:
+def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: bool) -> None:
     script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
     current, site = tmp_path / "current", tmp_path / "site"
     original = b'{"version":"1.0.0.6"}\n'
@@ -205,16 +195,12 @@ def _assert_public_switch(
         target = tmp_path / name / "site"
         target.mkdir(parents=True)
         content = (
-            b'{"version":"1.0.0.5"}'
-            if stale and not wait and name == "prepared"
-            else original
+            b'{"version":"1.0.0.5"}' if stale and not wait and name == "prepared" else original
         )
         (target / "download-release.json").write_bytes(content)
     current.symlink_to(tmp_path / "active")
     site.symlink_to(current / "site")
-    lock, attempted, protected = (
-        tmp_path / name for name in ("lock", "attempted", "protected")
-    )
+    lock, attempted, protected = (tmp_path / name for name in ("lock", "attempted", "protected"))
     # Exercise real kernel flock on macOS too, where the flock CLI is absent.
     flock = tmp_path / "flock"
     flock.write_text(
@@ -223,12 +209,8 @@ def _assert_public_switch(
         "fcntl.flock(int(sys.argv[-1]), fcntl.LOCK_EX)\n"
     )
     flock.chmod(0o755)
-    acquire = re.search(
-        r"acquire_publication_lock\(\) \{.*?^}", script, re.M | re.S
-    ).group()
-    verify = re.search(
-        r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S
-    ).group()
+    acquire = re.search(r"acquire_publication_lock\(\) \{.*?^}", script, re.M | re.S).group()
+    verify = re.search(r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S).group()
     verify = verify.replace(
         '"/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"',
         shlex.quote(str(tmp_path / "absent-hotfix")),
@@ -250,9 +232,7 @@ def _assert_public_switch(
         "PREVIOUS_SHA": "",
         "PREVIOUS_ARTIFACT_SHA": "",
     }
-    setup = "\n".join(
-        f"{key}={shlex.quote(str(value))}" for key, value in variables.items()
-    )
+    setup = "\n".join(f"{key}={shlex.quote(str(value))}" for key, value in variables.items())
     # A second open must still contend after the switch, during health/rollback.
     probe = (
         "import fcntl, pathlib, sys\n"
@@ -298,14 +278,10 @@ def _assert_public_switch(
                 ):
                     time.sleep(0.01)
                 assert attempted.exists(), "switch did not reach the shared lock"
-                assert process.poll() is None, (
-                    "switch passed another publisher's held lock"
-                )
+                assert process.poll() is None, "switch passed another publisher's held lock"
                 assert current.resolve() == tmp_path / "active"
                 if stale:
-                    (site / "download-release.json").write_bytes(
-                        b'{"version":"1.0.0.7"}'
-                    )
+                    (site / "download-release.json").write_bytes(b'{"version":"1.0.0.7"}')
                 fcntl.flock(held, fcntl.LOCK_UN)
             stdout, stderr = process.communicate(timeout=10)
         finally:
