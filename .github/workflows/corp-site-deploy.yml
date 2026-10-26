@@ -112,13 +112,17 @@ jobs:
             # market/runtime dependencies and restarts services, outside this scope.
             SYNC_STAGE=publish
             SITE_ROOT="${REMOTE_ROOT}/成都修茈科技有限公司"
+            GIT_SITE="${SITE_ROOT}"
+            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
+            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
+            PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+            mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+            exec 8>"$PUBLICATION_LOCK"
+            flock -w 60 8
             # Publish git-tree site chrome into nginx live root. Production serves
             # /root/成都修茈科技有限公司 (immutable-release symlink), not /root/XCMAX/...
             LIVE_SITE="$(readlink -f /root/成都修茈科技有限公司 2>/dev/null || true)"
             if [ -z "${LIVE_SITE}" ]; then LIVE_SITE="/root/成都修茈科技有限公司"; fi
-            GIT_SITE="${SITE_ROOT}"
-            python3 "${GIT_SITE}/scripts/evidence_assets.py" materialize
-            node "${XCMAX_ROOT}/scripts/dev/materialize_media_assets.mjs" marketing
             if [ -d "${GIT_SITE}" ] && [ -d "${LIVE_SITE}" ] && [ "$(readlink -f "${GIT_SITE}")" != "${LIVE_SITE}" ]; then
               echo "[info] publishing site chrome ${GIT_SITE} -> ${LIVE_SITE}"
               chmod u+w "${LIVE_SITE}" 2>/dev/null || true
@@ -177,6 +181,7 @@ jobs:
             else
               echo "[info] live site root coincides with git tree or missing; skip publish copy"
             fi
+            exec 8>&-
             SYNC_STAGE=nginx
             NGINX_SRC="${SITE_ROOT}/nginx-xiu-ci-root.conf"
             if [ -f /etc/nginx/conf.d/xiu-ci.com.conf ]; then

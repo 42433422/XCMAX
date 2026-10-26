@@ -161,3 +161,26 @@ test('the checked-in generated projection renders every canonical record without
   assert.equal(node('release-list').children.length, rows.length)
   for (const row of rows) assert.ok(node('release-list').textContent.includes('v' + row.version))
 })
+
+test('a disclosed test-only Windows artifact has its own identity and leaves stable and Mac unchanged', async () => {
+  const testVersion = '2.3.4.6', testRoot = 'https://xiu-ci.com/xcagi-v' + testVersion
+  const hotfix = interim(), filename = `XCAGI-Enterprise-Setup-${testVersion}-x64-unsigned.exe`
+  Object.assign(hotfix, { version: testVersion, release: { version: testVersion, test_only: true, notes: ['ETL not accepted', 'Original fifteen scenarios remain open'] } })
+  Object.assign(hotfix.artifact, { filename, url: `${testRoot}/enterprise/${sha}/${digest}/${filename}` })
+  const files = { ...historyFiles([{ version, notes: [] }]), [root + '/manifest.json']: manifest(), '/download-windows-hotfix.json': hotfix }
+  for (const page of ['download', 'download-releases']) {
+    const { node, api } = await render(page, files)
+    assert.equal(api.view(pointer, manifest(), hotfix).platform('win').version, testVersion)
+    assert.equal(api.view(pointer, manifest(), hotfix).platform('mac', 'arm64').version, version)
+    const text = node(page === 'download' ? 'download-note' : 'summary-changes').textContent
+    assert.match(text, /测试版/); assert.match(text, /ETL not accepted/); assert.match(text, /fifteen scenarios/)
+    assert.equal(api.view(pointer, manifest(), { ...hotfix, release: { ...hotfix.release, test_only: false } }).interim(), null)
+    for (const patch of [{ version }, { notes: [] }]) {
+      assert.equal(api.view(pointer, manifest(), { ...hotfix, release: { ...hotfix.release, ...patch } }).interim(), null)
+    }
+  }
+  const download = await render('download', files)
+  assert.equal(download.node('download-list').children[0].href, hotfix.artifact.url)
+  assert.match(download.node('download-list').children[0].textContent, /测试版/)
+  assert.equal(download.node('download-list').children[1].href, manifest().channels.official_download.enterprise.mac[0].url)
+})

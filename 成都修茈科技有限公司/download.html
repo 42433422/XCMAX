@@ -648,7 +648,7 @@
           var desktopRows = [
             {
               platform: 'win',
-              name: hotfix ? 'Windows 64 位 · 临时交付 v' + hotfix.version : 'Windows 64 位',
+              name: hotfix ? 'Windows 64 位 · ' + (hotfix.release && hotfix.release.test_only ? '测试版 v' : '临时交付 v') + hotfix.version : 'Windows 64 位',
             },
             { platform: 'mac', arch: 'arm64', name: 'macOS · Apple Silicon' },
             { platform: 'mac', arch: 'x64', name: 'macOS · Intel' },
@@ -676,7 +676,7 @@
           noteEl.textContent = state.tab === 'android'
             ? 'Android 为实验版（非签约级）；仅在制品清单校验通过后开放下载。'
             : '各平台分别核对清单中的版本、构建身份、文件大小及 SHA-256；未开放不代表历史版本未发布。' +
-              (hotfix ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '；不进入稳定自动更新。' : '')
+              (hotfix ? 'Windows ' + (hotfix.release && hotfix.release.test_only ? '测试版' : '临时交付包') + ' Authenticode 状态：' + hotfix.signature_status + '；不进入稳定自动更新。' + (hotfix.release && hotfix.release.test_only ? ' 已知问题与范围：' + hotfix.release.notes.join('；') : '') : '')
           listEl.replaceChildren()
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null

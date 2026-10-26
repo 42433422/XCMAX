@@ -23,6 +23,7 @@ GITHUB_REPOSITORY_SLUG="${XCMAX_GITHUB_REPOSITORY:-}"
 SITE_SUBDIR="成都修茈科技有限公司"
 MODSTORE_SUBDIR="${SITE_SUBDIR}/MODstore_deploy"
 LOCK_FILE="${XCMAX_RELEASE_LOCK:-/run/lock/xcmax-immutable-release.lock}"
+PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
 HEALTH_URL="${MODSTORE_DEPLOY_HEALTH_URL:-http://127.0.0.1:9999/api/health}"
 SCHEDULER_HEALTH_URL="${MODSTORE_SCHEDULER_HEALTH_URL:-http://127.0.0.1:9990/api/health}"
 PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
@@ -34,6 +35,12 @@ verify_public_pointers() {
   python3 "$POINTER_SYNC" --check --site-root "$1/$SITE_SUBDIR" \
     --published-site-root "$SITE_LINK" \
     --published-hotfix "/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"
+}
+
+acquire_publication_lock() {
+  mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+  exec 8>"$PUBLICATION_LOCK"
+  flock -w 60 8 || fail "another public-site publication is active"
 }
 
 log() { printf '[xcmax-release] %s\n' "$*"; }
@@ -1033,6 +1040,9 @@ assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
 migrate_delivery_state false
 
+# Acquire only after the build/migrations. Keep this lock through health checks
+# and rollback; those paths must not reacquire it through a child publisher.
+acquire_publication_lock
 verify_public_pointers "$FINAL_ROOT" || fail "public desktop pointers changed before activation"
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
