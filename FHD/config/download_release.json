@@ -1,6 +1,20 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT（发布链种子）。当前只发布 enterprise；personal 已冻结。download_version/version_lock 是待发布目标而非已发布事实：release_ready 为 false 期间不得对外宣称该版本已发布，对外已发布版本一律以线上 /download-release.json 指针为准。Android 继续发布已验收的 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
+  "_doc": "版本演进与发布意图唯一目录；release_history 保留历史世代，不等于正式发布次数。VERSION.md 管候选数字；逐制品 deliveries 及不可变发布清单提供渠道状态/身份/证据。官网、客户端、GitHub 是派生视图，必须交叉核验，不单独充当总账。release_ready 是旧兼容字段，不能证明所有平台已发布。企业版活跃、个人版冻结；工具链使用三段映射。",
+  "release_policy": {
+    "history_scope": "product_evolution",
+    "states": ["candidate", "accepted", "published", "withdrawn"],
+    "identity_fields": ["product", "sku", "platform", "arch", "channel", "source_sha", "build_run_id", "artifact_sha256"],
+    "evidence_by_state": {
+      "candidate": [],
+      "accepted": ["acceptance"],
+      "published": ["acceptance", "authorization", "publication"],
+      "withdrawn": ["acceptance", "authorization", "publication", "withdrawal"]
+    },
+    "signed_channels": ["stable-ota"],
+    "notarized_platforms": ["macos"],
+    "legacy_records": "History without deliveries is evolution provenance, not proof of publication; reconcile original manifests, never infer missing identities."
+  },
   "version_lock": "1.0.0.6",
   "marketing_version": "1.0.0.6",
   "download_version": "1.0.0.6",
@@ -44,12 +58,14 @@
   },
   "release_history": [
     {
+      "kind": "release", "publication_state": "published", "publication_scope": "historical-manual-download",
       "version": "1.0.0.6", "date": "2026-10-13",
       "title": "统一桌面发布", "channel": "稳定版（手动下载）",
       "notes": ["1.0.0.6 已于 2026-10-17 部署到生产；Windows x64 与 macOS Apple Silicon 安装包已完成实机安装验收和公网全量下载校验，发布在官网 1.0.0.6 版本目录，可手动下载，安装前请核对 SHA-256。", "Windows 安装包未做 Authenticode 签名，不进入自动更新；macOS 应用内自动更新仍停留在 1.0.0.5，1.0.0.6 暂未推送应用内更新，请手动下载覆盖安装。"],
       "platforms": ["Windows x64 手动下载（未签名）", "macOS Apple Silicon 手动下载"]
     },
     {
+      "kind": "release", "publication_state": "unknown",
       "version": "1.0.0.5",
       "date": "2026-09-17",
       "title": "Mac 应用内更新自动退出与自动重启验证版本",
@@ -64,6 +80,14 @@
       ]
     },
     {
+      "kind": "release", "publication_state": "unknown",
+      "version": "1.0.0.4", "date": "2026-09-14",
+      "title": "Mac 应用内更新退出与发货单修复", "channel": "历史发布记录（制品待对账）",
+      "notes": ["主线 CHANGELOG 记载本版发布：修复 macOS 应用内安装更新无法退出、OTA 失败后退出状态残留，以及发货单模板与生成下载链路。", "此条补齐有源码依据的版本演进；安装包、签名、公证、下载和验收身份仍须对账，不据此开放任何当前下载或 OTA 入口。"],
+      "provenance": {"repository": "42433422/XCMAX", "commit": "54d4541cbe4cd77e258163c75e3e9fc8c886b507", "path": "FHD/CHANGELOG.md", "section": "1.0.0.4（2026-09-14 发布）", "artifact_reconciliation": "pending"}
+    },
+    {
+      "kind": "release", "publication_state": "unknown",
       "version": "1.0.0.3",
       "date": "2026-09-13",
       "title": "Mac 模板上传写入修复",
@@ -71,13 +95,15 @@
       "notes": [
         "修复太阳鸟等已授权客户的 macOS 正式包模板上传写入受限路径，模板导入不再报错。",
         "修复新建发货单调用旧接口导致模板列表、生成与下载失效的问题。",
-        "1.0.0.3 安装包已上传稳定下载目录并公开 SHA-256，但更新清单尚未发布、对外发布指针未推进（release_ready=false），对外版本仍为 1.0.0.2。"
+        "1.0.0.3 安装包已上传稳定下载目录并公开 SHA-256，但更新清单尚未发布、对外发布指针未推进（release_ready=false），对外版本仍为 1.0.0.2。",
+        "以上为历史下载说明的当时状态；CHANGELOG 另记正式发布及随后恢复元数据发布。两种时间点记录保留，制品待对账，不据此判定当前可下载。"
       ],
       "platforms": [
         "macOS Apple Silicon 1.0.0.3 稳定版"
       ]
     },
     {
+      "kind": "release", "publication_state": "unknown",
       "version": "1.0.0.2",
       "date": "2026-09-13",
       "title": "Mac 模板导入与行业能力修复",
@@ -92,6 +118,7 @@
       ]
     },
     {
+      "kind": "release", "publication_state": "unknown",
       "version": "1.0.0.1",
       "date": "2026-09-02",
       "title": "太阳鸟行业考勤归并与企业交付可见",
@@ -112,6 +139,7 @@
       ]
     },
     {
+      "kind": "release", "publication_state": "unknown",
       "version": "1.0.0.0",
       "date": "2026-07-13",
       "title": "企业版稳定发布基线",
@@ -129,6 +157,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "10.0.0",
       "date": "2026-06-03",
       "title": "单轨收敛与六线打通",
@@ -140,6 +169,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "9.0.x",
       "date": "2026-05-29",
       "title": "认证、异步、锁与 CI 全面硬化",
@@ -151,6 +181,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "8.0.0",
       "date": "2026-05-21",
       "title": "跨行业 UI 与行业预设",
@@ -162,6 +193,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "7.0.0",
       "date": "2026-04-29",
       "title": "桌面版与 Web 并行交付",
@@ -173,6 +205,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "6.0.0",
       "date": "2026-04-28",
       "title": "商业模式与 Mod 生态成型",
@@ -184,6 +217,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "5.0.0",
       "date": "2026-04-20",
       "title": "Neuro-DDD 与审批流",
@@ -195,6 +229,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "4.0.0",
       "date": "2026-04-05",
       "title": "AI 员工体系与多模态交互",
@@ -206,6 +241,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "3.0.0",
       "date": "2026-03-15",
       "title": "混合意图引擎与任务 Agent",
@@ -217,6 +253,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "2.0.0",
       "date": "2026-02-20",
       "title": "Vue 3、AI 对话与 OCR",
@@ -228,6 +265,7 @@
       ]
     },
     {
+      "kind": "milestone", "publication_state": "unknown",
       "version": "1.0.0",
       "date": "2026-01-15",
       "title": "Excel 解析与标签打印起点",

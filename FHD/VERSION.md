@@ -12,7 +12,7 @@
 | **XCAGI 稳定产品版本** | `1.0.0.6` | 对外版本、发布目录、下载清单、Windows 文件/产品版本、Python/FastAPI、Android `versionName` |
 | **工具链兼容版本** | `1.0.0` | npm/Electron、Dart/Flutter、iOS/macOS `MARKETING_VERSION` |
 
-四段产品版本 `1.0.0.6` 是本轮候选目标，尚未发布；已发布版本只认线上 `/download-release.json`。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
+四段产品版本是当前源码目标；同版本的历史交付与新候选按制品身份区分，不能一概称为未发布。发布口径遵循上方 `PRODUCT_VERSION_SSOT.md`；公开指针须与原制品清单交叉核验。npm SemVer、Electron、Dart pub 和 Apple 市场版本只接受三段版本，因此这些锚点使用等价映射 `1.0.0`；它们不代表另一个产品版本。
 
 ## 🔗 必须同步的锚点
 
