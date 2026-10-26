@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable
-from contextlib import closing
 from types import SimpleNamespace
 from typing import Any
 
@@ -400,7 +399,7 @@ def chat_stream_sse_events(
     model: str | None = None,
     client: Any | None = None,
 ):
-    with closing(
+    with owned_model_read(
         _facade().chat_stream_text(
             user_message,
             runtime_context=runtime_context,

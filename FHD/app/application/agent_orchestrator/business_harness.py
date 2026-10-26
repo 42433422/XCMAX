@@ -128,7 +128,9 @@ def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
         metadata.get("non_retryable")
         or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
     ):
-        return "任务已停止后续执行；已有调用的结果待核对，请勿重复提交"
+        warning = "任务已停止后续执行；已有调用的结果待核对，请勿重复提交"
+        error = public_run_error(run) if status == "failed" else ""
+        return f"{error}\n{warning}" if error else warning
     if status == "failed":
         return public_run_error(run) or "业务任务执行失败，详细信息已记录"
     if status == "cancelled":
