@@ -111,9 +111,13 @@ def test_download_pages_share_bounded_interim_and_artifact_identity_validation()
 def test_history_projection_preserves_canonical_records_without_rewriting_current_pointer() -> None:
     source = json.loads((REPO_ROOT / "FHD/config/download_release.json").read_text())
     history = json.loads((REPO_ROOT / "成都修茈科技有限公司/data/release-history.json").read_text())
-    project = runpy.run_path(str(REPO_ROOT / "成都修茈科技有限公司/scripts/build_capability_center.py"))["public_projection"]
+    project = runpy.run_path(
+        str(REPO_ROOT / "成都修茈科技有限公司/scripts/build_capability_center.py")
+    )["public_projection"]
     assert history["release_history"] == project(source["release_history"], set())
-    assert "太阳鸟行业考勤归并与企业交付可见" in [entry["title"] for entry in source["release_history"]]
+    assert "太阳鸟行业考勤归并与企业交付可见" in [
+        entry["title"] for entry in source["release_history"]
+    ]
     public_text = json.dumps(history, ensure_ascii=False).casefold()
     assert "太阳鸟" not in public_text and "sunbird" not in public_text
     page = (REPO_ROOT / "成都修茈科技有限公司/download-releases.html").read_text()
