@@ -237,7 +237,8 @@ async def list_tickets(
             raise HTTPException(403, "工单受理回查需要提交账号身份")
         q = q.filter(
             CustomerServiceTicket.user_id == user.id,
-            CustomerServiceTicket.ticket_no == request_identity(user.id, "customer_feedback", source_ref),
+            CustomerServiceTicket.ticket_no
+            == request_identity(user.id, "customer_feedback", source_ref),
         )
     if status:
         q = q.filter(CustomerServiceTicket.status == status)

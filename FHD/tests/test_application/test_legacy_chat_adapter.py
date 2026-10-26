@@ -61,6 +61,18 @@ def _client(response, *, side_effect=False):
     return client
 
 
+@pytest.mark.parametrize("attached", [None, [], {"legacy_tool_records": ["synthetic-record"]}])
+def test_failed_reply_validates_dynamic_facade_result(monkeypatch, attached):
+    from app.legacy.chat import legacy_chat_runtime as runtime
+
+    monkeypatch.setattr(adapter, "_attach_last_tool_records", lambda payload: attached)
+    if isinstance(attached, dict):
+        assert runtime._failed_reply("synthetic failure", "synthetic_error") is attached
+    else:
+        with pytest.raises(TypeError, match="must return a dict"):
+            runtime._failed_reply("synthetic failure", "synthetic_error")
+
+
 @contextmanager
 def _planner_registry(registry):
     with patch.object(adapter, "_get_workflow_tool_registry", return_value=registry):

@@ -177,9 +177,9 @@ def infer_intent(
     """规则意图识别（明确关键词优先；订单号单独出现不再默认退款）。"""
     ctx = context or {}
     # A stale commerce deep link must not relabel a newly described defect.
-    if _facade().re.search(r"报错|卡死|断连|打不开|白屏|黑屏|闪退|没反应|加载失败", text) and not any(
-        word in text.lower() for word in ("退款", "refund", "投诉", "审核", "侵权")
-    ):
+    if _facade().re.search(
+        r"报错|卡死|断连|打不开|白屏|黑屏|闪退|没反应|加载失败", text
+    ) and not any(word in text.lower() for word in ("退款", "refund", "投诉", "审核", "侵权")):
         return "product_issue"
     scene = str(ctx.get("scene") or "").strip().lower()
     scene_map = {
@@ -1035,9 +1035,14 @@ def ensure_ticket(
                 db.flush()
             break
         except IntegrityError:
-            if attempt or not db.query(_facade().CustomerServiceTicket).filter_by(
-                ticket_no=ticket.ticket_no,
-            ).first():
+            if (
+                attempt
+                or not db.query(_facade().CustomerServiceTicket)
+                .filter_by(
+                    ticket_no=ticket.ticket_no,
+                )
+                .first()
+            ):
                 raise
     _facade().audit(
         db,
@@ -1849,7 +1854,6 @@ def session_payload(
 
 # --- from customer_service_orchestrator_part05.py ---
 """Implementation extracted from the public facade module."""
-
 
 
 CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected", "expired"})

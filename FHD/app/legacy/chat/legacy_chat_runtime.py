@@ -77,7 +77,7 @@ _ITERATION_LIMIT = "对话达到最大迭代次数，未完成。"
 
 
 def _failed_reply(message: str, error: str) -> dict[str, Any]:
-    return _facade()._attach_last_tool_records(
+    reply = _facade()._attach_last_tool_records(
         {
             "success": False,
             "error": error,
@@ -87,6 +87,9 @@ def _failed_reply(message: str, error: str) -> dict[str, Any]:
             "thinking_steps": None,
         }
     )
+    if not isinstance(reply, dict):
+        raise TypeError("legacy tool record attachment must return a dict")
+    return reply
 
 
 def _tool_payloads(messages: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:

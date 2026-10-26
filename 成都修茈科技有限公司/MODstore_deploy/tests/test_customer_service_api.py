@@ -1498,11 +1498,14 @@ def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_co
     from modstore_server import customer_service_orchestrator as facade
     from modstore_server import customer_service_orchestrator_merged as implementation
     from modstore_server.models_cs import CustomerServiceSession
+
     user = _make_user("number_collision")
     calls = []
+
     def number():
         calls.append(1)
         return SimpleNamespace(hex="collision" if always_collides or len(calls) < 3 else "unique")
+
     monkeypatch.setattr(implementation, "uuid4", number)
     with get_session_factory()() as db:
         session = CustomerServiceSession(user_id=user.id)
@@ -1511,41 +1514,63 @@ def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_co
         facade.ensure_ticket(db, user=user, session=session, intent="refund", extracted={})
         if always_collides:
             with pytest.raises(IntegrityError):
-                facade.ensure_ticket(db, user=user, session=session, intent="product_issue", extracted={})
+                facade.ensure_ticket(
+                    db, user=user, session=session, intent="product_issue", extracted={}
+                )
         else:
-            result = facade.ensure_ticket(db, user=user, session=session, intent="product_issue", extracted={})
+            result = facade.ensure_ticket(
+                db, user=user, session=session, intent="product_issue", extracted={}
+            )
             assert result.ticket_no == "CSunique"
         assert len(calls) == 3  # First ticket + at most two attempts; no retry loop.
 
 
 def test_source_ref_readback_is_exact_and_owner_scoped(client):
     from modstore_server.customer_issue_intake import request_identity
+
     owner, other = _make_user("readback_owner"), _make_user("readback_other")
     ref = "enterprise-cs:synthetic-owner:synthetic-conversation:hash"
     with get_session_factory()() as db:
-        ticket = _make_ticket(db, owner, ticket_no=request_identity(owner.id, "customer_feedback", ref),
-            intent="product_issue", evidence_json='{"source_ref":"'+ref+'"}')
+        ticket = _make_ticket(
+            db,
+            owner,
+            ticket_no=request_identity(owner.id, "customer_feedback", ref),
+            intent="product_issue",
+            evidence_json='{"source_ref":"' + ref + '"}',
+        )
         expected_id = ticket.id
         for index in range(55):
             _make_ticket(db, owner, ticket_no=f"CS-newer-{uuid.uuid4().hex}")
         db.commit()
     with _as_user(owner):
-        rows = client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"]
+        rows = client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()[
+            "items"
+        ]
         assert [row["id"] for row in rows] == [expected_id]
     with _as_user(other):
-        assert client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"] == []
+        assert (
+            client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"]
+            == []
+        )
 
 
 def test_waiting_refund_still_accepts_its_order_number(client, monkeypatch):
     from modstore_server import customer_service_orchestrator as orchestrator
+
     monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
     monkeypatch.setattr(orchestrator, "plan_actions", lambda *args, **kwargs: [])
     monkeypatch.setattr(orchestrator, "execute_matching_integrations", lambda *args, **kwargs: [])
     with _as_user(_make_user("refund_followup")):
-        first = client.post("/api/customer-service/chat", json={"message": "我要退款，请提交工单"}).json()
-        second = client.post("/api/customer-service/chat", json={
-            "message": "订单号：SYNTHETIC123", "session_id": first["session"]["id"],
-        }).json()
+        first = client.post(
+            "/api/customer-service/chat", json={"message": "我要退款，请提交工单"}
+        ).json()
+        second = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "订单号：SYNTHETIC123",
+                "session_id": first["session"]["id"],
+            },
+        ).json()
         assert second["ticket"]["id"] == first["ticket"]["id"]
         assert second["ticket"]["intent"] == "refund"
         assert second["decision"]["decision"] == "approved"
