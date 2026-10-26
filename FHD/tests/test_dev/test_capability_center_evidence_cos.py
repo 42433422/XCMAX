@@ -244,13 +244,16 @@ def test_withdrawn_run_preserves_only_matching_public_fallback(private_run, monk
 
 def test_public_projection_drops_credentials_without_changing_source() -> None:
     source = {
-        "status": "passed", "sha256": "a" * 64,
+        "status": "passed",
+        "sha256": "a" * 64,
         "nested": {"MFA_SECRET": "TEST-ONLY", "password": "TEST-ONLY", "safe": "visible"},
         "notes": ["otpauth://totp/test-only", "data.secret=TEST-ONLY", "accepted result"],
     }
     before = json.dumps(source)
     assert MODULE.public_projection(source, set()) == {
-        "status": "passed", "sha256": "a" * 64, "nested": {"safe": "visible"},
+        "status": "passed",
+        "sha256": "a" * 64,
+        "nested": {"safe": "visible"},
         "notes": [MODULE._PUBLIC_REDACTION, MODULE._PUBLIC_REDACTION, "accepted result"],
     }
     assert json.dumps(source) == before
@@ -263,18 +266,32 @@ def test_public_site_uses_evidence_identity_not_raw_authentication_prose() -> No
         assert all("visible_result" not in media for media in feature["media"])
     accounts = [f for f in data["evidence"]["features"] if f["feature"] == "base-account-security"]
     assert len(accounts) == 1 and accounts[0]["status"] == "passed"
-    assert accounts[0]["media"] == [] and accounts[0]["source_run"] is None and accounts[0]["run_log"] is None
-    original = ROOT / "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-account-security/base-account-security-web-run.json"
+    assert (
+        accounts[0]["media"] == []
+        and accounts[0]["source_run"] is None
+        and accounts[0]["run_log"] is None
+    )
+    original = (
+        ROOT
+        / "FHD/docs/evidence/e2e/feature-acceptance-webadmin-20260929/tools/runs/base-account-security/base-account-security-web-run.json"
+    )
     digest = hashlib.sha256(original.read_bytes()).hexdigest()
     assert digest == "e3c9782776a3268e47f5d9048e14af376ca9d1c466585cd5250159a927f41242"
     assert accounts[0]["acceptance_sha256"] == digest
 
 
-@pytest.mark.parametrize("credential", [
-    {"visible_result": "data.secret=TEST-ONLY"}, {"secret": "TEST-ONLY"},
-    {"MFA_SECRET": "TEST-ONLY"}, {"nested": {"access_token": "TEST-ONLY"}},
-])
-def test_credential_run_excludes_raw_record_and_companion_media(tmp_path, monkeypatch, credential) -> None:
+@pytest.mark.parametrize(
+    "credential",
+    [
+        {"visible_result": "data.secret=TEST-ONLY"},
+        {"secret": "TEST-ONLY"},
+        {"MFA_SECRET": "TEST-ONLY"},
+        {"nested": {"access_token": "TEST-ONLY"}},
+    ],
+)
+def test_credential_run_excludes_raw_record_and_companion_media(
+    tmp_path, monkeypatch, credential
+) -> None:
     source = tmp_path / "run.json"
     source.write_text(json.dumps({"media": [{"path": "mfa.png", **credential}]}))
     before = source.read_bytes()
@@ -289,5 +306,7 @@ def test_private_alias_pins_are_withdrawn_even_without_mounted_media(monkeypatch
     monkeypatch.setattr(MODULE, "_EVIDENCE_INDEX", INDEX)
     names = MODULE.private_asset_names(preserve_approved=True)
     assert "base-account-security-BS1-mfa-setup.png" in names
-    materialization = json.loads((SITE / "data/capabilities/evidence-materialization.json").read_text())
+    materialization = json.loads(
+        (SITE / "data/capabilities/evidence-materialization.json").read_text()
+    )
     assert not names.intersection(materialization["assets"])

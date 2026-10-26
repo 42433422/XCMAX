@@ -53,8 +53,10 @@ def test_preserved_history_and_projection_are_one_catalog():
     assert source["release_history"] == builder.public_projection(data["release_history"], set())
     assert [row["version"] for row in source["release_history"]] == versions
     assert "太阳鸟" in json.dumps(data["release_history"], ensure_ascii=False)
-    assert not any(marker in json.dumps(source, ensure_ascii=False).casefold()
-                   for marker in builder._PUBLIC_PRIVATE_MARKERS)
+    assert not any(
+        marker in json.dumps(source, ensure_ascii=False).casefold()
+        for marker in builder._PUBLIC_PRIVATE_MARKERS
+    )
 
 
 @pytest.mark.parametrize(

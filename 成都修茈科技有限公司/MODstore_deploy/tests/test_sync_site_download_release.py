@@ -45,9 +45,7 @@ def test_preserves_exact_public_identity_and_history_not_newest_candidate(
         "release_history": [{"version": "1.0.0.6"}, {"version": "1.0.0.5"}],
     }
     content = json.dumps(published, indent=3).encode() + b"\n"
-    hotfix = (
-        b'{"version":"1.0.0.6","git_sha":"different-build","stable_auto_update":false}'
-    )
+    hotfix = b'{"version":"1.0.0.6","git_sha":"different-build","stable_auto_update":false}'
     for name, data in (
         ("download-release.json", content),
         ("download-windows-hotfix.json", hotfix),
@@ -104,11 +102,7 @@ def test_absent_public_hotfix_removes_stale_staged_copy(tmp_path: Path) -> None:
 def test_server_and_static_publishers_never_infer_desktop_publication() -> None:
     script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
     sync = script.index('python3 "$POINTER_SYNC" --site-root')
-    assert (
-        script.index("npm run build")
-        < sync
-        < script.index('chmod -R a-w "$BUILD_ROOT"')
-    )
+    assert script.index("npm run build") < sync < script.index('chmod -R a-w "$BUILD_ROOT"')
     assert '--published-site-root "$SITE_LINK"' in script[sync : sync + 300]
     assert "TARGET_SHA" not in script[sync : script.index("\n\n", sync)]
     updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text()
@@ -118,9 +112,7 @@ def test_server_and_static_publishers_never_infer_desktop_publication() -> None:
 
 
 @pytest.mark.parametrize("stale", ["root", "mirror", "hotfix", "symlink", None])
-def test_check_is_read_only_and_requires_exact_pointer_set(
-    tmp_path: Path, stale
-) -> None:
+def test_check_is_read_only_and_requires_exact_pointer_set(tmp_path: Path, stale) -> None:
     for name in ("live", "staged"):
         (tmp_path / name).mkdir()
     pointer = "download-release.json"
@@ -161,9 +153,7 @@ def test_real_activation_and_rollback_blocks_preserve_public_bytes(
     current.symlink_to(tmp_path / "active")
     site.symlink_to(current / "site")
     before = (site / "download-release.json").read_bytes()
-    verify = re.search(
-        r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S
-    ).group()
+    verify = re.search(r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S).group()
     # Isolate only filesystem guards/switches; no production commands or paths run.
     verify = verify.replace(
         '"/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"',
@@ -185,9 +175,7 @@ def test_real_activation_and_rollback_blocks_preserve_public_bytes(
         "PREVIOUS_SHA": "",
         "PREVIOUS_ARTIFACT_SHA": "",
     }
-    setup = "\n".join(
-        f"{key}={shlex.quote(str(value))}" for key, value in variables.items()
-    )
+    setup = "\n".join(f"{key}={shlex.quote(str(value))}" for key, value in variables.items())
     result = subprocess.run(
         [
             "bash",

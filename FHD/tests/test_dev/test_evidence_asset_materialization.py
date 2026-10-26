@@ -342,11 +342,17 @@ def test_actual_deployer_rebuilds_before_publishing_and_stops_on_corruption(repo
     else:
         assert run.returncode == 0, run.stderr
         assert (live / "index.html").read_text() == "new page"
-        assert (live / "data/release-history.json").read_bytes() == (site / "data/release-history.json").read_bytes()
-        assert (live / "data/release-presentation.json").read_bytes() == (site / "data/release-presentation.json").read_bytes()
+        assert (live / "data/release-history.json").read_bytes() == (
+            site / "data/release-history.json"
+        ).read_bytes()
+        assert (live / "data/release-presentation.json").read_bytes() == (
+            site / "data/release-presentation.json"
+        ).read_bytes()
         assert (
             live / "capabilities/assets/evidence/old-public-url.png"
         ).read_bytes() == original.read_bytes()
         assert (live / "corp-butler/brand.jpg").read_bytes() == brand.read_bytes()
         assert json.loads((live / "download-release.json").read_text()) == {"verified": True}
-        assert json.loads((live / "corp-butler/download-release.json").read_text()) == {"verified": True}
+        assert json.loads((live / "corp-butler/download-release.json").read_text()) == {
+            "verified": True
+        }
