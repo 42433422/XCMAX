@@ -22,6 +22,9 @@ from tests.test_application.test_chat_stream_lifetime import (
     life,
     wait,
 )
+from tests.test_application.test_chat_stream_lifetime import (
+    source_bindings as source_bindings,
+)
 
 
 def load_source(name):
@@ -276,7 +279,7 @@ async def test_actual_planner_wrapper_disconnect_reads_back_unknown_not_permanen
         if name == "_xcagi_planner_stream_bytes":
             facade = namespace["_facade"]()
             facade.start_legacy_chat_run = lambda **k: expected
-            facade.mark_legacy_chat_stream_interrupted = mark
+            namespace["mark_legacy_chat_stream_interrupted"] = mark
             captured["facade"] = facade
         return actual_extract(path, name, namespace)
 
@@ -512,7 +515,7 @@ async def test_actual_observation_timeout_is_not_business_failure_and_never_repl
             namespace["watch_stream_interruption"] = watch
             facade = namespace["_facade"]()
             facade.start_legacy_chat_run = lambda **k: expected
-            facade.mark_legacy_chat_stream_interrupted = mark_with_order
+            namespace["mark_legacy_chat_stream_interrupted"] = mark_with_order
 
             def finalize(run_id, payload, **kwargs):
                 finalizations.append(payload)

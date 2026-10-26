@@ -19,9 +19,7 @@ from app.db.db_base import Base
 
 @pytest.mark.parametrize("failed_sink", [None, "artifacts", "observation"])
 @pytest.mark.parametrize("unknown", [False, True])
-def test_receipt_is_durable_before_optional_sinks(
-    tmp_path, monkeypatch, failed_sink, unknown
-):
+def test_receipt_is_durable_before_optional_sinks(tmp_path, monkeypatch, failed_sink, unknown):
     def no_network(*args, **kwargs):
         raise AssertionError("synthetic receipt tests prohibit network/model access")
 
@@ -32,13 +30,9 @@ def test_receipt_is_durable_before_optional_sinks(
     Base.metadata.create_all(engine)
     repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
     with engine.begin() as db:
-        db.exec_driver_sql(
-            "CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, receipt TEXT)"
-        )
+        db.exec_driver_sql("CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, receipt TEXT)")
     step = AgentStep("write", "synthetic", "write")
-    run = AgentRun(
-        user_id="synthetic", message="persist original receipt", steps=[step]
-    )
+    run = AgentRun(user_id="synthetic", message="persist original receipt", steps=[step])
     receipt = {"success": not unknown, "receipt_id": "original-committed-effect"}
     if unknown:
         receipt.update(outcome="unknown", retryable=False, reconciliation_required=True)
@@ -51,30 +45,19 @@ def test_receipt_is_durable_before_optional_sinks(
                     "SELECT payload_json FROM agent_runs WHERE run_id=?", (run.run_id,)
                 ).fetchone()[0]
             )
-            effects = reopened.execute(
-                "SELECT receipt FROM synthetic_effects"
-            ).fetchall()
+            effects = reopened.execute("SELECT receipt FROM synthetic_effects").fetchall()
         assert effects == [(receipt["receipt_id"],)]
         stored_step, stored_call = payload["steps"][0], payload["tool_calls"][0]
         assert (
-            stored_step["status"]
-            == stored_call["status"]
-            == ("failed" if unknown else "completed")
+            stored_step["status"] == stored_call["status"] == ("failed" if unknown else "completed")
         )
         assert stored_step["output"] == stored_call["output"]
         assert stored_step["finished_at"] == stored_call["finished_at"] != ""
-        assert (
-            stored_step["attempt_count"]
-            == stored_call["metadata"]["attempt_count"]
-            == 1
-        )
+        assert stored_step["attempt_count"] == stored_call["metadata"]["attempt_count"] == 1
         if unknown:
             assert stored_step["output"]["reconciliation_evidence"] == receipt
             assert payload["metadata"]["non_retryable"] is True
-            assert (
-                payload["metadata"]["recovery"]["state"]
-                == "manual_reconciliation_required"
-            )
+            assert payload["metadata"]["recovery"]["state"] == "manual_reconciliation_required"
         else:
             assert stored_step["output"] == receipt
         return payload
@@ -98,9 +81,7 @@ def test_receipt_is_durable_before_optional_sinks(
         return apply
 
     dependencies = SimpleNamespace(
-        action_spec=lambda *_: SimpleNamespace(
-            cost_units=0, permission="", timeout_seconds=2
-        ),
+        action_spec=lambda *_: SimpleNamespace(cost_units=0, permission="", timeout_seconds=2),
         validate=lambda *_: SimpleNamespace(ok=True),
         refresh_budget=lambda _: None,
     )
@@ -120,18 +101,14 @@ def test_receipt_is_durable_before_optional_sinks(
             execution.execute_step(run, step, runtime_context={}, node_outputs={})
         persisted = readback()
         assert observed == (
-            ["artifacts"]
-            if failed_sink == "artifacts"
-            else ["artifacts", "observation"]
+            ["artifacts"] if failed_sink == "artifacts" else ["artifacts", "observation"]
         )
         events = [event["event_type"] for event in persisted["events"]]
         if failed_sink is None:
             assert ("tool.failed" if unknown else "tool.completed") in events
         else:
             assert events == ["tool.started"]
-        reopened_repo = SQLAlchemyAgentRunRepository(
-            session_factory=sessionmaker(bind=engine)
-        )
+        reopened_repo = SQLAlchemyAgentRunRepository(session_factory=sessionmaker(bind=engine))
         assert reopened_repo.get(run.run_id).to_dict() == persisted
     finally:
         engine.dispose()

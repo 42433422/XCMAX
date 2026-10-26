@@ -27,12 +27,6 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run as finalize_legacy_chat_run,
 )
 from app.application.agent_orchestrator.chat_trace import (
-    mark_legacy_chat_stream_interrupted as mark_legacy_chat_stream_interrupted,
-)
-from app.application.agent_orchestrator.chat_trace import (
-    record_legacy_stream_tool_receipt as record_legacy_stream_tool_receipt,
-)
-from app.application.agent_orchestrator.chat_trace import (
     start_legacy_chat_run as start_legacy_chat_run,
 )
 from app.application.conversation import chat_stream_sse_events

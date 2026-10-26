@@ -24,12 +24,8 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 )
 from app.db.db_base import Base
 
-reconciler = importlib.import_module(
-    "app.application.agent_orchestrator.stale_run_reconciler"
-)
-task_dispatcher = importlib.import_module(
-    "app.application.agent_orchestrator.task_dispatcher"
-)
+reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
+task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
 
 
 @pytest.fixture(autouse=True)
@@ -83,9 +79,7 @@ def test_interrupted_running_run_and_task_are_converged(tmp_path) -> None:
         stale_at = _iso(-300)
         _backdate_run(factory, run.run_id, status="running", updated_at=stale_at)
 
-        reconciled = reconciler.reconcile_stale_running_runs(
-            stale_after_seconds=60, now=_iso()
-        )
+        reconciled = reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso())
 
         assert reconciled == 1
         stored = repo.get(run.run_id)
@@ -119,9 +113,7 @@ def test_restore_keeps_completed_backup_receipt_and_later_tasks(tmp_path, monkey
             db.exec_driver_sql("pragma journal_mode=wal")
             db.exec_driver_sql("create table restore_probe(price real)")
             db.exec_driver_sql("insert into restore_probe values(12.5)")
-        step = AgentStep(
-            "backup", "system_maintenance", "backup_database", status="running"
-        )
+        step = AgentStep("backup", "system_maintenance", "backup_database", status="running")
         run = AgentRun(
             user_id="2",
             message="备份数据库",
@@ -152,10 +144,7 @@ def test_restore_keeps_completed_backup_receipt_and_later_tasks(tmp_path, monkey
             user_id="2", message="原始失败", status="failed", error="审批请求创建失败"
         )
         repo.save(failed)
-        receipts = {
-            item.run_id: repo.get(item.run_id).to_dict()
-            for item in (run, queued, failed)
-        }
+        receipts = {item.run_id: repo.get(item.run_id).to_dict() for item in (run, queued, failed)}
         with engine.begin() as db:
             db.exec_driver_sql("update restore_probe set price=13.75")
         assert service.restore_database(snapshot["file_path"])["success"] is True
@@ -163,16 +152,11 @@ def test_restore_keeps_completed_backup_receipt_and_later_tasks(tmp_path, monkey
         for item in (run, queued, failed):
             assert repo.get(item.run_id).to_dict() == receipts[item.run_id]
             assert (
-                repo.get_task(
-                    user_id=item.user_id, task_id=item.run_id, tenant_id=""
-                ).status
+                repo.get_task(user_id=item.user_id, task_id=item.run_id, tenant_id="").status
                 == item.status
             )
         with sqlite3.connect(live) as reopened:
-            assert (
-                reopened.execute("select price from restore_probe").fetchone()[0]
-                == 12.5
-            )
+            assert reopened.execute("select price from restore_probe").fetchone()[0] == 12.5
             assert reopened.execute("pragma integrity_check").fetchone()[0] == "ok"
     finally:
         set_agent_run_repository_for_tests(None)
@@ -200,10 +184,7 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         fresh = AgentRun(user_id="u1", message="刚开始运行", status="running")
         repo.save(fresh)
 
-        assert (
-            reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso())
-            == 0
-        )
+        assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 0
         assert repo.get(queued.run_id).status == "queued"
         assert repo.get(leased.run_id).status == "running"
         assert "non_retryable" not in repo.get(leased.run_id).metadata
@@ -308,10 +289,7 @@ def test_startup_recovery_requires_both_persisted_and_current_replay_safety(
         assert stored["steps"] == [step.to_dict()]
         assert bool(stored["metadata"].get("non_retryable")) is unsafe
         if unsafe:
-            assert (
-                stored["metadata"]["recovery"]["state"]
-                == "manual_reconciliation_required"
-            )
+            assert stored["metadata"]["recovery"]["state"] == "manual_reconciliation_required"
             assert stored["metadata"]["recovery"]["step_ids"] == (
                 [step.step_id] if step_status == "running" else []
             )
@@ -322,9 +300,7 @@ def test_startup_recovery_requires_both_persisted_and_current_replay_safety(
         engine.dispose()
 
 
-@pytest.mark.parametrize(
-    "previous_recovery", [None, {"state": "waiting", "original": "keep"}]
-)
+@pytest.mark.parametrize("previous_recovery", [None, {"state": "waiting", "original": "keep"}])
 def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute(
     tmp_path, monkeypatch, previous_recovery
 ):
@@ -342,9 +318,7 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
         steps=[step],
     )
     run.tool_calls = [
-        ToolCall(
-            step.step_id, step.node_id, step.tool_id, step.action, status="running"
-        )
+        ToolCall(step.step_id, step.node_id, step.tool_id, step.action, status="running")
     ]
     if previous_recovery:
         run.metadata["recovery"] = dict(previous_recovery)
@@ -352,9 +326,7 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
     queue.enqueue(run)
     assert queue.claim("exited-process", lease_seconds=60) is not None
     with engine.begin() as db:
-        db.exec_driver_sql(
-            "CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, run_id TEXT)"
-        )
+        db.exec_driver_sql("CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, run_id TEXT)")
         db.exec_driver_sql(
             "UPDATE agent_task_executions SET lease_expires_at=? WHERE run_id=?",
             (_iso(-300), run.run_id),
@@ -381,9 +353,7 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
 
     def forbidden(*args, **kwargs):
         unexpected_dispatches.append((args, kwargs))
-        raise AssertionError(
-            "an unknown original write must never reach planning or tool dispatch"
-        )
+        raise AssertionError("an unknown original write must never reach planning or tool dispatch")
 
     monkeypatch.setattr(AgentOrchestrator, "_plan", forbidden)
     finished = threading.Event()
@@ -405,15 +375,11 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
             tool_executor=types.SimpleNamespace(execute=forbidden),
         ),
     )
-    monkeypatch.setattr(
-        task_dispatcher, "get_agent_task_dispatcher", lambda: dispatcher
-    )
+    monkeypatch.setattr(task_dispatcher, "get_agent_task_dispatcher", lambda: dispatcher)
     set_agent_run_repository_for_tests(repo)
     try:
         assert task_dispatcher.start_agent_task_dispatcher() is dispatcher
-        assert finished.wait(
-            5
-        ), "real dispatcher did not settle the expired original claim"
+        assert finished.wait(5), "real dispatcher did not settle the expired original claim"
         dispatcher.stop()
         stored = repo.get(run.run_id)
         assert stored.status == "failed" and stored.metadata["non_retryable"] is True
@@ -424,20 +390,16 @@ def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute
             AgentOrchestrator(repository=repo).retry_run(run.run_id)
         assert unexpected_dispatches == []
         with sqlite3.connect(path) as reopened:
-            assert reopened.execute(
-                "SELECT run_id FROM synthetic_effects"
-            ).fetchall() == [(run.run_id,)]
-            rows = reopened.execute(
-                "SELECT status,payload_json FROM agent_runs"
-            ).fetchall()
+            assert reopened.execute("SELECT run_id FROM synthetic_effects").fetchall() == [
+                (run.run_id,)
+            ]
+            rows = reopened.execute("SELECT status,payload_json FROM agent_runs").fetchall()
             assert len(rows) == 1 and rows[0][0] == "failed"
             payload = json.loads(rows[0][1])
             assert payload["steps"][0]["status"] == "running"
             assert payload["steps"][0]["output"] == {}
             assert len(payload["tool_calls"]) == 1
-            assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [
-                ("failed",)
-            ]
+            assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [("failed",)]
         execution = queue.get(run.run_id)
         assert execution.state == "failed"
         assert execution.execution_count == 2 and execution.recovery_count == 1
