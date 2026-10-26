@@ -125,3 +125,15 @@ describe('chatSseStream', () => {
     expect(events).toEqual(['done', 'tool_progress', 'requires_token', 'done'])
   })
 })
+
+ it('cancels and releases an open reader on stop without waiting for EOF', async () => {
+  const cancel = vi.fn()
+  const response = new Response(new ReadableStream({ cancel }))
+  const controller = new AbortController()
+  const reading = readPlannerSseResponse(response, vi.fn(), controller.signal)
+  const rejected = expect(reading).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejected
+  expect(cancel).toHaveBeenCalledOnce()
+  expect(response.body?.locked).toBe(false)
+ })

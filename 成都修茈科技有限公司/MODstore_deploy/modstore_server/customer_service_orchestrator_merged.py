@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import importlib
 from typing import Any
+from uuid import uuid4
+from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_issue_delivery_contract import (
     projected_dispatch_status,
@@ -174,6 +176,11 @@ def infer_intent(
 ) -> str:
     """规则意图识别（明确关键词优先；订单号单独出现不再默认退款）。"""
     ctx = context or {}
+    # A stale commerce deep link must not relabel a newly described defect.
+    if _facade().re.search(r"报错|卡死|断连|打不开|白屏|黑屏|闪退|没反应|加载失败", text) and not any(
+        word in text.lower() for word in ("退款", "refund", "投诉", "审核", "侵权")
+    ):
+        return "product_issue"
     scene = str(ctx.get("scene") or "").strip().lower()
     scene_map = {
         "refund": "refund",
@@ -459,6 +466,7 @@ def ensure_session(
                 _facade().CustomerServiceSession.id == session_id,
                 _facade().CustomerServiceSession.user_id == user.id,
             )
+            .with_for_update()
             .first()
         )
         if row:
@@ -700,7 +708,7 @@ def handle_customer_message(
         .first()
     )
     if open_ticket:
-        if open_ticket.status == "waiting_user" and intent in _facade().FOLLOWUP_INTENTS:
+        if open_ticket.status == "waiting_user" and intent in {"general", "greeting"}:
             intent = open_ticket.intent or intent
             session.intent = intent
             need_ticket = True
@@ -1006,21 +1014,31 @@ def ensure_ticket(
         existing.evidence_json = _facade().json_dumps(extracted)
         existing.updated_at = _facade().datetime.now(_facade().timezone.utc)
         return existing
-    ticket = _facade().CustomerServiceTicket(
-        session_id=session.id,
-        user_id=user.id,
-        ticket_no=f"CS{_facade().datetime.now(_facade().timezone.utc).strftime('%Y%m%d%H%M%S')}{user.id:04d}{session.id:04d}",
-        title=_facade().title_for_intent(intent, extracted),
-        intent=intent,
-        subject_type=_facade().subject_type_for_intent(intent),
-        subject_id=str(extracted.get("order_no") or extracted.get("catalog_id") or ""),
-        status="open",
-        priority="high" if intent == "catalog_review" else "normal",
-        evidence_json=_facade().json_dumps(extracted),
-        summary=str(extracted.get("reason") or "")[:2000],
-    )
-    db.add(ticket)
-    db.flush()
+    # Keep the unique constraint; only a verified number collision gets one retry.
+    for attempt in range(2):
+        try:
+            ticket = _facade().CustomerServiceTicket(
+                session_id=session.id,
+                user_id=user.id,
+                ticket_no=f"CS{uuid4().hex}",
+                title=_facade().title_for_intent(intent, extracted),
+                intent=intent,
+                subject_type=_facade().subject_type_for_intent(intent),
+                subject_id=str(extracted.get("order_no") or extracted.get("catalog_id") or ""),
+                status="open",
+                priority="high" if intent == "catalog_review" else "normal",
+                evidence_json=_facade().json_dumps(extracted),
+                summary=str(extracted.get("reason") or "")[:2000],
+            )
+            with db.begin_nested():
+                db.add(ticket)
+                db.flush()
+            break
+        except IntegrityError:
+            if attempt or not db.query(_facade().CustomerServiceTicket).filter_by(
+                ticket_no=ticket.ticket_no,
+            ).first():
+                raise
     _facade().audit(
         db,
         event_type="ticket_created",
@@ -1416,6 +1434,8 @@ def _looks_like_product_issue(user_text: str) -> bool:
         "黑屏",
         "闪退",
         "卡住",
+        "卡死",
+        "断连",
         "加载失败",
         "加载不出来",
         "加载不出",
@@ -1831,15 +1851,6 @@ def session_payload(
 """Implementation extracted from the public facade module."""
 
 
-from typing import Any
-
-from modstore_server.customer_issue_delivery_contract import (
-    projected_dispatch_status,
-    record_team_progress,
-    role_progress_state,
-    team_action_state,
-    team_succeeded,
-)
 
 CLOSED_CUSTOMER_ISSUE_STATES = frozenset({"resolved", "closed", "done", "rejected", "expired"})
 

@@ -28,8 +28,12 @@ describe('useAgentRunEvents', () => {
     expect(extractAgentRunId({})).toBe('')
   })
 
-  it.each(['events', 'run', 'error'])('does not apply a late %s result to the next owner', async stage => {
-    const switchOwner = () => setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+  it.each(['events', 'run', 'error', 'generation'])('does not apply a late %s result to the next owner or generation', async stage => {
+    let current = true
+    const switchOwner = () => {
+      if (stage === 'generation') current = false
+      else setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 2 })
+    }
     agentRunsApiMock.listEvents.mockImplementation(async () => {
       if (stage !== 'run') switchOwner()
       if (stage === 'error') throw new Error('old account unavailable')
@@ -37,7 +41,7 @@ describe('useAgentRunEvents', () => {
     })
     agentRunsApiMock.getRun.mockImplementation(async () => { switchOwner(); return { data: undefined } })
     const upsertTask = vi.fn(), removeTask = vi.fn()
-    await useAgentRunEventSync({ upsertTask, removeTask }).syncAgentRunEvents('r')
+    await useAgentRunEventSync({ upsertTask, removeTask }).syncAgentRunEvents('r', '', () => current)
     expect(upsertTask).not.toHaveBeenCalled()
     expect(removeTask).not.toHaveBeenCalled()
   })
@@ -120,12 +124,15 @@ describe('useAgentRunEvents', () => {
       ],
     })
     const upsertTask = vi.fn()
+    let messageRef = '5'
     const sync = useAgentRunEventSync({
       upsertTask,
-      getLastAiMessageRef: () => '5',
+      getLastAiMessageRef: () => messageRef,
     })
 
-    await sync.syncAgentRunFromPayload({ data: { run_id: 'run_1' } }, '查产品')
+    const pending = sync.syncAgentRunFromPayload({ data: { run_id: 'run_1' } }, '查产品')
+    messageRef = 'next-message'
+    await pending
 
     expect(agentRunsApiMock.listEvents).toHaveBeenCalledWith('run_1', {})
     expect(upsertTask).toHaveBeenCalledWith(

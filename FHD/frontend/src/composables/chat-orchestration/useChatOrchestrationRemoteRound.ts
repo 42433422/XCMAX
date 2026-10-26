@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { useAgentRunEventSync } from '../useAgentRunEvents'
+import { extractAgentRunId, type useAgentRunEventSync } from '../useAgentRunEvents'
 import type { useChatDbTokenGate } from '../useChatDbTokenGate'
 import type { useChatExcelContext } from '../useChatExcelContext'
 import type { useChatMessages } from '../useChatMessages'
@@ -32,6 +32,7 @@ export interface ChatOrchestrationRemoteRoundDeps {
   queueVoice: ChatMessagesApi['queueVoice']
   pushStreamingAiShell: ChatMessagesApi['pushStreamingAiShell']
   applyPlainTextToMessageIndex: ChatMessagesApi['applyPlainTextToMessageIndex']
+  flushMessagesCache: ChatMessagesApi['flushMessagesCache']
   ttsEnabled: Ref<boolean>
   chatSessionActivity: ReturnType<typeof useChatSessionActivity>
   pendingDbWriteChatRetryMessages: Ref<string[] | null>
@@ -145,8 +146,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
   async function executeRemoteChatRound(remoteMessages: string[], opts?: { fromWriteUnlock?: boolean }, scope?: ChatRequestScope) {
     if (!remoteMessages.length) return
     const requestScope = scope || { sessionId: sessionId.value, messages: [...messages.value] }
+    if (!requestScope.isCurrent) Object.assign(requestScope, chatSessionActivity.beginRound(requestScope.sessionId))
     const identity = requestScope.identity ?? resolveChatIdentity(String(modsStore.activeModId || ''))
-    const isOwnerCurrent = () => identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    const isOwnerCurrent = () => requestScope.isCurrent?.() !== false && identity === resolveChatIdentity(String(modsStore.activeModId || ''))
     if (!isOwnerCurrent()) return
     const activity = chatSessionActivity.forSession(requestScope.sessionId)
     const round = {
@@ -299,15 +301,19 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
+      const abort = () => controller.abort()
+      requestScope.signal?.addEventListener('abort', abort, { once: true })
+      if (requestScope.signal?.aborted) abort()
       let killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       const streamMessage = messages.value[msgIndex]
       const syncStreamRun = (payload: unknown, attachTrace = false) => {
-        if (!isOwnerCurrent()) return
-        void syncAgentRunFromPayload(payload, primaryText).then(() => {
+        const runId = extractAgentRunId(payload) || streamRunId
+        if (!round.isActive() || !runId) return
+        void syncAgentRunFromPayload({ ...asRecord(payload), run_id: runId }, primaryText, round.isActive).then(() => {
           if (attachTrace && round.isActive() && messages.value[msgIndex] === streamMessage
             && !messages.value.slice(msgIndex + 1).some(message => message?.role === 'ai')) {
-            attachAgentRunTraceToLastAiMessage()
+            attachAgentRunTraceToLastAiMessage(runId)
           }
         }).catch(() => undefined)
       }
@@ -376,6 +382,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             streamRunId = ev.run_id || streamRunId
             sseError = String(ev.message || '流式接口错误')
           } else if (ev.type === 'requires_token') {
+            if (!round.isActive()) return
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
             handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
@@ -387,7 +394,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               plannerWriteUnlockResumeDraft.value = streamPlain
             }
           }
-        })
+        }, controller.signal)
         if (!isOwnerCurrent()) return
         if (sseError) {
           throw new Error(sseError)
@@ -447,8 +454,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, timedOut && streamRunId ? errText : `处理失败：${errText}`)
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
+        if (round.isActive()) deps.flushMessagesCache?.()
         round.setStreaming(false)
         window.clearTimeout(killTimer)
+        requestScope.signal?.removeEventListener('abort', abort)
         round.setLoading(false)
         if (isOwnerCurrent()) stopLoadingProgress(requestScope.sessionId)
       }
@@ -517,9 +526,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             await addRoundMessage(part.response || '', responseCameFromCache(part) ? { sameAsPrevious: true } : undefined)
             if (!round.isActive()) return
             syncTaskFromChatResponse(part, primaryText)
-            await syncAgentRunFromPayload(part, primaryText)
+            await syncAgentRunFromPayload(part, primaryText, isOwnerCurrent)
             if (!round.isActive()) return
-            attachAgentRunTraceToLastAiMessage()
+            attachAgentRunTraceToLastAiMessage(extractAgentRunId(part))
           } else {
             await addRoundMessage('处理失败: ' + (part.message || '未知错误'))
           }
@@ -568,9 +577,9 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       await addRoundMessage(data.response || '', responseCameFromCache(data) ? { sameAsPrevious: true } : undefined)
       if (!round.isActive()) return
       syncTaskFromChatResponse(data, primaryText)
-      await syncAgentRunFromPayload(data, primaryText)
+      await syncAgentRunFromPayload(data, primaryText, isOwnerCurrent)
       if (!round.isActive()) return
-      attachAgentRunTraceToLastAiMessage()
+      attachAgentRunTraceToLastAiMessage(extractAgentRunId(data))
       consumeStateUpdates(data)
       attachContextSummaryToLastAiMessage()
       attachThinkingStepsToLastAiMessage(data)

@@ -38,7 +38,6 @@
           <details
             v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && (msg.toolProgressLabel || msg.executionProgress?.length)"
             class="execution-timeline"
-            :open="!!msg.streamingShell"
           >
             <summary>
               <i v-if="msg.streamingShell" class="fa fa-spinner fa-spin execution-timeline__spinner" aria-hidden="true"></i>
@@ -115,6 +114,9 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
+          <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg)">
+            {{ copyLabels.get(msg) || '复制' }}
+          </button>
           <button
             v-if="msg.role === 'ai' && canSpeakMessage(msg)"
             class="message-tts-btn"
@@ -142,7 +144,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
-import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
@@ -188,6 +190,25 @@ function waitingRunId(message: ChatMessage): string {
 }
 
 const messagesHostRef = ref<HTMLElement | null>(null)
+const copyLabels = ref(new Map<ChatMessage, string>())
+function copyableBody(message: ChatMessage): string {
+  if (message.streamingShell) return ''
+  if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) return '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
+  const html = message.role === 'ai'
+    ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content))
+    : sanitizeChatBubbleHtml(message.content)
+  return plainTextFromChatHtml(html).trim()
+}
+async function copyMessage(message: ChatMessage) {
+  const text = copyableBody(message)
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copyLabels.value.set(message, '已复制')
+  } catch {
+    copyLabels.value.set(message, '复制失败，请重试')
+  }
+}
 
 function latestExecutionLabel(message: ChatMessage): string {
   const list = message.executionProgress || []

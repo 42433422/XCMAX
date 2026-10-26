@@ -80,7 +80,7 @@ def test_compat_slot_logs_run_id_and_intent(caplog) -> None:
     request = Request({"type": "http", "headers": []})
     with (
         patch(
-            "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
+            "app.application.normal_chat_dispatch.try_normal_slot_read_payload_async",
             return_value={
                 "response": "当前共有 2 位客户",
                 "data": {"intent": "customers_query"},
@@ -117,7 +117,7 @@ def test_llm_planner_path_is_distinguishable(caplog) -> None:
 
     with (
         patch(
-            "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
+            "app.application.normal_chat_dispatch.try_normal_slot_read_payload_async",
             return_value=None,
         ),
         patch(f"{FACADE}.resolve_ai_tier", return_value="standard"),

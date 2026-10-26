@@ -261,7 +261,6 @@ module = [
     "modstore_server.self_evolution_operations_merged",
     "modstore_server.strategic_layer_api_merged",
     "modstore_server.time_rail_workflow_merged",
-    "modstore_server.workflow_api_merged",
     "modstore_server.workflow_scheduler_merged",
 ]
 ignore_errors = true

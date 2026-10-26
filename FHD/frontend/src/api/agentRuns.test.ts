@@ -63,11 +63,11 @@ describe('agentRunsApi', () => {
     await agentRunsApi.listRuns({ limit: 10 })
     await agentRunsApi.listEvents('run/1', { after_event_id: 'evt_1' })
 
-    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1')
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1', {}, { timeoutMs: 8000 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1/events', {
       after_event_id: 'evt_1',
-    })
+    }, { timeoutMs: 8000 })
     expect(agentRunsApi.eventStreamPath('run/1', 'evt/1')).toBe('/api/agent/runs/run%2F1/events/stream?after_event_id=evt%2F1')
   })
 

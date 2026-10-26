@@ -71,7 +71,7 @@ class CompatStream:
                 }
             )
             return
-        slot = self.fast_paths.slot(
+        slot = await self.fast_paths.slot(
             body.message, request=request, user_id=str(body.user_id or "default")
         )
         if isinstance(slot, dict) and slot.get("response"):

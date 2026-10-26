@@ -20,11 +20,14 @@ function parseSseDataLine(line: string): PlannerSseEvent | null {
 }
 
 /** 读取 ``fetch`` 得到的 SSE（``text/event-stream``）响应体并逐条回调事件 */
-export async function readPlannerSseResponse(response: Response, onEvent: (ev: PlannerSseEvent) => void): Promise<void> {
+export async function readPlannerSseResponse(response: Response, onEvent: (ev: PlannerSseEvent) => void, signal?: AbortSignal): Promise<void> {
   if (!response.body) {
     throw new Error('响应体不可读（可能被代理缓冲或未返回流）')
   }
   const reader = response.body.getReader()
+  const abort = () => { void reader.cancel().catch(() => undefined) }
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) abort()
   const decoder = new TextDecoder()
   let buffer = ''
   let terminalError = false
@@ -39,6 +42,7 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   try {
     while (true) {
       const { done, value } = await reader.read()
+      if (signal?.aborted) throw new DOMException('请求已中断', 'AbortError')
       if (done) break
       buffer += decoder.decode(value, { stream: true })
       const parts = buffer.split('\n\n')
@@ -55,6 +59,7 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
       }
     }
   } finally {
+    signal?.removeEventListener('abort', abort)
     if (terminalError) void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }

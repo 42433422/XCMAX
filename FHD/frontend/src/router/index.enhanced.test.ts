@@ -590,19 +590,13 @@ describe('router/index enhanced', () => {
 
   // ── edge cases ──────────────────────────────────────────
 
-  it('handles fetchProductSku failure gracefully for non-enterprise', async () => {
-    mockFetchProductSku.mockRejectedValueOnce(new Error('network'))
-    mockFetchProductSku.mockResolvedValueOnce('generic')
-    await router.push('/settings')
-    expect(router.currentRoute.value.name).toBe('settings')
-  })
-
-  it('redirects to login when enterprise SKU check fails', async () => {
+  it.each([false, true])('keeps protected navigation closed on an unavailable SKU: %s', async enterprise => {
+    await router.push('/login')
     mockFetchProductSku.mockRejectedValue(new Error('network'))
-    mockIsEnterpriseEdition.mockReturnValue(true)
-    await router.push('/')
+    mockIsEnterpriseEdition.mockReturnValue(enterprise)
     await router.push('/settings')
-    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.fullPath).toBe('/login')
+    expect(router.currentRoute.value.query.error).toBeUndefined()
   })
 
   it('allows public access routes without authentication', async () => {

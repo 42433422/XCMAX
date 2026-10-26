@@ -178,6 +178,70 @@ def test_customer_service_incomplete_refund_chats_without_ticket(client, monkeyp
         assert "提交工单" in data["message"]["content"]
 
 
+@pytest.mark.parametrize("context", [{}, {"scene": "refund", "complaint_type": "refund"}])
+def test_product_report_does_not_continue_waiting_refund(client, monkeypatch, context):
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    user = _make_user("onsite_new_topic")
+    with _as_user(user):
+        refund = client.post(
+            "/api/customer-service/chat", json={"message": "我要退款，请提交工单"}
+        ).json()
+        sid = refund["session"]["id"]
+        assert refund["ticket"]["status"] == "waiting_user"
+        report = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "window思考时间长时间后会500卡死",
+                "context": context,
+                "session_id": sid,
+            },
+        )
+        assert report.status_code == 200, report.text
+        assert report.json()["ticket"] is None
+        assert report.json()["intent"]["intent"] == "product_issue"
+        submitted = client.post(
+            "/api/customer-service/chat",
+            json={
+                "message": "提交工单",
+                "session_id": sid,
+            },
+        )
+        assert submitted.status_code == 200, submitted.text
+        ticket = submitted.json()["ticket"]
+        assert ticket["intent"] == "product_issue"
+        assert ticket["id"] != refund["ticket"]["id"]
+        assert "500" in ticket["summary"]
+
+
+def test_distinct_tickets_in_one_second_have_unique_numbers(client, monkeypatch):
+    from datetime import datetime, timezone
+    from modstore_server import customer_service_orchestrator as orchestrator
+    from modstore_server.models_cs import CustomerServiceSession
+
+    class FixedTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 26, 9, 40, 0, tzinfo=timezone.utc)
+
+    monkeypatch.setattr(orchestrator, "datetime", FixedTime)
+    user = _make_user("onsite_ticket_number")
+    with get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=user.id)
+        db.add(session)
+        db.flush()
+        first = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="refund", extracted={}
+        )
+        second = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="product_issue", extracted={}
+        )
+        assert first.ticket_no != second.ticket_no
+        replay = orchestrator.ensure_ticket(
+            db, user=user, session=session, intent="product_issue", extracted={}
+        )
+        assert replay.id == second.id
+
+
 def _assert_customer_service_chat_does_not_block_on_incident_publish(client, monkeypatch):
     """建单后的 incident 派发若同步执行会卡死「处理中…」；必须异步。"""
     import time
@@ -1425,3 +1489,63 @@ def test_admin_customer_ticket_intent_and_status_filters_preserve_customer_scope
         assert own["items"][0]["id"] == own_id
         assert own["items"][0]["user_id"] == customer.id
         assert own["items"][0]["status"] == "open"
+
+
+@pytest.mark.parametrize("always_collides", [False, True])
+def test_ticket_number_collision_retry_is_bounded(client, monkeypatch, always_collides):
+    from types import SimpleNamespace
+    from sqlalchemy.exc import IntegrityError
+    from modstore_server import customer_service_orchestrator as facade
+    from modstore_server import customer_service_orchestrator_merged as implementation
+    from modstore_server.models_cs import CustomerServiceSession
+    user = _make_user("number_collision")
+    calls = []
+    def number():
+        calls.append(1)
+        return SimpleNamespace(hex="collision" if always_collides or len(calls) < 3 else "unique")
+    monkeypatch.setattr(implementation, "uuid4", number)
+    with get_session_factory()() as db:
+        session = CustomerServiceSession(user_id=user.id)
+        db.add(session)
+        db.flush()
+        facade.ensure_ticket(db, user=user, session=session, intent="refund", extracted={})
+        if always_collides:
+            with pytest.raises(IntegrityError):
+                facade.ensure_ticket(db, user=user, session=session, intent="product_issue", extracted={})
+        else:
+            result = facade.ensure_ticket(db, user=user, session=session, intent="product_issue", extracted={})
+            assert result.ticket_no == "CSunique"
+        assert len(calls) == 3  # First ticket + at most two attempts; no retry loop.
+
+
+def test_source_ref_readback_is_exact_and_owner_scoped(client):
+    from modstore_server.customer_issue_intake import request_identity
+    owner, other = _make_user("readback_owner"), _make_user("readback_other")
+    ref = "enterprise-cs:synthetic-owner:synthetic-conversation:hash"
+    with get_session_factory()() as db:
+        ticket = _make_ticket(db, owner, ticket_no=request_identity(owner.id, "customer_feedback", ref),
+            intent="product_issue", evidence_json='{"source_ref":"'+ref+'"}')
+        expected_id = ticket.id
+        for index in range(55):
+            _make_ticket(db, owner, ticket_no=f"CS-newer-{uuid.uuid4().hex}")
+        db.commit()
+    with _as_user(owner):
+        rows = client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"]
+        assert [row["id"] for row in rows] == [expected_id]
+    with _as_user(other):
+        assert client.get("/api/customer-service/tickets", params={"source_ref": ref}).json()["items"] == []
+
+
+def test_waiting_refund_still_accepts_its_order_number(client, monkeypatch):
+    from modstore_server import customer_service_orchestrator as orchestrator
+    monkeypatch.setenv("MODSTORE_CS_LLM_INTENT", "0")
+    monkeypatch.setattr(orchestrator, "plan_actions", lambda *args, **kwargs: [])
+    monkeypatch.setattr(orchestrator, "execute_matching_integrations", lambda *args, **kwargs: [])
+    with _as_user(_make_user("refund_followup")):
+        first = client.post("/api/customer-service/chat", json={"message": "我要退款，请提交工单"}).json()
+        second = client.post("/api/customer-service/chat", json={
+            "message": "订单号：SYNTHETIC123", "session_id": first["session"]["id"],
+        }).json()
+        assert second["ticket"]["id"] == first["ticket"]["id"]
+        assert second["ticket"]["intent"] == "refund"
+        assert second["decision"]["decision"] == "approved"

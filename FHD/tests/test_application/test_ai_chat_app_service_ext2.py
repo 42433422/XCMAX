@@ -642,10 +642,12 @@ class TestTryHandleDynamicWorkflowExtended:
             patch(
                 "app.application.normal_chat_dispatch.build_label_print_response_dict",
                 return_value={"success": True, "response": "标签打印"},
-            ),
+            ) as print_builder,
         ):
             result = service._try_handle_dynamic_workflow("u1", "打印标签", "pro", ctx, {})
         assert result is not None
+        print_builder.assert_not_called()
+        service.workflow_planner.plan.assert_called_once()
 
     def test_pro_normal_profile_no_match_runs_planning(self):
         # 全局启用多步编排后：pro 源 + normal profile + 槽位未命中，仍进入 LLM 工作流规划

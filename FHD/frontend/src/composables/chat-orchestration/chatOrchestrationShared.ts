@@ -15,6 +15,9 @@ export type ChatOrchestrationAddAndSaveMessage = (
   targetSessionId?: string,
 ) => Promise<void>
 
+/** Local async work may update only its original visible round; receipts may be saved to its original owner/session. */
+export type ChatLocalScope = { sessionId: string; isCurrent: () => boolean; isOwnerCurrent: () => boolean }
+
 export type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
   legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void

@@ -52,7 +52,7 @@ def _bind(monkeypatch: pytest.MonkeyPatch, facade: ModuleType, label: str) -> Si
         "runtime_context_with_tier": lambda context, tier: {**context, "ai_tier": tier},
         "_client_issue_payload": AsyncMock(return_value=None),
         "_business_action": lambda *_a, **_kw: None,
-        "_slot_read": lambda *_a, **_kw: None,
+        "_slot_read": AsyncMock(return_value=None),
         "_kitten_context": AsyncMock(side_effect=lambda context, _message: (context, {})),
         "_ensure_chat_db_read_authorized": lambda *_a, **_kw: (True, None),
         "_message_requires_db_read_token": lambda _message: False,

@@ -68,7 +68,7 @@ try {
   record('desktop: 视频展示状态与公开 SSOT 一致', hasPublicVideo ? videoVisible : !videoVisible, hasPublicVideo ? '公开视频必须可见' : '公开视频为空，视频块保持隐藏')
 
   // 1 次点击路径
-  for (const [label, expect] of [['客户案例', '/cases.html'], ['下载', '/download'], ['价格', '/pricing.html'], ['验证中心', '/verify.html']]) {
+  for (const [label, expect] of [['客户案例', '/cases.html'], ['下载', '/download'], ['AI 市场', '/market/'], ['价格', '/pricing.html'], ['验证中心', '/verify.html']]) {
     const href = await desktop.locator('.nav-menu a', { hasText: label }).first().getAttribute('href')
     record(`desktop: 首页→${label} 1 次点击`, href === expect, href)
   }

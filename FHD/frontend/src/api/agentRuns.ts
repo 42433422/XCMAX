@@ -311,7 +311,7 @@ export const agentRunsApi = {
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {
-    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`)
+    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`, {}, { timeoutMs: 8000 })
   },
 
   listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
@@ -319,7 +319,7 @@ export const agentRunsApi = {
   },
 
   listEvents(runId: string, params: { after_event_id?: string } = {}): Promise<AgentRunEventsResponse> {
-    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params)
+    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params, { timeoutMs: 8000 })
   },
 
   eventStreamPath(runId: string, afterEventId?: string): string {

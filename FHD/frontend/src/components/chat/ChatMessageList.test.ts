@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { afterEach } from 'vitest'
@@ -196,7 +196,7 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   expect(host.value).toBe(wrapper.get('#chatMessages').element)
   expect(wrapper.findAll('.execution-timeline__marker').map(x => x.text())).toEqual(['✓', '×', '■', 'Ⅱ', '↻', '●'])
   expect(wrapper.get('.execution-timeline__current').text()).toBe('步骤5')
-  expect(wrapper.get('.execution-timeline').attributes('open')).toBeDefined()
+  expect(wrapper.get('.execution-timeline').attributes('open')).toBeUndefined()
   expect(wrapper.get('.todo-panel').text()).toContain('检查库存')
   expect(wrapper.get('.trace-node-meta').text()).toContain('重试 2 次 · 150ms')
   expect(wrapper.get('.trace-node-error').text()).toContain('暂时不可用')
@@ -216,3 +216,13 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   expect(wrapper.get('.execution-timeline__current').text()).toBe('自定义步骤')
   expect(wrapper.find('.chat-loading-row').exists()).toBe(false)
 })
+
+ it.each([true, false])('copies only rendered body and reports clipboard success=%s', async success => {
+  const writeText = success ? vi.fn().mockResolvedValue(undefined) : vi.fn().mockRejectedValue(new Error('denied'))
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  const wrapper = mountList(true)
+  await wrapper.get('.message-copy-btn').trigger('click')
+  await Promise.resolve()
+  expect(writeText).toHaveBeenCalledWith('系统显示 "正常"。')
+  expect(wrapper.get('.message-copy-btn').text()).toBe(success ? '已复制' : '复制失败，请重试')
+ })

@@ -390,7 +390,11 @@ class TestChat:
                 "analyze", client=mock_client, model="test-model", max_iterations=iterations
             )
         assert isinstance(result, dict)
-        assert ("最大迭代" in result["text"]) is not pending
+        if not pending:
+            assert result["success"] is False
+            assert result["error"] == (
+                "planner_iteration_limit" if iterations == 1 else "planner_no_progress"
+            )
         assert bool(result.get("pending_approval")) is pending
         assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
 
