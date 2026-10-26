@@ -877,6 +877,10 @@ class TestChatStreamTextExtraEdge:
         assert mock_client.chat.completions.create.call_count == (1 if pending else iterations)
         if pending:
             assert "审批请求已创建" in json.dumps(parts, ensure_ascii=False)
+            assert not any(
+                isinstance(part, dict) and "error" in (part.get("type"), part.get("_planner_sse"))
+                for part in parts
+            )
 
 
 # chat_stream_sse_events 补充分支

@@ -35,6 +35,7 @@ from app.infrastructure.llm.client import (
 from app.infrastructure.llm.client import (
     resolve_chat_model,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _PLANNER_TOOL_STREAM_LABELS: dict[str, str] = {
     "generate_office_document": "生成可下载文档（Word 或 Excel）",
@@ -442,7 +443,7 @@ def append_tool_messages(
                     payloads[idx] = mapped_payload
                     tc, name, raw_eff, _key = parsed[idx]
                     _append_last_tool_record(tc, name, raw_eff, mapped_payload)
-                except Exception as exc:  # noqa: BLE001 - collect completed receipts before propagating the first failure
+                except BOUNDARY_ERRORS as exc:  # adapter boundary drains receipts then re-raises
                     if first_error is None:
                         first_error = exc
 
