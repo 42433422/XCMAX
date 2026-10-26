@@ -78,7 +78,7 @@ def get_resource_path(*parts: str) -> str:
     return os.path.join(get_resources_dir(), *parts)
 
 
-def get_app_data_dir() -> str:
+def get_app_data_dir(*, create: bool = True) -> str:
     """
     获取应用程序数据目录
 
@@ -108,7 +108,8 @@ def get_app_data_dir() -> str:
         else:
             app_data_dir = base
 
-    os.makedirs(app_data_dir, exist_ok=True)
+    if create:
+        os.makedirs(app_data_dir, exist_ok=True)
     return app_data_dir
 
 

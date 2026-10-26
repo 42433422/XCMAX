@@ -28,6 +28,62 @@ class DatasetRepository:
         self._prepare_loaded_state = prepare_loaded_state
         self.lock = DatasetStateLock(self)
 
+    def read_rebuild_state(self, dataset_id: str) -> _DatasetState | None:
+        # _persist_locked publishes with atomic replace: one read sees one committed
+        # JSON generation, not a transaction spanning the vector index or ledger.
+        # Never acquire the writer lock or run projection/recovery initialization.
+        raw = json.loads(self.storage_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(raw, dict)
+            or type(raw.get("version")) is not int
+            or raw["version"] != 1
+            or not isinstance(raw.get("datasets"), dict)
+        ):
+            raise ValueError("invalid dataset snapshot")
+        if dataset_id not in raw["datasets"]:
+            return None
+        payload = raw["datasets"][dataset_id]
+        if (
+            not isinstance(payload, dict)
+            or payload.get("dataset_id") != dataset_id
+            or not isinstance(payload.get("rebuild_jobs"), dict)
+        ):
+            raise ValueError("invalid rebuild snapshot")
+        state = _DatasetState(dataset_id)
+        for job_id, row in payload["rebuild_jobs"].items():
+            if (
+                not isinstance(row, dict)
+                or not job_id
+                or row.get("job_id") != job_id
+                or row.get("dataset_id") != dataset_id
+                or not isinstance(row.get("status"), str)
+                or row.get("status")
+                not in {"queued", "running", "completed", "failed", "cancelled"}
+                or not isinstance(row.get("tenant_id"), str)
+                or not isinstance(row.get("metadata_filter"), dict)
+            ):
+                raise ValueError("invalid rebuild identity")
+            for name in ("document_count", "chunk_count", "attempt_count", "max_attempts"):
+                value = row.get(name)
+                if type(value) is not int or value < (1 if name == "max_attempts" else 0):
+                    raise ValueError("invalid rebuild count")
+            for name in (
+                "error",
+                "worker_id",
+                "created_at",
+                "queued_at",
+                "started_at",
+                "completed_at",
+                "cancelled_at",
+                "updated_at",
+            ):
+                if not isinstance(row.get(name), str):
+                    raise ValueError("invalid rebuild timestamp or owner")
+            if not all(row[name] for name in ("created_at", "queued_at", "updated_at")):
+                raise ValueError("missing rebuild timestamp")
+            state.rebuild_jobs[job_id] = _rebuild_job_from_dict(row)
+        return state
+
     def _load_persisted_state(self) -> None:
         try:
             if not self.storage_path.exists():

@@ -93,6 +93,7 @@ from app.application.dataset_rag.rebuild_coordinator import (
     RebuildCoordinator,
     _rebuild_job_queue_position_locked,
     _recover_rebuild_jobs_locked,
+    read_rebuild_job,
 )
 from app.application.dataset_rag.rebuild_coordinator import (
     _empty_rebuild_queue_summary as _empty_rebuild_queue_summary,
@@ -139,7 +140,7 @@ def _default_storage_path() -> Path:
     ).strip()
     if configured:
         return Path(configured).expanduser().resolve()
-    return Path(get_app_data_dir()).resolve() / "dataset_rag" / "datasets.json"
+    return Path(get_app_data_dir(create=False)).resolve() / "dataset_rag" / "datasets.json"
 
 
 def _build_dataset_vector_index_backend(
@@ -692,6 +693,25 @@ class DatasetRagApplicationService:
 
 _dataset_rag_app_service: DatasetRagApplicationService | None = None
 _dataset_rag_lock = threading.Lock()
+
+
+def read_dataset_rebuild_job(
+    dataset_id: str,
+    job_id: str,
+    *,
+    access_context: DatasetAccessContext | dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Keep the first status GET independent of write-side service initialization."""
+    service = _dataset_rag_app_service
+    if service is not None:
+        return service.get_rebuild_job(dataset_id, job_id, access_context=access_context)
+    return read_rebuild_job(
+        DatasetRepository(_default_storage_path(), prepare_loaded_state=lambda state: None),
+        dataset_id,
+        job_id,
+        max_concurrent_jobs=_resolve_max_concurrent_rebuild_jobs(None),
+        access_context=access_context,
+    )
 
 
 def get_dataset_rag_app_service() -> DatasetRagApplicationService:
