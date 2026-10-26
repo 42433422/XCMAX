@@ -118,7 +118,8 @@ def test_parallel_receipt_is_durable_before_sibling_finishes(
         current_lifetime.reset(token)
 
 
-def test_receipt_outage_stops_tools_and_retries_only_persistence(audit_store):
+@pytest.mark.parametrize("storage_error", [OSError, TypeError])
+def test_receipt_outage_stops_tools_and_retries_only_persistence(audit_store, storage_error):
     path, run = audit_store
     lifetime, unavailable, executions = StreamLifetime(), [True], []
     sequences = []
@@ -126,7 +127,7 @@ def test_receipt_outage_stops_tools_and_retries_only_persistence(audit_store):
     def persist(**receipt):
         sequences.append(receipt["sequence"])
         if unavailable[0]:
-            raise OSError("audit unavailable")
+            raise storage_error("audit unavailable")
         record_legacy_stream_tool_receipt(run, **receipt)
 
     def execute(*args, **kwargs):
@@ -140,13 +141,14 @@ def test_receipt_outage_stops_tools_and_retries_only_persistence(audit_store):
     token = current_lifetime.set(lifetime)
     adapter.reset_planner_tool_dedup_state()
     try:
-        with pytest.raises(StreamReceiptPersistenceError):
+        with pytest.raises(StreamReceiptPersistenceError) as error:
             adapter.append_tool_messages(
                 [],
                 [tool("import_excel_to_database"), tool("never")],
                 workspace_root=None,
                 execute_tool=execute,
             )
+        assert isinstance(error.value.__cause__, storage_error)
         assert lifetime.stopped.is_set() and lifetime.reason == "tool_receipt_persistence_failed"
         assert read_audit(path, run) == [] and executions == ["committed"]
         unavailable[0] = False

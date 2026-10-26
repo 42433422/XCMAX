@@ -10,6 +10,8 @@ import queue
 import threading
 from contextlib import contextmanager
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
+
 
 class StreamStopped(Exception):
     pass
@@ -95,7 +97,7 @@ class StreamLifetime:
                     try:
                         callback(sequence=sequence, record=record)
                         break
-                    except Exception as exc:  # noqa: BLE001 - retry only receipt storage, never tool execution
+                    except BOUNDARY_ERRORS as exc:  # observer boundary; retry storage, never tools
                         if attempt:
                             raise StreamReceiptPersistenceError(
                                 "工具回执尚未保存，请核对原调用"
@@ -126,7 +128,7 @@ class StreamLifetime:
             for callback in callbacks:
                 try:
                     callback(pending=pending, reason=self.reason)
-                except Exception:  # noqa: BLE001 - observation failure must not retain live producers
+                except BOUNDARY_ERRORS:  # observer boundary must release live producers
                     logging.getLogger(__name__).exception("stream interruption persistence failed")
 
     @staticmethod
@@ -135,7 +137,7 @@ class StreamLifetime:
             close = getattr(read, "close", None)
             if close:
                 close()
-        except Exception:  # noqa: BLE001 - best-effort read cleanup cannot replace the original outcome
+        except BOUNDARY_ERRORS:  # owned read teardown must preserve the original outcome
             pass
 
     @contextmanager
@@ -239,7 +241,7 @@ class StreamWorker:
                     break
                 if not self._put(item):
                     break
-        except Exception as exc:  # noqa: BLE001 - producer boundary forwards failure to its consumer
+        except BOUNDARY_ERRORS as exc:  # producer boundary forwards the original failure
             self._put(exc)
         finally:
             if iterator is not None:
