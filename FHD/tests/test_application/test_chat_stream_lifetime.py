@@ -1,10 +1,7 @@
 """Isolated source-level lifecycle regressions: no app startup or provider I/O."""
 
-import __future__
-
-import ast
 import asyncio
-import importlib.util
+import importlib
 import json
 import queue
 import sys
@@ -17,30 +14,37 @@ from types import SimpleNamespace as NS
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location(
-    "stream_lifetime_under_test", ROOT / "app/infrastructure/chat_stream_lifetime.py"
-)
-life = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(life)
-STREAM_BINDINGS = {
-    "StreamLifetime": life.StreamLifetime,
-    "StreamObservationTimeout": life.StreamObservationTimeout,
-    "StreamWorker": life.StreamWorker,
-    "current_lifetime": life.current_lifetime,
-}
+life = importlib.import_module("app.infrastructure.chat_stream_lifetime")
+_entrypoint_patches = None
+_entrypoint_modules = {}
+
+
+@pytest.fixture(autouse=True)
+def source_bindings(monkeypatch):
+    global _entrypoint_patches
+
+    for path in (
+        "app.fastapi_routes.xcagi_compat_chat_helpers",
+        "app.fastapi_routes.xcagi_compat_chat_stream",
+        "app.legacy.chat.legacy_chat_runtime",
+        "app.legacy.chat.legacy_chat_adapter",
+        "app.legacy.market_llm.openai_compat",
+        "app.application.market_llm.streaming",
+        "app.domain.shared_services.conversation.modstore_adapter",
+        "app.application.agent_orchestrator.chat_trace",
+    ):
+        _entrypoint_modules[path] = importlib.import_module(path)
+    _entrypoint_patches = monkeypatch
+    yield
+    _entrypoint_patches = None
 
 
 def extract(path, name, namespace):
-    node = next(
-        n for n in ast.parse((ROOT / path).read_text()).body if getattr(n, "name", "") == name
-    )
-    code = compile(
-        ast.Module(body=[node], type_ignores=[]),
-        str(path),
-        "exec",
-        flags=__future__.annotations.compiler_flag,
-    )
-    exec(code, namespace)
+    """Load the real entrypoint and bind only the test's explicit dependency seams."""
+    module = _entrypoint_modules[str(Path(path).with_suffix("")).replace("/", ".")]
+    for key, value in namespace.items():
+        _entrypoint_patches.setattr(module, key, value, raising=False)
+    namespace[name] = getattr(module, name)
     return namespace[name]
 
 
@@ -63,7 +67,6 @@ def bridge(factory):
         "app/fastapi_routes/xcagi_compat_chat_helpers.py",
         "_xcagi_planner_stream_bytes_async",
         {
-            **STREAM_BINDINGS,
             "_xcagi_planner_stream_bytes": factory,
             "_sse_event_line": lambda value: json.dumps(value).encode(),
         },
@@ -208,7 +211,6 @@ def guarded(factory, monkeypatch, timeout=0.15):
         "app/fastapi_routes/xcagi_compat_chat_helpers.py",
         "_xcagi_guarded_planner_stream_events",
         {
-            **STREAM_BINDINGS,
             "chat_stream_sse_events": factory,
             "time": time,
             "queue": queue,
@@ -520,7 +522,6 @@ async def test_real_sync_wrapper_catches_guard_timeout_and_delivers_error(monkey
         create_modstore_openai_client_from_request=lambda _: object(),
         start_legacy_chat_run=lambda **k: NS(run_id="synthetic-run"),
         finalize_legacy_chat_run=lambda *a, **k: None,
-        mark_legacy_chat_stream_interrupted=lambda *a, **k: None,
         _sse_event_line=lambda value: json.dumps(value).encode(),
         _sse_payload_with_run_id=lambda value, run_id: {**value, "run_id": run_id},
         _xcagi_guarded_planner_stream_events=lambda *a, **k: guarded(events, monkeypatch),
@@ -534,6 +535,8 @@ async def test_real_sync_wrapper_catches_guard_timeout_and_delivers_error(monkey
             "_facade": lambda: facade,
             "watch_stream_interruption": life.watch_stream_interruption,
             "watch_stream_tool_records": life.watch_stream_tool_records,
+            "mark_legacy_chat_stream_interrupted": lambda *a, **k: None,
+            "record_legacy_stream_tool_receipt": lambda *a, **k: None,
             "StreamObservationTimeout": life.StreamObservationTimeout,
             "_classify_and_submit_client_issue": lambda *a: None,
             "_client_issue_reply": lambda _: None,
@@ -568,9 +571,9 @@ def test_nested_and_concurrent_owned_reads_all_close_once(lifetime):
 
 @pytest.mark.asyncio
 async def test_real_modstore_generator_http_response_interrupts_blocked_mocktransport(monkeypatch):
-    import os
-
     import httpx
+
+    from app.domain.shared_services.conversation.modstore_adapter import _ModstoreOpenAICompletions
 
     entered, closed, finished = (threading.Event() for _ in range(3))
     requests, close_calls = [], []
@@ -609,24 +612,6 @@ async def test_real_modstore_generator_http_response_interrupts_blocked_mocktran
     )
     connection = NS(platform_url="https://synthetic.invalid", timeout=1, headers=lambda: {})
     request = NS(messages=[], payload=lambda *a, **k: {})
-    compatibility = {"os": os, "json": json, "SimpleNamespace": NS}
-    for name in [
-        "_to_openai_object",
-        "_normalize_stream_choice",
-        "_platform_stream_payload_to_openai_chunk",
-        "stream_response",
-    ]:
-        extract("app/legacy/market_llm/openai_compat.py", name, compatibility)
-    completions = extract(
-        "app/domain/shared_services/conversation/modstore_adapter.py",
-        "_ModstoreOpenAICompletions",
-        {
-            "OpenAIPorts": lambda complete, stream, model_name: NS(
-                complete=complete, stream=stream, model_name=model_name
-            ),
-            "openai_compat": NS(stream_response=compatibility["stream_response"]),
-        },
-    )
     adapter = NS(
         chat_completion_sync=lambda **k: pytest.fail("must not replay completion"),
         stream_chat_completion_sync=lambda **k: native(
@@ -638,7 +623,7 @@ async def test_real_modstore_generator_http_response_interrupts_blocked_mocktran
 
     def producer(*a, **k):
         try:
-            source = completions(adapter).create(messages=[], stream=True)
+            source = _ModstoreOpenAICompletions(adapter).create(messages=[], stream=True)
             with life.owned_model_read(source):
                 yield from source
         finally:
