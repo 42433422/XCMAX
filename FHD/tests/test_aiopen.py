@@ -22,11 +22,12 @@ from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
-    return TestClient(app)
+    return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
 @pytest.fixture(autouse=True)
@@ -91,16 +92,15 @@ def test_invoke_requires_key_when_configured(client, monkeypatch):
     assert resp.json()["success"] is True
 
 
-def test_invoke_open_when_no_keys(client, monkeypatch):
+def test_invoke_denied_when_no_keys(client, monkeypatch):
     monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
     resp = client.post("/api/aiopen/invoke", json={"tool": "api_catalog", "args": {}})
-    assert resp.status_code == 200
-    routes = {r["path"] for r in resp.json()["routes"]}
-    assert "/api/ai/unified_chat" in routes
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "AIOPEN_KEY_INVALID"
 
 
 def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
     with patch(
@@ -129,7 +129,7 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
 
 
 def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post(
         "/api/aiopen/invoke",
         json={"tool": "api_call", "args": {"path": "/api/not/whitelisted"}},
@@ -139,7 +139,7 @@ def test_invoke_api_call_blocked_outside_whitelist(client, monkeypatch):
 
 
 def test_invoke_unknown_tool(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post("/api/aiopen/invoke", json={"tool": "nope", "args": {}})
     assert resp.status_code == 404
 
@@ -165,6 +165,8 @@ def test_runtime_key_lifecycle(client, monkeypatch):
     assert resp.json()["revoked"] is True
     assert resp.json()["run_id"] == resp.json()["agent_run_id"]
     assert aiopen_service.list_api_keys() == []
+    # Revoking the last key must not reopen the API to unauthenticated clients.
+    assert client.post("/api/aiopen/invoke", json={"tool": "api_catalog"}).status_code == 401
 
 
 def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
@@ -236,7 +238,7 @@ def test_aiopen_control_routes_attach_agent_runs(client):
 
 
 def test_mcp_initialize_list_call(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
 
     init = client.post(
         "/api/aiopen/mcp",
@@ -284,7 +286,7 @@ def test_mcp_initialize_list_call(client, monkeypatch):
 
 
 def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     repo = InMemoryAgentRunRepository()
 
     with patch(
@@ -316,7 +318,7 @@ def test_aiopen_mcp_tools_call_attaches_agent_run_meta(client, monkeypatch):
 
 
 def test_mcp_get_probe(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.get("/api/aiopen/mcp")
     assert resp.status_code == 200
     data = resp.json()
@@ -343,7 +345,7 @@ def test_install_bundle(client):
 
 
 def test_mcp_initialize_session_header(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     resp = client.post(
         "/api/aiopen/mcp",
         json={
@@ -361,7 +363,7 @@ def test_mcp_initialize_session_header(client, monkeypatch):
 
 
 def test_ui_tool_without_session(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     AIOPEN_STATE["remote_control_enabled"] = True
     resp = client.post(
         "/api/aiopen/invoke",
@@ -374,7 +376,7 @@ def test_ui_tool_without_session(client, monkeypatch):
 
 
 def test_ui_tool_blocked_when_remote_control_off(client, monkeypatch):
-    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     AIOPEN_STATE["remote_control_enabled"] = False
     try:
         resp = client.post("/api/aiopen/invoke", json={"tool": "ui_click", "args": {}})

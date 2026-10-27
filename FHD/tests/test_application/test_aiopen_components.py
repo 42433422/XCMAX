@@ -210,7 +210,7 @@ def test_key_registry_owns_only_injected_state_and_key_sources() -> None:
     registry = ApiKeyRegistry(
         RuntimeState(values), lambda: configured_key[0], lambda size: "local-token", lambda: 42.0
     )
-    assert registry.verify(None) is True
+    assert registry.verify(None) is False
 
     generated = registry.generate("  local client  ")
     assert generated == {"key": "aiopen_local-token", "label": "local client", "created_at": 42.0}
