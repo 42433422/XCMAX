@@ -18,9 +18,12 @@
 from __future__ import annotations
 
 import logging
+import os
+import secrets
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Body, Header, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Body, Depends, Header, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.application.agent_orchestrator.chat_trace import (
@@ -62,6 +65,7 @@ from app.fastapi_routes.aiopen_route_support import (
     wrap_mcp_json as _wrap_mcp_json,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
+from app.infrastructure.auth.dependencies import require_admin_user, resolve_session_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -300,12 +304,15 @@ async def aiopen_mcp(
 
 
 @router.get("/api/aiopen/keys")
-def aiopen_keys_list():
+def aiopen_keys_list(_admin: Any = Depends(require_admin_user)):
     return {"success": True, "keys": list_api_keys()}
 
 
 @router.post("/api/aiopen/keys")
-def aiopen_keys_create(body: dict = Body(default_factory=dict)):
+def aiopen_keys_create(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     created = generate_api_key(str(body.get("label") or ""))
     return _trace_aiopen_control_result(
         {"success": True, **created},
@@ -316,7 +323,10 @@ def aiopen_keys_create(body: dict = Body(default_factory=dict)):
 
 
 @router.delete("/api/aiopen/keys")
-def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
+def aiopen_keys_revoke(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     key = str(body.get("key") or "").strip()
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
@@ -335,7 +345,7 @@ def aiopen_keys_revoke(body: dict = Body(default_factory=dict)):
 
 
 @router.get("/api/aiopen/panel")
-def aiopen_panel(request: Request):
+def aiopen_panel(request: Request, _admin: Any = Depends(require_admin_user)):
     whitelist = AIOPEN_STATE.get("whitelist", {})
     base = str(request.base_url).rstrip("/")
     manifest = aiopen_manifest()
@@ -357,7 +367,10 @@ def aiopen_panel(request: Request):
 
 
 @router.post("/api/aiopen/whitelist")
-def aiopen_whitelist(body: dict = Body(default_factory=dict)):
+def aiopen_whitelist(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     enabled = bool(body.get("enabled", False))
     if not path:
@@ -372,7 +385,10 @@ def aiopen_whitelist(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/aiopen/whitelist/seed")
-def aiopen_whitelist_seed(body: dict = Body(default_factory=dict)):
+def aiopen_whitelist_seed(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     """一键写入侧栏/业务全能力白名单，打通 MCP api_call 全调用闭环。"""
     enable = bool(body.get("enabled", True)) if "enabled" in body else True
     merge = bool(body.get("merge", True))
@@ -386,8 +402,14 @@ def aiopen_whitelist_seed(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/aiopen/loop/verify")
-async def aiopen_loop_verify(request: Request, body: dict = Body(default_factory=dict)):
+async def aiopen_loop_verify(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    x_aiopen_key: AiOpenKeyHeader = None,
+):
     """全调用闭环自检（等同 MCP capability_loop 工具）。"""
+    if not verify_api_key(x_aiopen_key):
+        return _unauthorized()
     result = await invoke_tool(
         "capability_loop", body if isinstance(body, dict) else {}, request.app
     )
@@ -395,7 +417,10 @@ async def aiopen_loop_verify(request: Request, body: dict = Body(default_factory
 
 
 @router.post("/api/aiopen/config")
-def aiopen_config(body: dict = Body(default_factory=dict)):
+def aiopen_config(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     base_url = str(body.get("base_url") or "").strip().rstrip("/")
     if not base_url:
         return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
@@ -409,7 +434,10 @@ def aiopen_config(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/aiopen/control")
-def aiopen_control(body: dict = Body(default_factory=dict)):
+def aiopen_control(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     enabled = bool(body.get("enabled", False))
     AIOPEN_STATE["remote_control_enabled"] = enabled
     return _trace_aiopen_control_result(
@@ -421,7 +449,12 @@ def aiopen_control(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/aiopen/openclaw/chat")
-def aiopen_openclaw_chat(body: dict = Body(default_factory=dict)):
+def aiopen_openclaw_chat(
+    body: dict = Body(default_factory=dict),
+    x_aiopen_key: AiOpenKeyHeader = None,
+):
+    if not verify_api_key(x_aiopen_key):
+        return _unauthorized()
     message = str(body.get("message") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)
@@ -449,23 +482,71 @@ def aiopen_openclaw_chat(body: dict = Body(default_factory=dict)):
 # ---------------------------------------------------------------------------
 
 
+def _trusted_screen_origin(ws: WebSocket) -> bool:
+    """Reject cross-site WebSocket hijacking; cross-origin UIs require an explicit allowlist."""
+    raw_origin = str(ws.headers.get("origin") or "").strip()
+    if not raw_origin:
+        return False
+    try:
+        parsed = urlsplit(raw_origin)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+        normalized = raw_origin.rstrip("/").lower()
+        host = str(ws.headers.get("host") or "").strip().lower()
+        if parsed.netloc.lower() == host:
+            return True
+        allowed = {
+            origin.strip().rstrip("/").lower()
+            for origin in os.environ.get("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "").split(",")
+            if origin.strip()
+        }
+        return normalized in allowed
+    except ValueError:
+        return False
+
+
 @router.websocket("/api/aiopen/ws")
 async def aiopen_screen_ws(ws: WebSocket):
-    await ws.accept()
-    session_id = str(ws.query_params.get("session_id") or "").strip()
-    if not session_id:
-        import uuid
+    # WebSocket bypasses HTTP-only LAN and CSRF middleware; authenticate *before* accepting.
+    if not _trusted_screen_origin(ws):
+        await ws.close(code=1008)
+        return
+    try:
+        user = resolve_session_user(ws)
+    except RECOVERABLE_ERRORS:
+        user = None
+    if user is None or not getattr(user, "is_active", True):
+        await ws.close(code=1008)
+        return
 
-        session_id = "screen_" + uuid.uuid4().hex[:12]
-    label = str(ws.query_params.get("label") or "").strip()
-    await aiopen_cursor_hub.connect(session_id, ws, meta={"label": label or "XCAGI 前端"})
+    # The server, not the browser/query string, owns the session identifier.
+    session_id = "screen_" + secrets.token_hex(16)
+    label = str(ws.query_params.get("label") or "").strip()[:100]
+    await ws.accept()
+    await aiopen_cursor_hub.connect(
+        session_id,
+        ws,
+        meta={
+            "label": label or "XCAGI 前端",
+            "principal_id": str(getattr(user, "id", "")),
+            "tenant_id": getattr(user, "tenant_id", None),
+        },
+    )
     try:
         await ws.send_json({"type": "hello", "session_id": session_id})
         while True:
             raw = await ws.receive_text()
-            handled = aiopen_cursor_hub.handle_client_message(raw)
+            handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
-                logger.debug("aiopen ws unhandled message: %s", raw[:200])
+                logger.debug("aiopen ws ignored unmatched message")
     except WebSocketDisconnect:
         pass
     except RECOVERABLE_ERRORS:

@@ -8,6 +8,12 @@ from dataclasses import dataclass
 from fastapi.responses import JSONResponse
 
 from app.db.models.user import User
+from app.domain.auth.ports import (
+    JsonObject,
+    PasswordBackend,
+    RouteResult,
+    UserDirectory,
+)
 from app.http.error_codes import (
     CREATE_FAILED,
     INVALID_INPUT,
@@ -18,13 +24,6 @@ from app.http.error_codes import (
     UPDATE_FAILED,
     WEAK_PASSWORD,
     error_envelope,
-)
-
-from .port_contracts import (
-    JsonObject,
-    PasswordBackend,
-    RouteResult,
-    UserDirectory,
 )
 
 

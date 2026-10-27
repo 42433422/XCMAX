@@ -8,8 +8,9 @@ from typing import cast
 from fastapi import APIRouter, Body, Request
 from fastapi.background import BackgroundTasks
 
+from app.domain.auth.ports import JsonObject
+
 from .credential_login import CredentialLogin
-from .port_contracts import JsonObject
 from .registration import Registration
 
 

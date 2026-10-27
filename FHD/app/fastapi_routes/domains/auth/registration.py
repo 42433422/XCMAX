@@ -13,18 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.application.session_account_meta import AccountKind
 from app.db.models.user import User
-from app.http.error_codes import (
-    CREATE_FAILED,
-    INVALID_INPUT,
-    LOCAL_LOGIN_AFTER_REGISTER,
-    LOGIN_AFTER_REGISTER,
-    MARKET_REGISTER_FAILED,
-    REGISTRATION_DISABLED,
-    WEAK_PASSWORD,
-    error_envelope,
-)
-
-from .port_contracts import (
+from app.domain.auth.ports import (
     AttachCookie,
     Database,
     ErrorTypes,
@@ -35,6 +24,16 @@ from .port_contracts import (
     RegistrationEnricher,
     RouteResult,
     UserDirectory,
+)
+from app.http.error_codes import (
+    CREATE_FAILED,
+    INVALID_INPUT,
+    LOCAL_LOGIN_AFTER_REGISTER,
+    LOGIN_AFTER_REGISTER,
+    MARKET_REGISTER_FAILED,
+    REGISTRATION_DISABLED,
+    WEAK_PASSWORD,
+    error_envelope,
 )
 
 

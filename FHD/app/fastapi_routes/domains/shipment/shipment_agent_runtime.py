@@ -6,7 +6,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.workflow.types import normalize_workflow_risk
+from app.application.workflow.workflow_types import normalize_workflow_risk
 
 
 def agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -42,7 +42,7 @@ def _run_shipment_agent(
     default_risk: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import get_workflow_tool_registry
     from app.infrastructure.auth.agent_principal import require_agent_principal
 

@@ -240,11 +240,13 @@ def _render_employee_py_for_manifest(
                 "default_output_relpath", "outputs/employee_output.xlsx"
             )
             rule_spec["default_template_relpath"] = direct_cfg.get("default_template_relpath", "")
-        return render_direct_python_asset_worker(
-            employee_id=employee_id,
-            label=label,
-            runtime_module=runtime_mod,
-            rule_spec=rule_spec,
+        return str(
+            render_direct_python_asset_worker(
+                employee_id=employee_id,
+                label=label,
+                runtime_module=runtime_mod,
+                rule_spec=rule_spec,
+            )
         )
     return render_employee_pack_employee_py(employee_id=employee_id, stem=stem, label=label)
 

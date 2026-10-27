@@ -21,8 +21,8 @@
   "local_patches": [
     {
       "path": "patches/local-runtime-hardening.patch",
-      "sha256": "08428a88d6238461970ade81a40b25276c66dfbe9a9f85442f61e5f9d5db0dfc",
-      "description": "Preserve existing named exception boundaries and cache-iteration typing fixes; no upstream runtime changes in this deduplication."
+      "sha256": "e50a902ee194abdbe0e92b4ad44a58f11994cad610cec3b1e96030117c11c914",
+      "description": "Preserve existing named exception boundaries and cache-iteration typing fixes; split pregel/main.py into facade + body modules for debt19 size gate."
     }
   ]
 }

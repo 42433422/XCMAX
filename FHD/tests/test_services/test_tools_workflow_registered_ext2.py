@@ -144,7 +144,7 @@ class TestCustomersRouterMissingBranches:
         # getattr(pkg, 'routes') which bypasses sys.modules when the module is
         # already cached as a parent-package attribute.
         with patch(
-            "app.fastapi_routes.domains.customer.routes._execute_customers_route_action",
+            "app.fastapi_routes.domains.customer.customer_routes._execute_customers_route_action",
             return_value={"success": True},
         ):
             result = _registered_router_customers(
@@ -166,7 +166,7 @@ class TestProductsRouterMissingBranches:
         svc.create_product.return_value = {"success": True}
         # Patch _svc directly on the module: `from pkg import routes` uses
         # getattr(pkg, 'routes') which bypasses sys.modules when already cached.
-        with patch("app.fastapi_routes.domains.product.routes._svc", return_value=svc):
+        with patch("app.fastapi_routes.domains.product.product_routes._svc", return_value=svc):
             result = _registered_router_products(
                 "create",
                 {"name": "P1", "unit_price": 5.0},

@@ -12,7 +12,7 @@ from typing import Any
 _FHD_ROOT = Path(__file__).resolve().parents[3]
 if str(_FHD_ROOT) not in sys.path:
     sys.path.insert(0, str(_FHD_ROOT))
-from scripts.dev.ssot_plugins.base import ROOT, load_registry  # noqa: E402
+from scripts.dev.ssot_plugins.plugin_base import ROOT, load_registry  # noqa: E402
 
 MOBILE_SSOT_DOC = ROOT / "docs" / "mobile_tri_platform_ssot.md"
 SSOT_INDEX = ROOT / "docs" / "SSOT_INDEX.md"

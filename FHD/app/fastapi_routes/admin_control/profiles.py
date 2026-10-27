@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import AdminGate, ErrorPolicy, JsonObject
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject
+
 from .profile_store import ProfileRepository
 
 if TYPE_CHECKING:

@@ -20,7 +20,7 @@ anywhere in the package without dragging the agent layer along.
 from __future__ import annotations
 
 from .env import DEFAULT_ENV_ALLOWLIST, sanitise_env
-from .paths import (
+from .path_policy import (
     PathSafetyError,
     is_safe_relative,
     resolve_within_root,

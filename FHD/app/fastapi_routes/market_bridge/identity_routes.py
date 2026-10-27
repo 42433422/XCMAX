@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .port_contracts import JsonObject
+from app.application.market_bridge.protocols import JsonObject
 
 
 @dataclass

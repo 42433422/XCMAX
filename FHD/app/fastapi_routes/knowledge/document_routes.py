@@ -8,7 +8,8 @@ from pathlib import Path
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from .port_contracts import DatasetAction
+from app.application.knowledge.http_port_contracts import DatasetAction
+
 from .schemas import DatasetDocumentIngestRequest, DatasetQueryRequest
 from .uploads import DocumentUpload
 

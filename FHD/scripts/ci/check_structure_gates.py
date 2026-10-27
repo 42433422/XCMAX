@@ -31,7 +31,7 @@ BASELINE = {
     "mixin_total": 12,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
-    "routes_total": 304,
+    "routes_total": 298,
     "routes_top_level": 115,
     "legacy_prod_ref_files": 27,
     "application_ports_py": 1,
@@ -51,7 +51,7 @@ BASELINE = {
     "ports_repo_wide": 15,
     "ports_layer_count": 3,
     "blueprints_py": 40,
-    "py_gt_100kb_nontest": 3,
+    "py_gt_100kb_nontest": 0,
     "fastapi_routes_ports": 0,
 }
 

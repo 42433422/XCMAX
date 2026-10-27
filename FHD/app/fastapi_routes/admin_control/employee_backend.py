@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from app.application.admin_control.protocols import JsonObject
+
 from .employee_run import EmployeeWork
-from .port_contracts import JsonObject
 
 if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentStep

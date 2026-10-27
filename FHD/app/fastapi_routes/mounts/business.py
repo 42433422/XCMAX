@@ -187,7 +187,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "admin_audit",
         lambda: (
-            __import__("app.fastapi_routes.domains.admin_audit.routes", fromlist=["router"]).router
+            __import__(
+                "app.fastapi_routes.domains.admin_audit.admin_audit_routes", fromlist=["router"]
+            ).router
         ),
         priority=10,
     )
@@ -195,7 +197,9 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         registry,
         "genai_traces",
         lambda: (
-            __import__("app.fastapi_routes.domains.genai_traces.routes", fromlist=["router"]).router
+            __import__(
+                "app.fastapi_routes.domains.genai_traces.genai_traces_routes", fromlist=["router"]
+            ).router
         ),
         priority=10,
     )
