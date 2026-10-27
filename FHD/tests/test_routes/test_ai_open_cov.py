@@ -616,7 +616,8 @@ def test_ws_autogenerate_session_id():
     ):
         c = _make_client()
         with c.websocket_connect(
-            "/api/aiopen/ws", headers={"Origin": "http://testserver"}
+            "/api/aiopen/ws",
+            headers={"Origin": "http://testserver"},
         ) as ws:
             hello = ws.receive_json()
             assert hello["type"] == "hello"
