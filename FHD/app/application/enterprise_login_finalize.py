@@ -45,6 +45,12 @@ async def finalize_enterprise_login(
 
     if not session_id:
         return result
+    from app.db.bootstrap.guarded import enabled
+
+    if enabled():
+        return _existing_guarded_login(
+            result, session_id, market_result, account_kind, username, invitation_code
+        )
     flow = _login_flow_module()
     market_token = ""
     local_demo_market = False
@@ -336,3 +342,49 @@ async def finalize_enterprise_login(
         else:
             background_tasks.add_task(sync_delivery_receipts)
     return result
+
+
+def _existing_guarded_login(result, session_id, market_result, account_kind, username, invitation):
+    """Read an already-bound identity; market login is not an enrollment protocol."""
+    from app.application.session_account_meta import enrich_session_meta_with_tenant
+    from app.db.bootstrap.guarded import validate_auth_schema
+    from app.db.models import User, UserSession
+    from app.db.session import get_host_db
+    from app.utils.time import utc_now_naive
+
+    def refuse():
+        raise HTTPException(409, "Guarded login requires an existing unchanged identity")
+
+    if invitation or not result.get("success"):
+        refuse()
+    with get_host_db() as db:
+        validate_auth_schema(db.connection())
+        row = db.query(UserSession).filter(UserSession.session_id == session_id).first()
+        user = db.get(User, row.user_id) if row else None
+        if (
+            row is None
+            or row.expires_at <= utc_now_naive()
+            or user is None
+            or not user.is_active
+            or user.username != username
+            or (result.get("user") or {}).get("id") != user.id
+        ):
+            refuse()
+        meta = enrich_session_meta_with_tenant(session_id, user)
+        if account_kind != meta.get("account_kind") or user.market_user_id != meta.get(
+            "market_user_id"
+        ):
+            refuse()
+        if market_result and market_result.get("success"):
+            flow = _login_flow_module()
+            blob = flow.extract_market_user_blob(market_result)
+            if (
+                blob.get("id") != meta.get("market_user_id")
+                or flow.resolve_market_username(market_result) != user.username
+                or bool(market_result.get("is_market_admin")) != meta.get("market_is_admin")
+                or bool(market_result.get("is_enterprise")) != meta.get("market_is_enterprise")
+            ):
+                refuse()
+        # No token, tenant, subscription, role, session metadata or entitlement
+        # writes, no refresh/reload callbacks, and no invitation acceptance.
+        return {**result, **meta}

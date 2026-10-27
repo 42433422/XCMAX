@@ -348,7 +348,13 @@ class SQLAlchemyAgentRunRepository:
             {AgentRunRecord.status: AgentRunRecord.status}, synchronize_session=False
         )
         record = db.get(AgentRunRecord, run.run_id, populate_existing=True)
-        preserve_run_evidence(run, self._record_to_run(record) if record is not None else None)
+        previous = self._record_to_run(record) if record is not None else None
+        from app.application.agent_orchestrator.catalog_authority_retention import (
+            preserve_catalog_run_authority,
+        )
+
+        preserve_catalog_run_authority(db, run, previous)
+        preserve_run_evidence(run, previous)
         ensure_terminal_business_result(run)
         run.touch()
         payload = json.dumps(run.to_dict(), ensure_ascii=False, default=str)
@@ -636,11 +642,40 @@ class SQLAlchemyAgentRunRepository:
     def clear(self) -> None:
         self._ensure_schema()
         with self._session_scope() as db:
+            from sqlalchemy import or_, tuple_
+
+            from app.application.agent_orchestrator.catalog_authority_retention import (
+                catalog_retention,
+                lock_catalog_cleanup,
+            )
             from app.db.models.agent import AgentRunRecord, AgentTaskCommandRecord, AgentTaskRecord
 
-            db.query(AgentTaskCommandRecord).delete()
-            db.query(AgentTaskRecord).delete()
-            db.query(AgentRunRecord).delete()
+            lock_catalog_cleanup(db)
+            retained = catalog_retention(db)
+            protected_tasks = (
+                db.query(AgentTaskRecord.id)
+                .filter(
+                    or_(
+                        tuple_(
+                            AgentTaskRecord.tenant_id,
+                            AgentTaskRecord.user_id,
+                            AgentTaskRecord.task_id,
+                        ).in_(retained.task_keys),
+                        AgentTaskRecord.active_run_id.in_(retained.run_ids),
+                        AgentTaskRecord.root_run_id.in_(retained.run_ids),
+                    )
+                )
+                .all()
+            )
+            db.query(AgentTaskCommandRecord).filter(
+                AgentTaskCommandRecord.run_id.not_in(retained.run_ids)
+            ).delete(synchronize_session=False)
+            db.query(AgentTaskRecord).filter(
+                AgentTaskRecord.id.not_in([row.id for row in protected_tasks])
+            ).delete(synchronize_session=False)
+            db.query(AgentRunRecord).filter(AgentRunRecord.run_id.not_in(retained.run_ids)).delete(
+                synchronize_session=False
+            )
 
     @contextmanager
     def transaction(self, *, read_only: bool = False) -> Iterator[Session]:

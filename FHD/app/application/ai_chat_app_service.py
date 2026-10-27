@@ -183,7 +183,7 @@ class AIChatApplicationService(
     def _merge_tool_runtime_context(
         user_id: str, message: str, context: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        runtime_ctx: dict[str, Any] = {"user_id": user_id, "message": message}
+        runtime_ctx: dict[str, Any] = {"conversation_id": user_id, "message": message}
         AIChatWorkflowResponseMixin._attach_task_tenant(runtime_ctx)
         if isinstance(context, dict):
             for key in (
@@ -204,6 +204,29 @@ class AIChatApplicationService(
             for key in ("excel_analysis", "last_excel_analysis_context"):
                 if key in context and isinstance(context[key], dict):
                     runtime_ctx[key] = context[key]
+        if isinstance(context, dict) and context.get("_actor_authorization") is not None:
+            from copy import deepcopy
+
+            from app.application.agent_orchestrator.runtime_context import (
+                RuntimeContextOwnershipError,
+            )
+            from app.infrastructure.auth.agent_mod_scope import validate_actor_context
+
+            if validate_actor_context(context) is not None:
+                raise RuntimeContextOwnershipError("工具任务的原登录身份已失效")
+            # Conversation identifiers are not business principals. Preserve the
+            # original server-bound actor through the delegate, never re-sign it.
+            for key in (
+                "user_id",
+                "actor_id",
+                "tenant_id",
+                "_actor_authorization",
+                "_mod_authorization",
+            ):
+                if key in context:
+                    runtime_ctx[key] = deepcopy(context[key])
+                else:
+                    runtime_ctx.pop(key, None)
         return runtime_ctx
 
     def process_chat(
@@ -410,7 +433,7 @@ class AIChatApplicationService(
         logger.info(
             "用户 %s 消息：%s... -> %s", user_id, message[:50], ai_result.get("action", "unknown")
         )
-        response_data = self._build_response(ai_result, source, message)
+        response_data = self._build_response(ai_result, source, message, runtime_context=ctx)
         return _finalize(response_data)
 
     @staticmethod
@@ -699,7 +722,11 @@ class AIChatApplicationService(
             logger.info("用户 %s 确认导入文件：%s -> %s", user_id, saved_name, unit_name)
 
     def _build_response(
-        self, ai_result: dict[str, Any], source: str | None, original_message: str = ""
+        self,
+        ai_result: dict[str, Any],
+        source: str | None,
+        original_message: str = "",
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """构建响应数据"""
         response_data = {
@@ -716,7 +743,12 @@ class AIChatApplicationService(
         result_data = ai_result.get("data") or {}
         if action == "tool_call" and result_data:
             response_data = self._handle_tool_call(
-                response_data, ai_result, result_data, source, original_message
+                response_data,
+                ai_result,
+                result_data,
+                source,
+                original_message,
+                runtime_context=runtime_context,
             )
         else:
             if action == "followup":
@@ -732,6 +764,7 @@ class AIChatApplicationService(
         result_data: dict[str, Any],
         source: str | None,
         original_message: str = "",
+        runtime_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """处理工具调用响应"""
         tool_key = result_data.get("tool_key")
@@ -743,7 +776,13 @@ class AIChatApplicationService(
             return response_data
         if self._is_pro_source(source):
             response_data = self._execute_pro_mode_tools(
-                response_data, tool_key, slots, parsed_params, ai_result, original_message
+                response_data,
+                tool_key,
+                slots,
+                parsed_params,
+                ai_result,
+                original_message,
+                runtime_context=runtime_context,
             )
         else:
             response_data = self._execute_normal_mode_tools(

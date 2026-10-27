@@ -52,9 +52,13 @@ _NON_ORM_TABLES = {
 }
 
 
+# Explicitly managed, retention-only schema; NOT created by the baseline.
+_RETAINED_OPT_IN_TABLES = {"agent_business_actions"}
+
+
 def _include_name(name, type_, parent_names):
     if type_ == "table":
-        return name not in _NON_ORM_TABLES
+        return name not in _NON_ORM_TABLES | _RETAINED_OPT_IN_TABLES
     return True
 
 

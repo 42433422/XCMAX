@@ -13,6 +13,10 @@ class CustomerMutationService(Protocol):
 
     def match_purchase_unit(self, input_name: str) -> Any | None: ...
 
+    def lookup_purchase_unit_for_ensure(self, input_name: str) -> dict[str, Any]: ...
+
+    def get_by_id(self, customer_id: int) -> dict[str, Any]: ...
+
 
 TargetResolver = Callable[[str, dict[str, Any]], tuple[list[dict[str, Any]], str]]
 
@@ -56,16 +60,68 @@ def _ensure_customer(params: dict[str, Any], svc: CustomerMutationService) -> di
     unit_name = _customer_name(params)
     if not unit_name:
         return {"success": False, "message": "缺少 unit_name"}
-    matched = svc.match_purchase_unit(unit_name)
-    if matched:
-        return {"success": True, "exists": True, "unit_name": matched.unit_name}
-    result = svc.create({"customer_name": unit_name})
-    if result.get("success"):
-        return {"success": True, "exists": False, "created": True, "unit_name": unit_name}
-    message = str(result.get("message") or "")
-    if "已存在" in message:
-        return {"success": True, "exists": True, "unit_name": unit_name}
-    return {"success": False, "message": message or "创建单位失败"}
+    uncertain = {
+        "success": False,
+        "outcome": "unknown",
+        "retryable": False,
+        "reconciliation_required": True,
+    }
+    lookup = svc.lookup_purchase_unit_for_ensure(unit_name)
+    status = lookup.get("status") if isinstance(lookup, dict) else "unknown"
+    if status not in {"matched", "absent"}:
+        return {
+            **uncertain,
+            "error_code": "customer_lookup_"
+            + ("ambiguous" if status == "ambiguous" else "unknown"),
+            "message": "无法唯一确认客户，未执行创建",
+        }
+    created = status == "absent"
+    if created:
+        result = svc.create({"customer_name": unit_name})
+        if isinstance(result, dict) and result.get("success") is False:
+            return {**result, **uncertain}
+        data = (
+            result.get("data")
+            if isinstance(result, dict) and result.get("success") is True
+            else None
+        )
+    else:
+        unit_name = lookup.get("unit_name")
+        data = lookup
+    customer_id = data.get("id") if isinstance(data, dict) else None
+    uncertain.update(
+        error_code="customer_receipt_unverified",
+        message="客户结果未独立确认，请核对原操作，勿自动重试",
+        data=data,
+    )
+    if type(customer_id) is not int or customer_id <= 0 or not unit_name:
+        return uncertain
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    try:
+        readback = svc.get_by_id(customer_id)
+    except (*RECOVERABLE_ERRORS, SQLAlchemyError):
+        return uncertain
+    row = readback.get("data") if isinstance(readback, dict) else None
+    if (
+        not isinstance(readback, dict)
+        or readback.get("success") is not True
+        or not isinstance(row, dict)
+        or type(row.get("id")) is not int
+        or row.get("id") != customer_id
+        or row.get("customer_name") != unit_name
+    ):
+        return uncertain
+    return {
+        "success": True,
+        "exists": not created,
+        "unit_name": unit_name,
+        "id": customer_id,
+        "data": row,
+        **({"created": True} if created else {}),
+    }
 
 
 def _upsert_customer(

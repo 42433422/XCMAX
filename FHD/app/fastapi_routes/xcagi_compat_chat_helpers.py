@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
@@ -34,7 +34,6 @@ from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
 from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
-from app.application.tutorial_v2.scope import validated_tutorial_tenant_id
 from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
 from app.domain.app_pure.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
@@ -132,43 +131,26 @@ def _runtime_context_with_authenticated_actor(
     request: Request,
     runtime_context: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Attach the local session actor and authenticated tenant.
-    Never trust chat body.user_id for approvals, and never trust any tenant_id
-    supplied by the request body/context: the tenant is derived only from the
-    authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
-    """
-    context = dict(runtime_context or {})
-    # Every identity field crosses an untrusted HTTP boundary here. A missing
-    # session must not leave a client claim available to downstream services.
-    for key in (
-        "tenant_id",
-        "actor_id",
-        "local_user_id",
-        "authenticated_local_user_id",
-        "authenticated_username",
-        "authenticated_display_name",
-    ):
-        context.pop(key, None)
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
+    """Propagate a server session identity; anonymous chat carries no tool claim."""
+    from app.fastapi_routes.domains.agent.route_support import (
+        request_runtime_context,
+        without_runtime_identity,
+    )
 
-        user = resolve_session_user(request)
-        actor_id = int(getattr(user, "id", 0) or 0)
-        if actor_id > 0:
-            context["local_user_id"] = actor_id
-            context["actor_id"] = actor_id
-    except RECOVERABLE_ERRORS:
-        logger.debug("chat session actor resolution skipped", exc_info=True)
-    if (tutorial_tenant := validated_tutorial_tenant_id(request)) is not None:
-        return {**context, "tenant_id": int(tutorial_tenant)}
+    context = without_runtime_identity(dict(runtime_context or {}))
     try:
-        from app.infrastructure.auth.tenant_context import resolve_tenant_id
+        context = request_runtime_context(request, context)
+    except HTTPException as exc:
+        from app.infrastructure.auth.dependencies import session_id_from_request
 
-        resolved_tenant = resolve_tenant_id(request)
-        if resolved_tenant is not None:
-            context["tenant_id"] = int(resolved_tenant)
-    except RECOVERABLE_ERRORS:
-        logger.debug("chat session tenant resolution skipped", exc_info=True)
+        if exc.status_code != 401 or session_id_from_request(request):
+            raise
+        return context
+    # Retain the chat adapter's integer aliases; the sealed binding is unchanged.
+    context["local_user_id"] = int(context["user_id"])
+    context["actor_id"] = int(context["user_id"])
+    if context.get("tenant_id"):
+        context["tenant_id"] = int(context["tenant_id"])
     return context
 
 

@@ -66,6 +66,12 @@ def _stop_agent_tasks(app: FastAPI) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
+    if getattr(app.state, "catalog_admission", None) is not None:
+        from .guarded_catalog import lifespan as guarded_lifespan
+
+        async with guarded_lifespan(app):
+            yield
+        return
     logger.info("🚀 FastAPI 应用启动中...")
 
     from app.fastapi_app.startup_timing import mark_startup

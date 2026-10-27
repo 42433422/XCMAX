@@ -18,6 +18,28 @@ export type ChatOrchestrationAddAndSaveMessage = (
 /** Local async work may update only its original visible round; receipts may be saved to its original owner/session. */
 export type ChatLocalScope = { sessionId: string; isCurrent: () => boolean; isOwnerCurrent: () => boolean }
 
+/** A transport-level success cannot override an unknown tool or run outcome. */
+export function requiresTurnReconciliation(value: unknown): boolean {
+  const pending: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }]
+  const seen = new Set<object>()
+  while (pending.length) {
+    const { value: item, depth } = pending.shift()!
+    if (!item || typeof item !== 'object' || seen.has(item)) continue
+    seen.add(item)
+    const row = asRecord(item)
+    if (row.requires_reconciliation || row.reconciliation_required ||
+      ['execution_outcome', 'outcome', 'execution_state', 'status'].some(key => ['unknown', 'outcome_unknown'].includes(String(row[key] || '').toLowerCase()))) return true
+    if (depth >= 3) continue
+    for (const key of ['data', 'payload', 'result']) pending.push({ value: row[key], depth: depth + 1 })
+    for (const key of ['legacy_tool_records', '_tool_records', 'tool_records']) {
+      const records = asArray(row[key])
+      if (records.length > 100) return true
+      for (const record of records) pending.push({ value: asRecord(record).output, depth: depth + 1 })
+    }
+  }
+  return false
+}
+
 export type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
   legacyAutoActionHandler?: (action: ChatAutoAction, userMessage: string) => void

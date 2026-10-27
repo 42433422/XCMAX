@@ -121,9 +121,70 @@ def _iter_result_payloads(run: Any) -> list[dict[str, Any]]:
     return payloads
 
 
+def _catalog_historical_summary(run: Any) -> str:
+    steps = list(getattr(run, "steps", []) or [])
+    if len(steps) != 1 or getattr(steps[0], "tool_id", "") != "catalog_products_v1":
+        return ""
+    output = getattr(steps[0], "output", {}) or {}
+    projected = ((getattr(run, "final_output", {}) or {}).get("node_outputs") or {}).get(
+        steps[0].node_id
+    )
+    if (
+        isinstance(projected, dict)
+        and projected.get("outcome") == "historical_saved"
+        and projected.get("business_action_id") == f"agent:{run.run_id}:{steps[0].step_id}"
+        and projected.get("data") == output.get("data")
+        and projected.get("business_verification") == output.get("business_verification")
+    ):
+        output = projected
+    if (
+        output.get("outcome") == "historical_saved"
+        and output.get("success") is False
+        and output.get("historical_effect_verified") is True
+        and output.get("current_matches") is False
+        and output.get("fresh_save") is False
+        and not output.get("reconciliation_required")
+        and (output.get("business_verification") or {}).get("verified") is True
+        and (output.get("business_verification") or {}).get("method") == "catalog_price_receipt_v1"
+    ):
+        return "原修改已核验，但当前已有后续变更；本次未保存"
+    return ""
+
+
+def _catalog_rejection_summary(run: Any) -> str:
+    steps = list(getattr(run, "steps", []) or [])
+    if len(steps) != 1 or getattr(steps[0], "tool_id", "") != "catalog_products_v1":
+        return ""
+    step = steps[0]
+    output = getattr(step, "output", {}) or {}
+    verification = output.get("business_verification")
+    if (
+        getattr(run, "status", "") == "completed"
+        and step.action in {"append_price", "correct_price"}
+        and output.get("outcome") == "rejected_no_effect"
+        and output.get("operation_outcome") == "rejected_no_effect"
+        and output.get("success") is False
+        and output.get("historical_effect_verified") is False
+        and output.get("current_matches") is False
+        and output.get("fresh_save") is False
+        and output.get("retryable") is False
+        and not output.get("reconciliation_required")
+        and output.get("business_action_id") == f"agent:{run.run_id}:{step.step_id}"
+        and isinstance(verification, dict)
+        and verification.get("verified") is True
+        and verification.get("source_binding_verified") is True
+        and verification.get("method") == "catalog_price_receipt_v1"
+    ):
+        return "未保存：审核前态已变化；原操作已核验无副作用"
+    return ""
+
+
 def _result_summary(run: Any, payloads: list[dict[str, Any]]) -> str:
     status = _text(getattr(run, "status", ""), limit=32)
     metadata = getattr(run, "metadata", {}) or {}
+    terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
+    if terminal_catalog:
+        return terminal_catalog
     if status in {"failed", "cancelled", "blocked", "paused"} and (
         metadata.get("non_retryable")
         or (metadata.get("recovery") or {}).get("state") == "manual_reconciliation_required"
@@ -238,8 +299,15 @@ def ensure_terminal_business_result(run: Any) -> dict[str, Any]:
         return {}
     final_output = getattr(run, "final_output", {})
     final_output = dict(final_output) if isinstance(final_output, dict) else {}
+    terminal_catalog = _catalog_historical_summary(run) or _catalog_rejection_summary(run)
+    if terminal_catalog:
+        status = "failed"  # Workflow completion is not success of a rejected/historical save.
     existing = final_output.get("business_result")
-    if isinstance(existing, dict) and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL:
+    if (
+        not terminal_catalog
+        and isinstance(existing, dict)
+        and existing.get("protocol") == BUSINESS_HARNESS_PROTOCOL
+    ):
         return dict(existing)
     payloads = _iter_result_payloads(run)
     identity = harness_event_context(run)

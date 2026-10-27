@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
 from app.fastapi_routes.voice_model_source import (
     env as _env,
@@ -329,6 +329,7 @@ def _execute_intent_tool(
     text: str,
     slots: dict[str, Any],
     session_id: str = "",
+    runtime_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """复用 AIChatApplicationService._execute_pro_mode_tools 执行低风险工具。
 
@@ -359,6 +360,7 @@ def _execute_intent_tool(
         parsed_params=parsed_params,
         ai_result=ai_result,
         original_message=text,
+        runtime_context=runtime_context,
     )
 
     return {
@@ -375,6 +377,7 @@ def _execute_intent_tool(
 
 @router.post("/command")
 async def voice_command(
+    request: Request,
     file: UploadFile = File(..., description="按住说话录制的音频（webm/ogg/wav/m4a）"),
     auto_execute: bool = Form(default=False, description="是否自动执行识别到的低风险意图"),
     session_id: str = Form(default="", description="会话 ID，用于执行链路追踪"),
@@ -466,7 +469,14 @@ async def voice_command(
     else:
         # 低风险 + 高置信度 + auto_execute=True → 真实执行
         try:
-            exec_payload = _execute_intent_tool(tool_key, text, slots, session_id)
+            from app.fastapi_routes.xcagi_compat_chat_helpers import (
+                _runtime_context_with_authenticated_actor,
+            )
+
+            runtime_context = _runtime_context_with_authenticated_actor(request, {})
+            exec_payload = _execute_intent_tool(
+                tool_key, text, slots, session_id, runtime_context=runtime_context
+            )
             executed = bool(exec_payload.get("executed", False))
             result = exec_payload.get("result")
             reason = exec_payload.get("reason", "executed" if executed else "execution_failed")

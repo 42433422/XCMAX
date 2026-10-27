@@ -32,6 +32,7 @@ from app.application.agent_orchestrator.task_execution_sql_repository import (
 from app.fastapi_routes.domains.agent.artifact_routes import (
     download_agent_artifact as download_agent_artifact,
 )
+from app.fastapi_routes.domains.agent.catalog_product_routes import router as catalog_router
 from app.fastapi_routes.domains.agent.event_routes import (
     list_agent_run_events as list_agent_run_events,
 )
@@ -80,6 +81,7 @@ logger = logging.getLogger(__name__)
 # registration/golden-snapshot boundary even though direct TestClient calls
 # could still traverse them.
 router = task_router
+router.routes.extend(catalog_router.routes)
 
 
 @router.post("/api/agent/runs", response_model=None)

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""校验 requirements-server-api.txt 与 lock 文件顶层包名一致。"""
+"""校验运行时依赖名；为 CI 从现有 uv.lock 读取唯一 pytest 精确版本。"""
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +47,26 @@ def parse_lock(path: Path) -> set[str]:
     return names
 
 
-def main() -> int:
+def locked_pytest_requirement(lock: Path = ROOT / "uv.lock") -> str:
+    with lock.open("rb") as stream:
+        packages = tomllib.load(stream)["package"]
+    versions = [p.get("version", "") for p in packages if p.get("name") == "pytest"]
+    if len(versions) != 1 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+){2}", versions[0]):
+        raise ValueError("uv.lock must contain exactly one stable pytest X.Y.Z version")
+    return f"pytest=={versions[0]}"
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--pytest-pin", action="store_true")
+    args = parser.parse_args(argv)
+    if args.pytest_pin:
+        try:
+            print(locked_pytest_requirement())
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            print(f"cannot read locked pytest requirement: {exc}", file=sys.stderr)
+            return 1
+        return 0
     if not REQ.is_file():
         print(f"missing {REQ}", file=sys.stderr)
         return 1

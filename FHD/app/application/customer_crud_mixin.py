@@ -1,6 +1,7 @@
 import logging
 from typing import TYPE_CHECKING, Any
 
+from app.infrastructure.tenant_scope import apply_tenant_filter, owned_tenant_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ class CustomerCrudMixin:
                 from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
 
                 unit = (
-                    session.query(PurchaseUnitModel)
+                    apply_tenant_filter(session.query(PurchaseUnitModel), PurchaseUnitModel)
                     .filter(PurchaseUnitModel.id == customer_id)
                     .first()
                 )
@@ -106,7 +107,7 @@ class CustomerCrudMixin:
                     return {"success": False, "message": "客户名称不能为空"}
 
                 existing = (
-                    session.query(PurchaseUnitModel)
+                    apply_tenant_filter(session.query(PurchaseUnitModel), PurchaseUnitModel)
                     .filter(PurchaseUnitModel.unit_name == customer_name)
                     .first()
                 )
@@ -119,6 +120,7 @@ class CustomerCrudMixin:
                     contact_person=data.get("contact_person", ""),
                     contact_phone=data.get("contact_phone", ""),
                     address=data.get("contact_address", ""),
+                    tenant_id=owned_tenant_id(),
                 )
 
                 session.add(unit)

@@ -40,6 +40,18 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _authenticated_chat_body(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    from app.fastapi_routes.xcagi_compat_chat_helpers import (
+        _runtime_context_with_authenticated_actor,
+    )
+
+    raw = body.get("context")
+    context = _runtime_context_with_authenticated_actor(
+        request, raw if isinstance(raw, dict) else {}
+    )
+    return {**body, "context": context, "user_id": context.get("user_id", body.get("user_id"))}
+
+
 def _public_unified_chat_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep provider/tool exception details behind the public chat boundary."""
     if bool(payload.get("success")):
@@ -136,6 +148,7 @@ def ai_test():
 
 @router.post("/api/ai/chat-unified")
 def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=dict)):
+    body = _authenticated_chat_body(request, body or {})
     from app.domain.app_pure.ai_chat_helpers import unified_chat_single_payload
 
     message = (body.get("message", "") or "").strip()
@@ -164,6 +177,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
 
 @router.post("/api/ai/chat-unified/batch")
 def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_factory=dict)):
+    body = _authenticated_chat_body(request, body or {})
     from app.domain.app_pure.ai_chat_helpers import (
         normalize_batch_messages_payload,
         unified_chat_single_payload,

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from contextlib import nullcontext
 
 from app.domain.shared_services.tools_workflow_business_db import (
     _registered_router_business_db,
@@ -123,11 +124,47 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
 
     params = dict(params or {})
     runtime_context = dict(params.pop("_runtime_context", None) or {})
+    customer_scope = nullcontext()
+    customer_tenant = None
+    if tool_id == "customers" and action == "ensure_exists":
+        from fastapi import HTTPException
+
+        from app.infrastructure.auth.agent_mod_scope import (
+            AgentModAuthorizationError,
+            _bound_actor,
+            agent_mod_execution_scope,
+        )
+        from app.infrastructure.auth.business_scope_gate import (
+            check_owned_business_permission,
+        )
+
+        try:
+            actor = _bound_actor(runtime_context)
+            customer_tenant = check_owned_business_permission(actor, "customer.edit")
+            if str(runtime_context.get("tenant_id")) != str(customer_tenant):
+                raise AgentModAuthorizationError("企业范围与登录账号不一致")
+            if set(params) - {"unit_name", "customer_name", "name"}:
+                raise AgentModAuthorizationError("客户确认操作不接受身份或对象 ID 覆盖")
+            for hint in ("service_source", "route_module"):
+                runtime_context.pop(hint, None)
+            customer_scope = agent_mod_execution_scope(runtime_context.get("_mod_authorization"))
+        except (AgentModAuthorizationError, HTTPException):
+            return {
+                "success": False,
+                "error_code": "customer_action_not_authorized",
+                "message": "当前登录身份无权在此客户数据范围执行操作",
+            }
     profile = resolve_tool_execution_profile(runtime_context)
     user_message = str(runtime_context.get("message") or "").strip()
     router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
     if router is not None:
-        result = router(action, params, runtime_context, profile, user_message)
+        from app.infrastructure.tenant_scope import owned_tenant_scope
+
+        with (
+            customer_scope,
+            owned_tenant_scope(customer_tenant) if customer_tenant is not None else nullcontext(),
+        ):
+            result = router(action, params, runtime_context, profile, user_message)
         if tool_id == "business_db" and action == "write" and isinstance(result, dict):
             payload = params.get("payload")
             if isinstance(payload, dict):

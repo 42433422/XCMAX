@@ -26,6 +26,12 @@ def task_execution_context(run: AgentRun, step: Any) -> dict[str, Any]:
         "task_id": str(task_context.get("task_id") or ""),
         "task_attempt": int(task_context.get("attempt") or 1),
         "idempotency_key": f"agent:{run.run_id}:{step.step_id}",
+        **(
+            {"business_action_id": f"agent:{run.run_id}:{step.step_id}"}
+            if step.tool_id == "catalog_products_v1"
+            and step.action in {"append_price", "correct_price"}
+            else {}
+        ),
     }
 
 

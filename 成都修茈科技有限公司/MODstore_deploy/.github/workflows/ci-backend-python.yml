@@ -37,9 +37,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           python -m pip install --upgrade pip
           pip install -e "$GITHUB_WORKSPACE/packages/retort_engine" \
-            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]"
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]" "$pytest_pin"
 
       - name: Release gate subset (hard)
         run: python -m pytest -m release_gate -q --tb=short
@@ -59,9 +62,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           python -m pip install --upgrade pip
           pip install -e "$GITHUB_WORKSPACE/packages/retort_engine" \
-            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]"
+            -e "$GITHUB_WORKSPACE/packages/xcagi_common" -e ".[web,dev,governance]" "$pytest_pin"
 
       - name: Test shared employee archive builds
         run: python -m pytest "$GITHUB_WORKSPACE/packages/xcagi_common/tests" -q

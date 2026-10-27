@@ -245,9 +245,10 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
     if kind == "credential-incidents":
         for row in data.get("incidents", []) if isinstance(data, dict) else []:
             status = str(row.get("status") or "").strip().lower()
+            # Risk acceptance cannot prove a known credential was revoked or rotated.
+            # Keep the finding open until independent resolution evidence is complete.
             resolved = status == "resolved" and _credential_resolution_is_valid(row)
-            accepted = status == "accepted_risk" and _risk_acceptance_is_valid(row)
-            closed = resolved or accepted
+            closed = resolved
             findings.append(
                 _finding(
                     row.get("id"),
@@ -371,17 +372,29 @@ def normalize(kind: str, data: Any) -> list[dict[str, Any]]:
 
 
 def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
-    """Accept rotation only with two-party, hashed and time-bounded evidence."""
+    """Close only with independent revocation, rotation and rejection evidence."""
 
     author = str(row.get("author") or "").strip()
     reviewer = str(row.get("reviewer") or "").strip()
     evidence = str(row.get("resolution_evidence_sha256") or "").strip().lower()
+    required_actions = row.get("required_actions")
+    if not isinstance(required_actions, list):
+        return False
+    action_names = {str(action).strip().lower() for action in required_actions}
+    if not {"revoke", "rotate", "verify_old_credential_rejected"}.issubset(action_names):
+        return False
     if not author or not reviewer or author.casefold() == reviewer.casefold():
         return False
     if not re.fullmatch(r"[0-9a-f]{64}", evidence):
         return False
     timestamps: dict[str, datetime] = {}
-    for field in ("revoked_at", "rotated_at", "reviewed_at", "review_due"):
+    for field in (
+        "revoked_at",
+        "rotated_at",
+        "old_credential_rejected_at",
+        "reviewed_at",
+        "review_due",
+    ):
         try:
             parsed = datetime.fromisoformat(str(row.get(field) or "").replace("Z", "+00:00"))
         except ValueError:
@@ -391,40 +404,9 @@ def _credential_resolution_is_valid(row: dict[str, Any]) -> bool:
         timestamps[field] = parsed.astimezone(UTC)
     now = datetime.now(UTC)
     return bool(
-        timestamps["revoked_at"] <= timestamps["reviewed_at"] <= now
-        and timestamps["rotated_at"] <= timestamps["reviewed_at"]
-        and timestamps["review_due"] >= now
-    )
-
-
-def _risk_acceptance_is_valid(row: dict[str, Any]) -> bool:
-    """Accept a documented owner risk decision, still two-party and time-bounded.
-
-    Used for credential incidents where the owner explicitly declines rotation
-    (e.g. test-only credentials whose source files are already removed). The
-    decision must carry independent reviewer evidence, an acceptance record
-    hash, and a review_due date so the risk is re-evaluated periodically.
-    """
-
-    author = str(row.get("author") or "").strip()
-    reviewer = str(row.get("reviewer") or "").strip()
-    evidence = str(row.get("resolution_evidence_sha256") or "").strip().lower()
-    if not author or not reviewer or author.casefold() == reviewer.casefold():
-        return False
-    if not re.fullmatch(r"[0-9a-f]{64}", evidence):
-        return False
-    timestamps: dict[str, datetime] = {}
-    for field in ("accepted_at", "reviewed_at", "review_due"):
-        try:
-            parsed = datetime.fromisoformat(str(row.get(field) or "").replace("Z", "+00:00"))
-        except ValueError:
-            return False
-        if parsed.tzinfo is None:
-            return False
-        timestamps[field] = parsed.astimezone(UTC)
-    now = datetime.now(UTC)
-    return bool(
-        timestamps["accepted_at"] <= timestamps["reviewed_at"] <= now
+        timestamps["revoked_at"] <= timestamps["old_credential_rejected_at"]
+        and timestamps["rotated_at"] <= timestamps["old_credential_rejected_at"]
+        and timestamps["old_credential_rejected_at"] <= timestamps["reviewed_at"] <= now
         and timestamps["review_due"] >= now
     )
 

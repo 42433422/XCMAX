@@ -284,8 +284,11 @@ export const agentRunsApi = {
     return api.post<ApiResponse<AgentRunReference>>('/api/agent/runs/observed-tool', payload)
   },
 
-  continueRun(runId: string, payload: ContinueAgentRunPayload): Promise<AgentRunResponse> {
-    return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/continue`, payload)
+  continueRun(runId: string, payload: ContinueAgentRunPayload, activeModId?: string): Promise<AgentRunResponse> {
+    const url = `/api/agent/runs/${encodeURIComponent(runId)}/continue`
+    return activeModId
+      ? api.post<AgentRunResponse>(url, payload, { headers: { 'X-XCAGI-Active-Mod-Id': activeModId } })
+      : api.post<AgentRunResponse>(url, payload)
   },
 
   answerClarification(runId: string, payload: { step_id: string; parameters: Record<string, unknown> }): Promise<AgentRunResponse> {

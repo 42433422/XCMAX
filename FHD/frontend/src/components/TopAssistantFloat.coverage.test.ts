@@ -1,29 +1,13 @@
+import { makeFetchResponse, mountComponent } from './__tests__/topAssistantFloatHarness'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
-import { createRouter, createMemoryHistory } from 'vue-router'
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { defineComponent, h, nextTick } from 'vue'
-import TopAssistantFloat from './TopAssistantFloat.vue'
-
-// ===== Mock 模块 =====
-
-// RouterLink 桩组件
-const RouterLinkStub = defineComponent({
-  name: 'RouterLinkStub',
-  props: { to: { type: [String, Object], default: '/' } },
-  setup:
-    (props, { slots }) =>
-    () =>
-      h('a', { href: typeof props.to === 'string' ? props.to : '#' }, slots.default?.()),
-})
-
-// ExcelPreview 桩组件，附带 $el 与 querySelector 以覆盖滚动同步逻辑
-const ExcelPreviewStub = defineComponent({
-  name: 'ExcelPreview',
-  setup() {
-    return () => h('div', { class: 'excel-preview-stub' })
-  },
-})
+import { nextTick, type UnwrapRef } from 'vue'
+import { authApi } from '@/api/auth'
+import type { useAssistantCatalogPrices } from './top-assistant-float/useAssistantCatalogPrices'
+import { webcrypto } from 'node:crypto'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+import { useModsStore } from '@/stores/mods'
 
 vi.mock('@/api', () => {
   class ApiError extends Error {
@@ -43,6 +27,9 @@ vi.mock('@/api', () => {
     ApiError,
   }
 })
+
+const catalogApi = vi.hoisted(() => ({ list: vi.fn(), submit: vi.fn(), lookup: vi.fn(), verify: vi.fn(), reconcile: vi.fn() }))
+vi.mock('@/api/catalogPrices', () => ({ catalogPricesApi: catalogApi }))
 
 vi.mock('@/api/products', () => {
   const searchProducts = vi.fn(async (keyword = '') => ({
@@ -76,133 +63,10 @@ vi.mock('@/api/products', () => {
   }
 })
 
-vi.mock('@/tutorial/promptAdvancedTutorial', () => ({
-  launchAdvancedDriverTour: vi.fn(async () => undefined),
-}))
-
-vi.mock('@/composables/useTutorialCatalog', () => ({
-  useTutorialCatalog: () => ({
-    tutorialTracks: [
-      {
-        id: 'host',
-        title: '宿主入门',
-        summary: '认识XC',
-        description: '宿主入门说明',
-        recommended: true,
-      },
-      { id: 'advanced', title: '进阶', summary: '进阶教程', description: '进阶说明' },
-    ],
-    advancedTrackHint: '进阶路线提示',
-    buildContext: () => ({ industryId: '考勤', mods: [], visibleNav: [] }),
-  }),
-}))
-
-vi.mock('@/composables/useWorkflowModsRuntimeContext', () => ({
-  useWorkflowModsRuntimeContext: () => ({ modWorkflowEmployeesActive: { value: false } }),
-}))
-
-vi.mock('@/composables/useWorkflowPanoramaNavVisible', () => ({
-  useWorkflowPanoramaNavVisible: () => ({ showWorkflowPanoramaNav: { value: false } }),
-}))
-
-vi.mock('@/utils/workflowNav', () => ({
-  resolveWorkflowVisualizationLocation: vi.fn(() => ({ name: 'workflow-visualization' })),
-}))
-
 vi.mock('@/utils/erpDomainPaths', () => ({
   resolveErpApiPath: (p: string) => p,
   resolveErpApiPathWhenReady: async (p: string) => p,
 }))
-
-vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
-  useEnterpriseScopedWorkflowRegistry: () => ({
-    scopedRegistryEntries: {
-      value: [{ id: 'wechat_msg' }, { id: 'label_print' }, { id: 'receipt_confirm' }],
-    },
-  }),
-}))
-
-vi.mock('@/utils/workflowEmployeeRegistry', () => ({
-  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
-  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
-  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
-  resolveLabel: (entry: { id: string }, _resolver: (k: string) => string) => {
-    const map: Record<string, string> = {
-      wechat_msg: '微信消息员工',
-      label_print: '标签打印员工',
-      receipt_confirm: '收货确认员工',
-    }
-    return map[entry.id] || entry.id
-  },
-}))
-
-vi.mock('@/utils/syncEnterpriseWorkflowRegistry', () => ({
-  syncEnterpriseWorkflowRegistry: vi.fn(async () => undefined),
-}))
-
-vi.mock('@/constants/productFlow', () => ({
-  DEFAULT_TUTORIAL_TRACK_ID: 'host',
-}))
-
-vi.mock('@/constants/workflowEmployeeMods', () => ({
-  WORKFLOW_EMPLOYEE_IDS: ['wechat_msg', 'label_print', 'receipt_confirm', 'shipment_mgmt'],
-}))
-
-// ===== 测试辅助 =====
-
-function makeFetchResponse(body: unknown = { ok: true }, ok = true) {
-  return {
-    ok,
-    status: ok ? 200 : 500,
-    headers: { get: () => 'application/json' },
-    json: async () => body,
-    text: async () => JSON.stringify(body),
-  }
-}
-
-function createTestRouter() {
-  const names = [
-    'home',
-    'login',
-    'register',
-    'settings',
-    'mod-store',
-    'products',
-    'product-onboarding',
-    'chat',
-    'dashboard',
-    'workflow-visualization',
-    'shipment-records',
-    'customers',
-    'template-preview',
-    'materials',
-    'inventory',
-    'approval-hub',
-  ]
-  const EmptyComp = defineComponent({ setup: () => () => h('div') })
-  const routes = names.map((name) => ({ path: `/${name}`, name, component: EmptyComp }))
-  routes.push({ path: '/', name: 'home', component: EmptyComp })
-  routes.push({ path: '/:pathMatch(.*)*', name: 'fallback', component: EmptyComp })
-  return createRouter({ history: createMemoryHistory(), routes })
-}
-
-async function mountComponent(options: Record<string, unknown> = {}) {
-  const router = options.router || createTestRouter()
-  await router.push('/chat')
-  await router.isReady()
-  const wrapper = mount(TopAssistantFloat, {
-    global: {
-      plugins: [router],
-      stubs: {
-        RouterLink: RouterLinkStub,
-        ExcelPreview: ExcelPreviewStub,
-        Teleport: true,
-      },
-    },
-  })
-  await flushPromises()
-  return { wrapper, router }
-}
 
 function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {}) {
   window.dispatchEvent(new CustomEvent(name, { detail }))
@@ -211,6 +75,10 @@ function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {})
 describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    useModsStore().activeModId = 'mod-test'
+    setRuntimeTenantStorageScopeInput({ tenantId: 5, localUserId: 7 })
+    vi.stubGlobal('crypto', webcrypto)
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_key: string, _options: unknown, fn: (lock: object) => Promise<unknown>) => fn({}) } })
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => makeFetchResponse()),
@@ -220,6 +88,8 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    setRuntimeTenantStorageScopeInput(null)
+    delete (navigator as Navigator & { locks?: unknown }).locks
     vi.restoreAllMocks()
     localStorage.clear()
   })
@@ -499,7 +369,99 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(wrapper.findAll('.product-item').length).toBeGreaterThan(0)
   })
 
-  it('保存产品行调用 updateProduct', async () => {
+  it('受保护目录必须明确选择，纠错保留未标注期间并显示冲突及只读计价单位', async () => {
+    const productsApi = (await import('@/api/products')).default
+    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'etl-owned-mixed-v1' }
+    catalogApi.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [{
+      id: 77, name: '保护产品', model_number: 'P77', unit: '客户甲', price: '12.00', currency: 'CNY', price_unit: 'kg', revision: 'a'.repeat(64), source,
+      history: [
+        { source_key: 'first', price: '12.00', period_start: null, period_end: null, period_label: null, effective: true },
+        { source_key: 'second', price: '13.00', period_start: null, period_end: null, period_label: null, effective: true },
+      ],
+    }] })
+    const { wrapper } = await mountComponent()
+    await wrapper.find('.assistant-float-toggle').trigger('click')
+    await wrapper.findAll('.assistant-tab').find(t => t.text().includes('协助副窗'))!.trigger('click')
+    expect(catalogApi.list).not.toHaveBeenCalled()
+    await wrapper.find('[data-testid="protected-catalog-select"]').setValue(true)
+    await wrapper.find('.product-search-row input').setValue('保护')
+    await wrapper.find('.product-search-row button').trigger('click')
+    await flushPromises()
+    expect(catalogApi.list).toHaveBeenCalledWith('保护', 'mod-test')
+    expect(productsApi.searchProducts).not.toHaveBeenCalled()
+    let panel = wrapper.find('[data-testid="protected-catalog"]')
+    expect(panel.text()).toContain('客户甲（只读，不是计价分母）')
+    expect(panel.text()).toContain('CNY/kg')
+    await panel.find('select').setValue('correct_price')
+    await flushPromises()
+    panel = wrapper.find('[data-testid="protected-catalog"]')
+    expect(panel.html()).toContain('选择原期间来源')
+    await panel.findAll('select')[1].setValue('first')
+    await flushPromises()
+    panel = wrapper.find('[data-testid="protected-catalog"]')
+    expect(panel.text()).toContain('未标注期间')
+    expect(panel.text()).toContain('冲突警告')
+    expect(panel.findAll('input[type="date"]')).toHaveLength(0)
+    expect(panel.text()).toContain('原金额 12.00')
+    expect(panel.text()).toContain('原金额 13.00')
+    await wrapper.find('[data-testid="protected-catalog-select"]').setValue(false)
+    expect(wrapper.find('[data-testid="protected-catalog"]').exists()).toBe(false)
+    expect(catalogApi.submit).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['cancel', 'close', 'confirm'])('original-operation reconciliation UI requires explicit %s decision', async decision => {
+    const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'etl-owned-mixed-v1' }
+    const row = { id: 77, name: '保护产品', model_number: 'P77', unit: '客户甲', price: '12.00', currency: 'CNY', price_unit: 'kg', revision: 'a'.repeat(64), source, history: [] }
+    catalogApi.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [row] })
+    catalogApi.submit.mockResolvedValue({ success: true, data: { run_id: 'run-a' } })
+    catalogApi.reconcile.mockReset()
+    vi.spyOn(authApi, 'getCurrentUser').mockResolvedValue({ success: true, data: { user: { id: 7 } as never, permissions: ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage'] } })
+    const { wrapper, vm } = await mountComponent()
+    const catalog = (vm as unknown as { catalog: UnwrapRef<ReturnType<typeof useAssistantCatalogPrices>> }).catalog
+    await wrapper.find('.assistant-float-toggle').trigger('click')
+    await wrapper.findAll('.assistant-tab').find(t => t.text().includes('协助副窗'))!.trigger('click')
+    await wrapper.find('[data-testid="protected-catalog-select"]').setValue(true)
+    await catalog.search('保护')
+    const product = catalog.rows[0]
+    Object.assign(catalog.draftFor(77), { price: '15.00', reason: '核对', period_start: '2026-01-01', period_end: '2026-12-31', confirmed: true })
+    await catalog.submit(product)
+    const body = catalogApi.submit.mock.calls.at(-1)![1]
+    catalogApi.lookup.mockResolvedValue({ success: true,
+      data: { run_id: 'run-a', user_id: '7', status: 'running', metadata: { runtime_context: { tenant_id: 5, mod_id: 'mod-test' } },
+        steps: [{ step_id: 'step-a', tool_id: 'catalog_products_v1', action: body.action, params: { ...body, product_id: 77, currency: 'CNY', price_unit: 'kg', selected_observations: [] }, status: 'running', output: {} }] },
+      operation: { state: 'pending', operation_id: body.operation_id, run_id: 'run-a', request_digest: 'b'.repeat(64) } })
+    const proof = { success: true, data: { verified: true, outcome: 'saved', historical_effect_verified: true, fresh_save: false, current_matches: false, business_action_id: 'action-a', operation_id: body.operation_id, run_id: 'run-a', request_digest: 'b'.repeat(64), product: { ...row, revision: 'c'.repeat(64) } } }
+    catalogApi.verify.mockResolvedValue(proof); catalogApi.reconcile.mockResolvedValue(proof)
+    const button = (text: string) => wrapper.findAll('[data-testid="protected-catalog"] button').find(b => b.text() === text)!
+    await button('只读核对原操作').trigger('click')
+    await vi.waitFor(() => expect(catalog.statusFor(77)?.canReconcile).toBe(true))
+    await nextTick()
+    const key = Object.keys(localStorage).find(k => k.startsWith('xcagi-catalog-price-operation-v1:'))!, before = localStorage.getItem(key)
+    expect(catalogApi.reconcile).not.toHaveBeenCalled()
+    await button('核对并终结原操作…').trigger('click')
+    expect(wrapper.find('[data-testid="catalog-reconciliation-confirmation"]').text()).toContain(body.operation_id)
+    expect(wrapper.text()).toContain('不会重放价格写入')
+    if (decision === 'cancel') await button('取消，保留原操作').trigger('click')
+    else if (decision === 'close') {
+      await wrapper.find('.assistant-close').trigger('click')
+      await wrapper.find('.assistant-float-toggle').trigger('click')
+    } else {
+      await button('确认核对并终结此原操作').trigger('click')
+      await vi.waitFor(() => expect(catalogApi.reconcile).toHaveBeenCalledExactlyOnceWith(body.operation_id, 'mod-test'))
+      await flushPromises()
+    }
+    expect(wrapper.find('[data-testid="catalog-reconciliation-confirmation"]').exists()).toBe(false)
+    if (decision === 'confirm') {
+      expect(localStorage.getItem(key)).toBeNull(); expect(wrapper.text()).toContain('当前数据已有后续变更')
+      expect(wrapper.text()).toContain('本次未重新保存')
+    } else {
+      expect(catalogApi.reconcile).not.toHaveBeenCalled(); expect(localStorage.getItem(key)).toBe(before)
+    }
+    wrapper.unmount()
+  })
+
+  it('旧 ERP 保存按钮禁用且身份字段只读', async () => {
     const productsApi = (await import('@/api/products')).default
     const { wrapper } = await mountComponent()
     await wrapper.find('.assistant-float-toggle').trigger('click')
@@ -515,7 +477,27 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     expect(saveBtn.exists()).toBe(true)
     await saveBtn.trigger('click')
     await flushPromises()
-    expect(productsApi.updateProduct).toHaveBeenCalled()
+    expect(saveBtn.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('.product-item input').every(input => input.attributes('readonly') !== undefined)).toBe(true)
+    expect(productsApi.updateProduct).not.toHaveBeenCalled()
+  })
+
+  it('数据源审批链未验证时副窗禁止发送产品修改', async () => {
+    const productsApi = (await import('@/api/products')).default
+    ;(productsApi.updateProduct as ReturnType<typeof vi.fn>).mockClear()
+    const { wrapper } = await mountComponent()
+    await wrapper.find('.assistant-float-toggle').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('.assistant-tab').find((t) => t.text().includes('协助副窗'))!.trigger('click')
+    await wrapper.find('.product-search-row input').setValue('产品')
+    await wrapper.find('.product-search-row .btn-primary').trigger('click')
+    await flushPromises()
+    const first = wrapper.findAll('.product-item')[0]
+    expect(first.find('.product-actions .btn-secondary').attributes('disabled')).toBeDefined()
+    await first.find('.product-actions .btn-secondary').trigger('click')
+    await flushPromises()
+    expect(first.text()).toContain('副窗暂不可保存')
+    expect(productsApi.updateProduct).not.toHaveBeenCalled()
   })
 
   it('保存产品行失败仍重置 savingProductId', async () => {

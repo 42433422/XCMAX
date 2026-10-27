@@ -98,10 +98,12 @@ class ProductsService(NeuroEventPublisherMixin):
             return {"success": False, "message": "服务未正确初始化", "data": [], "total": 0}
 
         start_time = time.perf_counter()
-        from app.infrastructure.tenant_scope import current_tenant_id
+        from app.infrastructure.tenant_scope import current_tenant_id, owned_tenant_id
+        from app.request_active_mod_ctx import get_request_active_mod_id
 
         cache_key = (
-            f"products:list:{current_tenant_id()}:"
+            f"products:list:{current_tenant_id()}:{get_request_active_mod_id()}:"
+            f"owned={owned_tenant_id() is not None}:"
             f"{unit_name}:{model_number}:{keyword}:{page}:{per_page}"
         )
 

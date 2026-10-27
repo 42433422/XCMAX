@@ -386,6 +386,15 @@ async def sync_entitlements_for_session(session_id: str, *, force: bool = False)
     sid = (session_id or "").strip()
     if not sid:
         return set()
+    from app.db.bootstrap.guarded import enabled
+
+    if enabled():
+        # Existing-only serving does not refresh market/account grants or reload
+        # Mods. Read this session's durable grants, not another account's cache.
+        if not restore_entitlements_from_session_row(sid):
+            clear_session_entitlements()
+            return set()
+        return set(get_cached_entitled_client_mod_ids() or set())
     cached_now = get_cached_entitled_client_mod_ids()
     last_sync = _entitlement_sync_at_by_session.get(sid, 0.0)
     if (
