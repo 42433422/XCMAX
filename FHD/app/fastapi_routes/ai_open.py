@@ -46,6 +46,8 @@ from app.application.aiopen.service import (
     seed_capability_whitelist,
     verify_api_key,
 )
+from app.domain.aiopen.principal import ScreenPrincipal
+from app.fastapi_routes.aiopen_access_dependency import bind_aiopen_principal
 from app.fastapi_routes.aiopen_route_support import (
     handle_mcp_message,
     safe_control_payload,
@@ -70,7 +72,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["aiopen"])
+router = APIRouter(tags=["aiopen"], dependencies=[Depends(bind_aiopen_principal)])
 
 AiOpenKeyHeader = Annotated[str | None, Header(alias="X-AIOPEN-Key")]
 
@@ -192,7 +194,9 @@ async def aiopen_invoke(
         return JSONResponse({"success": False, "message": "tool 不能为空"}, status_code=400)
     result = await invoke_tool(tool, args, request.app)
     status = 200
-    if result.get("code") == "ROUTE_NOT_WHITELISTED":
+    if result.get("code") in {
+        "ROUTE_NOT_WHITELISTED", "SCREEN_NOT_AUTHORIZED", "SCREEN_PRINCIPAL_REQUIRED"
+    }:
         status = 403
     elif result.get("code") == "UNKNOWN_TOOL":
         status = 404
@@ -315,7 +319,9 @@ def aiopen_keys_create(
     body: dict = Body(default_factory=dict),
     _admin: Any = Depends(require_admin_user),
 ):
-    created = generate_api_key(str(body.get("label") or ""))
+    created = generate_api_key(
+        str(body.get("label") or ""), principal=ScreenPrincipal.from_user(_admin)
+    )
     return _trace_aiopen_control_result(
         {"success": True, **created},
         route="/api/aiopen/keys",
