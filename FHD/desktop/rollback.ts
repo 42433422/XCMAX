@@ -3,7 +3,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import {
   launchWindowsFullRollback,
+  type WindowsRestoreHelperCommand,
   type WindowsRollbackAppliedRecord,
+  type WindowsRollbackDatabaseTarget,
 } from './rollback-windows.js'
 
 /**
@@ -55,6 +57,8 @@ export interface RollbackMarker {
   /** 迁移前 SQLite 备份及其恢复目标 */
   databaseBackupPath?: string
   databasePath?: string
+  /** 本次更新/回滚的唯一操作 ID；数据库恢复必须携带 */
+  operationId?: string
 }
 
 export interface RollbackApplied {
@@ -81,6 +85,50 @@ function appliedPath(): string {
 
 function helperLogPath(): string {
   return path.join(rollbackDir(), 'rollback-helper.log')
+}
+
+function restoreHelperDir(): string {
+  return path.join(rollbackDir(), 'restore-helper')
+}
+
+function restoreHelperManifestPath(): string {
+  return path.join(restoreHelperDir(), 'manifest.json')
+}
+
+function restoreReceiptPath(operationId: string): string {
+  return path.join(rollbackDir(), 'restore-receipts', `${operationId}.json`)
+}
+
+function operationRecordPath(): string {
+  return path.join(rollbackDir(), 'restore-operation.json')
+}
+
+function newRollbackOperationId(): string {
+  return `rollback-${new Date().toISOString().replace(/[:.]/g, '-')}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`
+}
+
+/**
+ * 解析打包时生成的受控恢复程序清单。
+ *
+ * 清单不存在或不可解析时返回 undefined —— 调用方必须据此拒绝执行数据库
+ * 恢复，而不是退回到“直接覆盖数据库”的旧路径。
+ */
+function resolveRestoreHelper(): WindowsRestoreHelperCommand | undefined {
+  const manifestPath = restoreHelperManifestPath()
+  let manifest: { executable?: string; argv?: string[] }
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  } catch {
+    return undefined
+  }
+  if (!manifest.executable) return undefined
+  return {
+    executable: path.resolve(restoreHelperDir(), manifest.executable),
+    argv: Array.isArray(manifest.argv) ? manifest.argv.map(String) : undefined,
+    manifestPath,
+  }
 }
 
 function resolveInside(root: string, relativePath: string): string {
@@ -231,6 +279,7 @@ export async function prepareRollback(toVersion: string): Promise<void> {
       backupRelPath: path.relative(dir, backupRoot),
     }
   }
+  marker.operationId = newRollbackOperationId()
   fs.writeFileSync(markerPath(), JSON.stringify(marker, null, 2), 'utf8')
 
   // 清理旧的 applied 标记
@@ -334,6 +383,15 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     if (!fs.existsSync(backupRoot)) {
       throw new Error(`回滚失败：完整应用备份目录不存在 ${backupRoot}`)
     }
+    const operationId = marker.operationId
+    const databaseTargets: WindowsRollbackDatabaseTarget[] =
+      marker.databasePath && marker.databaseBackupPath
+        ? [{ databasePath: marker.databasePath, databaseBackupPath: marker.databaseBackupPath }]
+        : []
+    if (databaseTargets.length > 0 && !operationId) {
+      // 缺 operationId 时不能退回旧链：旧链会直接覆盖数据库并删除 WAL。
+      throw new Error('回滚失败：数据库恢复缺少 operationId，拒绝执行旧回滚链')
+    }
     const options = {
       currentPid: process.pid,
       installDir: path.dirname(marker.appPath),
@@ -343,13 +401,18 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
       appliedPath: appliedPath(),
       logPath: helperLogPath(),
       applied,
-      ...(marker.databasePath && marker.databaseBackupPath
+      ...(operationId ? { operationId } : {}),
+      ...(databaseTargets.length > 0 && operationId
         ? {
-            databasePath: marker.databasePath,
-            databaseBackupPath: marker.databaseBackupPath,
+            databaseTargets,
+            allowedDataRoot: app.getPath('userData'),
+            restoreHelper: resolveRestoreHelper(),
+            restoreReceiptPath: restoreReceiptPath(operationId),
+            operationRecordPath: operationRecordPath(),
           }
         : {}),
     }
+    // 失败时抛出：marker / 操作记录保留，不写 applied，不重启应用。
     await launchWindowsFullRollback(options)
     return { mode: 'windows-full', scheduled: true }
   }

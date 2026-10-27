@@ -888,7 +888,11 @@ class DatabaseGuard:
                 GuardErrorCode.VERIFY_FAILED,
                 "回执目标与当前数据库不一致",
             )
-        targets = record.detail.get("targets") or receipt.get("targets") or []
+        raw_targets = record.detail.get("targets") or receipt.get("targets") or []
+        targets = [
+            str(item.get("path")) if isinstance(item, dict) else str(item)
+            for item in raw_targets
+        ]
         expected_hashes = {
             str(item.get("path")): item.get("sha256")
             for item in receipt.get("targets", [])
@@ -1150,6 +1154,7 @@ class RestoreSession:
                 "phase": "verifying",
                 "receipt": str(receipt_path),
                 "compensated": True,
+                "targets": [item["path"] for item in self.modified],
             },
             owner_pid=os.getpid(),
         )
