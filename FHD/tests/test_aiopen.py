@@ -29,7 +29,10 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
-    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(tier="admin", role="admin")
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        tier="admin",
+        role="admin",
+    )
     return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
@@ -420,7 +423,10 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
 
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
-    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(tier="admin", role="admin")
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        tier="admin",
+        role="admin",
+    )
     repo = InMemoryAgentRunRepository()
 
     with (

@@ -24,9 +24,7 @@ from app.infrastructure.aiopen.cursor_hub import AiOpenCursorHub
         (SimpleNamespace(id=1, is_active=True), None),
     ],
 )
-def test_screen_rejects_anonymous_disabled_or_untrusted_origin(
-    monkeypatch, principal, origin
-):
+def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, principal, origin):
     monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
     monkeypatch.setattr(ai_open_routes, "resolve_session_user", lambda ws: principal)
     app = FastAPI()

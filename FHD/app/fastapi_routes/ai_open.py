@@ -309,7 +309,10 @@ def aiopen_keys_list(_admin: Any = Depends(require_admin_user)):
 
 
 @router.post("/api/aiopen/keys")
-def aiopen_keys_create(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_keys_create(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     created = generate_api_key(str(body.get("label") or ""))
     return _trace_aiopen_control_result(
         {"success": True, **created},
@@ -320,7 +323,10 @@ def aiopen_keys_create(body: dict = Body(default_factory=dict), _admin: Any = De
 
 
 @router.delete("/api/aiopen/keys")
-def aiopen_keys_revoke(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_keys_revoke(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     key = str(body.get("key") or "").strip()
     if not key:
         return JSONResponse({"success": False, "message": "key 不能为空"}, status_code=400)
@@ -361,7 +367,10 @@ def aiopen_panel(request: Request, _admin: Any = Depends(require_admin_user)):
 
 
 @router.post("/api/aiopen/whitelist")
-def aiopen_whitelist(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_whitelist(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     enabled = bool(body.get("enabled", False))
     if not path:
@@ -376,7 +385,10 @@ def aiopen_whitelist(body: dict = Body(default_factory=dict), _admin: Any = Depe
 
 
 @router.post("/api/aiopen/whitelist/seed")
-def aiopen_whitelist_seed(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_whitelist_seed(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     """一键写入侧栏/业务全能力白名单，打通 MCP api_call 全调用闭环。"""
     enable = bool(body.get("enabled", True)) if "enabled" in body else True
     merge = bool(body.get("merge", True))
@@ -405,7 +417,10 @@ async def aiopen_loop_verify(
 
 
 @router.post("/api/aiopen/config")
-def aiopen_config(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_config(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     base_url = str(body.get("base_url") or "").strip().rstrip("/")
     if not base_url:
         return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
@@ -419,7 +434,10 @@ def aiopen_config(body: dict = Body(default_factory=dict), _admin: Any = Depends
 
 
 @router.post("/api/aiopen/control")
-def aiopen_control(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def aiopen_control(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     enabled = bool(body.get("enabled", False))
     AIOPEN_STATE["remote_control_enabled"] = enabled
     return _trace_aiopen_control_result(
