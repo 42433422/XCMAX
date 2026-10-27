@@ -542,17 +542,29 @@ def test_qclaw_openclaw_chat_attaches_agent_run(client):
     assert run.metadata["runtime_context"]["route"] == "/api/ai/qclaw/openclaw/chat"
 
 
-def test_screen_ws_command_roundtrip(client):
-    """screen 端 WS 收到指令并回执 → ui 工具拿到结果。"""
+def test_screen_ws_command_roundtrip(client, monkeypatch):
+    """A trusted authenticated screen receives a server-owned session identifier."""
+    from app.fastapi_routes import ai_open as ai_open_routes
+
     AIOPEN_STATE["remote_control_enabled"] = True
-    with client.websocket_connect("/api/aiopen/ws?session_id=test_screen&label=pytest") as ws:
+    monkeypatch.setattr(
+        ai_open_routes,
+        "resolve_session_user",
+        lambda ws: SimpleNamespace(id=27, tenant_id=42, is_active=True),
+    )
+    with client.websocket_connect(
+        "/api/aiopen/ws?session_id=attacker_supplied&label=pytest",
+        headers={"Origin": "http://testserver"},
+    ) as ws:
         hello = ws.receive_json()
-        assert hello == {"type": "hello", "session_id": "test_screen"}
+        session_id = hello["session_id"]
+        assert session_id.startswith("screen_")
+        assert session_id != "attacker_supplied"
 
         sessions = client.post(
             "/api/aiopen/invoke", json={"tool": "ui_sessions", "args": {}}
         ).json()
-        assert any(s["session_id"] == "test_screen" for s in sessions["sessions"])
+        assert any(s["session_id"] == session_id for s in sessions["sessions"])
 
 
 def test_aiopen_source_alias():

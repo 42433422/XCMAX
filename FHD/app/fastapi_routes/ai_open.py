@@ -18,7 +18,10 @@
 from __future__ import annotations
 
 import logging
+import os
+import secrets
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Body, Depends, Header, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -62,7 +65,7 @@ from app.fastapi_routes.aiopen_route_support import (
     wrap_mcp_json as _wrap_mcp_json,
 )
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
-from app.infrastructure.auth.dependencies import require_admin_user
+from app.infrastructure.auth.dependencies import require_admin_user, resolve_session_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -461,23 +464,71 @@ def aiopen_openclaw_chat(
 # ---------------------------------------------------------------------------
 
 
+def _trusted_screen_origin(ws: WebSocket) -> bool:
+    """Reject cross-site WebSocket hijacking; cross-origin UIs require an explicit allowlist."""
+    raw_origin = str(ws.headers.get("origin") or "").strip()
+    if not raw_origin:
+        return False
+    try:
+        parsed = urlsplit(raw_origin)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+        normalized = raw_origin.rstrip("/").lower()
+        host = str(ws.headers.get("host") or "").strip().lower()
+        if parsed.netloc.lower() == host:
+            return True
+        allowed = {
+            origin.strip().rstrip("/").lower()
+            for origin in os.environ.get("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "").split(",")
+            if origin.strip()
+        }
+        return normalized in allowed
+    except ValueError:
+        return False
+
+
 @router.websocket("/api/aiopen/ws")
 async def aiopen_screen_ws(ws: WebSocket):
-    await ws.accept()
-    session_id = str(ws.query_params.get("session_id") or "").strip()
-    if not session_id:
-        import uuid
+    # WebSocket bypasses HTTP-only LAN and CSRF middleware; authenticate *before* accepting.
+    if not _trusted_screen_origin(ws):
+        await ws.close(code=1008)
+        return
+    try:
+        user = resolve_session_user(ws)
+    except RECOVERABLE_ERRORS:
+        user = None
+    if user is None or not getattr(user, "is_active", True):
+        await ws.close(code=1008)
+        return
 
-        session_id = "screen_" + uuid.uuid4().hex[:12]
-    label = str(ws.query_params.get("label") or "").strip()
-    await aiopen_cursor_hub.connect(session_id, ws, meta={"label": label or "XCAGI 前端"})
+    # The server, not the browser/query string, owns the session identifier.
+    session_id = "screen_" + secrets.token_hex(16)
+    label = str(ws.query_params.get("label") or "").strip()[:100]
+    await ws.accept()
+    await aiopen_cursor_hub.connect(
+        session_id,
+        ws,
+        meta={
+            "label": label or "XCAGI 前端",
+            "principal_id": str(getattr(user, "id", "")),
+            "tenant_id": getattr(user, "tenant_id", None),
+        },
+    )
     try:
         await ws.send_json({"type": "hello", "session_id": session_id})
         while True:
             raw = await ws.receive_text()
-            handled = aiopen_cursor_hub.handle_client_message(raw)
+            handled = aiopen_cursor_hub.handle_client_message(raw, session_id=session_id)
             if not handled:
-                logger.debug("aiopen ws unhandled message: %s", raw[:200])
+                logger.debug("aiopen ws ignored unmatched message")
     except WebSocketDisconnect:
         pass
     except RECOVERABLE_ERRORS:
