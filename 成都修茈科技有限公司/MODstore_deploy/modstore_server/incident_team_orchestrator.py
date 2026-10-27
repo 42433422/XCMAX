@@ -108,7 +108,9 @@ def _execute_employee_task_with_timeout(
                     and runtime_input.get("event_id")
                     and runtime_input.get("attempt_id")
                 ):
-                    from modstore_server.incident_team_completion import persist_late_role_result
+                    from modstore_server.incident_team_completion import (
+                        persist_late_role_result,
+                    )
 
                     context.copy().run(
                         persist_late_role_result,

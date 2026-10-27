@@ -6,7 +6,6 @@ from pathlib import Path
 
 import yaml
 
-from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import (
     ShipmentEtlProfileError,
     clear_profile_cache,
@@ -14,6 +13,7 @@ from app.application.shipment_etl_profile import (
     load_profile_from_path,
 )
 from app.application.shipment_excel_etl_app_service import parse_delivery_notes
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 
 def test_universal_profile_loads_from_kb(tmp_path, monkeypatch):

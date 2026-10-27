@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.conversation.modstore_adapter import (
+from app.domain.shared_services.conversation.modstore_adapter import (
     ModstoreOpenAICompatibleClient,
     ModstorePlatformAdapter,
     _ModstoreOpenAICompletions,
@@ -84,7 +84,7 @@ class TestFromSessionBranches:
     def test_no_session_id_no_request_no_auth_skips_session_lookup(self):
         """No session, no request: goes straight to cls() at L268."""
         with patch(
-            "app.services.conversation.modstore_adapter.os.environ.get",
+            "app.domain.shared_services.conversation.modstore_adapter.os.environ.get",
             side_effect=lambda k, d="": {
                 "XCAGI_MARKET_BASE_URL": "",
                 "MODSTORE_PLATFORM_URL": "http://demo.local",

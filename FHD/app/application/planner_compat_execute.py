@@ -11,7 +11,7 @@ from typing import Any
 
 from fastapi import Request
 
-from app.application.planner_compat.ports import (
+from app.application.planner_compat.protocols import (
     AwaitTimeout,
     ChatBackends,
     ChatResponses,

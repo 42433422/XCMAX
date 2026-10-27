@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.workflow.types import WorkflowNode
+from app.application.workflow.workflow_types import WorkflowNode
 
 _MAX_PLANNER_TEXT_CHARS = 4096
 

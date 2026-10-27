@@ -9,7 +9,12 @@ from modstore_server.db.mac_control import MacControlObservation
 from modstore_server.mac_control_store import digest, encoded
 from modstore_server.mac_control_transport import age_seconds
 
-COMMANDS = {"codex": "codex", "claude_code": "claude", "cursor": "agent", "trae": "trae-cli"}
+COMMANDS = {
+    "codex": "codex",
+    "claude_code": "claude",
+    "cursor": "agent",
+    "trae": "trae-cli",
+}
 
 
 def prepare_windows_probe(db, client, devices, request):
@@ -41,7 +46,12 @@ def prepare_windows_probe(db, client, devices, request):
             command = client.request("GET", path + "/" + quote(pending["command_id"], safe="")).get(
                 "command", {}
             )
-            if command.get("status") in {"completed", "failed", "cancelled", "timed_out"}:
+            if command.get("status") in {
+                "completed",
+                "failed",
+                "cancelled",
+                "timed_out",
+            }:
                 ok = command.get("status") == "completed" and command.get("exit_code") == 0
                 probe = {
                     "ok": ok,
@@ -63,7 +73,10 @@ def prepare_windows_probe(db, client, devices, request):
             return
         title = f"xcmax-tool-probe:{key[:20]}:{int(now)}"
         record = record or MacControlObservation(id=key)
-        record.payload_json, record.checked_at = encoded({"submitted": True, "title": title}), now
+        record.payload_json, record.checked_at = (
+            encoded({"submitted": True, "title": title}),
+            now,
+        )
         db.add(record)
         db.commit()
         command = client.request(

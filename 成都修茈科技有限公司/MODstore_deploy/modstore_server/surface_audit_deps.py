@@ -17,7 +17,9 @@ from modstore_server.surface_audit_paths import fhd_root as _fhd_root
 from modstore_server.surface_audit_paths import is_local_url as _is_local_url
 from modstore_server.surface_audit_paths import modstore_deploy_root as _modstore_deploy_root
 from modstore_server.surface_audit_paths import repo_root as _repo_root
-from modstore_server.surface_audit_processes import SurfaceProcessLauncher
+from modstore_server.surface_audit_processes import (
+    SurfaceProcessLauncher,
+)
 from modstore_server.surface_audit_processes import _kill_pid_file as _kill_pid_file
 from modstore_server.surface_audit_processes import stop_surface_audit_ephemeral as _stop_ephemeral
 from modstore_server.surface_audit_readiness import SurfaceDependencyChecks
@@ -104,5 +106,7 @@ def ensure_surface_audit_deps() -> dict[str, Any]:
 
 def stop_surface_audit_ephemeral() -> dict[str, Any]:
     return _stop_ephemeral(
-        pids_directory=_pids_dir(), fhd_directory=_fhd_root(), stop_process=_kill_pid_file
+        pids_directory=_pids_dir(),
+        fhd_directory=_fhd_root(),
+        stop_process=_kill_pid_file,
     )

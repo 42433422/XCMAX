@@ -16,7 +16,7 @@ def isolated_login_host_db(tmp_path, monkeypatch):
     from sqlalchemy.orm import sessionmaker
 
     from app import db as host_db
-    from app.db.base import Base
+    from app.db.db_base import Base
 
     engine = create_engine(f"sqlite:///{tmp_path / 'login.sqlite'}")
     Base.metadata.create_all(engine)

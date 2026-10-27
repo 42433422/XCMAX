@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

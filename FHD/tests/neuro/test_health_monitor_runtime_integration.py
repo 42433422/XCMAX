@@ -20,7 +20,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.neuro_bus.event_store import EventStoreMode
-from app.neuro_bus.events.base import EventMetadata, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, NeuroEvent
 from app.neuro_bus.health_monitor import (
     HEALTH_EVENTS_DB_NAME,
     INCIDENT_REPORTED,

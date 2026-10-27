@@ -109,7 +109,7 @@ def _load_cases(path: Path = GOLDEN_PATH) -> list[dict]:
 
 
 def _match_rule(case: dict, text: str) -> bool:
-    from app.services.intent_service import is_goodbye, is_greeting, recognize_intents
+    from app.domain.shared_services.intent_service import is_goodbye, is_greeting, recognize_intents
 
     if case.get("check") == "greeting":
         return bool(is_greeting(text))
@@ -155,7 +155,7 @@ def _run_layer(name: str, cases: list[dict], matcher, observer=None) -> dict:
             stat[tier][0] += 1
         else:
             try:
-                from app.services.intent_service import recognize_intents
+                from app.domain.shared_services.intent_service import recognize_intents
 
                 if observer is None:
                     r = recognize_intents(text)
@@ -216,7 +216,7 @@ def build_confusion_matrix(per_case: list[dict]) -> dict[str, dict[str, int]]:
 
 
 def _run_holdout_round(cases: list[dict]) -> list[dict]:
-    from app.services.intent_service import is_goodbye, is_greeting, recognize_intents
+    from app.domain.shared_services.intent_service import is_goodbye, is_greeting, recognize_intents
 
     rows: list[dict] = []
     for case in cases:

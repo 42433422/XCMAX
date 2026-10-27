@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.shipment_etl.ports import ExtractionHistory
+from app.application.shipment_etl.protocols import ExtractionHistory
 from app.fastapi_routes.shipment_etl.responses import EtlResponses
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 

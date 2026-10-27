@@ -7,8 +7,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.persona.value_objects import PersonaAxes
+from app.domain.shared_services.persona.embedding_inferencer import (
+    EmbeddingInferencer,
+    EmbeddingInferResult,
+)
 from app.infrastructure.persona.embedding_client import EmbeddingClient
-from app.services.persona.embedding_inferencer import EmbeddingInferencer, EmbeddingInferResult
 
 
 class TestEmbeddingInferencer:

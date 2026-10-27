@@ -24,7 +24,9 @@ def _table_exists(table: str) -> bool:
 def _column_exists(table: str, column: str) -> bool:
     if not _table_exists(table):
         return False
-    return any(item["name"] == column for item in sa.inspect(op.get_bind()).get_columns(table))
+    return any(
+        item["name"] == column for item in sa.inspect(op.get_bind()).get_columns(table)
+    )
 
 
 def upgrade() -> None:

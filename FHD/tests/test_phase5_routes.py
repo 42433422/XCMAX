@@ -445,7 +445,7 @@ def test_xcmax_ops_dispatch_desktop_source(
 
 def test_xcmax_sync_conflicts_list(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.services.admin_sync_service.list_sync_conflicts",
+        "app.domain.shared_services.admin_sync_service.list_sync_conflicts",
         lambda limit=50: [{"inbox_id": 1}],
     )
     r = xcmax_client.get("/api/xcmax/sync/conflicts")
@@ -455,7 +455,7 @@ def test_xcmax_sync_conflicts_list(xcmax_client, monkeypatch: pytest.MonkeyPatch
 
 def test_xcmax_sync_resolve_skip(xcmax_client, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "app.services.admin_sync_service.mark_inbox_skipped",
+        "app.domain.shared_services.admin_sync_service.mark_inbox_skipped",
         lambda inbox_id: None,
     )
     mock_db = MagicMock()

@@ -64,7 +64,7 @@ from .installation import (
     build_mcp_url_config as build_mcp_url_config,
 )
 from .openclaw import OpenClawProxy
-from .ports import InstallationBuilders, InternalHttpClient, UpstreamResponse
+from .protocols import InstallationBuilders, InternalHttpClient, UpstreamResponse
 from .result_text import format_tool_result_text as format_tool_result_text
 from .route_policy import RoutePolicy
 from .route_policy import normalize_api_path as normalize_api_path

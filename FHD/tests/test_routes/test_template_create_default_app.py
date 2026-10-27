@@ -21,7 +21,7 @@ def template_app(tmp_path, monkeypatch):
     import app.fastapi_app.factory as factory
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
     from app.config import TestingConfig
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.user import Session, User
     from app.infrastructure.tenant_scope import tenant_scope
 

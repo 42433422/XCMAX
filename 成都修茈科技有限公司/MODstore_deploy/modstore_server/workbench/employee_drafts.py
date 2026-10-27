@@ -16,7 +16,10 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.models import User
-from modstore_server.workbench.schemas import EmployeeAiDraftBody, EmployeeAiRefinePromptBody
+from modstore_server.workbench.schemas import (
+    EmployeeAiDraftBody,
+    EmployeeAiRefinePromptBody,
+)
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
 
@@ -29,7 +32,10 @@ class DraftPorts:
 
 
 async def employee_ai_draft(
-    body: EmployeeAiDraftBody, user: User = Depends(_get_current_user), *, ports: DraftPorts
+    body: EmployeeAiDraftBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: DraftPorts,
 ):
     """SSE 事件序列：stage_start / stage_progress / stage_done / stage_error / pipeline_done。
 
@@ -68,14 +74,19 @@ async def employee_ai_draft(
                 else None
             )
             llm = RealLlmClient(
-                prov, api_key=api_key, model=mdl, base_url=base_url, forbid_reasoning_fallback=True
+                prov,
+                api_key=api_key,
+                model=mdl,
+                base_url=base_url,
+                forbid_reasoning_fallback=True,
             )
             from modstore_server.models import Workflow as WorkflowModel
 
             wf_rows = (
                 db.query(WorkflowModel)
                 .filter(
-                    WorkflowModel.user_id == cast(int, user.id), WorkflowModel.is_active.is_(True)
+                    WorkflowModel.user_id == cast(int, user.id),
+                    WorkflowModel.is_active.is_(True),
                 )
                 .order_by(WorkflowModel.updated_at.desc())
                 .limit(20)
@@ -146,7 +157,10 @@ async def employee_ai_draft(
 
 
 async def employee_ai_refine_prompt(
-    body: EmployeeAiRefinePromptBody, user: User = Depends(_get_current_user), *, ports: DraftPorts
+    body: EmployeeAiRefinePromptBody,
+    user: User = Depends(_get_current_user),
+    *,
+    ports: DraftPorts,
 ):
     """用 LLM 重写 employee system prompt，返回优化后文本与一句话 diff 说明。"""
     from modstore_server.employee_ai_pipeline import refine_system_prompt
@@ -171,7 +185,11 @@ async def employee_ai_refine_prompt(
             else None
         )
     llm = RealLlmClient(
-        prov, api_key=api_key, model=mdl, base_url=base_url, forbid_reasoning_fallback=True
+        prov,
+        api_key=api_key,
+        model=mdl,
+        base_url=base_url,
+        forbid_reasoning_fallback=True,
     )
     result, err = await refine_system_prompt(
         current_prompt=body.current_prompt,

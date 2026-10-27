@@ -6,6 +6,6 @@ Mod 中的电话业务员 / 对话面板可直接塞给前端或传入 VB-Cable 
 
 from __future__ import annotations
 
-from app.services.tts_service import synthesize_to_data_uri  # noqa: F401
+from app.domain.shared_services.tts_service import synthesize_to_data_uri  # noqa: F401
 
 __all__ = ["synthesize_to_data_uri"]

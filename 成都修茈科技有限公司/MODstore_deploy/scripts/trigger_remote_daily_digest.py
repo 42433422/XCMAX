@@ -25,7 +25,17 @@ def main() -> None:
     )
     rcmd = f"cd {deploy} && set -a && . {deploy}/.env && set +a && {deploy}/.venv/bin/python -u -c {repr(py)}"
     r = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=25", target, "bash", "-lc", rcmd],
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=25",
+            target,
+            "bash",
+            "-lc",
+            rcmd,
+        ],
         check=False,
     )
     raise SystemExit(r.returncode)

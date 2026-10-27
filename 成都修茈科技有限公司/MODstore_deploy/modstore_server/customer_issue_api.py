@@ -19,11 +19,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_current_user, get_db
-from modstore_server.customer_issue_delivery_contract import issue_resolution, repair_verification
+from modstore_server.customer_issue_delivery_contract import (
+    issue_resolution,
+    repair_verification,
+)
 from modstore_server.customer_issue_intake import enqueue_issue, request_identity
 from modstore_server.customer_issue_shared_repairs import router as shared_repairs_router
 from modstore_server.customer_service_customer_view import customer_issue_row as _issue_row
-from modstore_server.customer_service_customer_view import customer_ticket_row
+from modstore_server.customer_service_customer_view import (
+    customer_ticket_row,
+)
 from modstore_server.customer_service_orchestrator import CLOSED_CUSTOMER_ISSUE_STATES as _CLOSED
 from modstore_server.customer_service_tools import audit, json_dumps, json_loads
 from modstore_server.models import User, UserMod
@@ -33,7 +38,10 @@ from modstore_server.models_cs import (
     CustomerServiceSession,
     CustomerServiceTicket,
 )
-from modstore_server.work_order_api import record_customer_decision, route_customer_issue
+from modstore_server.work_order_api import (
+    record_customer_decision,
+    route_customer_issue,
+)
 
 router = APIRouter()
 router.include_router(shared_repairs_router)
@@ -41,7 +49,9 @@ router.include_router(shared_repairs_router)
 
 def _wake_owner_intake(ticket_id: int, source: str) -> None:
     if source in {"customer_feedback", "customer_reopen"}:
-        from modstore_server.customer_service_api import _schedule_customer_ticket_incident
+        from modstore_server.customer_service_api import (
+            _schedule_customer_ticket_incident,
+        )
 
         _schedule_customer_ticket_incident({"ticket_id": int(ticket_id)})
 
@@ -405,7 +415,11 @@ def decide_product_issue(
     if body.decision == "resolved":
         if closed:
             raise HTTPException(409, "工单已关闭；如问题仍存在，请重新打开")
-        ticket.status, ticket.decision_status, ticket.closed_at = "resolved", "approved", now
+        ticket.status, ticket.decision_status, ticket.closed_at = (
+            "resolved",
+            "approved",
+            now,
+        )
         resolution.update(
             state="resolved",
             resolved_at=now.isoformat(),
@@ -434,7 +448,12 @@ def decide_product_issue(
                 "release_target": resolution.pop("release_target", None),
             },
         ]
-        for key in ("resolved_at", "verification_mode", "closed_by_user_id", "handled_by"):
+        for key in (
+            "resolved_at",
+            "verification_mode",
+            "closed_by_user_id",
+            "handled_by",
+        ):
             resolution.pop(key, None)
         resolution.update(
             state="reopened",
@@ -448,7 +467,11 @@ def decide_product_issue(
                 or 0
             ),
         )
-        ticket.status, ticket.decision_status, ticket.closed_at = "processing", "accepted", None
+        ticket.status, ticket.decision_status, ticket.closed_at = (
+            "processing",
+            "accepted",
+            None,
+        )
     evidence["resolution"] = resolution
     evidence["customer_decisions"] = [
         *decisions,
@@ -486,7 +509,11 @@ def decide_product_issue(
         session_id=ticket.session_id,
         actor=user,
         actor_type="user",
-        detail={"note": note, "idempotency_key": body.idempotency_key, "event_id": event_id},
+        detail={
+            "note": note,
+            "idempotency_key": body.idempotency_key,
+            "event_id": event_id,
+        },
     )
     db.commit()
     _sync_customer_decision_work_order(

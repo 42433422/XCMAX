@@ -8,8 +8,9 @@ from typing import Any
 from fastapi import Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject
+
 from .common import read_json_object
-from .ports import AdminGate, ErrorPolicy, JsonObject
 
 
 class AutonomyAdmin:

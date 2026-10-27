@@ -22,7 +22,7 @@ def _registry_domains() -> list[dict]:
 
 def test_load_registry_returns_domains():
     """load_registry 解析 ssot.yaml 返回域列表。"""
-    from scripts.dev.ssot_plugins.base import load_registry
+    from scripts.dev.ssot_plugins.plugin_base import load_registry
 
     domains = load_registry(REGISTRY_PATH)
     assert len(domains) == len(_registry_domains())
@@ -32,7 +32,7 @@ def test_load_registry_returns_domains():
 
 def test_load_registry_enabled_filter():
     """enabled_only=True 只返回 enabled 域。"""
-    from scripts.dev.ssot_plugins.base import load_registry
+    from scripts.dev.ssot_plugins.plugin_base import load_registry
 
     domains = load_registry(REGISTRY_PATH, enabled_only=True)
     expected_enabled = [d for d in _registry_domains() if d.get("enabled", True)]
@@ -44,7 +44,7 @@ def test_load_registry_enabled_filter():
 
 def test_run_command_returns_exit_code():
     """run_command 执行命令并返回退出码。"""
-    from scripts.dev.ssot_plugins.base import run_command
+    from scripts.dev.ssot_plugins.plugin_base import run_command
 
     for executable in ("python", "python3"):
         code = run_command([executable, "-c", "import sys; sys.exit(0)"], cwd=ROOT)

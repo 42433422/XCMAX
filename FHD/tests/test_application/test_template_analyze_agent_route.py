@@ -9,7 +9,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
 def _client() -> TestClient:
-    from app.fastapi_routes.domains.system.routes import router
+    from app.fastapi_routes.domains.system.system_routes import router
 
     app = FastAPI()
     app.include_router(router)
@@ -30,26 +30,26 @@ def test_templates_analyze_route_executes_template_extract_through_agent_orchest
             return_value=repo,
         ),
         patch(
-            "app.services.document_templates_service._extract_structured_excel_preview",
+            "app.domain.shared_services.document_templates_service._extract_structured_excel_preview",
             return_value={
                 "fields": [{"label": "客户", "type": "dynamic"}],
                 "sample_rows": [{"客户": "ACME Trading"}],
             },
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_grid_preview",
+            "app.domain.shared_services.document_templates_service._extract_excel_grid_preview",
             return_value={"rows": [["客户"], ["ACME Trading"]]},
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_grid_style_cache",
+            "app.domain.shared_services.document_templates_service._extract_excel_grid_style_cache",
             return_value={"cells": {}},
         ),
         patch(
-            "app.services.document_templates_service._extract_excel_all_sheets_preview",
+            "app.domain.shared_services.document_templates_service._extract_excel_all_sheets_preview",
             return_value=[{"sheet_name": "出货"}],
         ),
         patch(
-            "app.services.document_templates_service._list_excel_sheet_names",
+            "app.domain.shared_services.document_templates_service._list_excel_sheet_names",
             return_value=["出货"],
         ),
     ):

@@ -18,13 +18,20 @@ WAV = os.environ.get("ASR_TEST_WAV", "/tmp/asr_example.wav")
 
 def load_pcm16_16k(path: str) -> bytes:
     with wave.open(path, "rb") as w:
-        ch, sr, sw, n = w.getnchannels(), w.getframerate(), w.getsampwidth(), w.getnframes()
+        ch, sr, sw, n = (
+            w.getnchannels(),
+            w.getframerate(),
+            w.getsampwidth(),
+            w.getnframes(),
+        )
         raw = w.readframes(n)
     if sw != 2:
         raise ValueError("need 16-bit wav")
     samples = list(struct.unpack("<" + "h" * (len(raw) // 2), raw))
     if ch == 2:
-        samples = [(samples[i] + samples[i + 1]) // 2 for i in range(0, len(samples), 2)]
+        samples = [
+            (samples[i] + samples[i + 1]) // 2 for i in range(0, len(samples), 2)
+        ]
     if sr != 16000:
         ratio = 16000 / sr
         out_len = int(len(samples) * ratio)
@@ -46,7 +53,9 @@ def extract_text(msg: dict) -> str:
         return direct
     sents = msg.get("stamp_sents") or []
     if isinstance(sents, list) and sents:
-        return "".join(str(s.get("text_seg") or "").replace(" ", "") for s in sents).strip()
+        return "".join(
+            str(s.get("text_seg") or "").replace(" ", "") for s in sents
+        ).strip()
     return ""
 
 

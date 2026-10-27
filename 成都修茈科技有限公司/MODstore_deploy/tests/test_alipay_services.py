@@ -23,7 +23,11 @@ def test_unusable_checkout_response_falls_back_to_verified_qr(monkeypatch, user_
 
     def precreate(**kwargs):
         calls.append(("precreate", kwargs))
-        return {"code": "10000", "qr_code": "fixture://checkout", "trade_no": "fixture-trade"}
+        return {
+            "code": "10000",
+            "qr_code": "fixture://checkout",
+            "trade_no": "fixture-trade",
+        }
 
     client = SimpleNamespace(
         api_alipay_trade_page_pay=page,
@@ -58,7 +62,11 @@ def test_notification_verification_delegates_exact_payload(monkeypatch, signatur
         return signature_result
 
     monkeypatch.setattr(payments, "build_client", lambda: SimpleNamespace(verify=verify))
-    payload = {"out_trade_no": "order-one", "total_amount": "1.23", "trade_status": "TRADE_SUCCESS"}
+    payload = {
+        "out_trade_no": "order-one",
+        "total_amount": "1.23",
+        "trade_status": "TRADE_SUCCESS",
+    }
     assert payments.verify_notify(payload, "fixture-signature") is signature_result
     assert observed == [(payload, "fixture-signature")]
 

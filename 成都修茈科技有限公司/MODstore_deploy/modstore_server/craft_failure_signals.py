@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 def resolve_craft_step_id(step_or_employee: str) -> Tuple[str, Optional[str]]:
     """将 craft 步骤 id 或员工 id 解析为 (step_id, employee_id)。"""
-    from modstore_server.craft_executor import craft_step_to_employee_id, employee_id_to_craft_step
+    from modstore_server.craft_executor import (
+        craft_step_to_employee_id,
+        employee_id_to_craft_step,
+    )
 
     key = str(step_or_employee or "").strip()
     if not key:

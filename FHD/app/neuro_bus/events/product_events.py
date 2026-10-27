@@ -6,7 +6,7 @@ Product 领域事件定义
 
 from typing import Any
 
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
 
 class _ProductEvent(NeuroEvent):

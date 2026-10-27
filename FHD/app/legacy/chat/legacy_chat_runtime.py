@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from types import SimpleNamespace
 from typing import Any
 
-from app.application.document_employee_routing import forced_document_tool_choice
+from app.domain.app_pure.document_employee_routing import forced_document_tool_choice
 from app.infrastructure.llm.client import llm_client_scope
 
 

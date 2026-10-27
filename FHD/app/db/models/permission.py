@@ -6,7 +6,7 @@ from typing import Optional, TypedDict
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Table
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.utils.time import utc_now_naive
 
 role_permissions = Table(

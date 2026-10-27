@@ -13,7 +13,7 @@ from app.application.dataset_rag.models import (
     _document_from_dict,
     _rebuild_job_from_dict,
 )
-from app.application.dataset_rag_queue import DatasetStateLock
+from app.domain.app_pure.dataset_rag_queue import DatasetStateLock
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

@@ -10,8 +10,8 @@ from unittest.mock import patch
 import pytest
 
 from app.desktop_runtime.backup_retention import cleanup_local_backups
+from app.desktop_runtime.desktop_runtime_paths import ensure_desktop_dirs
 from app.desktop_runtime.migrate import backup_database
-from app.desktop_runtime.paths import ensure_desktop_dirs
 
 
 def _backup(backups_dir: Path, name: str, age_days: int = 0) -> Path:

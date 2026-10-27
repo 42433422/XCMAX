@@ -14,7 +14,13 @@ pytest.importorskip("fastapi")
 
 LEAK = "Cursor Agent 失败: Command failed: /Users/a4243342/x; git clone https://github.com/o/r.git"
 LEAK_RE = re.compile(r"/Users/|git clone|Cursor Agent|github\.com|bak_t39|Traceback")
-INTERNAL_KEYS = {"actor_type", "repair_verified", "resolution", "employee_reports", "team"}
+INTERNAL_KEYS = {
+    "actor_type",
+    "repair_verified",
+    "resolution",
+    "employee_reports",
+    "team",
+}
 INTERNAL_KEYS |= {"data_correction", "backup_tables", "request", "result", "error"}
 
 
@@ -30,8 +36,16 @@ def _seed(owner_id: int) -> tuple[int, int]:
 
     resolution = {"repair_verified": True, "team": [{"role": "scout", "error": LEAK}]}
     resolution["data_correction"] = {"reason": "备份表 bak_t39_20261018_*"}
-    report = {"progress": f"排查未完成：{LEAK}", "team_ok": False, "at": "2026-10-16T04:48:46"}
-    evidence = {"resolution": resolution, "employee_reports": [report], "source_ref": "WO-1"}
+    report = {
+        "progress": f"排查未完成：{LEAK}",
+        "team_ok": False,
+        "at": "2026-10-16T04:48:46",
+    }
+    evidence = {
+        "resolution": resolution,
+        "employee_reports": [report],
+        "source_ref": "WO-1",
+    }
     with get_session_factory()() as db:
         session = cs.CustomerServiceSession(user_id=owner_id)
         db.add(session)
@@ -63,8 +77,14 @@ def _seed(owner_id: int) -> tuple[int, int]:
                 **ids, actor_type="ai", event_type="x", detail_json=json.dumps(detail)
             )
         )
-        payload = {"ticket": {"evidence": evidence}, "employee_progress": {"progress": LEAK}}
-        for role, content in (("user", "还是看不到 1.0.0.6"), ("assistant", f"进展：{LEAK}")):
+        payload = {
+            "ticket": {"evidence": evidence},
+            "employee_progress": {"progress": LEAK},
+        }
+        for role, content in (
+            ("user", "还是看不到 1.0.0.6"),
+            ("assistant", f"进展：{LEAK}"),
+        ):
             db.add(
                 cs.CustomerServiceMessage(
                     **ids,
@@ -119,4 +139,7 @@ def test_customer_views_hide_internal_fields_admin_keeps_everything(client):
 
 
 def _dispatch(detail):
-    return {"action_type": "employee.dispatch", "created_at": detail["actions"][0]["created_at"]}
+    return {
+        "action_type": "employee.dispatch",
+        "created_at": detail["actions"][0]["created_at"],
+    }

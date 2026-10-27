@@ -8,7 +8,7 @@
 from unittest.mock import MagicMock
 
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 from tests.test_application.ai_chat_test_helpers import _make_svc
 
 

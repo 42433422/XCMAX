@@ -91,7 +91,7 @@ def shipment_call_payload(tool_id: str, action: str, params: dict) -> dict | Non
     if (tool_id, action) == ("shipment_records", "create"):
         return params
     if tool_id == "business_db" and action == "write":
-        from app.services.tools_workflow_common import _normalize_business_db_entity
+        from app.domain.shared_services.tools_workflow_common import _normalize_business_db_entity
 
         if (
             _normalize_business_db_entity(params.get("entity")) == "shipment_records"

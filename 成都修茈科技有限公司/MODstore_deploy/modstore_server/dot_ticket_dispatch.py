@@ -112,7 +112,10 @@ def _opaque(match: "re.Match[str]") -> str:
 
 
 def redact_ticket_text(
-    text: Any, sensitive_values: Iterable[str] = (), keep: Iterable[str] = (), ip: bool = True
+    text: Any,
+    sensitive_values: Iterable[str] = (),
+    keep: Iterable[str] = (),
+    ip: bool = True,
 ) -> str:
     """遮蔽手机号、邮箱、姓名、地址、身份证、银行卡、令牌/密钥/密码、内部 ID 等。
 
@@ -183,7 +186,10 @@ def is_customer_ticket(req: Dict[str, Any]) -> bool:
 def triage_result(req: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
     """分诊结果：优先 ``customer_ticket_triage`` 贴的快照（含终极员工介入），否则按 intent 推。"""
 
-    from modstore_server.customer_ticket_triage import allow_code_fix, resolve_dispatch_lane
+    from modstore_server.customer_ticket_triage import (
+        allow_code_fix,
+        resolve_dispatch_lane,
+    )
 
     raw = _raw(req)
     nested = raw.get("triage")
@@ -309,7 +315,12 @@ def _incident_contract(req: Dict[str, Any]) -> Dict[str, Any] | None:
                 ):
                     raise DoltIncidentContractError("retry_handoff_missing")
                 handoffs.append(previous_fix)
-            return {"role": role, "source": source, "handoffs": handoffs, "review": actions}
+            return {
+                "role": role,
+                "source": source,
+                "handoffs": handoffs,
+                "review": actions,
+            }
     except DoltIncidentContractError:
         raise
     except RECOVERABLE_ERRORS as exc:
@@ -372,7 +383,11 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
     }
     source = contract["source"]
     resolution = source.get("resolution") or {}
-    lines = ["事故岗位执行契约（服务端校验，摘要不代替原任务凭证）:", f"role: {role}", goals[role]]
+    lines = [
+        "事故岗位执行契约（服务端校验，摘要不代替原任务凭证）:",
+        f"role: {role}",
+        goals[role],
+    ]
     if resolution.get("route") == "private_mod":
         lines += [
             "客户需求仅交付到原账号授权的私有 Mod；禁止客户专用宿主分支，禁止把客户业务数据并入共享代码。",
@@ -418,7 +433,12 @@ def _incident_prompt(contract: Dict[str, Any], req: Dict[str, Any]) -> str:
                 {
                     "requested": {
                         key: budget[key]
-                        for key in ("role", "context_chars", "output_tokens", "reasoning_effort")
+                        for key in (
+                            "role",
+                            "context_chars",
+                            "output_tokens",
+                            "reasoning_effort",
+                        )
                         if key in budget
                     },
                     "executor": "dolt",

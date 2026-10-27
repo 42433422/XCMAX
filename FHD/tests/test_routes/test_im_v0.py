@@ -15,7 +15,7 @@ def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     db_file = tmp_path / "im_v0_test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     from app.db import SessionLocal, dispose_and_recreate_engine, engine
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.init_db import ensure_sqlite_im_bootstrap, init_im_tables
     from app.db.models.user import User
 

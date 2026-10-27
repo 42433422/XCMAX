@@ -8,7 +8,12 @@
   python3 cdp_driver.py shot <out.png>      # 截图
   python3 cdp_driver.py status              # 打印 window.xcagiDesktop 更新状态
 """
-import asyncio, base64, json, os, sys, urllib.request
+import asyncio
+import base64
+import json
+import os
+import sys
+import urllib.request
 
 # 本机 HTTP/SOCKS 代理会拦截 127.0.0.1（历史假阴性根因），必须在导入 websockets 前清掉。
 for _k in ("ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"):

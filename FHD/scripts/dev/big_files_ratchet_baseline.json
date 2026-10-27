@@ -1,15 +1,15 @@
 {
   "_note": "文件规模观测与路由棘轮基线（路由只减不增）。由 scripts/dev/count_big_files.py --update-baseline 维护。>800 行的 .py 文件仅告警；单文件 >20 个 @router 的增长仍阻断。新代码请按职责拆分（router 拆 domain、app_service 拆 helper）。",
-  "updated": "2026-10-24",
+  "updated": "2026-10-25",
   "big_files_over_800_lines": 0,
   "big_router_files_over_20_routes": 6,
   "max_file_lines": 500,
   "max_routes_per_file": 41,
   "file_line_limits": {},
   "router_route_limits": {
-    "app/fastapi_routes/domains/misc/routes.py": 41,
-    "app/fastapi_routes/domains/static/routes.py": 32,
-    "app/fastapi_routes/domains/system/routes.py": 32,
+    "app/fastapi_routes/domains/misc/misc_routes.py": 41,
+    "app/fastapi_routes/domains/static/static_routes.py": 32,
+    "app/fastapi_routes/domains/system/system_routes.py": 32,
     "app/fastapi_routes/xcagi_compat_product.py": 26,
     "app/legacy/routes/product/compat_routes.py": 26,
     "app/fastapi_routes/domains/shipment/shipment_orders.py": 23

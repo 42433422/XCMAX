@@ -15,7 +15,7 @@ from app.domain.neuro.processors.coordinator import (
     get_processor_coordinator,
 )
 from app.neuro_bus.domains.ai_service_domain import AIServiceNeuroDomain, get_ai_service_domain
-from app.neuro_bus.domains.base import (
+from app.neuro_bus.domains.domains_base import (
     DomainChannel,
     DomainHandler,
     NeuroDomain,

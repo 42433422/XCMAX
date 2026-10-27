@@ -13,7 +13,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import market_account as market
 from app.utils.time import utc_now_naive

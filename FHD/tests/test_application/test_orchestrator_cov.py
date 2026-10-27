@@ -11,7 +11,7 @@ from app.application.agent_orchestrator.run_models import (
     LLMCall,
     ToolCall,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ---------------------------------------------------------------------------
 # Helpers

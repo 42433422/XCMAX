@@ -24,8 +24,8 @@ from app.application.sales_lifecycle_service import SalesLifecycleError, SalesLi
 from app.db.models import SalesOrder
 from app.db.models.sales import SALES_ORDER_STATUS_FLOW
 from app.db.session import get_db
+from app.domain.shared_services.fulfillment_service import FulfillmentService
 from app.infrastructure.tenant_scope import TenantScopeError, current_tenant_id, tenant_id_for_write
-from app.services.fulfillment_service import FulfillmentService
 
 logger = logging.getLogger(__name__)
 _CLOSED_LOOP_FP_PREFIX = idempotency.CLOSED_LOOP_FP_PREFIX

@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from fastapi import Request
 
 from app.application.dataset_rag.models import DatasetAccessContext
-from app.fastapi_routes.knowledge.ports import AccessResolver
+from app.application.knowledge.protocols import AccessResolver
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

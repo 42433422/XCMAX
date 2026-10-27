@@ -129,7 +129,9 @@ def handle_boss_im_message(*, user_id: int, employee_id: str, text: str) -> Dict
     if uid <= 0 or not eid or not body:
         return {"ok": False, "reason": "bad_args"}
 
-    from modstore_server.human_uncertainty_queue import answer_latest_pending_for_employee
+    from modstore_server.human_uncertainty_queue import (
+        answer_latest_pending_for_employee,
+    )
 
     answered = answer_latest_pending_for_employee(user_id=uid, employee_id=eid, answer=body)
     if answered.get("ok"):

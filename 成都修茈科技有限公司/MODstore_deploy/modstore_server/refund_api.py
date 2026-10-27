@@ -24,7 +24,11 @@ from modstore_server import (
     webhook_dispatcher,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.eventing.contracts import REFUND_APPROVED, REFUND_FAILED, REFUND_REJECTED
+from modstore_server.eventing.contracts import (
+    REFUND_APPROVED,
+    REFUND_FAILED,
+    REFUND_REJECTED,
+)
 from modstore_server.infrastructure.db import get_db
 from modstore_server.models import Entitlement, RefundRequest, User
 from modstore_server.operational_errors import RECOVERABLE_ERRORS

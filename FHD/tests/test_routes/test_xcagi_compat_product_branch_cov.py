@@ -527,7 +527,7 @@ class TestExecuteProductsCompatAction:
             with patch(
                 "app.fastapi_routes.xcagi_compat_product.products_pg_insert_row", return_value=1
             ):
-                import app.application.excel_imports as _ei
+                import app.domain.app_pure.excel_imports as _ei
 
                 _ei._parse_price = MagicMock(return_value=0.0)
                 try:
@@ -537,7 +537,7 @@ class TestExecuteProductsCompatAction:
                     _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_create_success(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -558,7 +558,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_create_http_exception(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -579,7 +579,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_create_recoverable_error(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -600,7 +600,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_update_invalid_id(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -620,7 +620,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_update_success(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -639,7 +639,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_update_http_exception(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -661,7 +661,7 @@ class TestExecuteProductsCompatAction:
             _ei.__dict__.pop("_parse_price", None)
 
     def test_pg_update_recoverable_error(self):
-        import app.application.excel_imports as _ei
+        import app.domain.app_pure.excel_imports as _ei
 
         _ei._parse_price = MagicMock(return_value=0.0)
         try:
@@ -893,8 +893,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="create", params={}, route_path="/p"
@@ -916,8 +916,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="create", params={}, route_path="/p"
@@ -942,8 +942,8 @@ class TestRunProductsCompatAgent:
                 return_value=registry,
             ),
             patch("app.application.agent_orchestrator.AgentOrchestrator", return_value=orch),
-            patch("app.application.workflow.types.PlanGraph"),
-            patch("app.application.workflow.types.WorkflowNode"),
+            patch("app.application.workflow.workflow_types.PlanGraph"),
+            patch("app.application.workflow.workflow_types.WorkflowNode"),
         ):
             result = xp._run_products_compat_agent(
                 request=self._req(), action="delete", params={"message": "hi"}, route_path="/p"

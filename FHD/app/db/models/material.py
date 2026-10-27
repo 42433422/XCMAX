@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import DateTime, Float, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import TenantScopedMixin
 
 

@@ -861,7 +861,9 @@ def execute_duty_graph_programmatic(
                     user_id=int(created_by_user_id),
                     **exec_kw,
                 )
-                from modstore_server.employee_orchestrator import _evaluate_execution_success
+                from modstore_server.employee_orchestrator import (
+                    _evaluate_execution_success,
+                )
 
                 result = (
                     run_res if isinstance(run_res, dict) else {"error": "invalid result payload"}

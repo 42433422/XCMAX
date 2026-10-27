@@ -6,7 +6,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from modstore_server.customer_delivery_receipts import all_artifacts_running
-from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_commerce_blockers,
+)
 from modstore_server.models_cs import CustomerServiceTicket
 
 

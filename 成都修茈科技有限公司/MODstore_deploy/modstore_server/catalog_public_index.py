@@ -8,7 +8,10 @@ from typing import Any, Dict, Set
 
 from modstore_server.catalog_publication_policy import is_private_package
 from modstore_server.catalog_store import load_store, norm_pkg_id, norm_version
-from modstore_server.duty_roster import all_planned_employee_ids, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    all_planned_employee_ids,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

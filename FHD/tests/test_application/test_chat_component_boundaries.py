@@ -21,7 +21,7 @@ from app.application.ai_chat.workflow_session import (
     SessionCallbacks,
     WorkflowSession,
 )
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,

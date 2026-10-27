@@ -158,7 +158,7 @@ def test_expired_idempotent_step_recovers_but_non_idempotent_step_fails_closed()
 
 @pytest.mark.parametrize("legacy_claim", [False, True])
 def test_quote_recovery_uses_real_registry_and_does_not_replay_unknown_write(legacy_claim):
-    from app.application.workflow.types import WorkflowNode
+    from app.application.workflow.workflow_types import WorkflowNode
 
     repository = InMemoryAgentRunRepository()
     executor = _ConcurrentExecutor()

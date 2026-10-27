@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import quote
 
-from .ports import InstallationBuilders
+from .protocols import InstallationBuilders
 
 
 def build_mcp_url_config(base_url: str, api_key: str = "") -> dict[str, Any]:

@@ -15,14 +15,18 @@ if str(MODSTORE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODSTORE_ROOT))
 
 
-def _simulate_execute(employee_id: str, payload: bytes, filename: str, user_id: int = 1) -> dict:
+def _simulate_execute(
+    employee_id: str, payload: bytes, filename: str, user_id: int = 1
+) -> dict:
     from modstore_server.employee_api import (
         _collect_llm_context_text,
         _persist_employee_outputs_for_download,
     )
     from modstore_server.services.employee import get_default_employee_client
 
-    session_dir = MODSTORE_ROOT / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    session_dir = (
+        MODSTORE_ROOT / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    )
     session_dir.mkdir(parents=True, exist_ok=True)
     dest = session_dir / filename
     dest.write_bytes(payload)
@@ -42,11 +46,15 @@ def _simulate_execute(employee_id: str, payload: bytes, filename: str, user_id: 
         if not isinstance(result, dict):
             return {"ok": False, "error": "result not dict"}
         llm_text = _collect_llm_context_text(session_dir, result)
-        downloads = _persist_employee_outputs_for_download(user_id, session_dir, dest, result)
+        downloads = _persist_employee_outputs_for_download(
+            user_id, session_dir, dest, result
+        )
         inner = result.get("result") if isinstance(result.get("result"), dict) else {}
         outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
         dp_ok = any(
-            isinstance(o, dict) and o.get("handler") == "direct_python" and o.get("ok") is True
+            isinstance(o, dict)
+            and o.get("handler") == "direct_python"
+            and o.get("ok") is True
             for o in outputs
         )
         return {
@@ -101,7 +109,8 @@ def main() -> int:
     if not ppt_bytes:
         print(
             json.dumps(
-                {"ok": False, "error": "python-pptx 未安装，无法生成测试 pptx"}, ensure_ascii=False
+                {"ok": False, "error": "python-pptx 未安装，无法生成测试 pptx"},
+                ensure_ascii=False,
             )
         )
         return 2
@@ -158,7 +167,9 @@ def main() -> int:
 
     # 生成员：用读取产出的 JSON 写回 pptx
     json_bytes = json.dumps(pres, ensure_ascii=False, indent=2).encode("utf-8")
-    gen_res = _simulate_execute("ppt-generate-employee", json_bytes, "presentation_full.json")
+    gen_res = _simulate_execute(
+        "ppt-generate-employee", json_bytes, "presentation_full.json"
+    )
     report["generate"] = {
         "ok": gen_res.get("ok"),
         "error": gen_res.get("error"),
@@ -170,7 +181,9 @@ def main() -> int:
         if str(dl.get("filename", "")).lower().endswith(".pptx"):
             from modstore_server.employee_api import _employee_download_jobs_root
 
-            out_pptx = _employee_download_jobs_root() / str(1) / dl["job_id"] / dl["filename"]
+            out_pptx = (
+                _employee_download_jobs_root() / str(1) / dl["job_id"] / dl["filename"]
+            )
             break
 
     if gen_res.get("ok") and out_pptx and out_pptx.is_file():
@@ -202,7 +215,10 @@ def main() -> int:
         except RECOVERABLE_ERRORS as e:
             report["roundtrip"] = {"ok": False, "error": str(e)[:300]}
 
-    ok = bool(read_res.get("ok") and (gen_res.get("ok") or report.get("roundtrip", {}).get("ok")))
+    ok = bool(
+        read_res.get("ok")
+        and (gen_res.get("ok") or report.get("roundtrip", {}).get("ok"))
+    )
     report["ok"] = ok
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if ok else 1

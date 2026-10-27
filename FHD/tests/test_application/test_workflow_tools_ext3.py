@@ -373,11 +373,11 @@ class TestExecuteWorkflowToolAdditionalHandlers:
 
         with (
             patch(
-                "app.services.kitten_ai_document.generate.generate_office_file",
+                "app.domain.shared_services.kitten_ai_document.generate.generate_office_file",
                 return_value=(b"content", "test.docx"),
             ),
             patch(
-                "app.services.kitten_ai_document.pickup.store_document_pickup",
+                "app.domain.shared_services.kitten_ai_document.pickup.store_document_pickup",
                 return_value="pickup_tok",
             ),
             patch("app.mod_sdk.employee_tool_registry.is_employee_tool", return_value=False),
@@ -386,7 +386,7 @@ class TestExecuteWorkflowToolAdditionalHandlers:
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
         ):

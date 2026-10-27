@@ -64,7 +64,12 @@ def load_workforce_contracts(path: Optional[Path] = None) -> Dict[str, Any]:
             raise RuntimeError(f"duty work contract has no trigger: {employee_id}")
         acceptance = list(dict.fromkeys([*defaults, *(raw.get("acceptance") or [])]))
         normalized.append(
-            {**raw, "employee_id": employee_id, "trigger": trigger, "acceptance": acceptance}
+            {
+                **raw,
+                "employee_id": employee_id,
+                "trigger": trigger,
+                "acceptance": acceptance,
+            }
         )
     return {**payload, "path": str(target), "contracts": normalized}
 

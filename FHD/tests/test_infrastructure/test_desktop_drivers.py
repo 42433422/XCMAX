@@ -120,7 +120,7 @@ def test_desktop_requests_plan_without_llm_and_keep_approval(
 def test_desktop_dispatch_uses_registered_profile_and_truthful_driver_result(svc, monkeypatch):
     from app.application.normal_chat_dispatch import route_normal_mode_message
     from app.desktop_automation import service as module
-    from app.services.tools_workflow_dispatch import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_dispatch import execute_registered_workflow_tool
 
     monkeypatch.setattr(module, "_service", svc[0])
     params = {"app_id": "textedit", "_runtime_context": {"user_id": "7"}}

@@ -17,7 +17,11 @@ from modstore_server.account_lifecycle import (
     lifecycle_for_user_id,
 )
 from modstore_server.api.deps import _get_current_user
-from modstore_server.auth_service import create_access_token, create_refresh_token, register_user
+from modstore_server.auth_service import (
+    create_access_token,
+    create_refresh_token,
+    register_user,
+)
 from modstore_server.llm_api import _membership_meta, _provider_labels
 from modstore_server.llm_crypto import fernet_configured
 from modstore_server.llm_key_resolver import KNOWN_PROVIDERS, credential_status

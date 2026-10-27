@@ -12,7 +12,7 @@ from app.application.agent_orchestrator.orchestrator import AgentOrchestrator
 from app.application.agent_orchestrator.run_models import AgentRun
 from app.application.agent_orchestrator.task_models import tenant_id_of_run
 from app.application.agent_orchestrator.tool_spec import validate_tool_call
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 class UnifiedTaskError(ValueError):

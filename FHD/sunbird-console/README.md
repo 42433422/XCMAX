@@ -22,3 +22,5 @@ cd FHD/sunbird-console && npm run build
 ```
 
 Vite 配置：`frontend/sunbirdConsole.vite.config.js`
+
+> debt19: 客户定制壳；官方管理台 SSOT 为 `FHD/admin-console`。

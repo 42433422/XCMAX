@@ -10,7 +10,7 @@ from app.application.group_chat.constants import (
     RELAY_PROGRESS_MIN_INTERVAL_SEC,
 )
 from app.application.group_chat.message_formatting import ChatFormatting
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     AppendReport,
     EmployeeProviders,
     MessageFactory,

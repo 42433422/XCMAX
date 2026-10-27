@@ -9,7 +9,7 @@ from contextlib import AbstractContextManager
 from pathlib import Path
 
 from app.application.user_memory.models import UserMemory
-from app.application.user_memory.ports import JsonObject
+from app.application.user_memory.protocols import JsonObject
 
 
 class JsonMemoryStorage:

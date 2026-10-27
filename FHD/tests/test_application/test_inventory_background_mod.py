@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 import app.db as db_mod
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User

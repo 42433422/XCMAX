@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from app.application.excel_etl_kb import reset_excel_etl_kb_for_tests
 from app.application.shipment_etl_profile import clear_profile_cache
 from app.application.shipment_excel_etl_app_service import (
     execute_shipment_excel_etl,
@@ -21,6 +20,7 @@ from app.application.shipment_excel_etl_ocr import (
     text_blocks_to_grid,
 )
 from app.application.shipment_excel_etl_security import direct_execute_allowed
+from app.domain.app_pure.excel_etl_kb import reset_excel_etl_kb_for_tests
 
 
 @pytest.fixture(autouse=True)
@@ -246,7 +246,7 @@ def test_direct_execute_requires_env(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     monkeypatch.setenv("FHD_SHIPMENT_ETL_FINGERPRINT_BACKEND", "legacy")
@@ -306,7 +306,7 @@ def test_direct_promotes_preview_only_target(tmp_path, monkeypatch):
 
     monkeypatch.setattr("app.bootstrap.get_shipment_app_service", lambda: _Fake())
     monkeypatch.setattr(
-        "app.services.tools_workflow_registered._execute_excel_import_records",
+        "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
         lambda records: {"success": True, "imported": len(records)},
     )
     fp = tmp_path / "fp2.sqlite3"

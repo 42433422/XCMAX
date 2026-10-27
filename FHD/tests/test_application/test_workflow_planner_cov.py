@@ -19,7 +19,7 @@ from app.application.workflow.planner import (
     _looks_like_business_db_write,
 )
 from app.application.workflow.risk_gate import HybridRiskGate
-from app.application.workflow.types import PlanGraph, WorkflowNode, validate_plan_graph
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
 
 _SAMPLE_REGISTRY: dict[str, Any] = {
     name: {

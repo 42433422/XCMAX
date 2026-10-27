@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.neuro_bus.bus import NeuroBus, get_neuro_bus
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

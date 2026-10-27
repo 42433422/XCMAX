@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .customer_service_ports import DeliveryServices, Environment, Payload, PipelineRepository
 from .models import (
     DeliveryPaymentBody,
     DeliveryPlanBody,
     PipelineBody,
 )
-from .ports import DeliveryServices, Environment, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

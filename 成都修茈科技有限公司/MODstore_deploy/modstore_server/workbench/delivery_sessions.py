@@ -43,7 +43,9 @@ class WorkbenchSessions:
         session_id = session_id or uuid.uuid4().hex[:24]
         source_scope = None
         if delivery_context:
-            from modstore_server.customer_delivery_sources import create_private_source_scope
+            from modstore_server.customer_delivery_sources import (
+                create_private_source_scope,
+            )
 
             source_scope = create_private_source_scope(
                 int(user_id), session_id, int(delivery_context["ticket_id"])

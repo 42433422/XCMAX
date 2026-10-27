@@ -19,7 +19,9 @@ import os
 import tempfile
 from pathlib import Path
 
-from modstore_server.infrastructure.private_asset_storage import require_private_directory
+from modstore_server.infrastructure.private_asset_storage import (
+    require_private_directory,
+)
 
 from .events import DomainEvent
 

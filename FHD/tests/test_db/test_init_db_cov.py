@@ -563,7 +563,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(
@@ -580,7 +580,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),
@@ -594,7 +594,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("postgresql")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all"),
+            patch("app.db.db_base.Base.metadata.create_all"),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(
@@ -612,7 +612,7 @@ class TestInitApprovalTables:
         eng = _make_mock_engine("sqlite")
         with (
             _patch_engine(eng),
-            patch("app.db.base.Base.metadata.create_all", side_effect=OSError("fail")),
+            patch("app.db.db_base.Base.metadata.create_all", side_effect=OSError("fail")),
             patch(
                 "sqlalchemy.inspect",
                 return_value=_make_inspector(["approval_flows"], {"approval_flows": []}),

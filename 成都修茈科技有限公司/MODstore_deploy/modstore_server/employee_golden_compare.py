@@ -7,7 +7,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from modstore_server.catalog_quality import PUBLIC_TABULAR_PKG_IDS, resolve_employee_pack_dir
+from modstore_server.catalog_quality import (
+    PUBLIC_TABULAR_PKG_IDS,
+    resolve_employee_pack_dir,
+)
 
 GOLDEN_PARITY_PASS_THRESHOLD = 85
 

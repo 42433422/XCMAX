@@ -27,7 +27,7 @@ from app.application.agent_orchestrator.task_execution_repository import (
     get_task_execution_repository,
     set_task_execution_repository_for_tests,
 )
-from app.fastapi_routes.domains.agent.routes import router
+from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
 
 
@@ -709,7 +709,7 @@ def test_approval_storage_failure_preserves_waiting_run_and_allows_retry(
             monkeypatch.setattr(
                 approval_grant, "_consumption_repository", lambda: unavailable_repository
             )
-            with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+            with patch("app.fastapi_routes.domains.agent.agent_routes._enqueue_run") as enqueue:
                 rejected = owner.post(
                     f"/api/agent/runs/{run_id}/continue", json={"approval_grant": grant}
                 )
@@ -783,7 +783,7 @@ def test_durable_http_approval_rolls_back_enqueue_failure_and_retries(
         replacement = {**previous_binding, "session_row_id": 2} if renew_session else None
         client = _client("owner", mod_authorization=replacement)
         with patch(
-            "app.fastapi_routes.domains.agent.routes.notify_agent_task_dispatcher"
+            "app.fastapi_routes.domains.agent.agent_routes.notify_agent_task_dispatcher"
         ) as notify:
             monkeypatch.setattr(queue, "enqueue_in_session", interrupted)
             failed = client.post(
@@ -845,7 +845,7 @@ def test_approval_cannot_replace_persisted_tenant_and_does_not_consume_grant():
     get_agent_run_repository().save(run)
     token = issue_approval_grant(run, principal_id="owner")["grant"]
     client = _client("owner", tenant_id="1")
-    with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+    with patch("app.fastapi_routes.domains.agent.agent_routes._enqueue_run") as enqueue:
         response = client.post(
             f"/api/agent/runs/{run.run_id}/continue",
             json={"approval_grant": token, "runtime_context": {"tenant_id": "2"}},
@@ -868,7 +868,7 @@ def test_resume_rejects_tenant_change_without_control_command():
     repository = get_agent_run_repository()
     repository.save(run)
     before = repository.get(run.run_id).to_dict()
-    with patch("app.fastapi_routes.domains.agent.routes._enqueue_run") as enqueue:
+    with patch("app.fastapi_routes.domains.agent.agent_routes._enqueue_run") as enqueue:
         response = _client("owner", tenant_id="1").post(
             f"/api/agent/runs/{run.run_id}/resume",
             json={"runtime_context": {"tenant_id": "2"}},
@@ -1001,7 +1001,7 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
 
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.start_run",
+        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
         return_value=run,
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
@@ -1023,7 +1023,7 @@ def test_agent_routes_do_not_expose_internal_exception_details() -> None:
 def test_agent_route_internal_failure_returns_stable_public_message() -> None:
     client = _client()
     with patch(
-        "app.fastapi_routes.domains.agent.routes.AgentOrchestrator.start_run",
+        "app.fastapi_routes.domains.agent.agent_routes.AgentOrchestrator.start_run",
         side_effect=RuntimeError("Traceback: database password=do-not-expose"),
     ):
         response = client.post("/api/agent/runs", json={"message": "执行任务"})
@@ -1473,7 +1473,7 @@ def test_task_control_command_survives_process_local_control_reset() -> None:
 
 def test_clarification_answer_is_bound_validated_and_does_not_approve_write():
     from app.application.workflow.clarification_node import build_clarify_node
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id="input",
@@ -1526,7 +1526,7 @@ def test_exported_spreadsheet_download_checks_owner_and_file_content(tmp_path, m
 
     from app.application.agent_orchestrator.artifact_files import artifact_path
     from app.application.agent_orchestrator.run_models import artifact_from_dict
-    from app.services.tools_workflow_erp import _registered_router_reports
+    from app.domain.shared_services.tools_workflow_erp import _registered_router_reports
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     run = AgentRun(user_id="u1", message="导出销售报表", status="completed")
@@ -1561,12 +1561,12 @@ def test_generated_shipment_download_contains_real_business_cells(tmp_path, monk
 
     import app.di.registry as _di_registry
     from app.application.agent_orchestrator.run_models import artifact_from_dict
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import Product, PurchaseUnit
-    from app.infrastructure.tenant_scope import tenant_scope
-    from app.services.tools_workflow_shipments_docs import (
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
         _registered_router_shipment_orders,
     )
+    from app.infrastructure.tenant_scope import tenant_scope
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path / "data"))
     engine = create_engine(f"sqlite:///{tmp_path / 'shipment.db'}")

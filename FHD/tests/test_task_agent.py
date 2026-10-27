@@ -2,7 +2,7 @@ import pytest
 
 
 def test_task_agent_parse_long_colloquial_shipment():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     msg = "哎，给我打印一下七彩乐园的发货单，嗯，编号9803，规格二十八一共三桶。"
@@ -17,13 +17,13 @@ def test_task_agent_parse_long_colloquial_shipment():
 
 
 def test_task_agent_declines_oversized_input_before_slot_regexes():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     assert get_task_agent().parse_task("编号" + "0" * 100_000) is None
 
 
 def test_task_agent_should_parse_spec_and_qty_without_separator():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     msg = "我打印一下七彩乐园的发货单，嗯，产品是9803规格二十八两桶"
@@ -38,7 +38,7 @@ def test_task_agent_should_parse_spec_and_qty_without_separator():
 
 
 def test_task_agent_followup_then_fill_bucket():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     first = agent.process_message("u_task_2", "给我打印七彩乐园的发货单，编号9803，规格28")
@@ -54,7 +54,7 @@ def test_task_agent_followup_then_fill_bucket():
 
 
 def test_task_agent_products_fallback():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     result = agent.process_message("u_task_3", "帮我看一下产品列表")
@@ -64,7 +64,7 @@ def test_task_agent_products_fallback():
 
 
 def test_task_agent_product_query_slots_should_extract():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     result = agent.process_message("u_task_4", "查一下型号9803规格28的产品")
@@ -76,7 +76,7 @@ def test_task_agent_product_query_slots_should_extract():
 
 
 def test_task_agent_customer_query_followup_then_fill():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     first = agent.process_message("u_task_5", "帮我查客户")
@@ -93,7 +93,7 @@ def test_task_agent_customer_query_followup_then_fill():
 
 
 def test_task_agent_followup_should_use_chinese_slot_labels():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     result = agent.process_message("u_task_6", "打印一下七彩乐园发货单，编号9803")
@@ -107,7 +107,7 @@ def test_task_agent_followup_should_use_chinese_slot_labels():
 
 
 def test_task_agent_followup_should_ask_natural_questions():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     result = agent.process_message("u_task_7", "打印发货单，七彩乐园")
@@ -120,7 +120,7 @@ def test_task_agent_followup_should_ask_natural_questions():
 
 
 def test_task_agent_should_parse_compact_shipment_with_qty_verb():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     msg = "发货单七彩乐园9803规格12要3桶"
@@ -136,7 +136,7 @@ def test_task_agent_should_parse_compact_shipment_with_qty_verb():
 
 
 def test_task_agent_linear_number_parser_preserves_common_shipment_grammar():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     arabic = agent.parse_task("打印七彩乐园的发货单编号9803规格12.5要3桶")
@@ -156,7 +156,7 @@ def test_task_agent_linear_number_parser_preserves_common_shipment_grammar():
 
 
 def test_task_agent_shipment_unit_cleanup_is_linear_and_keeps_customer_name():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     parsed = get_task_agent().parse_task("发货单七彩乐园9803规格12要3桶")
     assert parsed is not None
@@ -167,7 +167,7 @@ def test_task_agent_shipment_unit_cleanup_is_linear_and_keeps_customer_name():
 
 
 def test_task_agent_customer_query_handles_long_whitespace_without_regex_backtracking():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     parsed = get_task_agent().parse_task("查客户" + "\t" * 3000 + "太阳鸟贸易")
     assert parsed is not None
@@ -176,7 +176,7 @@ def test_task_agent_customer_query_handles_long_whitespace_without_regex_backtra
 
 
 def test_task_agent_linear_number_parser_handles_near_miss_user_text():
-    from app.services.task_agent import get_task_agent
+    from app.domain.shared_services.task_agent import get_task_agent
 
     agent = get_task_agent()
     # Under the established 4096-character input limit these long numeric runs

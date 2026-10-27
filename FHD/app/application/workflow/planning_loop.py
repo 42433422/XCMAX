@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Protocol
 
 from app.application.workflow.planner_tool_dispatch import RegisteredToolExecutor
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class PlanningLoop:
         probe_outputs: list[dict[str, Any]] = []
         task_agent = None
         try:
-            from app.services.task_agent import TaskAgent
+            from app.domain.shared_services.task_agent import TaskAgent
 
             task_agent = TaskAgent()
         except ImportError:

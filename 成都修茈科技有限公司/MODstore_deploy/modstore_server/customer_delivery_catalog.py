@@ -13,7 +13,9 @@ from typing import Any
 from modstore_server.catalog_publication_policy import stable_version
 from modstore_server.customer_delivery_package import verify_delivery_package
 from modstore_server.customer_delivery_receipts import canonical_sha256
-from modstore_server.customer_service_delivery_models import custom_delivery_commerce_blockers
+from modstore_server.customer_service_delivery_models import (
+    custom_delivery_commerce_blockers,
+)
 from modstore_server.customer_service_tools import json_dumps, json_loads
 from modstore_server.models import get_session_factory, get_user_mod_ids
 from modstore_server.models_cs import CustomerServiceTicket
@@ -255,7 +257,9 @@ def issue_release_download(record: dict[str, Any], raw: bytes) -> dict[str, str]
             }
         )
         evidence["download_grants"] = grants[-20:]
-        from modstore_server.customer_delivery_entitlements import grant_verified_delivery_access
+        from modstore_server.customer_delivery_entitlements import (
+            grant_verified_delivery_access,
+        )
 
         grant_verified_delivery_access(
             db, ticket, evidence, manifest, owner_id=record["owner_user_id"]

@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`vibe_coding.agent.security.paths`."""
+"""Unit tests for :mod:`vibe_coding.agent.security.path_policy`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from vibe_coding.agent.security.paths import (
+from vibe_coding.agent.security.path_policy import (
     PathSafetyError,
     is_safe_relative,
     resolve_within_root,

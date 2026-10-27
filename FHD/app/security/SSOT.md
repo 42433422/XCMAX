@@ -18,3 +18,7 @@
 - `app/fastapi_routes/domains/auth/` — HTTP 路由
 
 新增安全能力：优先扩展本目录或 `infrastructure/auth`，并补测试；禁止空文件充数。
+
+## debt19 thicken
+
+Added input_sanitizer, secrets_redactor, authz_policy, audit_trail, csrf_protect, rate_limit_policy, threat_headers, session_hardening, path_traversal_guard, security_health.

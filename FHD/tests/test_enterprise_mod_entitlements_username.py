@@ -13,7 +13,7 @@ def test_session_username_from_user_object():
     user = MagicMock()
     user.username = "xcagi-enterprise-demo"
     with __import__("unittest.mock").mock.patch(
-        "app.services.session_service.SessionService.validate_session",
+        "app.domain.shared_services.session_service.SessionService.validate_session",
         return_value=user,
     ):
         assert _session_username_for_entitlements("sid-1") == "xcagi-enterprise-demo"

@@ -180,7 +180,8 @@ class MaintenanceRuntime:
         merge = self.recovery.requested_merges(memory)
         retort = self.recovery.retort_scope(memory)
         absorbed = self.recovery.absorbed_merges(
-            memory, base_branch=os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main"
+            memory,
+            base_branch=os.environ.get("MODSTORE_PARA_BRANCH", "").strip() or "main",
         )
         if merge.get("changed") or retort.get("changed") or absorbed.get("changed"):
             self.state.write_memory(memory)
@@ -206,12 +207,18 @@ class MaintenanceRuntime:
                     "vibe-coding-maintainer",
                     "code",
                     self.prompts.code(
-                        context.run_id, context.gate, context.memory, context.resume_candidate
+                        context.run_id,
+                        context.gate,
+                        context.memory,
+                        context.resume_candidate,
                     ),
                     extra,
                 )
             )
-        for step, employee_id in (("review", "change-request-auditor"), ("qa", "test-qa-runner")):
+        for step, employee_id in (
+            ("review", "change-request-auditor"),
+            ("qa", "test-qa-runner"),
+        ):
             if step in steps_to_run:
                 extra = {
                     "allow_medium_risk": True,
@@ -324,12 +331,21 @@ class MaintenanceRuntime:
         return self._finish(
             context,
             status="failed",
-            extra={"error": error, "failed_step": "review", "retort_clarification": gate},
+            extra={
+                "error": error,
+                "failed_step": "review",
+                "retort_clarification": gate,
+            },
             policy_override=policy_override,
         )
 
     def _dispatch_step(
-        self, context: _RunContext, employee_id: str, step_name: str, task_text: str, extra: dict
+        self,
+        context: _RunContext,
+        employee_id: str,
+        step_name: str,
+        task_text: str,
+        extra: dict,
     ) -> Dict[str, Any]:
         base_branch = str(extra.get("branch") or "").strip() if step_name == "code" else ""
         result, ok, failure, para, report, code_retries, marker_retries = self.execution.run_step(

@@ -201,11 +201,22 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
+    import sys
+
     module = _SERVICE_EXPORTS.get(name)
     if module is not None:
         return getattr(import_module(f"{__name__}.{module}"), name)
     if name in _MODULE_EXPORTS:
         value = import_module(f"{__name__}.{name}")
+        globals()[name] = value
+        return value
+    # debt19: modules relocated under domain.app_pure / shared_services
+    for prefix in ("app.domain.app_pure", "app.domain.shared_services"):
+        try:
+            value = import_module(f"{prefix}.{name}")
+        except ModuleNotFoundError:
+            continue
+        sys.modules[f"{__name__}.{name}"] = value
         globals()[name] = value
         return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

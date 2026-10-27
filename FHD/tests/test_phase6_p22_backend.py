@@ -829,7 +829,7 @@ class TestPlannerToolsBranches:
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value="emp-result",
             ) as mock_emp,
         ):
@@ -850,7 +850,7 @@ class TestPlannerToolsBranches:
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 side_effect=RuntimeError("emp boom"),
             ),
             patch(
@@ -875,7 +875,7 @@ class TestPlannerToolsBranches:
                 return_value=(None, None),
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
             ),
             patch(

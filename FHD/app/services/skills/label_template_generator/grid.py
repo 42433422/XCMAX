@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, SupportsInt
 
-from .ports import Grid, Payload
+from .label_template_ports import Grid, Payload
 
 if TYPE_CHECKING:
     import numpy as np

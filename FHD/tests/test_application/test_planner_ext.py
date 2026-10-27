@@ -13,7 +13,7 @@ from app.application.workflow.planner import (
     execute_tool,
     get_tool_registry,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 # ========================= _WORKFLOW_TOOL_HANDLERS ========================
 

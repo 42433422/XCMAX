@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from app.application.workflow.types import WorkflowNode
+from app.application.workflow.workflow_types import WorkflowNode
 
 
 def stock_in_node(message: str, registry: dict[str, Any]) -> WorkflowNode | None:

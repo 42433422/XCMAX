@@ -11,7 +11,7 @@ from fastapi import Request
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import Connection
+from .protocols import Connection
 
 
 class LatestToken(Protocol):

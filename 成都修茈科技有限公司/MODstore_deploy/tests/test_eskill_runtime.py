@@ -7,7 +7,7 @@ from pathlib import Path
 
 def _bootstrap(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "modstore.db"))
-    import modstore_server.db.base as db_base
+    import modstore_server.db.db_base as db_base
     import modstore_server.models as models
 
     db_base._engine = None

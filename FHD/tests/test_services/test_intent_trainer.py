@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_trainer import (
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,

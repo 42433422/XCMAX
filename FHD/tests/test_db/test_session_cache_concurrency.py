@@ -189,6 +189,8 @@ class TestSqliteWriteGuard:
     def test_desktop_mode_takes_lock(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.db.sqlite_write_guard import _write_lock
 
-        monkeypatch.setattr("app.desktop_runtime.paths.is_desktop_mode", lambda: True)
+        monkeypatch.setattr(
+            "app.desktop_runtime.desktop_runtime_paths.is_desktop_mode", lambda: True
+        )
         with sqlite_write_guard():
             assert not _write_lock.acquire(blocking=False)

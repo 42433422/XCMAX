@@ -52,11 +52,13 @@ def _evaluate_retort_clarification_before_review(
         base_branch=base_branch,
         memory=memory,
         workspace_root=config._runtime_dir() / config.DEFAULT_MERGE_WORKSPACE_ROOT,
-        changed_files_for_branch=lambda workspace: workspace_domain._changed_files_for_branch(
-            repo_url=repo_url,
-            base_branch=base_branch,
-            branch=target,
-            workspace=workspace,
+        changed_files_for_branch=lambda workspace: (
+            workspace_domain._changed_files_for_branch(
+                repo_url=repo_url,
+                base_branch=base_branch,
+                branch=target,
+                workspace=workspace,
+            )
         ),
         cleanup_workspace=workspace_domain._cleanup_merge_workspace,
     )

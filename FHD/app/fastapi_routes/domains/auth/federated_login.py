@@ -11,12 +11,7 @@ from fastapi import BackgroundTasks, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.application.session_account_meta import AccountKind
-from app.http.error_codes import (
-    QR_NOT_FOUND,
-    error_envelope,
-)
-
-from .ports import (
+from app.domain.auth.ports import (
     AttachCookie,
     ErrorTypes,
     FinalizeOidc,
@@ -24,6 +19,10 @@ from .ports import (
     LoginBackend,
     QrIssuer,
     RouteResult,
+)
+from app.http.error_codes import (
+    QR_NOT_FOUND,
+    error_envelope,
 )
 
 

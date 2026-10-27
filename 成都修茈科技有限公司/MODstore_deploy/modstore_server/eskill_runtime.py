@@ -289,7 +289,9 @@ class ESkillRuntime:
             return self._execute_pipeline(logic, input_data, user_id=user_id)
 
         if logic_type in ("vibe_code", "vibe_workflow"):
-            from modstore_server.integrations.vibe_eskill_adapter import execute_vibe_kind
+            from modstore_server.integrations.vibe_eskill_adapter import (
+                execute_vibe_kind,
+            )
 
             return execute_vibe_kind(logic, input_data, user_id=user_id)
 

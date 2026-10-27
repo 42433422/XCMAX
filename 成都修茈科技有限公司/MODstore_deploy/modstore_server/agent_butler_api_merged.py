@@ -29,7 +29,8 @@ class ButlerAction(_facade().Base):
     risk = _facade().Column(_facade().String(16), default="low")
     status = _facade().Column(_facade().String(16), default="success", index=True)
     created_at = _facade().Column(
-        _facade().DateTime, default=lambda: _facade().datetime.now(_facade().timezone.utc)
+        _facade().DateTime,
+        default=lambda: _facade().datetime.now(_facade().timezone.utc),
     )
 
 
@@ -129,7 +130,10 @@ async def butler_daily_digest_record_detail(
     row = db.get(_facade().DailyDigestRecord, record_id)
     if row is None:
         raise _facade().HTTPException(404, "每日摘要记录不存在")
-    return {"success": True, "data": _facade()._daily_digest_record_to_dict(row, include_body=True)}
+    return {
+        "success": True,
+        "data": _facade()._daily_digest_record_to_dict(row, include_body=True),
+    }
 
 
 def _dd_repo_root():
@@ -268,7 +272,10 @@ async def butler_daily_digest_artifacts(
         }
     )
     try:
-        from modstore_server.release_train import list_release_train_history, snapshot_public
+        from modstore_server.release_train import (
+            list_release_train_history,
+            snapshot_public,
+        )
 
         stages.append(
             {
@@ -284,7 +291,11 @@ async def butler_daily_digest_artifacts(
         )
     except RECOVERABLE_ERRORS as exc:
         stages.append(
-            {"node": "RT", "label": "release_train 四段 + 历史快照", "error": str(exc)[:200]}
+            {
+                "node": "RT",
+                "label": "release_train 四段 + 历史快照",
+                "error": str(exc)[:200],
+            }
         )
     try:
         from modstore_server.daily_backup_job import list_backups
@@ -301,7 +312,10 @@ async def butler_daily_digest_artifacts(
         )
     except RECOVERABLE_ERRORS as exc:
         stages.append({"node": "DR", "label": "容灾备份", "error": str(exc)[:200]})
-    return {"success": True, "data": {"record_id": record_id, "day": day, "stages": stages}}
+    return {
+        "success": True,
+        "data": {"record_id": record_id, "day": day, "stages": stages},
+    }
 
 
 "Implementation extracted from the public facade module."
@@ -346,7 +360,10 @@ def _execute_admin_readonly_tool(
 
     try:
         if tool == "get_my_account_snapshot":
-            from modstore_server.xiaoc_cs_ssot import format_visitor_block, resolve_user_identity
+            from modstore_server.xiaoc_cs_ssot import (
+                format_visitor_block,
+                resolve_user_identity,
+            )
 
             ident = resolve_user_identity(user, db=db, source="butler")
             lines = [
@@ -409,7 +426,10 @@ def _execute_admin_readonly_tool(
             rows = (
                 db.query(CustomerServiceTicket)
                 .filter(CustomerServiceTicket.user_id == user.id)
-                .order_by(CustomerServiceTicket.updated_at.desc(), CustomerServiceTicket.id.desc())
+                .order_by(
+                    CustomerServiceTicket.updated_at.desc(),
+                    CustomerServiceTicket.id.desc(),
+                )
                 .limit(lim)
                 .all()
             )
@@ -662,7 +682,12 @@ def _resolve_corp_credentials(db: _facade().Session):
         if route_provider and route_model:
             route_key = platform_api_key(route_provider)
             if route_key:
-                return (route_provider, route_model, route_key, platform_base_url(route_provider))
+                return (
+                    route_provider,
+                    route_model,
+                    route_key,
+                    platform_base_url(route_provider),
+                )
     except RECOVERABLE_ERRORS:
         _facade().logger.debug("corp-chat: platform runtime route unavailable", exc_info=True)
     if not api_key and user_id_raw.isdigit():
@@ -715,7 +740,10 @@ def _resolve_corp_credentials(db: _facade().Session):
 
 
 def _build_corp_messages(
-    body: CorpChatDTO, *, user: _facade().User | None = None, db: _facade().Session | None = None
+    body: CorpChatDTO,
+    *,
+    user: _facade().User | None = None,
+    db: _facade().Session | None = None,
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     """官网公开咨询：统一小C 人设 + 对话对象 + 管理端 persy 知识库。"""
     from modstore_server.xiaoc_cs_ssot import (
@@ -734,7 +762,9 @@ def _build_corp_messages(
         )
     else:
         identity = identity_from_guest(
-            visitor_id=body.visitor_id or "", visitor_label=body.visitor_label or "", source="corp"
+            visitor_id=body.visitor_id or "",
+            visitor_label=body.visitor_label or "",
+            source="corp",
         )
     vb = format_visitor_block(identity)
     if vb:
@@ -758,7 +788,11 @@ def _build_corp_messages(
 
 
 def _get_or_create_conversation(
-    db: _facade().Session, user_id: int, conversation_id: int | None, provider: str, model: str
+    db: _facade().Session,
+    user_id: int,
+    conversation_id: int | None,
+    provider: str,
+    model: str,
 ) -> _facade().ChatConversation:
     if conversation_id:
         conv = (
@@ -794,15 +828,23 @@ async def butler_cs_ssot_policy(mode: str = "admin"):
         key = "external"
     if key not in XIAOC_PERMISSIONS:
         key = "admin"
-    return {"ok": True, "policy": permission_policy(mode=key), "modes": list(XIAOC_PERMISSIONS)}
+    return {
+        "ok": True,
+        "policy": permission_policy(mode=key),
+        "modes": list(XIAOC_PERMISSIONS),
+    }
 
 
 @_facade().router.post("/cs-ssot/retrieve")
 async def butler_cs_ssot_retrieve(
-    body: CsSsotRetrieveDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: CsSsotRetrieveDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """已登录市场/管理端：按身份检索公开库（管理员另含内部库）。"""
-    from modstore_server.xiaoc_cs_ssot import PUBLIC_DATASET_ID, retrieve_knowledge_for_mode
+    from modstore_server.xiaoc_cs_ssot import (
+        PUBLIC_DATASET_ID,
+        retrieve_knowledge_for_mode,
+    )
 
     mode = "admin" if bool(getattr(user, "is_admin", False)) else "market_cs"
     chunks = retrieve_knowledge_for_mode(body.query, mode=mode, top_k=body.top_k)
@@ -884,7 +926,12 @@ async def butler_corp_translate(
     ]
     try:
         raw_response = await _facade().chat_dispatch(
-            provider, api_key=api_key, base_url=base_url, model=model, messages=msgs, max_tokens=180
+            provider,
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            messages=msgs,
+            max_tokens=180,
         )
         if not raw_response.get("ok"):
             raise RuntimeError(raw_response.get("error") or "translate failed")
@@ -1488,12 +1535,27 @@ def _all_hands_session_steps(
     一一对应。
     """
     steps: _facade().List[_facade().Dict[str, _facade().Any]] = [
-        {"id": "prepare", "label": "准备员工清单", "status": "pending", "message": None},
-        {"id": "collect", "label": "收集全员汇报", "status": "pending", "message": None},
+        {
+            "id": "prepare",
+            "label": "准备员工清单",
+            "status": "pending",
+            "message": None,
+        },
+        {
+            "id": "collect",
+            "label": "收集全员汇报",
+            "status": "pending",
+            "message": None,
+        },
     ]
     if with_synthesize:
         steps.append(
-            {"id": "synthesize", "label": "数字管家综合答复", "status": "pending", "message": None}
+            {
+                "id": "synthesize",
+                "label": "数字管家综合答复",
+                "status": "pending",
+                "message": None,
+            }
         )
     steps.append({"id": "minutes", "label": "生成会议摘要", "status": "pending", "message": None})
     steps.append({"id": "complete", "label": "完成", "status": "pending", "message": None})
@@ -1504,7 +1566,10 @@ async def _run_all_hands_report_session(
     sid: str, user_id: int, payload: _facade().Dict[str, _facade().Any]
 ) -> None:
     """后台执行全员汇报，并把结果写入 workbench session。"""
-    from modstore_server.all_hands_report import build_all_hands_report, synthesize_meeting_minutes
+    from modstore_server.all_hands_report import (
+        build_all_hands_report,
+        synthesize_meeting_minutes,
+    )
     from modstore_server.daily_digest import (
         DEFAULT_DIGEST_EMAIL,
         parse_daily_digest_recipient_emails,
@@ -1529,7 +1594,10 @@ async def _run_all_hands_report_session(
     synthesize_flag = bool(payload.get("synthesize", True)) and bool(user_question)
     await _set_step(sid, "prepare", "running", "正在整理可汇报员工清单…")
     await _set_step(
-        sid, "prepare", "done", f"并发 {max(1, min(concurrency, 4))}；最多 {max_employees} 人"
+        sid,
+        "prepare",
+        "done",
+        f"并发 {max(1, min(concurrency, 4))}；最多 {max_employees} 人",
     )
     await _set_step(
         sid,
@@ -1688,7 +1756,11 @@ async def _run_all_hands_report_session(
             if deliv:
                 any_delivered = True
             meeting_minutes_email["per_to"].append(
-                {"to": to_email, "delivered": deliv, "mode": str(result.get("mode") or "")}
+                {
+                    "to": to_email,
+                    "delivered": deliv,
+                    "mode": str(result.get("mode") or ""),
+                }
             )
         meeting_minutes_email["any_delivered"] = any_delivered
         _facade().logger.info(
@@ -1727,7 +1799,8 @@ async def _run_all_hands_report_session(
 
 @_facade().router.post("/all-hands-report/sessions")
 async def butler_all_hands_report_session_start(
-    body: AllHandsReportDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: AllHandsReportDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """启动全员汇报后台任务（秒回 session_id，前端轮询 `/api/workbench/sessions/{id}`）。"""
     if not getattr(user, "is_admin", False):
@@ -1794,7 +1867,8 @@ async def butler_all_hands_report_session_start(
 
 @_facade().router.post("/all-hands-report")
 async def butler_all_hands_report(
-    body: AllHandsReportDTO, user: _facade().User = _facade().Depends(_facade()._get_current_user)
+    body: AllHandsReportDTO,
+    user: _facade().User = _facade().Depends(_facade()._get_current_user),
 ):
     """让数字管家召集全员汇报（**仅管理员**）。
 
@@ -1835,8 +1909,18 @@ class DigestVibePrepDTO(_facade().BaseModel):
 
 def _vibe_prep_session_steps() -> _facade().List[_facade().Dict[str, _facade().Any]]:
     return [
-        {"id": "prepare", "label": "准备员工清单", "status": "pending", "message": None},
-        {"id": "collect", "label": "收集员工快照", "status": "pending", "message": None},
+        {
+            "id": "prepare",
+            "label": "准备员工清单",
+            "status": "pending",
+            "message": None,
+        },
+        {
+            "id": "collect",
+            "label": "收集员工快照",
+            "status": "pending",
+            "message": None,
+        },
         {
             "id": "synthesize",
             "label": "生成更新/补丁 Markdown",
@@ -1909,7 +1993,10 @@ async def _run_digest_vibe_prep_session(
             _persist_workbench_session_unlocked(sid)
         if stage == "collect":
             await _set_step(
-                sid, "collect", "running", f"已收集 {completed}/{max(total, completed)} 名员工"
+                sid,
+                "collect",
+                "running",
+                f"已收集 {completed}/{max(total, completed)} 名员工",
             )
 
     try:
@@ -1938,7 +2025,10 @@ async def _run_digest_vibe_prep_session(
     await _set_step(sid, "collect", "done", f"已汇总 {n} 名员工")
     await _set_step(sid, "synthesize", "running", "正在生成更新清单与补丁清单…")
     await _set_step(
-        sid, "synthesize", "done", f"已生成双 Markdown（模型 {result.get('model') or '—'}）"
+        sid,
+        "synthesize",
+        "done",
+        f"已生成双 Markdown（模型 {result.get('model') or '—'}）",
     )
     await _set_step(sid, "complete", "running", "正在整理输出…")
     artifact = {
@@ -1951,7 +2041,9 @@ async def _run_digest_vibe_prep_session(
         "patches_markdown": result.get("patches_markdown") or "",
         "completed_at": _facade().datetime.now(_facade().timezone.utc).isoformat() + "Z",
     }
-    from modstore_server.digest_vibe_line_dispatch import dispatch_vibe_prep_to_production_lines
+    from modstore_server.digest_vibe_line_dispatch import (
+        dispatch_vibe_prep_to_production_lines,
+    )
     from modstore_server.digest_vibe_prep import persist_vibe_prep_on_digest_record
 
     persist_vibe_prep_on_digest_record(int(digest_row.id), result)
@@ -1963,7 +2055,8 @@ class DigestLineExecuteDTO(_facade().BaseModel):
     """``POST .../daily-digests/{id}/line-execute`` 入参（Phase A 或单产线）。"""
 
     dispatch_line: str = _facade().Field(
-        "PHASE-A", description="PHASE-A（默认，P-S+P-App 补丁）| P-W | P-S | P-App | S-R"
+        "PHASE-A",
+        description="PHASE-A（默认，P-S+P-App 补丁）| P-W | P-S | P-App | S-R",
     )
     force: bool = _facade().Field(False, description="忽略同 base_version 幂等跳过")
     list_kinds: _facade().Optional[_facade().List[str]] = _facade().Field(

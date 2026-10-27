@@ -14,7 +14,10 @@ def test_normalized_deploy_tier_defaults_local(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_normalized_deploy_tier_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
-    from modstore_server.deploy_context import is_production_tier, normalized_deploy_tier
+    from modstore_server.deploy_context import (
+        is_production_tier,
+        normalized_deploy_tier,
+    )
 
     monkeypatch.setenv("MODSTORE_DEPLOY_TIER", "prod")
     assert normalized_deploy_tier() == "production"

@@ -28,7 +28,7 @@ class TestRunPaddleOcrTask:
 
         mock_blocks = [{"text": "hello", "confidence": 0.99}]
         with patch(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
+            "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
             return_value=mock_blocks,
         ):
             result = run_paddle_ocr_task.run(str(img_path))
@@ -48,7 +48,7 @@ class TestRunPaddleOcrTask:
 
         # TypeError is NOT in RECOVERABLE_ERRORS, so it propagates uncaught
         with patch(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
+            "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
             side_effect=TypeError("bad image dtype"),
         ):
             with pytest.raises(TypeError, match="bad image dtype"):
@@ -70,7 +70,7 @@ class TestRunPaddleOcrTask:
         img.save(img_path)
 
         with patch(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
+            "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
             side_effect=RuntimeError("OCR engine down"),
         ):
             # The function catches RuntimeError (recoverable) → calls self.retry(exc=exc)
@@ -98,7 +98,7 @@ class TestRunIntentRecognitionTask:
         mock_recognizer.recognize.return_value = mock_result
 
         with patch(
-            "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
             return_value=mock_recognizer,
         ):
             from app.tasks.inference_tasks import run_intent_recognition_task
@@ -116,7 +116,7 @@ class TestRunIntentRecognitionTask:
         mock_recognizer.recognize.return_value = mock_result
 
         with patch(
-            "app.domain.services.unified_intent_recognizer.get_unified_intent_recognizer",
+            "app.domain.conversation.unified_intent_recognizer.get_unified_intent_recognizer",
             return_value=mock_recognizer,
         ):
             from app.tasks.inference_tasks import run_intent_recognition_task

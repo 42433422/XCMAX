@@ -22,10 +22,10 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 
 class TestSyncLocalPasswordForEmail:
-    @patch("app.fastapi_routes.domains.auth.routes._find_local_users_by_email")
+    @patch("app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email")
     @patch("app.application.auth_app_service.get_auth_app_service")
     def test_updates_matching_users(self, mock_get_service, mock_find_users):
-        from app.fastapi_routes.domains.auth.routes import _sync_local_password_for_email
+        from app.fastapi_routes.domains.auth.auth_routes import _sync_local_password_for_email
 
         mock_user1 = MagicMock()
         mock_user1.id = 1
@@ -40,10 +40,10 @@ class TestSyncLocalPasswordForEmail:
         result = _sync_local_password_for_email("test@example.com", "newpass123")
         assert result == 2
 
-    @patch("app.fastapi_routes.domains.auth.routes._find_local_users_by_email")
+    @patch("app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email")
     @patch("app.application.auth_app_service.get_auth_app_service")
     def test_skips_failed_resets(self, mock_get_service, mock_find_users):
-        from app.fastapi_routes.domains.auth.routes import _sync_local_password_for_email
+        from app.fastapi_routes.domains.auth.auth_routes import _sync_local_password_for_email
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -56,10 +56,10 @@ class TestSyncLocalPasswordForEmail:
         result = _sync_local_password_for_email("test@example.com", "newpass123")
         assert result == 0
 
-    @patch("app.fastapi_routes.domains.auth.routes._find_local_users_by_email")
+    @patch("app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email")
     @patch("app.application.auth_app_service.get_auth_app_service")
     def test_no_users_found(self, mock_get_service, mock_find_users):
-        from app.fastapi_routes.domains.auth.routes import _sync_local_password_for_email
+        from app.fastapi_routes.domains.auth.auth_routes import _sync_local_password_for_email
 
         mock_find_users.return_value = []
         result = _sync_local_password_for_email("test@example.com", "newpass123")
@@ -73,7 +73,7 @@ class TestSyncLocalPasswordForEmail:
 
 class TestEnrichRegisterWithTenant:
     def test_returns_result_when_no_user_id(self):
-        from app.fastapi_routes.domains.auth.routes import _enrich_register_with_tenant
+        from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
 
         result = {"success": True, "user": {}}
         out = _enrich_register_with_tenant(
@@ -83,7 +83,7 @@ class TestEnrichRegisterWithTenant:
 
     @patch("app.application.enterprise_login_flow.bind_tenant_for_login")
     def test_enriches_with_tenant_id(self, mock_bind):
-        from app.fastapi_routes.domains.auth.routes import _enrich_register_with_tenant
+        from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
 
         mock_bind.return_value = {"tenant_id": 100, "tenant_name": "Acme"}
         result = {"success": True, "user": {"id": 5}}
@@ -105,7 +105,7 @@ class TestEnrichRegisterWithTenant:
 
     @patch("app.application.enterprise_login_flow.bind_tenant_for_login")
     def test_skips_persist_when_no_session_id(self, mock_bind):
-        from app.fastapi_routes.domains.auth.routes import _enrich_register_with_tenant
+        from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
 
         mock_bind.return_value = {"tenant_id": 100, "tenant_name": "Acme"}
         result = {"success": True, "user": {"id": 5}}
@@ -128,12 +128,12 @@ class TestEnrichRegisterWithTenant:
         side_effect=RuntimeError("tenant fail"),
     )
     def test_handles_infra_transient(self, mock_bind):
-        from app.fastapi_routes.domains.auth.routes import _enrich_register_with_tenant
+        from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
         from app.utils.operational_errors import INFRA_TRANSIENT
 
         # Patch INFRA_TRANSIENT to include RuntimeError for this test
         with patch(
-            "app.fastapi_routes.domains.auth.routes.INFRA_TRANSIENT",
+            "app.fastapi_routes.domains.auth.auth_routes.INFRA_TRANSIENT",
             (RuntimeError,),
         ):
             result = {"success": True, "user": {"id": 5}}
@@ -148,7 +148,7 @@ class TestEnrichRegisterWithTenant:
 
     @patch("app.application.enterprise_login_flow.bind_tenant_for_login")
     def test_personal_sku_account_kind(self, mock_bind):
-        from app.fastapi_routes.domains.auth.routes import _enrich_register_with_tenant
+        from app.fastapi_routes.domains.auth.auth_routes import _enrich_register_with_tenant
 
         mock_bind.return_value = {"tenant_id": None, "tenant_name": ""}
         result = {"success": True, "user": {"id": 5}}
@@ -173,11 +173,11 @@ class TestEnrichRegisterWithTenant:
 
 class TestAuthMe:
     def test_no_session_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+            "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
             return_value=None,
         ):
             result = auth_me(request)
@@ -185,13 +185,13 @@ class TestAuthMe:
         assert result.status_code == 200
 
     def test_disabled_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         mock_user = MagicMock()
         mock_user.is_active = False
         with patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+            "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
             return_value=mock_user,
         ):
             result = auth_me(request)
@@ -199,7 +199,7 @@ class TestAuthMe:
         assert result.status_code == 403
 
     def test_active_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_me
+        from app.fastapi_routes.domains.auth.auth_routes import auth_me
 
         request = MagicMock()
         mock_user = MagicMock()
@@ -212,11 +212,11 @@ class TestAuthMe:
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -237,12 +237,12 @@ class TestAuthMe:
 class TestAuthSessionValidate:
     @pytest.mark.asyncio
     async def test_no_session_id(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
             return_value=None,
         ):
             result = await auth_session_validate(request, background_tasks)
@@ -251,13 +251,13 @@ class TestAuthSessionValidate:
 
     @pytest.mark.asyncio
     async def test_invalid_session(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -271,13 +271,13 @@ class TestAuthSessionValidate:
 
     @pytest.mark.asyncio
     async def test_enterprise_no_market_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -295,11 +295,11 @@ class TestAuthSessionValidate:
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -312,13 +312,13 @@ class TestAuthSessionValidate:
 
     @pytest.mark.asyncio
     async def test_enterprise_with_market_token(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -336,11 +336,11 @@ class TestAuthSessionValidate:
                 return_value=["mod1", "mod2"],
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={"account_kind": "enterprise"},
             ),
         ):
@@ -354,13 +354,13 @@ class TestAuthSessionValidate:
 
     @pytest.mark.asyncio
     async def test_enterprise_cached_entitlements(self):
-        from app.fastapi_routes.domains.auth.routes import auth_session_validate
+        from app.fastapi_routes.domains.auth.auth_routes import auth_session_validate
 
         request = MagicMock()
         background_tasks = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -378,11 +378,11 @@ class TestAuthSessionValidate:
                 return_value=["cached_mod"],
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=None,
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._session_meta_for_response",
+                "app.fastapi_routes.domains.auth.auth_routes._session_meta_for_response",
                 return_value={},
             ),
         ):
@@ -401,26 +401,26 @@ class TestAuthSessionValidate:
 
 class TestAuthForgotAccount:
     def test_invalid_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         result = auth_forgot_account({"email": "not-an-email"})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
     def test_empty_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         result = auth_forgot_account({"email": ""})
         assert isinstance(result, JSONResponse)
         assert result.status_code == 400
 
     def test_users_found(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         mock_user = MagicMock()
         mock_user.username = "alice"
         with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
             return_value=[mock_user],
         ):
             result = auth_forgot_account({"email": "alice@example.com"})
@@ -428,10 +428,10 @@ class TestAuthForgotAccount:
         assert result["data"]["found"] is True
 
     def test_no_users_found(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_account
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_account
 
         with patch(
-            "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+            "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
             return_value=[],
         ):
             result = auth_forgot_account({"email": "nobody@example.com"})
@@ -447,7 +447,7 @@ class TestAuthForgotAccount:
 class TestAuthForgotPasswordSendCode:
     @pytest.mark.asyncio
     async def test_invalid_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         result = await auth_forgot_password_send_code({"email": "bad"})
         assert isinstance(result, JSONResponse)
@@ -455,11 +455,11 @@ class TestAuthForgotPasswordSendCode:
 
     @pytest.mark.asyncio
     async def test_send_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[],
             ),
             patch(
@@ -472,11 +472,11 @@ class TestAuthForgotPasswordSendCode:
 
     @pytest.mark.asyncio
     async def test_send_failure_no_local_users(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[],
             ),
             patch(
@@ -490,12 +490,12 @@ class TestAuthForgotPasswordSendCode:
 
     @pytest.mark.asyncio
     async def test_send_failure_with_local_users(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_send_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_send_code
 
         mock_user = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes._find_local_users_by_email",
+                "app.fastapi_routes.domains.auth.auth_routes._find_local_users_by_email",
                 return_value=[mock_user],
             ),
             patch(
@@ -516,7 +516,7 @@ class TestAuthForgotPasswordSendCode:
 class TestAuthForgotPasswordReset:
     @pytest.mark.asyncio
     async def test_invalid_email(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         result = await auth_forgot_password_reset({"email": "bad"})
         assert isinstance(result, JSONResponse)
@@ -524,7 +524,7 @@ class TestAuthForgotPasswordReset:
 
     @pytest.mark.asyncio
     async def test_weak_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         result = await auth_forgot_password_reset({"email": "a@b.com", "new_password": "123"})
         assert isinstance(result, JSONResponse)
@@ -532,7 +532,7 @@ class TestAuthForgotPasswordReset:
 
     @pytest.mark.asyncio
     async def test_market_reset_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         with patch(
             "app.fastapi_routes.market_account.reset_market_password_with_code",
@@ -546,7 +546,7 @@ class TestAuthForgotPasswordReset:
 
     @pytest.mark.asyncio
     async def test_reset_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_forgot_password_reset
+        from app.fastapi_routes.domains.auth.auth_routes import auth_forgot_password_reset
 
         with (
             patch(
@@ -554,7 +554,7 @@ class TestAuthForgotPasswordReset:
                 new=AsyncMock(return_value={"success": True}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._sync_local_password_for_email",
+                "app.fastapi_routes.domains.auth.auth_routes._sync_local_password_for_email",
                 return_value=2,
             ),
         ):
@@ -573,7 +573,7 @@ class TestAuthForgotPasswordReset:
 class TestAuthRegister:
     @pytest.mark.asyncio
     async def test_missing_username_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         result = await auth_register(request, {"username": "", "password": ""})
@@ -582,7 +582,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_weak_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         result = await auth_register(request, {"username": "u", "password": "123"})
@@ -591,7 +591,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_enterprise_missing_email_creates_pending_market_identity(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         captured: dict = {}
 
@@ -613,13 +613,13 @@ class TestAuthRegister:
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
             patch("app.fastapi_routes.market_account.register_market_user", new=fake_register),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.fastapi_routes.market_account.save_session_market_token"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
             patch("app.application.account_registration.apply_account_profile_on_register"),
@@ -640,7 +640,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_enterprise_market_register_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -659,7 +659,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_enterprise_local_login_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -678,7 +678,7 @@ class TestAuthRegister:
                 ),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ) as mock_jit,
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -701,7 +701,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_enterprise_market_enterprise_profile_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -720,7 +720,7 @@ class TestAuthRegister:
                 ),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ) as mock_jit,
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -738,7 +738,7 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_enterprise_full_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
@@ -761,13 +761,13 @@ class TestAuthRegister:
                 new=AsyncMock(return_value={"success": True}),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                "app.fastapi_routes.domains.auth.auth_routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
             patch("app.fastapi_routes.market_account.save_session_market_token"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -785,13 +785,13 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_local_registration_disabled(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=False,
             ),
         ):
@@ -801,13 +801,13 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_local_create_user_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get,
@@ -824,13 +824,13 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_local_login_after_register_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get_user,
@@ -851,13 +851,13 @@ class TestAuthRegister:
 
     @pytest.mark.asyncio
     async def test_local_full_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_register
+        from app.fastapi_routes.domains.auth.auth_routes import auth_register
 
         request = MagicMock()
         with (
             patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="generic"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._open_registration_allowed",
+                "app.fastapi_routes.domains.auth.auth_routes._open_registration_allowed",
                 return_value=True,
             ),
             patch("app.application.get_user_app_service") as mock_get_user,
@@ -868,7 +868,7 @@ class TestAuthRegister:
             ),
             patch("app.fastapi_routes.market_account.save_session_market_token"),
             patch(
-                "app.fastapi_routes.domains.auth.routes._enrich_register_with_tenant",
+                "app.fastapi_routes.domains.auth.auth_routes._enrich_register_with_tenant",
                 side_effect=lambda **kw: kw["result"],
             ),
         ):
@@ -896,7 +896,7 @@ class TestAuthRegister:
 class TestAuthLogin:
     @pytest.mark.asyncio
     async def test_missing_credentials(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric:
@@ -908,7 +908,7 @@ class TestAuthLogin:
 
     @pytest.mark.asyncio
     async def test_login_with_error(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         err_resp = JSONResponse({"success": False}, status_code=401)
@@ -928,7 +928,7 @@ class TestAuthLogin:
 
     @pytest.mark.asyncio
     async def test_login_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login
 
         request = MagicMock()
         with (
@@ -954,7 +954,7 @@ class TestAuthLogin:
 class TestAuthLoginWithPhoneCode:
     @pytest.mark.asyncio
     async def test_missing_phone_or_code(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         with patch("app.utils.metrics.auth_login_duration_seconds") as mock_metric:
@@ -966,7 +966,7 @@ class TestAuthLoginWithPhoneCode:
 
     @pytest.mark.asyncio
     async def test_login_with_error(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         err_resp = JSONResponse({"success": False}, status_code=401)
@@ -992,7 +992,7 @@ class TestAuthLoginWithPhoneCode:
 
     @pytest.mark.asyncio
     async def test_login_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_login_with_phone_code
+        from app.fastapi_routes.domains.auth.auth_routes import auth_login_with_phone_code
 
         request = MagicMock()
         with (
@@ -1023,7 +1023,7 @@ class TestAuthLoginWithPhoneCode:
 
 class TestAuthOidcStatus:
     def test_returns_status(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_status
 
         with patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=True):
             result = auth_oidc_status()
@@ -1034,7 +1034,7 @@ class TestAuthOidcStatus:
 class TestAuthOidcStart:
     @pytest.mark.asyncio
     async def test_oidc_disabled(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_start
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_start
 
         request = MagicMock()
         with patch("app.infrastructure.auth.oidc_provider.oidc_enabled", return_value=False):
@@ -1044,7 +1044,7 @@ class TestAuthOidcStart:
 
     @pytest.mark.asyncio
     async def test_oidc_enabled(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_start
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_start
 
         request = MagicMock()
         request.query_params = {"return": "/dashboard"}
@@ -1064,7 +1064,7 @@ class TestAuthOidcStart:
 class TestAuthOidcCallback:
     @pytest.mark.asyncio
     async def test_oidc_disabled(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         with (
@@ -1080,7 +1080,7 @@ class TestAuthOidcCallback:
 
     @pytest.mark.asyncio
     async def test_invalid_state(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "bad"}
@@ -1101,7 +1101,7 @@ class TestAuthOidcCallback:
 
     @pytest.mark.asyncio
     async def test_missing_code(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "", "state": "ok"}
@@ -1122,7 +1122,7 @@ class TestAuthOidcCallback:
 
     @pytest.mark.asyncio
     async def test_exchange_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
@@ -1141,7 +1141,7 @@ class TestAuthOidcCallback:
                 new=AsyncMock(side_effect=RuntimeError("exchange failed")),
             ),
             patch(
-                "app.fastapi_routes.domains.auth.routes.INFRA_TRANSIENT",
+                "app.fastapi_routes.domains.auth.auth_routes.INFRA_TRANSIENT",
                 (RuntimeError,),
             ),
         ):
@@ -1151,7 +1151,7 @@ class TestAuthOidcCallback:
 
     @pytest.mark.asyncio
     async def test_auth_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
@@ -1188,7 +1188,7 @@ class TestAuthOidcCallback:
 
     @pytest.mark.asyncio
     async def test_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_oidc_callback
+        from app.fastapi_routes.domains.auth.auth_routes import auth_oidc_callback
 
         request = MagicMock()
         request.query_params = {"code": "abc", "state": "ok"}
@@ -1238,7 +1238,7 @@ class TestAuthOidcCallback:
 class TestAuthQrIssue:
     @pytest.mark.asyncio
     async def test_issue(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_issue
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_issue
 
         request = MagicMock()
         request.headers = {"User-Agent": "test-agent"}
@@ -1254,7 +1254,7 @@ class TestAuthQrIssue:
 class TestAuthQrStatus:
     @pytest.mark.asyncio
     async def test_qr_not_found(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with patch("app.security.auth_qr_login.poll_auth_qr", return_value=None):
             result = await auth_qr_status(qr_id="bad", poll_secret="x")
@@ -1263,7 +1263,7 @@ class TestAuthQrStatus:
 
     @pytest.mark.asyncio
     async def test_qr_pending(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with patch(
             "app.security.auth_qr_login.poll_auth_qr",
@@ -1274,7 +1274,7 @@ class TestAuthQrStatus:
 
     @pytest.mark.asyncio
     async def test_qr_expired(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with patch(
             "app.security.auth_qr_login.poll_auth_qr",
@@ -1285,7 +1285,7 @@ class TestAuthQrStatus:
 
     @pytest.mark.asyncio
     async def test_qr_confirmed_with_session(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with (
             patch(
@@ -1306,7 +1306,7 @@ class TestAuthQrStatus:
 
     @pytest.mark.asyncio
     async def test_qr_confirmed_no_session(self):
-        from app.fastapi_routes.domains.auth.routes import auth_qr_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_qr_status
 
         with (
             patch(
@@ -1329,7 +1329,7 @@ class TestAuthQrStatus:
 
 class TestAuthProfileGet:
     def test_returns_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_get
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_get
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1344,7 +1344,7 @@ class TestAuthProfileGet:
 
 class TestAuthProfilePatch:
     def test_no_fields(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_patch
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_patch
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1353,7 +1353,7 @@ class TestAuthProfilePatch:
         assert result.status_code == 400
 
     def test_update_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_patch
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_patch
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1369,7 +1369,7 @@ class TestAuthProfilePatch:
         assert result.status_code == 400
 
     def test_user_not_found_after_update(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_patch
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_patch
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1389,7 +1389,7 @@ class TestAuthProfilePatch:
         assert result.status_code == 404
 
     def test_update_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_profile_patch
+        from app.fastapi_routes.domains.auth.auth_routes import auth_profile_patch
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1424,7 +1424,7 @@ class TestAuthProfilePatch:
 
 class TestAuthPasswordChange:
     def test_missing_fields(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         result = auth_password_change(body={"old_password": "", "new_password": ""}, user=mock_user)
@@ -1432,7 +1432,7 @@ class TestAuthPasswordChange:
         assert result.status_code == 400
 
     def test_weak_password(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         result = auth_password_change(
@@ -1442,7 +1442,7 @@ class TestAuthPasswordChange:
         assert result.status_code == 400
 
     def test_change_failure(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1461,7 +1461,7 @@ class TestAuthPasswordChange:
         assert result.status_code == 400
 
     def test_change_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_password_change
+        from app.fastapi_routes.domains.auth.auth_routes import auth_password_change
 
         mock_user = MagicMock()
         mock_user.id = 1
@@ -1483,11 +1483,11 @@ class TestAuthPasswordChange:
 
 class TestAuthLogout:
     def test_no_session(self):
-        from app.fastapi_routes.domains.auth.routes import auth_logout
+        from app.fastapi_routes.domains.auth.auth_routes import auth_logout
 
         request = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+            "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
             return_value=None,
         ):
             result = auth_logout(request)
@@ -1495,12 +1495,12 @@ class TestAuthLogout:
         assert result.status_code == 400
 
     def test_logout_success(self):
-        from app.fastapi_routes.domains.auth.routes import auth_logout
+        from app.fastapi_routes.domains.auth.auth_routes import auth_logout
 
         request = MagicMock()
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.session_id_from_request",
+                "app.fastapi_routes.domains.auth.auth_routes.session_id_from_request",
                 return_value="sid",
             ),
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
@@ -1521,11 +1521,11 @@ class TestAuthLogout:
 
 class TestAuthSubscriptionStatus:
     def test_no_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_subscription_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_subscription_status
 
         request = MagicMock()
         with patch(
-            "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+            "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
             return_value=None,
         ):
             result = auth_subscription_status(request)
@@ -1533,14 +1533,14 @@ class TestAuthSubscriptionStatus:
         assert result.status_code == 200
 
     def test_with_user(self):
-        from app.fastapi_routes.domains.auth.routes import auth_subscription_status
+        from app.fastapi_routes.domains.auth.auth_routes import auth_subscription_status
 
         request = MagicMock()
         mock_user = MagicMock()
         mock_user.id = 1
         with (
             patch(
-                "app.fastapi_routes.domains.auth.routes.resolve_session_user",
+                "app.fastapi_routes.domains.auth.auth_routes.resolve_session_user",
                 return_value=mock_user,
             ),
             patch(
@@ -1564,7 +1564,7 @@ class TestAuthSubscriptionStatus:
 
 class TestUsersList:
     def test_list_default(self):
-        from app.fastapi_routes.domains.auth.routes import users_list
+        from app.fastapi_routes.domains.auth.auth_routes import users_list
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1578,7 +1578,7 @@ class TestUsersList:
         assert result["data"]["count"] == 1
 
     def test_list_include_inactive(self):
-        from app.fastapi_routes.domains.auth.routes import users_list
+        from app.fastapi_routes.domains.auth.auth_routes import users_list
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1594,7 +1594,7 @@ class TestUsersList:
 
 class TestUsersGet:
     def test_user_not_found(self):
-        from app.fastapi_routes.domains.auth.routes import users_get
+        from app.fastapi_routes.domains.auth.auth_routes import users_get
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1606,7 +1606,7 @@ class TestUsersGet:
         assert result.status_code == 404
 
     def test_user_found(self):
-        from app.fastapi_routes.domains.auth.routes import users_get
+        from app.fastapi_routes.domains.auth.auth_routes import users_get
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1619,7 +1619,7 @@ class TestUsersGet:
 
 class TestUsersCreate:
     def test_missing_fields(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         result = users_create(body={"username": "", "password": ""}, _user=mock_admin)
@@ -1627,7 +1627,7 @@ class TestUsersCreate:
         assert result.status_code == 400
 
     def test_weak_password(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         result = users_create(body={"username": "u", "password": "123"}, _user=mock_admin)
@@ -1635,7 +1635,7 @@ class TestUsersCreate:
         assert result.status_code == 400
 
     def test_invalid_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         result = users_create(
@@ -1646,7 +1646,7 @@ class TestUsersCreate:
         assert result.status_code == 400
 
     def test_create_failure(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1664,7 +1664,7 @@ class TestUsersCreate:
         assert result.status_code == 400
 
     def test_create_success(self):
-        from app.fastapi_routes.domains.auth.routes import users_create
+        from app.fastapi_routes.domains.auth.auth_routes import users_create
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1684,7 +1684,7 @@ class TestUsersCreate:
 
 class TestUsersUpdate:
     def test_invalid_role(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         result = users_update(user_id=1, body={"role": "superadmin"}, _user=mock_admin)
@@ -1692,7 +1692,7 @@ class TestUsersUpdate:
         assert result.status_code == 400
 
     def test_update_failure(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1707,7 +1707,7 @@ class TestUsersUpdate:
         assert result.status_code == 400
 
     def test_update_success(self):
-        from app.fastapi_routes.domains.auth.routes import users_update
+        from app.fastapi_routes.domains.auth.auth_routes import users_update
 
         mock_admin = MagicMock()
         with patch("app.application.get_user_app_service") as mock_get:
@@ -1723,7 +1723,7 @@ class TestUsersUpdate:
 
 class TestUsersDelete:
     def test_self_delete(self):
-        from app.fastapi_routes.domains.auth.routes import users_delete
+        from app.fastapi_routes.domains.auth.auth_routes import users_delete
 
         mock_admin = MagicMock()
         mock_admin.id = 1
@@ -1732,7 +1732,7 @@ class TestUsersDelete:
         assert result.status_code == 400
 
     def test_delete_failure(self):
-        from app.fastapi_routes.domains.auth.routes import users_delete
+        from app.fastapi_routes.domains.auth.auth_routes import users_delete
 
         mock_admin = MagicMock()
         mock_admin.id = 1
@@ -1745,7 +1745,7 @@ class TestUsersDelete:
         assert result.status_code == 400
 
     def test_delete_success(self):
-        from app.fastapi_routes.domains.auth.routes import users_delete
+        from app.fastapi_routes.domains.auth.auth_routes import users_delete
 
         mock_admin = MagicMock()
         mock_admin.id = 1
@@ -1759,7 +1759,7 @@ class TestUsersDelete:
 
 class TestUsersResetPassword:
     def test_missing_password(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         result = users_reset_password(user_id=1, body={"new_password": ""}, _user=mock_admin)
@@ -1767,7 +1767,7 @@ class TestUsersResetPassword:
         assert result.status_code == 400
 
     def test_weak_password(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         result = users_reset_password(user_id=1, body={"new_password": "123"}, _user=mock_admin)
@@ -1775,7 +1775,7 @@ class TestUsersResetPassword:
         assert result.status_code == 400
 
     def test_reset_failure(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
@@ -1792,7 +1792,7 @@ class TestUsersResetPassword:
         assert result.status_code == 400
 
     def test_reset_success(self):
-        from app.fastapi_routes.domains.auth.routes import users_reset_password
+        from app.fastapi_routes.domains.auth.auth_routes import users_reset_password
 
         mock_admin = MagicMock()
         with patch("app.application.auth_app_service.get_auth_app_service") as mock_get:
@@ -1813,21 +1813,21 @@ class TestUsersResetPassword:
 class TestFindLocalUsersByEmail:
     @patch("app.db.session.get_db")
     def test_invalid_email_no_at(self, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import _find_local_users_by_email
+        from app.fastapi_routes.domains.auth.auth_routes import _find_local_users_by_email
 
         result = _find_local_users_by_email("not-an-email")
         assert result == []
 
     @patch("app.db.session.get_db")
     def test_empty_email(self, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import _find_local_users_by_email
+        from app.fastapi_routes.domains.auth.auth_routes import _find_local_users_by_email
 
         result = _find_local_users_by_email("")
         assert result == []
 
     @patch("app.db.session.get_db")
     def test_valid_email(self, mock_get_db):
-        from app.fastapi_routes.domains.auth.routes import _find_local_users_by_email
+        from app.fastapi_routes.domains.auth.auth_routes import _find_local_users_by_email
 
         mock_db = MagicMock()
         mock_user = MagicMock()
@@ -1847,37 +1847,37 @@ class TestFindLocalUsersByEmail:
 
 class TestOpenRegistrationAllowedAdditional:
     def test_env_false(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "false")
         assert _open_registration_allowed("generic") is False
 
     def test_env_true(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "1")
         assert _open_registration_allowed("enterprise") is True
 
     def test_env_no(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "no")
         assert _open_registration_allowed("generic") is False
 
     def test_env_yes(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.setenv("FHD_ALLOW_OPEN_REGISTRATION", "yes")
         assert _open_registration_allowed("generic") is True
 
     def test_env_unset_generic(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.delenv("FHD_ALLOW_OPEN_REGISTRATION", raising=False)
         assert _open_registration_allowed("generic") is True
 
     def test_env_unset_enterprise(self, monkeypatch):
-        from app.fastapi_routes.domains.auth.routes import _open_registration_allowed
+        from app.fastapi_routes.domains.auth.auth_routes import _open_registration_allowed
 
         monkeypatch.delenv("FHD_ALLOW_OPEN_REGISTRATION", raising=False)
         assert _open_registration_allowed("enterprise") is False

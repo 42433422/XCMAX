@@ -18,7 +18,11 @@ import json
 import sys
 from pathlib import Path
 
-MIRRORS = ("MODstore_deploy/market/public", "MODstore_deploy/market/dist", "corp-butler")
+MIRRORS = (
+    "MODstore_deploy/market/public",
+    "MODstore_deploy/market/dist",
+    "corp-butler",
+)
 
 
 def _load(path: Path) -> dict | None:
@@ -43,7 +47,9 @@ def matches(data: dict | None, version: str) -> bool:
 
 def release_managed(release_root: Path, version: str) -> dict | None:
     builds = sorted(
-        (release_root / "update/releases/builds" / version).glob("*/download-release.json"),
+        (release_root / "update/releases/builds" / version).glob(
+            "*/download-release.json"
+        ),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -83,11 +89,21 @@ def accepted_packages(release_root: Path, version: str) -> dict | None:
     return packages or None
 
 
-def from_ssot(base: dict, ssot: dict, version: str, git_sha: str, accepted: dict | None) -> dict:
-    keys = ("version_lock", "download_version", "android_version", "android_git_sha", "active_skus")
+def from_ssot(
+    base: dict, ssot: dict, version: str, git_sha: str, accepted: dict | None
+) -> dict:
+    keys = (
+        "version_lock",
+        "download_version",
+        "android_version",
+        "android_git_sha",
+        "active_skus",
+    )
     keys += ("frozen_skus", "primary_sku", "win_installer_mb")
     out = {**base, **{k: ssot[k] for k in keys if k in ssot}}
-    template = ssot.get("release_root_template") or "{cos_base_url}/xcagi-v{download_version}"
+    template = (
+        ssot.get("release_root_template") or "{cos_base_url}/xcagi-v{download_version}"
+    )
     root = template.format(
         cos_base_url=str(ssot.get("cos_base_url") or "https://xiu-ci.com").rstrip("/"),
         download_version=version,
@@ -100,14 +116,19 @@ def from_ssot(base: dict, ssot: dict, version: str, git_sha: str, accepted: dict
     )
     if accepted and accepted.get("windows_x64"):
         out["win_installer_mb"] = round(accepted["windows_x64"]["bytes"] / 1048576)
-    out.update(release_history=ssot.get("release_history"), git_sha=git_sha, source="release_ssot")
+    out.update(
+        release_history=ssot.get("release_history"),
+        git_sha=git_sha,
+        source="release_ssot",
+    )
     out["generated_at"] = datetime.datetime.now(datetime.UTC).isoformat()
     return out
 
 
 def links_match(data: dict | None, version: str) -> bool:
     urls = [
-        str((data or {}).get(k) or "") for k in ("release_root", "cos_base_url", "manifest_url")
+        str((data or {}).get(k) or "")
+        for k in ("release_root", "cos_base_url", "manifest_url")
     ]
     return all(f"/xcagi-v{version}" in u for u in urls if u)
 
@@ -125,20 +146,29 @@ def main() -> int:
     if data is None:
         ssot = _load(args.ssot)
         if not matches(ssot, args.version):
-            print(f"[error] release SSOT is not version {args.version}", file=sys.stderr)
+            print(
+                f"[error] release SSOT is not version {args.version}", file=sys.stderr
+            )
             return 1
         accepted = accepted_packages(args.release_root, args.version)
-        data = from_ssot(_load(pointer) or {}, ssot, args.version, args.git_sha, accepted)
+        data = from_ssot(
+            _load(pointer) or {}, ssot, args.version, args.git_sha, accepted
+        )
     rendered = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     for target in [pointer, *(args.site_root / m / pointer.name for m in MIRRORS)]:
         if target == pointer or target.parent.is_dir():
             target.write_text(rendered, encoding="utf-8")
             if not (
-                matches(_load(target), args.version) and links_match(_load(target), args.version)
+                matches(_load(target), args.version)
+                and links_match(_load(target), args.version)
             ):
-                print(f"[error] {target} version/links != {args.version}", file=sys.stderr)
+                print(
+                    f"[error] {target} version/links != {args.version}", file=sys.stderr
+                )
                 return 1
-    print(f"[ok] download-release.json = {args.version} ({data.get('source', 'release')})")
+    print(
+        f"[ok] download-release.json = {args.version} ({data.get('source', 'release')})"
+    )
     return 0
 
 

@@ -10,7 +10,11 @@ CATALOG_STORE = os.path.join(BASE, "modstore_server/catalog_data")
 PACKAGES_JSON = os.path.join(CATALOG_STORE, "packages.json")
 FILES_DIR = os.path.join(CATALOG_STORE, "files")
 
-CONTRACT_EMPLOYEES = ["ai-contract-advisor", "ai-contract-drafter", "ai-contract-consultant"]
+CONTRACT_EMPLOYEES = [
+    "ai-contract-advisor",
+    "ai-contract-drafter",
+    "ai-contract-consultant",
+]
 
 
 def main():
@@ -21,7 +25,9 @@ def main():
             raw = json.load(f)
         if isinstance(raw, dict):
             packages = (
-                list(raw.values()) if all(isinstance(v, dict) for v in raw.values()) else [raw]
+                list(raw.values())
+                if all(isinstance(v, dict) for v in raw.values())
+                else [raw]
             )
         elif isinstance(raw, list):
             packages = raw
@@ -47,7 +53,9 @@ def main():
             manifest = json.load(f)
 
         if manifest.get("artifact") != "employee_pack":
-            print(f"SKIP {emp_id}: artifact={manifest.get('artifact')} != employee_pack")
+            print(
+                f"SKIP {emp_id}: artifact={manifest.get('artifact')} != employee_pack"
+            )
             continue
 
         print(f"Registering {emp_id}...")
@@ -57,14 +65,17 @@ def main():
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr(
-                f"{emp_id}/manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2)
+                f"{emp_id}/manifest.json",
+                json.dumps(manifest, ensure_ascii=False, indent=2),
             )
             backend_dir = os.path.join(lib_dir, "backend")
             if os.path.isdir(backend_dir):
                 for root, dirs, files in os.walk(backend_dir):
                     for fname in files:
                         fpath = os.path.join(root, fname)
-                        arcname = f"{emp_id}/backend/{os.path.relpath(fpath, backend_dir)}"
+                        arcname = (
+                            f"{emp_id}/backend/{os.path.relpath(fpath, backend_dir)}"
+                        )
                         zf.write(fpath, arcname)
 
         import hashlib

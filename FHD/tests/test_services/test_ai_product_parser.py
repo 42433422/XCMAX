@@ -2,7 +2,7 @@
 AIProductParser 购买单位与乱序解析测试
 """
 
-from app.services.ai_product_parser import AIProductParser
+from app.domain.shared_services.ai_product_parser import AIProductParser
 
 
 class TestAIProductParser:

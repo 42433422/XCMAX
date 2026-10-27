@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol
 
-from .types import NodeExecutionResult, PlanGraph, StateSchema, WorkflowRunResult
+from .workflow_types import NodeExecutionResult, PlanGraph, StateSchema, WorkflowRunResult
 
 
 class AgentLoopEngine(Protocol):

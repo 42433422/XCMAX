@@ -7,7 +7,7 @@ from pathlib import Path
 from fastapi import UploadFile
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.shipment_etl.ports import DocumentPreview
+from app.application.shipment_etl.protocols import DocumentPreview
 from app.fastapi_routes.shipment_etl.responses import EtlResponses
 from app.fastapi_routes.shipment_etl.uploads import OCR_SUFFIXES, SPREADSHEET_SUFFIXES, UploadStager
 from app.utils.operational_errors import RECOVERABLE_ERRORS

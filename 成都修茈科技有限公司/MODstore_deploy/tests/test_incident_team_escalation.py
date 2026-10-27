@@ -84,7 +84,10 @@ def _stored(event_id):
 
 def _request(event_id):
     return escalation.request_incident_escalation(
-        event_id=event_id, role="fix", category="quota", reason="token=private-value quota exceeded"
+        event_id=event_id,
+        role="fix",
+        category="quota",
+        reason="token=private-value quota exceeded",
     )
 
 
@@ -149,8 +152,14 @@ def test_dispatch_intent_is_durable_and_accepted_review_never_repairs(incident, 
         ({"task_id": "p1", "accepted": False}, "unknown"),
         ({"queued": True, "status": "awaiting_para_dispatcher"}, "unknown"),
         ({"accepted": True, "task_id": "p1", "partial": True}, "unknown"),
-        ({"accepted": True, "task_id": "p1", "requires_reconciliation": True}, "unknown"),
-        ({"ok": False, "accepted": False, "status": "blocked_no_online_para_device"}, "failed"),
+        (
+            {"accepted": True, "task_id": "p1", "requires_reconciliation": True},
+            "unknown",
+        ),
+        (
+            {"ok": False, "accepted": False, "status": "blocked_no_online_para_device"},
+            "failed",
+        ),
     ],
 )
 def test_unconfirmed_response_never_claims_accepted(incident, monkeypatch, result, state):
@@ -165,13 +174,15 @@ def test_unknown_reads_original_task_without_reposting(incident, monkeypatch):
     monkeypatch.setattr(
         escalation,
         "_dispatch_review",
-        lambda data: calls.append(data)
-        or {
-            "accepted": True,
-            "task_id": "original",
-            "outcome": "unknown",
-            "planned_devices": ["review-node"],
-        },
+        lambda data: (
+            calls.append(data)
+            or {
+                "accepted": True,
+                "task_id": "original",
+                "outcome": "unknown",
+                "planned_devices": ["review-node"],
+            }
+        ),
     )
     assert _request(event_id)["state"] == "unknown"
     assert _request(event_id)["state"] == "unknown"
@@ -272,7 +283,13 @@ def test_late_acceptance_is_audit_only_after_close_or_reopen(incident, monkeypat
         {
             "id": "original",
             "status": "completed",
-            "subTasks": [{"id": "other-child", "device_id": "other-device", "status": "completed"}],
+            "subTasks": [
+                {
+                    "id": "other-child",
+                    "device_id": "other-device",
+                    "status": "completed",
+                }
+            ],
         },
     ],
 )
@@ -358,7 +375,11 @@ def test_review_keeps_original_task_and_attempted_actions(incident, monkeypatch,
         role="fix",
         category="code",
         reason="CI still fails",
-        attempted_actions={"action": "code_retry_with_feedback", "attempts": 3, "max_rounds": 3},
+        attempted_actions={
+            "action": "code_retry_with_feedback",
+            "attempts": 3,
+            "max_rounds": 3,
+        },
     )
     assert receipt["state"] == "accepted"
     assert "original-fix-task" in prompts[0]
@@ -407,11 +428,13 @@ def test_same_claim_reentrant_but_competing_claim_never_posts(incident, monkeypa
     monkeypatch.setattr(
         escalation,
         "_dispatch_review",
-        lambda data: calls.append(data)
-        or {
-            "accepted": True,
-            "task_id": "claimed-review",
-        },
+        lambda data: (
+            calls.append(data)
+            or {
+                "accepted": True,
+                "task_id": "claimed-review",
+            }
+        ),
     )
     competing = claim_incident_for_node(event_id)
     assert competing["claimed"] is True
@@ -430,11 +453,13 @@ def test_rejected_dispatch_is_not_automatically_replayed(incident, monkeypatch):
     monkeypatch.setattr(
         escalation,
         "_dispatch_review",
-        lambda data: calls.append(data)
-        or {
-            "accepted": False,
-            "status": "blocked_no_online_para_device",
-        },
+        lambda data: (
+            calls.append(data)
+            or {
+                "accepted": False,
+                "status": "blocked_no_online_para_device",
+            }
+        ),
     )
     first = _request(incident[0])
     assert first["state"] == "failed"

@@ -45,7 +45,7 @@ class ProductQueryRoutes:
         )
         def taiyangniao_shipment_records_units_host_alias() -> dict:
             """Stable host alias for desktop clients with independently updated private Mods."""
-            from app.application.attendance_reference_data import attendance_unit_names
+            from app.domain.app_pure.attendance_reference_data import attendance_unit_names
 
             units = attendance_unit_names(product_units())
             return {"success": True, "data": units, "units": units, "source": "host_compat"}

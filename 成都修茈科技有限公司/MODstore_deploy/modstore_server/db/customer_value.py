@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import DDL, Column, DateTime, Index, Integer, String, Text, event
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class CustomerValueReceipt(Base):

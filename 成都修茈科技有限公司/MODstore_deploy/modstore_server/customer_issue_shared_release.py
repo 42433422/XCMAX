@@ -11,7 +11,10 @@ from typing import Any, Callable, Iterable
 import httpx
 from fastapi import HTTPException
 
-from modstore_server.customer_delivery_receipts import canonical_sha256, trusted_host_release
+from modstore_server.customer_delivery_receipts import (
+    canonical_sha256,
+    trusted_host_release,
+)
 from modstore_server.customer_issue_delivery_contract import (
     issue_resolution,
     repair_verification,

@@ -25,7 +25,17 @@ class CanvasPorts:
 
 
 async def _run_workbench_canvas_pipeline(
-    sid, payload, intent, brief, prov, mdl, gen_wf_graph, db, user, *, ports: CanvasPorts
+    sid,
+    payload,
+    intent,
+    brief,
+    prov,
+    mdl,
+    gen_wf_graph,
+    db,
+    user,
+    *,
+    ports: CanvasPorts,
 ):
     name = (payload.get("workflow_name") or "").strip()
     if not name:
@@ -114,7 +124,11 @@ async def _run_workbench_canvas_pipeline(
             await ports.progress.set_step(sid, "validate", "done", detail)
         else:
             report = ports.sandbox(
-                wid, {}, mock_employees=True, validate_only=True, user_id=cast(int, user.id)
+                wid,
+                {},
+                mock_employees=True,
+                validate_only=True,
+                user_id=cast(int, user.id),
             )
             ports.record_sandbox(
                 db,
@@ -139,7 +153,11 @@ async def _run_workbench_canvas_pipeline(
                     ports.sessions.persist(sid)
             if not errs:
                 run_report = ports.sandbox(
-                    wid, {}, mock_employees=True, validate_only=False, user_id=cast(int, user.id)
+                    wid,
+                    {},
+                    mock_employees=True,
+                    validate_only=False,
+                    user_id=cast(int, user.id),
                 )
                 ports.record_sandbox(
                     db,
@@ -159,7 +177,9 @@ async def _run_workbench_canvas_pipeline(
         )
     except RECOVERABLE_ERRORS as e:
         _LOG.exception(
-            "workbench skill pipeline failed session=%s step=%s", sid, _skill_current_step
+            "workbench skill pipeline failed session=%s step=%s",
+            sid,
+            _skill_current_step,
         )
         await ports.progress.fail(sid, _skill_current_step, str(e)[:2000])
     return

@@ -342,7 +342,9 @@ def validate_word_generate_backend(pack_dir: Path) -> Tuple[List[str], List[str]
     handlers: List[str] = []
     if mf_path.is_file():
         try:
-            from modstore_server.employee_asset_pipeline import manifest_actions_handlers
+            from modstore_server.employee_asset_pipeline import (
+                manifest_actions_handlers,
+            )
 
             mf = json.loads(mf_path.read_text(encoding="utf-8"))
             handlers = manifest_actions_handlers(mf)

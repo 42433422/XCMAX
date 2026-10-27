@@ -12,7 +12,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.domain.autonomy.risk_types import RiskDecision
 
 

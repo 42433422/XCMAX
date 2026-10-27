@@ -17,7 +17,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .admission import ChatAdmission
-from .ports import ChatBody, ChatTurn, Context, Payload
+from .protocols import ChatBody, ChatTurn, Context, Payload
 
 
 class BusinessAction(Protocol):

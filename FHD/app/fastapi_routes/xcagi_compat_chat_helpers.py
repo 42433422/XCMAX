@@ -29,9 +29,6 @@ from app.application.agent_orchestrator.chat_trace import (
 from app.application.agent_orchestrator.chat_trace import (
     start_legacy_chat_run as start_legacy_chat_run,
 )
-from app.application.chat_reply_safety import (
-    sanitize_model_chat_reply as sanitize_model_chat_reply,
-)
 from app.application.conversation import chat_stream_sse_events
 from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
@@ -39,6 +36,9 @@ from app.application.modstore_conversation_app import (
 from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
 from app.application.tutorial_v2.scope import validated_tutorial_tenant_id
 from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
+from app.domain.app_pure.chat_reply_safety import (
+    sanitize_model_chat_reply as sanitize_model_chat_reply,
+)
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply as planner_workflow_interrupt_reply,
 )

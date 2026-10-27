@@ -82,7 +82,10 @@ def test_inventory_context_exact_fields():
     inventory = by_id["inventory"]
     assert inventory.context_id == "inventory"
     assert inventory.event_prefixes == ("inventory.",)
-    assert inventory.aggregate_paths == ("app.domain.inventory", "app.services.inventory_service")
+    assert inventory.aggregate_paths == (
+        "app.domain.inventory",
+        "app.domain.shared_services.inventory_service",
+    )
     assert inventory.handler_module == "app.neuro_bus.domains.inventory_domain_handlers"
 
 
@@ -112,7 +115,7 @@ def test_intent_context_exact_fields():
     intent = by_id["intent"]
     assert intent.context_id == "intent"
     assert intent.event_prefixes == ("intent.",)
-    assert intent.aggregate_paths == ("app.domain.services.intent",)
+    assert intent.aggregate_paths == ("app.domain.conversation.intent",)
     assert intent.handler_module == "app.neuro_bus.domains.intent_domain"
 
 

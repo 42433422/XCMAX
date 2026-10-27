@@ -79,7 +79,9 @@ with tempfile.TemporaryDirectory() as td:
             we["label"] = name
             we["panel_title"] = name
             we["panel_summary"] = domain
-    mpath.write_text(json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    mpath.write_text(
+        json.dumps(m, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z_out:
         for p in sorted(td_path.rglob("*")):

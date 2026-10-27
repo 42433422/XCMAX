@@ -102,7 +102,13 @@ def test_butler_wallet_contract(
     monkeypatch.setattr(
         butler,
         "_resolve_butler_credentials",
-        lambda *_: ("test", "model", "key", "user_override" if byok else "platform", ""),
+        lambda *_: (
+            "test",
+            "model",
+            "key",
+            "user_override" if byok else "platform",
+            "",
+        ),
     )
     messages = [
         {"role": "system", "content": "private context"},
@@ -123,7 +129,11 @@ def test_butler_wallet_contract(
     answer = "answer " * 8
     upstream = {"ok": True, "content": answer}
     if reported_usage:
-        upstream["usage"] = {"prompt_tokens": 2, "completion_tokens": 1, "total_tokens": 3}
+        upstream["usage"] = {
+            "prompt_tokens": 2,
+            "completion_tokens": 1,
+            "total_tokens": 3,
+        }
     error = RuntimeError("controlled upstream failure")
     monkeypatch.setattr(
         butler,
@@ -187,7 +197,12 @@ def test_butler_wallet_contract(
     asyncio.run(invoke())
     if stream:
         stream_dispatch.assert_called_once_with(
-            "test", api_key="key", base_url="", model="model", messages=messages, max_tokens=16
+            "test",
+            api_key="key",
+            base_url="",
+            model="model",
+            messages=messages,
+            max_tokens=16,
         )
     else:
         stream_dispatch.assert_not_called()

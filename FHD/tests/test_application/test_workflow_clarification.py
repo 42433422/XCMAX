@@ -16,7 +16,7 @@ from app.application.workflow.clarification_node import (
     sweep_expired,
 )
 from app.application.workflow.engine import WorkflowEngine
-from app.application.workflow.types import Branch, PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import Branch, PlanGraph, WorkflowNode
 
 
 def _customers_registry() -> dict:
@@ -400,8 +400,10 @@ def test_shipment_inputs_shared_by_clarification_and_execution(params, expected,
     from app.application.agent_orchestrator.clarification import pause_for_clarification
     from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
     from app.application.agent_orchestrator.tool_spec import validate_tool_call
+    from app.domain.shared_services.tools_workflow_shipments_docs import (
+        _registered_router_shipment_records,
+    )
     from app.services.tools_execution.registry import _validate_required_params
-    from app.services.tools_workflow_shipments_docs import _registered_router_shipment_records
 
     params = {**params, "contact_person": "Alice", "contact_phone": "1234"}
     node = WorkflowNode(

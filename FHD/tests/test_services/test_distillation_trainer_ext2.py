@@ -1,4 +1,4 @@
-"""Tests for app.services.distillation_trainer — uncovered branches (ext2).
+"""Tests for app.domain.shared_services.distillation_trainer — uncovered branches (ext2).
 
 Focus: DistillationDataset.__len__, DistillationTrainer.train_epoch with real tensors,
 DistillationTrainer.train with insufficient data (< 10 samples), DistillationTrainer.init
@@ -13,8 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services import distillation_trainer as _distillation_module
-from app.services.distillation_trainer import (
+from app.domain.shared_services.distillation_trainer import (
     CHECKPOINT_DIR,
     DISTILL_DIR,
     ID_TO_LABEL,
@@ -25,6 +24,7 @@ from app.services.distillation_trainer import (
     DistillationTrainer,
     main,
 )
+from app.services import distillation_trainer as _distillation_module
 
 torch = _distillation_module.torch
 torch_available = torch is not None
@@ -227,10 +227,12 @@ class TestDistillationTrainerPrepareDataLowData:
         mock_tokenizer = MagicMock()
         mock_model = MagicMock()
         with (
-            patch("app.services.distillation_trainer.BertTokenizer") as MockTokenizer,
-            patch("app.services.distillation_trainer.BertForSequenceClassification") as MockModel,
-            patch("app.services.distillation_trainer.DataLoader") as MockDataLoader,
-            patch("app.services.distillation_trainer.train_test_split") as mock_split,
+            patch("app.domain.shared_services.distillation_trainer.BertTokenizer") as MockTokenizer,
+            patch(
+                "app.domain.shared_services.distillation_trainer.BertForSequenceClassification"
+            ) as MockModel,
+            patch("app.domain.shared_services.distillation_trainer.DataLoader") as MockDataLoader,
+            patch("app.domain.shared_services.distillation_trainer.train_test_split") as mock_split,
         ):
             MockTokenizer.from_pretrained.return_value = mock_tokenizer
             MockModel.from_pretrained.return_value = mock_model
@@ -262,7 +264,7 @@ class TestMainCustomModel:
         mock_trainer_instance = MagicMock()
         with (
             patch(
-                "app.services.distillation_trainer.DistillationTrainer",
+                "app.domain.shared_services.distillation_trainer.DistillationTrainer",
                 return_value=mock_trainer_instance,
             ) as MockTrainer,
             patch(

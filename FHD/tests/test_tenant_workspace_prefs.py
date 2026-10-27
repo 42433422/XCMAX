@@ -21,7 +21,7 @@ def test_patch_workspace_prefs_merges_workflow_employees(monkeypatch):
             return True
 
     monkeypatch.setattr(
-        "app.services.user_preference_service.get_user_preference_service",
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
         lambda: FakePrefService(),
     )
 
@@ -82,7 +82,7 @@ def test_bind_selected_industry_updates_user_and_tenant_prefs(monkeypatch):
             return False
 
     monkeypatch.setattr(
-        "app.services.user_preference_service.get_user_preference_service",
+        "app.domain.shared_services.user_preference_service.get_user_preference_service",
         lambda: FakePrefService(),
     )
     monkeypatch.setattr("app.db.session.get_db", lambda: FakeDbContext())

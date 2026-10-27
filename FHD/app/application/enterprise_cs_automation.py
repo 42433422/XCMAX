@@ -19,7 +19,10 @@ from sqlalchemy.orm import Session
 from app.db.models.im import ImCustomerServiceAutomationState
 from app.db.models.user import Session as UserSession
 from app.db.models.user import User
-from app.services.kellai_copilot_llm import content_from_completion, parse_json_content
+from app.domain.shared_services.kellai_copilot_llm import (
+    content_from_completion,
+    parse_json_content,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

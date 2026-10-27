@@ -120,7 +120,7 @@ def client_primary_mod_on_disk_visible(mod_id: str) -> bool:
     if mid != get_client_primary_erp_mod_id():
         return False
     try:
-        from app.desktop_runtime.paths import is_desktop_mode
+        from app.desktop_runtime.desktop_runtime_paths import is_desktop_mode
         from app.infrastructure.mods.mod_manager import get_mod_manager
         from app.mod_sdk.product_skus import resolve_product_sku
 

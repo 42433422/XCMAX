@@ -103,7 +103,12 @@ def ensure_index() -> None:
         pass
 
     try:
-        from redis.commands.search.field import NumericField, TagField, TextField, VectorField
+        from redis.commands.search.field import (
+            NumericField,
+            TagField,
+            TextField,
+            VectorField,
+        )
 
         try:
             index_definition_module = importlib.import_module(

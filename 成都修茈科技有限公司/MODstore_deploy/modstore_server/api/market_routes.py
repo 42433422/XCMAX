@@ -46,7 +46,10 @@ from modstore_server.auth_service import (
     register_user,
     verify_password,
 )
-from modstore_server.duty_roster import employee_partition_meta, is_planned_duty_employee_pack
+from modstore_server.duty_roster import (
+    employee_partition_meta,
+    is_planned_duty_employee_pack,
+)
 from modstore_server.email_service import (
     assert_email_outbound_configured,
     find_user_by_email,

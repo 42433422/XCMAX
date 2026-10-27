@@ -55,7 +55,8 @@ def build_scaffold_zip(
 
 
 def _merge_traditional_sidebar(
-    base: _facade().List[_facade().Dict[str, _facade().Any]], custom: _facade().List[_facade().Any]
+    base: _facade().List[_facade().Dict[str, _facade().Any]],
+    custom: _facade().List[_facade().Any],
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     by_key: _facade().Dict[str, _facade().Dict[str, _facade().Any]] = {}
     for item in base:
@@ -265,9 +266,13 @@ def merge_employees_for_blueprint_routes(
 
 
 def render_suite_blueprints_py(
-    mod_id: str, mod_name: str, employees: _facade().List[_facade().Dict[str, _facade().Any]]
+    mod_id: str,
+    mod_name: str,
+    employees: _facade().List[_facade().Dict[str, _facade().Any]],
 ) -> str:
-    from modstore_server.mod_suite_blueprints_template import render_suite_blueprints_py as _render
+    from modstore_server.mod_suite_blueprints_template import (
+        render_suite_blueprints_py as _render,
+    )
 
     return _render(mod_id, mod_name, employees)
 
@@ -291,7 +296,10 @@ def render_generated_home_vue(
 
 
 def _normalize_frontend_menu(
-    menu_raw: _facade().Optional[_facade().List[_facade().Any]], *, mod_id: str, mod_name: str
+    menu_raw: _facade().Optional[_facade().List[_facade().Any]],
+    *,
+    mod_id: str,
+    mod_name: str,
 ) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     if isinstance(menu_raw, list) and menu_raw:
         out: _facade().List[_facade().Dict[str, _facade().Any]] = []
@@ -306,14 +314,25 @@ def _normalize_frontend_menu(
                     }
                 )
         return out
-    return [{"id": f"{mod_id}-home", "label": mod_name, "icon": "fa-cube", "path": f"/{mod_id}"}]
+    return [
+        {
+            "id": f"{mod_id}-home",
+            "label": mod_name,
+            "icon": "fa-cube",
+            "path": f"/{mod_id}",
+        }
+    ]
 
 
 def _sanitize_industry(
     industry: _facade().Dict[str, _facade().Any], *, mod_name: str, description: str
 ) -> _facade().Dict[str, _facade().Any]:
     name = str(industry.get("name") or mod_name or "通用").strip() or "通用"
-    return {"schema_version": 1, "name": name, "description": str(description or "")[:500]}
+    return {
+        "schema_version": 1,
+        "name": name,
+        "description": str(description or "")[:500],
+    }
 
 
 def _normalize_frontend_app(
@@ -355,7 +374,8 @@ def _normalize_frontend_app(
         )
     base.setdefault("sections", secs)
     base.setdefault(
-        "metrics", [{"label": "AI 员工", "value": str(len(secs) or 1), "hint": "workflow"}]
+        "metrics",
+        [{"label": "AI 员工", "value": str(len(secs) or 1), "hint": "workflow"}],
     )
     base.setdefault(
         "hero_actions",

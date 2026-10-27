@@ -155,7 +155,8 @@ def test_existing_database_migration_preserves_events_and_is_idempotent():
 
 
 @pytest.mark.parametrize(
-    "starting_head", ["20261020_customer_ticket_eta", "20261020_incident_ownership", "both"]
+    "starting_head",
+    ["20261020_customer_ticket_eta", "20261020_incident_ownership", "both"],
 )
 def test_merge_upgrades_either_existing_head_without_losing_data(
     tmp_path, monkeypatch, starting_head

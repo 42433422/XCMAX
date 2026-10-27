@@ -36,7 +36,11 @@ def _bootstrap(tmp_path: Path, monkeypatch):
 
 def test_visible_collections_owner_and_grantee(tmp_path, monkeypatch):
     models, ve, rag = _bootstrap(tmp_path, monkeypatch)
-    from modstore_server.models import KnowledgeCollection, KnowledgeMembership, get_session_factory
+    from modstore_server.models import (
+        KnowledgeCollection,
+        KnowledgeMembership,
+        get_session_factory,
+    )
 
     sf = get_session_factory()
     with sf() as session:

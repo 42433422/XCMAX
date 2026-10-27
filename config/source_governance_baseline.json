@@ -1,111 +1,126 @@
 {
   "_note": "Source size above 800 lines is advisory. Router, exact-copy and mechanical-module debt may only shrink; source-boundary gates remain blocking and derived roots are excluded.",
   "schema_version": 2,
-  "updated_at": "2026-10-24",
+  "updated_at": "2026-10-25",
   "oversized_files": {
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 3458,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 3192,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 2799,
-      "soft_cap": 800
-    },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": {
       "stack": "modstore_backend",
-      "lines": 2451,
+      "lines": 2390,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": {
+      "stack": "modstore_backend",
+      "lines": 2318,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod1.py": {
+      "stack": "modstore_backend",
+      "lines": 2288,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": {
       "stack": "modstore_backend",
-      "lines": 2314,
+      "lines": 2263,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 2252,
+      "lines": 2176,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": {
       "stack": "modstore_backend",
-      "lines": 2050,
+      "lines": 2006,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod1_r1.py": {
+      "stack": "modstore_backend",
+      "lines": 1951,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1960,
+      "lines": 1885,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1738,
+      "lines": 1726,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1414,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 1400,
-      "soft_cap": 800
-    },
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": {
-      "stack": "modstore_backend",
-      "lines": 1347,
+      "lines": 1378,
       "soft_cap": 800
     },
     "FHD/app/application/agent_orchestrator/tool_spec_data/special_tool_contracts.py": {
       "stack": "fhd_backend",
-      "lines": 1335,
+      "lines": 1336,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": {
+      "stack": "modstore_backend",
+      "lines": 1315,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": {
+      "stack": "modstore_backend",
+      "lines": 1301,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/public_visualization_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1281,
+      "lines": 1250,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1250,
+      "lines": 1220,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1229,
+      "lines": 1205,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1225,
+      "lines": 1205,
+      "soft_cap": 800
+    },
+    "FHD/app/application/agent_orchestrator/tool_spec_data/output_schemas.py": {
+      "stack": "fhd_backend",
+      "lines": 1165,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_bench_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1187,
+      "lines": 1153,
+      "soft_cap": 800
+    },
+    "FHD/app/application/agent_orchestrator/tool_spec_data/input_schemas.py": {
+      "stack": "fhd_backend",
+      "lines": 1139,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1143,
+      "lines": 1134,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_duty_graph_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1133,
+      "lines": 1119,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": {
+      "stack": "modstore_backend",
+      "lines": 1106,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/routes_registry_merged.py": {
       "stack": "modstore_backend",
-      "lines": 1087,
+      "lines": 1069,
       "soft_cap": 800
     },
     "FHD/app/application/shipment_excel_etl_security.py": {
@@ -115,32 +130,37 @@
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_merged.py": {
       "stack": "modstore_backend",
-      "lines": 969,
+      "lines": 964,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_scaffold_merged.py": {
       "stack": "modstore_backend",
-      "lines": 947,
+      "lines": 949,
+      "soft_cap": 800
+    },
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod2.py": {
+      "stack": "modstore_backend",
+      "lines": 864,
       "soft_cap": 800
     },
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": {
       "stack": "modstore_backend",
-      "lines": 880,
+      "lines": 850,
       "soft_cap": 800
     }
   },
   "oversized_routers": {
-    "FHD/app/fastapi_routes/domains/misc/routes.py": {
+    "FHD/app/fastapi_routes/domains/misc/misc_routes.py": {
       "stack": "fhd_backend",
       "routes": 41,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/domains/static/routes.py": {
+    "FHD/app/fastapi_routes/domains/static/static_routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20
     },
-    "FHD/app/fastapi_routes/domains/system/routes.py": {
+    "FHD/app/fastapi_routes/domains/system/system_routes.py": {
       "stack": "fhd_backend",
       "routes": 32,
       "soft_cap": 20
@@ -193,6 +213,14 @@
     "FHD/app/application/employee_runtime/scheduler_execution.py": 17,
     "FHD/app/application/etl/parser_region_parse.py": 60,
     "FHD/app/application/etl/service_preview_worker.py": 12,
+    "FHD/app/domain/shared_services/inventory_counting.py": 20,
+    "FHD/app/domain/shared_services/inventory_lookup.py": 24,
+    "FHD/app/domain/shared_services/inventory_movements.py": 43,
+    "FHD/app/domain/shared_services/inventory_orders.py": 23,
+    "FHD/app/domain/shared_services/inventory_warehouses.py": 31,
+    "FHD/app/domain/shared_services/tools_workflow_business_db.py": 18,
+    "FHD/app/domain/shared_services/xcmax_sync_basic_appliers.py": 23,
+    "FHD/app/domain/shared_services/xcmax_sync_extended_appliers.py": 36,
     "FHD/app/fastapi_routes/domains/conversation/stream_helpers.py": 38,
     "FHD/app/fastapi_routes/domains/shipment/shipment_api_order_routes.py": 40,
     "FHD/app/fastapi_routes/im_ai_group_routes.py": 48,
@@ -204,86 +232,82 @@
     "FHD/app/infrastructure/billing/model_usage_records.py": 27,
     "FHD/app/infrastructure/rag/dataset_vector_sqlite.py": 20,
     "FHD/app/legacy/chat/legacy_chat_runtime.py": 22,
-    "FHD/app/services/inventory_counting.py": 20,
-    "FHD/app/services/inventory_lookup.py": 24,
-    "FHD/app/services/inventory_movements.py": 43,
-    "FHD/app/services/inventory_orders.py": 23,
-    "FHD/app/services/inventory_warehouses.py": 31,
-    "FHD/app/services/tools_workflow_business_db.py": 18,
-    "FHD/app/services/xcmax_sync_basic_appliers.py": 23,
-    "FHD/app/services/xcmax_sync_extended_appliers.py": 36,
     "FHD/app/utils/path_io/printer_cups_mixin.py": 52,
     "FHD/app/utils/path_io/printer_file_mixin.py": 55,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_duty_graph_api_merged.py": 380,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": 498,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/app_factory_merged.py": 92,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/authoring_merged.py": 169,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/admin_duty_graph_api_merged.py": 378,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/agent_butler_api_merged.py": 482,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/app_factory_merged.py": 91,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/authoring_merged.py": 168,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_enterprise_identity.py": 18,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": 842,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": 332,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps_merged.py": 199,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": 420,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": 302,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py": 482,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/api/market_routes_merged.py": 835,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/butler_qq_bridge_merged.py": 318,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/craft_steps_merged.py": 196,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/customer_service_orchestrator_merged.py": 412,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_merged.py": 295,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/daily_digest_surface_audit_merged.py": 457,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_vibe_collect.py": 21,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_vibe_synthesis.py": 18,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/digest_vibe_templates.py": 9,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_burnin_execution.py": 20,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_workforce_burnin_plan.py": 12,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline_merged.py": 174,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_scaffold_merged.py": 118,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_pipeline_merged.py": 170,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_ai_scaffold_merged.py": 116,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_fallback_result.py": 3,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged.py": 538,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": 310,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_bench_merged.py": 243,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged.py": 488,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod1_r1.py": 370,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod1_r2.py": 32,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_asset_pipeline_merged_mod2.py": 127,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_autonomy_service_merged.py": 306,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_bench_merged.py": 239,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod1.py": 360,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/employee_executor_merged_mod2.py": 115,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/integrations/ops_action_dispatch.py": 54,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": 491,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_catalog_merged.py": 160,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_api_merged.py": 488,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_catalog_merged.py": 157,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_chat_providers.py": 20,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_media_proxy.py": 21,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_runtime_autopilot_merged.py": 86,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": 302,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/llm_runtime_autopilot_merged.py": 85,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_auth_api_merged.py": 299,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_catalog_browse_routes.py": 2,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_catalog_browse_routes_merged.py": 148,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_ai_scaffold_merged.py": 108,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/market_catalog_browse_routes_merged.py": 147,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_ai_scaffold_merged.py": 107,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner_employeeagentrunner_mixin01.py": 57,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner_merged.py": 61,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged.py": 596,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/openapi_connector_runtime_merged.py": 156,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py": 268,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_merged.py": 76,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_employee_agent_runner_merged.py": 59,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod1.py": 478,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/mod_scaffold_runner_merged_mod2.py": 109,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/openapi_connector_runtime_merged.py": 153,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/para_delegate_handler_merged.py": 265,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_merged.py": 64,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_productionlineorchestrator_mixin01.py": 1,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_productionlineorchestrator_mixin01__productionlineorchestratorpart01mixin_mixin01.py": 116,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_productionlineorchestrator_mixin01__productionlineorchestratorpart01mixin_mixin01.py": 115,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/production_line_orchestrator_productionlineorchestrator_mixin01__productionlineorchestratorpart01mixin_mixin02.py": 76,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/public_visualization_api_merged.py": 244,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/public_visualization_api_merged.py": 239,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/release_train_merged.py": 173,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": 306,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_operations_merged.py": 158,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/routes_registry_merged.py": 341,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/research_tools_merged.py": 302,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/retort_clarification_operations_merged.py": 157,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/routes_registry_merged.py": 338,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_agent/agent_loop_v2.py": 14,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_agent/agent_loop_vibe.py": 36,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/script_workflow_execution_routes.py": 80,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_operations_merged.py": 200,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_layer_api_merged.py": 259,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/self_evolution_operations_merged.py": 197,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_layer_api_merged.py": 258,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/strategic_layer_meeting_routes.py": 45,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/telemetry_backlog_metrics.py": 4,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/telemetry_backlog_quality.py": 7,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_derive_tail.py": 1,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_derive_tail_phase01.py": 42,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_derive_tail_phase02.py": 25,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_merged.py": 205,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/time_rail_workflow_merged.py": 202,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_script_agent_job.py": 18,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_script_job.py": 10,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workbench_script_support.py": 29,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_api_merged.py": 529,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_api_merged.py": 525,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_engine_workflowengine_mixin01.py": 1,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin01.py": 113,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_engine_workflowengine_mixin01__workflowenginepart01mixin_mixin02.py": 126,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_engine_workflowengine_mixin02.py": 133,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_apply.py": 50,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_nl_operations.py": 80,
-    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_merged.py": 145,
+    "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_merged.py": 144,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase01.py": 69,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase02.py": 79,
     "成都修茈科技有限公司/MODstore_deploy/modstore_server/workflow_scheduler_startup_phase03.py": 83,

@@ -54,7 +54,8 @@ def guarded_executor(monkeypatch, fresh_db):
     ):
         monkeypatch.setattr(ee, name, _llm_must_not_run)
     monkeypatch.setattr(
-        "modstore_server.services.llm.chat_dispatch_via_platform_only", _llm_must_not_run
+        "modstore_server.services.llm.chat_dispatch_via_platform_only",
+        _llm_must_not_run,
     )
 
 
@@ -163,7 +164,11 @@ def test_unselected_dynamic_employee_does_not_skip_cognition(plan):
     assert not _para_first_skip_cognition(
         "dynamic-code-owner",
         ["agent"],
-        {"role": "fix", "_trusted_incident_team_execution": True, "incident_team": plan},
+        {
+            "role": "fix",
+            "_trusted_incident_team_execution": True,
+            "incident_team": plan,
+        },
     )
 
 
@@ -175,7 +180,8 @@ def test_trusted_incident_para_outage_never_plans_locally(para_ready, monkeypatc
         return preflight == "ready_failure"
 
     monkeypatch.setattr(
-        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch", readiness
+        "modstore_server.para_delegate_handler.para_delegate_ready_for_dispatch",
+        readiness,
     )
     if preflight == "disabled_flag":
         monkeypatch.setenv("MODSTORE_PARA_FIRST_SKIP_COGNITION", "0")
@@ -184,7 +190,11 @@ def test_trusted_incident_para_outage_never_plans_locally(para_ready, monkeypatc
         assert input_data["ticket_id"] == 1
         assert input_data["ticket_no"] == "TEST-OUTAGE-1"
         para_ready["para"] += 1
-        return {"handler": "para_delegate", "ok": False, "error": "synthetic Para unavailable"}
+        return {
+            "handler": "para_delegate",
+            "ok": False,
+            "error": "synthetic Para unavailable",
+        }
 
     monkeypatch.setattr(
         "modstore_server.para_delegate_handler.dispatch_para_delegate", failed_dispatch
@@ -229,5 +239,9 @@ def test_trusted_incident_disabled_para_uses_real_failure_dispatch(
     assert out["llm_tokens"] == 0
     assert out["result"]["handlers"] == ["para_delegate"]
     assert out["result"]["outputs"] == [
-        {"handler": "para_delegate", "ok": False, "error": "MODSTORE_PARA_DELEGATE_ENABLED=0"}
+        {
+            "handler": "para_delegate",
+            "ok": False,
+            "error": "MODSTORE_PARA_DELEGATE_ENABLED=0",
+        }
     ]

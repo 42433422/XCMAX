@@ -115,7 +115,9 @@ def _dispatch_incident_team_once(event_id: int) -> dict[str, Any]:
         updated = _payload(ev)
         ticket_id = int(updated.get("ticket_id") or 0)
         if ticket_id:
-            from modstore_server.customer_issue_shared_repairs import active_shared_repair
+            from modstore_server.customer_issue_shared_repairs import (
+                active_shared_repair,
+            )
             from modstore_server.models_cs import CustomerServiceTicket
 
             ticket = session.get(CustomerServiceTicket, ticket_id, with_for_update=True)

@@ -33,7 +33,7 @@ class SessionMarketProvider:
     ) -> dict[str, Any] | None:
         import httpx
 
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         platform_url = (
             (

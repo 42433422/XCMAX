@@ -26,7 +26,7 @@ from app.application.dataset_rag.models import (
 from app.application.dataset_rag.repository import DatasetRepository
 from app.application.dataset_rag.retrieval_policy import _metadata_matches
 from app.application.dataset_rag.vector_index import VectorIndexService, _embedding_metadata
-from app.application.dataset_rag_queue import owner_alive, owner_id
+from app.domain.app_pure.dataset_rag_queue import owner_alive, owner_id
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 REBUILD_TERMINAL_STATUSES = {"completed", "failed", "cancelled"}

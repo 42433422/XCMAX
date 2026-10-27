@@ -37,7 +37,7 @@ class TestEnrichKittenAnalyzerRuntime:
     async def test_kitten_analyzer_with_business_db_success(self) -> None:
         rc = {"kitten_analyzer": True, "kitten_include_business_db": True}
         with patch(
-            "app.services.kitten_business_snapshot.build_kitten_business_snapshot",
+            "app.domain.shared_services.kitten_business_snapshot.build_kitten_business_snapshot",
             return_value={"success": True, "text": "snapshot", "stats": {}},
         ):
             result = await enrich_kitten_analyzer_runtime(rc, "hello")
@@ -47,7 +47,7 @@ class TestEnrichKittenAnalyzerRuntime:
     async def test_kitten_analyzer_with_business_db_failure(self) -> None:
         rc = {"kitten_analyzer": True, "kitten_include_business_db": True}
         with patch(
-            "app.services.kitten_business_snapshot.build_kitten_business_snapshot",
+            "app.domain.shared_services.kitten_business_snapshot.build_kitten_business_snapshot",
             side_effect=ImportError("no module"),
         ):
             result = await enrich_kitten_analyzer_runtime(rc, "hello")

@@ -152,7 +152,7 @@ def _bypass_native_planner_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda _n: False,
     )
     monkeypatch.setattr(
-        "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+        "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
         lambda *a, **k: None,
     )
 

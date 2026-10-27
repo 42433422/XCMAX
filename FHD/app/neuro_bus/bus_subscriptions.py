@@ -12,7 +12,7 @@ from app.neuro_bus.bus_primitives import (
     PriorityEventQueue,
     _neuro_trace_sample_rate,
 )
-from app.neuro_bus.events.base import AsyncEventHandler, EventHandler, NeuroEvent
+from app.neuro_bus.events.events_base import AsyncEventHandler, EventHandler, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -199,7 +199,7 @@ class NeuroBusSubscriptionsMixin:
     def registered_domains(self) -> list[str]:
         """已注册神经域名称（来自 DomainRegistry，供启动日志与健康检查）。"""
         try:
-            from app.neuro_bus.domains.base import get_domain_registry
+            from app.neuro_bus.domains.domains_base import get_domain_registry
 
             return cast("list[str]", get_domain_registry().list_domains())
         except RECOVERABLE_ERRORS:

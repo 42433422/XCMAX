@@ -26,7 +26,7 @@ from app.application.persy_memory_utils import (
     _scope_denied,
     _truncate,
 )
-from app.services.user_memory_service import UserMemoryService
+from app.domain.shared_services.user_memory_service import UserMemoryService
 
 
 class PersyMemoryGraphMixin:

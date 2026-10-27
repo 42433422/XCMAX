@@ -46,8 +46,10 @@ def store(monkeypatch) -> TaskConversationStore:
         "app.application.task_conversation_store.get_db",
         isolated_db,
     )
-    monkeypatch.setattr("app.services.conversation_service.get_db", isolated_db)
-    monkeypatch.setattr("app.services.conversation_service.notify_user", lambda **kwargs: None)
+    monkeypatch.setattr("app.domain.shared_services.conversation_service.get_db", isolated_db)
+    monkeypatch.setattr(
+        "app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None
+    )
     return TaskConversationStore()
 
 
@@ -120,7 +122,7 @@ def test_clear_removes_only_current_users_sessions(store: TaskConversationStore)
 
 
 def test_compat_persistence_cannot_append_to_another_owners_session(store: TaskConversationStore):
-    from app.services.conversation_service import ConversationService
+    from app.domain.shared_services.conversation_service import ConversationService
 
     store.save_message(session_id="private-session", user_id=41, role="user", content="本人内容")
     with pytest.raises(PermissionError):
@@ -140,7 +142,7 @@ def test_legacy_history_routes_cannot_access_other_owners_session(store, monkeyp
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
-    from app.fastapi_routes.domains.conversation.routes import router
+    from app.fastapi_routes.domains.conversation.conversation_routes import router
 
     store.save_message(session_id="private-route", user_id=41, role="user", content="本人内容")
     monkeypatch.setattr(
@@ -189,8 +191,8 @@ def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
     from starlette.requests import Request
 
     from app.application.ai_chat_app_service import AIChatApplicationService
+    from app.domain.shared_services.conversation_service import ConversationService
     from app.legacy.routes.conversation.compat_extra import conversations_get
-    from app.services.conversation_service import ConversationService
 
     conversation = ConversationService()
     monkeypatch.setattr("app.services.get_conversation_service", lambda: conversation)

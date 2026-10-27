@@ -48,7 +48,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"TXT 读取员工 handlers 应为 ['direct_python']，当前为 {handlers}",
                         )
-                    from modstore_server.txt_extract_runtime import validate_txt_read_backend
+                    from modstore_server.txt_extract_runtime import (
+                        validate_txt_read_backend,
+                    )
 
                     tx_errs, _ = validate_txt_read_backend(pack_dir)
                     if tx_errs:
@@ -60,7 +62,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"CSV 读取员工 handlers 应为 ['direct_python']，当前为 {handlers}",
                         )
-                    from modstore_server.csv_tabular_runtime import validate_csv_read_backend
+                    from modstore_server.csv_tabular_runtime import (
+                        validate_csv_read_backend,
+                    )
 
                     cr_errs, _ = validate_csv_read_backend(pack_dir)
                     if cr_errs:
@@ -72,7 +76,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"CSV 生成员工 handlers 应为 ['direct_python']，当前为 {handlers}",
                         )
-                    from modstore_server.csv_tabular_runtime import validate_csv_generate_backend
+                    from modstore_server.csv_tabular_runtime import (
+                        validate_csv_generate_backend,
+                    )
 
                     cg_errs, _ = validate_csv_generate_backend(pack_dir)
                     if cg_errs:
@@ -84,7 +90,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"Excel 读取员工 handlers 应为 ['direct_python']，当前为 {handlers}",
                         )
-                    from modstore_server.excel_tabular_runtime import validate_excel_read_backend
+                    from modstore_server.excel_tabular_runtime import (
+                        validate_excel_read_backend,
+                    )
 
                     er_errs, _ = validate_excel_read_backend(pack_dir)
                     if er_errs:
@@ -110,7 +118,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"TXT 生成员工 handlers 须含 direct_python，当前为 {handlers}",
                         )
-                    from modstore_server.txt_extract_runtime import validate_txt_generate_backend
+                    from modstore_server.txt_extract_runtime import (
+                        validate_txt_generate_backend,
+                    )
 
                     tg_errs, _ = validate_txt_generate_backend(pack_dir)
                     if tg_errs:
@@ -122,7 +132,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"PDF 读取员工 handlers 应为 ['direct_python']，当前为 {handlers}",
                         )
-                    from modstore_server.pdf_extract_runtime import validate_pdf_read_backend
+                    from modstore_server.pdf_extract_runtime import (
+                        validate_pdf_read_backend,
+                    )
 
                     pr_errs, _ = validate_pdf_read_backend(pack_dir)
                     if pr_errs:
@@ -134,7 +146,9 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
                             False,
                             f"PDF 生成员工 handlers 须含 direct_python，当前为 {handlers}",
                         )
-                    from modstore_server.pdf_extract_runtime import validate_pdf_generate_backend
+                    from modstore_server.pdf_extract_runtime import (
+                        validate_pdf_generate_backend,
+                    )
 
                     pg_errs, _ = validate_pdf_generate_backend(pack_dir)
                     if pg_errs:
@@ -152,7 +166,10 @@ def _employee_handlers_contract_ok(pack_dir: Path) -> Tuple[bool, str]:
         if wx_errs:
             return (False, wx_errs[0][:200])
     elif "direct_python" in handlers and (not pack_has_direct_python_runtime(pack_dir)):
-        return (False, "声明 direct_python 但库内无 runtime 实现（画布保存不能替代 generate）")
+        return (
+            False,
+            "声明 direct_python 但库内无 runtime 实现（画布保存不能替代 generate）",
+        )
     return (True, "")
 
 
@@ -172,7 +189,12 @@ def _employee_quality_extras(
     runnable = True
     handlers_ok, handlers_msg = _employee_handlers_contract_ok(pack_dir)
     items.append(
-        {"check": "handlers 契约", "ok": handlers_ok, "note": handlers_msg[:120], "critical": True}
+        {
+            "check": "handlers 契约",
+            "ok": handlers_ok,
+            "note": handlers_msg[:120],
+            "critical": True,
+        }
     )
     if not handlers_ok:
         critical_failed = True
@@ -190,7 +212,9 @@ def _employee_quality_extras(
     )
     if builtin_runtime and pack_dir.is_dir():
         if pipeline_label == "word_full_extract":
-            from modstore_server.word_extract_runtime import validate_word_extract_backend
+            from modstore_server.word_extract_runtime import (
+                validate_word_extract_backend,
+            )
 
             rx_errs, rx_warns = validate_word_extract_backend(pack_dir)
             chk_id = "word_extract_runtime"
@@ -202,7 +226,9 @@ def _employee_quality_extras(
             chk_id = "txt_read_runtime"
             chk_label = "TXT 读取后端"
         elif pipeline_label == "txt_generate":
-            from modstore_server.txt_extract_runtime import validate_txt_generate_backend
+            from modstore_server.txt_extract_runtime import (
+                validate_txt_generate_backend,
+            )
 
             rx_errs, rx_warns = validate_txt_generate_backend(pack_dir)
             chk_id = "txt_generate_runtime"
@@ -214,19 +240,25 @@ def _employee_quality_extras(
             chk_id = "pdf_read_runtime"
             chk_label = "PDF 读取后端"
         elif pipeline_label == "pdf_generate":
-            from modstore_server.pdf_extract_runtime import validate_pdf_generate_backend
+            from modstore_server.pdf_extract_runtime import (
+                validate_pdf_generate_backend,
+            )
 
             rx_errs, rx_warns = validate_pdf_generate_backend(pack_dir)
             chk_id = "pdf_generate_runtime"
             chk_label = "PDF 生成后端"
         elif pipeline_label == "excel_full_read":
-            from modstore_server.excel_tabular_runtime import validate_excel_read_backend
+            from modstore_server.excel_tabular_runtime import (
+                validate_excel_read_backend,
+            )
 
             rx_errs, rx_warns = validate_excel_read_backend(pack_dir)
             chk_id = "excel_read_runtime"
             chk_label = "Excel 读取后端"
         elif pipeline_label == "excel_generate":
-            from modstore_server.excel_tabular_runtime import validate_excel_generate_backend
+            from modstore_server.excel_tabular_runtime import (
+                validate_excel_generate_backend,
+            )
 
             rx_errs, rx_warns = validate_excel_generate_backend(pack_dir)
             chk_id = "excel_generate_runtime"
@@ -238,7 +270,9 @@ def _employee_quality_extras(
             chk_id = "csv_read_runtime"
             chk_label = "CSV 读取后端"
         elif pipeline_label == "csv_generate":
-            from modstore_server.csv_tabular_runtime import validate_csv_generate_backend
+            from modstore_server.csv_tabular_runtime import (
+                validate_csv_generate_backend,
+            )
 
             rx_errs, rx_warns = validate_csv_generate_backend(pack_dir)
             chk_id = "csv_generate_runtime"

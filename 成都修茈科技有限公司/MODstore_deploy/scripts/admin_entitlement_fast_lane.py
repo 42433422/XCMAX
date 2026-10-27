@@ -62,7 +62,9 @@ def _has_explicit_database_target() -> bool:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="管理员套餐/权益快速通道（不生成订单或支付）")
+    parser = argparse.ArgumentParser(
+        description="管理员套餐/权益快速通道（不生成订单或支付）"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plans", help="列出所有可绑定套餐")
     status = sub.add_parser("status", help="查询账号当前权益")
@@ -72,7 +74,9 @@ def build_parser() -> argparse.ArgumentParser:
         action = sub.add_parser(command, help=f"{command} 指定套餐")
         action.add_argument("account", help="用户 ID、用户名或邮箱")
         action.add_argument("plan_id", help="plan_templates.plan_id")
-        action.add_argument("--actor", required=True, help="操作管理员 ID、用户名或邮箱")
+        action.add_argument(
+            "--actor", required=True, help="操作管理员 ID、用户名或邮箱"
+        )
         action.add_argument("--reason", required=True, help="审计原因，至少 4 个字")
         action.add_argument("--days", type=int, default=None, help="会员权益有效天数")
         action.add_argument(
@@ -110,7 +114,9 @@ def run(
         if args.command == "status":
             return account_fast_lane_status(db, args.account)
         action = "assign" if args.command in {"grant", "assign"} else "revoke"
-        key = args.idempotency_key.strip() or (f"fast-lane-cli-{action}-{uuid.uuid4().hex}")
+        key = args.idempotency_key.strip() or (
+            f"fast-lane-cli-{action}-{uuid.uuid4().hex}"
+        )
         return apply_fast_lane_action(
             db,
             actor=args.actor,
@@ -127,7 +133,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         result = run(argv)
     except FastLaneError as exc:
-        print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        print(
+            json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False),
+            file=sys.stderr,
+        )
         return 2
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     return 0

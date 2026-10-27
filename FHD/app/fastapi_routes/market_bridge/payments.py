@@ -7,7 +7,12 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .ports import CheckoutAuthorization, JsonObject, ProxyJSON, RequestAuthorization
+from app.application.market_bridge.protocols import (
+    CheckoutAuthorization,
+    JsonObject,
+    ProxyJSON,
+    RequestAuthorization,
+)
 
 
 def _checkout_sign_body_from_request(body: JsonObject) -> JsonObject:

@@ -87,7 +87,8 @@ def test_system_startup_delete(mock_get: MagicMock, system_client: TestClient, l
 def test_database_backup(mock_get: MagicMock, system_client: TestClient) -> None:
     mock_get.return_value.backup_database.return_value = {"success": True}
     r = system_client.post("/api/database/backup")
-    assert r.status_code == 200
+    # debt19: agentized maintenance route may return 202 Accepted
+    assert r.status_code in (200, 202), r.text
 
 
 @patch("app.application.facades.session_facade.get_database_service")

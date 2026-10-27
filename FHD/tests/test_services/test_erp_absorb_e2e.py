@@ -50,8 +50,8 @@ from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
 from app.application.workflow.risk_gate import HybridRiskGate
-from app.application.workflow.types import ApprovalStatus
-from app.db.base import Base
+from app.application.workflow.workflow_types import ApprovalStatus
+from app.db.db_base import Base
 from app.db.models import (
     Customer,
     InventoryLedger,
@@ -64,9 +64,9 @@ from app.db.models import (
     SalesOrderItem,
     Warehouse,
 )
+from app.domain.shared_services.report_service import ReportService
+from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.infrastructure.tenant_scope import tenant_scope
-from app.services.report_service import ReportService
-from app.services.tools_workflow_registered import execute_registered_workflow_tool
 
 # 精确验收句子（实体名按句中原样：A 产品含「产品」标记与空格，客户B含「客户」前缀）
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"

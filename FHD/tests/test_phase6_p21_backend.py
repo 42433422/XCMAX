@@ -51,11 +51,22 @@ from app.application.workflow.approval_gated_engine import (
 )
 from app.application.workflow.approval_service import ApprovalService
 from app.application.workflow.risk_gate import RiskDecision
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,
     WorkflowRunResult,
+)
+from app.domain.shared_services.conversation.context import ConversationContext
+from app.domain.shared_services.conversation.handlers import HandlersMixin
+from app.domain.shared_services.distilled_intent_service import (
+    DEFAULT_INTENT_LABELS,
+    DistilledIntentRecognizer,
+)
+from app.domain.shared_services.modstore_library_sync import (
+    download_modstore_export_zip,
+    fetch_modstore_library_mod_ids,
+    sync_modstore_library_to_local,
 )
 from app.fastapi_routes import service_bridge as sb
 from app.fastapi_routes.service_bridge import (
@@ -67,17 +78,6 @@ from app.fastapi_routes.service_bridge import (
 from app.infrastructure.payment import order_store
 from app.infrastructure.skills.template_manager import template_manager as tm
 from app.services import distilled_intent_service as dis_svc
-from app.services.conversation.context import ConversationContext
-from app.services.conversation.handlers import HandlersMixin
-from app.services.distilled_intent_service import (
-    DEFAULT_INTENT_LABELS,
-    DistilledIntentRecognizer,
-)
-from app.services.modstore_library_sync import (
-    download_modstore_export_zip,
-    fetch_modstore_library_mod_ids,
-    sync_modstore_library_to_local,
-)
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -1572,7 +1572,7 @@ class TestModstoreLibrarySyncCleanup:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch(
@@ -1580,7 +1580,7 @@ class TestModstoreLibrarySyncCleanup:
                 return_value=mock_mm,
             ),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
             patch("os.unlink", side_effect=OSError("permission denied")),
@@ -1597,7 +1597,7 @@ class TestModstoreLibrarySyncCleanup:
 
     async def test_sync_all_ok_with_empty_fetch_returns_noop(self) -> None:
         with patch(
-            "app.services.modstore_library_sync.fetch_modstore_library_mod_ids",
+            "app.domain.shared_services.modstore_library_sync.fetch_modstore_library_mod_ids",
             return_value=[],
         ) as mock_fetch:
             result = await sync_modstore_library_to_local(
@@ -1618,7 +1618,7 @@ class TestModstoreLibrarySyncCleanup:
 
         with (
             patch(
-                "app.services.modstore_library_sync.download_modstore_export_zip",
+                "app.domain.shared_services.modstore_library_sync.download_modstore_export_zip",
                 return_value=b"zip-bytes",
             ),
             patch(
@@ -1626,7 +1626,7 @@ class TestModstoreLibrarySyncCleanup:
                 return_value=mock_mm,
             ),
             patch(
-                "app.services.modstore_library_sync.normalize_package_zip_path",
+                "app.domain.shared_services.modstore_library_sync.normalize_package_zip_path",
                 side_effect=lambda p: p,
             ),
         ):

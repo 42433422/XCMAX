@@ -12,7 +12,7 @@ from typing import Any, cast
 from urllib.parse import urlparse
 
 from app.application.etl.errors import EtlError
-from app.application.etl.targets.base import TargetField, json_safe
+from app.application.etl.targets.targets_base import TargetField, json_safe
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 

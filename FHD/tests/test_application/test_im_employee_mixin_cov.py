@@ -1141,7 +1141,7 @@ def test_customer_push_skips_sender_in_admin_recipients():
         patch.object(svc, "enterprise_cs_user_id", return_value=9),
         patch.object(svc, "_display_name", return_value="Sender"),
         patch.object(svc, "_query_admin_user_ids", return_value=[2, 3]),
-        patch("app.services.mobile_push.notify_user") as notify,
+        patch("app.domain.shared_services.mobile_push.notify_user") as notify,
     ):
         svc._maybe_push_cs_message(7, 2, "hello", [9, 2])
     notify.assert_called_once_with(

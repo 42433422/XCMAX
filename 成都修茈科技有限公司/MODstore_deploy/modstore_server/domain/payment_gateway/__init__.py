@@ -1,4 +1,4 @@
-from modstore_server.domain.payment_gateway.ports import PaymentReadRepository
-from modstore_server.domain.payment_gateway.types import OrderRef
+from modstore_server.domain.payment_gateway.payment_gateway_types import OrderRef
+from modstore_server.domain.payment_gateway.port_contracts import PaymentReadRepository
 
 __all__ = ["OrderRef", "PaymentReadRepository"]

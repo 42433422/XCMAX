@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from sqlalchemy import Table
 
-from app.application.workflow.types import PlanGraph, plan_from_dict, plan_to_dict
+from app.application.workflow.workflow_types import PlanGraph, plan_from_dict, plan_to_dict
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ class WorkflowPlanStore:
         if self._schema_ensured:
             return
         try:
-            from app.db.base import Base
+            from app.db.db_base import Base
             from app.db.models.workflow import WorkflowPlan
 
             Base.metadata.create_all(

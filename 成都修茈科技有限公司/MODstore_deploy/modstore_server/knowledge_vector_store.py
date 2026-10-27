@@ -28,7 +28,11 @@ import time
 from typing import Any, Dict, List, Optional
 
 from modstore_server import vector_engine
-from modstore_server.models import KnowledgeCollection, KnowledgeDocument, get_session_factory
+from modstore_server.models import (
+    KnowledgeCollection,
+    KnowledgeDocument,
+    get_session_factory,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.vector_engine import VectorEngineError
 

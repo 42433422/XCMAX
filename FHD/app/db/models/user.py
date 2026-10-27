@@ -7,7 +7,7 @@ from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Integer,
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.base import Base
+from app.db.db_base import Base
 
 if TYPE_CHECKING:
     from app.db.models.ai import AIConversationSession

@@ -6,7 +6,7 @@ from typing import Any
 
 from app.domain.autonomy.autonomy_guard import RiskDecision, evaluate_risk, get_autonomy_guard
 
-from .types import PlanGraph, database_restore_error
+from .workflow_types import PlanGraph, database_restore_error
 
 
 class HybridRiskGate:

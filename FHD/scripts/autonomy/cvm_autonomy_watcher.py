@@ -80,12 +80,7 @@ if __package__ in (None, ""):
         Signal,
     )
 else:
-    from .cross_tier_gate import check_before_action
-    from .cross_tier_gate import is_enabled as cross_tier_gate_enabled
-    from .cvm_adapter import CvmAutonomyAdapter
-    from .impact_predictor import predict
-    from .policies import ALL_POLICIES
-    from .types import (
+    from .autonomy_types import (
         Action,
         ActionResult,
         ActionTracker,
@@ -99,6 +94,11 @@ else:
         RuntimeTruthSnapshot,
         Signal,
     )
+    from .cross_tier_gate import check_before_action
+    from .cross_tier_gate import is_enabled as cross_tier_gate_enabled
+    from .cvm_adapter import CvmAutonomyAdapter
+    from .impact_predictor import predict
+    from .policies import ALL_POLICIES
 
 # 显式 autonomy callback（优先）+ 旁路 approval ledger client（fail-open）
 try:

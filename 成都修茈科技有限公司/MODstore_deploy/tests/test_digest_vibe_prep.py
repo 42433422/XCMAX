@@ -190,7 +190,10 @@ def test_template_fallback_persists_action_items_not_only_minutes(tmp_path, monk
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "action_items.db"))
     monkeypatch.setenv("MODSTORE_PYTEST_USE_SQLITE", "1")
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    from modstore_server.digest_action_items import list_action_items, parse_and_store_action_items
+    from modstore_server.digest_action_items import (
+        list_action_items,
+        parse_and_store_action_items,
+    )
     from modstore_server.digest_vibe_prep import (
         _finalize_vibe_result,
         resolve_vibe_prep_version_context,

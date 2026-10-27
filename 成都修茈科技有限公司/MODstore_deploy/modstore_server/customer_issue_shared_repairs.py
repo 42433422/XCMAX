@@ -107,7 +107,10 @@ def active_shared_repair(db: Session, ticket: Any) -> dict[str, Any] | None:
     action = (
         db.query(CustomerServiceAction)
         .filter_by(
-            ticket_id=ticket.id, user_id=ticket.user_id, action_type=_ACTION, status="completed"
+            ticket_id=ticket.id,
+            user_id=ticket.user_id,
+            action_type=_ACTION,
+            status="completed",
         )
         .filter(CustomerServiceAction.id > _integer(resolution.get("reopen_after_action_id")))
         .order_by(CustomerServiceAction.id.desc())
@@ -233,7 +236,11 @@ def shared_repair_candidates(
         raise HTTPException(404, "原工单不存在")
     signature = shared_repair_signature(target)
     if not signature or target.status != "processing" or target.closed_at:
-        return {"items": [], "match_sha256": signature, "reason": "no_exact_public_match"}
+        return {
+            "items": [],
+            "match_sha256": signature,
+            "reason": "no_exact_public_match",
+        }
     actions = (
         db.query(CustomerServiceAction)
         .filter_by(action_type="issue.repair.result", status="completed")
@@ -276,7 +283,11 @@ def link_shared_repair(
     if prior is not None:
         if json_loads(str(prior.request_json or ""), {}).get("confirmation") != request:
             raise HTTPException(409, "同一关联请求标识不能用于不同内容")
-        return {"success": True, "replayed": True, "link": active_shared_repair(db, target)}
+        return {
+            "success": True,
+            "replayed": True,
+            "link": active_shared_repair(db, target),
+        }
     signature = shared_repair_signature(target)
     if (
         not signature
@@ -337,7 +348,8 @@ def link_shared_repair(
             CustomerServiceTicket.closed_at.is_(None),
         )
         .update(
-            {"evidence_json": json_dumps(evidence), "updated_at": now}, synchronize_session=False
+            {"evidence_json": json_dumps(evidence), "updated_at": now},
+            synchronize_session=False,
         )
     )
     if changed != 1:
@@ -359,4 +371,8 @@ def link_shared_repair(
     )
     db.commit()
     db.refresh(target)
-    return {"success": True, "replayed": False, "link": active_shared_repair(db, target)}
+    return {
+        "success": True,
+        "replayed": False,
+        "link": active_shared_repair(db, target),
+    }

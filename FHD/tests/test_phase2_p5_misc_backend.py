@@ -23,7 +23,7 @@ from app.fastapi_routes.domains.misc.helpers import (
 )
 from app.infrastructure.mods.manifest import parse_manifest
 from app.infrastructure.mods.package import compute_directory_hash, compute_file_hash
-from app.neuro_bus.domains.base import DomainChannel, DomainHandler
+from app.neuro_bus.domains.domains_base import DomainChannel, DomainHandler
 
 
 def _http_request(**headers: str) -> Request:

@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from threading import Lock
 from typing import Any, Optional
 
-from modstore_server.domain.notification.types import NotificationType
+from modstore_server.domain.notification.notification_types import NotificationType
 
 
 class NotificationClient(ABC):
@@ -46,7 +46,9 @@ class InProcessNotificationClient(NotificationClient):
         content: str,
         data: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        from modstore_server.application.notification import NotificationApplicationService
+        from modstore_server.application.notification import (
+            NotificationApplicationService,
+        )
         from modstore_server.infrastructure.notification_repository import (
             SqlNotificationRepository,
             WebsocketRealtimePusher,

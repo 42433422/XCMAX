@@ -166,7 +166,7 @@ def _event_types(run: Any) -> list[str]:
 def run_cross_process_eval() -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     with tempfile.TemporaryDirectory(prefix="xcmax_market_wallet_cross_process_") as tmp:
         tmp_path = Path(tmp)

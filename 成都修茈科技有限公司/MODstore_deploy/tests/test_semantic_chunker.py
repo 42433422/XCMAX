@@ -1,6 +1,10 @@
 """语义分块器单元测试。"""
 
-from modstore_server.knowledge_ingest import SemanticChunker, _get_chunker, _split_sentences
+from modstore_server.knowledge_ingest import (
+    SemanticChunker,
+    _get_chunker,
+    _split_sentences,
+)
 
 
 class TestSplitSentences:

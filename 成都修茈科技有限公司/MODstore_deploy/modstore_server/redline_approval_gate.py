@@ -203,7 +203,9 @@ def approve_redline_request(
 ) -> Dict[str, Any]:
     """审批通过红线请求 → 落盘变更。"""
     try:
-        from modstore_server.employee_change_request_service import apply_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            apply_employee_change_request,
+        )
 
         result = apply_employee_change_request(cr_id, admin_user_id)
 
@@ -238,7 +240,9 @@ def reject_redline_request(
 ) -> Dict[str, Any]:
     """审批拒绝红线请求 → 回滚变更。"""
     try:
-        from modstore_server.employee_change_request_service import reject_employee_change_request
+        from modstore_server.employee_change_request_service import (
+            reject_employee_change_request,
+        )
 
         result = reject_employee_change_request(
             cr_id,

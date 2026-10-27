@@ -116,7 +116,7 @@ def _active_software_llm() -> tuple[bool, Any | None, Any | None]:
 
         if get_active_provider(profile="etl") is not None:
             return True, None, None
-        from app.services.ai_conversation_service import get_ai_conversation_service
+        from app.domain.shared_services.ai_conversation_service import get_ai_conversation_service
 
         service = get_ai_conversation_service()
         if get_active_provider(conversation_service=service, profile="etl") is not None:

@@ -9,6 +9,16 @@ from typing import Literal
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+from app.application.mobile_extensions.protocols import (
+    AiGroupChatServiceFactory,
+    MobileGroupModeCall,
+    MobileGroupUidCall,
+    MobilePrincipal,
+    MobileRequestUserIdCall,
+    MobileSessionMetaCall,
+    RequireMobileAdminOrEnterpriseCall,
+    UserDependency,
+)
 from app.fastapi_routes.mobile_extensions.mobile_git_branches import (
     branch_context_from_body as _mobile_branch_context_from_body,
 )
@@ -25,16 +35,6 @@ from app.fastapi_routes.mobile_extensions.models import (
     AiGroupCreateBody,
     AiGroupMemberBody,
     AiGroupMessageBody,
-)
-from app.fastapi_routes.mobile_extensions.ports import (
-    AiGroupChatServiceFactory,
-    MobileGroupModeCall,
-    MobileGroupUidCall,
-    MobilePrincipal,
-    MobileRequestUserIdCall,
-    MobileSessionMetaCall,
-    RequireMobileAdminOrEnterpriseCall,
-    UserDependency,
 )
 from app.utils.device_system.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS

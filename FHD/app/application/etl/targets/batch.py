@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from app.application.etl.errors import EtlError
 from app.application.etl.secrets import read_webhook_secret
-from app.application.etl.targets.base import (
+from app.application.etl.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,

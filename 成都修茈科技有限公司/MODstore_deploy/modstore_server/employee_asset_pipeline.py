@@ -31,7 +31,9 @@ from modstore_server.csv_tabular_runtime import (
     render_csv_read_convert_module,
 )
 from modstore_server.employee_ai_scaffold import parse_employee_pack_llm_json
-from modstore_server.employee_pack_blueprints_template import render_employee_pack_blueprints_py
+from modstore_server.employee_pack_blueprints_template import (
+    render_employee_pack_blueprints_py,
+)
 from modstore_server.excel_tabular_runtime import (
     build_excel_generate_rule_spec,
     build_excel_read_rule_spec,
@@ -98,7 +100,7 @@ from modstore_server.word_generate_runtime import (
     is_word_generate,
     render_word_generate_convert_module,
 )
-from modstore_server.employee_asset_pipeline_merged import (
+from modstore_server.employee_asset_pipeline_merged import (  # type: ignore[attr-defined]
     _clean_brief_for_description as _clean_brief_for_description,
     _safe_basename as _safe_basename,
     _classify_asset as _classify_asset,

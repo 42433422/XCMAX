@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING
 from fastapi import Body, Request
 from fastapi.responses import JSONResponse
 
-from .ports import AdminGate, ErrorPolicy, JsonObject
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy, JsonObject
+
 from .profile_store import ProfileRepository
 
 if TYPE_CHECKING:
@@ -32,11 +33,11 @@ class ProfileChange:
 
     @classmethod
     def parse(cls, payload: JsonObject, valid_tiers: set[str]) -> ProfileChange | JSONResponse:
-        from app.application.account_tier_derivation import (
+        from app.domain.app_pure.account_tier_derivation import (
             VALID_ACCOUNT_TIERS,
             normalize_account_tier,
         )
-        from app.application.entitled_industries_init import merge_entitled_industries
+        from app.domain.app_pure.entitled_industries_init import merge_entitled_industries
 
         username = str(payload.get("username") or "").strip()
         tier = str(payload.get("tier") or "").strip()
@@ -63,8 +64,8 @@ class ProfileChange:
         )
 
     def values_for(self, user: User | None) -> JsonObject | JSONResponse:
-        from app.application.account_tier_derivation import should_have_account_tier
-        from app.application.entitled_industries_init import (
+        from app.domain.app_pure.account_tier_derivation import should_have_account_tier
+        from app.domain.app_pure.entitled_industries_init import (
             merge_entitled_industries,
             validate_industry_in_entitled,
         )

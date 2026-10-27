@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from app.application.workflow.types import WorkflowNode
+from app.application.workflow.workflow_types import WorkflowNode
 from app.domain.conversation.services.chat_tool_intent import is_negated_action_request
 
 _MAX_PLANNER_TEXT_CHARS = 4096

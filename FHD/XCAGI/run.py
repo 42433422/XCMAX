@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""兼容 README/文档中的 ``python run.py``；实际启动逻辑在 ``run_fastapi.main()``。"""
+"""Compat entry — prefer FHD/run.py (SSOT). Delegates to run_fastapi.main()."""
 
 from __future__ import annotations
 

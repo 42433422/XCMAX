@@ -10,7 +10,7 @@ import httpx
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .authentication import validate_demo_destination
-from .ports import (
+from .protocols import (
     ChatInput,
     CompletionPorts,
     Connection,

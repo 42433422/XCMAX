@@ -137,7 +137,12 @@ def create_candidate(
 def _create_candidate(db: Session, body: CandidateBody) -> dict[str, Any]:
     key = str(body.dedup_key or "").strip()
     if not key:
-        return {"wo_id": "", "created": False, "status": "", "reason": "empty_dedup_key"}
+        return {
+            "wo_id": "",
+            "created": False,
+            "status": "",
+            "reason": "empty_dedup_key",
+        }
     source = str(body.source or "").strip() or "unknown"
     wo_id = derive_wo_id(key)
     existing = _view(db, wo_id)
@@ -201,7 +206,12 @@ def transition(
     current = str(view.get("status") or "")
     invalid = validate_transition(current, target)
     if invalid == "already_in_state":
-        return {"ok": True, "reason": "already_in_state", "wo_id": wo_id, "status": current}
+        return {
+            "ok": True,
+            "reason": "already_in_state",
+            "wo_id": wo_id,
+            "status": current,
+        }
     if invalid:
         return {"ok": False, "reason": invalid, "wo_id": wo_id, "status": current}
 
@@ -209,7 +219,12 @@ def transition(
     if target == "routed":
         track = str(ref.get("track") or "").strip()
         if track and track not in WO_TRACKS:
-            return {"ok": False, "reason": "unknown_track", "wo_id": wo_id, "track": track}
+            return {
+                "ok": False,
+                "reason": "unknown_track",
+                "wo_id": wo_id,
+                "track": track,
+            }
         if not track:
             reason, source, context = _created_facts(db, wo_id)
             track = classify_track(source=source, reason=reason, context=context)
@@ -355,7 +370,11 @@ def route_customer_issue(
         if event.get("event") == "gate" and event.get("ref", {}).get("gate")
     }
     for gate, gate_status, evidence in (
-        ("intake", "ROUTED", {"customer_ticket_id": ticket_id, "customer_ticket_no": ticket_no}),
+        (
+            "intake",
+            "ROUTED",
+            {"customer_ticket_id": ticket_id, "customer_ticket_no": ticket_no},
+        ),
         ("evidence", "COLLECTED", {"support_bundle_sha256": support_bundle_sha256}),
     ):
         previous = receipts.get(gate, {})

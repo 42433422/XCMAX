@@ -170,7 +170,7 @@ class TestDiscoveryDirectoriesTenantPrivate:
 
 class TestCreateTagsTenant:
     def test_insert_binds_tenant_id(self):
-        from app.services.document_templates.crud import create_template_with_payload
+        from app.domain.shared_services.document_templates.crud import create_template_with_payload
 
         mock_db = MagicMock()
         mock_result = MagicMock()
@@ -183,7 +183,7 @@ class TestCreateTagsTenant:
             patch("app.db.init_db.init_template_tables"),
             patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.shared_services.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):
@@ -196,13 +196,13 @@ class TestCreateTagsTenant:
         assert params["tenant_id"] == 42
 
     def test_create_without_tenant_forbidden(self):
-        from app.services.document_templates.crud import create_template_with_payload
+        from app.domain.shared_services.document_templates.crud import create_template_with_payload
 
         with (
             patch("app.db.init_db.init_template_tables"),
             patch("app.infrastructure.templates.tenant_scope.ensure_templates_tenant_column"),
             patch(
-                "app.services.document_templates.crud._validate_required_terms",
+                "app.domain.shared_services.document_templates.crud._validate_required_terms",
                 return_value=(True, []),
             ),
         ):

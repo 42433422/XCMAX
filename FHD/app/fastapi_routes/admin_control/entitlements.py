@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import Body, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .ports import AdminGate, ErrorPolicy
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy
 
 
 class AccountEntitlements:

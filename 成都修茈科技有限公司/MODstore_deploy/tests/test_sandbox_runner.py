@@ -161,7 +161,10 @@ def test_runtime_sdk_rpc_round_trip(tmp_path: Path, monkeypatch) -> None:
 
 def test_runtime_sdk_rejects_invalid_token(tmp_path: Path) -> None:
     """直接连 RPC 但用错 token：握手失败、连接关闭。"""
-    from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+    from modstore_server.script_agent.sandbox_host import (
+        SandboxHostContext,
+        SandboxRpcServer,
+    )
 
     async def go():
         rpc = SandboxRpcServer(SandboxHostContext(user_id=1))
@@ -188,7 +191,10 @@ def test_runtime_sdk_rejects_invalid_token(tmp_path: Path) -> None:
 
 
 def test_sandbox_employee_run_allowlist_blocks_rpc() -> None:
-    from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+    from modstore_server.script_agent.sandbox_host import (
+        SandboxHostContext,
+        SandboxRpcServer,
+    )
 
     async def go():
         ctx = SandboxHostContext(user_id=1, employee_run_allowlist=("only-a",))
@@ -200,7 +206,10 @@ def test_sandbox_employee_run_allowlist_blocks_rpc() -> None:
 
 
 def test_sandbox_employee_run_allowlist_allows_and_runs(monkeypatch, tmp_path: Path) -> None:
-    from modstore_server.script_agent.sandbox_host import SandboxHostContext, SandboxRpcServer
+    from modstore_server.script_agent.sandbox_host import (
+        SandboxHostContext,
+        SandboxRpcServer,
+    )
     from modstore_server.services import employee as employee_svc
 
     async def go():

@@ -20,7 +20,9 @@ import modstore_server.maintenance_loop.risk as _maintenance_risk
 import modstore_server.maintenance_loop.schedule as _maintenance_schedule
 import modstore_server.maintenance_loop.store as _maintenance_store
 import modstore_server.maintenance_loop.workspace as _maintenance_workspace
-from modstore_server import retort_clarification_gate
+from modstore_server import (
+    retort_clarification_gate,
+)
 from modstore_server import self_maintenance_retort_change_evidence as retort_change_evidence
 from modstore_server.autonomous_risk_gate import (
     _historical_rollback_rate as _historical_rollback_rate_v3,
@@ -39,12 +41,17 @@ from modstore_server.maintenance_loop.knowledge_gate import (
     _reject_and_retry_kb_schema_failure,
 )
 from modstore_server.maintenance_loop.memory import close_loop_memory_items
-from modstore_server.maintenance_loop.merge_policy import _assess_branch_auto_merge_policy
+from modstore_server.maintenance_loop.merge_policy import (
+    _assess_branch_auto_merge_policy,
+)
 from modstore_server.maintenance_loop.outcomes import (
     _reconcile_requested_merge_feedback,
     _update_loop_memory,
 )
-from modstore_server.maintenance_loop.para_auth import _PARA_GUEST_AUTH_CACHE, _guest_auth_headers
+from modstore_server.maintenance_loop.para_auth import (
+    _PARA_GUEST_AUTH_CACHE,
+    _guest_auth_headers,
+)
 from modstore_server.maintenance_loop.prompts import (
     _code_task_text,
     _qa_task_text,

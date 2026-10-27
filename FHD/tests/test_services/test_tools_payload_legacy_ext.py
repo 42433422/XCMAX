@@ -1,4 +1,4 @@
-"""Tests for app.services.tools_payload_legacy — coverage ramp for uncovered branches."""
+"""Tests for app.domain.shared_services.tools_payload_legacy — coverage ramp for uncovered branches."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from app.services.tools_payload_legacy import dispatch_legacy_tool_payload
+from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
 
 
 def _json_fn(data, status=200):
@@ -187,7 +187,7 @@ class TestShipmentGenerateTool:
         mock_svc = Mock()
         mock_svc.execute.return_value = ({"success": True}, 200)
         with patch(
-            "app.services.shipment_number_mode_service.ShipmentNumberModeService",
+            "app.domain.shared_services.shipment_number_mode_service.ShipmentNumberModeService",
             return_value=mock_svc,
         ):
             result = _unwrap(

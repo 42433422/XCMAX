@@ -53,7 +53,7 @@ from app.application.user_memory_vector_app_service import (
     UserMemoryVectorIngestApplicationService,
 )
 from app.db import validators as db_validators
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.transports import redis_pubsub as redis_pubsub_mod
 from app.services import finance_unified_archive as fin_archive
 from app.services import system_service as system_service_mod
@@ -1252,7 +1252,9 @@ class TestShipmentApprovalApproveRoute:
         with (
             patch("app.application.workflow.get_approval_service") as mock_get,
             patch("app.application.workflow.WorkflowEngine") as mock_engine_cls,
-            patch("app.fastapi_routes.domains.shipment.routes._dispatch_tool_for_approval"),
+            patch(
+                "app.fastapi_routes.domains.shipment.shipment_routes._dispatch_tool_for_approval"
+            ),
         ):
             svc = MagicMock()
             svc.approve.return_value = True
@@ -1619,7 +1621,9 @@ class TestLedgerItemFromInvoice:
 
 class TestItemsFromPipeline:
     def test_empty_pipeline(self):
-        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=[]):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=[]
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert items == []
 
@@ -1628,7 +1632,9 @@ class TestItemsFromPipeline:
             {"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 100}},
             {"market_user_id": 2, "invoice": {"id": 2, "amount_cents": 200}},
         ]
-        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(1, limit=10)
         assert len(items) == 1
         assert items[0]["source_id"] == 1
@@ -1646,7 +1652,9 @@ class TestItemsFromPipeline:
                 "erp_customer_name": "Acme",
             }
         ]
-        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert len(items) == 1
         assert items[0]["source_type"] == "pipeline_payment"
@@ -1655,7 +1663,9 @@ class TestItemsFromPipeline:
 
     def test_limit_enforced(self):
         docs = [{"market_user_id": i, "invoice": {"id": i, "amount_cents": 100}} for i in range(10)]
-        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=3)
         assert len(items) == 3
 
@@ -1666,7 +1676,9 @@ class TestItemsFromPipeline:
                 "payment": {"contract_amount_cents": 500},  # no confirmed_at
             }
         ]
-        with patch("app.services.user_cs_pipeline._iter_pipeline_docs", return_value=docs):
+        with patch(
+            "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs", return_value=docs
+        ):
             items = fin_archive._items_from_pipeline(None, limit=10)
         assert items == []
 
@@ -1690,7 +1702,7 @@ class TestListLedger:
     def test_returns_db_items_when_available(self):
         db_items = [{"source_type": "financial_transaction", "amount_cents": 100}]
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=db_items,
         ):
             result = fin_archive.list_ledger(limit=50)
@@ -1700,11 +1712,11 @@ class TestListLedger:
         crm_items = [{"id": 1, "amount_cents": 200, "invoice_no": "X"}]
         with (
             patch(
-                "app.services.finance_unified_archive._items_from_db",
+                "app.domain.shared_services.finance_unified_archive._items_from_db",
                 return_value=[],
             ),
             patch(
-                "app.services.user_cs_crm_store.list_crm_invoices",
+                "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 return_value={"items": crm_items},
             ),
         ):
@@ -1716,15 +1728,15 @@ class TestListLedger:
         pipeline_items = [{"market_user_id": 1, "invoice": {"id": 1, "amount_cents": 300}}]
         with (
             patch(
-                "app.services.finance_unified_archive._items_from_db",
+                "app.domain.shared_services.finance_unified_archive._items_from_db",
                 return_value=[],
             ),
             patch(
-                "app.services.user_cs_crm_store.list_crm_invoices",
+                "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 return_value={"items": []},
             ),
             patch(
-                "app.services.user_cs_pipeline._iter_pipeline_docs",
+                "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs",
                 return_value=pipeline_items,
             ),
         ):
@@ -1734,7 +1746,7 @@ class TestListLedger:
 
     def test_limit_capped_at_2000(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ) as mock_db:
             fin_archive.list_ledger(limit=99999)
@@ -1743,7 +1755,7 @@ class TestListLedger:
 
     def test_limit_minimum_1(self):
         with patch(
-            "app.services.finance_unified_archive._items_from_db",
+            "app.domain.shared_services.finance_unified_archive._items_from_db",
             return_value=[],
         ) as mock_db:
             fin_archive.list_ledger(limit=0)
@@ -1752,15 +1764,15 @@ class TestListLedger:
     def test_crm_error_falls_to_pipeline(self):
         with (
             patch(
-                "app.services.finance_unified_archive._items_from_db",
+                "app.domain.shared_services.finance_unified_archive._items_from_db",
                 return_value=[],
             ),
             patch(
-                "app.services.user_cs_crm_store.list_crm_invoices",
+                "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 side_effect=RuntimeError("crm down"),
             ),
             patch(
-                "app.services.user_cs_pipeline._iter_pipeline_docs",
+                "app.domain.shared_services.user_cs_pipeline._iter_pipeline_docs",
                 return_value=[],
             ),
         ):
@@ -1770,7 +1782,9 @@ class TestListLedger:
 
 class TestSummarizeLedger:
     def test_empty_ledger(self):
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=[]):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=[]
+        ):
             result = fin_archive.summarize_ledger()
         assert result == {}
 
@@ -1780,7 +1794,9 @@ class TestSummarizeLedger:
             {"track": "contract", "amount_cents": 200},
             {"track": "manual", "amount_cents": 50},
         ]
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items
+        ):
             result = fin_archive.summarize_ledger()
         assert result["contract"]["count"] == 2
         assert result["contract"]["amount_cents"] == 300
@@ -1788,7 +1804,9 @@ class TestSummarizeLedger:
 
     def test_missing_track_defaults_to_manual(self):
         items = [{"amount_cents": 100}]
-        with patch("app.services.finance_unified_archive.list_ledger", return_value=items):
+        with patch(
+            "app.domain.shared_services.finance_unified_archive.list_ledger", return_value=items
+        ):
             result = fin_archive.summarize_ledger()
         assert "manual" in result
 
@@ -1827,7 +1845,7 @@ class TestArchiveFromCrmInvoice:
 class TestRebuildLedgerArchive:
     def test_rebuild_empty(self):
         with patch(
-            "app.services.user_cs_crm_store.list_crm_invoices",
+            "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
             return_value={"items": []},
         ):
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)
@@ -1837,10 +1855,12 @@ class TestRebuildLedgerArchive:
         items = [{"id": 1, "amount_cents": 100}, {"id": 2, "amount_cents": 200}]
         with (
             patch(
-                "app.services.user_cs_crm_store.list_crm_invoices",
+                "app.domain.shared_services.user_cs_crm_store.list_crm_invoices",
                 return_value={"items": items},
             ),
-            patch("app.services.finance_unified_archive.archive_from_crm_invoice") as mock_archive,
+            patch(
+                "app.domain.shared_services.finance_unified_archive.archive_from_crm_invoice"
+            ) as mock_archive,
         ):
             mock_archive.return_value = {"archived": True}
             result = fin_archive.rebuild_ledger_archive(market_user_id=1)
@@ -2656,7 +2676,7 @@ class TestSystemServiceGetPrinterConfig:
         fake_printer_svc.list_printers.return_value = ["p1", "p2"]
         fake_printer_svc.get_default_printer.return_value = "p1"
         with patch(
-            "app.services.printer_service.PrinterService",
+            "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
         ):
             result = svc.get_printer_config()
@@ -2669,7 +2689,7 @@ class TestSystemServiceGetPrinterConfig:
         fake_printer_svc = MagicMock()
         fake_printer_svc.list_printers.side_effect = RuntimeError("fail")
         with patch(
-            "app.services.printer_service.PrinterService",
+            "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
         ):
             result = svc.get_printer_config()
@@ -2683,7 +2703,7 @@ class TestSystemServiceSetDefaultPrinter:
         fake_printer_svc = MagicMock()
         fake_printer_svc.set_default_printer.return_value = True
         with patch(
-            "app.services.printer_service.PrinterService",
+            "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
         ):
             result = svc.set_default_printer("p1")
@@ -2694,7 +2714,7 @@ class TestSystemServiceSetDefaultPrinter:
         fake_printer_svc = MagicMock()
         fake_printer_svc.set_default_printer.return_value = False
         with patch(
-            "app.services.printer_service.PrinterService",
+            "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
         ):
             result = svc.set_default_printer("p1")
@@ -2705,7 +2725,7 @@ class TestSystemServiceSetDefaultPrinter:
         fake_printer_svc = MagicMock()
         fake_printer_svc.set_default_printer.side_effect = RuntimeError("x")
         with patch(
-            "app.services.printer_service.PrinterService",
+            "app.domain.shared_services.printer_service.PrinterService",
             return_value=fake_printer_svc,
         ):
             result = svc.set_default_printer("p1")
@@ -2786,7 +2806,7 @@ class TestRetiredOwnerlessSunbirdSeed:
         )
 
         with patch(
-            "app.desktop_runtime.paths.get_desktop_data_dir",
+            "app.desktop_runtime.desktop_runtime_paths.get_desktop_data_dir",
             side_effect=AssertionError("implicit ownerless directory access"),
         ) as resolve_root:
             assert sync_sunbird_delivery_files() == 0

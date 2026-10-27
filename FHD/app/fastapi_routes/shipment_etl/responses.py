@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.shipment_etl.ports import Payload
+from app.application.shipment_etl.protocols import Payload
 
 PUBLIC_ETL_ERRORS = {
     "unsafe_path": "非法文件路径",

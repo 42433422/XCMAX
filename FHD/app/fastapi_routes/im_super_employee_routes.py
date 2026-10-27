@@ -55,7 +55,7 @@ async def codex_super_employee_invoke(
         if denied is not None:
             return denied
         if isinstance(body.get("durable_request"), dict):
-            from app.application.execution_scope import CapabilityGrant
+            from app.domain.app_pure.execution_scope import CapabilityGrant
             from app.fastapi_routes.mac_control_proxy import proxy
 
             if not CapabilityGrant.resolve(_facade().factory_context()).is_factory:

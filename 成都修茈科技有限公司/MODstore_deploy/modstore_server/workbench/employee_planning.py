@@ -33,7 +33,10 @@ async def plan_employee(state: EmployeeBuildState, *, ports: EmployeePlanningPor
         )
     else:
         await ports.progress.set_step(
-            state.session_id, "employee_plan", "running", "正在拆分员工、脚本工作流与 Skill 组职责"
+            state.session_id,
+            "employee_plan",
+            "running",
+            "正在拆分员工、脚本工作流与 Skill 组职责",
         )
     _ep_result = await ports.craft_step(
         "employee_plan",

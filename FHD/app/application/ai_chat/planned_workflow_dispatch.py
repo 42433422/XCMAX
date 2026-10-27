@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.application.workflow.risk_gate import HybridRiskGate
-    from app.application.workflow.types import PlanGraph, WorkflowRunResult
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +293,9 @@ class PlannedWorkflowDispatch:
         )
 
         if references_recent_business_record(str(message or "")):
-            from app.services.tools_workflow_registered import get_recent_business_db_target
+            from app.domain.shared_services.tools_workflow_registered import (
+                get_recent_business_db_target,
+            )
 
             recent_target = get_recent_business_db_target(user_id)
             if recent_target is None:
@@ -322,7 +324,7 @@ class PlannedWorkflowDispatch:
         plan = self.planner.plan(
             user_id=user_id, message=planner_message, tool_registry=tool_registry, context=context
         )
-        from app.application.workflow.types import PlanGraph
+        from app.application.workflow.workflow_types import PlanGraph
 
         if not isinstance(plan, PlanGraph):
             logger.warning("工作流规划器返回无效计划类型: %s", type(plan).__name__)

@@ -15,7 +15,7 @@ from app.utils.operational_errors import BOUNDARY_ERRORS
 
 def predict(text: str) -> dict:
     from app.application.normal_chat_dispatch import route_normal_mode_message
-    from app.services.intent_service import is_goodbye, is_greeting
+    from app.domain.shared_services.intent_service import is_goodbye, is_greeting
 
     if is_greeting(text):
         return {"intent": "greeting"}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from app.application.workflow.types import PlanGraph, StateSchema, WorkflowRunResult
+from app.application.workflow.workflow_types import PlanGraph, StateSchema, WorkflowRunResult
 from app.domain.workflow.ports import (
     Checkpoint,
     CheckpointStore,

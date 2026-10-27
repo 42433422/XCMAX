@@ -8,7 +8,7 @@ import pytest
 
 @pytest.fixture
 def svc():
-    from app.services.conversation_service import ConversationService
+    from app.domain.shared_services.conversation_service import ConversationService
 
     return ConversationService()
 
@@ -40,8 +40,8 @@ class TestSaveMessagePush:
         ]
 
         with (
-            patch("app.services.conversation_service.get_db") as mock_get_db,
-            patch("app.services.conversation_service.notify_user") as mock_notify,
+            patch("app.domain.shared_services.conversation_service.get_db") as mock_get_db,
+            patch("app.domain.shared_services.conversation_service.notify_user") as mock_notify,
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = False
@@ -64,8 +64,8 @@ class TestSaveMessagePush:
         """assistant 消息保存后应触发 notify_user 推送。"""
         mock_db = _mock_db_with_session(user_id=42, conversation_id=99)
         with (
-            patch("app.services.conversation_service.get_db") as mock_get_db,
-            patch("app.services.conversation_service.notify_user") as mock_notify,
+            patch("app.domain.shared_services.conversation_service.get_db") as mock_get_db,
+            patch("app.domain.shared_services.conversation_service.notify_user") as mock_notify,
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = False
@@ -89,8 +89,8 @@ class TestSaveMessagePush:
         """user 消息保存后不应触发推送。"""
         mock_db = _mock_db_with_session(user_id=42, conversation_id=100)
         with (
-            patch("app.services.conversation_service.get_db") as mock_get_db,
-            patch("app.services.conversation_service.notify_user") as mock_notify,
+            patch("app.domain.shared_services.conversation_service.get_db") as mock_get_db,
+            patch("app.domain.shared_services.conversation_service.notify_user") as mock_notify,
         ):
             mock_get_db.return_value.__enter__.return_value = mock_db
             mock_get_db.return_value.__exit__.return_value = False
@@ -108,9 +108,9 @@ class TestSaveMessagePush:
         """notify_user 失败不应中断消息保存。"""
         mock_db = _mock_db_with_session(user_id=42, conversation_id=101)
         with (
-            patch("app.services.conversation_service.get_db") as mock_get_db,
+            patch("app.domain.shared_services.conversation_service.get_db") as mock_get_db,
             patch(
-                "app.services.conversation_service.notify_user",
+                "app.domain.shared_services.conversation_service.notify_user",
                 side_effect=RuntimeError("push fail"),
             ),
         ):

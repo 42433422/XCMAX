@@ -25,7 +25,7 @@ from app.domain.neuro.processors.subconscious import (
 )
 from app.domain.neuro.reflex_arc import IntentReflexArc, get_reflex_arc
 from app.neuro_bus.domains.intent_domain import get_intent_domain
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)

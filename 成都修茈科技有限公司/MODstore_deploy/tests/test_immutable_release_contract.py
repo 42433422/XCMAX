@@ -466,7 +466,9 @@ def test_production_workflow_requires_manually_orchestrated_exact_sha() -> None:
         assert "reset --hard" not in rendered
 
 
-def test_receipt_source_attestation_executes_strict_identity_checks(tmp_path: Path) -> None:
+def test_receipt_source_attestation_executes_strict_identity_checks(
+    tmp_path: Path,
+) -> None:
     workflow = yaml.safe_load((ROOT / ".github/workflows/prod-deploy-receipt.yml").read_text())
     published = yaml.safe_load(
         (REPO_ROOT / ".github/workflows/modstore-prod-deploy-receipt.yml").read_text()
@@ -560,7 +562,10 @@ def test_receipt_source_attestation_executes_strict_identity_checks(tmp_path: Pa
                 "SOURCE_WORKFLOW_ID": "34",
             },
         )
-        assert (result.returncode == 0) == (field in (None, "legacy")), (field, result.stderr)
+        assert (result.returncode == 0) == (field in (None, "legacy")), (
+            field,
+            result.stderr,
+        )
         if result.returncode == 0:
             assert f"merge_sha={product}\n" in output.read_text()
 

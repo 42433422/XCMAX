@@ -49,7 +49,7 @@ def test_run_all_returns_int():
 
 def test_domain_registered_in_registry():
     """dev-guards 域已在 ssot.yaml 注册且 enabled。"""
-    from scripts.dev.ssot_plugins.base import find_domain, load_registry
+    from scripts.dev.ssot_plugins.plugin_base import find_domain, load_registry
 
     d = find_domain(load_registry(), "dev-guards")
     assert d is not None, "dev-guards 域未注册"

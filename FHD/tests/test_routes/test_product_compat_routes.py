@@ -59,7 +59,7 @@ class TestShipmentRecordsUnits:
                 return_value={"success": True, "data": [{"name": "销售部"}]},
             ),
             patch(
-                "app.application.attendance_reference_data.attendance_unit_names",
+                "app.domain.app_pure.attendance_reference_data.attendance_unit_names",
                 return_value=["生产部", "销售部"],
             ),
         ):
@@ -312,7 +312,7 @@ class TestProductsUpdate:
                 "app.legacy.routes.product.compat_routes._business_mod_json_block",
                 return_value=None,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/update", json={"id": None})
             assert r.status_code == 400
@@ -335,7 +335,7 @@ class TestProductsUpdate:
                 "app.legacy.routes.product.compat_routes._product_parse_id",
                 return_value=1,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/update", json={"id": 1, "name": "Updated"})
             assert r.status_code == 200
@@ -420,7 +420,7 @@ class TestProductsAdd:
                 "app.legacy.routes.product.compat_routes.products_pg_insert_row",
                 return_value=10,
             ),
-            patch.dict("sys.modules", {"app.application.excel_imports": mock_excel}),
+            patch.dict("sys.modules", {"app.domain.app_pure.excel_imports": mock_excel}),
         ):
             r = client_compat.post("/products/add", json={"name": "New Product"})
             assert r.status_code == 200

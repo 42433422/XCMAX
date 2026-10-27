@@ -38,7 +38,7 @@ def test_configured_restore_approval_restores_wal_and_retains_audit(
     from sqlalchemy.orm import sessionmaker
 
     from app.application import approval_workspace_app_service as service
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models import User
     from app.db.models.approval import (
         ApprovalFlow,
@@ -46,7 +46,7 @@ def test_configured_restore_approval_restores_wal_and_retains_audit(
         ApprovalRecord,
         ApprovalRequest,
     )
-    from app.services.database_service import DatabaseService
+    from app.domain.shared_services.database_service import DatabaseService
 
     live, backup = tmp_path / "live.db", tmp_path / "snapshot.bak"
     engine = create_engine(f"sqlite:///{live}")

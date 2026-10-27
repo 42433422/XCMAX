@@ -49,7 +49,8 @@ async def api_pipeline_status():
 
 @router.post("/run")
 async def api_pipeline_run(
-    body: PipelineRunRequest = PipelineRunRequest(), _admin: Any = Depends(require_admin_user)
+    body: PipelineRunRequest = PipelineRunRequest(),
+    _admin: Any = Depends(require_admin_user),
 ):
     from modstore_server.production_line_orchestrator import run_production_line
 
@@ -63,7 +64,9 @@ async def api_pipeline_run(
 
 @router.post("/steps/{step_id}/approve")
 async def api_step_approve(step_id: str, admin: Any = Depends(require_admin_user)):
-    from modstore_server.production_line_orchestrator import approve_production_line_step
+    from modstore_server.production_line_orchestrator import (
+        approve_production_line_step,
+    )
 
     result = await approve_production_line_step(step_id, admin_user_id=int(admin.id))
     return {
@@ -91,7 +94,9 @@ async def api_step_reject(
 
 @router.post("/stop")
 async def api_pipeline_stop(_admin: Any = Depends(require_admin_user)):
-    from modstore_server.production_line_orchestrator import get_production_line_orchestrator
+    from modstore_server.production_line_orchestrator import (
+        get_production_line_orchestrator,
+    )
 
     orch = get_production_line_orchestrator()
     orch.stop_pipeline()

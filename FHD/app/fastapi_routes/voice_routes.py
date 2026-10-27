@@ -239,7 +239,7 @@ def _transcribe_audio(file_path: Path, language: str | None = None) -> str:
 def _recognize_intent(text: str) -> dict[str, Any]:
     """对转写文本做意图识别，返回统一结构。
 
-    优先复用规则引擎（``app.services.intent_service.recognize_intents``），
+    优先复用规则引擎（``app.domain.shared_services.intent_service.recognize_intents``），
     规则未命中 tool_key 时再尝试 unified_intent_recognizer（覆盖蒸馏/BERT/DeepSeek 等慢路径，
     失败回退为纯规则结果）。规则引擎同步、轻量、无外部依赖，适合语音指令场景。
 

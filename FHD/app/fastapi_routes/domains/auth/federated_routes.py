@@ -8,8 +8,9 @@ from typing import cast
 from fastapi import APIRouter, Body, Query, Request
 from fastapi.background import BackgroundTasks
 
+from app.domain.auth.ports import JsonObject
+
 from .federated_login import FederatedLogin
-from .ports import JsonObject
 
 
 class FederatedRoutes:

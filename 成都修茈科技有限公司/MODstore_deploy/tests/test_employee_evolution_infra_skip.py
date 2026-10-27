@@ -12,7 +12,12 @@ import pytest
 
 from modstore_server import employee_autonomy_service as svc
 from modstore_server.llm_failure_classifier import classify_failure_kind
-from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory, init_db
+from modstore_server.models import (
+    EmployeeExecutionMetric,
+    User,
+    get_session_factory,
+    init_db,
+)
 
 
 @pytest.fixture(autouse=True)

@@ -32,7 +32,7 @@ from app.fastapi_routes.domains.misc.helpers import (
     _require_login_user,
     _session_to_dict,
 )
-from app.infrastructure.persistence.compat_db.base import (
+from app.infrastructure.persistence.compat_db.compat_db_base import (
     _customer_body_name_contact,
     _exc_chain_has_undefined_table,
     _pg_expr_norm_unit,

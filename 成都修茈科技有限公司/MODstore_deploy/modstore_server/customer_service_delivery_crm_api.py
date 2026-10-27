@@ -14,7 +14,9 @@ from modstore_server.customer_service_delivery_api import (
     _custom_delivery_payload,
     _start_custom_delivery_run,
 )
-from modstore_server.customer_service_delivery_completion import complete_delivery_if_ready
+from modstore_server.customer_service_delivery_completion import (
+    complete_delivery_if_ready,
+)
 from modstore_server.customer_service_delivery_models import (
     CustomDeliveryCrmUpdateBody,
     custom_delivery_commerce_blockers,

@@ -10,7 +10,7 @@ from app.application.agent_orchestrator.run_repository import AgentRunRepository
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
-    from app.application.workflow.types import PlanGraph, WorkflowRunResult
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 
 
 class AgentWorkflowBridge:
