@@ -36,6 +36,7 @@ jobs:
           set -euo pipefail
           python -I - <<'PY'
           from pathlib import Path
+          import ast
           import hashlib
           import json
           import os
@@ -66,6 +67,23 @@ jobs:
               target = Path(path)
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(git('show', HEAD + ':' + path))
+          cov = Path('FHD/tests/test_routes/test_ai_open_cov.py')
+          before = cov.read_bytes()
+          assert hashlib.sha1(b'blob ' + str(len(before)).encode() + b'\0' + before).hexdigest() == '24bfca0628778e8c8c4e4cde4e618ade5519ed5c'
+          old_import = b'    from app.fastapi_routes.ai_open import _safe_aiopen_control_payload  # noqa: PLC0415\n\n'
+          old_call = b'    result = _safe_aiopen_control_payload(payload)'
+          assert before.count(old_import) == 2 and before.count(old_call) == 2
+          assert b'import app.fastapi_routes.ai_open as _aiopen_mod' in before
+          after = before.replace(old_import, b'').replace(old_call, b'    result = _aiopen_mod._safe_aiopen_control_payload(payload)')
+          def assertions(raw):
+              return [ast.dump(node) for node in ast.walk(ast.parse(raw)) if isinstance(node, ast.Assert)]
+          def tests(raw):
+              return [node.name for node in ast.walk(ast.parse(raw)) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith('test_')]
+          assert assertions(before) == assertions(after), 'Test assertions must remain identical'
+          assert tests(before) == tests(after), 'All test cases must be retained'
+          compile(after, str(cov), 'exec')
+          cov.write_bytes(after)
+          print('Reused existing module import; all test names and assertion ASTs unchanged')
           original = git('show', BASE + ':' + changelog)
           head_content = git('show', HEAD + ':' + changelog)
           main_content = git('show', MAIN + ':' + changelog)
@@ -117,7 +135,7 @@ jobs:
           print('Prepared changed paths:', json.dumps(sorted(changed), ensure_ascii=False))
           if changed != set(paths):
               raise SystemExit('Unexpected generated changes; refusing blob preparation')
-          receipt = {'main_sha': main, 'head_sha': os.environ['INTEGRATION_HEAD'], 'merge_base': os.environ['INTEGRATION_BASE'], 'local_only_ancestry': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'ssot_gate': 'passed', 'files': []}
+          receipt = {'main_sha': main, 'head_sha': os.environ['INTEGRATION_HEAD'], 'merge_base': os.environ['INTEGRATION_BASE'], 'local_only_ancestry': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'ssot_gate': 'passed', 'assertions_and_cases': 'unchanged', 'files': []}
           for path in paths:
               data = Path(path).read_bytes()
               local_sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
