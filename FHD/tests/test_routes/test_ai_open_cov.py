@@ -13,6 +13,7 @@ Target missing branches (line_from → line_to):
 """
 
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -129,6 +130,11 @@ def _make_client(**extra: Any) -> TestClient:
     """Build a TestClient with all mocks active (context must still be managed by caller)."""
     app = FastAPI()
     app.include_router(_aiopen_mod.router)
+    # Coverage tests exercise post-auth business branches as a signed-in admin.
+    # Anonymous/non-admin rejection is asserted separately in test_aiopen.py.
+    app.dependency_overrides[_aiopen_mod.require_admin_user] = lambda: SimpleNamespace(
+        id=1, tier="admin", is_active=True
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 

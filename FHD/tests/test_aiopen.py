@@ -7,6 +7,7 @@ MCP JSON-RPC（initialize → tools/list → tools/call）、
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -19,6 +20,7 @@ from app.application.aiopen.service import AIOPEN_STATE
 from app.fastapi_routes.ai_open import router as ai_open_router
 from app.fastapi_routes.ai_qclaw import _QCLOW_RUNTIME_STATE
 from app.fastapi_routes.ai_qclaw import router as ai_qclaw_router
+from app.infrastructure.auth.dependencies import require_admin_user
 
 
 @pytest.fixture()
@@ -27,6 +29,10 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        tier="admin",
+        role="admin",
+    )
     return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
@@ -407,7 +413,8 @@ def test_legacy_qclaw_urls_share_state(client):
     AIOPEN_STATE["openclaw_base"] = "http://localhost:28789"
 
 
-def test_qclaw_control_and_test_route_attach_agent_runs():
+def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
 
     @app.get("/api/qclaw/smoke")
@@ -416,10 +423,14 @@ def test_qclaw_control_and_test_route_attach_agent_runs():
 
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
+    app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        tier="admin",
+        role="admin",
+    )
     repo = InMemoryAgentRunRepository()
 
     with (
-        TestClient(app) as local_client,
+        TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"}) as local_client,
         patch(
             "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
             return_value=repo,
@@ -557,3 +568,61 @@ def test_aiopen_source_alias():
     assert is_qclaw_source("qclaw")
     assert is_qclaw_source("lobster")
     assert not is_qclaw_source("pro")
+
+
+def test_aiopen_and_qclaw_management_denied_without_admin_session(monkeypatch):
+    """Anonymous clients cannot create keys or change global policy via either URL family."""
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
+    routes = [
+        ("GET", "/api/aiopen/keys"),
+        ("POST", "/api/aiopen/keys"),
+        ("DELETE", "/api/aiopen/keys"),
+        ("GET", "/api/aiopen/panel"),
+        ("POST", "/api/aiopen/whitelist"),
+        ("POST", "/api/aiopen/whitelist/seed"),
+        ("POST", "/api/aiopen/config"),
+        ("POST", "/api/aiopen/control"),
+        ("GET", "/api/ai/qclaw/panel"),
+        ("POST", "/api/ai/qclaw/wechat-gateway"),
+        ("POST", "/api/ai/qclaw/openclaw/config"),
+        ("POST", "/api/ai/qclaw/whitelist"),
+        ("POST", "/api/ai/qclaw/test-route"),
+    ]
+    with TestClient(app) as unauthenticated:
+        for method, path in routes:
+            response = unauthenticated.request(method, path, json={} if method != "GET" else None)
+            assert response.status_code == 401, (method, path, response.text)
+
+
+def test_non_admin_cannot_manage_aiopen(monkeypatch):
+    """A verified ordinary user must not become an AIOPEN administrator."""
+    from app.infrastructure.auth import dependencies
+
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    monkeypatch.setattr(
+        dependencies,
+        "get_logged_in_user",
+        lambda request: SimpleNamespace(tier="normal", role="user", is_active=True),
+    )
+    with TestClient(app) as ordinary:
+        assert ordinary.post("/api/aiopen/keys", json={"label": "forbidden"}).status_code == 403
+        assert ordinary.post("/api/aiopen/control", json={"enabled": True}).status_code == 403
+
+
+def test_direct_aiopen_and_legacy_qclaw_tools_require_key(monkeypatch):
+    """Unauthenticated probes and chat proxies cannot bypass /invoke protection."""
+    monkeypatch.delenv("AIOPEN_API_KEY", raising=False)
+    app = FastAPI()
+    app.include_router(ai_open_router)
+    app.include_router(ai_qclaw_router)
+    with TestClient(app) as unauthenticated:
+        for path in (
+            "/api/aiopen/loop/verify",
+            "/api/aiopen/openclaw/chat",
+            "/api/ai/qclaw/openclaw/chat",
+        ):
+            assert unauthenticated.post(path, json={"message": "test"}).status_code == 401
