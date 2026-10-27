@@ -71,6 +71,9 @@ def test_planner_and_agent_share_each_threads_model_without_environment_key(monk
     from app.infrastructure.llm import client as routing
 
     monkeypatch.setattr(routing, "_first_api_key", lambda: ("", None))
+    # The assertion below is for online mode; other tests may have switched the
+    # process-wide LLM mode to offline, where an API key is intentionally optional.
+    monkeypatch.setattr(routing, "resolve_mode", lambda: "online")
 
     def run(model):
         payload = {"model": model, "choices": [{"message": {"content": model}}]}
