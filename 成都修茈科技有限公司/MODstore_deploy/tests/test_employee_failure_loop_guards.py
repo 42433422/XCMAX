@@ -76,21 +76,33 @@ def test_vibe_employee_does_not_force_para_when_delegate_unconfigured(monkeypatc
     assert out["outputs"] == [{"handler": "llm_md", "output": "已完成分析"}]
 
 
-def test_incident_team_tasks_require_plain_chinese():
+@pytest.mark.parametrize("role", ["scout", "fix", "verify"])
+def test_incident_team_tasks_preserve_redacted_log_evidence(role):
     from modstore_server.incident_team_orchestrator import _task_for_role
 
+    error = "[error] connect() failed (111: Connection refused) while connecting to upstream"
     task = _task_for_role(
         event_type="on_error",
-        payload={"summary": "nginx error.log 尾部含 error"},
-        role="verify",
+        payload={
+            "summary": "nginx error.log 出现新增严重错误",
+            "path": "/var/log/nginx/error.log",
+            "snippet": error + " token=synthetic-secret-value\n" + "x" * 10000,
+            "raw_payload": {"password": "must-never-appear"},
+        },
+        role=role,
         scout_result={"ok": True, "result": {"raw": "SCOUT_RESULT"}},
         fix_result={"ok": False, "error": "handler_failed"},
     )
 
     assert "回复必须说人话" in task
     assert "不要直接倾倒 JSON" in task
-    assert "用 PASS/FAIL 开头" in task
+    assert ("用 PASS/FAIL 开头" in task) == (role == "verify")
     assert "Incident team role=" not in task
+    assert error in task
+    assert "/var/log/nginx/error.log" in task
+    assert "synthetic-secret-value" not in task
+    assert "must-never-appear" not in task
+    assert "x" * 2001 not in task
 
 
 def test_health_scan_excludes_infra_and_lifecycle_failures(fresh_db, monkeypatch):
