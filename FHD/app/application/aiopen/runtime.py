@@ -46,11 +46,11 @@ class ApiKeyRegistry:
         self._clock = clock
 
     def verify(self, provided: str | None) -> bool:
-        """Preserve development-mode access when neither key source is configured."""
+        """Require a configured key; uninitialized installations fail closed."""
         env_key = self._env_key()
         runtime_keys = self._state.keys()
         if not env_key and not runtime_keys:
-            return True
+            return False
         got = (provided or "").strip()
         if not got:
             return False
