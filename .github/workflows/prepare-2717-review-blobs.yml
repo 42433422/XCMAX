@@ -1,4 +1,4 @@
-name: Prepare PR 2717 review blobs
+name: Prepare PR 2717 reviewed main integration
 
 on:
   pull_request:
@@ -12,6 +12,7 @@ jobs:
   prepare:
     if: >-
       github.repository == '42433422/XCMAX' &&
+      github.event.pull_request.number == 2718 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.head_ref == 'repair/2717-preserve-changelog-20261028'
     runs-on: ubuntu-latest
@@ -19,36 +20,72 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ab9f38e4fda2b8758d48c924d3741ae1877e5230
           fetch-depth: 0
           persist-credentials: false
-      - name: Preserve history and regenerate the existing page
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.11'
+      - name: Assemble exact reviewed parents and preserve all historical bytes
         shell: bash
         run: |
           set -euo pipefail
           python -I - <<'PY'
           from pathlib import Path
           import hashlib
-          path = Path('FHD/CHANGELOG.md')
-          original = path.read_bytes()
-          actual = hashlib.sha1(b'blob ' + str(len(original)).encode() + b'\0' + original).hexdigest()
-          if actual != 'a20249dd064e55803608f734062a2238737aeabc':
-              raise SystemExit('Unexpected changelog baseline; do not overwrite concurrent work')
+          import subprocess
+          MAIN = 'ab9f38e4fda2b8758d48c924d3741ae1877e5230'
+          HEAD = '09149d30e476f34d3c16b15d82b4b37f12f79106'
+          BASE = 'db9f75e8ed371726f1b7dc4ed1d9dcb04dd891d9'
+          paths = {
+              'FHD/CHANGELOG.md',
+              'FHD/app/fastapi_routes/aiopen_route_support.py',
+              'FHD/tests/test_routes/test_ai_open_cov.py',
+              'FHD/tests/test_security/test_aiopen_trace_privacy.py',
+              '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html',
+          }
+          def git(*args):
+              return subprocess.check_output(['git', *args])
+          def blob(ref, path):
+              result = subprocess.run(['git', 'rev-parse', '--verify', ref + ':' + path], capture_output=True)
+              return result.stdout.strip() if result.returncode == 0 else None
+          assert git('rev-parse', 'HEAD').decode().strip() == MAIN
+          assert git('rev-parse', 'refs/remotes/origin/main').decode().strip() == MAIN
+          assert git('rev-parse', 'refs/remotes/origin/security/aiopen-trace-privacy-20261028').decode().strip() == HEAD
+          assert git('merge-base', MAIN, HEAD).decode().strip() == BASE
+          changed = set(filter(None, git('diff', '--name-only', '-z', BASE, HEAD).decode().split('\0')))
+          assert changed == paths, 'Unexpected feature diff; refusing integration'
+          changelog = 'FHD/CHANGELOG.md'
+          for path in sorted(paths - {changelog}):
+              assert blob(MAIN, path) == blob(BASE, path), 'Concurrent change in ' + path
+              target = Path(path)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              target.write_bytes(git('show', HEAD + ':' + path))
+          original = git('show', BASE + ':' + changelog)
+          head_content = git('show', HEAD + ':' + changelog)
+          main_content = git('show', MAIN + ':' + changelog)
+          actual = hashlib.sha1(b'blob ' + str(len(main_content)).encode() + b'\0' + main_content).hexdigest()
+          assert actual == 'b0b4678c30cc3cba42ab108a29c2f8d888c0a209'
           lines = original.splitlines(keepends=True)
-          if len(lines) < 3 or lines[2].rstrip(b'\r\n') != b'## Unreleased':
-              raise SystemExit('Expected leading Unreleased section is absent')
+          assert lines[2].rstrip(b'\r\n') == b'## Unreleased'
           prefix = b''.join(lines[:3])
           newline = b'\r\n' if lines[2].endswith(b'\r\n') else b'\n'
           entry = newline + '- 安全：AIOPEN 工具及管理操作的新增追踪只保留必要状态元数据，不再复制业务正文、凭据或异常原文；正常业务响应不变，历史审计材料保留。'.encode() + newline
-          updated = prefix + entry + original[len(prefix):]
-          if updated[:len(prefix)] + updated[len(prefix) + len(entry):] != original:
-              raise SystemExit('Historical changelog bytes changed')
-          path.write_bytes(updated)
+          assert head_content == prefix + entry + original[len(prefix):]
+          assert main_content.startswith(prefix) and entry not in main_content
+          merged = prefix + entry + main_content[len(prefix):]
+          assert merged[:len(prefix)] + merged[len(prefix) + len(entry):] == main_content
+          Path(changelog).write_bytes(merged)
+          print('Both reviewed parents retained; entire main changelog byte-preserved')
           PY
-          python3 '成都修茈科技有限公司/scripts/build_capability_center.py'
-          python3 '成都修茈科技有限公司/scripts/build_capability_center.py' --check
-          git diff --check
-      - name: Store reviewed blobs without creating commits or changing refs
+          python -m pip install 'PyYAML==6.0.3'
+          python '成都修茈科技有限公司/scripts/build_capability_center.py'
+          python '成都修茈科技有限公司/scripts/build_capability_center.py' --check
+          git add -- FHD/CHANGELOG.md FHD/app/fastapi_routes/aiopen_route_support.py FHD/tests/test_routes/test_ai_open_cov.py FHD/tests/test_security/test_aiopen_trace_privacy.py '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html'
+          git diff --cached --check
+          git diff --exit-code
+          (cd FHD && python scripts/dev/ssot_cli.py gate) 2>&1 | tee repair-gate.log
+      - name: Store reviewed blobs only, never commits or refs
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -62,15 +99,14 @@ jobs:
           import subprocess
           import urllib.request
           from pathlib import Path
-          paths = ['FHD/CHANGELOG.md', '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html']
-          changed = subprocess.check_output(['git', 'diff', '--name-only', '-z']).decode().split('\0')
+          paths = ['FHD/CHANGELOG.md', 'FHD/app/fastapi_routes/aiopen_route_support.py', 'FHD/tests/test_routes/test_ai_open_cov.py', 'FHD/tests/test_security/test_aiopen_trace_privacy.py', '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html']
+          changed = subprocess.check_output(['git', 'diff', '--cached', '--name-only', '-z']).decode().split('\0')
           if set(filter(None, changed)) != set(paths):
               raise SystemExit('Unexpected generated changes; refusing blob preparation')
-          receipt = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'files': []}
+          receipt = {'main_sha': 'ab9f38e4fda2b8758d48c924d3741ae1877e5230', 'head_sha': '09149d30e476f34d3c16b15d82b4b37f12f79106', 'merge_base': 'db9f75e8ed371726f1b7dc4ed1d9dcb04dd891d9', 'ssot_gate': 'passed', 'files': []}
           for path in paths:
               data = Path(path).read_bytes()
               local_sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-              old_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD:' + path]).decode().strip()
               request = urllib.request.Request(
                   'https://api.github.com/repos/42433422/XCMAX/git/blobs',
                   data=json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode(),
@@ -81,15 +117,21 @@ jobs:
                   remote_sha = json.load(response)['sha']
               if remote_sha != local_sha:
                   raise SystemExit('Blob identity mismatch')
-              receipt['files'].append({'path': path, 'before': old_sha, 'sha': remote_sha, 'bytes': len(data)})
+              output = Path('prepared-review') / path
+              output.parent.mkdir(parents=True, exist_ok=True)
+              output.write_bytes(data)
+              receipt['files'].append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': remote_sha, 'bytes': len(data)})
           Path('repair-receipt.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
           print(json.dumps(receipt, ensure_ascii=False))
           PY
-      - name: Preserve review receipt
+      - name: Preserve preparation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pr2717-prepared-blob-receipt
-          path: repair-receipt.json
+          name: pr2717-reviewed-main-integration
+          path: |
+            repair-receipt.json
+            repair-gate.log
+            prepared-review/
           retention-days: 120
           if-no-files-found: error
