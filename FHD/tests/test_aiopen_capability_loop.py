@@ -13,6 +13,7 @@ from app.application.aiopen.service import (
     seed_capability_whitelist,
 )
 from app.fastapi_routes.ai_open import router as ai_open_router
+from app.infrastructure.auth.dependencies import require_admin_user
 
 
 @pytest.fixture()
@@ -29,6 +30,7 @@ def client(monkeypatch):
         return {"success": True, "reply": f"echo:{body.get('message', '')}"}
 
     app.include_router(ai_open_router)
+    app.dependency_overrides[require_admin_user] = lambda: object()
     return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
