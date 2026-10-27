@@ -36,20 +36,22 @@ def _match_suffix(uri: str) -> str | None:
 
 
 def keep_result(result: dict) -> bool:
+    """Drop only the exact independently reviewed sink line, never the whole file."""
     if result.get("ruleId") != SAFE_RULE:
         return True
-    for loc in result.get("locations") or []:
-        pl = loc.get("physicalLocation") or {}
-        uri = _uri((pl.get("artifactLocation") or {}).get("uri") or "")
-        suffix = _match_suffix(uri)
-        if not suffix:
-            continue
-        line = (pl.get("region") or {}).get("startLine")
-        sinks = SAFE_LINES_BY_SUFFIX.get(suffix) or set()
-        if line is None or not sinks or any(abs(int(line) - sink) <= 40 for sink in sinks):
-            return False
-        return False
-    return True
+    locations = result.get("locations") or []
+    if not locations or not isinstance(locations[0], dict):
+        return True
+    # Use the primary location only. Ancillary related locations must not hide
+    # a new vulnerability whose sink is elsewhere in the same source file.
+    pl = locations[0].get("physicalLocation") or {}
+    uri = _uri((pl.get("artifactLocation") or {}).get("uri") or "")
+    suffix = _match_suffix(uri)
+    if not suffix:
+        return True
+    line = (pl.get("region") or {}).get("startLine")
+    reviewed_sinks = SAFE_LINES_BY_SUFFIX.get(suffix, set())
+    return type(line) is not int or line not in reviewed_sinks
 
 
 def main(argv: list[str]) -> int:
