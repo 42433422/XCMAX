@@ -501,7 +501,9 @@ def _trusted_screen_origin(ws: WebSocket) -> bool:
             return False
         normalized = raw_origin.rstrip("/").lower()
         host = str(ws.headers.get("host") or "").strip().lower()
-        if parsed.netloc.lower() == host:
+        request_scheme = str(ws.url.scheme or "").lower()
+        origin_scheme = {"ws": "http", "wss": "https"}.get(request_scheme, request_scheme)
+        if parsed.scheme.lower() == origin_scheme and parsed.netloc.lower() == host:
             return True
         allowed = {
             origin.strip().rstrip("/").lower()
