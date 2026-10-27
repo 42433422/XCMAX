@@ -17,10 +17,14 @@ jobs:
       github.head_ref == 'repair/2717-preserve-changelog-20261028'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      INTEGRATION_MAIN: 9d35a9306aef0d23b0c159bd2c95f78f62120f4f
+      INTEGRATION_HEAD: 09149d30e476f34d3c16b15d82b4b37f12f79106
+      INTEGRATION_BASE: db9f75e8ed371726f1b7dc4ed1d9dcb04dd891d9
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ab9f38e4fda2b8758d48c924d3741ae1877e5230
+          ref: ${{ env.INTEGRATION_MAIN }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
@@ -33,11 +37,11 @@ jobs:
           python -I - <<'PY'
           from pathlib import Path
           import hashlib
+          import json
           import os
           import subprocess
-          MAIN = 'ab9f38e4fda2b8758d48c924d3741ae1877e5230'
-          HEAD = '09149d30e476f34d3c16b15d82b4b37f12f79106'
-          BASE = 'db9f75e8ed371726f1b7dc4ed1d9dcb04dd891d9'
+          MAIN, HEAD, BASE = (os.environ['INTEGRATION_' + name] for name in ('MAIN', 'HEAD', 'BASE'))
+          Path('repair-inputs.json').write_text(json.dumps({'main': MAIN, 'head': HEAD, 'base': BASE}) + '\n')
           paths = {
               'FHD/CHANGELOG.md',
               'FHD/app/fastapi_routes/aiopen_route_support.py',
@@ -50,10 +54,10 @@ jobs:
           def blob(ref, path):
               result = subprocess.run(['git', 'rev-parse', '--verify', ref + ':' + path], capture_output=True)
               return result.stdout.strip() if result.returncode == 0 else None
-          assert git('rev-parse', 'HEAD').decode().strip() == MAIN
-          assert git('rev-parse', 'refs/remotes/origin/main').decode().strip() == MAIN
-          assert git('rev-parse', 'refs/remotes/origin/security/aiopen-trace-privacy-20261028').decode().strip() == HEAD
-          assert git('merge-base', MAIN, HEAD).decode().strip() == BASE
+          assert git('rev-parse', 'HEAD').decode().strip() == MAIN, 'Checkout mismatch'
+          assert git('rev-parse', 'refs/remotes/origin/main').decode().strip() == MAIN, 'Main advanced; re-review'
+          assert git('rev-parse', 'refs/remotes/origin/security/aiopen-trace-privacy-20261028').decode().strip() == HEAD, 'Feature head advanced; re-review'
+          assert git('merge-base', MAIN, HEAD).decode().strip() == BASE, 'Unexpected common ancestor'
           changed = set(filter(None, git('diff', '--name-only', '-z', BASE, HEAD).decode().split('\0')))
           assert changed == paths, 'Unexpected feature diff; refusing integration'
           changelog = 'FHD/CHANGELOG.md'
@@ -89,7 +93,7 @@ jobs:
           python '成都修茈科技有限公司/scripts/build_capability_center.py'
           python '成都修茈科技有限公司/scripts/build_capability_center.py' --check
           git add -- FHD/CHANGELOG.md FHD/app/fastapi_routes/aiopen_route_support.py FHD/tests/test_routes/test_ai_open_cov.py FHD/tests/test_security/test_aiopen_trace_privacy.py '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html'
-          git diff --cached ab9f38e4fda2b8758d48c924d3741ae1877e5230 --check
+          git diff --cached "$INTEGRATION_MAIN" --check
           git diff --exit-code
           (cd FHD && python scripts/dev/ssot_cli.py gate) 2>&1 | tee repair-gate.log
       - name: Store reviewed blobs only, never remote commits or refs
@@ -107,13 +111,13 @@ jobs:
           import subprocess
           import urllib.request
           from pathlib import Path
-          main = 'ab9f38e4fda2b8758d48c924d3741ae1877e5230'
+          main = os.environ['INTEGRATION_MAIN']
           paths = ['FHD/CHANGELOG.md', 'FHD/app/fastapi_routes/aiopen_route_support.py', 'FHD/tests/test_routes/test_ai_open_cov.py', 'FHD/tests/test_security/test_aiopen_trace_privacy.py', '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html']
           changed = set(filter(None, subprocess.check_output(['git', 'diff', '--cached', main, '--name-only', '-z']).decode().split('\0')))
           print('Prepared changed paths:', json.dumps(sorted(changed), ensure_ascii=False))
           if changed != set(paths):
               raise SystemExit('Unexpected generated changes; refusing blob preparation')
-          receipt = {'main_sha': main, 'head_sha': '09149d30e476f34d3c16b15d82b4b37f12f79106', 'merge_base': 'db9f75e8ed371726f1b7dc4ed1d9dcb04dd891d9', 'local_only_ancestry': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'ssot_gate': 'passed', 'files': []}
+          receipt = {'main_sha': main, 'head_sha': os.environ['INTEGRATION_HEAD'], 'merge_base': os.environ['INTEGRATION_BASE'], 'local_only_ancestry': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'ssot_gate': 'passed', 'files': []}
           for path in paths:
               data = Path(path).read_bytes()
               local_sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
@@ -140,6 +144,7 @@ jobs:
         with:
           name: pr2717-reviewed-main-integration
           path: |
+            repair-inputs.json
             repair-receipt.json
             repair-gate.log
             prepared-review/
