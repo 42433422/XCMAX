@@ -22,9 +22,7 @@ def _finding(*, uri: str, line: int | None, rule: str = "py/path-injection") -> 
     region = {} if line is None else {"startLine": line}
     return {
         "ruleId": rule,
-        "locations": [
-            {"physicalLocation": {"artifactLocation": {"uri": uri}, "region": region}}
-        ],
+        "locations": [{"physicalLocation": {"artifactLocation": {"uri": uri}, "region": region}}],
     }
 
 
@@ -34,9 +32,17 @@ _EXCEL = "FHD/app/fastapi_routes/domains/excel/excel_extract.py"
 
 @pytest.mark.parametrize(
     ("path", "line"),
-    [(_SHIPMENT, 464), (_SHIPMENT, 807), (_SHIPMENT, 924),
-     (_EXCEL, 65), (_EXCEL, 68), (_EXCEL, 125),
-     (_EXCEL, 267), (_EXCEL, 269), (_EXCEL, 316)],
+    [
+        (_SHIPMENT, 464),
+        (_SHIPMENT, 807),
+        (_SHIPMENT, 924),
+        (_EXCEL, 65),
+        (_EXCEL, 68),
+        (_EXCEL, 125),
+        (_EXCEL, 267),
+        (_EXCEL, 269),
+        (_EXCEL, 316),
+    ],
 )
 def test_only_explicitly_reviewed_sink_is_suppressed(path, line):
     assert keep_result(_finding(uri=path, line=line)) is False
