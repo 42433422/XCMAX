@@ -15,6 +15,7 @@ const PROVIDER_FAILURES = [
   '504',
   'authentication expired',
   'connection reset',
+  'failed to create agent: models is required',
   'model usage has reached',
   'overloaded',
   'personal quota limit',

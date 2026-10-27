@@ -36,6 +36,26 @@ def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, prin
                 pass
 
 
+@pytest.mark.parametrize(
+    ("request_scheme", "origin", "expected"),
+    [
+        ("ws", "http://testserver", True),
+        ("wss", "https://testserver", True),
+        ("ws", "https://testserver", False),
+        ("wss", "http://testserver", False),
+    ],
+)
+def test_screen_origin_scheme_must_match_transport_scheme(
+    monkeypatch, request_scheme, origin, expected
+):
+    monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
+    websocket = SimpleNamespace(
+        headers={"origin": origin, "host": "testserver"},
+        url=SimpleNamespace(scheme=request_scheme),
+    )
+    assert ai_open_routes._trusted_screen_origin(websocket) is expected
+
+
 def test_screen_explicit_cross_origin_allowlist(monkeypatch):
     monkeypatch.setenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "https://frontend.example")
     monkeypatch.setattr(
