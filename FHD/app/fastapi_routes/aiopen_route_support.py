@@ -9,18 +9,38 @@ from typing import Any, Callable
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from app.application.aiopen.service import (
+from app.application.aiopen.definitions import (
     MCP_DEFAULT_PROTOCOL_VERSION,
     MCP_PROTOCOL_VERSIONS,
+    TOOL_DEFINITIONS,
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+_TRACE_FLAGS = (
+    "success",
+    "pending_approval",
+    "requires_token",
+    "enabled",
+    "merge",
+    "revoked",
+    "wechat_open",
+    "remote_control_enabled",
+)
+_TRACE_TOOL_NAMES = frozenset(item["name"] for item in TOOL_DEFINITIONS)
+
 
 def safe_control_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    safe = dict(payload or {})
-    raw_key = str(safe.pop("key", "") or "")
-    if raw_key:
-        safe["key_preview"] = raw_key[:16]
+    """Keep only typed operational metadata, never business values or key prefixes."""
+    safe: dict[str, Any] = {"payload_redacted": True}
+    for name in _TRACE_FLAGS:
+        value = payload.get(name)
+        if isinstance(value, bool):
+            safe[name] = value
+    status = payload.get("status_code")
+    if isinstance(status, int) and not isinstance(status, bool) and 100 <= status <= 599:
+        safe["status_code"] = status
+    if payload.get("key"):
+        safe["key_preview"] = "[REDACTED]"
     return safe
 
 
@@ -36,7 +56,8 @@ def trace_tool_call(
     user_id: str = "",
 ) -> str:
     try:
-        message = str(result.get("message") or result.get("code") or f"AIOPEN tool {tool} executed")
+        tool = tool if tool in _TRACE_TOOL_NAMES else "unknown_tool"
+        message = f"AIOPEN {tool} executed"
         trace_payload = {
             "success": bool(result.get("success", False)),
             "response": message,
@@ -47,8 +68,8 @@ def trace_tool_call(
                         "tool_id": "aiopen",
                         "tool_name": "aiopen",
                         "action": tool,
-                        "params": dict(args or {}),
-                        "output": dict(result or {}),
+                        "params": {"payload_redacted": True, "argument_count": len(args or {})},
+                        "output": safe_control_payload(result or {}),
                         "tool_call_id": f"aiopen:{tool}",
                     }
                 ],
@@ -69,8 +90,8 @@ def trace_tool_call(
             intent="aiopen_tool_call",
         )
         return str(run.run_id)
-    except RECOVERABLE_ERRORS:
-        logger.exception("failed to attach AgentRun trace to AIOPEN tool call")
+    except RECOVERABLE_ERRORS as error:
+        logger.warning("AIOPEN tool trace failed (%s)", type(error).__name__)
         return ""
 
 
@@ -90,7 +111,7 @@ def trace_control_result(
     try:
         safe_payload = safe_control_payload(payload)
         safe_body = safe_control_payload(body or {})
-        message = str(payload.get("message") or action)
+        message = f"AIOPEN {action}"
         run = create_trace_run(
             {
                 "success": bool(payload.get("success", False)),
@@ -115,8 +136,8 @@ def trace_control_result(
         traced["run_id"] = run.run_id
         traced["agent_run_id"] = run.run_id
         return traced
-    except RECOVERABLE_ERRORS:
-        logger.exception("failed to attach AgentRun trace to AIOPEN control action")
+    except RECOVERABLE_ERRORS as error:
+        logger.warning("AIOPEN control trace failed (%s)", type(error).__name__)
         return payload
 
 
@@ -198,8 +219,8 @@ async def handle_mcp_message(
         args: dict[str, Any] = raw_args if isinstance(raw_args, dict) else {}
         try:
             result = await invoke(tool, args, app)
-        except RECOVERABLE_ERRORS as error:
-            return jsonrpc_error(request_id, -32603, f"tool execution failed: {error}")
+        except RECOVERABLE_ERRORS:
+            return jsonrpc_error(request_id, -32603, "tool execution failed")
         trace_id = trace_call(
             route="/api/aiopen/mcp",
             channel="aiopen_mcp",
