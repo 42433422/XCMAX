@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 安全：AIOPEN 对外 AI/MCP 入口未配置凭据时不再默认放行，撤销最后一把运行时密钥后仍拒绝匿名调用（候选改动，需 CI 和实机复验）。
+
 - 架构债 debt19 收口：拆分 MODstore/evals/pregel 巨文件为 facade+模块，compat-resource-glob 改为 tgz 依赖以收敛 package.json；用户侧功能不变。
 
 - 架构债 follow-up：收敛 ports/同名路由入口与兼容清单，不改变产品功能。
