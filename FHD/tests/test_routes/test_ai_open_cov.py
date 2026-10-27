@@ -603,33 +603,48 @@ def test_openclaw_chat_proxy_200_returns_dict():
 
 
 def test_ws_autogenerate_session_id():
-    """WS without session_id query-param must auto-generate a session_id."""
+    """An authenticated, same-origin WS gets a server-generated session_id."""
     hub = MagicMock()
     hub.connect = AsyncMock()
     hub.disconnect = AsyncMock()
     hub.handle_client_message = MagicMock(return_value=True)
+    principal = SimpleNamespace(id=1, tenant_id=1, is_active=True)
 
-    with _all_mocks(aiopen_cursor_hub=hub):
+    with _all_mocks(
+        aiopen_cursor_hub=hub,
+        resolve_session_user=MagicMock(return_value=principal),
+    ):
         c = _make_client()
-        with c.websocket_connect("/api/aiopen/ws") as ws:
+        with c.websocket_connect(
+            "/api/aiopen/ws",
+            headers={"Origin": "http://testserver"},
+        ) as ws:
             hello = ws.receive_json()
             assert hello["type"] == "hello"
-            # session_id must be auto-generated (non-empty, starts with "screen_")
             assert hello["session_id"].startswith("screen_")
+            hub.connect.assert_awaited_once()
 
 
-def test_ws_provided_session_id_used():
-    """WS with session_id param must use that exact session_id in the hello frame."""
+def test_ws_client_session_id_is_ignored():
+    """A client-supplied session_id must not override the server-owned screen ID."""
     hub = MagicMock()
     hub.connect = AsyncMock()
     hub.disconnect = AsyncMock()
     hub.handle_client_message = MagicMock(return_value=True)
+    principal = SimpleNamespace(id=1, tenant_id=1, is_active=True)
 
-    with _all_mocks(aiopen_cursor_hub=hub):
+    with _all_mocks(
+        aiopen_cursor_hub=hub,
+        resolve_session_user=MagicMock(return_value=principal),
+    ):
         c = _make_client()
-        with c.websocket_connect("/api/aiopen/ws?session_id=my-sess-42") as ws:
+        with c.websocket_connect(
+            "/api/aiopen/ws?session_id=my-sess-42",
+            headers={"Origin": "http://testserver"},
+        ) as ws:
             hello = ws.receive_json()
-            assert hello["session_id"] == "my-sess-42"
+            assert hello["session_id"].startswith("screen_")
+            assert hello["session_id"] != "my-sess-42"
 
 
 # ===========================================================================
@@ -639,21 +654,28 @@ def test_ws_provided_session_id_used():
 
 
 def test_ws_recoverable_error_during_receive():
-    """A ValueError (in RECOVERABLE_ERRORS) during receive must not crash the server."""
+    """A recoverable message error is handled after a valid authenticated handshake."""
     hub = MagicMock()
     hub.connect = AsyncMock()
     hub.disconnect = AsyncMock()
-    # Simulate a recoverable error on the first message receive
     hub.handle_client_message = MagicMock(side_effect=ValueError("bad input"))
+    principal = SimpleNamespace(id=1, tenant_id=1, is_active=True)
 
-    with _all_mocks(aiopen_cursor_hub=hub):
+    with _all_mocks(
+        aiopen_cursor_hub=hub,
+        resolve_session_user=MagicMock(return_value=principal),
+    ):
         c = _make_client()
         try:
-            with c.websocket_connect("/api/aiopen/ws?session_id=err-sess") as ws:
-                ws.receive_json()  # hello frame
+            with c.websocket_connect(
+                "/api/aiopen/ws?session_id=err-sess",
+                headers={"Origin": "http://testserver"},
+            ) as ws:
+                assert ws.receive_json()["type"] == "hello"
                 ws.send_text("trigger")
         except BOUNDARY_ERRORS:
-            pass  # connection may close after the error – acceptable
+            pass  # connection may close after the recoverable receive error
+    hub.handle_client_message.assert_called_once()
 
 
 # ===========================================================================

@@ -32,6 +32,7 @@ class AiOpenCursorHub:
         self._sessions: dict[str, WebSocket] = {}
         self._session_meta: dict[str, dict[str, Any]] = {}
         self._pending: dict[str, asyncio.Future] = {}
+        self._pending_sessions: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._command_log: list[dict[str, Any]] = []
 
@@ -41,6 +42,8 @@ class AiOpenCursorHub:
         self, session_id: str, ws: WebSocket, meta: dict[str, Any] | None = None
     ) -> None:
         async with self._lock:
+            if session_id in self._sessions:
+                raise ValueError("AIOPEN screen session already registered")
             self._sessions[session_id] = ws
             self._session_meta[session_id] = {
                 "session_id": session_id,
@@ -53,6 +56,14 @@ class AiOpenCursorHub:
         async with self._lock:
             self._sessions.pop(session_id, None)
             self._session_meta.pop(session_id, None)
+            # Unblock commands waiting on a screen that has disconnected.
+            for req_id, owner in tuple(self._pending_sessions.items()):
+                if owner != session_id:
+                    continue
+                self._pending_sessions.pop(req_id, None)
+                future = self._pending.pop(req_id, None)
+                if future is not None and not future.done():
+                    future.set_result({"success": False, "code": "SCREEN_DISCONNECTED"})
         logger.info(
             "aiopen cursor ws disconnect session=%s total=%s", session_id, len(self._sessions)
         )
@@ -96,6 +107,7 @@ class AiOpenCursorHub:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[req_id] = fut
+        self._pending_sessions[req_id] = target
         self._log_command(
             {
                 "id": req_id,
@@ -109,6 +121,7 @@ class AiOpenCursorHub:
             await ws.send_text(json.dumps(payload, ensure_ascii=False))
         except RECOVERABLE_ERRORS as err:
             self._pending.pop(req_id, None)
+            self._pending_sessions.pop(req_id, None)
             await self.disconnect(target)
             return {"success": False, "message": f"指令下发失败：{err}"}
         try:
@@ -121,14 +134,15 @@ class AiOpenCursorHub:
             }
         finally:
             self._pending.pop(req_id, None)
+            self._pending_sessions.pop(req_id, None)
         if isinstance(result, dict):
             result.setdefault("success", True)
             result.setdefault("session_id", target)
             return result
         return {"success": True, "session_id": target, "result": result}
 
-    def handle_client_message(self, raw: str) -> bool:
-        """处理 screen 端回传的消息；命中 pending 回执返回 True。"""
+    def handle_client_message(self, raw: str, *, session_id: str) -> bool:
+        """Only the originating screen may acknowledge its own pending command."""
         try:
             msg = json.loads(raw)
         except (ValueError, TypeError):
@@ -137,7 +151,7 @@ class AiOpenCursorHub:
             return False
         req_id = str(msg.get("id") or "")
         fut = self._pending.get(req_id)
-        if fut is None or fut.done():
+        if self._pending_sessions.get(req_id) != session_id or fut is None or fut.done():
             return False
         fut.set_result(msg.get("result") if isinstance(msg.get("result"), dict) else msg)
         return True
