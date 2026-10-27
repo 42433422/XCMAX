@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_sha:
-        description: "Full 40-character SHA to scan twice before release"
+        description: "Exact 40-character release SHA; scan its complete ancestor history"
         required: true
         type: string
 
@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -32,6 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${{ inputs.release_sha }}"
+          test "$(git rev-parse --is-shallow-repository)" = false
           mkdir -p "${RUNNER_TEMP}/security-native" "${RUNNER_TEMP}/security-reports"
 
       - name: Export open and manually dismissed CodeQL and Dependabot alerts
@@ -69,6 +71,7 @@ jobs:
           set +e
           docker run --rm -v "${PWD}:/repo" zricethezav/gitleaks:latest detect \
             --source /repo --config /repo/.github/gitleaks-config.toml \
+            --log-opts="--full-history HEAD" \
             --report-format sarif \
             --report-path /repo/gitleaks-release.sarif --no-banner --redact
           test -s gitleaks-release.sarif && mv gitleaks-release.sarif "${RUNNER_TEMP}/security-native/gitleaks.sarif"
