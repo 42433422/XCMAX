@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
+from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
 from app.domain.shared_services.tools_payload_legacy import dispatch_legacy_tool_payload
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.services.tools_execution.context import _hdr, _j
 from app.services.tools_execution.order_parser import _parse_order_text
 from app.services.tools_execution.registry import (
@@ -22,7 +22,7 @@ def execute_tool_from_payload(data):
 
 def _execute_tool_from_payload_inner(data):
     try:
-        logger.info("[DEBUG] /api/tools/execute 收到请求 - data: %s", data)
+        logger.info("/api/tools/execute request received")
 
         if not data:
             logger.error("[DEBUG] /api/tools/execute 请求数据为空")
@@ -49,15 +49,6 @@ def _execute_tool_from_payload_inner(data):
             status_code = 200 if routed.get("success") else 400
             return _j(routed, status_code)
 
-        logger.info(
-            "[DEBUG] tool_id=%s, action=%s, params_keys=%s", tool_id, action, list(params.keys())
-        )
-        if "order_text" in params:
-            logger.info(
-                "[DEBUG] order_text=%s",
-                params.get("order_text")[:200] if params.get("order_text") else None,
-            )
-
         return dispatch_legacy_tool_payload(
             tool_id,
             action,
@@ -68,5 +59,5 @@ def _execute_tool_from_payload_inner(data):
         )
 
     except RECOVERABLE_ERRORS as e:
-        logger.error("执行工具失败: %s", e)
+        logger.error("执行工具失败")
         return _j({"success": False, "message": str(e)}, 500)

@@ -410,7 +410,7 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     wrapper.unmount()
   })
 
-  it.each(['cancel', 'close', 'confirm'])('original-operation reconciliation UI requires explicit %s decision', async decision => {
+  it.each(['cancel', 'close', 'confirm'].flatMap(decision => [false, true].map(preclaim => ({ decision, preclaim }))))('original-operation reconciliation UI requires explicit $decision decision, preclaim=$preclaim', async ({ decision, preclaim }) => {
     const source = { source_id: 'protected-source', epoch: 'epoch-1', protocol: 'etl-owned-mixed-v1' }
     const row = { id: 77, name: '保护产品', model_number: 'P77', unit: '客户甲', price: '12.00', currency: 'CNY', price_unit: 'kg', revision: 'a'.repeat(64), source, history: [] }
     catalogApi.list.mockResolvedValue({ success: true, capability: 'catalog_prices_v1', source, data: [row] })
@@ -432,7 +432,10 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
         steps: [{ step_id: 'step-a', tool_id: 'catalog_products_v1', action: body.action, params: { ...body, product_id: 77, currency: 'CNY', price_unit: 'kg', selected_observations: [] }, status: 'running', output: {} }] },
       operation: { state: 'pending', operation_id: body.operation_id, run_id: 'run-a', request_digest: 'b'.repeat(64) } })
     const proof = { success: true, data: { verified: true, outcome: 'saved', historical_effect_verified: true, fresh_save: false, current_matches: false, business_action_id: 'action-a', operation_id: body.operation_id, run_id: 'run-a', request_digest: 'b'.repeat(64), product: { ...row, revision: 'c'.repeat(64) } } }
-    catalogApi.verify.mockResolvedValue(proof); catalogApi.reconcile.mockResolvedValue(proof)
+    if (preclaim) Object.assign(proof.data, { outcome: 'rejected_no_effect', historical_effect_verified: false, reason_code: 'preclaim_finalized', receipt_kind: 'catalog_preclaim_finalization_v1', product: row })
+    if (preclaim) catalogApi.verify.mockRejectedValue(Object.assign(new Error('unverified original'), { status: 409 }))
+    else catalogApi.verify.mockResolvedValue(proof)
+    catalogApi.reconcile.mockResolvedValue(proof)
     const button = (text: string) => wrapper.findAll('[data-testid="protected-catalog"] button').find(b => b.text() === text)!
     await button('只读核对原操作').trigger('click')
     await vi.waitFor(() => expect(catalog.statusFor(77)?.canReconcile).toBe(true))
@@ -453,8 +456,9 @@ describe('TopAssistantFloat.vue 覆盖率补齐测试', () => {
     }
     expect(wrapper.find('[data-testid="catalog-reconciliation-confirmation"]').exists()).toBe(false)
     if (decision === 'confirm') {
-      expect(localStorage.getItem(key)).toBeNull(); expect(wrapper.text()).toContain('当前数据已有后续变更')
-      expect(wrapper.text()).toContain('本次未重新保存')
+      expect(localStorage.getItem(key)).toBeNull()
+      if (preclaim) expect(wrapper.text()).toContain('未保存：原操作已核验并终结')
+      else { expect(wrapper.text()).toContain('当前数据已有后续变更'); expect(wrapper.text()).toContain('本次未重新保存') }
     } else {
       expect(catalogApi.reconcile).not.toHaveBeenCalled(); expect(localStorage.getItem(key)).toBe(before)
     }

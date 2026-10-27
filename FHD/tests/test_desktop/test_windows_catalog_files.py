@@ -81,7 +81,8 @@ def test_failed_boundary_does_not_return_a_successful_snapshot(failure):
         files._observe_family(api, PureWindowsPath(r"C:\owner\catalog.sqlite"))
 
 
-def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_failure():
+@pytest.mark.parametrize("error_type", [files.WindowsCatalogUnsupported, KeyboardInterrupt])
+def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_failure(error_type):
     calls = []
     native = files._NativeFiles.__new__(files._NativeFiles)
     native.active = True
@@ -89,10 +90,10 @@ def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_fail
     native._close = lambda handle: calls.append(("close", handle))
 
     def rejected(*args):
-        raise files.WindowsCatalogUnsupported("injected reparse rejection")
+        raise error_type("injected reparse rejection")
 
     native._identity = rejected
-    with pytest.raises(files.WindowsCatalogUnsupported):
+    with pytest.raises(error_type):
         native._open(PureWindowsPath(r"C:\db.sqlite"), False)
     assert calls == [
         (r"\\?\C:\db.sqlite", 0x80, 3, None, 3, 0x02200000, None),

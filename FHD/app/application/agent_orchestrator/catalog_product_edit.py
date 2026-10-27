@@ -7,12 +7,20 @@ proof is not absence and never authorizes another effect, including a new UUID.
 import hmac
 import json
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.application.agent_orchestrator.business_action_ledger import (
     _action_identity,
     canonical_hash,
+)
+from app.application.agent_orchestrator.catalog_preclaim_authority import (
+    PRECLAIM_RECEIPT,
+    PRECLAIM_STATES,
+    fence_identity,
+    signed_payload,
+    validate_fence,
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep, agent_run_from_dict
 from app.application.agent_orchestrator.run_repository import get_agent_run_repository
@@ -25,6 +33,67 @@ from app.db.models.workflow import WorkflowPlan
 from app.infrastructure.auth.agent_principal import AgentPrincipal
 from app.infrastructure.tenant_scope import tenant_scope
 from app.mod_sdk.catalog_product_store import TOOL, encoded, factory_for, proof, reviewed_params
+
+_claim_admission = ContextVar("catalog_source_claim_admission", default=None)
+
+
+def _execution_owner():
+    from asyncio import current_task
+    from threading import get_ident
+
+    try:
+        task = current_task()
+    except RuntimeError:
+        task = None
+    return get_ident(), task
+
+
+def _signed_payload(envelope):
+    return signed_payload(envelope, proof)
+
+
+def _fence_identity(claim, run):
+    return fence_identity(claim, run, action_context(run))
+
+
+def _validate_fence(envelope, claim, run):
+    intent = _signed_payload(envelope)
+    return validate_fence(intent, _fence_identity(claim, run))
+
+
+def _preclaim_record(row, claim, run, action):
+    resolution = json.loads(row.runtime_context or "null")
+    if (
+        action is not None
+        or not isinstance(resolution, dict)
+        or set(resolution) != {"intent", "receipt"}
+    ):
+        raise ValueError("original preclaim finalization record differs")
+    _validate_fence(resolution["intent"], claim, run)
+    if row.status == "resolving_no_effect":
+        if resolution["receipt"] is not None:
+            raise ValueError("unfinished finalization cannot assert physical readback")
+    elif row.status == "finalized_no_effect":
+        payload = _signed_payload(resolution["receipt"])
+        validate_receipt_authority(claim, payload, action, run=run)
+        if payload["preclaim_fence"] != resolution["intent"]:
+            raise ValueError("finalized original witness differs")
+    else:
+        raise ValueError("original finalization state differs")
+    return resolution
+
+
+def _match_preclaim_record(row, claim, run, action, payload):
+    validate_receipt_authority(claim, payload, action, run=run)
+    if row.status in PRECLAIM_STATES:
+        resolution = _preclaim_record(row, claim, run, action)
+        if resolution["intent"] != payload["preclaim_fence"] or (
+            row.status == "finalized_no_effect"
+            and _signed_payload(resolution["receipt"]) != payload
+        ):
+            raise ValueError("retained original finalization witness differs")
+    elif row.status != "pending" or row.runtime_context:
+        raise ValueError("original preclaim witness has no matching operation")
 
 
 def repository():
@@ -110,7 +179,7 @@ def validate_host_operation(db, row, *, run=None):
         run.run_id != claim["run_id"]
         or row.plan_id != claim["operation_key"]
         or row.intent != TOOL
-        or row.status not in {"pending", "verified", "rejected"}
+        or row.status not in {"pending", "verified", "rejected"} | PRECLAIM_STATES
         or row.user_id != claim["owner"]
         or run.user_id != claim["owner"]
         or len(run.steps) != 1
@@ -170,7 +239,11 @@ def validate_host_operation(db, row, *, run=None):
     ):
         raise ValueError("original signed approval/consumption differs")
     if action is None:
-        if row.status != "pending" or run.status not in {
+        if row.status in PRECLAIM_STATES:
+            _preclaim_record(row, claim, run, action)
+        elif row.status != "pending":
+            raise ValueError("original action missing")
+        if run.status not in {
             "queued",
             "running",
             "retrying",
@@ -182,7 +255,8 @@ def validate_host_operation(db, row, *, run=None):
             raise ValueError("original action missing")
         return run, claim, None
     if (
-        action.fingerprint != fingerprint
+        row.status in PRECLAIM_STATES
+        or action.fingerprint != fingerprint
         or action.run_id != run.run_id
         or action.tool_id != TOOL
         or action.action != step.action
@@ -236,7 +310,7 @@ def reconcile_source(db, binding, *, executing=None):
             key = RECEIPT + canonical_hash(claim["operation_key"])
             payload = receipts.get(key)
             if payload is None:
-                if row.status != "pending" or (
+                if row.status not in {"pending", "resolving_no_effect"} or (
                     action is not None
                     and not (
                         executing == claim["operation_key"]
@@ -247,18 +321,23 @@ def reconcile_source(db, binding, *, executing=None):
                     raise ValueError("original source evidence missing; reconciliation required")
             else:
                 if (
-                    action is None
-                    or payload["params"] != claim["params"]
+                    payload["params"] != claim["params"]
                     or payload["run_id"] != run.run_id
                     or payload["owner"] != run.user_id
-                    or payload["business_action_id"] != action.business_action_id
+                    or payload["business_action_id"] != action_context(run)["business_action_id"]
                     or payload.get("operation_digest") != claim["operation_digest"]
                 ):
                     raise ValueError("source/host original authority differs")
-                validate_receipt_authority(claim, payload, action)
-                if row.status != "pending" and action.receipt_json != encoded(payload):
-                    raise ValueError("retained immutable receipt differs")
-                if row.status == "pending" and executing != claim["operation_key"]:
+                if payload.get("receipt_kind") == PRECLAIM_RECEIPT:
+                    _match_preclaim_record(row, claim, run, action, payload)
+                else:
+                    validate_receipt_authority(claim, payload, action, run=run)
+                    if row.status != "pending" and action.receipt_json != encoded(payload):
+                        raise ValueError("retained immutable receipt differs")
+                if (
+                    row.status in {"pending", "resolving_no_effect"}
+                    and executing != claim["operation_key"]
+                ):
                     raise ValueError("original owner must reconcile pending effect")
             operations[key] = claim
         if set(receipts) - set(operations):
@@ -409,7 +488,35 @@ def existing_action(params, context):
         _, current, action = validate_host_operation(db, journal(db, claim["operation_key"]))
         if current != claim:
             raise ValueError("original catalog action differs")
-        return action is not None
+        return action is not None or journal(db, claim["operation_key"]).status in PRECLAIM_STATES
+
+
+@contextmanager
+def source_claim_admission(factory, params, context):
+    """Private live source ownership, never a request field or reusable ticket."""
+    from app.db.models.owned_source import ProductPriceHistory
+    from app.mod_sdk.catalog_product_store import RECEIPT
+
+    principal, _, claim = trusted_original(params, context, writing=True)
+    if factory.principal != principal or factory.binding != claim["binding"]:
+        raise ValueError("original claim source differs")
+    with factory() as source:
+        factory.knowledge.validate()
+        reconcile_source(source, factory.binding, executing=claim["operation_key"])
+        if (
+            source.query(WorkflowPlan.id)
+            .filter_by(plan_id=RECEIPT + canonical_hash(claim["operation_key"]))
+            .first()
+            or source.query(ProductPriceHistory.id)
+            .filter_by(source_key=canonical_hash([TOOL, claim["operation_key"]]))
+            .first()
+        ):
+            raise ValueError("original source decision exists; no fresh claim")
+        token = _claim_admission.set((factory, claim, _execution_owner()))
+        try:
+            yield
+        finally:
+            _claim_admission.reset(token)
 
 
 def fresh_claim_guard(db, params, context):
@@ -438,6 +545,19 @@ def fresh_claim_guard(db, params, context):
     reference = capture_worker_claim()
     if reference is None or reference[0] != run.run_id:
         raise ValueError("original durable worker lease required")
+    admission = _claim_admission.get()
+    if (
+        admission is None
+        or admission[1] != claim
+        or admission[2] != _execution_owner()
+        or admission[0].principal != principal
+        or admission[0].binding != claim["binding"]
+    ):
+        raise ValueError("private original-source claim admission required")
+    # Assert the already-held physical lock, never acquire source under HOST.
+    from app.desktop_runtime.database_generation_registry import _owned_lock
+
+    _owned_lock(admission[0].target, None)
     validate_owned_host_session(db)
     lock_execution_claim(
         db, run_id=reference[0], owner_id=reference[1], execution_count=reference[2]
@@ -567,13 +687,188 @@ def release_verified(claim, payload):
         row.status = terminal
 
 
-def validate_receipt_authority(claim, payload, action):
+def prepare_preclaim_finalization(principal, claim, revision, *, payload=None):
+    """Durably fence this approved operation before publishing a no-effect witness.
+
+    Caller holds the original source transaction/lock. No worker claim is created;
+    the signed intent records this owner's explicit decision, not a historical lease.
+    """
+    from app.application.agent_orchestrator.run_models import utc_now_iso
+    from app.application.agent_orchestrator.task_execution_sql_repository import _task_id_of
+    from app.db.models.agent import AgentTaskExecutionRecord
+    from app.desktop_runtime.database_generation_registry import validate_owned_host_session
+    from app.mod_sdk.owned_price_catalog import _context
+
+    with repository().transaction() as db:
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        validate_owned_host_session(db)
+        _context(principal, mixed=True)
+        row = journal(db, claim["operation_key"])
+        run, current, action = validate_host_operation(db, row)
+        if current != claim or run.user_id != principal.user_id or action is not None:
+            raise ValueError("original preclaim authority changed")
+        # This also requires the retained original consumed approval, even if no
+        # execution was ever dispatched. Missing approval is not recoverable here.
+        identity = _fence_identity(claim, run)
+        if payload is not None:
+            _match_preclaim_record(row, claim, run, action, payload)
+        if row.status == "pending":
+            if row.runtime_context:
+                raise ValueError("pending original finalization record differs")
+            if payload is None:
+                intent = {**identity, "resolution_id": uuid4().hex, "revision": revision}
+                envelope = {"payload": intent, "proof": proof(intent)}
+            else:
+                envelope = payload["preclaim_fence"]
+        elif row.status == "resolving_no_effect":
+            envelope = _preclaim_record(row, claim, run, action)["intent"]
+            if payload is None and envelope["payload"]["revision"] != revision:
+                raise ValueError("source changed during unfinished preclaim finalization")
+        else:
+            raise ValueError("original operation is not a pending preclaim resolution")
+        if (
+            db.query(WorkflowPlan)
+            .filter_by(
+                plan_id=claim["head"],
+                intent=TOOL,
+                status="active",
+                runtime_context=claim["operation_key"],
+            )
+            .update({"status": "active"}, synchronize_session=False)
+            != 1
+        ):
+            raise ValueError("original preclaim head differs")
+        queue = db.get(AgentTaskExecutionRecord, run.run_id, populate_existing=True)
+        if (
+            queue is None
+            or queue.user_id != run.user_id
+            or queue.tenant_id != claim["binding"]["tenant_id"]
+            or queue.task_id != _task_id_of(run)
+            or queue.state not in {"queued", "claimed", "failed", "cancelled", "blocked"}
+        ):
+            raise ValueError("original dispatch authority unavailable")
+        now = utc_now_iso()
+        queue.state = "cancelled"
+        queue.lease_owner = queue.lease_expires_at = queue.heartbeat_at = None
+        queue.last_error_code = "catalog_preclaim_finalized"
+        queue.finished_at = queue.updated_at = now
+        # Writer ownership serializes the absent-ledger check, head and fence.
+        # Do not reset the real execution_count or create a substitute queue row.
+        changed = (
+            db.query(WorkflowPlan)
+            .filter_by(
+                plan_id=claim["operation_key"],
+                intent=TOOL,
+                status=row.status,
+                runtime_context=row.runtime_context,
+            )
+            .update(
+                {
+                    "status": "resolving_no_effect",
+                    "runtime_context": encoded(
+                        {
+                            "intent": envelope,
+                            "receipt": None,
+                        }
+                    ),
+                },
+                synchronize_session=False,
+            )
+        )
+        if changed != 1:
+            raise ValueError("original preclaim fence CAS lost")
+        # Persist the public task terminal state atomically with the queue fence.
+        # Retention normalizes stale saves without changing signed action identity.
+        repository().save_in_session(db, run)
+        return envelope
+
+
+def release_preclaim_verified(principal, claim, payload):
+    """Only after independent physical readback, while source ownership is held."""
+    from app.desktop_runtime.database_generation_registry import validate_owned_host_session
+    from app.mod_sdk.owned_price_catalog import _context
+
+    with repository().transaction() as db:
+        db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+        validate_owned_host_session(db)
+        _context(principal, mixed=True)
+        row = journal(db, claim["operation_key"])
+        run, current, action = validate_host_operation(db, row)
+        if current != claim or run.user_id != principal.user_id:
+            raise ValueError("original finalization owner changed")
+        _match_preclaim_record(row, claim, run, action, payload)
+        if row.status == "finalized_no_effect":
+            return
+        if row.status != "resolving_no_effect":
+            raise ValueError("durable preclaim fence required before release")
+        resolution = _preclaim_record(row, claim, run, action)
+        resolution["receipt"] = {"payload": payload, "proof": proof(payload)}
+        if (
+            db.query(WorkflowPlan)
+            .filter_by(
+                plan_id=claim["operation_key"],
+                intent=TOOL,
+                status="resolving_no_effect",
+                runtime_context=row.runtime_context,
+            )
+            .update(
+                {"status": "finalized_no_effect", "runtime_context": encoded(resolution)},
+                synchronize_session=False,
+            )
+            != 1
+            or db.query(WorkflowPlan)
+            .filter_by(
+                plan_id=claim["head"],
+                intent=TOOL,
+                status="active",
+                runtime_context=claim["operation_key"],
+            )
+            .update({"status": "idle", "runtime_context": ""}, synchronize_session=False)
+            != 1
+        ):
+            raise ValueError("original preclaim release CAS lost")
+
+
+def validate_receipt_authority(claim, payload, action, *, run=None):
     """Join either signed receipt to the original immutable ledger owner.
 
     The historical execution count is evidence, not a current live lease. A later
     queue generation cannot invalidate history or substitute a new ledger owner.
     """
     from app.application.agent_orchestrator.tool_spec import get_tool_action_spec
+
+    if "receipt_kind" in payload:
+        if (
+            payload.get("receipt_kind") != PRECLAIM_RECEIPT
+            or action is not None
+            or run is None
+            or set(payload)
+            != {
+                "receipt_kind",
+                "binding",
+                "operation_digest",
+                "params",
+                "run_id",
+                "owner",
+                "business_action_id",
+                "outcome",
+                "reason_code",
+                "absent_source_key",
+                "preclaim_fence",
+            }
+            or payload["outcome"] != "rejected_no_effect"
+            or payload["reason_code"] != "preclaim_finalized"
+            or payload["binding"] != claim["binding"]
+            or payload["operation_digest"] != claim["operation_digest"]
+            or payload["params"] != claim["params"]
+            or payload["run_id"] != claim["run_id"]
+            or payload["owner"] != claim["owner"]
+            or payload["business_action_id"] != action_context(run)["business_action_id"]
+            or payload["absent_source_key"] != canonical_hash([TOOL, claim["operation_key"]])
+        ):
+            raise ValueError("original preclaim receipt proof differs")
+        _validate_fence(payload["preclaim_fence"], claim, run)
+        return
 
     field = {"saved": "effect_claim", "rejected_no_effect": "no_effect"}.get(payload.get("outcome"))
     evidence = payload.get(field) if field else None
@@ -616,7 +911,11 @@ def validate_receipt_authority(claim, payload, action):
 
 def verify_receipt_authority(claim, payload):
     with repository().transaction(read_only=True) as db:
-        _, current, action = validate_host_operation(db, journal(db, claim["operation_key"]))
+        row = journal(db, claim["operation_key"])
+        run, current, action = validate_host_operation(db, row)
         if current != claim:
             raise ValueError("original receipt operation differs")
-        validate_receipt_authority(claim, payload, action)
+        if payload.get("receipt_kind") == PRECLAIM_RECEIPT:
+            _match_preclaim_record(row, claim, run, action, payload)
+        else:
+            validate_receipt_authority(claim, payload, action, run=run)

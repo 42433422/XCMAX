@@ -162,11 +162,11 @@ class _NativeFiles:
         )  # OPEN_EXISTING; OPEN_REPARSE_POINT | BACKUP_SEMANTICS.
         if handle == ctypes.c_void_p(-1).value:
             raise ctypes.WinError(ctypes.get_last_error())
-        try:
-            return handle, self._identity(handle, path, directory)
-        except BaseException:
-            self._close(handle)
-            raise
+        with ExitStack() as rollback:
+            rollback.callback(self._close, handle)
+            identity = self._identity(handle, path, directory)
+            rollback.pop_all()
+            return handle, identity
 
     def pin(self, path, *, directory):
         handle, identity = self._open(path, directory)

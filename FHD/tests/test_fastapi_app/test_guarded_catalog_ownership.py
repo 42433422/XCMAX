@@ -226,3 +226,28 @@ def test_guarded_request_never_seeds_missing_mod(admission, mod_id):
     )
     assert ModActivation(ports).ensure(mod_id, "synthetic-session") is False
     assert calls == [mod_id]
+
+
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt, type(None)])
+def test_factory_releases_admission_only_when_construction_fails(monkeypatch, error_type):
+    from app.fastapi_app import factory
+
+    owner, app, config = object(), object(), object()
+    released = []
+    monkeypatch.setattr(g, "admit", lambda *args: owner)
+    monkeypatch.setattr(g, "release", released.append)
+
+    def construct(*args):
+        assert args[-1] is owner
+        if error_type is not type(None):
+            raise error_type("construction interrupted")
+        return app
+
+    monkeypatch.setattr(factory, "_create_fastapi_app", construct)
+    if error_type is type(None):
+        assert factory.create_fastapi_app(config) is app
+        assert released == []
+    else:
+        with pytest.raises(error_type, match="construction interrupted"):
+            factory.create_fastapi_app(config)
+        assert released == [owner]

@@ -9,8 +9,11 @@ from io import BytesIO
 import pytest
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import event
-from test_authenticated_principal_propagation import request
-from test_authenticated_principal_propagation import sessions as _sessions_fixture
+
+from tests.test_application.test_authenticated_principal_propagation import request
+from tests.test_application.test_authenticated_principal_propagation import (
+    sessions as _sessions_fixture,
+)
 
 sessions = _sessions_fixture
 

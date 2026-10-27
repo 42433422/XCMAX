@@ -117,6 +117,7 @@ def _execute_catalog(step, context):
     from app.application.agent_orchestrator.catalog_product_edit import (
         existing_action,
         repository,
+        source_claim_admission,
         trusted_original,
     )
     from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
@@ -150,7 +151,8 @@ def _execute_catalog(step, context):
         with tenant_scope(int(principal.tenant_id)), factory.guard():
             check_invocation_deadline()
             trusted_original(params, context, writing=True)
-            claim, existing = ledger.claim(step.tool_id, step.action, params, context)
+            with source_claim_admission(factory, params, context):
+                claim, existing = ledger.claim(step.tool_id, step.action, params, context)
             if existing is None:
                 held = {
                     **context,

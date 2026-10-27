@@ -1377,13 +1377,13 @@ jobs:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: |
           $ErrorActionPreference = 'Stop'
-          $pytestVersion = python -c "import tomllib; p=tomllib.load(open('uv.lock','rb')); v=[x['version'] for x in p['package'] if x['name']=='pytest']; assert len(v)==1; print(v[0])"
-          if ($LASTEXITCODE -ne 0) { throw 'Locked pytest version unavailable' }
-          python -m pip install --disable-pip-version-check "pytest==$pytestVersion"
+          $pytestRequirements = python -c "import tomllib; p=tomllib.load(open('uv.lock','rb')); names=('pytest','pytest-asyncio'); v={n:[x['version'] for x in p['package'] if x['name']==n] for n in names}; assert all(len(x)==1 for x in v.values()); print(' '.join(n+'=='+v[n][0] for n in names))"
+          if ($LASTEXITCODE -ne 0) { throw 'Locked pytest requirements unavailable' }
+          python -m pip install --disable-pip-version-check ($pytestRequirements -split ' ')
           if ($LASTEXITCODE -ne 0) { throw 'Locked pytest installation failed' }
           python -c "import sys; assert sys.platform == 'win32', 'Native Windows execution required'"
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows runtime unavailable' }
-          python -m pytest --noconftest -o addopts= -p no:cacheprovider -q tests/test_desktop/test_windows_catalog_files_native.py --junitxml=windows-catalog-native.xml
+          python -m pytest --noconftest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -q tests/test_desktop/test_windows_catalog_files_native.py --junitxml=windows-catalog-native.xml
           if ($LASTEXITCODE -ne 0) { throw 'Native catalog observation tests failed' }
           @'
           import xml.etree.ElementTree as ET

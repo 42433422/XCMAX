@@ -248,18 +248,35 @@ export function useAssistantCatalogPrices(onVerified: (id: number) => void) {
         // GET only observes history. Only an explicitly confirmed POST may finalize a pending HOST head.
         if (confirmation && !await canReconcile(s)) throw new Error('当前会话无完整核对权限；原操作保留，只可读取')
         if (!current(s)) return
-        const verified = confirmation
-          ? await catalogPricesApi.reconcile(saved.operation, s.identity!.mod)
-          : await catalogPricesApi.verify(saved.operation, s.identity!.mod)
+        if (!rows.value.includes(row) || !sameSource(row.source, saved.source)) throw new Error('原目录快照已失效，保留原操作')
+        let verified
+        try {
+          verified = confirmation
+            ? await catalogPricesApi.reconcile(saved.operation, s.identity!.mod)
+            : await catalogPricesApi.verify(saved.operation, s.identity!.mod)
+        } catch (e) {
+          if (confirmation || object(e).status !== 409 || !['pending', 'resolving_no_effect'].includes(operation.state)) throw e
+          // The original identity was independently checked above. A missing
+          // receipt is NOT absence proof: only offer an explicit server decision.
+          const permitted = await canReconcile(s)
+          if (!current(s)) return
+          if (!rows.value.includes(row) || !sameSource(row.source, saved.source)) throw new Error('原目录快照已失效，保留原操作')
+          show(row.id, { state: 'unknown', operation: saved.operation, runId: saved.runId, preview, canReconcile: permitted,
+            message: `原操作结果仍未知，保留标记，禁止重放；未证明已保存或无副作用。${permitted ? '可明确确认核对并终结原操作；服务器无法核验时仍会保留。' : '当前会话只可读取，不能执行核对确认。'}` })
+          return
+        }
         if (!current(s)) return
+        if (!rows.value.includes(row) || !sameSource(row.source, saved.source)) throw new Error('原目录快照已失效，保留原操作')
         const proof = verified.data
         if (!verified.success || proof?.verified !== true || proof.operation_id !== saved.operation || proof.run_id !== saved.runId || proof.request_digest !== operation.request_digest
           || typeof proof.business_action_id !== 'string' || !proof.business_action_id
           || proof.product?.id !== row.id || !validRow(proof.product, saved.source) || typeof proof.current_matches !== 'boolean') throw new Error('同来源独立读回未核验，禁止重放')
         const rejected = proof.outcome === 'rejected_no_effect'
+        const preclaim = proof.receipt_kind === 'catalog_preclaim_finalization_v1'
         if (!['saved', 'rejected_no_effect'].includes(proof.outcome) || proof.fresh_save !== false || proof.historical_effect_verified !== !rejected
-          || (rejected && (proof.reason_code !== 'review_precondition_changed' || proof.current_matches !== false))) throw new Error('原操作历史或无副作用证明不完整，禁止重放')
-        const terminal = operation.state === (rejected ? 'rejected' : 'verified')
+          || (preclaim ? !rejected || proof.reason_code !== 'preclaim_finalized' : proof.receipt_kind !== undefined || (rejected && proof.reason_code !== 'review_precondition_changed'))
+          || (rejected && proof.current_matches !== false)) throw new Error('原操作历史或无副作用证明不完整，禁止重放')
+        const terminal = operation.state === (preclaim ? 'finalized_no_effect' : rejected ? 'rejected' : 'verified')
         if (!confirmation && !terminal) {
           const permitted = await canReconcile(s)
           if (!current(s)) return
@@ -272,7 +289,7 @@ export function useAssistantCatalogPrices(onVerified: (id: number) => void) {
         if (localStorage.getItem(key(row.id)) !== null) throw new Error('原操作标记无法更新')
         rows.value = rows.value.map(item => item.id === row.id ? proof.product : item)
         resetDraft(proof.product)
-        show(row.id, { state: 'verified', operation: saved.operation, runId: saved.runId, message: rejected ? '未保存：审核前态已变化，请重新核对再提交' : proof.current_matches ? '历史修改已核验，同来源当前读回一致；本次未重新保存。' : '历史修改已核验，当前数据已有后续变更；已刷新最新版本，本次未重新保存。' })
+        show(row.id, { state: 'verified', operation: saved.operation, runId: saved.runId, message: preclaim ? '未保存：原操作已核验并终结，请重新核对再提交' : rejected ? '未保存：审核前态已变化，请重新核对再提交' : proof.current_matches ? '历史修改已核验，同来源当前读回一致；本次未重新保存。' : '历史修改已核验，当前数据已有后续变更；已刷新最新版本，本次未重新保存。' })
         if (!rejected && proof.current_matches) onVerified(row.id)
       })
     } catch (e) {

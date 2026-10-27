@@ -388,7 +388,7 @@ describe('explicit original-operation reconciliation', () => {
     expect(localStorage.length).toBe(0); expect(verified).not.toHaveBeenCalled()
     expect(editor.statusFor(11)?.message).toContain('未保存')
   })
-  it.each([409, 401, 422])('failed read-only verification HTTP %s never becomes reconciliation', async status => {
+  it.each([401, 422])('failed read-only verification HTTP %s never offers reconciliation', async status => {
     const { editor, row } = await pending(), before = JSON.stringify(original())
     api.verify.mockRejectedValueOnce(Object.assign(new Error(String(status)), { status }))
     await editor.check(row)
@@ -450,5 +450,130 @@ describe('explicit original-operation reconciliation', () => {
     api.lookup.mockResolvedValue(response(true)); api.verify.mockResolvedValue(proof)
     await editor.check(editor.rows.value[0])
     expect(localStorage.length).toBe(0); expect(api.reconcile).toHaveBeenCalledOnce()
+  })
+})
+
+describe('explicit preclaim finalization', () => {
+  function noEffect() {
+    const proof = verification(false)
+    return { ...proof, data: { ...proof.data, product: product(), outcome: 'rejected_no_effect', historical_effect_verified: false,
+      reason_code: 'preclaim_finalized', receipt_kind: 'catalog_preclaim_finalization_v1' } }
+  }
+  async function interrupted(state = 'pending') {
+    const current = await ready(); await current.editor.submit(current.row)
+    const run = response(true); run.operation.state = state; run.data.status = 'failed'; run.data.steps[0].status = 'failed'
+    api.lookup.mockResolvedValue(run)
+    api.verify.mockRejectedValue(Object.assign(new Error('unverified original'), { status: 409 }))
+    return { ...current, run }
+  }
+  it.each(['pending', 'resolving_no_effect'])('offers confirmation for validated %s identity, never treating GET409 as absence proof', async state => {
+    const { editor, row, verified } = await interrupted(state), before = JSON.stringify(original())
+    await editor.check(row)
+    expect(editor.statusFor(11)?.canReconcile).toBe(true)
+    expect(editor.statusFor(11)?.message).toContain('未证明已保存或无副作用')
+    expect(editor.statusFor(11)?.state).toBe('unknown'); expect(editor.canEdit(row)).toBe(false)
+    expect(JSON.stringify(original())).toBe(before); expect(verified).not.toHaveBeenCalled()
+    await editor.confirmReconciliation(row)
+    editor.requestReconciliation(row); editor.cancelReconciliation(); await editor.confirmReconciliation(row)
+    expect(api.reconcile).not.toHaveBeenCalled(); expect(api.proceed).not.toHaveBeenCalled()
+    expect(JSON.stringify(original())).toBe(before)
+  })
+  it('finalizes only after explicit confirmation and typed physical evidence, then requires a fresh reviewed request', async () => {
+    const { editor, row, verified } = await interrupted(), operation = original().operation
+    await editor.check(row); api.reconcile.mockResolvedValue(noEffect())
+    editor.requestReconciliation(row)
+    await Promise.all([editor.confirmReconciliation(row), editor.confirmReconciliation(row)])
+    expect(api.reconcile).toHaveBeenCalledExactlyOnceWith(operation, 'mod-a')
+    expect(api.proceed).not.toHaveBeenCalled(); expect(api.submit).toHaveBeenCalledOnce(); expect(verified).not.toHaveBeenCalled()
+    expect(localStorage.length).toBe(0); expect(editor.rows.value[0]).toEqual(product())
+    expect(editor.statusFor(11)?.message).toBe('未保存：原操作已核验并终结，请重新核对再提交')
+    const refreshed = editor.rows.value[0]
+    expect(editor.canEdit(refreshed)).toBe(true); expect(editor.draftFor(11).confirmed).toBe(false)
+    await editor.submit(refreshed); expect(api.submit).toHaveBeenCalledOnce()
+    Object.assign(editor.draftFor(11), { price: '16', reason: '重新审核', period_start: '2027-01-01', period_end: '2027-12-31', confirmed: true })
+    await editor.submit(refreshed)
+    expect(api.submit.mock.calls[1][1].operation_id).not.toBe(operation)
+    expect(api.submit.mock.calls[1][1].revision).toBe(revision)
+  })
+  it.each(['pending', 'resolving_no_effect', 'rejected', 'finalized_no_effect'])('GET typed proof clears only the exact finalized_no_effect terminal, not %s', async state => {
+    const { editor, row, verified } = await interrupted(state)
+    api.verify.mockResolvedValue(noEffect()); await editor.check(row)
+    expect(localStorage.length).toBe(state === 'finalized_no_effect' ? 0 : 1)
+    expect(api.reconcile).not.toHaveBeenCalled(); expect(verified).not.toHaveBeenCalled()
+  })
+  it.each(['missing-type', 'unknown-type', 'wrong-reason', 'saved', 'current-matches', 'historical-effect', 'fresh-save', 'unverified', 'source'])('retains original for invalid preclaim POST evidence: %s', async kind => {
+    const { editor, row, verified } = await interrupted()
+    await editor.check(row)
+    const proof = noEffect()
+    if (kind === 'missing-type') delete (proof.data as Partial<typeof proof.data>).receipt_kind
+    if (kind === 'unknown-type') proof.data.receipt_kind = 'unknown-version'
+    if (kind === 'wrong-reason') proof.data.reason_code = 'review_precondition_changed'
+    if (kind === 'saved') { proof.data.outcome = 'saved'; proof.data.historical_effect_verified = true }
+    if (kind === 'current-matches') proof.data.current_matches = true
+    if (kind === 'historical-effect') proof.data.historical_effect_verified = true
+    if (kind === 'fresh-save') proof.data.fresh_save = true
+    if (kind === 'unverified') proof.data.verified = false
+    if (kind === 'source') proof.data.product.source.epoch = 'other'
+    api.reconcile.mockResolvedValue(proof)
+    editor.requestReconciliation(row); await editor.confirmReconciliation(row)
+    expect(localStorage.length).toBe(1); expect(editor.canEdit(row)).toBe(false); expect(verified).not.toHaveBeenCalled()
+  })
+  it.each(['owner', 'tenant', 'mod', 'operation', 'run', 'params', 'source'])('does not offer finalization for mismatched original %s even when verification would be409', async kind => {
+    const { editor, row, run } = await interrupted()
+    if (kind === 'owner') run.data.user_id = '8'
+    if (kind === 'tenant') run.data.metadata.runtime_context.tenant_id = 8
+    if (kind === 'mod') run.data.metadata.runtime_context.mod_id = 'other'
+    if (kind === 'operation') run.operation.operation_id = crypto.randomUUID()
+    if (kind === 'run') run.data.run_id = 'other'
+    if (kind === 'params') run.data.steps[0].params.price = '99.00'
+    if (kind === 'source') row.source.epoch = 'other'
+    await editor.check(row); editor.requestReconciliation(row); await editor.confirmReconciliation(row)
+    expect(api.verify).not.toHaveBeenCalled(); expect(api.permissions).not.toHaveBeenCalled()
+    expect(editor.statusFor(11)?.canReconcile).not.toBe(true); expect(api.reconcile).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
+  })
+  it.each(['read-only', 'foreign-owner', 'unavailable'])('does not offer finalization with %s current grants', async kind => {
+    const { editor, row } = await interrupted()
+    if (kind === 'unavailable') api.permissions.mockRejectedValue(new Error('401'))
+    else api.permissions.mockResolvedValue({ success: true, data: { user: { id: kind === 'foreign-owner' ? 8 : 7 }, permissions: ['product.view', 'dataset.read'] } })
+    await editor.check(row); editor.requestReconciliation(row); await editor.confirmReconciliation(row)
+    expect(editor.statusFor(11)?.canReconcile).toBe(false)
+    expect(api.reconcile).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
+  })
+  it.each(['verified', 'rejected', 'finalized_no_effect', 'unknown'])('does not use409 to offer finalization for terminal/unknown state %s', async state => {
+    const { editor, row } = await interrupted(state)
+    await editor.check(row)
+    expect(editor.statusFor(11)?.canReconcile).not.toBe(true); expect(api.permissions).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
+  })
+  it('does not preserve a stale offer after original lookup409', async () => {
+    const { editor, row } = await interrupted()
+    await editor.check(row); expect(editor.statusFor(11)?.canReconcile).toBe(true)
+    api.lookup.mockRejectedValueOnce(Object.assign(new Error('original unavailable'), { status: 409 }))
+    await editor.check(row); editor.requestReconciliation(row); await editor.confirmReconciliation(row)
+    expect(editor.statusFor(11)?.canReconcile).not.toBe(true); expect(api.reconcile).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
+  })
+  it.each(['source', 'account', 'revoked'])('rechecks %s after the offer and before confirmed POST', async kind => {
+    const { editor, row } = await interrupted(); await editor.check(row)
+    editor.requestReconciliation(row)
+    let resolve!: (value: unknown) => void
+    api.permissions.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = editor.confirmReconciliation(row)
+    await vi.waitFor(() => expect(api.permissions).toHaveBeenCalledTimes(2))
+    if (kind === 'source') row.source.epoch = 'other'
+    if (kind === 'account') { account(8); account(7) }
+    resolve({ success: true, data: { user: { id: 7 }, permissions: kind === 'revoked' ? [] : ['product.view', 'dataset.read', 'etl.execute', 'product.edit', 'dataset.write', 'etl.template.manage'] } })
+    await pending
+    expect(api.reconcile).not.toHaveBeenCalled(); expect(localStorage.length).toBe(1)
+  })
+  it.each(['GET', 'POST'])('keeps the original when source changes during %s physical readback', async method => {
+    const { editor, row, verified } = await interrupted(method === 'GET' ? 'finalized_no_effect' : 'pending')
+    if (method === 'POST') { await editor.check(row); editor.requestReconciliation(row) }
+    const proof = noEffect(), endpoint = method === 'GET' ? api.verify : api.reconcile
+    let resolve!: (value: unknown) => void
+    endpoint.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = method === 'GET' ? editor.check(row) : editor.confirmReconciliation(row)
+    await vi.waitFor(() => expect(endpoint).toHaveBeenCalledOnce())
+    row.source.epoch = 'replacement'
+    resolve(proof); await pending
+    expect(localStorage.length).toBe(1); expect(verified).not.toHaveBeenCalled(); expect(editor.statusFor(11)?.state).toBe('unknown')
   })
 })

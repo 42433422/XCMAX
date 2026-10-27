@@ -266,7 +266,7 @@ def factory_for(principal, *, purpose=CatalogPurpose.ETL, lock_timeout=0):
     return OwnedSqlSessions(principal, mixed=True, purpose=purpose, lock_timeout=lock_timeout)
 
 
-def read_products(principal, *, product_id=None, keyword=""):
+def read_products(principal, *, product_id=None, keyword="", operation_key=None):
     from app.application.agent_orchestrator.catalog_product_edit import reconcile_source
 
     factory = factory_for(principal, purpose=CatalogPurpose.READ)
@@ -274,7 +274,7 @@ def read_products(principal, *, product_id=None, keyword=""):
         with tenant_scope(int(principal.tenant_id)), factory.guard():
             factory.knowledge.validate()
             with factory() as db:
-                reconcile_source(db, factory.binding)
+                reconcile_source(db, factory.binding, executing=operation_key)
                 if product_id is not None:
                     return state(db, product_id, principal.tenant_id)[4]
                 query = db.query(Product.id).filter_by(tenant_id=int(principal.tenant_id))
@@ -431,16 +431,101 @@ def execute_catalog_price(params, action, *, source_factory=None):
             factory.engine.dispose()
 
 
+def reconcile_operation(principal, operation_id):
+    """Explicit original-owner resolution, never approval or original-write retry.
+
+    Supported restore epochs remain mandatory. Missing terminal source evidence
+    is not recreated from HOST, and this is not an anti-rollback external ledger.
+    """
+    from app.application.agent_orchestrator.catalog_product_edit import (
+        PRECLAIM_RECEIPT,
+        action_context,
+        original,
+        prepare_preclaim_finalization,
+        reconcile_source,
+    )
+
+    run, claim, status = original(principal, operation_id)
+    factory = factory_for(principal, lock_timeout=5)
+    try:
+        if factory.binding != claim["binding"]:
+            raise ValueError("original catalog source changed")
+        with tenant_scope(int(principal.tenant_id)), factory.guard():
+            factory.knowledge.validate()
+            with factory() as db:
+                db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+                factory.validate(db)
+                reconcile_source(db, factory.binding, executing=claim["operation_key"])
+                key = RECEIPT + canonical_hash(claim["operation_key"])
+                record = db.query(WorkflowPlan).filter_by(plan_id=key).one_or_none()
+                payload = receipt_payload(db, key) if record is not None else None
+                if payload is None or payload.get("receipt_kind") == PRECLAIM_RECEIPT:
+                    source_key = canonical_hash([TOOL, claim["operation_key"]])
+                    if db.query(ProductPriceHistory.id).filter_by(source_key=source_key).first():
+                        raise ValueError("original preclaim operation has a source event")
+                    # Independent current history validation is required even for
+                    # zero DML. An absent ledger/receipt alone proves nothing.
+                    product, _, _, effective, view = state(
+                        db, claim["params"]["product_id"], principal.tenant_id
+                    )
+                    if (
+                        Decimal(str(effective_price(history_events(effective))["price"]))
+                        != product.price
+                    ):
+                        raise ValueError("current price differs from effective history")
+                    if status != "finalized_no_effect":
+                        intent = prepare_preclaim_finalization(
+                            principal, claim, view["revision"], payload=payload
+                        )
+                        if payload is None:
+                            payload = {
+                                "receipt_kind": PRECLAIM_RECEIPT,
+                                "binding": factory.binding,
+                                "operation_digest": claim["operation_digest"],
+                                "params": claim["params"],
+                                "run_id": run.run_id,
+                                "owner": principal.user_id,
+                                "business_action_id": action_context(run)["business_action_id"],
+                                "outcome": "rejected_no_effect",
+                                "reason_code": "preclaim_finalized",
+                                "absent_source_key": source_key,
+                                "preclaim_fence": intent,
+                            }
+                            db.add(
+                                WorkflowPlan(
+                                    plan_id=key,
+                                    intent=TOOL,
+                                    user_id=principal.user_id,
+                                    status="rejected",
+                                    runtime_context=encoded(
+                                        {"payload": payload, "proof": proof(payload)}
+                                    ),
+                                )
+                            )
+                            db.commit()
+    finally:
+        factory.engine.dispose()
+    # New physical connection/factory after source commit; never release a head
+    # from the just-written ORM object or an uncertain commit response.
+    return verify_operation(principal, operation_id, release=True)
+
+
 def verify_operation(principal, operation_id, *, release=False):
     from app.application.agent_orchestrator.catalog_product_edit import (
+        PRECLAIM_RECEIPT,
         original,
         reconcile_source,
+        release_preclaim_verified,
         release_verified,
         verify_receipt_authority,
     )
 
     run, claim, status = original(principal, operation_id)
-    factory = factory_for(principal, purpose=CatalogPurpose.ETL if release else CatalogPurpose.READ)
+    factory = factory_for(
+        principal,
+        purpose=CatalogPurpose.ETL if release else CatalogPurpose.READ,
+        lock_timeout=5 if release else 0,
+    )
     try:
         if factory.binding != claim["binding"]:
             raise ValueError("original catalog source changed")
@@ -501,9 +586,17 @@ def verify_operation(principal, operation_id, *, release=False):
                     "run_id": run.run_id,
                     "request_digest": claim["request_digest"],
                     "business_action_id": payload["business_action_id"],
+                    **(
+                        {"receipt_kind": PRECLAIM_RECEIPT}
+                        if payload.get("receipt_kind") == PRECLAIM_RECEIPT
+                        else {}
+                    ),
                 }
             if release:
-                release_verified(claim, payload)
+                if payload.get("receipt_kind") == PRECLAIM_RECEIPT:
+                    release_preclaim_verified(principal, claim, payload)
+                else:
+                    release_verified(claim, payload)
             return result
     finally:
         factory.engine.dispose()
@@ -527,6 +620,8 @@ def verify_catalog_action(params, context, *, release=False):
             if current
             else "原修改已核验，但当前已有后续变更；本次未保存"
             if saved
+            else "原操作已核验并终结，无价格写入；本次未重新保存"
+            if result.get("reason_code") == "preclaim_finalized"
             else "未保存：审核前态已变化；原操作已核验无副作用"
         ),
         "historical_effect_verified": saved,

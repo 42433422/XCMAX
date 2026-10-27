@@ -6,6 +6,7 @@ import inspect
 import logging
 import os
 import threading
+from contextlib import ExitStack
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,11 +56,11 @@ def create_fastapi_app(
 
     config_object = config_object or get_config("default")
     admission = admit(config_object, _app_singleton)
-    try:
-        return _create_fastapi_app(config_object, enable_cors, enable_docs, admission)
-    except BaseException:
-        release(admission)
-        raise
+    with ExitStack() as rollback:
+        rollback.callback(release, admission)
+        app = _create_fastapi_app(config_object, enable_cors, enable_docs, admission)
+        rollback.pop_all()
+        return app
 
 
 def _create_fastapi_app(config_object, enable_cors, enable_docs, admission):

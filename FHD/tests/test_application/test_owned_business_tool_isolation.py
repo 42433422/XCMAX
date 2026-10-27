@@ -335,3 +335,22 @@ def test_unreviewed_sku_denies_both_tools_without_effect(stores, monkeypatch, sk
     assert product(actor)["error_code"] == "tool_permission_denied"
     assert customer(actor)["success"] is False
     assert rows(engine) == before
+
+
+def test_application_and_legacy_dispatch_preserve_authorization(stores):
+    from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_dispatch import (
+        execute_registered_workflow_tool as legacy_execute,
+    )
+
+    actor, _, _, engine = stores
+    before = rows(engine)
+    for execute in (execute_registered_workflow_tool, legacy_execute):
+        denied = execute("customers", "ensure_exists", {"name": "anonymous-denied"})
+        assert denied["error_code"] == "customer_action_not_authorized"
+        assert rows(engine) == before
+    params = {"name": "same-application-customer", "_runtime_context": actor.context}
+    created = execute_registered_workflow_tool("customers", "ensure_exists", params)
+    repeated = legacy_execute("customers", "ensure_exists", params)
+    assert created["success"] and created["created"]
+    assert repeated["success"] and repeated["id"] == created["id"]

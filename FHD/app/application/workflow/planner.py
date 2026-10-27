@@ -10,10 +10,10 @@ from typing import Any, cast
 
 import httpx
 
+from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
 from app.domain.conversation.services.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import ensure_fhd_repo_on_syspath

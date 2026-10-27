@@ -42,7 +42,7 @@ export interface CatalogRunResponse {
 }
 export interface CatalogVerification {
   success: boolean
-  data: { verified: boolean; outcome: 'saved' | 'rejected_no_effect'; reason_code?: string; current_matches: boolean; historical_effect_verified: boolean; fresh_save: false; business_action_id: string; product: CatalogProduct; operation_id: string; run_id: string; request_digest: string }
+  data: { verified: boolean; outcome: 'saved' | 'rejected_no_effect'; reason_code?: string; receipt_kind?: 'catalog_preclaim_finalization_v1'; current_matches: boolean; historical_effect_verified: boolean; fresh_save: false; business_action_id: string; product: CatalogProduct; operation_id: string; run_id: string; request_digest: string }
 }
 const base = '/api/etl/owned-mixed-v1/products'
 const scope = (mod: string) => {

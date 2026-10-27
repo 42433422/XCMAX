@@ -124,10 +124,21 @@ def preserve_catalog_run_authority(db, run, previous):
         raise ValueError("catalog approval identity differs")
     if evidence:
         run.metadata[_EVIDENCE_KEY] = deepcopy(evidence)
+    if row is not None and row.status in {"resolving_no_effect", "finalized_no_effect"}:
+        # The original action is fenced, including when a late worker saves an
+        # older snapshot. Preserve failed evidence; never present a fresh success.
+        run.status = "cancelled"
+        run.metadata["non_retryable"] = True
+        if previous is not None and previous.steps[0].status == "failed":
+            # No later attempt is legitimate after this permanent dispatch fence.
+            run.steps[0].__dict__.update(deepcopy(previous.steps[0].__dict__))
+        elif run.steps[0].status != "failed":
+            run.steps[0].status = "skipped"
     _, claim, _ = validate_host_operation(db, row, run=run)
     head = journal(db, claim["head"])
     if head is None or (
-        row.status == "pending" and (head.status != "active" or head.runtime_context != key)
+        row.status in {"pending", "resolving_no_effect"}
+        and (head.status != "active" or head.runtime_context != key)
     ):
         raise ValueError("catalog operation head missing or changed")
 
