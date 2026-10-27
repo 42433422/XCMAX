@@ -121,7 +121,10 @@ def ai_qclaw_panel(_admin: Any = Depends(require_admin_user)):
 
 
 @router.post("/api/ai/qclaw/wechat-gateway")
-def ai_qclaw_wechat_gateway(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def ai_qclaw_wechat_gateway(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     enabled = bool(body.get("enabled", False))
     _QCLOW_RUNTIME_STATE["wechat_open"] = enabled
     return _trace_qclaw_control_result(
@@ -133,7 +136,10 @@ def ai_qclaw_wechat_gateway(body: dict = Body(default_factory=dict), _admin: Any
 
 
 @router.post("/api/ai/qclaw/openclaw/config")
-def ai_qclaw_openclaw_config(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def ai_qclaw_openclaw_config(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     base_url = str(body.get("base_url") or "").strip().rstrip("/")
     if not base_url:
         return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
@@ -147,7 +153,10 @@ def ai_qclaw_openclaw_config(body: dict = Body(default_factory=dict), _admin: An
 
 
 @router.post("/api/ai/qclaw/whitelist")
-def ai_qclaw_whitelist(body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def ai_qclaw_whitelist(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     enabled = bool(body.get("enabled", False))
     if not path:
@@ -163,7 +172,11 @@ def ai_qclaw_whitelist(body: dict = Body(default_factory=dict), _admin: Any = De
 
 
 @router.post("/api/ai/qclaw/test-route")
-def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict), _admin: Any = Depends(require_admin_user)):
+def ai_qclaw_test_route(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     method = str(body.get("method") or "GET").upper()
     if not path:
