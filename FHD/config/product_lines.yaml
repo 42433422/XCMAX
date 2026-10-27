@@ -19,6 +19,7 @@ version: 1
 generated:
   json: FHD/metrics/product_lines_status.generated.json
   doc: FHD/docs/PRODUCT_LINES_STATUS.md
+  history: 成都修茈科技有限公司/data/release-history.json
 
 sources:
   version: FHD/VERSION.md

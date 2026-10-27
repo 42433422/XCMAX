@@ -685,11 +685,9 @@ def test_ws_recoverable_error_during_receive():
 
 def test_safe_control_payload_key_preview():
     """Trace metadata must never expose a credential or its prefix."""
-    from app.fastapi_routes.ai_open import _safe_aiopen_control_payload  # noqa: PLC0415
-
     payload = {"key": "super-secret-key!", "other": "val"}
     original = payload.copy()
-    result = _safe_aiopen_control_payload(payload)
+    result = _aiopen_mod._safe_aiopen_control_payload(payload)
     assert result == {"payload_redacted": True, "key_preview": "[REDACTED]"}
     assert payload == original
     assert "super-secret-key" not in str(result)
@@ -697,10 +695,8 @@ def test_safe_control_payload_key_preview():
 
 def test_safe_control_payload_no_key():
     """Without credentials, arbitrary business fields are still not retained."""
-    from app.fastapi_routes.ai_open import _safe_aiopen_control_payload  # noqa: PLC0415
-
     payload = {"foo": "bar"}
     original = payload.copy()
-    result = _safe_aiopen_control_payload(payload)
+    result = _aiopen_mod._safe_aiopen_control_payload(payload)
     assert result == {"payload_redacted": True}
     assert payload == original

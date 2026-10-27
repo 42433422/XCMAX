@@ -28,6 +28,14 @@ SCHEDULER_HEALTH_URL="${MODSTORE_SCHEDULER_HEALTH_URL:-http://127.0.0.1:9990/api
 PUBLIC_HEALTH_URL="${MODSTORE_PUBLIC_HEALTH_URL:-https://xiu-ci.com/api/health}"
 RELEASES_TO_KEEP="${XCMAX_RELEASES_TO_KEEP:-4}"
 
+POINTER_SYNC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sync_site_download_release.py"
+
+verify_public_pointers() {
+  python3 "$POINTER_SYNC" --check --site-root "$1/$SITE_SUBDIR" \
+    --published-site-root "$SITE_LINK" \
+    --published-hotfix "/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"
+}
+
 log() { printf '[xcmax-release] %s\n' "$*"; }
 fail() { log "ERROR: $*" >&2; exit 1; }
 
@@ -477,9 +485,10 @@ else
       || fail "payment service jar missing after build"
   fi
 
-  python3 "$DEPLOY_DIR/scripts/sync_site_download_release.py" --site-root "$(dirname "$DEPLOY_DIR")" \
-    --ssot "$BUILD_ROOT/FHD/config/download_release.json" --version "$PRODUCT_VERSION" --git-sha "$TARGET_SHA" \
-    || fail "public download manifest does not match product version $PRODUCT_VERSION"
+  python3 "$POINTER_SYNC" --site-root "$(dirname "$DEPLOY_DIR")" \
+    --published-site-root "$SITE_LINK" \
+    --published-hotfix "/var/www/update/releases/stable/enterprise/download-windows-hotfix.json" \
+    || fail "cannot preserve existing public desktop pointers"
 
   TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}^{tree}")"
   SUNBIRD_TREE_SHA="$(git -C "$SOURCE_ROOT" rev-parse "${TARGET_SHA}:FHD/mods/sunbird-attendance-custom")"
@@ -540,6 +549,7 @@ PY
   trap - EXIT
 fi
 unset BUILD_JWT_SECRET
+verify_public_pointers "$FINAL_ROOT" || fail "prepared release has stale desktop pointers; reconcile before migration"
 
 chmod 0555 "$FINAL_ROOT"
 
@@ -876,6 +886,10 @@ LIBRARY_DIR="$(select_library_target "$LIBRARY_DIR" "$PREVIOUS_LIBRARY_DIR" "$PR
 LIBRARY_DIR="$(persistent_path "$LIBRARY_DIR" "$RELEASES_DIR")" || fail "invalid persistent library directory"
 
 rollback() {
+  if ! verify_public_pointers "$PREVIOUS_ROOT"; then
+    log "ERROR: rollback blocked by changed public desktop pointers; operator reconciliation required"
+    return 1
+  fi
   log "promotion failed; rolling current back to $PREVIOUS_ROOT"
   ln -s "$PREVIOUS_ROOT" "${CURRENT_LINK}.rollback"
   mv -Tf "${CURRENT_LINK}.rollback" "$CURRENT_LINK"
@@ -1019,6 +1033,7 @@ assert isinstance(payload, dict) and isinstance(payload.get("packages"), list)
 PY
 migrate_delivery_state false
 
+verify_public_pointers "$FINAL_ROOT" || fail "public desktop pointers changed before activation"
 ln -s "$FINAL_ROOT" "${CURRENT_LINK}.next"
 mv -Tf "${CURRENT_LINK}.next" "$CURRENT_LINK"
 RELEASE_SWITCHED=1
