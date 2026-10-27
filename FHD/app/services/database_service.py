@@ -6,7 +6,6 @@
 
 import logging
 import os
-import shutil
 import sqlite3
 from datetime import datetime
 from typing import Any
@@ -15,6 +14,12 @@ from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _is_path_inside(root: str, candidate: str) -> bool:
+    root_key = os.path.normcase(os.path.realpath(root))
+    candidate_key = os.path.normcase(os.path.realpath(candidate))
+    return candidate_key == root_key or candidate_key.startswith(root_key + os.sep)
 
 
 class DatabaseService(NeuroEventPublisherMixin):
@@ -155,42 +160,100 @@ class DatabaseService(NeuroEventPublisherMixin):
 
     def restore_database(self, backup_file: str) -> dict[str, Any]:
         """
-        恢复数据库
+        恢复数据库（受保护路径）。
+
+        任何直接文件拷贝都被禁止：必须经 ``restore_helper.guarded_restore``，
+        即先关闭写入、持恢复锁、生成安全备份、用 SQLite 一致性备份写入临时库、
+        校验完整性并原子替换，最后凭成功回执重新开放写入。返回 ``success=True``
+        只代表目标已核验并重新可写。
 
         Args:
-            backup_file: 备份文件路径或文件名
+            backup_file: 备份文件路径或文件名（必须位于备份目录内）
 
         Returns:
-            结果字典
+            结果字典：success/message/status/operation_id/receipt_path/error
         """
+        db_path = self._get_db_path()
+        if not db_path:
+            return {"success": False, "message": "仅支持 SQLite 数据库恢复", "status": "refused"}
+
+        backup_dir = os.path.abspath(self._get_backup_dir())
+        candidate = (
+            os.path.abspath(backup_file)
+            if os.path.isabs(backup_file)
+            else os.path.abspath(os.path.join(backup_dir, backup_file))
+        )
+        if not _is_path_inside(backup_dir, candidate):
+            return {
+                "success": False,
+                "message": f"备份文件不在备份目录内：{backup_file}",
+                "status": "refused",
+                "error": {"code": "DB_GUARD_PATH_ESCAPE"},
+            }
+        if not os.path.isfile(candidate):
+            return {
+                "success": False,
+                "message": f"备份文件不存在：{candidate}",
+                "status": "refused",
+            }
+
+        from app.desktop_runtime.database_generation_registry import (
+            GuardError,
+            canonical_database_path,
+        )
+        from app.desktop_runtime.restore_helper import (
+            RestoreTarget,
+            guarded_restore,
+        )
+
+        data_dir = os.path.dirname(os.path.abspath(db_path))
         try:
-            db_path = self._get_db_path()
+            report = guarded_restore(
+                [RestoreTarget(canonical_database_path(db_path), canonical_database_path(candidate), canonical_database_path(data_dir))],
+                safety_root=os.path.join(backup_dir, "pre-restore"),
+                before_replace=self._dispose_connections,
+            )
+        except GuardError as exc:
+            payload = exc.to_dict()
+            logger.error("数据库恢复被拒绝：%s", payload)
+            return {
+                "success": False,
+                "message": payload.get("message") or "数据库恢复被拒绝",
+                "status": "refused",
+                "error": payload,
+            }
 
-            if not db_path:
-                return {"success": False, "message": "仅支持 SQLite 数据库恢复"}
+        if report.status != "succeeded":
+            logger.error(
+                "数据库恢复未成功：status=%s operation=%s error=%s",
+                report.status,
+                report.operation_id,
+                report.error,
+            )
+            return {
+                "success": False,
+                "message": "数据库恢复未成功，当前写入保持关闭或需人工处置",
+                "status": report.status,
+                "operation_id": report.operation_id,
+                "receipt_path": report.receipt_path,
+                "error": report.error,
+            }
 
-            if not os.path.isabs(backup_file):
-                backup_dir = self._get_backup_dir()
-                backup_path = os.path.join(backup_dir, backup_file)
-            else:
-                backup_path = backup_file
+        logger.info("数据库恢复成功：from=%s operation=%s", candidate, report.operation_id)
+        return {
+            "success": True,
+            "message": "数据库恢复成功",
+            "status": "succeeded",
+            "operation_id": report.operation_id,
+            "receipt_path": report.receipt_path,
+        }
 
-            if not os.path.exists(backup_path):
-                return {"success": False, "message": f"备份文件不存在：{backup_path}"}
+    @staticmethod
+    def _dispose_connections() -> None:
+        """替换数据库文件前丢掉旧连接池，避免旧连接继续指向旧 inode。"""
+        from app.db import dispose_and_recreate_engine
 
-            db_dir = os.path.dirname(db_path)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
-
-            shutil.copy2(backup_path, db_path)
-
-            logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
-
-            return {"success": True, "message": "数据库恢复成功"}
-
-        except RECOVERABLE_ERRORS:
-            logger.exception("数据库恢复失败")
-            return {"success": False, "message": "数据库恢复失败"}
+        dispose_and_recreate_engine()
 
     def list_backups(self) -> dict[str, Any]:
         """
@@ -239,7 +302,7 @@ class DatabaseService(NeuroEventPublisherMixin):
 
     def delete_backup(self, backup_file: str) -> dict[str, Any]:
         """
-        删除备份文件
+        删除备份文件（仅限备份目录内）
 
         Args:
             backup_file: 备份文件路径或文件名
@@ -248,11 +311,14 @@ class DatabaseService(NeuroEventPublisherMixin):
             结果字典
         """
         try:
-            if not os.path.isabs(backup_file):
-                backup_dir = self._get_backup_dir()
-                backup_path = os.path.join(backup_dir, backup_file)
-            else:
-                backup_path = backup_file
+            backup_dir = os.path.abspath(self._get_backup_dir())
+            backup_path = (
+                os.path.abspath(backup_file)
+                if os.path.isabs(backup_file)
+                else os.path.abspath(os.path.join(backup_dir, backup_file))
+            )
+            if not _is_path_inside(backup_dir, backup_path):
+                return {"success": False, "message": f"备份文件不在备份目录内：{backup_file}"}
 
             if not os.path.exists(backup_path):
                 return {"success": False, "message": f"备份文件不存在：{backup_path}"}

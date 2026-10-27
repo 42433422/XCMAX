@@ -37,8 +37,17 @@ _MIGRATION_LOCK_TIMEOUT_SECONDS = 600.0
 
 @contextmanager
 def migration_lock(data_dir: str | os.PathLike[str] | None = None) -> Iterator[None]:
-    """串行化同一 data_dir 下的 schema 迁移与迁移前备份。"""
-    lock_dir = ensure_desktop_dirs(data_dir)["data"]
+    """串行化同一 data_dir 下的 schema 迁移与迁移前备份。
+
+    迁移/备份都是写操作，必须在数据库保护协议允许写时进行：恢复结果为
+    ``UNKNOWN``、存在未完成的恢复意图或正在恢复时直接失败退出，不允许
+    带病迁移（``--migrate-only`` 与常规启动共用这一道门禁）。
+    """
+    dirs = ensure_desktop_dirs(data_dir)
+    lock_dir = dirs["data"]
+    from .database_generation_registry import DatabaseGuard
+
+    DatabaseGuard(lock_dir / "xcagi.db").require_startable()
     with exclusive_file_lock(
         lock_dir / _MIGRATION_LOCK_NAME,
         blocking=True,
@@ -145,15 +154,31 @@ def recover_if_corrupt(
     if _quick_check_ok(db):
         return {"action": "ok", "detail": ""}
 
-    # 4) 库损坏：改名留证据
+    # 4) 库损坏：主库与 -wal/-shm 一起改名留证据，避免旧 WAL 被重放到恢复库
     logger.error("database corrupt: %s, attempting recovery from backups", db)
+    from .database_generation_registry import (
+        DatabaseGuard,
+        new_operation_id,
+    )
+
+    guard = DatabaseGuard(db)
+    operation_id = new_operation_id("startup-corrupt")
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
     corrupt_path = db.with_name(f"xcagi.db.corrupt-{stamp}")
     try:
         db.rename(corrupt_path)
-        logger.warning("renamed corrupt db to %s", corrupt_path)
+        for suffix in ("-wal", "-shm", "-journal"):
+            sidecar = db.with_name(db.name + suffix)
+            if sidecar.exists():
+                sidecar.rename(corrupt_path.with_name(corrupt_path.name + suffix))
+        logger.warning("quarantined corrupt db and sidecars at %s", corrupt_path)
     except OSError as exc:
-        logger.error("failed to rename corrupt db: %s", exc)
+        logger.error("failed to quarantine corrupt db: %s", exc)
+        guard.mark_unknown(
+            reason="corrupt_quarantine_failed",
+            operation_id=operation_id,
+            detail={"error": str(exc)},
+        )
         return {"action": "corrupt_no_backup", "detail": f"rename failed: {exc}"}
 
     # 5) 扫描备份目录找最近的、通过 integrity_check 的备份
@@ -169,23 +194,55 @@ def recover_if_corrupt(
 
     if not candidates:
         logger.error("no backups dir, cannot recover")
+        guard.mark_unknown(reason="corrupt_no_backup", operation_id=operation_id)
         return {"action": "corrupt_no_backup", "detail": "no usable backup"}
 
+    from .restore_helper import RestoreTarget, guarded_restore
+
     candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    guard.write_intent(
+        operation_id,
+        targets=[db],
+        metadata={"source": "startup_corrupt_recovery"},
+    )
+    last_detail = "no usable backup"
     for candidate in candidates:
         if not _integrity_check_ok(candidate):
             logger.warning("skipping bad backup: %s", candidate)
             continue
-        try:
-            shutil.copy2(candidate, db)
+        report = guarded_restore(
+            [
+                RestoreTarget(
+                    database=db.resolve(),
+                    backup=candidate.resolve(),
+                    allowed_root=dirs["data"].resolve(),
+                )
+            ],
+            operation_id=operation_id,
+            safety_root=backups_dir / "pre-restore",
+        )
+        if report.status == "succeeded":
             logger.info("restored db from backup: %s", candidate.name)
             return {"action": "restored", "detail": candidate.name}
-        except OSError as exc:
-            logger.error("restore from %s failed: %s", candidate, exc)
-            continue
+        last_detail = f"{candidate.name}: {report.status}"
+        logger.error("restore from %s failed: %s", candidate.name, report.error)
+        if report.status in {"compensate_failed", "unknown"}:
+            # 结果未知时严禁换下一个备份重试，保持 UNKNOWN 等人工核验。
+            return {"action": "corrupt_no_backup", "detail": last_detail}
+        # 拒绝执行（未修改任何目标）才允许尝试下一个备份。
+        guard.clear_intent(operation_id)
 
-    # 6) 所有备份都不行——主库已被改名，需要调用方决定是否阻塞启动
+    # 6) 所有备份都不行——保持 UNKNOWN，不允许迁移或普通写入继续
     logger.error("all backups failed integrity check or restore")
+    try:
+        guard.clear_intent(operation_id)
+    except Exception:
+        pass
+    guard.mark_unknown(
+        reason="corrupt_no_backup",
+        operation_id=operation_id,
+        detail={"lastAttempt": last_detail},
+    )
     return {"action": "corrupt_no_backup", "detail": "no usable backup"}
 
 
