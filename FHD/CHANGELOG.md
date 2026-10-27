@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 安全扫描：路径注入告警仅允许豁免已经逐行复核的 CodeQL 精确位置；其他发现保留并阻断候选发布，防止同一文件的新问题被误隐藏。
+
 - 架构债 debt19 收口：拆分 MODstore/evals/pregel 巨文件为 facade+模块，compat-resource-glob 改为 tgz 依赖以收敛 package.json；用户侧功能不变。
 
 - 架构债 follow-up：收敛 ports/同名路由入口与兼容清单，不改变产品功能。
