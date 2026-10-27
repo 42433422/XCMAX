@@ -679,26 +679,28 @@ def test_ws_recoverable_error_during_receive():
 
 
 # ===========================================================================
-# 22. _safe_aiopen_control_payload – raw_key non-empty → key_preview set
-#     Lines 114-116
+# 22. _safe_aiopen_control_payload – fixed redaction without business values
 # ===========================================================================
 
 
 def test_safe_control_payload_key_preview():
-    """_safe_aiopen_control_payload must set key_preview (first 16 chars) when key present."""
-    # Import the private helper directly; no side-effects.
+    """Trace metadata must never expose a credential or its prefix."""
     from app.fastapi_routes.ai_open import _safe_aiopen_control_payload  # noqa: PLC0415
 
-    result = _safe_aiopen_control_payload({"key": "super-secret-key!", "other": "val"})
-    assert "key" not in result
-    assert result["key_preview"] == "super-secret-key"  # first 16 chars of "super-secret-key!"
-    assert result["other"] == "val"
+    payload = {"key": "super-secret-key!", "other": "val"}
+    original = payload.copy()
+    result = _safe_aiopen_control_payload(payload)
+    assert result == {"payload_redacted": True, "key_preview": "[REDACTED]"}
+    assert payload == original
+    assert "super-secret-key" not in str(result)
 
 
 def test_safe_control_payload_no_key():
-    """_safe_aiopen_control_payload with no key → no key_preview field."""
+    """Without credentials, arbitrary business fields are still not retained."""
     from app.fastapi_routes.ai_open import _safe_aiopen_control_payload  # noqa: PLC0415
 
-    result = _safe_aiopen_control_payload({"foo": "bar"})
-    assert "key_preview" not in result
-    assert result["foo"] == "bar"
+    payload = {"foo": "bar"}
+    original = payload.copy()
+    result = _safe_aiopen_control_payload(payload)
+    assert result == {"payload_redacted": True}
+    assert payload == original
