@@ -52,11 +52,14 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Install isolated cross-service test dependencies
         run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           python -m venv .delivery-e2e-venv
           .delivery-e2e-venv/bin/python -m pip install --upgrade pip
           .delivery-e2e-venv/bin/python -m pip install \
             -e './成都修茈科技有限公司/MODstore_deploy[web,dev]' \
-            'pandas>=2.0' 'pydantic-settings>=2.11'
+            'pandas>=2.0' 'pydantic-settings>=2.11' "$pytest_pin"
       - name: Verify signed delivery, runtime receipt and original-ticket rework
         working-directory: 成都修茈科技有限公司/MODstore_deploy
         env:

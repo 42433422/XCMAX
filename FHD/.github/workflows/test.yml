@@ -93,9 +93,12 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+          pytest_pin="$(python "$GITHUB_WORKSPACE/FHD/scripts/dev/check_requirements_lock.py" --pytest-pin)"
+          [[ "$pytest_pin" =~ ^pytest==[0-9]+(\.[0-9]+){2}$ ]]
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
-          pip install -r deploy/requirements-dev.txt
+          pip install -r deploy/requirements-dev.txt "$pytest_pin"
 
       - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
