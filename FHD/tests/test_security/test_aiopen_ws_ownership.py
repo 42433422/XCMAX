@@ -36,6 +36,32 @@ def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, prin
                 pass
 
 
+@pytest.mark.parametrize(
+    ("base_url", "origin"),
+    [
+        ("https://testserver", "http://testserver"),
+        ("http://testserver", "https://testserver"),
+    ],
+)
+def test_screen_rejects_same_host_with_different_scheme(
+    monkeypatch, base_url, origin
+):
+    monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
+    monkeypatch.setattr(
+        ai_open_routes,
+        "resolve_session_user",
+        lambda ws: SimpleNamespace(id=1, is_active=True),
+    )
+    app = FastAPI()
+    app.include_router(ai_open_routes.router)
+    with TestClient(app, base_url=base_url) as client:
+        with pytest.raises(WebSocketDisconnect):
+            with client.websocket_connect(
+                "/api/aiopen/ws", headers={"Origin": origin}
+            ):
+                pass
+
+
 def test_screen_explicit_cross_origin_allowlist(monkeypatch):
     monkeypatch.setenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", "https://frontend.example")
     monkeypatch.setattr(
