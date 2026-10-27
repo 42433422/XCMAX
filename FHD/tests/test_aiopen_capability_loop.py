@@ -16,7 +16,8 @@ from app.fastapi_routes.ai_open import router as ai_open_router
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     app = FastAPI()
 
     @app.get("/api/products/list")
@@ -28,7 +29,7 @@ def client():
         return {"success": True, "reply": f"echo:{body.get('message', '')}"}
 
     app.include_router(ai_open_router)
-    return TestClient(app)
+    return TestClient(app, headers={"X-AIOPEN-Key": "fixture-aiopen-key"})
 
 
 @pytest.fixture(autouse=True)
