@@ -121,11 +121,13 @@ test('provider mode falls back only on quota, login, billing, rate-limit, timeou
     '429 Too Many Requests',
     'request timed out',
     'cursor exited with code null (timed out)\ntimed out',
+    'trae 失败: failed to create agent: failed to create agent: Models is required',
   ]) assert.equal(isToolFallbackEligible(text, 'provider'), true, text);
   for (const text of [
     'AssertionError: expected 2 to equal 3',
     'SyntaxError: Unexpected token',
     'safety policy violation: unauthorized content',
+    'failed to create agent: Models is required; permission denied',
     '',
   ]) assert.equal(isToolFallbackEligible(text, 'provider'), false, text);
   assert.equal(isToolFallbackEligible('AssertionError: expected 2 to equal 3', 'any'), true);
