@@ -34,12 +34,14 @@ jobs:
           actual = hashlib.sha1(b'blob ' + str(len(original)).encode() + b'\0' + original).hexdigest()
           if actual != 'a20249dd064e55803608f734062a2238737aeabc':
               raise SystemExit('Unexpected changelog baseline; do not overwrite concurrent work')
-          marker = b'## Unreleased\n'
-          if original.count(marker) != 1:
-              raise SystemExit('Unreleased marker is not unique')
-          entry = '\n- 安全：AIOPEN 工具及管理操作的新增追踪只保留必要状态元数据，不再复制业务正文、凭据或异常原文；正常业务响应不变，历史审计材料保留。\n'.encode()
-          updated = original.replace(marker, marker + entry, 1)
-          if updated.replace(marker + entry, marker, 1) != original:
+          lines = original.splitlines(keepends=True)
+          if len(lines) < 3 or lines[2].rstrip(b'\r\n') != b'## Unreleased':
+              raise SystemExit('Expected leading Unreleased section is absent')
+          prefix = b''.join(lines[:3])
+          newline = b'\r\n' if lines[2].endswith(b'\r\n') else b'\n'
+          entry = newline + '- 安全：AIOPEN 工具及管理操作的新增追踪只保留必要状态元数据，不再复制业务正文、凭据或异常原文；正常业务响应不变，历史审计材料保留。'.encode() + newline
+          updated = prefix + entry + original[len(prefix):]
+          if updated[:len(prefix)] + updated[len(prefix) + len(entry):] != original:
               raise SystemExit('Historical changelog bytes changed')
           path.write_bytes(updated)
           PY
