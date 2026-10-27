@@ -9,7 +9,7 @@ from logging import Logger
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .ports import Payload, ProductAgentCall, ProductServiceFacade
+from .port_contracts import Payload, ProductAgentCall, ProductServiceFacade
 
 
 def _normalize_products_create_payload(payload: Payload) -> Payload:

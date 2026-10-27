@@ -138,7 +138,11 @@ async def stage_resolve_workflow(
             "",
         )
     cands = [
-        {"index": i, "name": w.get("name", ""), "description": str(w.get("description", ""))[:120]}
+        {
+            "index": i,
+            "name": w.get("name", ""),
+            "description": str(w.get("description", ""))[:120],
+        }
         for i, w in enumerate(eligible_workflows)
     ]
     msg = f"员工意图：{intent.role}（{intent.scenario}）\n候选工作流：{_facade().json.dumps(cands, ensure_ascii=False)}"
@@ -250,7 +254,8 @@ async def stage_design_v2(
         if not isinstance(actions.get("agent"), dict):
             actions["agent"] = {}
         actions["agent"].setdefault(
-            "workspace", {"mode": "user_project", "requires_project_root": True, "read_only": True}
+            "workspace",
+            {"mode": "user_project", "requires_project_root": True, "read_only": True},
         )
     declared_handlers = list(actions.get("handlers") or [])
     is_agent = "agent" in declared_handlers
@@ -462,7 +467,10 @@ def stage_assemble(
     eid = intent.id
     hp_norm, _ = normalize_xcagi_host_profile({"panel_kind": "mod_http"})
     wf_row = merge_workflow_employee_for_manifest(
-        employee_id=eid, label=intent.name, panel_summary=intent.scenario, host_profile=hp_norm
+        employee_id=eid,
+        label=intent.name,
+        panel_summary=intent.scenario,
+        host_profile=hp_norm,
     )
     if workflow_choice and workflow_choice.workflow_id:
         wf_row["workflow_id"] = workflow_choice.workflow_id
@@ -525,7 +533,11 @@ def stage_assemble(
                 actions_in_v2["agent"] = {}
             actions_in_v2["agent"].setdefault(
                 "workspace",
-                {"mode": "user_project", "requires_project_root": True, "read_only": True},
+                {
+                    "mode": "user_project",
+                    "requires_project_root": True,
+                    "read_only": True,
+                },
             )
         v2_dict["actions"] = actions_in_v2
     manifest: _facade().Dict[str, _facade().Any] = {
@@ -656,7 +668,9 @@ async def stage_generate_code(
         _strip_code_fence,
         sanitize_employee_stem,
     )
-    from modstore_server.script_agent.llm_output_sanitize import finalize_extracted_python
+    from modstore_server.script_agent.llm_output_sanitize import (
+        finalize_extracted_python,
+    )
 
     result = _facade().GeneratedCode()
     handlers = list(manifest.get("employee_config_v2", {}).get("actions", {}).get("handlers", []))
@@ -799,12 +813,18 @@ async def stage_generate_code(
         runtime_kind = rule_spec.get("runtime_kind", "")
         result.runtime_kind = runtime_kind
         result.employee_py = render_direct_python_asset_worker(
-            employee_id=employee_id, label=label, runtime_module=runtime_mod, rule_spec=rule_spec
+            employee_id=employee_id,
+            label=label,
+            runtime_module=runtime_mod,
+            rule_spec=rule_spec,
         )
         result.code_source = "asset_pipeline_llm"
         try:
             from modstore_server.llm_chat_proxy import chat_dispatch
-            from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+            from modstore_server.llm_key_resolver import (
+                platform_api_key,
+                platform_base_url,
+            )
 
             prov = "xiaomi"
             api_key = platform_api_key(prov)
@@ -888,7 +908,10 @@ async def stage_generate_code(
         result.code_source = "agent_llm_impl"
         try:
             from modstore_server.llm_chat_proxy import chat_dispatch
-            from modstore_server.llm_key_resolver import platform_api_key, platform_base_url
+            from modstore_server.llm_key_resolver import (
+                platform_api_key,
+                platform_base_url,
+            )
 
             prov = "xiaomi"
             api_key = platform_api_key(prov)
@@ -1037,7 +1060,9 @@ async def run_pipeline(
         await _emit("stage_error", "resolve_workflow", error=err, retryable=True)
         return None
     await _emit(
-        "stage_done", "resolve_workflow", data=_facade().asdict(wf_choice) if wf_choice else None
+        "stage_done",
+        "resolve_workflow",
+        data=_facade().asdict(wf_choice) if wf_choice else None,
     )
     await _emit("stage_start", "suggest_skills")
     skills, err = await _facade().stage_suggest_skills(intent, llm)
@@ -1057,7 +1082,9 @@ async def run_pipeline(
         await _emit("stage_error", "suggest_pricing", error=err, retryable=False)
         pricing = None
     await _emit(
-        "stage_done", "suggest_pricing", data=_facade().asdict(pricing) if pricing else None
+        "stage_done",
+        "suggest_pricing",
+        data=_facade().asdict(pricing) if pricing else None,
     )
     await _emit("stage_start", "assemble")
     manifest, errs = _facade().stage_assemble(intent, wf_choice, v2, skills, pricing)
@@ -1099,6 +1126,9 @@ async def run_pipeline(
             },
         )
     await _emit(
-        "pipeline_done", "pipeline", manifest=manifest, generated_code=_facade().asdict(generated)
+        "pipeline_done",
+        "pipeline",
+        manifest=manifest,
+        generated_code=_facade().asdict(generated),
     )
     return manifest

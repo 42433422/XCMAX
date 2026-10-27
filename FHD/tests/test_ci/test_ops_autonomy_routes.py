@@ -158,10 +158,10 @@ def test_owner_work_order_review_requires_all_gates_and_records_session_actor(mo
         )
     ]
     view = {"wo_id": "WO-abcdef123456", "status": "in_dev", "history": history}
-    monkeypatch.setattr("app.services.work_order_ssot.list_work_orders", lambda limit: [view])
-    monkeypatch.setattr("app.services.work_order_ssot.get_work_order", lambda wo_id: view)
+    monkeypatch.setattr("app.domain.shared_services.ssot.list_work_orders", lambda limit: [view])
+    monkeypatch.setattr("app.domain.shared_services.ssot.get_work_order", lambda wo_id: view)
     monkeypatch.setattr(
-        "app.services.work_order_gate.record_gate",
+        "app.domain.shared_services.gate.record_gate",
         lambda *args, **kwargs: {"ok": True, "gate": args[1], "status": args[2]},
     )
     monkeypatch.setattr(

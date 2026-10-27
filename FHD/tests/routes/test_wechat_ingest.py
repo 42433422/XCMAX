@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from app.application import wechat_ingest_service
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.customer import Customer
 from app.db.models.wechat_sync import WechatContact, WechatMessage
 from app.fastapi_routes import wechat_ingest

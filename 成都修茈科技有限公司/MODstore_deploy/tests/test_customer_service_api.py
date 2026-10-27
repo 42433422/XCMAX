@@ -940,7 +940,10 @@ def test_order_field_extract_keeps_short_mixed_ids_and_rejects_ambiguous_text(me
 
 
 def test_infer_intent_order_no_alone_is_not_refund():
-    from modstore_server.customer_service_orchestrator import infer_intent, should_create_ticket
+    from modstore_server.customer_service_orchestrator import (
+        infer_intent,
+        should_create_ticket,
+    )
 
     intent = infer_intent("订单号：ABC123456789", {"order_no": "ABC123456789"})
     assert intent == "general"
@@ -1216,7 +1219,7 @@ def test_ticket_submitter_type_backfills_and_admin_filter_keeps_customer_scope(c
 
     from sqlalchemy import text
 
-    from modstore_server.db.base import get_engine
+    from modstore_server.db.db_base import get_engine
     from modstore_server.models_cs import CustomerServiceAuditLog
 
     customer, admin = (

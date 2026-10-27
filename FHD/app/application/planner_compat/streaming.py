@@ -15,7 +15,7 @@ from app.fastapi_routes.xcagi_compat_chat_models import XcagiCompatChatBody
 from .admission import ChatAdmission
 from .application import FastPaths
 from .persona import PersonaEnricher
-from .ports import Context, Payload
+from .protocols import Context, Payload
 
 
 class StreamBackend(Protocol):

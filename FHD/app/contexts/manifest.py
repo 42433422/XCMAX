@@ -31,7 +31,7 @@ BOUNDED_CONTEXTS: tuple[BoundedContextMeta, ...] = (
     BoundedContextMeta(
         context_id="inventory",
         event_prefixes=("inventory.",),
-        aggregate_paths=("app.domain.inventory", "app.services.inventory_service"),
+        aggregate_paths=("app.domain.inventory", "app.domain.shared_services.inventory_service"),
         handler_module="app.neuro_bus.domains.inventory_domain_handlers",
     ),
     BoundedContextMeta(
@@ -49,7 +49,7 @@ BOUNDED_CONTEXTS: tuple[BoundedContextMeta, ...] = (
     BoundedContextMeta(
         context_id="intent",
         event_prefixes=("intent.",),
-        aggregate_paths=("app.domain.services.intent",),
+        aggregate_paths=("app.domain.conversation.intent",),
         handler_module="app.neuro_bus.domains.intent_domain",
     ),
 )

@@ -3,7 +3,7 @@
 from sqlalchemy import Float, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class MacControlTask(Base):

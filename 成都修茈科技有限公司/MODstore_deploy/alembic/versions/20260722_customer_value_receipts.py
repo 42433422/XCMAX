@@ -29,23 +29,43 @@ def upgrade() -> None:
                 nullable=False,
                 server_default="pending_evidence",
             ),
-            sa.Column("customer_ref", sa.String(128), nullable=False, server_default=""),
-            sa.Column("customer_goal_id", sa.String(128), nullable=False, server_default=""),
+            sa.Column(
+                "customer_ref", sa.String(128), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "customer_goal_id", sa.String(128), nullable=False, server_default=""
+            ),
             sa.Column("order_no", sa.String(96), nullable=False, server_default=""),
             sa.Column("artifact_id", sa.String(256), nullable=False, server_default=""),
-            sa.Column("acceptance_id", sa.String(128), nullable=False, server_default=""),
+            sa.Column(
+                "acceptance_id", sa.String(128), nullable=False, server_default=""
+            ),
             sa.Column("amount_cents", sa.Integer(), nullable=False, server_default="0"),
             sa.Column("currency", sa.String(8), nullable=False, server_default="CNY"),
-            sa.Column("payment_provider", sa.String(32), nullable=False, server_default=""),
-            sa.Column("provider_trade_no", sa.String(128), nullable=False, server_default=""),
             sa.Column(
-                "provider_verification", sa.String(64), nullable=False, server_default=""
+                "payment_provider", sa.String(32), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "provider_trade_no", sa.String(128), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "provider_verification",
+                sa.String(64),
+                nullable=False,
+                server_default="",
             ),
             sa.Column("environment", sa.String(32), nullable=False, server_default=""),
-            sa.Column("source_event_id", sa.String(192), nullable=False, server_default=""),
-            sa.Column("source_employee_id", sa.String(128), nullable=False, server_default=""),
             sa.Column(
-                "supersedes_receipt_id", sa.String(96), nullable=False, server_default=""
+                "source_event_id", sa.String(192), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "source_employee_id", sa.String(128), nullable=False, server_default=""
+            ),
+            sa.Column(
+                "supersedes_receipt_id",
+                sa.String(96),
+                nullable=False,
+                server_default="",
             ),
             sa.Column("evidence_json", sa.Text(), nullable=False, server_default="{}"),
             sa.Column("evidence_digest", sa.String(64), nullable=False),

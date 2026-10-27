@@ -47,7 +47,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.domain.neuro.processors.conscious import (
     BusinessLogicHandler,
     ConsciousProcessor,
@@ -58,7 +58,7 @@ from app.domain.neuro.processors.conscious import (
     get_conscious_processor,
 )
 from app.domain.value_objects import ContactInfo
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
 # ===========================================================================
 # Shared fixtures
@@ -727,13 +727,13 @@ class TestPaddleOcrAvailability:
     """Cover ``check_paddle_available`` and helpers."""
 
     def test_check_paddle_available_returns_true_when_installed(self):
-        from app.services.paddle_ocr_runner import check_paddle_available
+        from app.domain.shared_services.paddle_ocr_runner import check_paddle_available
 
         with patch.dict("sys.modules", {"paddleocr": MagicMock()}):
             assert check_paddle_available() is True
 
     def test_check_paddle_available_returns_false_when_missing(self):
-        from app.services.paddle_ocr_runner import check_paddle_available
+        from app.domain.shared_services.paddle_ocr_runner import check_paddle_available
 
         original = __import__("sys").modules.get("paddleocr")
         try:
@@ -746,17 +746,17 @@ class TestPaddleOcrAvailability:
                 __import__("sys").modules["paddleocr"] = original
 
     def test_is_paddlex_infer_dir_empty_path(self):
-        from app.services.paddle_ocr_runner import _is_paddlex_infer_dir
+        from app.domain.shared_services.paddle_ocr_runner import _is_paddlex_infer_dir
 
         assert _is_paddlex_infer_dir("") is False
 
     def test_is_paddlex_infer_dir_no_inference_yml(self, tmp_dir):
-        from app.services.paddle_ocr_runner import _is_paddlex_infer_dir
+        from app.domain.shared_services.paddle_ocr_runner import _is_paddlex_infer_dir
 
         assert _is_paddlex_infer_dir(tmp_dir) is False
 
     def test_is_paddlex_infer_dir_with_inference_yml(self, tmp_dir):
-        from app.services.paddle_ocr_runner import _is_paddlex_infer_dir
+        from app.domain.shared_services.paddle_ocr_runner import _is_paddlex_infer_dir
 
         with open(os.path.join(tmp_dir, "inference.yml"), "w") as f:
             f.write("test")
@@ -767,7 +767,7 @@ class TestPaddleOcrPickDetRecDirs:
     """Cover ``_pick_det_rec_dirs``."""
 
     def test_pick_det_rec_dirs_finds_both(self, tmp_dir):
-        from app.services.paddle_ocr_runner import _pick_det_rec_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _pick_det_rec_dirs
 
         det_dir = os.path.join(tmp_dir, "PP-OCRv4_mobile_det_infer")
         rec_dir = os.path.join(tmp_dir, "PP-OCRv4_mobile_rec_infer")
@@ -783,14 +783,14 @@ class TestPaddleOcrPickDetRecDirs:
         assert rec is not None and rec.endswith("PP-OCRv4_mobile_rec_infer")
 
     def test_pick_det_rec_dirs_finds_neither(self, tmp_dir):
-        from app.services.paddle_ocr_runner import _pick_det_rec_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _pick_det_rec_dirs
 
         det, rec = _pick_det_rec_dirs(tmp_dir)
         assert det is None
         assert rec is None
 
     def test_pick_det_rec_dirs_finds_only_legacy_names(self, tmp_dir):
-        from app.services.paddle_ocr_runner import _pick_det_rec_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _pick_det_rec_dirs
 
         det_dir = os.path.join(tmp_dir, "ch_PP-OCRv4_det_infer")
         rec_dir = os.path.join(tmp_dir, "ch_PP-OCRv4_rec_infer")
@@ -810,7 +810,7 @@ class TestPaddleOcrResolveLocalModelDirs:
     """Cover ``_resolve_local_model_dirs``."""
 
     def test_resolve_local_model_dirs_with_explicit_dirs(self, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_DIR", "/det")
         monkeypatch.setenv("PADDLEOCR_TEXT_REC_MODEL_DIR", "/rec")
@@ -820,7 +820,7 @@ class TestPaddleOcrResolveLocalModelDirs:
         assert rec == "/rec"
 
     def test_resolve_local_model_dirs_with_root(self, tmp_dir, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_DIR", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_DIR", raising=False)
@@ -840,7 +840,7 @@ class TestPaddleOcrResolveLocalModelDirs:
         assert rec is not None and rec.endswith("PP-OCRv4_mobile_rec_infer")
 
     def test_resolve_local_model_dirs_no_env(self, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_dirs
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_dirs
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_DIR", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_DIR", raising=False)
@@ -854,7 +854,7 @@ class TestPaddleOcrResolveLocalModelNames:
     """Cover ``_resolve_local_model_names``."""
 
     def test_resolve_local_model_names_with_env(self, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_NAME", "custom_det")
         monkeypatch.setenv("PADDLEOCR_TEXT_REC_MODEL_NAME", "custom_rec")
@@ -863,7 +863,7 @@ class TestPaddleOcrResolveLocalModelNames:
         assert rn == "custom_rec"
 
     def test_resolve_local_model_names_defaults(self, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
 
         monkeypatch.delenv("PADDLEOCR_TEXT_DET_MODEL_NAME", raising=False)
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_NAME", raising=False)
@@ -872,7 +872,7 @@ class TestPaddleOcrResolveLocalModelNames:
         assert rn == "PP-OCRv4_mobile_rec"
 
     def test_resolve_local_model_names_only_det_env(self, monkeypatch):
-        from app.services.paddle_ocr_runner import _resolve_local_model_names
+        from app.domain.shared_services.paddle_ocr_runner import _resolve_local_model_names
 
         monkeypatch.setenv("PADDLEOCR_TEXT_DET_MODEL_NAME", "custom_det")
         monkeypatch.delenv("PADDLEOCR_TEXT_REC_MODEL_NAME", raising=False)
@@ -942,38 +942,38 @@ class TestPaddleOcrNormalizePredictResult:
     """Cover ``_normalize_predict_result``."""
 
     def test_normalize_list_with_dict(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         result = [{"res": {"rec_texts": ["hello"]}}]
         out = _normalize_predict_result(result)
         assert out == {"rec_texts": ["hello"]}
 
     def test_normalize_object_with_json(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         obj = SimpleNamespace(json={"res": {"rec_texts": ["world"]}})
         out = _normalize_predict_result(obj)
         assert out == {"rec_texts": ["world"]}
 
     def test_normalize_empty_list(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         assert _normalize_predict_result([]) == {}
 
     def test_normalize_non_dict_json(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         obj = SimpleNamespace(json=["not", "a", "dict"])
         assert _normalize_predict_result(obj) == {}
 
     def test_normalize_res_not_dict(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         result = [{"res": "not a dict"}]
         assert _normalize_predict_result(result) == {}
 
     def test_normalize_no_json_attr(self):
-        from app.services.paddle_ocr_runner import _normalize_predict_result
+        from app.domain.shared_services.paddle_ocr_runner import _normalize_predict_result
 
         obj = SimpleNamespace()
         assert _normalize_predict_result(obj) == {}
@@ -1633,7 +1633,7 @@ class TestKittenReportCollectPluginResults:
     """Cover ``KittenReportExportService.collect_plugin_results``."""
 
     def test_collect_plugin_results_empty_payload(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         results = service.collect_plugin_results({})
@@ -1643,7 +1643,7 @@ class TestKittenReportCollectPluginResults:
         assert "financial_report" in keys
 
     def test_collect_plugin_results_with_dataset(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1659,7 +1659,7 @@ class TestKittenReportCollectPluginResults:
         assert "10" in rule_stats["summary"]
 
     def test_collect_plugin_results_with_none_values(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {"dataset": None, "messages": None, "result": None}
@@ -1667,8 +1667,8 @@ class TestKittenReportCollectPluginResults:
         assert len(results) == 6
 
     def test_plugin_to_dict_conversion(self):
-        from app.services.kitten_report.plugins import PluginResult
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.plugins import PluginResult
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         item = PluginResult(
             key="test",
@@ -1691,7 +1691,7 @@ class TestKittenReportBuildReport:
     """Cover ``KittenReportExportService.build_report``."""
 
     def test_build_report_minimal_payload(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         result = service.build_report({})
@@ -1703,7 +1703,7 @@ class TestKittenReportBuildReport:
         assert len(result["plugins"]) == 6
 
     def test_build_report_with_full_payload(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1727,7 +1727,7 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_with_html_content(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {
@@ -1742,7 +1742,7 @@ class TestKittenReportBuildReport:
         assert len(result["content"]) > 0
 
     def test_build_report_empty_messages(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         payload = {"messages": []}
@@ -1754,30 +1754,30 @@ class TestKittenReportHtmlToText:
     """Cover ``_html_to_text`` static method."""
 
     def test_html_to_text_br_replacement(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("a<br>b<br/>c<br />d")
         assert text == "a\nb\nc\nd"
 
     def test_html_to_text_strong_removal(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("<strong>bold</strong>")
         assert text == "bold"
 
     def test_html_to_text_entity_replacement(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         text = KittenReportExportService._html_to_text("a&nbsp;b&amp;c")
         assert text == "a b&c"
 
     def test_html_to_text_empty_string(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         assert KittenReportExportService._html_to_text("") == ""
 
     def test_html_to_text_no_html(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         assert KittenReportExportService._html_to_text("plain text") == "plain text"
 
@@ -1786,11 +1786,13 @@ class TestKittenReportFinancialSheet:
     """Cover ``_add_financial_sheet`` indirectly via build_report."""
 
     def test_build_report_with_financial_plugin_data(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         # Patch FinancialReportPlugin to return rich data
-        with patch("app.services.kitten_report.service.FinancialReportPlugin") as MockFinancial:
+        with patch(
+            "app.domain.shared_services.kitten_report.service.FinancialReportPlugin"
+        ) as MockFinancial:
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="financial_report",
                 title="财务报表分析",
@@ -1831,10 +1833,12 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_with_inventory_plugin_data(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
-        with patch("app.services.kitten_report.service.InventoryValuationPlugin") as MockInv:
+        with patch(
+            "app.domain.shared_services.kitten_report.service.InventoryValuationPlugin"
+        ) as MockInv:
             MockInv.return_value.run.return_value = SimpleNamespace(
                 key="inventory_valuation",
                 title="库存价值评估",
@@ -1857,13 +1861,17 @@ class TestKittenReportFinancialSheet:
             assert len(result["content"]) > 0
 
     def test_build_report_no_financial_no_inventory(self):
-        from app.services.kitten_report.service import KittenReportExportService
+        from app.domain.shared_services.kitten_report.service import KittenReportExportService
 
         service = KittenReportExportService()
         # Both plugins return non-matching keys -> _add_financial_sheet returns early
         with (
-            patch("app.services.kitten_report.service.FinancialReportPlugin") as MockFinancial,
-            patch("app.services.kitten_report.service.InventoryValuationPlugin") as MockInv,
+            patch(
+                "app.domain.shared_services.kitten_report.service.FinancialReportPlugin"
+            ) as MockFinancial,
+            patch(
+                "app.domain.shared_services.kitten_report.service.InventoryValuationPlugin"
+            ) as MockInv,
         ):
             MockFinancial.return_value.run.return_value = SimpleNamespace(
                 key="other",
@@ -2238,7 +2246,7 @@ class TestProcessingResult:
 @pytest.fixture
 def excel_client() -> TestClient:
     app = FastAPI()
-    from app.fastapi_routes.domains.excel.routes import router as excel_router
+    from app.fastapi_routes.domains.excel.excel_routes import router as excel_router
 
     app.include_router(excel_router)
     return TestClient(app, raise_server_exceptions=False)
@@ -2383,7 +2391,9 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_with_file(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.routes.get_upload_dir", return_value=tmp_dir),
+            patch(
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+            ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,
@@ -2404,7 +2414,9 @@ class TestExcelAiAnalyze:
 
     def test_ai_analyze_file_analysis_error_returns_500(self, excel_client, tmp_dir):
         with (
-            patch("app.fastapi_routes.domains.excel.routes.get_upload_dir", return_value=tmp_dir),
+            patch(
+                "app.fastapi_routes.domains.excel.excel_routes.get_upload_dir", return_value=tmp_dir
+            ),
             patch(
                 "app.application.facades.conversation_facade.get_data_analysis_service"
             ) as mock_get,

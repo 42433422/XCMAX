@@ -403,7 +403,7 @@ include_external_packages = true
 id = "sync-service-uses-dal"
 name = "Sync service uses the existing DAO instead of the SQLite driver"
 type = "forbidden"
-source_modules = ["app.services.xcmax_sync_service"]
+source_modules = ["app.domain.shared_services.xcmax_sync_service"]
 forbidden_modules = ["sqlite3"]
 allow_indirect_imports = true
 

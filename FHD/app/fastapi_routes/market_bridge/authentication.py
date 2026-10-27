@@ -9,9 +9,13 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from app.application.market_bridge.protocols import (
+    DemoPayload,
+    JsonObject,
+    NormalizeAuth,
+    ProxyJSON,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-from .ports import DemoPayload, JsonObject, NormalizeAuth, ProxyJSON
 
 
 @dataclass

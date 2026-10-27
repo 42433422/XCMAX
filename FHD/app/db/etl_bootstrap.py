@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, cast
 
 from sqlalchemy import Table, inspect, text
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.etl import (
     EtlRun,
     EtlRunRow,

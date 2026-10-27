@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import Connection, Payload, ResponsePorts, Route
+from .protocols import Connection, Payload, ResponsePorts, Route
 
 
 def _response_status_code(response: object, default: int = 200) -> int:

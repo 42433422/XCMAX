@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from .types import Diagnosis, Signal
+from .autonomy_types import Diagnosis, Signal
 
 # 服务器端 + 桌面端共用的 kind → root_cause 映射
 RCA_MAP: dict[str, str] = {

@@ -353,7 +353,9 @@ def answer_pending_question(
         session_id = str(context.get("session_id") or "").strip()
         if session_id:
             try:
-                from modstore_server.retort_clarification_gate import answer_clarification
+                from modstore_server.retort_clarification_gate import (
+                    answer_clarification,
+                )
 
                 retort_bridge = answer_clarification(
                     session_id,

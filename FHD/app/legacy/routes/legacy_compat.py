@@ -141,7 +141,7 @@ def _register_early_critical_routes(app: FastAPI) -> None:
     # legacy_auth — bare mount, must mount before xcagi_compat / SPA fallback
     _mount_router(
         app,
-        "app.fastapi_routes.domains.auth.routes",
+        "app.fastapi_routes.domains.auth.auth_routes",
         router_attr="router",
         log_name="legacy_auth_router early (/api/auth/*)",
     )

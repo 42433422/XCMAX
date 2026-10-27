@@ -273,8 +273,12 @@ def main() -> int:
         print(f"No employee.yaml files found under {yuangon_dir}", file=sys.stderr)
         return 2
 
-    from modstore_server.application.catalog import get_default_catalog_application_service
-    from modstore_server.application.employee import get_default_employee_application_service
+    from modstore_server.application.catalog import (
+        get_default_catalog_application_service,
+    )
+    from modstore_server.application.employee import (
+        get_default_employee_application_service,
+    )
     from modstore_server.employee_ai_scaffold import build_employee_pack_zip
     from modstore_server.models import CatalogItem, User, get_session_factory
 
@@ -385,7 +389,9 @@ def main() -> int:
 
     if not args.dry_run and failed == 0:
         try:
-            from modstore_server.incident_bus import sync_employee_trigger_bindings_from_yuangon
+            from modstore_server.incident_bus import (
+                sync_employee_trigger_bindings_from_yuangon,
+            )
 
             n = sync_employee_trigger_bindings_from_yuangon(yuangon_dir)
             print(f"synced incident trigger bindings: {n} rows (yuangon)")

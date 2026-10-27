@@ -39,7 +39,12 @@ def schedule_windows_verification(db, parent, raw):
         key=digest([parent.id, "windows", sha, archive]),
         request=child_request,
     )
-    event(db, parent, "windows_verification_queued", {"child_task_id": child.id, **evidence})
+    event(
+        db,
+        parent,
+        "windows_verification_queued",
+        {"child_task_id": child.id, **evidence},
+    )
     db.commit()
     return ""
 

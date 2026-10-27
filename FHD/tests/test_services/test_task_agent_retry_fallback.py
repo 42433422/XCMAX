@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.services.task_agent import TaskAgent, get_task_agent
+from app.domain.shared_services.task_agent import TaskAgent, get_task_agent
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def agent():
 @pytest.fixture(autouse=True)
 def _reset_task_context():
     """每个测试后清 task_context_service 状态。"""
-    from app.services.task_context_service import get_task_context_service
+    from app.domain.shared_services.task_context_service import get_task_context_service
 
     svc = get_task_context_service()
     for uid in list(svc._store.keys() if hasattr(svc, "_store") else []):

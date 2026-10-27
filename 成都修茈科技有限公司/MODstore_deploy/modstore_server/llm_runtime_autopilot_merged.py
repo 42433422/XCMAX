@@ -224,7 +224,10 @@ async def reconcile_llm_route_autopilot(
     if not event["enabled"] and (not force):
         event.update({"action": "disabled", "reason": "autopilot_disabled"})
         return _facade()._record(event)
-    from modstore_server.llm_quota_monitor import classify_probe_result, platform_quota_snapshot
+    from modstore_server.llm_quota_monitor import (
+        classify_probe_result,
+        platform_quota_snapshot,
+    )
     from modstore_server.llm_runtime_route import (
         current_runtime_route,
         platform_model_catalog,

@@ -14,7 +14,7 @@ from app.application.workflow.approval_service import (
     process_approval_timeouts,
     reload_approval_service,
 )
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     ApprovalRequest,
     ApprovalStatus,
     PlanGraph,
@@ -426,7 +426,7 @@ def test_ai_workflow_approval_persists_valid_actor_flow_and_audit(monkeypatch, t
     from sqlalchemy import text
 
     import app.db as db_mod
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.db.models.approval import (
         ApprovalFlow,
         ApprovalFlowNode,

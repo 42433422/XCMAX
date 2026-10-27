@@ -148,7 +148,10 @@ from modstore_server.workbench.uploads import read_workbench_uploads
 from modstore_server.workbench.vibe_readiness import (
     _check_vibe_coding_capability as _check_vibe_coding_capability,
 )
-from modstore_server.workbench_research import build_research_context, fetch_web_search_context_pack
+from modstore_server.workbench_research import (
+    build_research_context,
+    fetch_web_search_context_pack,
+)
 from modstore_server.workbench_script_runner import run_script_agent_job, run_script_job
 from modstore_server.workflow_engine import run_workflow_sandbox
 from modstore_server.workflow_nl_graph import apply_nl_workflow_graph
@@ -392,7 +395,10 @@ async def _run_workbench_script_pipeline(
         mdl,
         db,
         ports=script_pipeline.ScriptPorts(
-            _session_store(), _progress(), run_script_job, _commit_script_workflow_from_result
+            _session_store(),
+            _progress(),
+            run_script_job,
+            _commit_script_workflow_from_result,
         ),
     )
 
@@ -436,7 +442,14 @@ async def _run_workbench_employee_pipeline(
     sid, user_id, payload, intent, brief, prov, mdl, replace, db, user
 ):
     return await employee_pipeline.run_employee_pipeline(
-        sid, user_id, payload, brief, prov, mdl, replace, services=_employee_services(db, user)
+        sid,
+        user_id,
+        payload,
+        brief,
+        prov,
+        mdl,
+        replace,
+        services=_employee_services(db, user),
     )
 
 
@@ -585,7 +598,9 @@ async def workbench_unified_tts(
 @router.post("/tts/edge", summary="微软在线神经 TTS（edge-tts，返回 MP3）")
 async def workbench_edge_tts(body: WorkbenchEdgeTtsBody, _user: User = Depends(_get_current_user)):
     return await speech_api.workbench_edge_tts(
-        body, _user, ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS))
+        body,
+        _user,
+        ports=speech_api.SpeechPorts(cast(speech_api.EdgeBackend | None, _EDGE_TTS)),
     )
 
 
@@ -618,7 +633,10 @@ async def employee_ai_refine_prompt(
     return await employee_drafts.employee_ai_refine_prompt(body, user, ports=_draft_ports())
 
 
-@router.post("/employee-bench-test", summary="员工上架前基准测试（LLM 生成任务 + 执行 + 五维审核）")
+@router.post(
+    "/employee-bench-test",
+    summary="员工上架前基准测试（LLM 生成任务 + 执行 + 五维审核）",
+)
 async def employee_bench_test(body: EmployeeBenchRequest, user: User = Depends(_get_current_user)):
     """
     1. LLM 生成 1-5 级（每级 3 条）共 15 项测试任务

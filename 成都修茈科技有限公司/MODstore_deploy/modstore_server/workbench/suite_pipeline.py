@@ -121,7 +121,13 @@ async def _run_workbench_mod_pipeline(
             return
         await ports.progress.set_step(sid, "manifest", "done", "manifest 已生成")
         await ports.progress.set_step(sid, "repo", "done", f"Mod 仓库：{res.get('id')}")
-        for skipped in ("industry", "employees", "workflows", "api", "workflow_sandbox"):
+        for skipped in (
+            "industry",
+            "employees",
+            "workflows",
+            "api",
+            "workflow_sandbox",
+        ):
             await ports.progress.set_step(sid, skipped, "skipped", "最小 Mod 模式跳过")
         await ports.progress.set_step(sid, "mod_sandbox", "running", "正在做轻量 Mod 校验")
         mod_dir = Path(res["path"])
@@ -177,7 +183,11 @@ async def _run_workbench_mod_pipeline(
     try:
         await ports.progress.set_step(sid, "repo", "running", "正在新建或覆盖 Mod 仓库")
         imported = ports.import_repository(
-            db, user, parsed=parsed, replace=replace, generate_frontend=generate_frontend
+            db,
+            user,
+            parsed=parsed,
+            replace=replace,
+            generate_frontend=generate_frontend,
         )
         if not imported.get("ok"):
             await ports.progress.fail(sid, "repo", imported.get("error") or "Mod 仓库创建失败")
@@ -256,7 +266,8 @@ async def _run_workbench_mod_pipeline(
         except RECOVERABLE_ERRORS as exc:
             _LOG.exception("workbench mod employee_impls failed session=%s", sid)
             await _abort_mod_pipeline(
-                "employee_impls", f"生成员工脚本异常（可查看服务端日志）: {exc!s}"[:1000]
+                "employee_impls",
+                f"生成员工脚本异常（可查看服务端日志）: {exc!s}"[:1000],
             )
             return
         impl_errs = impl_result.get("errors") or []
@@ -412,7 +423,10 @@ async def _run_workbench_mod_pipeline(
                 sess["validate_warnings"] = (
                     api_summary["warnings"] + validation_summary["workflow_warnings"]
                 )
-                sess["sandbox_report"] = {"workflow": workflow_sandbox, "mod": mod_sandbox}
+                sess["sandbox_report"] = {
+                    "workflow": workflow_sandbox,
+                    "mod": mod_sandbox,
+                }
                 ports.sessions.persist(sid)
         await ports.progress.finish(
             sid,

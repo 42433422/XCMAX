@@ -354,7 +354,7 @@ def _session_username_for_entitlements(session_id: str) -> str:
     except RECOVERABLE_ERRORS:
         pass
     try:
-        from app.services.session_service import SessionService
+        from app.domain.shared_services.session_service import SessionService
 
         info = SessionService().validate_session(sid)
         username: str | None = None

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import xcmax_admin
 from app.utils.time import utc_now_naive

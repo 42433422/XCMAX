@@ -17,7 +17,7 @@ def run_paddle_ocr_task(self, image_path: str):
     import numpy as np
     from PIL import Image
 
-    from app.services.paddle_ocr_runner import predict_to_text_blocks
+    from app.domain.shared_services.paddle_ocr_runner import predict_to_text_blocks
 
     try:
         img = np.array(Image.open(Path(image_path)))
@@ -30,7 +30,7 @@ def run_paddle_ocr_task(self, image_path: str):
 
 @celery_app.task(bind=True, max_retries=1, queue="inference")
 def run_intent_recognition_task(self, text: str, **kwargs):
-    from app.domain.services.unified_intent_recognizer import get_unified_intent_recognizer
+    from app.domain.conversation.unified_intent_recognizer import get_unified_intent_recognizer
 
     recognizer = get_unified_intent_recognizer()
     return recognizer.recognize(text)

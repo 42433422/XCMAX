@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import get_db, require_admin
-from modstore_server.db.mac_control import MacControlEvent, MacControlObservation, MacControlTask
+from modstore_server.db.mac_control import (
+    MacControlEvent,
+    MacControlObservation,
+    MacControlTask,
+)
 from modstore_server.mac_control_store import TERMINAL, accept, transition, view
 from modstore_server.mac_control_transport import stale_window
 from modstore_server.models import User

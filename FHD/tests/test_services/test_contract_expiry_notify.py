@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.contract_lifecycle import notify_contract_expiry_items
+from app.domain.shared_services.contract_lifecycle import notify_contract_expiry_items
 
 
 @pytest.fixture
@@ -20,8 +20,8 @@ def items():
     ]
 
 
-@patch("app.services.user_cs_pipeline.save_pipeline")
-@patch("app.services.user_cs_pipeline.load_pipeline")
+@patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+@patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
 def test_notify_dry_run_no_push(mock_load, mock_save, items):
     mock_load.return_value = {"market_user_id": 1001}
     out = notify_contract_expiry_items(items, dry_run=True, push=False)
@@ -33,10 +33,13 @@ def test_notify_dry_run_no_push(mock_load, mock_save, items):
 @patch(
     "app.infrastructure.persistence.contract_expiry_notification_repository.get_contract_expiry_notification_repository"
 )
-@patch("app.services.user_cs_intake_notice._primary_contact_name", return_value="wx-contact")
+@patch(
+    "app.domain.shared_services.user_cs_intake_notice._primary_contact_name",
+    return_value="wx-contact",
+)
 @patch("app.desktop_automation.service.get_desktop_automation_service")
-@patch("app.services.user_cs_pipeline.save_pipeline")
-@patch("app.services.user_cs_pipeline.load_pipeline")
+@patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+@patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
 def test_notify_push_success(
     mock_load,
     mock_save,
@@ -65,9 +68,9 @@ def test_notify_push_success(
 @patch(
     "app.infrastructure.persistence.contract_expiry_notification_repository.get_contract_expiry_notification_repository"
 )
-@patch("app.services.user_cs_intake_notice._primary_contact_name", return_value="")
-@patch("app.services.user_cs_pipeline.save_pipeline")
-@patch("app.services.user_cs_pipeline.load_pipeline")
+@patch("app.domain.shared_services.user_cs_intake_notice._primary_contact_name", return_value="")
+@patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+@patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
 def test_notify_push_failed_no_contact(
     mock_load,
     mock_save,

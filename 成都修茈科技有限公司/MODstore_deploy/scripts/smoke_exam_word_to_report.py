@@ -25,7 +25,9 @@ def _simulate_execute_file(
     )
     from modstore_server.services.employee import get_default_employee_client
 
-    session_dir = MODSTORE_ROOT / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    session_dir = (
+        MODSTORE_ROOT / "var" / "employee_uploads" / str(user_id) / uuid.uuid4().hex
+    )
     session_dir.mkdir(parents=True, exist_ok=True)
     dest = session_dir / filename
     dest.write_bytes(payload)
@@ -45,14 +47,18 @@ def _simulate_execute_file(
         if not isinstance(result, dict):
             return {"ok": False, "error": "result not dict"}
         llm_text = _collect_llm_context_text(session_dir, result)
-        downloads = _persist_employee_outputs_for_download(user_id, session_dir, dest, result)
+        downloads = _persist_employee_outputs_for_download(
+            user_id, session_dir, dest, result
+        )
         out = dict(result)
         out["llm_context_text"] = llm_text
         out["output_downloads"] = downloads
         inner = result.get("result") if isinstance(result.get("result"), dict) else {}
         outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
         dp_ok = any(
-            isinstance(o, dict) and o.get("handler") == "direct_python" and o.get("ok") is True
+            isinstance(o, dict)
+            and o.get("handler") == "direct_python"
+            and o.get("ok") is True
             for o in outputs
         )
         has_doc = any(
@@ -60,7 +66,8 @@ def _simulate_execute_file(
             for d in downloads
         )
         has_report_html = any(
-            isinstance(d, dict) and "quantitative_report.html" in str(d.get("filename") or "")
+            isinstance(d, dict)
+            and "quantitative_report.html" in str(d.get("filename") or "")
             for d in downloads
         )
         if employee_id == "json-report-employee":
@@ -134,16 +141,23 @@ def main() -> int:
         )
         return 1
 
-    report_res = _simulate_execute_file("json-report-employee", json_payload, "document_full.json")
+    report_res = _simulate_execute_file(
+        "json-report-employee", json_payload, "document_full.json"
+    )
     downloads = report_res.get("output_downloads") or []
     has_html = any(
-        isinstance(d, dict) and "quantitative_report.html" in str(d.get("filename") or "")
+        isinstance(d, dict)
+        and "quantitative_report.html" in str(d.get("filename") or "")
         for d in downloads
     )
-    inner = report_res.get("result") if isinstance(report_res.get("result"), dict) else {}
+    inner = (
+        report_res.get("result") if isinstance(report_res.get("result"), dict) else {}
+    )
     outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
     report_dp_ok = any(
-        isinstance(o, dict) and o.get("handler") == "direct_python" and o.get("ok") is True
+        isinstance(o, dict)
+        and o.get("handler") == "direct_python"
+        and o.get("ok") is True
         for o in outputs
     )
     ok = has_html and (report_dp_ok or bool(report_res.get("ok")))

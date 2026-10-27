@@ -310,7 +310,10 @@ def test_handoff_requires_source_evidence_and_only_creates_one_child(factory):
 
     with factory() as db:
         parent = accept(
-            db, actor="a", key="parent-key", request={**request(), "verify_on_windows": True}
+            db,
+            actor="a",
+            key="parent-key",
+            request={**request(), "verify_on_windows": True},
         )
         assert schedule_windows_verification(db, parent, {"reports": []})
         assert db.query(MacControlTask).count() == 1

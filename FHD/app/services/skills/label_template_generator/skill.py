@@ -6,7 +6,7 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import SkillPorts
+from .label_template_ports import SkillPorts
 
 
 def execute(

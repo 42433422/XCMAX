@@ -152,7 +152,8 @@ def test_resource_limits_fail_before_creating_library(tmp_path, monkeypatch, lim
 
     monkeypatch.setattr(archive_import, limit, 1)
     source = archive(
-        tmp_path / "big.zip", [("safe/manifest.json", json.dumps(manifest())), ("safe/a", "x")]
+        tmp_path / "big.zip",
+        [("safe/manifest.json", json.dumps(manifest())), ("safe/a", "x")],
     )
     library = tmp_path / "library"
     with pytest.raises(ValueError):

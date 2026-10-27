@@ -9,8 +9,8 @@ from typing import Any, cast
 from fastapi import Request
 
 from app.application.dataset_rag_app_service import DatasetRagApplicationService
+from app.application.knowledge.protocols import AccessResolver
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
-from app.fastapi_routes.knowledge.ports import AccessResolver
 from app.fastapi_routes.knowledge.schemas import QueryRequest
 from app.fastapi_routes.knowledge.serialization import _public_dataset_payload
 from app.utils.operational_errors import RECOVERABLE_ERRORS

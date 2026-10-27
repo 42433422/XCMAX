@@ -27,7 +27,15 @@ from modstore_server.platform_llm_scope import platform_llm_scope_active
 
 
 class RuntimeHarness:
-    def __init__(self, owner, *, barrier=None, fail_step=None, admitted=True, lease_available=True):
+    def __init__(
+        self,
+        owner,
+        *,
+        barrier=None,
+        fail_step=None,
+        admitted=True,
+        lease_available=True,
+    ):
         self.owner = owner
         self.memory = {"owner": owner}
         self.ledger = []
@@ -81,7 +89,11 @@ class RuntimeHarness:
             if kwargs["status"] != "completed":
                 # Exercise the real fail-closed decision before any external policy IO.
                 return decision._decide_post_loop_policy(**kwargs)
-            assert [step["step"] for step in kwargs["steps"]] == ["code", "review", "qa"]
+            assert [step["step"] for step in kwargs["steps"]] == [
+                "code",
+                "review",
+                "qa",
+            ]
             return {"action": "auto_merge_requested_low_risk"}
 
         def new_run_id():
@@ -122,7 +134,7 @@ class RuntimeHarness:
             ),
             prompts=RuntimePrompts(
                 code=lambda _run, _gate, memory, _candidate: f"code:{memory['owner']}",
-                review=lambda _run, branch, memory: f"review:{memory['owner']}:{branch}",
+                review=lambda _run, branch, memory: (f"review:{memory['owner']}:{branch}"),
                 qa=lambda _run, branch, memory: f"qa:{memory['owner']}:{branch}",
             ),
             now=lambda: datetime(2026, 10, 22, tzinfo=timezone.utc),
@@ -196,14 +208,19 @@ def test_failed_review_stops_qa_and_records_one_failed_terminal_outcome():
     assert [call["step_name"] for call in harness.calls] == ["code", "review"]
     assert result["status"] == "failed"
     assert result["failed_step"] == "review"
-    assert result["policy_decision"] == {"action": "stop", "reason": "loop_not_completed"}
+    assert result["policy_decision"] == {
+        "action": "stop",
+        "reason": "loop_not_completed",
+    }
     assert len(harness.outcomes) == 1
     assert len([row for row in harness.ledger if row["phase"] == "complete"]) == 1
     assert not harness.lock.locked()
 
 
 @pytest.mark.parametrize("scope_only", [False, True])
-def test_retort_blocks_before_report_dispatch_and_preserves_scope_remediation(scope_only):
+def test_retort_blocks_before_report_dispatch_and_preserves_scope_remediation(
+    scope_only,
+):
     harness = RuntimeHarness("retort")
     gate = {"blocked": True, "reason": "retort_clarification_pending"}
     if scope_only:
@@ -234,7 +251,9 @@ def test_knowledge_schema_rejection_stops_before_review_and_owns_retry_receipt()
             "reason": "kb_json_schema_validation_failed",
             "kb_validation": {"errors": ["missing schema field"]},
         },
-        reject_knowledge=lambda **kwargs: received.append(kwargs) or {"status": "kb_schema_failed"},
+        reject_knowledge=lambda **kwargs: (
+            received.append(kwargs) or {"status": "kb_schema_failed"}
+        ),
     )
     assert harness.runtime.run() == {"status": "kb_schema_failed"}
     assert [call["step_name"] for call in harness.calls] == ["code"]
@@ -264,7 +283,9 @@ def test_runtime_components_cold_import_without_public_facade_bootstrap():
     assert result.returncode == 0, result.stderr
 
 
-def test_status_participants_sort_by_each_participant_without_scratch_loop_state(monkeypatch):
+def test_status_participants_sort_by_each_participant_without_scratch_loop_state(
+    monkeypatch,
+):
     monkeypatch.setattr(status_contract.review, "_focused_test_command", lambda: "pytest")
     state = {
         "trigger": "cron",
@@ -305,13 +326,22 @@ def test_status_participants_sort_by_each_participant_without_scratch_loop_state
         runtime_source={},
         latest_event_at=None,
     )
-    assert [item["employee_id"] for item in result["participants"]] == ["newer", "older"]
+    assert [item["employee_id"] for item in result["participants"]] == [
+        "newer",
+        "older",
+    ]
     assert result["evidence"]["steps_by_open_run"] == state["steps_by_run"]
     assert "item" not in state and "run_id" not in state
 
 
-def test_runtime_status_projects_complete_read_model_without_previous_call_state(monkeypatch):
-    from modstore_server import duty_employee_registry, duty_roster, self_evolution_knowledge
+def test_runtime_status_projects_complete_read_model_without_previous_call_state(
+    monkeypatch,
+):
+    from modstore_server import (
+        duty_employee_registry,
+        duty_roster,
+        self_evolution_knowledge,
+    )
     from modstore_server.maintenance_loop import config, review, schedule, status, store
 
     employees = ["vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"]
@@ -332,13 +362,17 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     monkeypatch.setattr(store, "_load_loop_memory", lambda: {})
     monkeypatch.setattr(store, "_read_governance_audit", lambda _limit: [])
     monkeypatch.setattr(
-        schedule, "should_run_self_maintenance_loop", lambda **_kwargs: {"should_run": False}
+        schedule,
+        "should_run_self_maintenance_loop",
+        lambda **_kwargs: {"should_run": False},
     )
     monkeypatch.setattr(review, "_focused_test_command", lambda: "pytest")
     monkeypatch.setattr(duty_roster, "all_planned_employee_ids", lambda: employees)
     monkeypatch.setattr(duty_roster, "SIX_LINE_DEPARTMENTS", {"test": {"ids": employees}})
     monkeypatch.setattr(
-        duty_employee_registry, "duty_employee_records", lambda: dict.fromkeys(employees, {})
+        duty_employee_registry,
+        "duty_employee_records",
+        lambda: dict.fromkeys(employees, {}),
     )
     monkeypatch.setattr(
         self_evolution_knowledge, "build_self_evolution_context", lambda **_kwargs: {}
@@ -361,7 +395,9 @@ def test_runtime_status_projects_complete_read_model_without_previous_call_state
     assert len(first["participants"]) == 3
 
 
-def test_public_entry_point_preserves_arguments_and_uses_runtime_composition(monkeypatch):
+def test_public_entry_point_preserves_arguments_and_uses_runtime_composition(
+    monkeypatch,
+):
     from modstore_server import self_maintenance_loop_runner
     from modstore_server.maintenance_loop import coordinator
 

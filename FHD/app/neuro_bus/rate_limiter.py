@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from threading import Lock, RLock
 
 from app.neuro_bus import deprecated_sliding_window as _compat
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.rate_limiter_facade import NeuroRateLimiterMixin
 
 logger = logging.getLogger(__name__)

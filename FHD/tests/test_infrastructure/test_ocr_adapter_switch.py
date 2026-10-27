@@ -85,11 +85,11 @@ class TestOcrServiceInit:
         with patch.dict(
             "sys.modules",
             {
-                "app.services.paddle_ocr_runner": fake_runner,
+                "app.domain.shared_services.paddle_ocr_runner": fake_runner,
             },
         ):
             # Build a fresh instance (skip auto init via env)
-            with caplog.at_level(logging.ERROR, logger="app.services.ocr_service"):
+            with caplog.at_level(logging.ERROR, logger="app.domain.shared_services.ocr_service"):
                 instance = svc.OCRService.__new__(svc.OCRService)
                 instance.use_gpu = False
                 instance.reader = None
@@ -113,7 +113,7 @@ class TestOcrServiceInit:
         with patch.dict(
             "sys.modules",
             {
-                "app.services.paddle_ocr_runner": fake_runner,
+                "app.domain.shared_services.paddle_ocr_runner": fake_runner,
                 "easyocr": fake_easyocr_mod,
             },
         ):
@@ -136,7 +136,7 @@ class TestOcrServiceInit:
         fake_runner.get_paddle_ocr_instance.return_value = "paddle-ok"
         with patch.dict(
             "sys.modules",
-            {"app.services.paddle_ocr_runner": fake_runner},
+            {"app.domain.shared_services.paddle_ocr_runner": fake_runner},
         ):
             instance = svc.OCRService.__new__(svc.OCRService)
             instance.use_gpu = False
@@ -154,8 +154,8 @@ class TestOcrServiceInit:
 
         monkeypatch.setenv("XCAGI_OCR_BACKEND", "auto")
         # When the import inside _init_engines raises, it must be swallowed.
-        with caplog.at_level(logging.WARNING, logger="app.services.ocr_service"):
-            with patch.dict("sys.modules", {"app.services.paddle_ocr_runner": None}):
+        with caplog.at_level(logging.WARNING, logger="app.domain.shared_services.ocr_service"):
+            with patch.dict("sys.modules", {"app.domain.shared_services.paddle_ocr_runner": None}):
                 instance = svc.OCRService.__new__(svc.OCRService)
                 instance.use_gpu = False
                 instance.reader = None
@@ -168,7 +168,7 @@ class TestOcrServiceInit:
 
 class TestActiveBackend:
     def test_paddle(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = True
@@ -177,7 +177,7 @@ class TestActiveBackend:
         assert svc.get_active_ocr_backend() == "paddleocr"
 
     def test_easyocr(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -186,7 +186,7 @@ class TestActiveBackend:
         assert svc.get_active_ocr_backend() == "easyocr"
 
     def test_tesseract(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -195,7 +195,7 @@ class TestActiveBackend:
         assert svc.get_active_ocr_backend() == "tesseract"
 
     def test_none(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -206,7 +206,7 @@ class TestActiveBackend:
 
 class TestRecognizeNoEngines:
     def test_recognize_returns_empty(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -216,7 +216,7 @@ class TestRecognizeNoEngines:
         assert out == ""
 
     def test_recognize_text_blocks_returns_empty(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -228,7 +228,7 @@ class TestRecognizeNoEngines:
 
 class TestRecognizeFile:
     def test_missing_file(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -239,13 +239,13 @@ class TestRecognizeFile:
         assert "文件不存在" in out["message"]
 
     def test_paddle_engine_call(self, monkeypatch) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         # The OCR service does a local import inside ``recognize``:
-        #     from app.services.paddle_ocr_runner import predict_to_text_blocks
+        #     from app.domain.shared_services.paddle_ocr_runner import predict_to_text_blocks
         # So we must patch the symbol in the *source* module.
         monkeypatch.setattr(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
+            "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
             lambda arr: [{"text": "hello"}, {"text": "world"}],
         )
         svc = OCRService.__new__(OCRService)
@@ -259,7 +259,7 @@ class TestRecognizeFile:
 
 class TestRecognizeTextFromBytes:
     def test_bad_bytes(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -272,12 +272,12 @@ class TestRecognizeTextFromBytes:
 
     def test_paddle_path(self, monkeypatch) -> None:
         """Paddle path should return averaged confidence from blocks."""
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         # Patch the source module because ``ocr_service.recognize_text_from_bytes``
-        # performs a local `from app.services.paddle_ocr_runner import ...`.
+        # performs a local `from app.domain.shared_services.paddle_ocr_runner import ...`.
         monkeypatch.setattr(
-            "app.services.paddle_ocr_runner.predict_to_text_blocks",
+            "app.domain.shared_services.paddle_ocr_runner.predict_to_text_blocks",
             lambda arr: [
                 {"text": "abc", "conf": 80.0},
                 {"text": "def", "conf": 60.0},
@@ -304,7 +304,7 @@ class TestRecognizeTextFromBytes:
 
 class TestRecognizeWithDetails:
     def test_no_engine_returns_empty(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -321,7 +321,7 @@ class TestRecognizeWithDetails:
 
 class TestExtractStructuredData:
     def test_full_match(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         text = (
@@ -345,7 +345,7 @@ class TestExtractStructuredData:
         assert out["raw_text"] == text
 
     def test_empty_text(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         out = svc.extract_structured_data("")
@@ -353,7 +353,7 @@ class TestExtractStructuredData:
         assert out["products"] == []
 
     def test_amount_value_error_caught(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         out = svc.extract_structured_data("合计：not-a-number")
@@ -363,7 +363,7 @@ class TestExtractStructuredData:
 
 class TestAnalyzeText:
     def test_empty_text_returns_defaults(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         out = svc.analyze_text("")
@@ -372,14 +372,14 @@ class TestAnalyzeText:
         assert out["suggestions"] == []
 
     def test_order_text_classified(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         out = svc.analyze_text("客户张三的订单编号001, 购货单位X")
         assert out["text_type"] in ("order", "customer")
 
     def test_field_detection(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         text = "购货单位：ABC\n联系人：李四\n2024-01-01\n订单编号：X1\n合计：1.0"
@@ -395,14 +395,14 @@ class TestAnalyzeText:
 
 class TestCleanText:
     def test_empty(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._clean_text("") == ""
         assert svc._clean_text(None) == ""  # type: ignore[arg-type]
 
     def test_drops_blank_lines(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         out = svc._clean_text("a\n\n  b  \n   \nc")
@@ -411,35 +411,35 @@ class TestCleanText:
 
 class TestClassifyText:
     def test_number(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._classify_text("123.45") == "number"
         assert svc._classify_text("1,000.00") == "number"
 
     def test_date(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._classify_text("2024-01-15") == "date"
         assert svc._classify_text("2024年1月15日") == "date"
 
     def test_amount(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._classify_text("100元") == "amount"
         assert svc._classify_text("$50") == "amount"
 
     def test_phone(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._classify_text("13800138000") == "phone"
         assert svc._classify_text("+86-138-0013-8000") == "phone"
 
     def test_text_fallback(self) -> None:
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         assert svc._classify_text("Hello World") == "text"
@@ -454,7 +454,7 @@ class TestClassifyText:
 class TestAdapterFromService:
     def test_ocr_adapter_compatible(self) -> None:
         """`OCRService.recognize_text` matches the `OCRPort` signature for paths."""
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False
@@ -467,7 +467,7 @@ class TestAdapterFromService:
 
     def test_recognize_product_aliases(self) -> None:
         """recognize_trademark and recognize_product currently alias recognize_text."""
-        from app.services.ocr_service import OCRService
+        from app.domain.shared_services.ocr_service import OCRService
 
         svc = OCRService.__new__(OCRService)
         svc._paddle_enabled = False

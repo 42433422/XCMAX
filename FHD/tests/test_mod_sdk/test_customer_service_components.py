@@ -271,9 +271,9 @@ def test_declared_host_interfaces_match_actual_exported_call_contracts():
 
 @pytest.mark.asyncio
 async def test_crm_component_runs_with_independent_explicit_dependencies():
+    from app.application.customer_service.protocols import Payload
     from app.mod_sdk.customer_service.crm import CrmHandlers
     from app.mod_sdk.customer_service.models import PipelineBody
-    from app.mod_sdk.customer_service.ports import Payload
 
     calls = []
 
@@ -325,7 +325,7 @@ def test_domain_imports_do_not_load_host_bindings_or_numbered_routes():
             "-c",
             "import importlib,sys; "
             "[importlib.import_module('app.mod_sdk.customer_service.'+name) for name in "
-            "('models','ports','pipeline','intake','crm','changes','delivery','contracts','messaging')]; "
+            "('models','protocols','pipeline','intake','crm','changes','delivery','contracts','messaging')]; "
             "assert 'app.mod_sdk.host_services' not in sys.modules; "
             "assert not any(name.startswith('app.mod_sdk.customer_service_bridge_routes_part') "
             "for name in sys.modules)",

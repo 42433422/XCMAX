@@ -12,6 +12,7 @@
 *.war
 *.tar.gz
 *.tgz
+!market/compat-resource-glob.tgz
 *.zip
 *.dmg
 *.exe

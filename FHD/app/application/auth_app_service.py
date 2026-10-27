@@ -196,7 +196,7 @@ class AuthApplicationService:
         except RECOVERABLE_ERRORS as bootstrap_exc:
             logger.warning("登录前 auth 表自检跳过: %s", bootstrap_exc)
         try:
-            from app.application.account_security import (
+            from app.domain.app_pure.account_security import (
                 is_locked,
                 lock_remaining_seconds,
                 register_failed_attempt,

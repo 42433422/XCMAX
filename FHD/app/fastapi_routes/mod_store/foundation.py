@@ -10,9 +10,9 @@ from typing import Literal, cast
 
 from fastapi import HTTPException
 
+from app.application.mod_store.http_port_contracts import FoundationInstall
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import FoundationInstall
 from .schemas import ModStoreInstallResult, ModStoreSimpleResponse
 
 

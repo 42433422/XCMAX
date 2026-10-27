@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from app.domain.persona.value_objects import RapportScore
-from app.services.persona.rapport_calculator import RapportCalculator
+from app.domain.shared_services.persona.rapport_calculator import RapportCalculator
 
 
 class TestRapportCalculator:

@@ -14,7 +14,7 @@ import pytest
 
 from app.neuro_bus.dead_letter_queue import DeadLetterQueue, DeadLetterReason
 from app.neuro_bus.event_store import EventStore, EventStoreMode, WrongExpectedVersionError
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 def event(kind="sample"):

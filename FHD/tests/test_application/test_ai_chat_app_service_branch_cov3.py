@@ -25,7 +25,7 @@ from tests.test_application.ai_chat_test_helpers import (
 
 
 def test_approval_child_preserves_exact_parent_link_without_mutating_parent():
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     node = WorkflowNode(
         node_id="sales_create_order",
@@ -100,7 +100,7 @@ def test_confirmation_does_not_resume_another_conversation_pending_slot(session_
 
 @pytest.mark.parametrize("status", ["running", "pending_awaiting"])
 def test_restart_confirmation_hydrates_only_current_session_pending_plan(status):
-    from app.application.workflow.types import PlanGraph, WorkflowNode, plan_to_dict
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, plan_to_dict
 
     svc = _make_svc()
     with patch("app.application.workflow.plan_store.WorkflowPlanStore") as store:
@@ -530,7 +530,7 @@ class TestTryHandleDynamicWorkflowEdge:
         mock_start.assert_called_once()
 
     def test_pending_workflow_confirm_with_approval_required(self):
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         svc = _make_svc()
         plan = PlanGraph(

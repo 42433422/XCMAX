@@ -55,7 +55,7 @@ from typing import Any, Callable
 
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
-from .types import (
+from .autonomy_types import (
     Action,
     ActionResult,
     ActionType,

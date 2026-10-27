@@ -26,7 +26,13 @@ from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
-from modstore_server.models import CatalogItem, User, Workflow, WorkflowEdge, WorkflowNode
+from modstore_server.models import (
+    CatalogItem,
+    User,
+    Workflow,
+    WorkflowEdge,
+    WorkflowNode,
+)
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 

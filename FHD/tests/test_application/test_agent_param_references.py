@@ -14,9 +14,9 @@ from app.application.agent_orchestrator.param_references import (
     resolve_references,
 )
 from app.application.agent_orchestrator.run_models import AgentRun, AgentStep
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import InventoryLedger, InventoryTransaction, Product, Warehouse
-from app.services.inventory_service import InventoryService
+from app.domain.shared_services.inventory_service import InventoryService
 
 PRODUCT_ROW = {"id": 7, "name": "交付闭环升级标记产品-UP-20260930-OLD-001"}
 
@@ -154,7 +154,7 @@ def _out(db, product_id, warehouse_id):
     def _get_db():
         yield db
 
-    with patch("app.services.inventory_service.get_db", _get_db):
+    with patch("app.domain.shared_services.inventory_service.get_db", _get_db):
         return InventoryService().inventory_out(product_id, warehouse_id, 1)
 
 

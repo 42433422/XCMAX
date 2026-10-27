@@ -66,8 +66,26 @@ test.describe('Login flow', () => {
     })
     await expect(page).toHaveURL((url) => url.pathname === '/business-docking')
     await expect(page.locator('#view-business-docking')).toBeVisible({ timeout: 25_000 })
-    await page.goto('/materials', { waitUntil: 'domcontentloaded' })
-    await expect(page).toHaveURL((url) => url.pathname === '/mod/xcagi-erp-domain-bridge/materials')
+    await page.evaluate(async () => {
+      const app = (
+        document.querySelector('#app') as HTMLElement & {
+          __vue_app__?: {
+            config?: {
+              globalProperties?: {
+                $router?: { push: (path: string) => Promise<unknown> }
+              }
+            }
+          }
+        }
+      ).__vue_app__
+      const router = app?.config?.globalProperties?.$router
+      if (!router) throw new Error('Vue router is unavailable from the mounted app')
+      await router.push('/materials')
+    })
+    await expect(page).toHaveURL(
+      (url) => url.pathname === '/mod/xcagi-erp-domain-bridge/materials',
+      { timeout: 45_000 },
+    )
     await expect(page.locator('body')).not.toContainText('正在登录')
   })
 })

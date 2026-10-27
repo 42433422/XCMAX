@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from app.application.agent_orchestrator.run_models import AgentRun
     from app.application.workflow.approval_service import ApprovalService
     from app.application.workflow.ports import CheckpointStore, WorkflowRuntime
-    from app.application.workflow.types import PlanGraph, WorkflowRunResult
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ class WorkflowSession:
     def hydrate_pending_workflow(self, user_id: str, session_id: str) -> bool:
         """仅恢复当前会话的待确认计划；跨会话续跑须从明确的任务入口处理。"""
         try:
-            from app.application.workflow.types import plan_from_dict
+            from app.application.workflow.workflow_types import plan_from_dict
 
             active = self._plan_store().list_active(user_id, limit=1, session_id=session_id)
             if not active or active[0].get("status") != "pending_awaiting":
@@ -380,7 +380,9 @@ class WorkflowSession:
         candidates = item.get("candidates") or []
         confirmed = resolve_confirmed_target(text, candidates)
         if confirmed is None and target.tool_id == "business_db" and (not candidates):
-            from app.services.tools_workflow_registered import prepare_business_db_write_target
+            from app.domain.shared_services.tools_workflow_registered import (
+                prepare_business_db_write_target,
+            )
 
             entity = str(target.params.get("entity") or "")
             selector: dict[str, Any]
@@ -443,7 +445,7 @@ class WorkflowSession:
                 pending = self.pending.get(user_id)
         invalid_plan = False
         if control and pending:
-            from app.application.workflow.types import PlanGraph, validate_plan_graph
+            from app.application.workflow.workflow_types import PlanGraph, validate_plan_graph
 
             try:
                 plan = pending.get("plan")
@@ -481,7 +483,7 @@ class WorkflowSession:
                     approval_requests: list[dict[str, Any]] = []
                     try:
                         from app.application.agent_orchestrator import AgentOrchestrator
-                        from app.application.workflow.types import PlanGraph
+                        from app.application.workflow.workflow_types import PlanGraph
 
                         for node_info in approval_nodes:
                             node = None

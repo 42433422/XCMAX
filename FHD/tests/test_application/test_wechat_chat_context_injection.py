@@ -12,10 +12,10 @@ from sqlalchemy.orm import sessionmaker
 from app.application import wechat_ingest_service
 from app.application.ai_chat.context_enrichment import inject_wechat_contact_context
 from app.application.wechat_chat_context import resolve_wechat_chat_context
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.customer import Customer
 from app.db.models.wechat_sync import WechatContact, WechatMessage
-from app.services.conversation.prompts import PromptsMixin
+from app.domain.shared_services.conversation.prompts import PromptsMixin
 
 
 @pytest.fixture()

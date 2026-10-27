@@ -38,7 +38,12 @@ from sqlalchemy.orm import Session
 from modstore_server.api.deps import _get_current_user
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_key_resolver import resolve_api_key, resolve_base_url
-from modstore_server.models import ScriptWorkflow, ScriptWorkflowRun, ScriptWorkflowVersion, User
+from modstore_server.models import (
+    ScriptWorkflow,
+    ScriptWorkflowRun,
+    ScriptWorkflowVersion,
+    User,
+)
 from modstore_server.operational_errors import BOUNDARY_ERRORS
 from modstore_server.script_agent.agent_loop import run_agent_loop
 from modstore_server.script_agent.brief import Brief

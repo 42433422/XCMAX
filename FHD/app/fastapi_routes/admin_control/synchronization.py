@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Callable
 from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from .ports import ErrorPolicy, SyncStore
+from app.application.admin_control.protocols import ErrorPolicy, SyncStore
 
 
 class Synchronization:

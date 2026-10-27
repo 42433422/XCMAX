@@ -109,7 +109,11 @@ async def align_catalog_employee_packs_llm_from_deepseek(
         mdl["model_name"] = new_m
 
         body = EmployeeSaveBody(
-            manifest=mf2, employee_id=pack_id, provider=new_p, model=new_m, register_skills=False
+            manifest=mf2,
+            employee_id=pack_id,
+            provider=new_p,
+            model=new_m,
+            register_skills=False,
         )
         try:
             await employee_save_impl(body, eff_user)
@@ -223,7 +227,11 @@ async def align_single_employee_pack_llm_to_auto(
     mdl["model_name"] = "auto"
 
     body = EmployeeSaveBody(
-        manifest=mf2, employee_id=pack_id, provider="auto", model="auto", register_skills=False
+        manifest=mf2,
+        employee_id=pack_id,
+        provider="auto",
+        model="auto",
+        register_skills=False,
     )
     try:
         await employee_save_impl(body, eff_user)
@@ -336,7 +344,11 @@ async def align_catalog_employee_packs_llm_to_auto_sentinel(
         mdl["model_name"] = "auto"
 
         body = EmployeeSaveBody(
-            manifest=mf2, employee_id=pack_id, provider="auto", model="auto", register_skills=False
+            manifest=mf2,
+            employee_id=pack_id,
+            provider="auto",
+            model="auto",
+            register_skills=False,
         )
         try:
             await employee_save_impl(body, eff_user)

@@ -1,7 +1,7 @@
 from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
 from app.application.agent_orchestrator.clarification import apply_clarification_answer
 from app.application.workflow.clarification_node import build_clarify_node
-from app.application.workflow.types import PlanGraph, WorkflowNode
+from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
 
 def test_stock_in_asks_warehouse_name_then_requires_approval():

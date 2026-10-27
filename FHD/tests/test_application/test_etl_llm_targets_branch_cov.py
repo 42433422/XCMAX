@@ -24,13 +24,13 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
-from app.application.etl.targets.base import (
+from app.application.etl.targets.targets_base import (
     PreviewDecision,
     TargetAdapter,
     TargetField,
     json_safe,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 
 # --------------------------------------------------------------------------- fixtures
 
@@ -321,7 +321,7 @@ def test_llm_assist_active_software_llm(monkeypatch):
             side_effect=lambda *a, **k: FakeProvider() if "conversation_service" in k else None,
         ),
         patch(
-            "app.services.ai_conversation_service.get_ai_conversation_service",
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
             return_value=object(),
         ),
     ):
@@ -336,7 +336,8 @@ def test_llm_assist_active_software_llm(monkeypatch):
         ),
         patch("app.infrastructure.llm.providers.registry.get_active_provider", return_value=None),
         patch(
-            "app.services.ai_conversation_service.get_ai_conversation_service", return_value=None
+            "app.domain.shared_services.ai_conversation_service.get_ai_conversation_service",
+            return_value=None,
         ),
     ):
         assert llm_assist._active_software_llm() == (False, None, None)
@@ -645,7 +646,8 @@ def test_session_provider_chat_completion_success(monkeypatch):
 
     monkeypatch.setattr("httpx.AsyncClient", FakeClient)
     monkeypatch.setattr(
-        "app.services.conversation.modstore_adapter.ModstorePlatformAdapter", FakeAdapter
+        "app.domain.shared_services.conversation.modstore_adapter.ModstorePlatformAdapter",
+        FakeAdapter,
     )
     prov = SessionMarketProvider(1, "tok", timeout_seconds=4.0)
     out = asyncio.run(

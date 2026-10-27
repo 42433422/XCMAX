@@ -69,7 +69,10 @@ class EmployeeReporter:
                 if rc.get("ok"):
                     research_pack = str(rc.get("context_pack") or "")
                     research_sources = [
-                        {"title": str(s.get("title") or ""), "url": str(s.get("url") or "")}
+                        {
+                            "title": str(s.get("title") or ""),
+                            "url": str(s.get("url") or ""),
+                        }
                         for s in rc.get("sources") or []
                         if isinstance(s, dict)
                     ][:8]
@@ -129,7 +132,12 @@ class EmployeeReporter:
             )
             if text:
                 text = self.coerce_excerpt(
-                    text, {"employee_id": pkg_id, "name": display_name, "area": signals.get("area")}
+                    text,
+                    {
+                        "employee_id": pkg_id,
+                        "name": display_name,
+                        "area": signals.get("area"),
+                    },
                 )
             completed = datetime.now(timezone.utc).isoformat()
             return {
@@ -152,7 +160,11 @@ class EmployeeReporter:
 
         def _run() -> Dict[str, Any]:
             return self.execute(
-                pkg_id, task_text, inp, user_id, bench_llm_override=(bench_provider, bench_model)
+                pkg_id,
+                task_text,
+                inp,
+                user_id,
+                bench_llm_override=(bench_provider, bench_model),
             )
 
         out: Dict[str, Any] = {}
@@ -196,7 +208,11 @@ class EmployeeReporter:
         if inp.get("all_hands_standby"):
             text = self.coerce_excerpt(
                 text,
-                {"employee_id": pkg_id, "name": display_name, "area": self.area_for(pkg_id) or ""},
+                {
+                    "employee_id": pkg_id,
+                    "name": display_name,
+                    "area": self.area_for(pkg_id) or "",
+                },
             )
         cog_err = (out.get("cognition_error") or "").strip()
         return {

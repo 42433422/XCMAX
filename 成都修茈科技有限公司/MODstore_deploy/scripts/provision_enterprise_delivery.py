@@ -60,14 +60,22 @@ def _resolve_args(args: argparse.Namespace) -> tuple[str, list[str], str]:
     if not username:
         raise SystemExit("--username is required when --delivery is not a known preset")
     if not mod_ids:
-        raise SystemExit("no mod ids resolved; pass --delivery, --all-industries, or --mod-id")
+        raise SystemExit(
+            "no mod ids resolved; pass --delivery, --all-industries, or --mod-id"
+        )
     return username, mod_ids, note
 
 
-def provision(username: str, mod_ids: list[str], *, dry_run: bool = False) -> dict[str, Any]:
+def provision(
+    username: str, mod_ids: list[str], *, dry_run: bool = False
+) -> dict[str, Any]:
     sf = get_session_factory()
     with sf() as session:
-        user = session.query(User).filter(func.lower(User.username) == username.lower()).first()
+        user = (
+            session.query(User)
+            .filter(func.lower(User.username) == username.lower())
+            .first()
+        )
         if user is None:
             return {"ok": False, "error": "USER_NOT_FOUND", "username": username}
         user_id = int(user.id)
@@ -86,7 +94,9 @@ def provision(username: str, mod_ids: list[str], *, dry_run: bool = False) -> di
                 added.append(mod_id)
 
     after_mod_ids = (
-        sorted(set(before_mod_ids) | set(mod_ids)) if dry_run else sorted(get_user_mod_ids(user_id))
+        sorted(set(before_mod_ids) | set(mod_ids))
+        if dry_run
+        else sorted(get_user_mod_ids(user_id))
     )
     return {
         "ok": True,
@@ -103,7 +113,9 @@ def provision(username: str, mod_ids: list[str], *, dry_run: bool = False) -> di
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Provision enterprise delivery entitlements")
+    parser = argparse.ArgumentParser(
+        description="Provision enterprise delivery entitlements"
+    )
     parser.add_argument("--delivery", choices=sorted(DELIVERY_PRESETS), default="")
     parser.add_argument("--username", default="")
     parser.add_argument("--mod-id", action="append", default=[])

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .ports import ErrorPolicy, JsonObject
+from app.application.admin_control.protocols import ErrorPolicy, JsonObject
 
 
 class UsageSummary:

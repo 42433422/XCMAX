@@ -1,4 +1,4 @@
-"""Tests for app.services.intent_trainer — deep coverage (ext3).
+"""Tests for app.domain.shared_services.intent_trainer — deep coverage (ext3).
 
 Focus: train_intent_model with mocked Trainer, export_to_onnx,
 split_data edge cases, parse_nlu_yaml edge cases, compute_metrics,
@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.intent_trainer import (
+from app.domain.shared_services.intent_trainer import (
     HAS_YAML,
     ID_TO_LABEL,
     INTENT_LABELS,
@@ -229,11 +229,13 @@ class TestIntentDatasetEdgeCases:
 
 
 class TestTrainIntentModel:
-    @patch("app.services.intent_trainer.Trainer")
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
-    @patch("app.services.intent_trainer.AutoConfig.from_pretrained")
-    @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
-    @patch("app.services.intent_trainer.load_training_data")
+    @patch("app.domain.shared_services.intent_trainer.Trainer")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
+    @patch("app.domain.shared_services.intent_trainer.AutoConfig.from_pretrained")
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
+    @patch("app.domain.shared_services.intent_trainer.load_training_data")
     def test_train_with_mock(
         self, mock_load, mock_tokenizer, mock_config, mock_model, mock_trainer, tmp_path
     ):
@@ -263,8 +265,10 @@ class TestTrainIntentModel:
 
 
 class TestExportToOnnx:
-    @patch("app.services.intent_trainer.AutoModelForSequenceClassification.from_pretrained")
-    @patch("app.services.intent_trainer.AutoTokenizer.from_pretrained")
+    @patch(
+        "app.domain.shared_services.intent_trainer.AutoModelForSequenceClassification.from_pretrained"
+    )
+    @patch("app.domain.shared_services.intent_trainer.AutoTokenizer.from_pretrained")
     def test_export_without_onnxruntime(self, mock_tokenizer, mock_model, tmp_path):
         with patch.dict("sys.modules", {"onnxruntime": None}):
             # Should skip without error
@@ -285,7 +289,7 @@ class TestMainCLI:
     def test_main_with_nonexistent_data(self):
         with patch("sys.argv", ["intent_trainer", "--data", "/nonexistent.json"]):
             with patch(
-                "app.services.intent_trainer.load_training_data",
+                "app.domain.shared_services.intent_trainer.load_training_data",
                 side_effect=FileNotFoundError("no file"),
             ):
                 with pytest.raises(FileNotFoundError):

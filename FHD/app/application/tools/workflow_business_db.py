@@ -88,6 +88,8 @@ def try_execute_business_db_tool(name: str, args: dict[str, Any]) -> dict[str, A
     if action is None:
         return None
 
-    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+    from app.domain.shared_services.tools_workflow_registered import (
+        execute_registered_workflow_tool,
+    )
 
     return execute_registered_workflow_tool("business_db", action, args)

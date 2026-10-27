@@ -13,8 +13,8 @@ from typing import Any
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .output import CliOutput
-from .ports import ConversationPorts
 from .profiles import SuperEmployeeToolProfile
+from .protocols import ConversationPorts
 
 logger = logging.getLogger(__name__)
 

@@ -27,7 +27,7 @@ from typing import Any, cast
 
 from sqlalchemy import Table
 
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def _persist_event_log(event: NeuroEvent, *, side_effect: str = "") -> int | Non
 def _invalidate_product_cache_best_effort() -> bool:
     """尽力失效产品读缓存（无 Redis 时安全 no-op）。返回是否成功调用失效。"""
     try:
-        from app.services.products_service import ProductsService
+        from app.domain.shared_services.products_service import ProductsService
 
         ProductsService()._invalidate_product_cache()
         return True

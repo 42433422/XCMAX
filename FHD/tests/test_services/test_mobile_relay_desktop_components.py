@@ -560,7 +560,7 @@ def test_config_component_atomic_failure_preserves_private_binding(monkeypatch, 
 def test_independent_executor_waits_for_correlated_result_with_fake_clock():
     from app.application.desktop_relay import messages
     from app.application.desktop_relay.execution import ExecutionPorts, RelayTaskExecutor
-    from app.application.desktop_relay.ports import JsonObject
+    from app.application.desktop_relay.protocols import JsonObject
 
     class Clock:
         now = 0.0
@@ -632,11 +632,11 @@ import sys
 
 class DenyRoot(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.startswith('app.services.mobile_relay_desktop_client'):
+        if fullname.startswith('app.domain.shared_services.mobile_relay_desktop_client'):
             raise AssertionError('component imported its composition root')
 
 sys.meta_path.insert(0, DenyRoot())
-for name in ('ports', 'configuration', 'registration', 'lifecycle', 'polling', 'execution', 'messages', 'cleanup'):
+for name in ('protocols', 'configuration', 'registration', 'lifecycle', 'polling', 'execution', 'messages', 'cleanup'):
     importlib.import_module('app.application.desktop_relay.' + name)
 """
     result = subprocess.run(

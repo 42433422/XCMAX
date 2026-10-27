@@ -16,10 +16,8 @@ from docx import Document
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.services import service_contract_fill as contracts
-from app.services import user_cs_pipeline as pipelines
-from app.services.kitten_ai_document import generate as document_renderer
-from app.services.service_contract_fill import (
+from app.domain.shared_services.kitten_ai_document import generate as document_renderer
+from app.domain.shared_services.service_contract_fill import (
     FIELD_SCHEMA,
     build_contract_wechat_hint,
     build_merged_fields,
@@ -29,6 +27,8 @@ from app.services.service_contract_fill import (
     load_field_overrides,
     save_field_overrides,
 )
+from app.services import service_contract_fill as contracts
+from app.services import user_cs_pipeline as pipelines
 
 
 @pytest.fixture(autouse=True)
@@ -148,7 +148,10 @@ class TestBuildMergedFields:
             "username": "张三",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch(
+            "app.domain.shared_services.service_contract_fill.load_pipeline",
+            return_value=mock_pipeline,
+        ):
             result = build_merged_fields(100, username="张三")
             for field in FIELD_SCHEMA:
                 assert field["key"] in result
@@ -160,7 +163,10 @@ class TestBuildMergedFields:
             "erp_customer_name": "原公司",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch(
+            "app.domain.shared_services.service_contract_fill.load_pipeline",
+            return_value=mock_pipeline,
+        ):
             result = build_merged_fields(101)
             assert result["party_a_name"] == "覆盖公司"
 
@@ -170,7 +176,10 @@ class TestBuildMergedFields:
             "erp_customer_name": "管道公司",
             "contract_fields": {"party_a_name": "存储公司"},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch(
+            "app.domain.shared_services.service_contract_fill.load_pipeline",
+            return_value=mock_pipeline,
+        ):
             result = build_merged_fields(102)
             assert result["party_a_name"] == "存储公司"
 
@@ -180,13 +189,19 @@ class TestBuildMergedFields:
             "erp_customer_name": "ERP公司",
             "contract_fields": {},
         }
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch(
+            "app.domain.shared_services.service_contract_fill.load_pipeline",
+            return_value=mock_pipeline,
+        ):
             result = build_merged_fields(103)
             assert result["party_a_name"] == "ERP公司"
 
     def test_sign_date_auto_filled(self, _tmp_roots):
         mock_pipeline = {"contract_fields": {}}
-        with patch("app.services.service_contract_fill.load_pipeline", return_value=mock_pipeline):
+        with patch(
+            "app.domain.shared_services.service_contract_fill.load_pipeline",
+            return_value=mock_pipeline,
+        ):
             result = build_merged_fields(100)
             assert result["sign_date"] != ""
 
@@ -256,8 +271,9 @@ def _contract_text(content):
 
 @pytest.fixture
 def _contract_client(_contract_generation, monkeypatch):
+    # debt19: SSOT is FHD/mods (contracts.__file__ may live under app/domain/... → parents[2]==app)
     path = (
-        Path(contracts.__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[2]
         / "mods/xcagi-customer-service-bridge/backend/blueprints.py"
     )
     spec = importlib.util.spec_from_file_location("synthetic_contract_artifact_bridge", path)

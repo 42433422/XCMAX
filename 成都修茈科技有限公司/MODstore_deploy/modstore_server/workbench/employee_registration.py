@@ -74,7 +74,8 @@ async def register_and_verify_workflow(
                     _raw_mf, _emp_pack_id
                 )
                 (state.pack_dir / "manifest.json").write_text(
-                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+                    json.dumps(_aligned_mf, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
                 )
                 reconcile_employee_pack_manifest(state.pack_dir, brief=state.employee_brief)
                 if state.use_word_extract:
@@ -133,7 +134,10 @@ async def register_and_verify_workflow(
     else:
         state.current_step = "workflow_sandbox"
         await ports.progress.set_step(
-            state.session_id, "workflow_sandbox", "running", "工作流结构校验（validate_only）"
+            state.session_id,
+            "workflow_sandbox",
+            "running",
+            "工作流结构校验（validate_only）",
         )
         wid_raw = (
             state.workflow_attachment.get("workflow_id")
@@ -145,7 +149,9 @@ async def register_and_verify_workflow(
         except (TypeError, ValueError):
             wid_int = 0
         if state.target == "pack_plus_workflow" and wid_int <= 0:
-            from modstore_server.craft_failure_signals import invalid_workflow_sandbox_report
+            from modstore_server.craft_failure_signals import (
+                invalid_workflow_sandbox_report,
+            )
 
             _wf_invalid_msg = "输入 workflow_id 无效：pack-registrar / workflow-automator 须先创建画布工作流并写入 wf_attach.workflow_id"
             report = invalid_workflow_sandbox_report(wid_raw)
@@ -245,7 +251,10 @@ async def register_and_verify_workflow(
                         "txt_generate",
                     ):
                         await ports.progress.set_step(
-                            state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                            state.session_id,
+                            "workflow_sandbox",
+                            "error",
+                            _wf_sb_msg[:480],
                         )
                         await ports.progress.fail(
                             state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]
@@ -255,8 +264,12 @@ async def register_and_verify_workflow(
                     try:
                         import base64 as _b64mod
 
-                        from modstore_server.txt_extract_runtime import minimal_txt_fixture_bytes
-                        from modstore_server.word_extract_runtime import minimal_docx_fixture_b64
+                        from modstore_server.txt_extract_runtime import (
+                            minimal_txt_fixture_bytes,
+                        )
+                        from modstore_server.word_extract_runtime import (
+                            minimal_docx_fixture_b64,
+                        )
 
                         _biz_input: Dict[str, Any] = {
                             "task": state.routing_brief or state.brief or "测试任务"
@@ -313,10 +326,15 @@ async def register_and_verify_workflow(
                                 "txt_generate",
                             ):
                                 await ports.progress.set_step(
-                                    state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                                    state.session_id,
+                                    "workflow_sandbox",
+                                    "error",
+                                    _wf_sb_msg[:480],
                                 )
                                 await ports.progress.fail(
-                                    state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]
+                                    state.session_id,
+                                    "workflow_sandbox",
+                                    _wf_sb_msg[:1000],
                                 )
                                 return True
                     except RECOVERABLE_ERRORS as _biz_exc:
@@ -329,7 +347,10 @@ async def register_and_verify_workflow(
                             "txt_generate",
                         ):
                             await ports.progress.set_step(
-                                state.session_id, "workflow_sandbox", "error", _wf_sb_msg[:480]
+                                state.session_id,
+                                "workflow_sandbox",
+                                "error",
+                                _wf_sb_msg[:480],
                             )
                             await ports.progress.fail(
                                 state.session_id, "workflow_sandbox", _wf_sb_msg[:1000]

@@ -288,7 +288,11 @@ async def get_models_for_provider(
     """Compatibility entry point for callers owning their database session."""
     api_key, base_url = resolve_catalog_credentials(session, user_id, provider)
     return await get_models_for_credentials(
-        user_id, provider, api_key=api_key, base_url=base_url, force_refresh=force_refresh
+        user_id,
+        provider,
+        api_key=api_key,
+        base_url=base_url,
+        force_refresh=force_refresh,
     )
 
 

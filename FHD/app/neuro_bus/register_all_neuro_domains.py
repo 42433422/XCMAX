@@ -18,8 +18,8 @@ def register_all_neuro_domains() -> list[str]:
         当前已注册域名称列表。
     """
     from app.neuro_bus.domains.ai_service_domain import get_ai_service_domain
-    from app.neuro_bus.domains.base import get_domain_registry
     from app.neuro_bus.domains.customer_domain import get_customer_domain
+    from app.neuro_bus.domains.domains_base import get_domain_registry
     from app.neuro_bus.domains.intent_domain import get_intent_domain
     from app.neuro_bus.domains.inventory_domain import get_inventory_domain
     from app.neuro_bus.domains.ocr_domain import get_ocr_domain

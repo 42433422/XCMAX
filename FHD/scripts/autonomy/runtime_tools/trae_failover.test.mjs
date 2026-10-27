@@ -43,6 +43,8 @@ test('policy failures and unknown command failures do not silently change tools'
 
 test('missing Trae models permit failover while policy refusals still stop it', () => {
   const error = 'failed to create agent: failed to create agent: Models is required';
+  assert.equal(isTraeProviderFailoverEligible('Models is required'), false);
+  assert.equal(isTraeProviderFailoverEligible(`permission denied: ${error}`), false);
   for (const details of [
     describeTraeFailure({ code: 1, stdout: JSON.stringify({ type: 'result', error }) }),
     describeTraeFailure({ code: 1, stderr: error }),

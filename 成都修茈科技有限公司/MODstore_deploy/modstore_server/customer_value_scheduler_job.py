@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from modstore_server.customer_value_escalation import ensure_customer_value_gap_escalation
+from modstore_server.customer_value_escalation import (
+    ensure_customer_value_gap_escalation,
+)
 from modstore_server.customer_value_reconciler import reconcile_paid_customer_value
 
 

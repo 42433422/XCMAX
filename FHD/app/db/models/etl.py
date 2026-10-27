@@ -21,7 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.mixins import TenantScopedMixin, TimestampMixin
 from app.utils.time import utc_now_naive
 

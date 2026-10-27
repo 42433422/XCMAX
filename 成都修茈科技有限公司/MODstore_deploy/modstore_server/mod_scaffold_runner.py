@@ -26,7 +26,9 @@ from modstore_server.employee_ai_scaffold import (
     build_employee_pack_zip,
     parse_employee_pack_llm_json,
 )
-from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+from modstore_server.employee_pack_export import (
+    build_employee_pack_manifest_from_workflow,
+)
 from modstore_server.llm_chat_proxy import chat_dispatch
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
@@ -61,7 +63,7 @@ from modstore_server.models import (
 
 logger = logging.getLogger(__name__)
 
-from modstore_server.mod_scaffold_runner_merged import (
+from modstore_server.mod_scaffold_runner_merged import (  # type: ignore[attr-defined]
     _parse_positive_int as _parse_positive_int,
     _employee_node_ids_for_workflow as _employee_node_ids_for_workflow,
     _ensure_minimal_employee_workflow_graph as _ensure_minimal_employee_workflow_graph,

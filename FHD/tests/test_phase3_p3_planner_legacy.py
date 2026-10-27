@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
-from app.application.workflow.types import PlanGraph
+from app.application.workflow.workflow_types import PlanGraph
 from app.legacy.chat.legacy_chat_adapter import (
     _parse_generate_office_format,
     _planner_tools_max_workers,

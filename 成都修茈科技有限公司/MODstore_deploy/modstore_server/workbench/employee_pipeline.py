@@ -8,7 +8,10 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from modstore_server.employee_brief_utils import extract_routing_brief, is_contract_doc_review_brief
+from modstore_server.employee_brief_utils import (
+    extract_routing_brief,
+    is_contract_doc_review_brief,
+)
 from modstore_server.employee_pack_cleanup import cleanup_experimental_pack
 from modstore_server.employee_pipeline_routing import (
     classify_employee_pipeline,
@@ -16,9 +19,18 @@ from modstore_server.employee_pipeline_routing import (
     validate_runtime_pipeline_consistency,
 )
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
-from modstore_server.workbench.employee_delivery import EmployeeDeliveryPorts, deliver_employee
-from modstore_server.workbench.employee_generation import EmployeeGenerationPorts, generate_employee
-from modstore_server.workbench.employee_planning import EmployeePlanningPorts, plan_employee
+from modstore_server.workbench.employee_delivery import (
+    EmployeeDeliveryPorts,
+    deliver_employee,
+)
+from modstore_server.workbench.employee_generation import (
+    EmployeeGenerationPorts,
+    generate_employee,
+)
+from modstore_server.workbench.employee_planning import (
+    EmployeePlanningPorts,
+    plan_employee,
+)
 from modstore_server.workbench.employee_quality import (
     EmployeeQualityPorts,
     evaluate_employee_quality,

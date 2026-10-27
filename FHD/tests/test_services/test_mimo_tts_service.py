@@ -1,4 +1,4 @@
-"""Tests for app.services.mimo_tts_service — MiMo-V2.5 TTS HTTP client.
+"""Tests for app.domain.shared_services.mimo_tts_service — MiMo-V2.5 TTS HTTP client.
 
 Covers:
 * ``resolve_mimo_credentials`` env var resolution + /v1 root stripping.

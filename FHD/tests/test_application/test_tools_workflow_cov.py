@@ -229,7 +229,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -251,7 +251,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -307,7 +307,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -333,7 +333,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -355,7 +355,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.application.employee_pack_runner.try_execute_employee_planner_tool",
+                "app.domain.app_pure.employee_pack_runner.try_execute_employee_planner_tool",
                 return_value=None,
                 create=True,
             ),
@@ -377,7 +377,7 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
                 create=True,
             ),
@@ -539,7 +539,7 @@ class TestImportProductsPreview:
                 create=True,
             ),
             patch(
-                "app.services.unified_query_service.find_purchase_unit",
+                "app.domain.shared_services.unified_query_service.find_purchase_unit",
                 return_value=mock_find_pu(),
                 create=True,
             ),

@@ -25,7 +25,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application import payment_service as psvc
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import (
     ChartOfAccount,
     Customer,

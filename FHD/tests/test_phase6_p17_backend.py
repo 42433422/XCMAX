@@ -37,7 +37,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from app.neuro_bus.events.base import EventMetadata, EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventMetadata, EventPriority, NeuroEvent
 
 # ===========================================================================
 # Shared fixtures
@@ -79,27 +79,27 @@ class TestStripBearerPrefix:
     """Cover ``_strip_bearer_prefix`` helper."""
 
     def test_strip_bearer_prefix_with_bearer_returns_token(self):
-        from app.services.conversation.modstore_adapter import _strip_bearer_prefix
+        from app.domain.shared_services.conversation.modstore_adapter import _strip_bearer_prefix
 
         assert _strip_bearer_prefix("Bearer abc123") == "abc123"
 
     def test_strip_bearer_prefix_case_insensitive(self):
-        from app.services.conversation.modstore_adapter import _strip_bearer_prefix
+        from app.domain.shared_services.conversation.modstore_adapter import _strip_bearer_prefix
 
         assert _strip_bearer_prefix("bearer xyz") == "xyz"
 
     def test_strip_bearer_prefix_without_bearer_returns_same(self):
-        from app.services.conversation.modstore_adapter import _strip_bearer_prefix
+        from app.domain.shared_services.conversation.modstore_adapter import _strip_bearer_prefix
 
         assert _strip_bearer_prefix("abc123") == "abc123"
 
     def test_strip_bearer_prefix_empty_string_returns_empty(self):
-        from app.services.conversation.modstore_adapter import _strip_bearer_prefix
+        from app.domain.shared_services.conversation.modstore_adapter import _strip_bearer_prefix
 
         assert _strip_bearer_prefix("") == ""
 
     def test_strip_bearer_prefix_none_returns_empty(self):
-        from app.services.conversation.modstore_adapter import _strip_bearer_prefix
+        from app.domain.shared_services.conversation.modstore_adapter import _strip_bearer_prefix
 
         assert _strip_bearer_prefix(None) == ""
 
@@ -108,26 +108,26 @@ class TestToOpenaiObject:
     """Cover ``_to_openai_object`` helper."""
 
     def test_dict_converted_to_simplenamespace(self):
-        from app.services.conversation.modstore_adapter import _to_openai_object
+        from app.domain.shared_services.conversation.modstore_adapter import _to_openai_object
 
         result = _to_openai_object({"key": "value"})
         assert isinstance(result, SimpleNamespace)
         assert result.key == "value"
 
     def test_list_converted_to_list_of_objects(self):
-        from app.services.conversation.modstore_adapter import _to_openai_object
+        from app.domain.shared_services.conversation.modstore_adapter import _to_openai_object
 
         result = _to_openai_object([1, "two"])
         assert result == [1, "two"]
 
     def test_scalar_returned_as_is(self):
-        from app.services.conversation.modstore_adapter import _to_openai_object
+        from app.domain.shared_services.conversation.modstore_adapter import _to_openai_object
 
         assert _to_openai_object(42) == 42
         assert _to_openai_object("hello") == "hello"
 
     def test_nested_dict_converted_recursively(self):
-        from app.services.conversation.modstore_adapter import _to_openai_object
+        from app.domain.shared_services.conversation.modstore_adapter import _to_openai_object
 
         result = _to_openai_object({"outer": {"inner": 1}})
         assert isinstance(result.outer, SimpleNamespace)
@@ -138,14 +138,18 @@ class TestNormalizeStreamChoice:
     """Cover ``_normalize_stream_choice`` helper."""
 
     def test_choice_with_delta_returns_unchanged(self):
-        from app.services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"delta": {"content": "hi"}, "index": 0, "finish_reason": None}
         result = _normalize_stream_choice(choice)
         assert "delta" in result
 
     def test_choice_with_message_dict_extracts_delta(self):
-        from app.services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"message": {"content": "hello"}, "index": 1, "finish_reason": "stop"}
         result = _normalize_stream_choice(choice)
@@ -153,14 +157,18 @@ class TestNormalizeStreamChoice:
         assert result["index"] == 1
 
     def test_choice_without_message_returns_empty_delta(self):
-        from app.services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {"index": 0, "finish_reason": None}
         result = _normalize_stream_choice(choice)
         assert result["delta"] == {}
 
     def test_choice_with_tool_calls_in_message(self):
-        from app.services.conversation.modstore_adapter import _normalize_stream_choice
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            _normalize_stream_choice,
+        )
 
         choice = {
             "message": {"content": "call", "tool_calls": [{"id": "t1"}]},
@@ -175,21 +183,21 @@ class TestPlatformStreamPayloadToOpenaiChunk:
     """Cover ``_platform_stream_payload_to_openai_chunk`` helper."""
 
     def test_empty_string_returns_none(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
         assert _platform_stream_payload_to_openai_chunk("") is None
 
     def test_done_returns_none(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
         assert _platform_stream_payload_to_openai_chunk("[DONE]") is None
 
     def test_invalid_json_returns_raw_text_as_content(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -197,7 +205,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["content"] == "not json"
 
     def test_valid_json_with_choices_normalizes(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -206,7 +214,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["content"] == "hi"
 
     def test_error_type_raises_value_error(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -215,7 +223,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
             _platform_stream_payload_to_openai_chunk(data)
 
     def test_plain_dict_with_content_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -224,7 +232,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["content"] == "hello"
 
     def test_plain_dict_with_text_field_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -233,7 +241,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["content"] == "world"
 
     def test_plain_dict_with_delta_field_returns_chunk(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -242,7 +250,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["content"] == "delta_text"
 
     def test_plain_dict_with_tool_calls(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -251,7 +259,7 @@ class TestPlatformStreamPayloadToOpenaiChunk:
         assert result["choices"][0]["delta"]["tool_calls"] == [{"id": "tc1"}]
 
     def test_plain_dict_empty_returns_none(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             _platform_stream_payload_to_openai_chunk,
         )
 
@@ -264,7 +272,7 @@ class TestModstorePlatformAdapterInit:
     """Cover ``ModstorePlatformAdapter.__init__`` and simple properties."""
 
     def test_init_with_defaults(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
@@ -277,7 +285,7 @@ class TestModstorePlatformAdapterInit:
         assert a.model_name == "mimo-v2.5-pro"
 
     def test_init_with_custom_params(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(
             platform_url="http://custom:9000",
@@ -293,22 +301,22 @@ class TestModstorePlatformAdapterInit:
         assert a.model_name == "gpt-4"
 
     def test_parse_user_id_valid(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         assert ModstorePlatformAdapter._parse_user_id("123") == 123
 
     def test_parse_user_id_empty_returns_none(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         assert ModstorePlatformAdapter._parse_user_id("") is None
 
     def test_parse_user_id_invalid_returns_none(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         assert ModstorePlatformAdapter._parse_user_id("abc") is None
 
     def test_repr_configured(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://x", auth_token="tok")
         r = repr(a)
@@ -316,7 +324,7 @@ class TestModstorePlatformAdapterInit:
         assert "http://x" in r
 
     def test_repr_not_configured(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
         # Force platform_url to empty by patching the env default
@@ -331,7 +339,7 @@ class TestModstorePlatformAdapterResolveProviderModel:
     """Cover ``_resolve_provider_model``."""
 
     def test_defaults_used_when_none(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(default_provider="openai", default_model="gpt-4")
         p, m = a._resolve_provider_model(None, None)
@@ -339,7 +347,7 @@ class TestModstorePlatformAdapterResolveProviderModel:
         assert m == "gpt-4"
 
     def test_explicit_overrides_defaults(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         p, m = a._resolve_provider_model("Custom", "my-model")
@@ -347,7 +355,7 @@ class TestModstorePlatformAdapterResolveProviderModel:
         assert m == "my-model"
 
     def test_model_with_slash_splits_provider(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         p, m = a._resolve_provider_model(None, "anthropic/claude-3")
@@ -355,7 +363,7 @@ class TestModstorePlatformAdapterResolveProviderModel:
         assert m == "claude-3"
 
     def test_model_with_slash_empty_parts_ignored(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         p, m = a._resolve_provider_model(None, "/model-only")
@@ -367,14 +375,14 @@ class TestModstorePlatformAdapterBuildHeaders:
     """Cover ``_build_headers``."""
 
     def test_with_auth_token(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(auth_token="mytoken")
         h = a._build_headers()
         assert h["Authorization"] == "Bearer mytoken"
 
     def test_without_auth_token(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(auth_token="")
         h = a._build_headers()
@@ -385,7 +393,7 @@ class TestModstorePlatformAdapterNormalizeResponse:
     """Cover ``_normalize_response``."""
 
     def test_with_choices_list(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         raw = {
@@ -404,7 +412,7 @@ class TestModstorePlatformAdapterNormalizeResponse:
         assert result["model"] == "gpt-4"
 
     def test_with_choices_and_tool_calls(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         raw = {
@@ -421,7 +429,7 @@ class TestModstorePlatformAdapterNormalizeResponse:
         assert result["choices"][0]["message"]["tool_calls"] == [{"id": "t1"}]
 
     def test_without_choices_uses_content(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         raw = {"content": "hello", "usage": {"prompt_tokens": 3}, "success": True}
@@ -431,7 +439,7 @@ class TestModstorePlatformAdapterNormalizeResponse:
         assert result["_modstore_meta"]["success"] is True
 
     def test_usage_dataclass_converted_to_dict(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         usage_obj = SimpleNamespace(prompt_tokens=10, completion_tokens=20)
@@ -440,7 +448,7 @@ class TestModstorePlatformAdapterNormalizeResponse:
         assert isinstance(result["usage"], dict)
 
     def test_empty_choices_list_falls_through(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         raw = {"choices": [], "content": "fallback", "usage": {}}
@@ -456,7 +464,9 @@ class TestModstorePlatformAdapterChatCompletion:
         import httpx
 
         monkeypatch.setenv("XCAGI_LLM_CHAT_FAILOVER", "1")
-        monkeypatch.setattr("app.services.conversation.modstore_adapter._CATALOG_CACHE", {})
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation.modstore_adapter._CATALOG_CACHE", {}
+        )
         calls = []
         client_type = httpx.Client
 
@@ -478,7 +488,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
     @pytest.mark.asyncio
     async def test_chat_completion_no_url_raises_value_error(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
         a = ModstorePlatformAdapter()
@@ -488,7 +498,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
     @pytest.mark.asyncio
     async def test_chat_completion_success(self, chat_discovery_http):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
         mock_response = MagicMock()
@@ -506,7 +516,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
         with (
             patch(
-                "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
+                "app.domain.shared_services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
                 create=True,
             ),
             patch(
@@ -519,7 +529,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
     @pytest.mark.asyncio
     async def test_chat_completion_http_error_raises_value_error(self, chat_discovery_http):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", auth_token="tok")
         mock_response = MagicMock()
@@ -536,7 +546,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
     @pytest.mark.asyncio
     async def test_chat_completion_with_user_id_in_payload(self, chat_discovery_http):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test", user_id=99)
         mock_response = MagicMock()
@@ -550,7 +560,7 @@ class TestModstorePlatformAdapterChatCompletion:
 
         with (
             patch(
-                "app.services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
+                "app.domain.shared_services.conversation.modstore_adapter.neuro_notify_ai_model_roundtrip",
                 create=True,
             ),
             patch(
@@ -567,7 +577,7 @@ class TestModstorePlatformAdapterFromSession:
     """Cover ``from_session`` class method."""
 
     def test_from_session_with_env_token(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "env_token")
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
@@ -577,7 +587,7 @@ class TestModstorePlatformAdapterFromSession:
         assert a._source == "env"
 
     def test_from_session_with_request_auth_header(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
@@ -591,7 +601,7 @@ class TestModstorePlatformAdapterFromSession:
         assert a.auth_token == ""
 
     def test_from_session_no_token_no_session(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
@@ -605,13 +615,13 @@ class TestModstorePlatformAdapterRefreshToken:
     """Cover ``refresh_token_from_session``."""
 
     def test_refresh_no_session_id_returns_false(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         assert a.refresh_token_from_session(session_id="", request=None) is False
 
     def test_refresh_with_valid_session_succeeds(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(auth_token="old")
         with patch.dict(
@@ -628,7 +638,7 @@ class TestModstorePlatformAdapterRefreshToken:
         assert a.auth_token == "new_token"
 
     def test_refresh_session_no_token_returns_false(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(auth_token="old")
         with patch.dict(
@@ -649,7 +659,7 @@ class TestModstorePlatformAdapterGetProviders:
 
     @pytest.mark.asyncio
     async def test_get_providers_success(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_response = MagicMock()
@@ -666,7 +676,7 @@ class TestModstorePlatformAdapterGetProviders:
 
     @pytest.mark.asyncio
     async def test_get_providers_failure_returns_empty(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_response = MagicMock()
@@ -682,7 +692,7 @@ class TestModstorePlatformAdapterGetProviders:
 
     @pytest.mark.asyncio
     async def test_get_providers_exception_returns_empty(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_client = AsyncMock()
@@ -699,7 +709,7 @@ class TestModstorePlatformAdapterGetCredentialStatus:
 
     @pytest.mark.asyncio
     async def test_get_credential_status_success(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_response = MagicMock()
@@ -716,7 +726,7 @@ class TestModstorePlatformAdapterGetCredentialStatus:
 
     @pytest.mark.asyncio
     async def test_get_credential_status_http_error(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_response = MagicMock()
@@ -732,7 +742,7 @@ class TestModstorePlatformAdapterGetCredentialStatus:
 
     @pytest.mark.asyncio
     async def test_get_credential_status_exception(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter(platform_url="http://test")
         mock_client = AsyncMock()
@@ -749,7 +759,7 @@ class TestModstorePlatformAdapterClose:
 
     @pytest.mark.asyncio
     async def test_close_open_client(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         mock_client = AsyncMock()
@@ -761,7 +771,7 @@ class TestModstorePlatformAdapterClose:
 
     @pytest.mark.asyncio
     async def test_close_no_client_no_error(self):
-        from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
+        from app.domain.shared_services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         a = ModstorePlatformAdapter()
         a._client = None
@@ -772,13 +782,17 @@ class TestCreateModstoreAdapterFromEnv:
     """Cover ``create_modstore_adapter_from_env``."""
 
     def test_no_env_returns_none(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import create_modstore_adapter_from_env
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            create_modstore_adapter_from_env,
+        )
 
         monkeypatch.delenv("MODSTORE_PLATFORM_URL", raising=False)
         assert create_modstore_adapter_from_env() is None
 
     def test_with_env_returns_adapter(self, monkeypatch):
-        from app.services.conversation.modstore_adapter import create_modstore_adapter_from_env
+        from app.domain.shared_services.conversation.modstore_adapter import (
+            create_modstore_adapter_from_env,
+        )
 
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://env:8765")
         result = create_modstore_adapter_from_env()
@@ -790,7 +804,7 @@ class TestModstoreOpenAICompatibleClient:
     """Cover ``ModstoreOpenAICompatibleClient`` and inner classes."""
 
     def test_default_model_property(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             ModstoreOpenAICompatibleClient,
             ModstorePlatformAdapter,
         )
@@ -800,7 +814,7 @@ class TestModstoreOpenAICompatibleClient:
         assert c.default_model == "gpt-4o"
 
     def test_default_provider_property(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             ModstoreOpenAICompatibleClient,
             ModstorePlatformAdapter,
         )
@@ -810,7 +824,7 @@ class TestModstoreOpenAICompatibleClient:
         assert c.default_provider == "openai"
 
     def test_is_modstore_openai_compatible_flag(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             ModstoreOpenAICompatibleClient,
             ModstorePlatformAdapter,
         )
@@ -823,7 +837,7 @@ class TestModstoreOpenAICompletionsCreate:
     """Cover ``_ModstoreOpenAICompletions.create`` non-stream path."""
 
     def test_create_non_stream_returns_simplenamespace(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             ModstoreOpenAICompatibleClient,
             ModstorePlatformAdapter,
         )
@@ -853,7 +867,7 @@ class TestModstoreProxyAdapterAlias:
     """Cover backward-compat alias."""
 
     def test_alias_is_same_class(self):
-        from app.services.conversation.modstore_adapter import (
+        from app.domain.shared_services.conversation.modstore_adapter import (
             ModstorePlatformAdapter,
             ModstoreProxyAdapter,
         )
@@ -1696,7 +1710,7 @@ class TestProductsPgInsertRow:
             ),
             patch.dict(
                 "sys.modules",
-                {"app.application.excel_imports": mock_excel},
+                {"app.domain.app_pure.excel_imports": mock_excel},
             ),
         ):
             with pytest.raises(Exception) as exc_info:
@@ -1725,7 +1739,7 @@ class TestProductsPgInsertRow:
             ),
             patch.dict(
                 "sys.modules",
-                {"app.application.excel_imports": mock_excel},
+                {"app.domain.app_pure.excel_imports": mock_excel},
             ),
         ):
             with pytest.raises(Exception) as exc_info:
@@ -2166,7 +2180,7 @@ class TestChartDataServiceRevenueChart:
     """Cover ``ChartDataService.get_revenue_chart_data``."""
 
     def test_revenue_chart_db_error_returns_failure(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with patch(
@@ -2178,7 +2192,7 @@ class TestChartDataServiceRevenueChart:
         assert result["message"] == "营收图表暂不可用"
 
     def test_revenue_chart_success(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2195,7 +2209,7 @@ class TestChartDataServiceRevenueChart:
         assert "data" in result
 
     def test_revenue_chart_custom_months(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2213,7 +2227,7 @@ class TestChartDataServiceProductPieChart:
     """Cover ``ChartDataService.get_product_pie_chart_data``."""
 
     def test_product_pie_chart_db_error_returns_failure(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with patch(
@@ -2224,7 +2238,7 @@ class TestChartDataServiceProductPieChart:
         assert result["success"] is False
 
     def test_product_pie_chart_success(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2248,7 +2262,7 @@ class TestChartDataServiceCustomerBarChart:
     """Cover ``ChartDataService.get_customer_bar_chart_data``."""
 
     def test_customer_bar_chart_db_error_returns_failure(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with patch(
@@ -2259,7 +2273,7 @@ class TestChartDataServiceCustomerBarChart:
         assert result["success"] is False
 
     def test_customer_bar_chart_long_name_truncated(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2279,7 +2293,7 @@ class TestChartDataServiceCustomerBarChart:
         assert result["data"]["labels"][0].endswith("...")
 
     def test_customer_bar_chart_short_name_not_truncated(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2303,7 +2317,7 @@ class TestChartDataServiceProfitTrendChart:
     """Cover ``ChartDataService.get_profit_trend_chart_data``."""
 
     def test_profit_trend_db_error_returns_failure(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with patch(
@@ -2314,7 +2328,7 @@ class TestChartDataServiceProfitTrendChart:
         assert result["success"] is False
 
     def test_profit_trend_success(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2335,7 +2349,7 @@ class TestChartDataServiceInventoryChart:
     """Cover ``ChartDataService.get_inventory_chart_data``."""
 
     def test_inventory_chart_db_error_returns_failure(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with patch(
@@ -2354,7 +2368,7 @@ class TestChartDataServiceInventoryChart:
         """
         from sqlalchemy.exc import ProgrammingError
 
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         err = ProgrammingError("SELECT 1", {}, RuntimeError("table does not exist"))
@@ -2367,7 +2381,7 @@ class TestChartDataServiceInventoryChart:
                 svc.get_inventory_chart_data()
 
     def test_inventory_chart_success(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         mock_db = MagicMock()
@@ -2389,7 +2403,7 @@ class TestChartDataServiceGetAllChartsData:
     """Cover ``ChartDataService.get_all_charts_data``."""
 
     def test_get_all_charts_data_returns_all_keys(self):
-        from app.services.kitten_report.chart_data_service import ChartDataService
+        from app.domain.shared_services.kitten_report.chart_data_service import ChartDataService
 
         svc = ChartDataService()
         with (
@@ -2416,20 +2430,20 @@ class TestDefaultSteps:
     """Cover ``_default_steps``."""
 
     def test_default_steps_has_all_o_keys(self):
-        from app.services.operations_line_bridge import _default_steps
+        from app.domain.shared_services.operations_line_bridge import _default_steps
 
         steps = _default_steps()
         for key in ["O1", "O2", "O3", "O4", "O5", "O6", "O7", "O8", "O9", "O10"]:
             assert key in steps
 
     def test_default_steps_o1_is_done(self):
-        from app.services.operations_line_bridge import _default_steps
+        from app.domain.shared_services.operations_line_bridge import _default_steps
 
         steps = _default_steps()
         assert steps["O1"]["status"] == "done"
 
     def test_default_steps_o5_o6_are_done(self):
-        from app.services.operations_line_bridge import _default_steps
+        from app.domain.shared_services.operations_line_bridge import _default_steps
 
         steps = _default_steps()
         assert steps["O5"]["status"] == "done"
@@ -2440,17 +2454,17 @@ class TestScanPipelines:
     """Cover ``_scan_pipelines``."""
 
     def test_scan_pipelines_import_error_returns_zeros(self, monkeypatch):
-        from app.services.operations_line_bridge import _scan_pipelines
+        from app.domain.shared_services.operations_line_bridge import _scan_pipelines
 
         monkeypatch.setitem(
             __import__("sys").modules,
-            "app.services.user_cs_pipeline",
+            "app.domain.shared_services.user_cs_pipeline",
             None,
         )
         # Force re-import by clearing cached module
         import importlib
 
-        with patch.dict("sys.modules", {"app.services.user_cs_pipeline": None}):
+        with patch.dict("sys.modules", {"app.domain.shared_services.user_cs_pipeline": None}):
             total, missing_crm, missing_erp, by_stage = _scan_pipelines()
         assert total == 0
         assert missing_crm == 0
@@ -2458,7 +2472,7 @@ class TestScanPipelines:
         assert by_stage == {}
 
     def test_scan_pipelines_with_pipeline_data(self, tmp_dir, monkeypatch):
-        from app.services.operations_line_bridge import _scan_pipelines
+        from app.domain.shared_services.operations_line_bridge import _scan_pipelines
 
         # Create a pipeline JSON file
         pipeline_dir = Path(tmp_dir) / "pipelines"
@@ -2477,7 +2491,9 @@ class TestScanPipelines:
         mock_module._pipeline_roots = mock_pipeline_roots
         mock_module._STAGE_ORDER = mock_stage_order
 
-        with patch.dict("sys.modules", {"app.services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, missing_crm, missing_erp, by_stage = _scan_pipelines()
         assert total == 1
         assert missing_crm == 1
@@ -2485,7 +2501,7 @@ class TestScanPipelines:
         assert by_stage.get("intake_done") == 1
 
     def test_scan_pipelines_skips_invalid_json(self, tmp_dir):
-        from app.services.operations_line_bridge import _scan_pipelines
+        from app.domain.shared_services.operations_line_bridge import _scan_pipelines
 
         pipeline_dir = Path(tmp_dir) / "pipelines"
         pipeline_dir.mkdir()
@@ -2495,12 +2511,14 @@ class TestScanPipelines:
         mock_module._pipeline_roots = MagicMock(return_value=[pipeline_dir])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, missing_crm, missing_erp, by_stage = _scan_pipelines()
         assert total == 0
 
     def test_scan_pipelines_skips_non_dict_data(self, tmp_dir):
-        from app.services.operations_line_bridge import _scan_pipelines
+        from app.domain.shared_services.operations_line_bridge import _scan_pipelines
 
         pipeline_dir = Path(tmp_dir) / "pipelines"
         pipeline_dir.mkdir()
@@ -2510,18 +2528,22 @@ class TestScanPipelines:
         mock_module._pipeline_roots = MagicMock(return_value=[pipeline_dir])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, _, _, _ = _scan_pipelines()
         assert total == 0
 
     def test_scan_pipelines_skips_non_dir_roots(self, tmp_dir):
-        from app.services.operations_line_bridge import _scan_pipelines
+        from app.domain.shared_services.operations_line_bridge import _scan_pipelines
 
         mock_module = MagicMock()
         mock_module._pipeline_roots = MagicMock(return_value=[Path("/nonexistent/path")])
         mock_module._STAGE_ORDER = ["idle"]
 
-        with patch.dict("sys.modules", {"app.services.user_cs_pipeline": mock_module}):
+        with patch.dict(
+            "sys.modules", {"app.domain.shared_services.user_cs_pipeline": mock_module}
+        ):
             total, _, _, _ = _scan_pipelines()
         assert total == 0
 
@@ -2530,14 +2552,14 @@ class TestComputeOperationsHealth:
     """Cover ``compute_operations_health``."""
 
     def test_returns_dict_with_required_keys(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
         with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
             return_value=(0, 0, 0, {}),
         ):
             result = compute_operations_health()
@@ -2546,14 +2568,14 @@ class TestComputeOperationsHealth:
         assert "pipeline_count" in result
 
     def test_o2_status_when_no_pipelines(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
         with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
             return_value=(0, 0, 0, {}),
         ):
             result = compute_operations_health()
@@ -2561,14 +2583,14 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O2"]["status"] == "done"
 
     def test_o2_status_when_pipelines_complete(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
         with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
             return_value=(5, 0, 0, {"quoted": 3, "signed": 2}),
         ):
             result = compute_operations_health()
@@ -2576,7 +2598,7 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O3"]["quoted"] == 3
 
     def test_o4_with_market_payment_health(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://market:8765")
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2588,7 +2610,7 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch(
@@ -2600,7 +2622,7 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O4"]["status"] == "done"
 
     def test_o4_market_health_probe_failure(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://market:8765")
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2608,7 +2630,7 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch(
@@ -2620,7 +2642,7 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O4"]["status"] == "partial"
 
     def test_o4_market_health_http_error(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://market:8765")
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2631,7 +2653,7 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch(
@@ -2643,7 +2665,7 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O4"]["status"] == "partial"
 
     def test_o8_signoff_backend_info(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2655,19 +2677,19 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch.dict(
                 "sys.modules",
-                {"app.services.user_cs_delivery_signoff": mock_module},
+                {"app.domain.shared_services.user_cs_delivery_signoff": mock_module},
             ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O8"]["status"] == "done"
 
     def test_o8_signoff_sqlite_backend(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2679,19 +2701,19 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch.dict(
                 "sys.modules",
-                {"app.services.user_cs_delivery_signoff": mock_module},
+                {"app.domain.shared_services.user_cs_delivery_signoff": mock_module},
             ),
         ):
             result = compute_operations_health()
         assert result["steps"]["O8"]["status"] == "partial"
 
     def test_o10_reconciliation_status(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2708,12 +2730,12 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch.dict(
                 "sys.modules",
-                {"app.services.reconciliation_scheduler": mock_module},
+                {"app.domain.shared_services.reconciliation_scheduler": mock_module},
             ),
         ):
             result = compute_operations_health()
@@ -2721,7 +2743,7 @@ class TestComputeOperationsHealth:
         assert "最近对账" in result["steps"]["O10"]["note"]
 
     def test_o10_reconciliation_no_last_run(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
@@ -2733,12 +2755,12 @@ class TestComputeOperationsHealth:
 
         with (
             patch(
-                "app.services.operations_line_bridge._scan_pipelines",
+                "app.domain.shared_services.operations_line_bridge._scan_pipelines",
                 return_value=(0, 0, 0, {}),
             ),
             patch.dict(
                 "sys.modules",
-                {"app.services.reconciliation_scheduler": mock_module},
+                {"app.domain.shared_services.reconciliation_scheduler": mock_module},
             ),
         ):
             result = compute_operations_health()
@@ -2746,28 +2768,28 @@ class TestComputeOperationsHealth:
         assert result["steps"]["O10"]["status"] == "partial"
 
     def test_payment_backend_env_var(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.setenv("MODEL_PAYMENT_BACKEND", "java")
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
         with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
             return_value=(0, 0, 0, {}),
         ):
             result = compute_operations_health()
         assert result["payment_backend"] == "java"
 
     def test_pipeline_count_and_breakpoints(self, monkeypatch):
-        from app.services.operations_line_bridge import compute_operations_health
+        from app.domain.shared_services.operations_line_bridge import compute_operations_health
 
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.delenv("MODEL_PAYMENT_BACKEND", raising=False)
         monkeypatch.delenv("PAYMENT_BACKEND", raising=False)
 
         with patch(
-            "app.services.operations_line_bridge._scan_pipelines",
+            "app.domain.shared_services.operations_line_bridge._scan_pipelines",
             return_value=(10, 3, 2, {}),
         ):
             result = compute_operations_health()

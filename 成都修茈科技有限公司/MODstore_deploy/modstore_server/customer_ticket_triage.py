@@ -105,7 +105,14 @@ def apply_triage_intervention(
             body["allow_code_fix"] = bool(decided.get("allow_code_fix"))
         body["triage_intervention"] = {
             k: decided[k]
-            for k in ("intent", "tool_name", "device_id", "allow_code_fix", "note", "by")
+            for k in (
+                "intent",
+                "tool_name",
+                "device_id",
+                "allow_code_fix",
+                "note",
+                "by",
+            )
             if k in decided
         }
     snap = build_triage_snapshot(body, intervention=decided)

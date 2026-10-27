@@ -181,9 +181,11 @@ def _stable_sample_catalog_items(
     day = _facade().datetime.now(_facade().timezone.utc).strftime("%Y-%m-%d")
     ranked = sorted(
         items,
-        key=lambda item: _facade()
-        .hashlib.sha256(f"{day}:{item.get('id') or item.get('pkg_id') or ''}".encode())
-        .hexdigest(),
+        key=lambda item: (
+            _facade()
+            .hashlib.sha256(f"{day}:{item.get('id') or item.get('pkg_id') or ''}".encode())
+            .hexdigest()
+        ),
     )
     return ranked[:cap]
 
@@ -236,7 +238,10 @@ def _pick_lane_sample_target(
     predicates = {
         "P-W": (_facade()._is_ai_employee_store_target,),
         "P-S": (_facade()._is_ps_ai_employee_target,),
-        "P-App": (_facade()._is_ai_employee_store_target, _facade()._is_papp_ai_ecosystem_target),
+        "P-App": (
+            _facade()._is_ai_employee_store_target,
+            _facade()._is_papp_ai_ecosystem_target,
+        ),
     }.get(lane, ())
     for pred in predicates:
         for t in lane_targets:
@@ -249,7 +254,9 @@ def _pick_lane_sample_target(
     return lane_targets[0]
 
 
-def _pick_sample_targets(full: _facade().List[SurfaceTarget]) -> _facade().List[SurfaceTarget]:
+def _pick_sample_targets(
+    full: _facade().List[SurfaceTarget],
+) -> _facade().List[SurfaceTarget]:
     """日更 sample：P-W / P-S / P-App 各 1 张 AI 员工代表截图。"""
     per_lane = _facade()._max_targets_per_lane()
     out: _facade().List[_facade().SurfaceTarget] = []
@@ -288,7 +295,8 @@ def _limit_targets_per_lane(
 
 
 def _append_pw_catalog_targets(
-    out: _facade().List[SurfaceTarget], catalog: _facade().List[_facade().Dict[str, _facade().Any]]
+    out: _facade().List[SurfaceTarget],
+    catalog: _facade().List[_facade().Dict[str, _facade().Any]],
 ) -> None:
     for item in catalog:
         cid = item.get("id")
@@ -297,12 +305,18 @@ def _append_pw_catalog_targets(
         label = str(item.get("name") or item.get("pkg_id") or cid).strip()
         out.append(
             _facade().SurfaceTarget(
-                "P-W", "网站 P-W", f"AI员工商品-{label}", f"/market/catalog/{cid}", "desktop"
+                "P-W",
+                "网站 P-W",
+                f"AI员工商品-{label}",
+                f"/market/catalog/{cid}",
+                "desktop",
             )
         )
 
 
-def _pw_catalog_items_for_daily(base: str) -> _facade().List[_facade().Dict[str, _facade().Any]]:
+def _pw_catalog_items_for_daily(
+    base: str,
+) -> _facade().List[_facade().Dict[str, _facade().Any]]:
     """日更 P-W：公开商品详情抽样 1–3（其余 P-W 页全量）。"""
     if _facade()._catalog_screenshot_max() <= 0:
         return []
@@ -652,7 +666,10 @@ def _login_surface_audit_sync(
     def _req(
         url: str, payload: _facade().Optional[_facade().Dict[str, _facade().Any]] = None
     ) -> _facade().Tuple[_facade().Dict[str, _facade().Any], _facade().Dict[str, str]]:
-        headers = {"User-Agent": "MODstore-surface-audit/1.0", "Accept": "application/json"}
+        headers = {
+            "User-Agent": "MODstore-surface-audit/1.0",
+            "Accept": "application/json",
+        }
         if payload is not None:
             headers["Content-Type"] = "application/json"
             csrf = cookies.get("csrf_token") or ""
@@ -726,7 +743,10 @@ def _login_surface_audit_sync(
             ).strip()
         except RECOVERABLE_ERRORS as exc:
             _facade().logger.warning(
-                "surface audit: %s session-handoff failed base=%s err=%s", label, api_base, exc
+                "surface audit: %s session-handoff failed base=%s err=%s",
+                label,
+                api_base,
+                exc,
             )
     has_required_state = bool(access) or (account_kind == "enterprise" and bool(session_id))
     if not ok or not has_required_state:
@@ -837,14 +857,20 @@ def _cookie_url_for_auth(target_url: str, auth: _facade().Dict[str, _facade().An
 
 
 async def _inject_market_auth(
-    context: _facade().Any, auth: _facade().Dict[str, _facade().Any], target_url: str = ""
+    context: _facade().Any,
+    auth: _facade().Dict[str, _facade().Any],
+    target_url: str = "",
 ) -> None:
     cookies = auth.get("cookies") if isinstance(auth.get("cookies"), dict) else {}
     session_id = str(auth.get("session_id") or cookies.get("session_id") or "").strip()
     csrf = str(auth.get("csrf_token") or cookies.get("csrf_token") or "").strip()
     cookie_rows: _facade().List[_facade().Dict[str, str]] = []
     cookie_url = _facade()._cookie_url_for_auth(target_url, auth)
-    for name, value in {**cookies, "session_id": session_id, "csrf_token": csrf}.items():
+    for name, value in {
+        **cookies,
+        "session_id": session_id,
+        "csrf_token": csrf,
+    }.items():
         v = str(value or "").strip()
         if name and v:
             cookie_rows.append({"name": str(name), "value": v, "url": cookie_url})
@@ -1017,7 +1043,8 @@ async def _capture_one(
 ) -> _facade().Dict[str, _facade().Any]:
     console_errors: _facade().List[str] = []
     page.on(
-        "console", lambda msg: console_errors.append(str(msg.text)) if msg.type == "error" else None
+        "console",
+        lambda msg: (console_errors.append(str(msg.text)) if msg.type == "error" else None),
     )
     vp = _facade()._MOBILE_VIEWPORT if viewport == "mobile" else _facade()._DESKTOP_VIEWPORT
     await page.set_viewport_size(vp)
@@ -1206,7 +1233,8 @@ async def analyze_surface_lanes(
             }
             if enabled not in ("0", "false", "no", "off"):
                 _facade().logger.warning(
-                    "surface audit: lane analysis fallback lane=%s err=bench LLM 未配置", lane
+                    "surface audit: lane analysis fallback lane=%s err=bench LLM 未配置",
+                    lane,
                 )
             continue
         system = _facade()._LANE_ANALYSIS_SYSTEM.format(
@@ -1409,7 +1437,8 @@ async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
         raise RuntimeError(f"surface audit deps bootstrap failed: {exc}") from exc
     try:
         timeout_ms = max(
-            10000, int(_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "90000"))
+            10000,
+            int(_facade().os.environ.get("MODSTORE_DAILY_SURFACE_AUDIT_TIMEOUT_MS", "90000")),
         )
     except ValueError:
         timeout_ms = 90000
@@ -1477,7 +1506,8 @@ async def run_surface_audit_async() -> _facade().Dict[str, _facade().Any]:
             market_auth = _facade()._login_surface_audit_sync(label="P-W")
             if market_auth:
                 _facade().logger.info(
-                    "surface audit: market login ok user=%s", market_auth.get("username")
+                    "surface audit: market login ok user=%s",
+                    market_auth.get("username"),
                 )
             elif any((_facade()._path_needs_market_auth(t.path) for t in _targets)):
                 raise RuntimeError(
@@ -1660,7 +1690,7 @@ def _render_analysis_block_html(report: _facade().Dict[str, _facade().Any], lane
         return ""
     owners = row.get("owners") or []
     owner_html = (
-        f"""<span style="font-size:11px;color:#64748b">对应员工：{_facade().html.escape(', '.join((str(o) for o in owners[:4])))}</span>"""
+        f"""<span style="font-size:11px;color:#64748b">对应员工：{_facade().html.escape(", ".join((str(o) for o in owners[:4])))}</span>"""
         if owners
         else ""
     )
@@ -1709,9 +1739,9 @@ def _render_lane_html(
             else ""
         )
         items.append(
-            f"""<li style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0"><div style="font-weight:600;color:#1e293b">{_facade().html.escape(str(r.get('name') or ''))} <span style="font-size:11px;color:{color}">HTTP {st or '—'} · {_facade().html.escape(str(r.get('viewport') or ''))}</span></div><div style="font-size:12px;color:#64748b;margin-top:2px">{_facade().html.escape(str(r.get('url') or ''))}</div><div style="font-size:12px;color:#475569;margin-top:2px">{_facade().html.escape(str(r.get('title') or ''))}</div>"""
+            f"""<li style="margin:8px 0;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0"><div style="font-weight:600;color:#1e293b">{_facade().html.escape(str(r.get("name") or ""))} <span style="font-size:11px;color:{color}">HTTP {st or "—"} · {_facade().html.escape(str(r.get("viewport") or ""))}</span></div><div style="font-size:12px;color:#64748b;margin-top:2px">{_facade().html.escape(str(r.get("url") or ""))}</div><div style="font-size:12px;color:#475569;margin-top:2px">{_facade().html.escape(str(r.get("title") or ""))}</div>"""
             + (
-                f"""<div style="font-size:12px;color:#b91c1c;margin-top:4px">{_facade().html.escape(str(r.get('error')))}</div>"""
+                f"""<div style="font-size:12px;color:#b91c1c;margin-top:4px">{_facade().html.escape(str(r.get("error")))}</div>"""
                 if r.get("error")
                 else ""
             )
@@ -1726,12 +1756,18 @@ def _render_lane_html(
         else ""
     )
     analysis_html = _facade()._render_analysis_block_html(report or {}, lane)
-    return f"""<div style="margin:12px 0"><div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px">{_facade().html.escape(label)}</div>{analysis_html}<ul style="list-style:none;margin:0;padding:0">{''.join(items)}{more_html}</ul></div>"""
+    return f"""<div style="margin:12px 0"><div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:6px">{_facade().html.escape(label)}</div>{analysis_html}<ul style="list-style:none;margin:0;padding:0">{"".join(items)}{more_html}</ul></div>"""
 
 
-def _lane_count_overview_html(results: _facade().List[_facade().Dict[str, _facade().Any]]) -> str:
+def _lane_count_overview_html(
+    results: _facade().List[_facade().Dict[str, _facade().Any]],
+) -> str:
     """三端实测页数总览（数据驱动：实时统计 results 各 lane 行数 + 正常/异常，绝不写死）。"""
-    lanes = (("P-W", "网站", "#2563eb"), ("P-S", "软件", "#0d9488"), ("P-App", "移动", "#7c3aed"))
+    lanes = (
+        ("P-W", "网站", "#2563eb"),
+        ("P-S", "软件", "#0d9488"),
+        ("P-App", "移动", "#7c3aed"),
+    )
     chips: _facade().List[str] = []
     for lane, label, color in lanes:
         rows = [r for r in results if r.get("lane") == lane]
@@ -1843,7 +1879,7 @@ def build_surface_audit_html_sync() -> _facade().Tuple[str, _facade().Dict[str, 
     if isinstance(report.get("baseline_delta"), dict):
         delta_md = _facade().baseline_delta_excerpt_markdown(report["baseline_delta"])
         if delta_md.strip():
-            delta_html = f"""<p style="margin:10px 0 0;font-size:12px;color:#475569">{_facade().html.escape(delta_md).replace(chr(10), '<br/>')}</p>"""
+            delta_html = f"""<p style="margin:10px 0 0;font-size:12px;color:#475569">{_facade().html.escape(delta_md).replace(chr(10), "<br/>")}</p>"""
     overview_html = _facade()._lane_count_overview_html(results)
     html_out = f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 16px"><p style="margin:0 0 10px;font-size:12px;color:{badge_color};font-weight:700">{badge} · {_facade().html.escape(badge_sub)}</p>{overview_html}{lanes_html}{delta_html}</div>'
     return (html_out, report)

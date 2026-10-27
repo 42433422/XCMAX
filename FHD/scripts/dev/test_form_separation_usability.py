@@ -187,7 +187,7 @@ def _eval_one(path: Path) -> dict:
             with (
                 patch("app.bootstrap.get_shipment_app_service", return_value=_FakeShip()),
                 patch(
-                    "app.services.tools_workflow_registered._execute_excel_import_records",
+                    "app.domain.shared_services.tools_workflow_registered._execute_excel_import_records",
                     return_value={"success": True, "imported": 1},
                 ),
                 patch(

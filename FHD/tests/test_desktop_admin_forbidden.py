@@ -76,7 +76,7 @@ def test_assert_desktop_allows_session_id_loads_meta() -> None:
 
 
 def test_auth_permission_admin_shell_blocked_on_desktop_mode() -> None:
-    from app.application.auth_permission_resolver import resolve_permissions
+    from app.domain.app_pure.auth_permission_resolver import resolve_permissions
 
     with patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=True):
         decision = resolve_permissions(

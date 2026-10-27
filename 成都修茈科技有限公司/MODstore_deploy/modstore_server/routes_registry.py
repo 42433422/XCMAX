@@ -13,7 +13,16 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import httpx
-from fastapi import APIRouter, Body, Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from modman.blueprint_scan import scan_fastapi_router_routes
@@ -77,7 +86,10 @@ from modstore_server.authoring import slim_openapi_paths
 from modstore_server.constants import DEFAULT_XCAGI_BACKEND_URL
 from modstore_server.employee_pack_export import build_employee_pack_zip_from_workflow
 from modstore_server.file_safe import read_text_under_mod, write_text_under_mod
-from modstore_server.mod_ai_scaffold import render_frontend_routes_js, render_generated_home_vue
+from modstore_server.mod_ai_scaffold import (
+    render_frontend_routes_js,
+    render_generated_home_vue,
+)
 from modstore_server.mod_scaffold_runner import (
     analyze_mod_employee_readiness,
     patch_workflow_graph_employee_nodes,
@@ -146,7 +158,10 @@ _TAGS = [
     {"name": "mods", "description": "Mod 列表、详情、manifest、文件读写、导入导出"},
     {"name": "sync", "description": "与 XCAGI/mods 推送与拉回"},
     {"name": "debug", "description": "沙箱目录、primary 批量标记、XCAGI 状态代理"},
-    {"name": "authoring", "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并"},
+    {
+        "name": "authoring",
+        "description": "扩展面文档、蓝图路由静态扫描、宿主 OpenAPI 合并",
+    },
     {"name": "payment", "description": "支付、订单与会员计划"},
     {"name": "workflow", "description": "工作流编排与执行"},
     {"name": "webhooks", "description": "业务 Webhook 投递与重放"},

@@ -10,7 +10,7 @@ from typing import Any
 
 from app.domain.neuro.neuro_uow import NeuroUnitOfWork
 from app.neuro_bus import bus as neuro_bus
-from app.neuro_bus.events.base import EventPriority, NeuroEvent
+from app.neuro_bus.events.events_base import EventPriority, NeuroEvent
 from app.neuro_bus.events.inventory_events import (
     InventoryCheckCompletedEvent,
     InventoryStockInEvent,
@@ -51,7 +51,7 @@ def _resolve_purchase_service_cls():
     cls = PurchaseService
     if cls is not None:
         return cls
-    from app.services.purchase_service import PurchaseService as _PurchaseService
+    from app.domain.shared_services.purchase_service import PurchaseService as _PurchaseService
 
     return _PurchaseService
 

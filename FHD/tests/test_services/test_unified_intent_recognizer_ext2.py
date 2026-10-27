@@ -1,5 +1,5 @@
 # mypy: disable-error-code="var-annotated"
-"""Extended tests for ``app.services.unified_intent_recognizer`` covering low-coverage branches."""
+"""Extended tests for ``app.domain.shared_services.unified_intent_recognizer`` covering low-coverage branches."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.unified_intent_recognizer import (
+from app.domain.shared_services.unified_intent_recognizer import (
     RecognizerResult,
     RecognizerType,
     UnifiedIntentRecognizer,
@@ -21,7 +21,7 @@ from app.services.unified_intent_recognizer import (
 def fresh_recognizer(monkeypatch: pytest.MonkeyPatch) -> UnifiedIntentRecognizer:
     """Build a recognizer with all sub-engines mocked (no real model loading)."""
     # Reset singleton
-    import app.services.unified_intent_recognizer as mod
+    import app.domain.shared_services.unified_intent_recognizer as mod
 
     monkeypatch.setattr(mod, "_unified_recognizer", None)
     # Patch _init_recognizers to avoid loading real engines
@@ -59,7 +59,7 @@ class TestRecognizeQuickPath:
             "context_inherited": True,
         }
         with patch(
-            "app.services.intent_service.quick_recognize",
+            "app.domain.shared_services.intent_service.quick_recognize",
             return_value=quick_result,
         ):
             result = fresh_recognizer.recognize("msg", context_data={"k": "v"})
@@ -79,7 +79,7 @@ class TestRecognizeQuickPath:
         }
         with (
             patch(
-                "app.services.intent_service.quick_recognize",
+                "app.domain.shared_services.intent_service.quick_recognize",
                 return_value=quick_result,
             ),
             patch.object(
@@ -95,7 +95,7 @@ class TestRecognizeQuickPath:
         quick_result = {"primary_intent": None, "elapsed_ms": 10}
         with (
             patch(
-                "app.services.intent_service.quick_recognize",
+                "app.domain.shared_services.intent_service.quick_recognize",
                 return_value=quick_result,
             ),
             patch.object(
@@ -110,7 +110,7 @@ class TestRecognizeQuickPath:
     ) -> None:
         with (
             patch(
-                "app.services.intent_service.quick_recognize",
+                "app.domain.shared_services.intent_service.quick_recognize",
                 side_effect=RuntimeError("quick fail"),
             ),
             patch.object(
@@ -124,7 +124,7 @@ class TestRecognizeQuickPath:
 class TestRecognizeRulePath:
     def test_recognize_rule_success(self, fresh_recognizer: UnifiedIntentRecognizer) -> None:
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value={"primary_intent": "order", "tool_key": "order"},
         ):
             result = fresh_recognizer._recognize_rule("msg")
@@ -135,7 +135,7 @@ class TestRecognizeRulePath:
         self, fresh_recognizer: UnifiedIntentRecognizer
     ) -> None:
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             side_effect=RuntimeError("rule fail"),
         ):
             result = fresh_recognizer._recognize_rule("msg")
@@ -425,11 +425,11 @@ class TestReload:
 
         monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", fake_init)
         monkeypatch.setattr(
-            "app.services.unified_intent_recognizer.reload_intent_config",
+            "app.domain.shared_services.unified_intent_recognizer.reload_intent_config",
             lambda: None,
         )
         monkeypatch.setattr(
-            "app.services.rule_engine.reload_rule_engine",
+            "app.domain.shared_services.rule_engine.reload_rule_engine",
             lambda: None,
         )
         fresh_recognizer.reload()
@@ -440,7 +440,7 @@ class TestSingletonAccessors:
     def test_get_unified_intent_recognizer_returns_singleton(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import app.services.unified_intent_recognizer as mod
+        import app.domain.shared_services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
         monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)
@@ -449,7 +449,7 @@ class TestSingletonAccessors:
         assert r1 is r2
 
     def test_reload_unified_recognizer(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import app.services.unified_intent_recognizer as mod
+        import app.domain.shared_services.unified_intent_recognizer as mod
 
         monkeypatch.setattr(mod, "_unified_recognizer", None)
         monkeypatch.setattr(UnifiedIntentRecognizer, "_init_recognizers", lambda self: None)

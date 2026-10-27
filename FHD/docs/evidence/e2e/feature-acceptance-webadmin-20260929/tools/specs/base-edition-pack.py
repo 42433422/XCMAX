@@ -43,8 +43,8 @@ def _card(page, env, name, cid, title, req, status, body):
     if getattr(_card, 'used', False):
         return
     _card.used = True
-    import json as _json
     import html as _html
+    import json as _json
     payload = _json.dumps(body, ensure_ascii=False, default=str)
     if len(payload) > 2800:
         payload = payload[:2800] + " …(截断)"

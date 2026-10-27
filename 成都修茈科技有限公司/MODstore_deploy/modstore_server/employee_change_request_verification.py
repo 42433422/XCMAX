@@ -135,7 +135,9 @@ def _maybe_run_post_apply_consistency(
     if raw in ("0", "false", "no", "off"):
         return {"ran": False}
     try:
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         out = run_full_consistency_check(
             repo_root,
@@ -146,7 +148,9 @@ def _maybe_run_post_apply_consistency(
         )
     except TypeError:
         # 兼容旧签名
-        from modstore_server.tools.doc_consistency_checker import run_full_consistency_check
+        from modstore_server.tools.doc_consistency_checker import (
+            run_full_consistency_check,
+        )
 
         out = run_full_consistency_check(repo_root)
     except RECOVERABLE_ERRORS as exc:

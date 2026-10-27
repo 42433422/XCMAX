@@ -68,7 +68,7 @@ async def mod_store_private_delivery_status(request: Request) -> ModStoreSimpleR
             uid = 0
         if uid <= 0:
             raise HTTPException(status_code=401, detail="转返工须已绑定市场账号身份")
-        from app.application.customer_issue_intake_app import submit_private_rework
+        from app.domain.app_pure.customer_issue_intake_app import submit_private_rework
         from app.fastapi_routes.private_mod_delivery_context import (
             _private_delivery_market_token,
         )

@@ -17,7 +17,16 @@ from modstore_server import (
     self_maintenance_retort_remediation,
 )
 
-from . import decision, dispatch, knowledge_gate, outcomes, prompts, schedule, store, workspace
+from . import (
+    decision,
+    dispatch,
+    knowledge_gate,
+    outcomes,
+    prompts,
+    schedule,
+    store,
+    workspace,
+)
 
 Record = Dict[str, Any]
 RecordOperation = Callable[..., Record]

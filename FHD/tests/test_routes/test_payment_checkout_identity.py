@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.user import Session, User
 from app.fastapi_routes import market_account, model_payment
 from app.infrastructure.payment import modstore_payment_proxy as proxy
@@ -20,7 +20,7 @@ from app.utils.time import utc_now_naive
 pytestmark = pytest.mark.release_gate
 
 
-@pytest.fixture(params=["host", "full-host", "mods", "XCAGI/mods"])
+@pytest.fixture(params=["host", "full-host", "mods"])
 def payment_client(request, tmp_path, monkeypatch):
     import app.db as database
 

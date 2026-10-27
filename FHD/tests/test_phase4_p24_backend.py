@@ -265,7 +265,7 @@ def mobile_ext_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         AsyncMock(return_value=({}, False, "")),
     )
     monkeypatch.setattr(
-        "app.application.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
+        "app.domain.app_pure.employee_circle_sync.sync_modstore_reports", AsyncMock(return_value={})
     )
     app = FastAPI()
     app.include_router(mobile_ext.extension_router)

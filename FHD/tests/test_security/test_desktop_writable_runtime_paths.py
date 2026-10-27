@@ -44,7 +44,7 @@ def test_lan_settings_use_desktop_data_dir(monkeypatch, tmp_path):
 def test_memory_json_and_lock_stay_outside_packaged_resources(
     monkeypatch, tmp_path, custom_directory
 ):
-    from app.desktop_runtime.paths import configure_desktop_environment
+    from app.desktop_runtime.desktop_runtime_paths import configure_desktop_environment
     from app.services import user_memory_service as memory
 
     for name in ("XCAGI_USER_MEMORY_DIR", "XCAGI_USER_MEMORY_JSON_PATH"):

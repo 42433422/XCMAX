@@ -17,7 +17,7 @@ import pytest
 
 import app.application.workflow.engine as engine_mod
 from app.application.workflow.engine import WorkflowEngine, _get_sync_http_client
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     NodeExecutionResult,
     PlanGraph,
     WorkflowNode,

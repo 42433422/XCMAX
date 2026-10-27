@@ -1064,7 +1064,7 @@ def test_knowledge_v1_dataset_rebuild_cancel_route(tmp_path: Path) -> None:
         # contract. Host ownership and wake-up use real workers in the separate
         # HTTP/Agent lifecycle tests below; unrelated process startup must not
         # exhaust a fake embedding operation's bounded wait here.
-        patch("app.application.dataset_rag_queue.ensure_host_worker") as wake_host,
+        patch("app.domain.app_pure.dataset_rag_queue.ensure_host_worker") as wake_host,
     ):
         client.post(
             "/api/knowledge/v1/datasets/route-queue/documents",
@@ -1200,7 +1200,7 @@ def test_rebuild_survives_tool_exit_and_is_owned_by_host(tmp_path, monkeypatch, 
         assert persisted["attempt_count"] == 1
     finally:
         release.set()
-        from app.application.dataset_rag_queue import stop_host_workers
+        from app.domain.app_pure.dataset_rag_queue import stop_host_workers
 
         assert stop_host_workers()
 
@@ -1259,7 +1259,7 @@ def test_rebuild_recovers_only_after_real_host_process_dies(tmp_path, monkeypatc
         if host.is_alive():
             host.terminate()
         host.join(5)
-        from app.application.dataset_rag_queue import stop_host_workers
+        from app.domain.app_pure.dataset_rag_queue import stop_host_workers
 
         assert stop_host_workers()
 
@@ -1268,7 +1268,7 @@ def _host_service():
     import os
     import time
 
-    from app.application.dataset_rag_queue import _hosts, ensure_host_worker
+    from app.domain.app_pure.dataset_rag_queue import _hosts, ensure_host_worker
 
     ensure_host_worker()
     deadline = time.monotonic() + 5
@@ -1286,7 +1286,7 @@ def test_direct_agent_rebuild_wakes_host_without_waiting_for_cold_storage(tmp_pa
 
     from app.application.agent_orchestrator.run_models import AgentStep
     from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
-    from app.application.dataset_rag_queue import stop_host_workers
+    from app.domain.app_pure.dataset_rag_queue import stop_host_workers
 
     storage = tmp_path / "cold-host.json"
     monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(storage))

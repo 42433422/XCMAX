@@ -18,3 +18,9 @@
 - 不在本轮删除仍被测试引用的 deprecated 适配
 
 编排叙事以**稳定入口 + 契约测试**为准，不以文件数为准。
+
+## debt19 orchestration surface
+
+- agent_registry / agent_dispatcher
+- orchestration_saga
+- capability_router

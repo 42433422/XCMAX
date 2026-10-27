@@ -71,9 +71,13 @@ def _matches(path: str, patterns: Iterable[str]) -> bool:
                 return True
             continue
         if "/" in pattern:
-            if fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(normalized, f"**/{pattern}"):
+            if fnmatch.fnmatch(normalized, pattern) or fnmatch.fnmatch(
+                normalized, f"**/{pattern}"
+            ):
                 return True
-        elif fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(normalized, f"**/{pattern}"):
+        elif fnmatch.fnmatch(name, pattern) or fnmatch.fnmatch(
+            normalized, f"**/{pattern}"
+        ):
             return True
     return False
 
@@ -85,14 +89,18 @@ def _files(root: Path) -> tuple[list[str], int]:
         rel = path.relative_to(root)
         rel_text = rel.as_posix()
         if rel_text.startswith(IGNORED_PATH_PREFIXES) or any(
-            part in IGNORED_DIR_NAMES or part.endswith(".egg-info") or part.startswith(".tmp-")
+            part in IGNORED_DIR_NAMES
+            or part.endswith(".egg-info")
+            or part.startswith(".tmp-")
             for part in rel.parts
         ):
             if path.is_file():
                 ignored += 1
             continue
         if path.is_file():
-            if any(fnmatch.fnmatch(path.name, pattern) for pattern in IGNORED_FILE_PATTERNS):
+            if any(
+                fnmatch.fnmatch(path.name, pattern) for pattern in IGNORED_FILE_PATTERNS
+            ):
                 ignored += 1
                 continue
             included.append(rel.as_posix())
@@ -173,7 +181,9 @@ def audit(company_root: Path) -> tuple[str, list[str]]:
             if in_scope and not forbidden:
                 writers_by_file[relpath].append(employee_id)
     uncovered = [path for path in files if not writers_by_file.get(path)]
-    overlaps = [(path, owners) for path, owners in writers_by_file.items() if len(owners) > 1]
+    overlaps = [
+        (path, owners) for path, owners in writers_by_file.items() if len(owners) > 1
+    ]
     covered = len(files) - len(uncovered)
     coverage = 100.0 if not files else covered * 100.0 / len(files)
     now = datetime.now(UTC).isoformat()
@@ -206,11 +216,13 @@ def audit(company_root: Path) -> tuple[str, list[str]]:
     lines.extend([f"- `{path}`" for path in uncovered[:200]] or ["- 无"])
     lines.extend(["", "## 多员工可写（前 200 项）", ""])
     lines.extend(
-        [f"- `{path}`：{', '.join(owners)}" for path, owners in overlaps[:200]] or ["- 无"]
+        [f"- `{path}`：{', '.join(owners)}" for path, owners in overlaps[:200]]
+        or ["- 无"]
     )
     lines.extend(["", "## scope 被 forbidden 收窄（前 200 项）", ""])
     lines.extend(
-        [f"- `{path}`：{employee_id}" for path, employee_id in self_conflicts[:200]] or ["- 无"]
+        [f"- `{path}`：{employee_id}" for path, employee_id in self_conflicts[:200]]
+        or ["- 无"]
     )
     lines.append("")
     return "\n".join(lines), contract_errors
@@ -218,7 +230,9 @@ def audit(company_root: Path) -> tuple[str, list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--company-root", type=Path, default=Path(__file__).resolve().parents[2])
+    parser.add_argument(
+        "--company-root", type=Path, default=Path(__file__).resolve().parents[2]
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()

@@ -111,7 +111,7 @@ def _check_db_state(expect: dict[str, Any]) -> tuple[bool, str]:
     if not assertions:
         return True, ""
     from app.db import SessionLocal, engine
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.infrastructure.tenant_scope import current_tenant_id
     from scripts.dev.task_benchmark_assertions import assertion_model_config as _model_config
 
@@ -242,7 +242,7 @@ def run_trial(tasks_path: Path, trial: int, out_path: Path) -> None:
     import app.db.models  # noqa: F401  确保全部模型注册后再建表
     from app.application.workflow.planner import LLMWorkflowPlanner
     from app.db import engine
-    from app.db.base import Base
+    from app.db.db_base import Base
     from app.infrastructure.tenant_scope import tenant_scope
     from app.services.tools_execution.registry import get_workflow_tool_registry
     from scripts.dev.task_benchmark_assertions import (

@@ -151,7 +151,9 @@ async def api_register_workflow_employee_catalog(
     )
     if manifest_err or not manifest_zip:
         raise _facade().HTTPException(400, manifest_err or "生成员工包失败")
-    from modstore_server.employee_pack_export import build_employee_pack_manifest_from_workflow
+    from modstore_server.employee_pack_export import (
+        build_employee_pack_manifest_from_workflow,
+    )
 
     manifest, manifest_build_err = build_employee_pack_manifest_from_workflow(
         mod_id, data, entry, workflow_index=idx
@@ -166,8 +168,14 @@ async def api_register_workflow_employee_catalog(
         "artifact": "employee_pack",
         "industry": body.industry.strip() or "通用",
         "release_channel": body.release_channel,
-        "commerce": {"mode": "free" if body.price <= 0 else "paid", "price": body.price},
-        "license": {"type": "personal" if body.price <= 0 else "commercial", "verify_url": None},
+        "commerce": {
+            "mode": "free" if body.price <= 0 else "paid",
+            "price": body.price,
+        },
+        "license": {
+            "type": "personal" if body.price <= 0 else "commercial",
+            "verify_url": None,
+        },
         "probe_mod_id": mod_id,
     }
     with _facade().tempfile.NamedTemporaryFile(suffix=".xcemp", delete=False) as tmp:
@@ -209,7 +217,12 @@ async def api_register_workflow_employee_catalog(
             readiness = analyze_mod_employee_readiness(db, user, d)
     finally:
         tmp_path.unlink(missing_ok=True)
-    return {"ok": True, "package": saved, "audit": audit, "employee_readiness": readiness}
+    return {
+        "ok": True,
+        "package": saved,
+        "audit": audit,
+        "employee_readiness": readiness,
+    }
 
 
 def _slug_workflow_employee_id(raw: str, fallback: str = "emp") -> str:
@@ -245,7 +258,8 @@ def api_attach_catalog_employee(
     sf = _facade().get_session_factory()
     with sf() as db:
         q = db.query(CatalogItem).filter(
-            CatalogItem.artifact == "employee_pack", CatalogItem.compliance_status != "delisted"
+            CatalogItem.artifact == "employee_pack",
+            CatalogItem.compliance_status != "delisted",
         )
         if body.catalog_item_id:
             item = q.filter(CatalogItem.id == int(body.catalog_item_id)).first()
@@ -425,7 +439,11 @@ def api_patch_workflow_employee_nodes(
     with sf() as db:
         out = patch_workflow_graph_employee_nodes(db, user, mod_dir=d, workflow_results=[])
         readiness = analyze_mod_employee_readiness(db, user, d)
-    return {"ok": bool(out.get("ok")), "graph_patch": out, "employee_readiness": readiness}
+    return {
+        "ok": bool(out.get("ok")),
+        "graph_patch": out,
+        "employee_readiness": readiness,
+    }
 
 
 @_facade().router.post("/api/mods/{mod_id}/frontend/regenerate")

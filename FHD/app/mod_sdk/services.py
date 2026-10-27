@@ -21,7 +21,7 @@ def get_products_service():
 
 
 def get_unified_intent_recognizer():
-    from app.services.unified_intent_recognizer import (
+    from app.domain.shared_services.unified_intent_recognizer import (
         get_unified_intent_recognizer as impl,
     )
 

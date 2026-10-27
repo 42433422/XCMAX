@@ -419,7 +419,9 @@ assert feedback_stats(None) == {"total": 0, "confirmed": 0, "negated": 0, "corre
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("first", ["app.utils.user_memory", "app.services.user_memory_service"])
+@pytest.mark.parametrize(
+    "first", ["app.utils.user_memory", "app.domain.shared_services.user_memory_service"]
+)
 def test_cold_import_orders_preserve_exports_and_default_paths(first: str) -> None:
     script = """
 import importlib, os, socket, sys

@@ -14,9 +14,17 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
-from modstore_server.db.base import Base
+from modstore_server.db.db_base import Base
 
 
 class AIEmployeeAccount(Base):

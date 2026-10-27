@@ -33,7 +33,10 @@ def _add_user(session) -> int:
 
 def test_handler_failure_detail_preserves_para_error_for_classification():
     from modstore_server.employee_executor import _handler_failure_detail
-    from modstore_server.llm_failure_classifier import FAILURE_KIND_TRANSIENT, classify_failure_kind
+    from modstore_server.llm_failure_classifier import (
+        FAILURE_KIND_TRANSIENT,
+        classify_failure_kind,
+    )
 
     error = _handler_failure_detail(
         {

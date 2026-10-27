@@ -14,7 +14,7 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 from app.application.agent_orchestrator.run_models import AgentStep
 from app.application.agent_orchestrator.tool_executor import AgentToolExecutor
 from app.application.shipment_app_service import ShipmentApplicationService
-from app.db.base import Base
+from app.db.db_base import Base
 from app.fastapi_routes import shipment_orders
 from app.infrastructure.auth import business_scope_gate as gate
 from app.infrastructure.persistence.shipment_record_command_impl import (

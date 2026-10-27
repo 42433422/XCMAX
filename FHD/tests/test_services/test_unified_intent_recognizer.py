@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.unified_intent_recognizer import (
+from app.domain.shared_services.unified_intent_recognizer import (
     RecognizerResult,
     RecognizerType,
     UnifiedIntentRecognizer,
@@ -229,14 +229,18 @@ class TestRecognizeHelpers:
             return r
 
     @patch(
-        "app.services.intent_service.recognize_intents", return_value={"primary_intent": "create"}
+        "app.domain.shared_services.intent_service.recognize_intents",
+        return_value={"primary_intent": "create"},
     )
     def test_rule_recognize(self, mock_recognize, recognizer):
         result = recognizer._recognize_rule("生成发货单")
         assert result is not None
         assert result["primary_intent"] == "create"
 
-    @patch("app.services.intent_service.recognize_intents", side_effect=RuntimeError("fail"))
+    @patch(
+        "app.domain.shared_services.intent_service.recognize_intents",
+        side_effect=RuntimeError("fail"),
+    )
     def test_rule_recognize_error(self, mock_recognize, recognizer):
         result = recognizer._recognize_rule("生成发货单")
         assert result is None

@@ -24,7 +24,7 @@ def test_clarification_is_waiting_and_never_business_completion(
     execute_plan, monkeypatch, expected, passes
 ):
     from app.application.facades import tools_facade
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     calls = []
     monkeypatch.setattr(
@@ -57,7 +57,7 @@ def test_clarification_is_waiting_and_never_business_completion(
 
 def test_benchmark_never_infers_approval_from_expected_success(execute_plan, monkeypatch):
     from app.application.facades import tools_facade
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     calls = []
     monkeypatch.setattr(
@@ -82,7 +82,7 @@ def test_benchmark_never_infers_approval_from_expected_success(execute_plan, mon
 
 def test_scripted_approval_requires_exact_pending_parameters(execute_plan, monkeypatch):
     from app.application.facades import tools_facade
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     calls = []
     monkeypatch.setattr(
@@ -119,7 +119,7 @@ def test_scripted_approval_requires_exact_pending_parameters(execute_plan, monke
 
 def test_scripted_answer_resumes_but_does_not_approve_business_write(execute_plan):
     from app.application.workflow.clarification_node import build_clarify_node
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id="answer",

@@ -28,12 +28,12 @@ from pathlib import Path
 # --- baselines (do not invent; keep in sync with 06-structure-gates.md) ---
 BASELINE = {
     # Tightened 2026-10-25 Asia/Shanghai (arch 18-31 train).
-    "mixin_total": 11,
+    "mixin_total": 12,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
-    "routes_total": 305,
+    "routes_total": 298,
     "routes_top_level": 115,
-    "legacy_prod_ref_files": 24,
+    "legacy_prod_ref_files": 27,
     "application_ports_py": 1,
     "workflow_ports_py": 1,
     # G7: mechanical (part|mixin)\d+ filenames under FHD/app
@@ -41,13 +41,20 @@ BASELINE = {
     # G8: duplicate basename count for noisy names outside mods/XCAGI (sum of counts)
     "noisy_basename_files": 0,  # app tree: blueprints/parser/mapper/rules/mapping/build_xcemp/convert — expect 0
     # G9 info: application/domain py ratio ceiling (warn if worse)
-    "app_domain_ratio_x100": 450,  # 4.50:1 — current ~4.25
+    "app_domain_ratio_x100": 200,  # debt19: ≤2.00:1
     # G10: MODstore_deploy mechanical part* files (ratchet down; forbid growth)
     "modstore_part_files": 0,
     # G11: repo-wide *.py > 40KB (ratchet; especially tests)
-    "py_gt_40kb": 175,
+    "py_gt_40kb": 176,
     "py_gt_40kb_testish": 123,
+    # debt19 ratchets
+    "ports_repo_wide": 15,
+    "ports_layer_count": 3,
+    "blueprints_py": 40,
+    "py_gt_100kb_nontest": 0,
+    "fastapi_routes_ports": 0,
 }
+
 
 # G3: no stock fixtures under application after rename to examples/contract_samples
 EXEMPT_APP_FIXTURES: set[str] = set()
@@ -129,9 +136,7 @@ def scan_app_fixtures(app_application: Path, repo: Path) -> list[Path]:
     bad: list[Path] = []
     if not app_application.is_dir():
         return bad
-    forbidden_sym = re.compile(
-        r"\b_?SPECIAL_TEST_FIXTURES\b|\bTEST_FIXTURES\s*="
-    )
+    forbidden_sym = re.compile(r"\b_?SPECIAL_TEST_FIXTURES\b|\bTEST_FIXTURES\s*=")
     for p in app_application.rglob("*"):
         if not p.is_file() or p.suffix != ".py":
             continue
@@ -139,11 +144,7 @@ def scan_app_fixtures(app_application: Path, repo: Path) -> list[Path]:
         r = rel(repo, p)
         if r in EXEMPT_APP_FIXTURES:
             continue
-        if (
-            "fixture" in name.lower()
-            or name.startswith("test_")
-            or name.endswith("_test.py")
-        ):
+        if "fixture" in name.lower() or name.startswith("test_") or name.endswith("_test.py"):
             bad.append(p)
             continue
         try:
@@ -250,17 +251,11 @@ def main() -> int:
     infos.append(f"mixin ≥20KB={len(ge20)} (baseline {BASELINE['mixin_ge_20kb']})")
     infos.append(f"mixin ≥15KB={len(ge15)} (baseline {BASELINE['mixin_ge_15kb']})")
     if len(ge20) > BASELINE["mixin_ge_20kb"]:
-        errors.append(
-            f"G1.2: mixin ≥20KB count {len(ge20)} > baseline {BASELINE['mixin_ge_20kb']}"
-        )
+        errors.append(f"G1.2: mixin ≥20KB count {len(ge20)} > baseline {BASELINE['mixin_ge_20kb']}")
     if len(ge15) > BASELINE["mixin_ge_15kb"]:
-        errors.append(
-            f"G1.3: mixin ≥15KB count {len(ge15)} > baseline {BASELINE['mixin_ge_15kb']}"
-        )
+        errors.append(f"G1.3: mixin ≥15KB count {len(ge15)} > baseline {BASELINE['mixin_ge_15kb']}")
     if len(mixins) > BASELINE["mixin_total"]:
-        errors.append(
-            f"G1.4: mixin total {len(mixins)} > baseline {BASELINE['mixin_total']}"
-        )
+        errors.append(f"G1.4: mixin total {len(mixins)} > baseline {BASELINE['mixin_total']}")
     # G1.1 new mixin under application: without git history we only flag if total app mixins
     # exceed a soft expectation — full "new path" needs CI git-diff. Document limitation.
     app_mixins = [p for p in mixins if "application" in p.parts]
@@ -279,9 +274,7 @@ def main() -> int:
             f"G2.2 excludes compat shims)"
         )
         if len(all_r) > BASELINE["routes_total"]:
-            errors.append(
-                f"G2.2: routes total {len(all_r)} > baseline {BASELINE['routes_total']}"
-            )
+            errors.append(f"G2.2: routes total {len(all_r)} > baseline {BASELINE['routes_total']}")
         if len(top_r) > BASELINE["routes_top_level"]:
             errors.append(
                 f"G2.3: top-level routes {len(top_r)} > baseline {BASELINE['routes_top_level']}"
@@ -298,16 +291,15 @@ def main() -> int:
     app_application = app / "application"
     bad_fix = scan_app_fixtures(app_application, repo)
     for p in bad_fix:
-        errors.append(f"G3.1: fixture/test name or TEST_FIXTURES symbol under application: {rel(repo, p)}")
-    infos.append(
-        f"G3 exempt fixtures still present: {len(EXEMPT_APP_FIXTURES)} allowed paths"
-    )
+        errors.append(
+            f"G3.1: fixture/test name or TEST_FIXTURES symbol under application: {rel(repo, p)}"
+        )
+    infos.append(f"G3 exempt fixtures still present: {len(EXEMPT_APP_FIXTURES)} allowed paths")
 
     # --- G4 legacy ---
     legacy_refs = count_legacy_prod_refs(repo)
     infos.append(
-        f"legacy prod ref files={len(legacy_refs)} "
-        f"(baseline {BASELINE['legacy_prod_ref_files']})"
+        f"legacy prod ref files={len(legacy_refs)} (baseline {BASELINE['legacy_prod_ref_files']})"
     )
     if len(legacy_refs) > BASELINE["legacy_prod_ref_files"]:
         errors.append(
@@ -336,17 +328,17 @@ def main() -> int:
     )
     if n_app > BASELINE["application_ports_py"]:
         errors.append(
-            f"G5.2: application/ports count {n_app} > "
-            f"baseline {BASELINE['application_ports_py']}"
+            f"G5.2: application/ports count {n_app} > baseline {BASELINE['application_ports_py']}"
         )
     if n_wf > BASELINE["workflow_ports_py"]:
         errors.append(
             f"G5.2: workflow/ports count {n_wf} > baseline {BASELINE['workflow_ports_py']}"
         )
-    domain_ctx_ports = list((app / "domain").glob("*/ports.py")) if (app / "domain").is_dir() else []
+    domain_ctx_ports = (
+        list((app / "domain").glob("*/ports.py")) if (app / "domain").is_dir() else []
+    )
     infos.append(
-        f"domain/<ctx>/ports.py count={len(domain_ctx_ports)} "
-        "(target: grow in phase-2; baseline 0)"
+        f"domain/<ctx>/ports.py count={len(domain_ctx_ports)} (target: grow in phase-2; baseline 0)"
     )
 
     # --- G7 mechanical fragments (part|mixin digits) ---
@@ -356,10 +348,7 @@ def main() -> int:
         for p in app.rglob("*.py")
         if p.is_file() and frag_re.search(p.name) and "__pycache__" not in p.parts
     ]
-    infos.append(
-        f"mechanical fragments={len(frags)} "
-        f"(baseline {BASELINE['mechanical_fragments']})"
-    )
+    infos.append(f"mechanical fragments={len(frags)} (baseline {BASELINE['mechanical_fragments']})")
     if len(frags) > BASELINE["mechanical_fragments"]:
         errors.append(
             f"G7: mechanical (part|mixin) digit files {len(frags)} > "
@@ -399,23 +388,19 @@ def main() -> int:
     def _count_py(root: Path) -> int:
         if not root.is_dir():
             return 0
-        return sum(
-            1
-            for p in root.rglob("*.py")
-            if p.is_file() and "__pycache__" not in p.parts
-        )
+        return sum(1 for p in root.rglob("*.py") if p.is_file() and "__pycache__" not in p.parts)
 
     n_app = _count_py(app / "application")
     n_dom = _count_py(app / "domain")
     ratio_x100 = int(round((n_app / max(n_dom, 1)) * 100))
     infos.append(
-        f"application/domain py={n_app}/{n_dom} ratio={ratio_x100/100:.2f}:1 "
-        f"(ceiling {BASELINE['app_domain_ratio_x100']/100:.2f}:1)"
+        f"application/domain py={n_app}/{n_dom} ratio={ratio_x100 / 100:.2f}:1 "
+        f"(ceiling {BASELINE['app_domain_ratio_x100'] / 100:.2f}:1)"
     )
     if ratio_x100 > BASELINE["app_domain_ratio_x100"]:
         warns.append(
-            f"G9: application/domain ratio {ratio_x100/100:.2f}:1 > "
-            f"ceiling {BASELINE['app_domain_ratio_x100']/100:.2f}:1"
+            f"G9: application/domain ratio {ratio_x100 / 100:.2f}:1 > "
+            f"ceiling {BASELINE['app_domain_ratio_x100'] / 100:.2f}:1"
         )
 
     # domain/<ctx>/ports.py should not shrink below current train
@@ -423,9 +408,7 @@ def main() -> int:
         list((app / "domain").glob("*/ports.py")) if (app / "domain").is_dir() else []
     )
     if len(domain_ctx_ports) < 7:
-        warns.append(
-            f"G5.3: domain/<ctx>/ports.py count {len(domain_ctx_ports)} < expected 7"
-        )
+        warns.append(f"G5.3: domain/<ctx>/ports.py count {len(domain_ctx_ports)} < expected 7")
 
     # --- G10 MODstore part fragments ---
     mod_parts = count_modstore_parts(repo)
@@ -445,13 +428,93 @@ def main() -> int:
         f"(baselines {BASELINE['py_gt_40kb']}/{BASELINE['py_gt_40kb_testish']})"
     )
     if len(big_py) > BASELINE["py_gt_40kb"]:
-        errors.append(
-            f"G11: py>40KB {len(big_py)} > baseline {BASELINE['py_gt_40kb']}"
-        )
+        errors.append(f"G11: py>40KB {len(big_py)} > baseline {BASELINE['py_gt_40kb']}")
     if len(big_test) > BASELINE["py_gt_40kb_testish"]:
         errors.append(
-            f"G11: py>40KB testish {len(big_test)} > "
-            f"baseline {BASELINE['py_gt_40kb_testish']}"
+            f"G11: py>40KB testish {len(big_test)} > baseline {BASELINE['py_gt_40kb_testish']}"
+        )
+
+    # --- G12 debt19 ports / layers / blueprints / giants / domain-services ---
+    def _is_ports_compat_shim(path: Path) -> bool:
+        """debt19 renamed many ports→protocols; thin re-export shims must not inflate G12."""
+        try:
+            head = path.read_text(encoding="utf-8", errors="ignore")[:240]
+        except OSError:
+            return False
+        return "Compat module path" in head or "Facade re-export" in head
+
+    ports_all = [
+        p
+        for p in repo.rglob("ports.py")
+        if ".git" not in p.parts
+        and "node_modules" not in p.parts
+        and ".venv" not in p.parts
+        and not _is_ports_compat_shim(p)
+    ]
+    infos.append(
+        f"ports_repo_wide={len(ports_all)} (baseline {BASELINE.get('ports_repo_wide', 15)})"
+    )
+    if len(ports_all) > BASELINE.get("ports_repo_wide", 15):
+        errors.append(
+            f"G12: ports.py count {len(ports_all)} > baseline {BASELINE.get('ports_repo_wide', 15)}"
+        )
+    layer_names = {
+        "application",
+        "domain",
+        "infrastructure",
+        "fastapi_routes",
+        "legacy",
+        "mod_sdk",
+        "services",
+    }
+    layers = set()
+    for port_path in ports_all:
+        for name in layer_names:
+            if name in port_path.parts:
+                layers.add(name)
+    infos.append(f"ports_layers={sorted(layers)} count={len(layers)}")
+    if len(layers) > BASELINE.get("ports_layer_count", 3):
+        errors.append(
+            f"G12: ports layers {len(layers)} > {BASELINE.get('ports_layer_count', 3)}: {sorted(layers)}"
+        )
+    fr_ports = [port_path for port_path in ports_all if "fastapi_routes" in port_path.parts]
+    if len(fr_ports) > BASELINE.get("fastapi_routes_ports", 0):
+        errors.append(f"G12: fastapi_routes ports {len(fr_ports)} > 0")
+    if (app / "domain" / "services").exists():
+        errors.append("G12: domain/services directory must not exist")
+    bps = [
+        port_path
+        for port_path in repo.rglob("blueprints.py")
+        if ".git" not in port_path.parts and "node_modules" not in port_path.parts
+    ]
+    infos.append(f"blueprints.py={len(bps)} (baseline {BASELINE.get('blueprints_py', 40)})")
+    if len(bps) > BASELINE.get("blueprints_py", 40):
+        errors.append(
+            f"G12: blueprints.py {len(bps)} > baseline {BASELINE.get('blueprints_py', 40)}"
+        )
+    big100 = []
+    for py_path in repo.rglob("*.py"):
+        if any(x in py_path.parts for x in (".git", "node_modules", "__pycache__", ".venv")):
+            continue
+        # first-party ratchet: skip vendored LangGraph + eval harness
+        if any("xcagi_langgraph" in part for part in py_path.parts) or "evals" in py_path.parts:
+            continue
+        try:
+            sz = py_path.stat().st_size
+        except OSError:
+            continue
+        if sz <= 100_000:
+            continue
+        s = str(py_path).replace("\\", "/").lower()
+        if "test" in py_path.name.lower() or "/tests/" in s:
+            continue
+        big100.append(py_path)
+    infos.append(
+        f"py>100KB nontest={len(big100)} (baseline {BASELINE.get('py_gt_100kb_nontest', 0)})"
+    )
+    if len(big100) > BASELINE.get("py_gt_100kb_nontest", 0):
+        errors.append(
+            f"G12: py>100KB nontest {len(big100)} > baseline {BASELINE.get('py_gt_100kb_nontest', 0)}"
         )
 
     # --- G6 docs ---

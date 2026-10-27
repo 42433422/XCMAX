@@ -9,7 +9,7 @@ from logging import Logger
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from .ports import Payload, ProductListDispatcher, ProductLookup, ProductServiceFacade
+from .port_contracts import Payload, ProductListDispatcher, ProductLookup, ProductServiceFacade
 
 
 @dataclass(frozen=True)

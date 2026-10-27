@@ -98,8 +98,14 @@ def test_escalation_retains_both_signals_sent_to_an_owned_child(monkeypatch):
 
     proc = Mock(pid=123)
     proc.poll.side_effect = [None, None, -signal.SIGTERM]
-    proc.wait.side_effect = [subprocess.TimeoutExpired("synthetic", 0.25), -signal.SIGTERM]
+    proc.wait.side_effect = [
+        subprocess.TimeoutExpired("synthetic", 0.25),
+        -signal.SIGTERM,
+    ]
     send = Mock()
     monkeypatch.setattr(os, "killpg", send)
-    assert terminate_subprocess(proc, process_group=True) == {signal.SIGTERM, signal.SIGKILL}
+    assert terminate_subprocess(proc, process_group=True) == {
+        signal.SIGTERM,
+        signal.SIGKILL,
+    }
     assert send.call_count == 2

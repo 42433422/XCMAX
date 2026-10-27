@@ -12,7 +12,7 @@ CONVERTER = (
     / "backend"
     / "vendor"
     / "autonomy_gap_analyst"
-    / "convert.py"
+    / "autonomy_gap_analyst_convert.py"
 )
 
 

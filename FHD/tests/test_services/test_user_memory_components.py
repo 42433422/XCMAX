@@ -23,8 +23,8 @@ from fastapi.testclient import TestClient
 
 from app.application.user_memory.models import UserMemory
 from app.application.user_memory.patterns import chronological_contexts
-from app.application.user_memory.ports import MemoryAccess
 from app.application.user_memory.preferences import PreferenceMemory
+from app.application.user_memory.protocols import MemoryAccess
 from app.infrastructure.user_memory.persistence import MemoryRepository
 from app.services import user_memory_service as module
 
@@ -310,16 +310,16 @@ def test_components_import_without_the_service_facade() -> None:
 
         class BlockFacade(importlib.abc.MetaPathFinder):
             def find_spec(self, fullname, path=None, target=None):
-                if fullname.startswith("app.services.user_memory_service"):
+                if fullname.startswith("app.domain.shared_services.user_memory_service"):
                     raise AssertionError("component imported service facade")
 
         sys.meta_path.insert(0, BlockFacade())
-        for name in ("models", "ports", "policy",
+        for name in ("models", "protocols", "policy",
                      "preferences", "candidates", "queries", "patterns", "feedback"):
             importlib.import_module("app.application.user_memory." + name)
         for name in ("json_storage", "persistence"):
             importlib.import_module("app.infrastructure.user_memory." + name)
-        assert "app.services.user_memory_service" not in sys.modules
+        assert "app.domain.shared_services.user_memory_service" not in sys.modules
         """
     )
     result = subprocess.run(

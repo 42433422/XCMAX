@@ -324,7 +324,7 @@ def _validate_input_schema(spec: ToolActionSpecV2, params: dict[str, Any]) -> tu
     if missing:
         return False, "缺少有效出货参数：" + "、".join(missing)
     if (spec.tool_id, spec.action) == ("inventory", "stock_in"):
-        from app.application.inventory_inputs import validate_stock_in_request
+        from app.domain.app_pure.inventory_inputs import validate_stock_in_request
 
         try:
             validate_stock_in_request(params)

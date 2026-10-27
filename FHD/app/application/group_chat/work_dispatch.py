@@ -7,7 +7,7 @@ from typing import Any
 
 from app.application.group_chat.dispatch_targeting import DispatchTargeting
 from app.application.group_chat.message_formatting import ChatFormatting
-from app.application.group_chat.ports import ExecuteWork, MessageFactory, MessageStore
+from app.application.group_chat.protocols import ExecuteWork, MessageFactory, MessageStore
 
 
 class WorkDispatch:

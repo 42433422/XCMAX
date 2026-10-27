@@ -8,7 +8,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from modman.manifest_util import folder_name_must_match_id, read_manifest, validate_manifest_dict
+from modman.manifest_util import (
+    folder_name_must_match_id,
+    read_manifest,
+    validate_manifest_dict,
+)
 
 
 def project_root() -> Path:

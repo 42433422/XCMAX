@@ -10,7 +10,10 @@ from typing import Any, Dict, List, cast
 from sqlalchemy.orm import Session
 
 from modstore_server.models import User
-from modstore_server.workbench.intent import CANVAS_SKILL_INTENT, _canonical_workbench_intent
+from modstore_server.workbench.intent import (
+    CANVAS_SKILL_INTENT,
+    _canonical_workbench_intent,
+)
 from modstore_server.workbench.sessions import ProgressCallbacks, SessionStore
 
 _LOG = logging.getLogger("modstore_server.workbench_api")
@@ -98,7 +101,16 @@ async def _run_pipeline(
             return
         if intent == "mod":
             await ports.suite(
-                sid, payload, intent, brief, prov, mdl, replace, generate_frontend, db, user
+                sid,
+                payload,
+                intent,
+                brief,
+                prov,
+                mdl,
+                replace,
+                generate_frontend,
+                db,
+                user,
             )
             return
         if intent == "employee":

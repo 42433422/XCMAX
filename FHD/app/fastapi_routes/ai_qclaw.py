@@ -18,9 +18,9 @@ Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch1/2` 拆分而出；现 Q
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Depends, Header, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
@@ -28,7 +28,8 @@ from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run,
     create_chat_trace_run,
 )
-from app.application.aiopen.service import AIOPEN_STATE, openclaw_chat_proxy
+from app.application.aiopen.service import AIOPEN_STATE, openclaw_chat_proxy, verify_api_key
+from app.infrastructure.auth.dependencies import require_admin_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ def ai_qclaw_routes():
 
 
 @router.get("/api/ai/qclaw/panel")
-def ai_qclaw_panel():
+def ai_qclaw_panel(_admin: Any = Depends(require_admin_user)):
     whitelist = _QCLOW_RUNTIME_STATE.get("whitelist", {})
     routes = [{"path": path, "enabled": bool(enabled)} for path, enabled in whitelist.items()]
     return {
@@ -120,7 +121,10 @@ def ai_qclaw_panel():
 
 
 @router.post("/api/ai/qclaw/wechat-gateway")
-def ai_qclaw_wechat_gateway(body: dict = Body(default_factory=dict)):
+def ai_qclaw_wechat_gateway(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     enabled = bool(body.get("enabled", False))
     _QCLOW_RUNTIME_STATE["wechat_open"] = enabled
     return _trace_qclaw_control_result(
@@ -132,7 +136,10 @@ def ai_qclaw_wechat_gateway(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/qclaw/openclaw/config")
-def ai_qclaw_openclaw_config(body: dict = Body(default_factory=dict)):
+def ai_qclaw_openclaw_config(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     base_url = str(body.get("base_url") or "").strip().rstrip("/")
     if not base_url:
         return JSONResponse({"success": False, "message": "base_url 不能为空"}, status_code=400)
@@ -146,7 +153,10 @@ def ai_qclaw_openclaw_config(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/qclaw/whitelist")
-def ai_qclaw_whitelist(body: dict = Body(default_factory=dict)):
+def ai_qclaw_whitelist(
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     enabled = bool(body.get("enabled", False))
     if not path:
@@ -162,7 +172,11 @@ def ai_qclaw_whitelist(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/api/ai/qclaw/test-route")
-def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict)):
+def ai_qclaw_test_route(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    _admin: Any = Depends(require_admin_user),
+):
     path = str(body.get("path") or "").strip()
     method = str(body.get("method") or "GET").upper()
     if not path:
@@ -199,7 +213,12 @@ def ai_qclaw_test_route(request: Request, body: dict = Body(default_factory=dict
 
 
 @router.post("/api/ai/qclaw/openclaw/chat")
-def ai_qclaw_openclaw_chat(body: dict = Body(default_factory=dict)):
+def ai_qclaw_openclaw_chat(
+    body: dict = Body(default_factory=dict),
+    x_aiopen_key: Annotated[str | None, Header(alias="X-AIOPEN-Key")] = None,
+):
+    if not verify_api_key(x_aiopen_key):
+        return JSONResponse({"success": False, "code": "AIOPEN_KEY_INVALID"}, status_code=401)
     message = str(body.get("message") or "").strip()
     if not message:
         return JSONResponse({"success": False, "message": "message 不能为空"}, status_code=400)

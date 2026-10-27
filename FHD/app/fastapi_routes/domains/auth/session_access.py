@@ -11,6 +11,12 @@ from fastapi import BackgroundTasks, Request, Response
 from fastapi.responses import JSONResponse
 
 from app.db.models.user import User
+from app.domain.auth.ports import (
+    ErrorTypes,
+    JsonObject,
+    RouteResult,
+    SessionBackend,
+)
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
     INVALID_INPUT,
@@ -19,13 +25,6 @@ from app.http.error_codes import (
     NO_SESSION,
     UNAUTHORIZED,
     error_envelope,
-)
-
-from .ports import (
-    ErrorTypes,
-    JsonObject,
-    RouteResult,
-    SessionBackend,
 )
 
 
@@ -221,7 +220,7 @@ class SessionAccess:
 def account_profile_fields(user: User | None, session_meta: dict[str, Any]) -> JsonObject:
     """账号体系真相源字段（暴露给前端只读展示）：tier / account_tier / budget_range /
     entitled_industries / market_membership_tier。account_tier 经派生（非企业为 None）。"""
-    from app.application.account_tier_derivation import resolve_account_tier_for_user
+    from app.domain.app_pure.account_tier_derivation import resolve_account_tier_for_user
 
     tier = str(getattr(user, "tier", "") or "") if user is not None else ""
     return {

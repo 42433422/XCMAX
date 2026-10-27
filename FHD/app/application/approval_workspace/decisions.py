@@ -23,7 +23,7 @@ from app.db.models.approval import (
 )
 
 from .outcomes import execution_outcome, persist_outcome
-from .ports import (
+from .protocols import (
     ApprovalAccess,
     ApprovalNodes,
     ApproveWithoutNode,

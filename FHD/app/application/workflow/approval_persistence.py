@@ -14,7 +14,7 @@ from app.application.workflow.approval_persistence_writes import (
 from app.application.workflow.approval_persistence_writes import (
     persist_workflow_approval as persist_workflow_approval,
 )
-from app.application.workflow.types import (
+from app.application.workflow.workflow_types import (
     ApprovalRequest,
     PlanGraph,
     plan_from_dict,

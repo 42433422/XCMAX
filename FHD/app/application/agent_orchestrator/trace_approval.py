@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.application.workflow.types import WorkflowRunResult
+from app.application.workflow.workflow_types import WorkflowRunResult
 
 from .run_models import AgentRun
 from .run_repository import AgentRunRepository

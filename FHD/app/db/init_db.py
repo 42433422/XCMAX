@@ -18,7 +18,6 @@ from typing import Any, cast
 from sqlalchemy import Table
 from sqlalchemy.engine import Engine
 
-from app.db.base import Base
 from app.db.bootstrap import locations, seeding
 from app.db.bootstrap.column_repairs import LegacyColumnRepairs
 from app.db.bootstrap.engine_selection import EngineSelection
@@ -26,6 +25,7 @@ from app.db.bootstrap.im_migration import ensure_message_provenance
 from app.db.bootstrap.orm_tables import GroupName, OrmBootstrap, table_group
 from app.db.bootstrap.postgres_auth import PostgresAuthBootstrap
 from app.db.bootstrap.runtime import RuntimeBootstrap
+from app.db.db_base import Base
 from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap as ensure_sqlite_etl_bootstrap
 from app.legacy.db.bootstrap import legacy_tables
 from app.legacy.db.bootstrap.legacy_tables import TemplateTables

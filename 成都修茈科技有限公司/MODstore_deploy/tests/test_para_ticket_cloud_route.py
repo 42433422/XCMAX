@@ -11,7 +11,9 @@ CANNOT_HANDLE = {"logs_tail": [{"content": "CANNOT_HANDLE"}]}
 
 def _req(input_data=None, employee_id="change-request-auditor"):
     return mod._build_request(
-        task="t", input_data=TICKET if input_data is None else input_data, employee_id=employee_id
+        task="t",
+        input_data=TICKET if input_data is None else input_data,
+        employee_id=employee_id,
     )
 
 
@@ -79,7 +81,10 @@ def test_ticket_route_parses_hops_and_keeps_legacy_when_unset(monkeypatch):
 def test_ticket_route_hands_off_only_before_submission_without_outbox(monkeypatch):
     calls = _fake_once(monkeypatch, [dict(REFUSAL), {"ok": True, "status": "para_task_completed"}])
     out = mod._post_webhook(_req())
-    assert calls == [("grok-cloud", "grok_bot", ["grok_bot"]), ("dolt-cloud", "dolt", ["dolt"])]
+    assert calls == [
+        ("grok-cloud", "grok_bot", ["grok_bot"]),
+        ("dolt-cloud", "dolt", ["dolt"]),
+    ]
     assert out["ok"] and out["ticket_route_handoffs"][0]["status"] == REFUSAL["status"]
 
 
@@ -142,7 +147,9 @@ def test_transport_failures_do_not_create_a_second_task(monkeypatch, failure):
 
     client = httpx.Client
     monkeypatch.setattr(
-        httpx, "Client", lambda **kw: client(transport=httpx.MockTransport(transport), **kw)
+        httpx,
+        "Client",
+        lambda **kw: client(transport=httpx.MockTransport(transport), **kw),
     )
     devices = [] if failure == "no_device" else [{"id": "grok-cloud", "_selected_tool": "grok_bot"}]
     for name, value in {

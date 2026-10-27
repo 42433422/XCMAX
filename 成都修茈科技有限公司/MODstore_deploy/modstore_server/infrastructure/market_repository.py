@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modstore_server.domain.market.types import MarketListing, MarketSearchQuery
+from modstore_server.domain.market.market_types import MarketListing, MarketSearchQuery
 
 
 class InMemoryMarketBrowseRepository:

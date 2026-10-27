@@ -10,7 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
-from modstore_server.api.service_auth import require_admin_or_internal, require_admin_user
+from modstore_server.api.service_auth import (
+    require_admin_or_internal,
+    require_admin_user,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger("modstore_server.xcmax_admin_api")

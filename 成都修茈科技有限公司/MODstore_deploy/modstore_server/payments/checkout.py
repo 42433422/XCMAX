@@ -76,7 +76,10 @@ def create_pay_order(
         }
     logger.warning("[alipay] page.pay 失败，回退尝试 precreate: %s", res.get("message"))
     pr = methods.precreate(
-        out_trade_no=out_trade_no, subject=subject, total_amount=total_amount, notify_url=notify_url
+        out_trade_no=out_trade_no,
+        subject=subject,
+        total_amount=total_amount,
+        notify_url=notify_url,
     )
     if pr["ok"]:
         return {

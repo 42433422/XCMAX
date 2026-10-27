@@ -325,7 +325,9 @@ class TestMobileAuthLoginRoute:
                 status_code=200,
             )
 
-        monkeypatch.setattr("app.fastapi_routes.domains.auth.routes.auth_login", fake_auth_login)
+        monkeypatch.setattr(
+            "app.fastapi_routes.domains.auth.auth_routes.auth_login", fake_auth_login
+        )
 
         resp = client.post(
             "/api/mobile/v1/auth/login",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.application.workflow.types import PlanGraph, WorkflowRunResult
+from app.application.workflow.workflow_types import PlanGraph, WorkflowRunResult
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .artifact_ingestion import ingest_artifact_to_dataset

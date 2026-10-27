@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.application.chat_business_safety_core import classify_business_chat_intent
-from app.application.intent_recognition_app import recognize_intents
+from app.domain.app_pure.chat_business_safety_core import classify_business_chat_intent
+from app.domain.app_pure.intent_recognition_app import recognize_intents
 
 
 @pytest.mark.parametrize("prefix", ["", "请AI员工帮我", "请AI业务员工帮我"])

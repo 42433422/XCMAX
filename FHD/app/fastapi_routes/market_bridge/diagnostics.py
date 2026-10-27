@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi.responses import JSONResponse
 
-from .ports import ProxyJSON
+from app.application.market_bridge.protocols import ProxyJSON
 
 
 @dataclass

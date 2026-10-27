@@ -16,7 +16,7 @@ from app.application.group_chat.constants import (
     CompletionFn,
 )
 from app.application.group_chat.dispatch_targeting import DispatchTargeting
-from app.application.group_chat.ports import (
+from app.application.group_chat.protocols import (
     MessageFactory,
     MessageStore,
     RouteDiscussion,

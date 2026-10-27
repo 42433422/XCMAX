@@ -40,8 +40,7 @@ from .employee_tools.configuration import _provider_base_url as _provider_base_u
 from .employee_tools.configuration import _provider_has_key as _provider_has_key
 from .employee_tools.configuration import _provider_model as _provider_model
 from .employee_tools.configuration import _read_env_file as _read_env_file
-from .employee_tools.policy import _check_write_gate as _check_write_gate
-from .employee_tools.ports import (
+from .employee_tools.employee_tool_ports import (
     Configuration,
     CursorPorts,
     DispatchPorts,
@@ -56,6 +55,7 @@ from .employee_tools.ports import (
     TraePorts,
     WorkspacePorts,
 )
+from .employee_tools.policy import _check_write_gate as _check_write_gate
 from .employee_tools.processes import CommandRunner
 from .employee_tools.results import _err as _err
 from .employee_tools.results import _ok as _ok

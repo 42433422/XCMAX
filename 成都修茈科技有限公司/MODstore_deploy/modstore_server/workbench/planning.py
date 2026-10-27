@@ -53,7 +53,10 @@ def _fallback_employee_orchestration_plan(brief: str, payload: Dict[str, Any]) -
         is_csv_generate,
         resolve_csv_orchestration_plan,
     )
-    from modstore_server.employee_brief_utils import compact_routing_brief, extract_routing_brief
+    from modstore_server.employee_brief_utils import (
+        compact_routing_brief,
+        extract_routing_brief,
+    )
     from modstore_server.excel_tabular_runtime import (
         is_excel_full_read,
         is_excel_generate,

@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy import desc, select
 
-from modstore_server.db.base import get_session_factory
+from modstore_server.db.db_base import get_session_factory
 from modstore_server.db.strategic import CouncilMeeting as CouncilMeetingModel
 from modstore_server.db.strategic import StrategicActionItem
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
@@ -41,7 +41,10 @@ from modstore_server.strategic_layer.council_meeting_models import (
     meeting_row_to_dict as _meeting_row_to_dict,
 )
 from modstore_server.strategic_layer.council_meeting_models import parse_json as _loads
-from modstore_server.strategic_layer.decision_ledger import DecidedBy, StrategicDecisionLedger
+from modstore_server.strategic_layer.decision_ledger import (
+    DecidedBy,
+    StrategicDecisionLedger,
+)
 
 logger = logging.getLogger(__name__)
 

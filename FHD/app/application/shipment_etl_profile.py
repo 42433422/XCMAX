@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from app.application.excel_etl_kb import get_excel_etl_kb
+from app.domain.app_pure.excel_etl_kb import get_excel_etl_kb
 
 _BUILTIN_DIR = (
     Path(__file__).resolve().parents[2] / "resources" / "config" / "shipment_etl" / "examples"

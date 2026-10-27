@@ -59,7 +59,14 @@ def importer(monkeypatch, tmp_path):
     "headers,expected",
     [
         ({"Cookie": "csrf_token=t", "X-CSRF-Token": "t"}, 401),
-        ({"Authorization": "Bearer forged", "Cookie": "csrf_token=t", "X-CSRF-Token": "t"}, 401),
+        (
+            {
+                "Authorization": "Bearer forged",
+                "Cookie": "csrf_token=t",
+                "X-CSRF-Token": "t",
+            },
+            401,
+        ),
         ({"Authorization": "Bearer member"}, 403),
         ({"Cookie": "is_admin=true; csrf_token=t"}, 403),
     ],

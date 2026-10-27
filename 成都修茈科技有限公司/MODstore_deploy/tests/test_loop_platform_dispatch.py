@@ -40,7 +40,10 @@ def test_self_maintenance_override_enabled(monkeypatch):
 
     monkeypatch.delenv("MODSTORE_SELF_MAINTENANCE_PLATFORM_LLM", raising=False)
     monkeypatch.setattr(llm_mod, "resolve_platform_bench_llm", lambda: ("openai", "gpt-4o-mini"))
-    assert _maintenance_dispatch._loop_platform_bench_override() == ("openai", "gpt-4o-mini")
+    assert _maintenance_dispatch._loop_platform_bench_override() == (
+        "openai",
+        "gpt-4o-mini",
+    )
 
 
 def test_self_maintenance_override_disabled(monkeypatch):

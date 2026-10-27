@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.fastapi_routes.mobile_extensions.ports import (
+from app.application.mobile_extensions.protocols import (
     ChunkEmployeeReplyCall,
     ExecuteEmployeeCall,
     ExtractEmployeeFailureTextCall,

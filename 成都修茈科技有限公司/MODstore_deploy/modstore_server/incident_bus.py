@@ -162,7 +162,9 @@ def publish(
     )
     if event_type == "employee.suggestion.created":
         try:
-            from modstore_server.employee_autonomy_service import ingest_suggestion_event_payload
+            from modstore_server.employee_autonomy_service import (
+                ingest_suggestion_event_payload,
+            )
 
             ingest_suggestion_event_payload(
                 source_employee_id=source,
@@ -325,7 +327,9 @@ def _dispatch_incident(event_id: int) -> None:
                     row.dispatch_state = "dispatching"
                 session.commit()
             if reconcile:
-                from modstore_server.incident_team_completion import reconcile_pending_teams
+                from modstore_server.incident_team_completion import (
+                    reconcile_pending_teams,
+                )
 
                 reconcile_pending_teams(event_id=int(event_id))
                 return

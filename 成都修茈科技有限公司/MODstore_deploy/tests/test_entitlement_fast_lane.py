@@ -93,7 +93,10 @@ def test_fast_lane_lists_every_account_tier_and_registers_admin_routes(client):
 
 
 def test_fast_lane_assign_replace_membership_revoke_and_idempotency(client):
-    from modstore_server.entitlement_fast_lane import FastLaneConflict, apply_fast_lane_action
+    from modstore_server.entitlement_fast_lane import (
+        FastLaneConflict,
+        apply_fast_lane_action,
+    )
     from modstore_server.models import (
         CommerceAdminAction,
         Entitlement,
@@ -241,7 +244,10 @@ def test_fast_lane_assign_replace_membership_revoke_and_idempotency(client):
 
 
 def test_fast_lane_rejects_non_admin_and_terminal_uses_same_service(client):
-    from modstore_server.entitlement_fast_lane import FastLaneForbidden, apply_fast_lane_action
+    from modstore_server.entitlement_fast_lane import (
+        FastLaneForbidden,
+        apply_fast_lane_action,
+    )
     from modstore_server.models import UserPlan, get_session_factory
     from scripts.admin_entitlement_fast_lane import run
 

@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import Body, Query, Request
 from fastapi.responses import JSONResponse
 
-from .ports import AdminGate, ErrorPolicy
+from app.application.admin_control.protocols import AdminGate, ErrorPolicy
 
 
 class Deployment:
@@ -22,7 +22,7 @@ class Deployment:
         if gate is not None:
             return gate
         normalized_channel = "staging" if str(channel).strip() == "staging" else "stable"
-        from app.application.admin_deploy_push import check_deploy_updates
+        from app.domain.app_pure.admin_deploy_push import check_deploy_updates
 
         data = await asyncio.to_thread(check_deploy_updates, normalized_channel)
         return {"success": True, "data": data}
@@ -48,7 +48,7 @@ class Deployment:
         if ssh_key:
             options["ssh_key"] = ssh_key
         try:
-            from app.application.admin_deploy_push import start_deploy_push
+            from app.domain.app_pure.admin_deploy_push import start_deploy_push
 
             job = await start_deploy_push(options)
             return {"success": True, "data": job.to_dict()}
@@ -66,7 +66,7 @@ class Deployment:
         ]
         if not normalized_job_id:
             return JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
-        from app.application.admin_deploy_push import get_deploy_job
+        from app.domain.app_pure.admin_deploy_push import get_deploy_job
 
         job = get_deploy_job(normalized_job_id)
         if job is None:

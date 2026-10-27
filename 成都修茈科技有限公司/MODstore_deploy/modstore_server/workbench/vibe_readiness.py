@@ -25,7 +25,9 @@ def _check_vibe_coding_capability(
     """
     import re as _re
 
-    from modstore_server.mod_employee_impl_scaffold import employee_py_system_prompt_gaps
+    from modstore_server.mod_employee_impl_scaffold import (
+        employee_py_system_prompt_gaps,
+    )
 
     results: List[Dict[str, Any]] = []
     nl_data = wf_attach.get("nl") if isinstance(wf_attach, dict) else None
@@ -139,7 +141,9 @@ def _check_vibe_coding_capability(
             if isinstance(rs, dict):
                 rk = rs.get("runtime_kind")
                 if rk == "word_full_extract":
-                    from modstore_server.word_extract_runtime import validate_word_extract_backend
+                    from modstore_server.word_extract_runtime import (
+                        validate_word_extract_backend,
+                    )
 
                     wx_errs, wx_warns = validate_word_extract_backend(pack_dir)
                     results.append(
@@ -162,7 +166,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "txt_full_read":
-                    from modstore_server.txt_extract_runtime import validate_txt_read_backend
+                    from modstore_server.txt_extract_runtime import (
+                        validate_txt_read_backend,
+                    )
 
                     tx_errs, tx_warns = validate_txt_read_backend(pack_dir)
                     results.append(
@@ -185,7 +191,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "txt_generate":
-                    from modstore_server.txt_extract_runtime import validate_txt_generate_backend
+                    from modstore_server.txt_extract_runtime import (
+                        validate_txt_generate_backend,
+                    )
 
                     tg_errs, tg_warns = validate_txt_generate_backend(pack_dir)
                     results.append(
@@ -208,7 +216,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "pdf_full_read":
-                    from modstore_server.pdf_extract_runtime import validate_pdf_read_backend
+                    from modstore_server.pdf_extract_runtime import (
+                        validate_pdf_read_backend,
+                    )
 
                     pr_errs, pr_warns = validate_pdf_read_backend(pack_dir)
                     results.append(
@@ -231,7 +241,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "pdf_generate":
-                    from modstore_server.pdf_extract_runtime import validate_pdf_generate_backend
+                    from modstore_server.pdf_extract_runtime import (
+                        validate_pdf_generate_backend,
+                    )
 
                     pg_errs, pg_warns = validate_pdf_generate_backend(pack_dir)
                     results.append(
@@ -254,7 +266,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "word_generate":
-                    from modstore_server.word_generate_runtime import validate_word_generate_backend
+                    from modstore_server.word_generate_runtime import (
+                        validate_word_generate_backend,
+                    )
 
                     wg_errs, wg_warns = validate_word_generate_backend(pack_dir)
                     results.append(
@@ -277,7 +291,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "excel_full_read":
-                    from modstore_server.excel_tabular_runtime import validate_excel_read_backend
+                    from modstore_server.excel_tabular_runtime import (
+                        validate_excel_read_backend,
+                    )
 
                     er_errs, er_warns = validate_excel_read_backend(pack_dir)
                     results.append(
@@ -325,7 +341,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "csv_full_read":
-                    from modstore_server.csv_tabular_runtime import validate_csv_read_backend
+                    from modstore_server.csv_tabular_runtime import (
+                        validate_csv_read_backend,
+                    )
 
                     cr_errs, cr_warns = validate_csv_read_backend(pack_dir)
                     results.append(
@@ -348,7 +366,9 @@ def _check_vibe_coding_capability(
                             }
                         )
                 elif rk == "csv_generate":
-                    from modstore_server.csv_tabular_runtime import validate_csv_generate_backend
+                    from modstore_server.csv_tabular_runtime import (
+                        validate_csv_generate_backend,
+                    )
 
                     cg_errs, cg_warns = validate_csv_generate_backend(pack_dir)
                     results.append(

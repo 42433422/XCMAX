@@ -8,11 +8,11 @@ from pathlib import Path
 
 from fastapi.responses import FileResponse
 
+from .customer_service_ports import ContractsServices, Environment, Payload, PipelineRepository
 from .models import (
     ContractFieldsBody,
     ContractGenerateBody,
 )
-from .ports import ContractsServices, Environment, Payload, PipelineRepository
 
 
 @dataclass(frozen=True, eq=False)

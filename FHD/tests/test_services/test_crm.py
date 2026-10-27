@@ -17,7 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.customer_app_service import CustomerApplicationService
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models.crm import ADDRESS_TYPES, CustomerAddress
 from app.db.models.customer import Customer
 
@@ -202,7 +202,7 @@ class TestCustomerCreditService:
 class TestSupplierWrapper:
     def test_get_suppliers_wrapper(self, service, monkeypatch):
         """供应商查询薄封装复用 PurchaseService。"""
-        import app.services.purchase_service as ps
+        import app.domain.shared_services.purchase_service as ps
 
         fake = ps.PurchaseService()
         fake.get_suppliers = lambda status=None, keyword=None: {
@@ -217,7 +217,7 @@ class TestSupplierWrapper:
 
     def test_get_supplier_wrapper(self, service, monkeypatch):
         """供应商详情薄封装复用 PurchaseService。"""
-        import app.services.purchase_service as ps
+        import app.domain.shared_services.purchase_service as ps
 
         fake = ps.PurchaseService()
         fake.get_supplier = lambda supplier_id: {

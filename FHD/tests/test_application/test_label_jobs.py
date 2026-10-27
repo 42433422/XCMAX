@@ -271,7 +271,7 @@ def test_submit_uses_real_agent_and_authenticated_identity(env, monkeypatch, loc
     from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
     repo = InMemoryAgentRunRepository()
-    from app.services.printer_service import PrinterService
+    from app.domain.shared_services.printer_service import PrinterService
 
     service = PrinterService.__new__(PrinterService)
     service.printer_utils = MagicMock()
@@ -429,7 +429,7 @@ def test_safe_saved_background_and_grid_are_present_in_pdf(env):
 
 
 def test_live_printer_service_uses_safe_pdf_adapter_only_once(env, monkeypatch):
-    from app.services.printer_service import PrinterService
+    from app.domain.shared_services.printer_service import PrinterService
 
     job = create(env)
     path = str(env.service.file(OWNER, job["id"]))
@@ -459,7 +459,7 @@ def test_product_selection_uses_same_tenant_source_with_search_and_pagination(en
 
 
 def test_legacy_routes_cannot_print_controlled_job_without_internal_dispatch(env, monkeypatch):
-    from app.services.printer_service import PrinterService
+    from app.domain.shared_services.printer_service import PrinterService
     from app.utils.path_io.print_utils import PrinterUtils
 
     job = create(env)

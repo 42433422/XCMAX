@@ -94,14 +94,20 @@ def assert_no_effects(sandbox):
         ({"Authorization": "Bearer forged"}, 401),
         ({"Authorization": "Bearer forged", "Cookie": "csrf_token=test"}, 403),
         (
-            {"Authorization": "Bearer forged", "Cookie": "csrf_token=test", "X-CSRF-Token": "test"},
+            {
+                "Authorization": "Bearer forged",
+                "Cookie": "csrf_token=test",
+                "X-CSRF-Token": "test",
+            },
             401,
         ),
     ],
 )
 def test_auth_and_csrf_reject_before_any_effect(sandbox, headers, status):
     result = sandbox.api.post(
-        "/api/sandbox/push-and-test", headers=headers, json={"host_url": BACKEND, "mod_id": "owned"}
+        "/api/sandbox/push-and-test",
+        headers=headers,
+        json={"host_url": BACKEND, "mod_id": "owned"},
     )
     assert result.status_code == status
     assert_no_effects(sandbox)
@@ -109,7 +115,9 @@ def test_auth_and_csrf_reject_before_any_effect(sandbox, headers, status):
 
 def test_nonowner_rejected_before_library_read(sandbox):
     result = sandbox.api.post(
-        "/api/sandbox/push-and-test", headers=OWNER, json={"host_url": BACKEND, "mod_id": "other"}
+        "/api/sandbox/push-and-test",
+        headers=OWNER,
+        json={"host_url": BACKEND, "mod_id": "other"},
     )
     assert result.status_code == 403
     assert_no_effects(sandbox)
@@ -136,7 +144,9 @@ def test_nonowner_rejected_before_library_read(sandbox):
 )
 def test_untrusted_destination_rejected_before_any_effect(sandbox, route, auth, target):
     result = sandbox.api.post(
-        f"/api/sandbox/{route}", headers=auth, json={"host_url": target, "mod_id": "owned"}
+        f"/api/sandbox/{route}",
+        headers=auth,
+        json={"host_url": target, "mod_id": "owned"},
     )
     assert result.status_code == 403
     assert_no_effects(sandbox)
@@ -154,7 +164,9 @@ def test_untrusted_destination_rejected_before_any_effect(sandbox, route, auth, 
 )
 def test_authorized_upload_preserves_package_contract(sandbox, auth, mid, target, base):
     result = sandbox.api.post(
-        "/api/sandbox/push-and-test", headers=auth, json={"host_url": target, "mod_id": mid}
+        "/api/sandbox/push-and-test",
+        headers=auth,
+        json={"host_url": target, "mod_id": mid},
     )
     assert result.status_code == 200
     assert result.json() == {
@@ -182,7 +194,9 @@ def test_authorized_upload_preserves_package_contract(sandbox, auth, mid, target
 def test_install_redirect_does_not_forward_package_or_credentials(sandbox, status):
     sandbox.response.update(status=status, headers={"Location": "https://attacker.invalid/install"})
     result = sandbox.api.post(
-        "/api/sandbox/push-and-test", headers=OWNER, json={"host_url": BACKEND, "mod_id": "owned"}
+        "/api/sandbox/push-and-test",
+        headers=OWNER,
+        json={"host_url": BACKEND, "mod_id": "owned"},
     )
     assert result.json()["ok"] is False
     assert len(sandbox.calls) == 1
@@ -205,7 +219,9 @@ def test_connect_and_host_status_use_configured_backend(sandbox):
 
 def test_unicode_configured_host_does_not_authorize_distinct_ascii_host(sandbox, monkeypatch):
     monkeypatch.setattr(
-        library_paths, "cfg", lambda: RepoConfig(xcagi_backend_url="https://faß.example/base")
+        library_paths,
+        "cfg",
+        lambda: RepoConfig(xcagi_backend_url="https://faß.example/base"),
     )
     result = sandbox.api.post(
         "/api/sandbox/push-and-test",
@@ -219,10 +235,14 @@ def test_unicode_configured_host_does_not_authorize_distinct_ascii_host(sandbox,
 @pytest.mark.parametrize("target", ["https://faß.example/base", "https://xn--fa-hia.example/base"])
 def test_unicode_configured_host_uses_httpx_idna_identity(sandbox, monkeypatch, target):
     monkeypatch.setattr(
-        library_paths, "cfg", lambda: RepoConfig(xcagi_backend_url="https://faß.example/base")
+        library_paths,
+        "cfg",
+        lambda: RepoConfig(xcagi_backend_url="https://faß.example/base"),
     )
     result = sandbox.api.post(
-        "/api/sandbox/push-and-test", headers=OWNER, json={"host_url": target, "mod_id": "owned"}
+        "/api/sandbox/push-and-test",
+        headers=OWNER,
+        json={"host_url": target, "mod_id": "owned"},
     )
     assert result.json()["ok"] is True
     assert str(sandbox.calls[0].url) == "https://xn--fa-hia.example/base/api/mod-store/install"

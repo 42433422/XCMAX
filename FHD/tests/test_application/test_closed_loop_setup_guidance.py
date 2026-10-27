@@ -21,7 +21,7 @@ from app.application.workflow.approval_persistence import (
     canonical_workflow_outcome,
     closed_loop_setup_failure_code,
 )
-from app.db.base import Base
+from app.db.db_base import Base
 from app.db.models import Warehouse
 from app.db.models.approval import ApprovalStatus
 from app.infrastructure.tenant_scope import tenant_scope

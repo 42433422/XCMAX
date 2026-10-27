@@ -30,7 +30,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func
 
 from modstore_server.api.auth_deps import require_user
-from modstore_server.models import AuthorEarning, AuthorWithdrawal, User, get_session_factory
+from modstore_server.models import (
+    AuthorEarning,
+    AuthorWithdrawal,
+    User,
+    get_session_factory,
+)
 
 logger = logging.getLogger(__name__)
 

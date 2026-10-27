@@ -140,7 +140,10 @@ async def bind_employee_workflows(
                         else "未能生成可保存的脚本工作流"
                     )
                     await ports.progress.set_step(
-                        state.session_id, "script_workflow", "skipped", f"已跳过：{_skip_reason}"
+                        state.session_id,
+                        "script_workflow",
+                        "skipped",
+                        f"已跳过：{_skip_reason}",
                     )
                     _LOG.warning(
                         "pipeline: script_wf=None but ok=True — skipping, reason=%s session=%s",
@@ -167,7 +170,10 @@ async def bind_employee_workflows(
                 )
         else:
             await ports.progress.set_step(
-                state.session_id, "script_workflow", "skipped", "已跳过：未开启配套小程序"
+                state.session_id,
+                "script_workflow",
+                "skipped",
+                "已跳过：未开启配套小程序",
             )
     if state.should_skip("embed_script"):
         await ports.progress.set_step(
@@ -180,7 +186,10 @@ async def bind_employee_workflows(
         state.current_step = "embed_script"
         if state.embed_script_workflow and state.script_workflow:
             await ports.progress.set_step(
-                state.session_id, "embed_script", "running", "正在把配套小程序绑定到员工能力"
+                state.session_id,
+                "embed_script",
+                "running",
+                "正在把配套小程序绑定到员工能力",
             )
             _es_result = await ports.craft_step(
                 "embed_script",

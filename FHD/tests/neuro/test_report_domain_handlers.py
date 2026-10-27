@@ -35,7 +35,7 @@ from app.neuro_bus.domains.report_domain_handlers import (
     handle_monthly_summary_requested,
     register_report_domain_handlers,
 )
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 
 
 @pytest.fixture(autouse=True)

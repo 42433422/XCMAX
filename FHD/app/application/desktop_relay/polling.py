@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from app.application.desktop_relay.messages import _BLOCKED_STATUSES, _FAILED_STATUSES
-from app.application.desktop_relay.ports import (
+from app.application.desktop_relay.protocols import (
     ApiUrlCall,
     CompletionCall,
     ConditionalConfigUpdate,

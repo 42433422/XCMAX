@@ -10,7 +10,11 @@ from typing import Any, Dict, List, Optional, Protocol, cast
 
 from sqlalchemy.orm import Session
 
-from modstore_server.models import ScriptWorkflow, ScriptWorkflowRun, ScriptWorkflowVersion
+from modstore_server.models import (
+    ScriptWorkflow,
+    ScriptWorkflowRun,
+    ScriptWorkflowVersion,
+)
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 from modstore_server.workbench.planning import _script_workflow_brief
 
@@ -23,7 +27,11 @@ _LOG = logging.getLogger("modstore_server.workbench_api")
 
 
 def _embed_script_workflow_in_employee_pack(
-    pack_dir: Path, *, script_workflow: Dict[str, Any], brief: str, db: Optional[Session] = None
+    pack_dir: Path,
+    *,
+    script_workflow: Dict[str, Any],
+    brief: str,
+    db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """Write ScriptWorkflow linkage into an employee pack manifest in-place.
 

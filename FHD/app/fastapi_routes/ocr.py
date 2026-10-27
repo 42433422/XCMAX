@@ -57,7 +57,7 @@ def _run_ocr_agent(
     params: dict[str, Any],
 ) -> Any:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.workflow.types import PlanGraph, WorkflowNode
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
     plan = PlanGraph(
         plan_id=f"ocr_{action}",

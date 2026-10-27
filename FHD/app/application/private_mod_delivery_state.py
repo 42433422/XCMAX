@@ -99,7 +99,7 @@ def _now_iso() -> str:
 
 
 def _state_path() -> Path:
-    from app.desktop_runtime.paths import get_desktop_data_dir
+    from app.desktop_runtime.desktop_runtime_paths import get_desktop_data_dir
 
     root = get_desktop_data_dir() / "data" / "private_mod_delivery"
     return root / "state.json"

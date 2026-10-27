@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.application.account_tier_derivation import (
+from app.domain.app_pure.account_tier_derivation import (
     VALID_ACCOUNT_TIERS,
     derive_account_tier,
     normalize_account_tier,

@@ -320,7 +320,7 @@ class TestTieredConfidence:
     def test_recognize_intent_end_to_end_rule_hit(self):
         """_recognize_intent 用真实规则管道：高优先级命中 → 0.85"""
         coord = UnifiedConversationCoordinator()
-        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+        with patch("app.domain.shared_services.intent_service.recognize_intents") as mock_rule:
             mock_rule.return_value = {
                 "primary_intent": "shipment_generate",
                 "tool_key": "shipment_generate",
@@ -336,7 +336,7 @@ class TestTieredConfidence:
     def test_recognize_intent_end_to_end_no_hit(self):
         """未命中且非反射 → 置信度 0.0（不再硬编码 0.8）"""
         coord = UnifiedConversationCoordinator()
-        with patch("app.services.intent_service.recognize_intents") as mock_rule:
+        with patch("app.domain.shared_services.intent_service.recognize_intents") as mock_rule:
             mock_rule.return_value = {
                 "primary_intent": None,
                 "tool_key": None,

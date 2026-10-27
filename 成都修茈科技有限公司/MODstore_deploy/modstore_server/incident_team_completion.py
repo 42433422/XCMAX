@@ -15,7 +15,10 @@ from modstore_server.customer_issue_delivery_contract import (
     para_task_succeeded,
     team_succeeded,
 )
-from modstore_server.incident_team_handler_digest import handler_output_digest, redact_text
+from modstore_server.incident_team_handler_digest import (
+    handler_output_digest,
+    redact_text,
+)
 from modstore_server.models import IncidentEvent, get_session_factory
 from modstore_server.operational_errors import RECOVERABLE_ERRORS
 

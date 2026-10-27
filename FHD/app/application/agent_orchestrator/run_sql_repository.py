@@ -418,7 +418,7 @@ class SQLAlchemyAgentRunRepository:
             return
         with self._schema_lock:
             with self._session_scope(read_only=True) as db:
-                from app.db.base import Base
+                from app.db.db_base import Base
                 from app.db.models.agent import (
                     AgentRunRecord,
                     AgentTaskCommandRecord,

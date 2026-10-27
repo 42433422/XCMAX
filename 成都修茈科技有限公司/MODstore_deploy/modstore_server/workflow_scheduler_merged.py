@@ -278,7 +278,9 @@ def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> No
     ):
         return
     try:
-        from modstore_server.maintenance_loop.coordinator import run_self_maintenance_loop
+        from modstore_server.maintenance_loop.coordinator import (
+            run_self_maintenance_loop,
+        )
 
         result = run_self_maintenance_loop(
             triggered_by="incident_event",
@@ -398,7 +400,6 @@ def _register_employee_cron_jobs() -> None:
         _facade().logger.info("employee auto cron disabled (MODSTORE_EMPLOYEE_AUTO_CRON_ENABLED=0)")
         return
     try:
-
         task_router = importlib.import_module("modstore_server.task_router")
         employee_runtime = importlib.import_module("modstore_server.employee_runtime")
         _load_all_employee_profiles = task_router._load_all_employee_profiles
@@ -407,7 +408,9 @@ def _register_employee_cron_jobs() -> None:
             contract_schedule,
             workforce_contract_map,
         )
-        from modstore_server.employee_cron_registration import build_employee_cron_candidates
+        from modstore_server.employee_cron_registration import (
+            build_employee_cron_candidates,
+        )
         from modstore_server.employee_cron_registration_ledger import (
             defer_employee_cron_if_approval_required,
             reconcile_employee_cron_registrations,
@@ -475,7 +478,9 @@ def _register_employee_cron_jobs() -> None:
             schedule_source: str = schedule_source_local,
         ) -> None:
             try:
-                from modstore_server.employee_duty_cron_runtime import execute_employee_cron_duty
+                from modstore_server.employee_duty_cron_runtime import (
+                    execute_employee_cron_duty,
+                )
 
                 execute_employee_cron_duty(
                     employee_id=eid,

@@ -476,7 +476,9 @@ def _cli() -> int:
 def cleanup_employee_workspaces() -> Dict[str, Any]:
     """清理过期员工工作区文件（由定时任务或 janitor 主流程调用）。"""
     try:
-        from modstore_server.employee_workspace_manager import cleanup_expired_workspaces
+        from modstore_server.employee_workspace_manager import (
+            cleanup_expired_workspaces,
+        )
 
         result = cleanup_expired_workspaces()
         logger.info("janitor: workspace cleanup completed")

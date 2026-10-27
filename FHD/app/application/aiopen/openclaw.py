@@ -10,7 +10,7 @@ from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import UpstreamOpener
+from .protocols import UpstreamOpener
 
 
 class OpenClawProxy:

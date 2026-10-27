@@ -118,7 +118,9 @@ def test_same_trigger_interruption_bypasses_cooldown_and_signal_threshold(
         },
     )
     monkeypatch.setattr(
-        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+        _maintenance_self_evolution_knowledge,
+        "evolution_metrics_gate",
+        lambda: {"pause": False},
     )
 
     gate = _maintenance_schedule.should_run_self_maintenance_loop(
@@ -162,7 +164,9 @@ def test_interruption_does_not_bypass_cooldown_for_another_trigger(monkeypatch) 
         },
     )
     monkeypatch.setattr(
-        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+        _maintenance_self_evolution_knowledge,
+        "evolution_metrics_gate",
+        lambda: {"pause": False},
     )
 
     gate = _maintenance_schedule.should_run_self_maintenance_loop(
@@ -247,7 +251,9 @@ def test_same_trigger_transient_para_failure_bypasses_cooldown_and_threshold(
         },
     )
     monkeypatch.setattr(
-        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+        _maintenance_self_evolution_knowledge,
+        "evolution_metrics_gate",
+        lambda: {"pause": False},
     )
 
     gate = _maintenance_schedule.should_run_self_maintenance_loop(
@@ -293,7 +299,9 @@ def test_non_infrastructure_failure_keeps_cooldown(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+        _maintenance_self_evolution_knowledge,
+        "evolution_metrics_gate",
+        lambda: {"pause": False},
     )
 
     gate = _maintenance_schedule.should_run_self_maintenance_loop(
@@ -335,7 +343,9 @@ def test_transient_failure_recovery_requires_same_trigger(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        _maintenance_self_evolution_knowledge, "evolution_metrics_gate", lambda: {"pause": False}
+        _maintenance_self_evolution_knowledge,
+        "evolution_metrics_gate",
+        lambda: {"pause": False},
     )
 
     gate = _maintenance_schedule.should_run_self_maintenance_loop(

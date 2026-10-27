@@ -218,7 +218,9 @@ def _register_scheduler_phase_03():
         try:
 
             def _run() -> None:
-                from modstore_server.llm_runtime_autopilot import run_llm_route_autopilot
+                from modstore_server.llm_runtime_autopilot import (
+                    run_llm_route_autopilot,
+                )
 
                 out = run_llm_route_autopilot(triggered_by="scheduler")
                 _facade().logger.info(
@@ -260,7 +262,9 @@ def _register_scheduler_phase_03():
         try:
 
             def _run() -> None:
-                from modstore_server.employee_autonomy_service import run_employee_evolution_scan
+                from modstore_server.employee_autonomy_service import (
+                    run_employee_evolution_scan,
+                )
 
                 try:
                     lookback = int(
@@ -348,7 +352,9 @@ def _register_scheduler_phase_03():
         try:
 
             def _run() -> None:
-                from modstore_server.boss_daily_im_report import send_boss_daily_im_report
+                from modstore_server.boss_daily_im_report import (
+                    send_boss_daily_im_report,
+                )
 
                 out = send_boss_daily_im_report()
                 _facade().logger.info(

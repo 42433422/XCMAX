@@ -18,7 +18,11 @@ from sqlalchemy.exc import IntegrityError
 
 from modstore_server.customer_value_evidence import build_customer_value_evidence
 from modstore_server.db.strategic import StrategicActionItem, StrategicDecision
-from modstore_server.strategic_layer import DecisionProposer, DecisionType, StrategicDecisionLedger
+from modstore_server.strategic_layer import (
+    DecisionProposer,
+    DecisionType,
+    StrategicDecisionLedger,
+)
 
 ESCALATION_SCHEMA = "xcagi.customer_value_escalation/v1"
 ESCALATION_SCOPE = "global"
@@ -67,7 +71,7 @@ def _digest(snapshot: Mapping[str, Any]) -> str:
 def _session_factory(factory: Callable[..., Any] | None) -> Callable[..., Any]:
     if factory is not None:
         return factory
-    from modstore_server.db.base import get_session_factory
+    from modstore_server.db.db_base import get_session_factory
 
     return get_session_factory
 

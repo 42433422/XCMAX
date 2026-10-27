@@ -12,11 +12,7 @@ from app.mod_sdk import host_services
 from .changes import ChangesHandlers
 from .contracts import ContractsHandlers
 from .crm import CrmHandlers
-from .delivery import DeliveryHandlers
-from .intake import IntakeHandlers
-from .messaging import MessagingHandlers
-from .pipeline import PipelineHandlers
-from .ports import (
+from .customer_service_ports import (
     ChangesServices,
     ContractsServices,
     CrmServices,
@@ -29,6 +25,10 @@ from .ports import (
     PipelineRepository,
     PipelineServices,
 )
+from .delivery import DeliveryHandlers
+from .intake import IntakeHandlers
+from .messaging import MessagingHandlers
+from .pipeline import PipelineHandlers
 
 
 def _page_registry() -> Payload:

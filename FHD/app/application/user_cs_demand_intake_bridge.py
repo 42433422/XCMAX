@@ -58,7 +58,7 @@ def normalize_demand_intake_result(
 
 
 def mark_demand_intake_sent(market_user_id: int) -> dict[str, Any]:
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+    from app.domain.shared_services.user_cs_pipeline import load_pipeline, save_pipeline
 
     doc = load_pipeline(int(market_user_id))
     doc["intake_sent"] = True

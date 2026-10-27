@@ -136,7 +136,7 @@ def ai_test():
 
 @router.post("/api/ai/chat-unified")
 def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=dict)):
-    from app.application.ai_chat_helpers import unified_chat_single_payload
+    from app.domain.app_pure.ai_chat_helpers import unified_chat_single_payload
 
     message = (body.get("message", "") or "").strip()
     if not message:
@@ -164,7 +164,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
 
 @router.post("/api/ai/chat-unified/batch")
 def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_factory=dict)):
-    from app.application.ai_chat_helpers import (
+    from app.domain.app_pure.ai_chat_helpers import (
         normalize_batch_messages_payload,
         unified_chat_single_payload,
     )
@@ -203,7 +203,7 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
 
 @router.post("/api/ai/intent/test")
 def ai_intent_test(body: dict = Body(default_factory=dict)):
-    from app.application.ai_chat_helpers import recognize_intents
+    from app.domain.app_pure.ai_chat_helpers import recognize_intents
 
     message = body.get("message", "")
     if not message:

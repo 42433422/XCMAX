@@ -6,7 +6,7 @@ from PIL import Image
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-from .ports import OCRPorts, Payload
+from .label_template_ports import OCRPorts, Payload
 
 
 def extract_text_with_ocr(ports: OCRPorts, image_path: str, use_regions: bool = True) -> Payload:

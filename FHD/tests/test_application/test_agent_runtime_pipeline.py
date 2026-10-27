@@ -87,7 +87,10 @@ class TestHooksGatePipelineContracts:
     def test_remember_primitive_does_not_self_gate(self, monkeypatch):
         monkeypatch.delenv("XCAGI_AGENT_RUNTIME_HOOKS", raising=False)
         with (
-            patch("app.services.conversation_service.ConversationService", lambda: MagicMock()),
+            patch(
+                "app.domain.shared_services.conversation_service.ConversationService",
+                lambda: MagicMock(),
+            ),
             patch(
                 "app.application.user_memory_vector_app_service."
                 "get_user_memory_vector_ingest_app_service",
@@ -206,7 +209,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = lambda *a, **k: saved.append(a)
-        monkeypatch.setattr("app.services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
 
         from app.application.user_memory_vector_app_service import UserMemoryVectorChunk
 
@@ -243,7 +248,9 @@ class TestRememberRunOutcome:
 
         svc = MagicMock()
         svc.save_message.side_effect = RuntimeError("db down")
-        monkeypatch.setattr("app.services.conversation_service.ConversationService", lambda: svc)
+        monkeypatch.setattr(
+            "app.domain.shared_services.conversation_service.ConversationService", lambda: svc
+        )
         monkeypatch.setattr(
             "app.application.user_memory_vector_app_service."
             "get_user_memory_vector_ingest_app_service",
@@ -262,7 +269,7 @@ class TestOrchestratorMainLinkWiring:
         return AgentOrchestrator(repository=InMemoryAgentRunRepository())
 
     def test_plan_memory_recall_lands_on_run(self):
-        from app.application.workflow.types import PlanGraph
+        from app.application.workflow.workflow_types import PlanGraph
 
         plan = PlanGraph(plan_id="p1", intent="test")
         plan.metadata["memory_recall"] = {
@@ -443,7 +450,7 @@ class TestOrchestratorMainLinkWiring:
     def test_full_run_records_writeback_event(self, monkeypatch):
         """端到端：start_run_from_plan 全流程 → completed + runtime.memory_writeback。"""
         monkeypatch.setenv("XCAGI_AGENT_RUNTIME_HOOKS", "1")
-        from app.application.workflow.types import PlanGraph, WorkflowNode
+        from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
         plan = PlanGraph(
             plan_id="p1",

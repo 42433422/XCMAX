@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from app.services.user_cs_intake_notice import (
+from app.domain.shared_services.user_cs_intake_notice import (
     _now_iso,
     _primary_contact_name,
     build_intake_form_notice_message,
@@ -20,7 +20,7 @@ class TestNowIso:
 
 
 class TestPrimaryContactName:
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_company_preferred(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {
             "intake_form": {"company": " 某某科技 ", "name": ""},
@@ -29,7 +29,7 @@ class TestPrimaryContactName:
         }
         assert _primary_contact_name(1) == "某某科技"
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_name_fallback(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {
             "intake_form": {"company": "", "name": "张三"},
@@ -38,7 +38,7 @@ class TestPrimaryContactName:
         }
         assert _primary_contact_name(1) == "张三"
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_non_dict_intake_falls_back(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {
             "intake_form": "not-a-dict",
@@ -47,12 +47,12 @@ class TestPrimaryContactName:
         }
         assert _primary_contact_name(1) == "ERP名"
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_erp_fallback(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {"intake_form": {}, "erp_customer_name": "  ERP名  "}
         assert _primary_contact_name(1) == "ERP名"
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_username_fallback(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {"intake_form": {}, "erp_customer_name": "", "username": "u1"}
         assert _primary_contact_name(1) == "u1"
@@ -79,23 +79,23 @@ class TestBuildIntakeFormNoticeMessage:
 
 
 class TestMaybeSendIntakeFormNotice:
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_already_sent_skips(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {"intake_form_notice_sent": True}
         result = maybe_send_intake_form_notice(1)
         assert result == {"sent": False, "skipped": True, "reason": "already_sent"}
 
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_no_contact_returns_error(self, mock_load: MagicMock) -> None:
         mock_load.return_value = {"intake_form_notice_sent": False}
         result = maybe_send_intake_form_notice(1)
         assert result["sent"] is False
         assert "error" in result
 
-    @patch("app.services.user_cs_demand_form.build_intake_form_url")
+    @patch("app.domain.shared_services.user_cs_demand_form.build_intake_form_url")
     @patch("app.desktop_automation.service.get_desktop_automation_service")
-    @patch("app.services.user_cs_pipeline.save_pipeline")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_send_success(
         self,
         mock_load: MagicMock,
@@ -113,10 +113,10 @@ class TestMaybeSendIntakeFormNotice:
         assert "form_url" in result
         mock_save.assert_called_once()
 
-    @patch("app.services.user_cs_demand_form.build_intake_form_url")
+    @patch("app.domain.shared_services.user_cs_demand_form.build_intake_form_url")
     @patch("app.desktop_automation.service.get_desktop_automation_service")
-    @patch("app.services.user_cs_pipeline.save_pipeline")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.save_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_send_failure_not_saved(
         self,
         mock_load: MagicMock,
@@ -133,9 +133,9 @@ class TestMaybeSendIntakeFormNotice:
         assert result["sent"] is False
         mock_save.assert_not_called()
 
-    @patch("app.services.user_cs_demand_form.build_intake_form_url")
+    @patch("app.domain.shared_services.user_cs_demand_form.build_intake_form_url")
     @patch("app.desktop_automation.service.get_desktop_automation_service")
-    @patch("app.services.user_cs_pipeline.load_pipeline")
+    @patch("app.domain.shared_services.user_cs_pipeline.load_pipeline")
     def test_send_exception(
         self, mock_load: MagicMock, mock_da: MagicMock, mock_url: MagicMock
     ) -> None:

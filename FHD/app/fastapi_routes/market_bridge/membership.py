@@ -6,9 +6,8 @@ from dataclasses import dataclass
 from logging import Logger
 from typing import Any
 
+from app.application.market_bridge.protocols import ProxyJSON
 from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-from .ports import ProxyJSON
 
 
 @dataclass

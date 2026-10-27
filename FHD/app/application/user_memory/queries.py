@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from app.application.user_memory.ports import (
+from app.application.user_memory.protocols import (
     MemoryAccess,
     MemoryListing,
 )

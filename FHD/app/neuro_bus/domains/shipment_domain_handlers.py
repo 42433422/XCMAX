@@ -10,7 +10,7 @@ from typing import Any
 from app.bootstrap import get_shipment_application_service_core
 from app.neuro_bus.bus import get_neuro_bus
 from app.neuro_bus.command_gateway import try_complete_command_reply
-from app.neuro_bus.events.base import NeuroEvent
+from app.neuro_bus.events.events_base import NeuroEvent
 from app.neuro_bus.events.shipment_events import (
     ShipmentExportedEvent,
     ShipmentInventoryDeductedEvent,

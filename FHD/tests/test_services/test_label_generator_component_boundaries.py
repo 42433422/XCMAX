@@ -14,10 +14,10 @@ from typing import Any
 import pytest
 from PIL import Image
 
+from app.domain.label_template.ports import Grid, ImageAnalysisPorts, OCRPorts
 from app.services.skills.label_template_generator import analysis as image_analysis
 from app.services.skills.label_template_generator import label_template_generator as generator
 from app.services.skills.label_template_generator import ocr as image_ocr
-from app.services.skills.label_template_generator.ports import Grid, ImageAnalysisPorts, OCRPorts
 
 _GENERATED_CONSUMER = r"""
 import importlib.util
@@ -379,7 +379,7 @@ def test_capability_modules_import_without_facade_or_optional_ocr_engines():
             "import importlib, sys; "
             "prefix = 'app.services.skills.label_template_generator.'; "
             "[importlib.import_module(prefix + part) for part in "
-            "('ports', 'analysis', 'fields', 'grid', 'adapters', 'ocr', 'codegen', 'skill')]; "
+            "('label_template_ports', 'analysis', 'fields', 'grid', 'adapters', 'ocr', 'codegen', 'skill')]; "
             "assert prefix + 'label_template_generator' not in sys.modules; "
             "assert 'cv2' not in sys.modules; assert 'paddleocr' not in sys.modules",
         ],

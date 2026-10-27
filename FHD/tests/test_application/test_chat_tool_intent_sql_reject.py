@@ -208,7 +208,7 @@ class TestFallbackPlanTwoLevelRouting:
     def test_intent_service_failure_falls_to_clarify(self) -> None:
         planner = _make_planner()
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             side_effect=RuntimeError("boom"),
         ):
             plan = planner._fallback_plan("pid", "随便看看", _full_registry())
@@ -218,7 +218,7 @@ class TestFallbackPlanTwoLevelRouting:
     def test_negated_message_not_routed(self) -> None:
         planner = _make_planner()
         with patch(
-            "app.services.intent_service.recognize_intents",
+            "app.domain.shared_services.intent_service.recognize_intents",
             return_value={"tool_key": "customers", "is_negated": True},
         ):
             plan = planner._fallback_plan("pid", "不要查客户", _full_registry())

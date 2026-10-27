@@ -1,7 +1,7 @@
 import pytest
 
-from app.services.intent_service import recognize_intents
-from app.services.rule_engine import RuleEngine
+from app.domain.shared_services.intent_service import recognize_intents
+from app.domain.shared_services.rule_engine import RuleEngine
 
 
 @pytest.mark.parametrize(
