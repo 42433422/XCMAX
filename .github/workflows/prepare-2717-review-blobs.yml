@@ -1,0 +1,93 @@
+name: Prepare PR 2717 review blobs
+
+on:
+  pull_request:
+    branches: [security/aiopen-trace-privacy-20261028]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    if: >-
+      github.repository == '42433422/XCMAX' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'repair/2717-preserve-changelog-20261028'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve history and regenerate the existing page
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I - <<'PY'
+          from pathlib import Path
+          import hashlib
+          path = Path('FHD/CHANGELOG.md')
+          original = path.read_bytes()
+          actual = hashlib.sha1(b'blob ' + str(len(original)).encode() + b'\0' + original).hexdigest()
+          if actual != 'a20249dd064e55803608f734062a2238737aeabc':
+              raise SystemExit('Unexpected changelog baseline; do not overwrite concurrent work')
+          marker = b'## Unreleased\n'
+          if original.count(marker) != 1:
+              raise SystemExit('Unreleased marker is not unique')
+          entry = '\n- 安全：AIOPEN 工具及管理操作的新增追踪只保留必要状态元数据，不再复制业务正文、凭据或异常原文；正常业务响应不变，历史审计材料保留。\n'.encode()
+          updated = original.replace(marker, marker + entry, 1)
+          if updated.replace(marker + entry, marker, 1) != original:
+              raise SystemExit('Historical changelog bytes changed')
+          path.write_bytes(updated)
+          PY
+          python3 '成都修茈科技有限公司/scripts/build_capability_center.py'
+          python3 '成都修茈科技有限公司/scripts/build_capability_center.py' --check
+          git diff --check
+      - name: Store reviewed blobs without creating commits or changing refs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -I - <<'PY'
+          import base64
+          import hashlib
+          import json
+          import os
+          import subprocess
+          import urllib.request
+          from pathlib import Path
+          paths = ['FHD/CHANGELOG.md', '成都修茈科技有限公司/capabilities/feature/mods-aiopen-support.html']
+          changed = subprocess.check_output(['git', 'diff', '--name-only', '-z']).decode().split('\0')
+          if set(filter(None, changed)) != set(paths):
+              raise SystemExit('Unexpected generated changes; refusing blob preparation')
+          receipt = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(), 'files': []}
+          for path in paths:
+              data = Path(path).read_bytes()
+              local_sha = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
+              old_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD:' + path]).decode().strip()
+              request = urllib.request.Request(
+                  'https://api.github.com/repos/42433422/XCMAX/git/blobs',
+                  data=json.dumps({'content': base64.b64encode(data).decode(), 'encoding': 'base64'}).encode(),
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json'},
+                  method='POST',
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  remote_sha = json.load(response)['sha']
+              if remote_sha != local_sha:
+                  raise SystemExit('Blob identity mismatch')
+              receipt['files'].append({'path': path, 'before': old_sha, 'sha': remote_sha, 'bytes': len(data)})
+          Path('repair-receipt.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
+          print(json.dumps(receipt, ensure_ascii=False))
+          PY
+      - name: Preserve review receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr2717-prepared-blob-receipt
+          path: repair-receipt.json
+          retention-days: 120
+          if-no-files-found: error
