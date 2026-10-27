@@ -24,6 +24,8 @@ MANAGED_INCLUDES = (
 WWW_MANAGED_INCLUDES = ("include /etc/nginx/snippets/admin-console-www.inc.conf;",)
 
 MANAGED_LOCATION_HEADERS = (
+    "location ~ ^/(styles\\.css|main\\.js|release-data\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
+    "location = /data/release-history.json {",
     "location ~ ^/(styles\\.css|main\\.js|contact-intake\\.js|contact-channels\\.js|visualization\\.js|world-will\\.js|world-will-ticker\\.js|world-will-ticker\\.css)$ {",
     "location = /admin/founder-autonomy {",
     "location = /admin/founder-autonomy/ {",

@@ -127,7 +127,7 @@ def parse_release_gates(rel: str) -> dict:
 
 
 def _gate_summary(gates: dict[str, str]) -> dict:
-    summary = {status: 0 for status in ("GREEN", "YELLOW", "RED", "UNKNOWN")}
+    summary = dict.fromkeys(("GREEN", "YELLOW", "RED", "UNKNOWN"), 0)
     for status in gates.values():
         summary[status] = summary.get(status, 0) + 1
     summary["total"] = len(gates)
@@ -287,6 +287,97 @@ def _drift(drift_id: str, level: str, source: str, detail: str) -> dict:
     return {"id": drift_id, "level": level, "source": source, "detail": detail}
 
 
+def release_inventory_errors(download: dict) -> list[str]:
+    """Validate the existing catalog; legacy prose is not artifact acceptance."""
+    policy = download.get("release_policy") or {}
+    rows = download.get("release_history")
+    if not isinstance(rows, list) or not rows:
+        return ["release_history must be a non-empty list"]
+    if set(policy.get("states", [])) != {"candidate", "accepted", "published", "withdrawn"}:
+        return ["release_policy must declare all four lifecycle states"]
+    required = policy.get("identity_fields") or []
+    if not {
+        "product",
+        "sku",
+        "platform",
+        "arch",
+        "channel",
+        "source_sha",
+        "build_run_id",
+        "artifact_sha256",
+    }.issubset(required):
+        return ["release_policy is missing immutable artifact identity fields"]
+    evidence_rules = policy.get("evidence_by_state") or {}
+    if any(
+        not set(fields).issubset(evidence_rules.get(state, []))
+        for state, fields in {
+            "accepted": ["acceptance"],
+            "published": ["acceptance", "authorization", "publication"],
+            "withdrawn": ["acceptance", "authorization", "publication", "withdrawal"],
+        }.items()
+    ):
+        return ["release_policy is missing lifecycle evidence gates"]
+    errors, names, identities = [], set(), set()
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("version"):
+            errors.append("history record requires version")
+            continue
+        if row.get("kind") not in {"milestone", "release"} or row.get("publication_state") not in [
+            *policy["states"],
+            "unknown",
+        ]:
+            errors.append(f"{row['version']}: history classification required")
+        # Alias names include repository/product namespace when identities differ.
+        for name in [row["version"], *row.get("aliases", [])]:
+            if not isinstance(name, str) or not name or name in names:
+                errors.append(f"duplicate/invalid history identity or alias: {name}")
+            else:
+                names.add(name)
+        for delivery in row.get("deliveries", []):
+            if not isinstance(delivery, dict):
+                errors.append(f"{row['version']}: delivery must be an object")
+                continue
+            state = delivery.get("state")
+            identity = tuple(str(delivery.get(k) or "") for k in required)
+            if state not in policy["states"] or not all(identity) or identity in identities:
+                errors.append(
+                    f"{row['version']}: invalid state, incomplete or duplicate artifact identity"
+                )
+            identities.add(identity)
+            for field, length in (("source_sha", 40), ("artifact_sha256", 64)):
+                if not re.fullmatch(
+                    r"[0-9a-f]{" + str(length) + r"}", str(delivery.get(field, ""))
+                ):
+                    errors.append(f"{row['version']}: invalid {field}")
+            evidence = delivery.get("evidence") or {}
+            for field in policy.get("evidence_by_state", {}).get(state, []):
+                if not isinstance(evidence.get(field), str) or not evidence[field].strip():
+                    errors.append(f"{row['version']}: {state} requires {field} evidence")
+            if delivery.get("signature") not in {"signed", "unsigned", "unknown", "not-applicable"}:
+                errors.append(f"{row['version']}: signature status required")
+            if delivery.get("notarization") not in {"accepted", "unknown", "not-applicable"}:
+                errors.append(f"{row['version']}: notarization status required")
+            if (
+                state == "published"
+                and delivery.get("signature") == "unsigned"
+                and not evidence.get("unsigned_risk_acceptance")
+            ):
+                errors.append(f"{row['version']}: unsigned publication requires risk acceptance")
+            if state == "published" and delivery.get("signature") == "unknown":
+                errors.append(f"{row['version']}: unknown signature blocks publication")
+            if state == "published" and delivery.get("channel") in policy.get(
+                "signed_channels", []
+            ):
+                if delivery.get("signature") != "signed":
+                    errors.append(f"{row['version']}: stable OTA requires a signed artifact")
+                if (
+                    delivery.get("platform") in policy.get("notarized_platforms", [])
+                    and delivery.get("notarization") != "accepted"
+                ):
+                    errors.append(f"{row['version']}: macOS stable OTA requires notarization")
+    return errors
+
+
 def detect_drift(cfg: dict, version: dict, train: dict, download: dict) -> tuple[list[dict], dict]:
     """权威源之间的状态漂移。error = 阻断（CI 失败）；info = 需可见但不阻断。
 
@@ -296,6 +387,10 @@ def detect_drift(cfg: dict, version: dict, train: dict, download: dict) -> tuple
     toolchain = version["toolchain"]
     items: list[dict] = []
 
+    items.extend(
+        _drift("release-inventory", "error", "download_release.json", error)
+        for error in release_inventory_errors(download)
+    )
     pairs = [
         ("release_train.product_version", train.get("product_version")),
         ("download_release.marketing_version", download.get("marketing_version")),
@@ -353,7 +448,7 @@ def detect_drift(cfg: dict, version: dict, train: dict, download: dict) -> tuple
                 "release-not-closed",
                 "info",
                 "download_release.release_ready=false",
-                f"{product} 发布面未闭环：下载/更新指针未推进到产品版本",
+                f"{product} 源码发布意图未闭环；不否定同版本历史交付，当前各渠道需读回原制品证据",
             )
         )
     if toolchain and not product.startswith(toolchain):
@@ -427,7 +522,7 @@ def build_status() -> dict:
 
     return {
         "schema": "xcagi.product_lines_status/v1",
-        "generated_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "generated_at": dt.datetime.now(dt.UTC).strftime("%Y-%m-%d %H:%M UTC"),
         "generator": "FHD/scripts/dev/product_lines_status.py",
         "config": CONFIG_PATH.relative_to(REPO_ROOT).as_posix(),
         "policy": (
@@ -437,6 +532,7 @@ def build_status() -> dict:
         ),
         "version": version,
         "release": {
+            "history": download["release_history"],
             "train": {
                 "epoch": train.get("epoch"),
                 "product_version": train.get("product_version"),
@@ -445,6 +541,8 @@ def build_status() -> dict:
                 "last_bump_at": train.get("last_bump_at"),
             },
             "download": {
+                "history_generations": len(download.get("release_history", [])),
+                "history_scope": "product_evolution_not_published_release_count",
                 "version_lock": download.get("version_lock"),
                 "download_version": download.get("download_version"),
                 "marketing_version": download.get("marketing_version"),
@@ -509,10 +607,11 @@ def render_doc(status: dict) -> str:
     out.append("")
     out.append("| 口径 | 值 | 来源 |")
     out.append("|------|----|------|")
-    out.append(f"| 稳定产品版本 | `{version['product']}` | `{version['source']}` |")
+    out.append(f"| 源码候选版本 | `{version['product']}` | `{version['source']}` |")
     out.append(f"| 工具链兼容版本 | `{version['toolchain']}` | `{version['source']}` |")
     out.append(f"| 发布火车 product_version | `{train['product_version']}` | `release_train.json` |")
     out.append(f"| 发布火车 current | `{train['current']}` | `release_train.json` |")
+    out.append(f"| 版本演进世代（非正式发布次数） | {download['history_generations']} | `download_release.json#release_history` |")
     out.append(f"| 下载清单 version_lock | `{download['version_lock']}` | `download_release.json` |")
     out.append(f"| 下载清单 download_version | `{download['download_version']}` | `download_release.json` |")
     out.append(f"| 下载清单 marketing_version | `{download['marketing_version']}` | `download_release.json` |")
@@ -638,14 +737,19 @@ def render_json(status: dict) -> str:
 
 # ---------------------------------------------------------------------- main
 
+def generated_views(cfg: dict, status: dict) -> dict[str, str]:
+    history = {"_generated": "DO NOT EDIT: product_lines_status.py from FHD/config/download_release.json",
+               "schema": "xcagi.release_history.public/v1", "release_history": _capability_builder().public_projection(status["release"]["history"], set())}
+    return {cfg["generated"]["json"]: render_json(status),
+            cfg["generated"]["doc"]: render_doc(status),
+            cfg["generated"]["history"]: render_json(history)}
+
+
 def generate() -> int:
     cfg = load_config()
     status = build_status()
-    targets = {
-        REPO_ROOT / cfg["generated"]["json"]: render_json(status),
-        REPO_ROOT / cfg["generated"]["doc"]: render_doc(status),
-    }
-    for path, content in targets.items():
+    for rel, content in generated_views(cfg, status).items():
+        path = REPO_ROOT / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         print(f"已生成 {path.relative_to(REPO_ROOT)}")
@@ -663,10 +767,7 @@ def check() -> int:
     status = build_status()
     failures: list[str] = []
 
-    for rel, expected in (
-        (cfg["generated"]["json"], render_json(status)),
-        (cfg["generated"]["doc"], render_doc(status)),
-    ):
+    for rel, expected in generated_views(cfg, status).items():
         path = REPO_ROOT / rel
         if not path.is_file():
             failures.append(f"缺失生成物：{rel}（运行 python3 scripts/dev/product_lines_status.py generate）")

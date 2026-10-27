@@ -21,11 +21,9 @@
         --muted: #626b78;
         --soft: #f5f7fa;
         --line: #e2e6ec;
-        --line-dark: #cfd5dd;
         --blue: #1267e8;
         --blue-dark: #0b4fb8;
         --green: #118866;
-        --green-soft: #eaf8f3;
         --radius: 18px;
         --shadow: 0 24px 70px rgba(25, 38, 58, 0.14);
       }
@@ -294,9 +292,6 @@
         font-size: 10.5px;
         line-height: 1.6;
       }
-      .download-note a {
-        color: var(--blue);
-      }
       .download-note.is-warning {
         color: #8a5a0b;
         font-weight: 650;
@@ -366,129 +361,6 @@
       .proof-item b {
         margin-right: 6px;
         color: var(--ink);
-      }
-
-      .section-head {
-        max-width: 760px;
-      }
-      .section-head h2 {
-        margin: 0;
-        font-size: clamp(38px, 5vw, 58px);
-        line-height: 1.08;
-        letter-spacing: -0.05em;
-      }
-      .section-head > p:last-child {
-        margin: 18px 0 0;
-        color: var(--muted);
-        font-size: 16px;
-        line-height: 1.75;
-      }
-
-      .feature-list {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 24px 34px;
-        margin-top: 36px;
-      }
-      .feature {
-        display: grid;
-        grid-template-columns: 28px 1fr;
-        gap: 10px;
-      }
-      .feature span {
-        width: 28px;
-        height: 28px;
-        display: grid;
-        place-items: center;
-        border-radius: 8px;
-        color: var(--green);
-        background: var(--green-soft);
-        font-size: 10px;
-        font-weight: 800;
-      }
-      .feature b {
-        display: block;
-        margin: 2px 0 5px;
-        font-size: 14px;
-      }
-      .feature p {
-        margin: 0;
-        color: #747d89;
-        font-size: 12px;
-        line-height: 1.62;
-      }
-
-      .test-note {
-        margin: 18px 0 0;
-        padding-top: 17px;
-        border-top: 1px solid var(--line);
-        color: #7b8490;
-        font-size: 11px;
-        line-height: 1.65;
-      }
-      .test-note b {
-        color: #9a6816;
-      }
-
-      .card-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 18px;
-      }
-      .card-actions a {
-        padding: 9px 12px;
-        border: 1px solid var(--line-dark);
-        border-radius: 9px;
-        color: #4e5864;
-        font-size: 11px;
-        font-weight: 700;
-        text-decoration: none;
-      }
-      .card-actions a:first-child {
-        border-color: var(--green);
-        color: var(--green);
-      }
-
-      .partner-details {
-        margin-top: 48px;
-        border-top: 1px solid var(--line);
-        border-bottom: 1px solid var(--line);
-      }
-      .partner-details summary {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 18px;
-        padding: 22px 0;
-        cursor: pointer;
-        list-style: none;
-        font-size: 13px;
-        font-weight: 750;
-      }
-      .partner-details summary::-webkit-details-marker {
-        display: none;
-      }
-      .partner-details summary::after {
-        content: '+';
-        color: #8b94a0;
-        font-size: 18px;
-        font-weight: 400;
-      }
-      .partner-details[open] summary::after {
-        content: '−';
-      }
-      .partner-copy {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 34px;
-        padding: 0 0 28px;
-      }
-      .partner-copy p {
-        margin: 0;
-        color: #68717d;
-        font-size: 12.5px;
-        line-height: 1.78;
       }
 
       .footer {
@@ -596,14 +468,6 @@
           border-left: 0;
         }
 
-        .feature-list {
-          grid-template-columns: 1fr;
-          gap: 22px;
-        }
-        .partner-copy {
-          grid-template-columns: 1fr;
-          gap: 16px;
-        }
         .footer-inner {
           align-items: flex-start;
           flex-direction: column;
@@ -664,7 +528,7 @@
                   </div>
                 </div>
                 <p class="pending" id="pending" hidden>部分平台尚未开放，请以各平台下载按钮为准。</p>
-                <div id="platforms" class="download-platform-status"><strong>产品平台等级（来源：能力目录 / FHD/VERSION.md）</strong><span>Windows：<b data-platform-status="Windows 桌面">签约级</b></span><span>macOS：<b data-platform-status="macOS 桌面">签约级</b></span><span>Android：<b data-platform-status="Android">实验骨架·非签约级</b></span><span>Web：<b data-platform-status="Web / 后端">签约级</b></span></div>
+                <div id="platforms" class="download-platform-status"><strong>产品平台等级（来源：能力目录 / FHD/VERSION.md）</strong><span>Windows：<b data-platform-status="Windows 桌面">待核验</b></span><span>macOS：<b data-platform-status="macOS 桌面">待核验</b></span><span>Android：<b data-platform-status="Android">实验骨架·非签约级</b></span><span>Web：<b data-platform-status="Web / 后端">待核验</b></span></div>
                 <div class="download-list" id="download-list" aria-live="polite" aria-label="XCAGI 可下载版本"></div>
                 <p class="download-note" id="download-note">
                   支持状态和当前开放安装包分开展示；Android 为实验版。安装后可按需安装行业 Mod。
@@ -701,6 +565,7 @@
       </div>
     </footer>
 
+    <script src="/release-data.js"></script>
     <script>
       ;(function () {
         'use strict'
@@ -710,24 +575,11 @@
           return
         }
 
-        // 当前版本只有一个来源：发布清单 /download-release.json（发布流程在 Windows/macOS
-        // 双平台产物通过验证后原子写入）。页面不内置版本兜底值——手写兜底会与指针冲突，
-        // 且每次发版都要人工改一次页面，漏改就让官网自相矛盾。
-        var RELEASE_ROOT = 'https://xiu-ci.com'
-        var state = {
-          version: '',
-          androidVersion: '',
-          base: '',
-          winMb: '',
-          releaseReady: false,
-          gitSha: '',
-          releaseId: '',
-          manifest: null,
-          windowsHotfix: null,
-          tab: 'desktop',
-          macArch: 'arm64',
-          preferredPlatform: 'win',
-        }
+        var releases = window.XCReleaseData
+        if (!releases) return
+        var state = { pointer: null, manifest: null, windowsHotfix: null, loaded: false,
+          tab: 'desktop', macArch: 'arm64', preferredPlatform: 'win' }
+        function releaseView() { return releases.view(state.pointer, state.manifest, state.windowsHotfix) }
 
         function detectPlatform() {
           var ua = navigator.userAgent || ''
@@ -752,114 +604,34 @@
           return 'arm64'
         }
 
-        function officialUrl(path) {
-          return RELEASE_ROOT + '/xcagi-v' + state.version + '/enterprise/' + path
-        }
-
-        // 字段与路径须和 release-desktop.yml 写出的临时指针逐项一致。
-        function activeWindowsHotfix() {
-          var hotfix = state.windowsHotfix
-          var artifact = hotfix && hotfix.artifact
-          if (!artifact || hotfix.schema !== 'xcagi.windows_interim_release/v1' || hotfix.version !== state.version) return null
-          var commit = String(hotfix.git_sha || '').toLowerCase()
-          var sha = String(artifact.sha256 || '').toLowerCase()
-          var status = hotfix.signature_status
-          var filename = 'XCAGI-Enterprise-Setup-' + hotfix.version + '-x64-' + status + '.exe'
-          var unsignedAccepted = status === 'unsigned' && hotfix.risk_acceptance &&
-            Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
-          if (!hotfix.download_allowed || hotfix.stable_auto_update !== false || (status !== 'signed' && !unsignedAccepted) ||
-            !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit) || !/^[0-9a-f]{64}$/.test(sha) ||
-            artifact.platform !== 'windows' || artifact.arch !== 'x64' || artifact.filename !== filename ||
-            !Number.isSafeInteger(artifact.size) || artifact.size <= 0 ||
-            artifact.url !== officialUrl(commit + '/' + sha + '/' + filename)) return null
-          return hotfix
-        }
-
+        function activeWindowsHotfix() { return releaseView().interim() }
         function fileName(platform, arch) {
-          if (platform === 'android') return 'XCAGI-Enterprise-Android-' + state.androidVersion + '.apk'
-          if (platform === 'mac') return 'XCAGI-Enterprise-' + state.version + '-mac-' + (arch || state.macArch) + '.dmg'
-          var hotfix = activeWindowsHotfix()
-          if (hotfix) return hotfix.artifact.filename
-          return 'XCAGI-Enterprise-Setup-' + state.version + '-x64.exe'
+          var status = releaseView().platform(platform, arch || state.macArch)
+          return status.artifact ? status.artifact.filename : ''
         }
-
-        function staticUrl(platform) {
-          return state.base + '/enterprise/' + fileName(platform)
-        }
-
-        function manifestEntry(platform, arch) {
-          var manifest = state.manifest
-          var sku = manifest && manifest.channels && manifest.channels.official_download && manifest.channels.official_download.enterprise
-          if (!sku || !state.releaseReady || manifest.release_ready !== true || manifest.version !== state.version ||
-            !state.gitSha || manifest.git_sha !== state.gitSha || !state.releaseId || manifest.release_id !== state.releaseId) return null
-          var macArch = arch || state.macArch
-          var entry = platform === 'mac'
-            ? (sku.mac || []).filter(function (row) { return row && row.filename === fileName('mac', macArch) })[0]
-            : sku[platform]
-          if (!entry || !/^[a-f0-9]{64}$/i.test(entry.sha256 || '')) return null
-          var expectArch = platform === 'mac' ? macArch : 'x64'
-          var validUrl = entry.url === officialUrl(entry.filename) || (platform === 'mac' && /^[a-f0-9]{40}$/.test(state.gitSha) &&
-            entry.url === RELEASE_ROOT + '/xcagi-v' + state.version + '/builds/' + state.gitSha + '/enterprise/' + entry.filename)
-          return platform === 'android' || (entry.filename === fileName(platform, macArch) && validUrl &&
-            (!entry.arch || entry.arch === expectArch)) ? entry : null
-        }
-
         function downloadUrl(platform, arch) {
-          var hotfix = platform === 'win' ? activeWindowsHotfix() : null
-          var entry = hotfix ? hotfix.artifact : manifestEntry(platform, arch)
-          return entry ? entry.url : platform === 'android' && state.androidVersion ? staticUrl(platform) : ''
+          var artifact = releaseView().platform(platform, arch || state.macArch).artifact
+          return artifact ? artifact.url : ''
         }
-
         function metaText(platform, arch) {
-          var hotfix = platform === 'win' ? activeWindowsHotfix() : null
-          if (hotfix) {
-            return 'v' + hotfix.version + ' · Authenticode ' + hotfix.signature_status + ' · 约 ' + Math.round(hotfix.artifact.size / 1048576) + ' MB · SHA256 ' + String(hotfix.artifact.sha256)
-          }
-          var entry = manifestEntry(platform, arch)
-          var bits = []
-          if (entry && entry.size) bits.push('约 ' + Math.round(entry.size / 1048576) + ' MB')
-          else if (platform === 'win' && state.winMb) bits.push('约 ' + state.winMb + ' MB')
-          if (entry && entry.sha256) bits.push('SHA256 ' + String(entry.sha256).slice(0, 12) + '…')
-          return bits.join(' · ')
+          var status = releaseView().platform(platform, arch || state.macArch)
+          var artifact = status.artifact
+          return artifact ? 'v' + status.version + ' · ' + status.channel +
+            (status.temporary ? ' · Authenticode ' + status.temporary.signature_status : '') +
+            ' · 约 ' + Math.round(artifact.size / 1048576) + ' MB · SHA256 ' + artifact.sha256 : status.status
         }
-
-        function fetchJson(url, cache, requireJsonContentType) {
-          return fetch(url, { cache: cache }).then(function (response) {
-            var type = response.headers.get('content-type') || ''
-            if (!response.ok || (requireJsonContentType && !type.includes('json'))) return null
-            return response.json()
-          }).catch(function () { return null })
-        }
-
         function loadReleaseInfo() {
           return fetch('/download-release.json', { cache: 'no-store' }).then(function (response) {
-            var type = response.headers.get('content-type') || ''
-            return response.ok && type.includes('json') ? response.json() : null
-          }).catch(function () {
-            return null
-          }).then(function (data) {
-            if (!data) return
-            if (typeof data.download_version === 'string') state.version = data.download_version
-            if (typeof data.android_version === 'string') state.androidVersion = data.android_version
-            if (typeof data.git_sha === 'string') state.gitSha = data.git_sha.toLowerCase()
-            if (typeof data.release_id === 'string') state.releaseId = data.release_id
-            if (data.win_installer_mb != null) state.winMb = String(data.win_installer_mb)
-            if (typeof data.release_ready === 'boolean') state.releaseReady = data.release_ready
-            if (typeof data.release_root === 'string') state.base = data.release_root.replace(/\/$/, '')
-            else if (typeof data.cos_base_url === 'string') state.base = data.cos_base_url.replace(/\/$/, '')
-            else if (state.version) state.base = RELEASE_ROOT + '/xcagi-v' + state.version
-          })
-        }
-
-        function loadManifest() {
-          return fetchJson(state.base + '/manifest.json', 'no-cache').then(function (data) {
-            if (data && data.schema === 'xcagi.download_manifest/v1') state.manifest = data
-          })
-        }
-
-        function loadWindowsHotfix() {
-          return fetchJson('/download-windows-hotfix.json', 'no-store', true).then(function (data) {
-            if (data && data.schema === 'xcagi.windows_interim_release/v1') state.windowsHotfix = data
+            return response.ok && (response.headers.get('content-type') || '').includes('json') ? response.json() : null
+          }).catch(function () { return null }).then(function (pointer) {
+            state.pointer = pointer
+            var url = releases.manifestUrl(pointer)
+            return Promise.all([url ? releases.fetchJson(url) : null, releases.fetchJson('/download-windows-hotfix.json')])
+          }).then(function (results) {
+            state.manifest = results[0]
+            state.windowsHotfix = results[1]
+            state.loaded = true
+            render()
           })
         }
 
@@ -894,26 +666,17 @@
         }
 
         function render() {
-          var hotfix = activeWindowsHotfix()
-          var known = state.tab === 'android' ? Boolean(state.androidVersion) : Boolean(state.version)
-          // 版本号来自发布清单，一律以文本节点写入 DOM，不拼接 HTML 字符串（避免 DOM XSS）。
-          if (!known) versionEl.replaceChildren('版本信息加载中…')
-          else if (state.tab === 'android') versionEl.replaceChildren('当前版本 ', textElement('b', '', state.androidVersion))
-          else if (hotfix && manifestEntry('mac')) versionEl.replaceChildren('macOS 稳定版 ', textElement('b', '', state.version), ' · Windows 临时交付 ', textElement('b', '', hotfix.version))
-          else if (hotfix) versionEl.replaceChildren('macOS 稳定包待开放 · Windows 临时交付 ', textElement('b', '', hotfix.version))
-          else versionEl.replaceChildren('当前版本 ', textElement('b', '', state.version))
-          pendingEl.hidden = rows().every(function (row) {
-            return Boolean(downloadUrl(row.platform, row.arch))
-          })
+          var current = releaseView()
+          var hotfix = current.interim()
+          var version = state.tab === 'android' ? current.androidVersion : current.version
+          versionEl.replaceChildren(version ? (state.tab === 'android' ? 'Android 实验版本 ' : '下载指针版本 ') : (state.loaded ? '版本信息暂不可用' : '版本信息加载中…'))
+          if (version) versionEl.append(textElement('b', '', version))
+          pendingEl.hidden = rows().every(function (row) { return Boolean(downloadUrl(row.platform, row.arch)) })
           noteEl.classList.toggle('is-warning', Boolean(hotfix) && hotfix.signature_status === 'unsigned' && state.tab === 'desktop')
-          noteEl.textContent =
-            state.tab === 'android'
-              ? 'Android 为实验版（非签约级），安装后请在系统设置中允许“安装未知应用”。'
-              : hotfix
-                ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '。安装前请核对完整 SHA-256；不会进入稳定自动更新。' + (manifestEntry('mac') ? 'macOS 仍使用稳定版。' : 'macOS 稳定包暂未开放。')
-                : (downloadUrl('mac', 'x64')
-                  ? '支持 Windows 10+、macOS 12+。安装后可按需安装行业 Mod。'
-                  : '支持 Windows 10+ 与 Apple Silicon。本次不提供 Intel Mac 安装包，Intel 入口不会下载 Apple Silicon 包。')
+          noteEl.textContent = state.tab === 'android'
+            ? 'Android 为实验版（非签约级）；仅在制品清单校验通过后开放下载。'
+            : '各平台分别核对清单中的版本、构建身份、文件大小及 SHA-256；未开放不代表历史版本未发布。' +
+              (hotfix ? 'Windows 临时交付包 Authenticode 状态：' + hotfix.signature_status + '；不进入稳定自动更新。' : '')
           listEl.replaceChildren()
           rows().forEach(function (row, index) {
             var rowHotfix = row.platform === 'win' ? activeWindowsHotfix() : null
@@ -960,7 +723,7 @@
         state.macArch = detectMacArch()
         if (state.preferredPlatform === 'android') state.tab = 'android'
         setTab(state.tab)
-        loadReleaseInfo().then(loadManifest).then(loadWindowsHotfix).then(render)
+        loadReleaseInfo()
       })()
     </script>
 
