@@ -109,7 +109,7 @@ def test_pytest_pin_uses_canonical_lock_without_mutating_it() -> None:
 @pytest.mark.parametrize("workflow,cwd", _INSTALL_WORKFLOWS)
 @pytest.mark.parametrize("lock_case", _LOCK_CASES)
 def test_actual_ci_installs_use_pin_and_stop_before_pip_on_bad_lock(
-    tmp_path: Path, monkeypatch, workflow: str, cwd: str, lock_case: str
+    tmp_path: Path, workflow: str, cwd: str, lock_case: str
 ) -> None:
     workspace = tmp_path / "repo with spaces"
     tool = workspace / "FHD/scripts/dev/check_requirements_lock.py"
@@ -141,8 +141,14 @@ if "--format=json" in sys.argv:
         path = fakebin / name
         path.write_text(wrapper)
         path.chmod(0o755)
+    (fakebin / "pip.py").write_text(
+        "import json, os, sys\n"
+        'with open(os.environ["INSTALL_LOG"], "a") as stream:\n'
+        '    stream.write(json.dumps(sys.argv[1:]) + "\\n")\n'
+    )
     env = {**os.environ, "GITHUB_WORKSPACE": str(workspace), "INSTALL_LOG": str(log)}
     env["PATH"] = str(fakebin) + os.pathsep + env["PATH"]
+    env["PYTHONPATH"] = str(fakebin)
     jobs = yaml.safe_load((_REPO_ROOT / workflow).read_text())["jobs"]
     installs = [
         step
@@ -155,25 +161,15 @@ if "--format=json" in sys.argv:
     )
     for step in installs:
         log.unlink(missing_ok=True)
-        calls = []
         if step.get("shell") == "python":
-            with monkeypatch.context() as patch:
-                patch.setenv("GITHUB_WORKSPACE", str(workspace))
-                patch.chdir(workdir)
-                patch.setattr(subprocess, "check_call", lambda args: calls.append(args))
-                if lock_case == "valid":
-                    exec(compile(step["run"], workflow, "exec"), {})
-                else:
-                    with pytest.raises(subprocess.CalledProcessError):
-                        exec(compile(step["run"], workflow, "exec"), {})
+            script = tmp_path / "workflow_install.py"
+            script.write_text(step["run"])
+            command = [sys.executable, str(script)]
         else:
-            result = subprocess.run(
-                ["bash", "-c", step["run"]], cwd=workdir, env=env, capture_output=True
-            )
-            assert (result.returncode == 0) == (lock_case == "valid"), result.stderr.decode()
-            calls = (
-                [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
-            )
+            command = ["bash", "-c", step["run"]]
+        result = subprocess.run(command, cwd=workdir, env=env, capture_output=True)
+        assert (result.returncode == 0) == (lock_case == "valid"), result.stderr.decode()
+        calls = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
         if lock_case == "valid":
             test_installs = [
                 args
