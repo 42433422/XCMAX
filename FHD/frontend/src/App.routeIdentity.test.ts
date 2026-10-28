@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { expect, it, vi } from 'vitest'
 import App from './App.vue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -13,7 +13,9 @@ vi.mock('@/components/shell/AppGlobalProviders.vue', () => ({ default: { render:
 vi.mock('@/components/aiopen/VirtualCursorOverlay.vue', () => ({ default: { render: () => null } }))
 vi.mock('@/composables/useAppBoot', () => ({ useAppBoot: () => ({ hideChrome: false, appReady: true, isAdminConsoleSpa: () => mode.admin }) }))
 vi.mock('@/utils/desktopShell', () => ({ isDesktopShell: () => mode.desktop }))
+vi.mock('@/stores/accountProfile', () => ({ useAccountProfileStore: () => account }))
 vi.mock('@/composables/usePrivateDeliverySync', () => ({ usePrivateDeliverySync: () => undefined }))
+const account = reactive({ impersonatingMarketUserId: null as number | null })
 
 it('preserves an admin page and its input across anchor jumps, while query changes still reload it', async () => {
   let mounts = 0
@@ -56,7 +58,14 @@ it('caches desktop pages without a transition and clears cached pages on account
   await router.push('/one'); await flushPromises()
   expect(mounts).toBe(2)
   expect(wrapper.get('input').element.value).toBe('')
+  await wrapper.get('input').setValue('不可跨身份读取')
+  await router.push('/two'); await flushPromises()
+  account.impersonatingMarketUserId = 42
+  await router.push('/one'); await flushPromises()
+  expect(mounts).toBe(3)
+  expect(wrapper.get('input').element.value).toBe('')
   wrapper.unmount()
+  account.impersonatingMarketUserId = null
   mode.admin = true
   mode.desktop = false
 })

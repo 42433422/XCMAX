@@ -10,8 +10,10 @@ import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { useAccountProfileStore } from '@/stores/accountProfile'
 
 const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
+const account = useAccountProfileStore()
 usePrivateDeliverySync()
 </script>
 
@@ -33,7 +35,7 @@ usePrivateDeliverySync()
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else-if="!isAdminConsoleSpa()" :path="route.fullPath">
-          <keep-alive :key="productReadAccountEpoch" :max="12">
+          <keep-alive :key="JSON.stringify([productReadAccountEpoch, account.impersonatingMarketUserId])" :max="12">
             <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
           </keep-alive>
         </RouteErrorBoundary>
