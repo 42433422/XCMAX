@@ -30,6 +30,7 @@ def client(monkeypatch):
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73,
         tier="admin",
         role="admin",
     )
@@ -124,7 +125,7 @@ def test_aiopen_invoke_attaches_agent_run_for_tool_call(client, monkeypatch):
     assert body["agent_run_id"] == run_id
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "aiopen-rest-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "aiopen_tool_call"
     assert run.metadata["channel"] == "aiopen_invoke"
     assert run.metadata["runtime_context"]["route"] == "/api/aiopen/invoke"
@@ -192,7 +193,7 @@ def test_aiopen_key_lifecycle_traces_without_key_leak(client, monkeypatch):
 
     create_run = repo.get(created["run_id"])
     assert create_run is not None
-    assert create_run.user_id == "key-admin"
+    assert create_run.user_id == "73"  # verified admin id, not body user_id
     assert create_run.intent == "aiopen_control_update"
     assert create_run.metadata["channel"] == "aiopen_control"
     assert create_run.metadata["runtime_context"]["route"] == "/api/aiopen/keys"
@@ -424,6 +425,7 @@ def test_qclaw_control_and_test_route_attach_agent_runs(monkeypatch):
     app.include_router(ai_open_router)
     app.include_router(ai_qclaw_router)
     app.dependency_overrides[require_admin_user] = lambda: SimpleNamespace(
+        id=73,
         tier="admin",
         role="admin",
     )
@@ -507,7 +509,7 @@ def test_aiopen_openclaw_chat_attaches_agent_run(client):
     run = repo.get(run_id)
     assert run is not None
     assert run.status == "completed"
-    assert run.user_id == "aiopen-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "external_openclaw_chat"
     assert run.metadata["channel"] == "aiopen_openclaw"
     assert run.metadata["source"] == "aiopen"
@@ -541,7 +543,7 @@ def test_qclaw_openclaw_chat_attaches_agent_run(client):
     run = repo.get(run_id)
     assert run is not None
     assert run.status == "completed"
-    assert run.user_id == "qclaw-user"
+    assert run.user_id == "aiopen-api-key"  # body user_id must not spoof
     assert run.intent == "external_openclaw_chat"
     assert run.metadata["channel"] == "qclaw_openclaw"
     assert run.metadata["source"] == "qclaw"

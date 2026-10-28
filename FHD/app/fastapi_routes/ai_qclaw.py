@@ -48,6 +48,7 @@ def _trace_qclaw_control_result(
     body: dict[str, Any] | None = None,
     channel: str = "qclaw_control",
     intent: str = "qclaw_control_update",
+    user_id: str = "",
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
         return payload
@@ -66,9 +67,7 @@ def _trace_qclaw_control_result(
                 "action": action,
                 "request": dict(body or {}),
             },
-            user_id=str(
-                (body or {}).get("user_id") or (body or {}).get("userId") or "qclaw-control"
-            ),
+            user_id=user_id or "qclaw-control",
             source="qclaw",
             channel=channel,
             intent=intent,
@@ -132,6 +131,7 @@ def ai_qclaw_wechat_gateway(
         route="/api/ai/qclaw/wechat-gateway",
         action="wechat_gateway_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -149,6 +149,7 @@ def ai_qclaw_openclaw_config(
         route="/api/ai/qclaw/openclaw/config",
         action="openclaw_config_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -168,6 +169,7 @@ def ai_qclaw_whitelist(
         route="/api/ai/qclaw/whitelist",
         action="whitelist_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -202,6 +204,7 @@ def ai_qclaw_test_route(
             route="/api/ai/qclaw/test-route",
             action="test_route_smoke",
             body=body,
+            user_id=str(getattr(_admin, "id", "") or ""),
             channel="qclaw_route_smoke",
             intent="qclaw_route_smoke",
         )
@@ -231,7 +234,7 @@ def ai_qclaw_openclaw_chat(
             "source": "qclaw",
             "external_gateway": "openclaw",
         },
-        user_id=str(body.get("user_id") or body.get("userId") or "").strip() or None,
+        user_id="aiopen-api-key",
         source="qclaw",
         channel="qclaw_openclaw",
         intent="external_openclaw_chat",

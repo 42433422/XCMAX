@@ -1,5 +1,5 @@
 {
-  "lines": 2330609,
-  "updated": "2026-10-25",
-  "note": "棘轮下调"
+  "lines": 2330765,
+  "updated": "2026-10-28",
+  "note": "安全 #2720：审计身份绑定；旧 test_aiopen 断言改为可信 actor；ruff/format；基线与提交树一致"
 }

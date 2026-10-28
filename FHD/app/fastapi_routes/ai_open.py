@@ -115,6 +115,7 @@ def _trace_aiopen_control_result(
     body: dict[str, Any] | None = None,
     channel: str = "aiopen_control",
     intent: str = "aiopen_control_update",
+    user_id: str = "",
 ) -> dict[str, Any]:
     return trace_control_result(
         payload,
@@ -125,6 +126,7 @@ def _trace_aiopen_control_result(
         body=body,
         channel=channel,
         intent=intent,
+        user_id=user_id,
     )
 
 
@@ -201,7 +203,7 @@ async def aiopen_invoke(
         tool=tool,
         args=args,
         result=result,
-        user_id=str(body.get("user_id") or body.get("userId") or ""),
+        user_id="aiopen-api-key",
     )
     if run_id:
         payload["run_id"] = run_id
@@ -319,6 +321,7 @@ def aiopen_keys_create(
         route="/api/aiopen/keys",
         action="keys_create",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -336,6 +339,7 @@ def aiopen_keys_revoke(
         route="/api/aiopen/keys",
         action="keys_revoke",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -381,6 +385,7 @@ def aiopen_whitelist(
         route="/api/aiopen/whitelist",
         action="whitelist_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -398,6 +403,7 @@ def aiopen_whitelist_seed(
         route="/api/aiopen/whitelist/seed",
         action="whitelist_seed",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -430,6 +436,7 @@ def aiopen_config(
         route="/api/aiopen/config",
         action="openclaw_config_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -445,6 +452,7 @@ def aiopen_control(
         route="/api/aiopen/control",
         action="remote_control_update",
         body=body,
+        user_id=str(getattr(_admin, "id", "") or ""),
     )
 
 
@@ -467,7 +475,7 @@ def aiopen_openclaw_chat(
             "source": "aiopen",
             "external_gateway": "openclaw",
         },
-        user_id=str(body.get("user_id") or body.get("userId") or "").strip() or None,
+        user_id="aiopen-api-key",
         source="aiopen",
         channel="aiopen_openclaw",
         intent="external_openclaw_chat",
