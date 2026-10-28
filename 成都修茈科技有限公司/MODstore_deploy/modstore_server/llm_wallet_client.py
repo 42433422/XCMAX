@@ -35,6 +35,7 @@ class JavaWalletClient:
         """Accept an in-flight model operation only after fresh scoped authentication."""
         if not self._is_pat():
             return
+        assert self.request is not None
         from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
 
         raw = authorization.strip()
@@ -85,7 +86,8 @@ class JavaWalletClient:
                     or hold.get("status") != "held"
                     or received is None
                     or not received.is_finite()
-                    or received.as_tuple().exponent < -2
+                    or not isinstance((exponent := received.as_tuple().exponent), int)
+                    or exponent < -2
                     or received != money(amount)
                 ):
                     raise ValueError("invalid hold")
@@ -131,7 +133,8 @@ class JavaWalletClient:
                         or result.get("status") != "settled"
                         or actual is None
                         or not actual.is_finite()
-                        or actual.as_tuple().exponent < -2
+                        or not isinstance((exponent := actual.as_tuple().exponent), int)
+                        or exponent < -2
                         or actual != money(actual_amount)
                     ):
                         raise ValueError("invalid settlement")
@@ -171,6 +174,7 @@ class JavaWalletClient:
 
         try:
             if self._is_pat():
+                assert self.request is not None
                 from modstore_server.llm_wallet_assertion import issue_assertion, load_signing_key
 
                 operation = path.rsplit("/", 1)[-1]

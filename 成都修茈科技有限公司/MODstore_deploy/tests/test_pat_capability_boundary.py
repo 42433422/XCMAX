@@ -535,7 +535,7 @@ async def test_byok_rechecks_pat_before_upstream(pat_case, monkeypatch, state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "case", ["invalid-json", "non-object", "wrong-amount", "fractional-cent", "terminal"]
+    "case", ["invalid-json", "non-object", "wrong-amount", "fractional-cent", "terminal", "nan"]
 )
 async def test_pat_preauthorization_rejects_corrupt_success_response(
     pat_case, monkeypatch, tmp_path, case
@@ -553,7 +553,12 @@ async def test_pat_preauthorization_rejects_corrupt_success_response(
     elif case == "non-object":
         response = httpx.Response(200, json=[])
     else:
-        amount = {"wrong-amount": "0.06", "fractional-cent": "0.049", "terminal": "0.05"}[case]
+        amount = {
+            "wrong-amount": "0.06",
+            "fractional-cent": "0.049",
+            "terminal": "0.05",
+            "nan": "NaN",
+        }[case]
         response = httpx.Response(
             200,
             json={
@@ -579,7 +584,8 @@ async def test_pat_preauthorization_rejects_corrupt_success_response(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "settled_amount,status", [("0.00", "settled"), ("0.019", "settled"), ("0.02", "held")]
+    "settled_amount,status",
+    [("0.00", "settled"), ("0.019", "settled"), ("0.02", "held"), ("Infinity", "settled")],
 )
 async def test_pat_settlement_requires_confirmed_exact_amount(
     pat_case, monkeypatch, tmp_path, settled_amount, status
