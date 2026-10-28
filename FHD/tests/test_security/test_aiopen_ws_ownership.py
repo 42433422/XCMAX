@@ -17,7 +17,18 @@ from app.infrastructure.aiopen.cursor_hub import AiOpenCursorHub
 from app.infrastructure.aiopen.principal_context import screen_principal_scope
 
 OWNER = ScreenPrincipal("owner", "tenant-a")
-IMPOSTOR = ScreenPrincipal("impostor", "tenant-a")
+
+
+def _meta(p: ScreenPrincipal) -> dict[str, str]:
+    return {"principal_id": p.principal_id, "tenant_id": p.tenant_id}
+
+
+class _Sock:
+    def __init__(self) -> None:
+        self.sent = ""
+
+    async def send_text(self, data: str) -> None:
+        self.sent = data
 
 
 @pytest.mark.parametrize(
@@ -35,10 +46,9 @@ def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, prin
     app = FastAPI()
     app.include_router(ai_open_routes.router)
     headers = {"Origin": origin} if origin else {}
-    with TestClient(app) as client:
-        with pytest.raises(WebSocketDisconnect):
-            with client.websocket_connect("/api/aiopen/ws", headers=headers):
-                pass
+    with TestClient(app) as client, pytest.raises(WebSocketDisconnect):
+        with client.websocket_connect("/api/aiopen/ws", headers=headers):
+            pass
 
 
 @pytest.mark.parametrize(
@@ -50,9 +60,7 @@ def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, prin
         ("wss", "http://testserver", False),
     ],
 )
-def test_screen_origin_scheme_must_match_transport_scheme(
-    monkeypatch, request_scheme, origin, expected
-):
+def test_screen_origin_scheme_must_match_transport_scheme(monkeypatch, request_scheme, origin, expected):
     monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
     websocket = SimpleNamespace(
         headers={"origin": origin, "host": "testserver"},
@@ -79,32 +87,13 @@ def test_screen_explicit_cross_origin_allowlist(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_screen_acknowledgements_bound_to_own_connection():
-    hub = AiOpenCursorHub()
-
-    class FakeSocket:
-        def __init__(self) -> None:
-            self.sent = ""
-
-        async def send_text(self, data: str) -> None:
-            self.sent = data
-
-    owner = FakeSocket()
-    impostor = FakeSocket()
-    await hub.connect(
-        "owner",
-        owner,
-        {"principal_id": OWNER.principal_id, "tenant_id": OWNER.tenant_id},
-    )
-    await hub.connect(
-        "impostor",
-        impostor,
-        {"principal_id": IMPOSTOR.principal_id, "tenant_id": IMPOSTOR.tenant_id},
-    )
+    hub, owner, impostor = AiOpenCursorHub(), _Sock(), _Sock()
+    await hub.connect("owner", owner, _meta(OWNER))
+    await hub.connect("impostor", impostor, _meta(ScreenPrincipal("impostor", "tenant-a")))
     with screen_principal_scope(OWNER):
         work = asyncio.create_task(hub.dispatch("snapshot", {}, session_id="owner", timeout=1))
         await asyncio.sleep(0)
-        command = json.loads(owner.sent)
-        reply = json.dumps({"id": command["id"], "result": {"success": True, "data": "ok"}})
+        reply = json.dumps({"id": json.loads(owner.sent)["id"], "result": {"success": True, "data": "ok"}})
         assert hub.handle_client_message(reply, session_id="impostor") is False
         assert not work.done()
         assert hub.handle_client_message(reply, session_id="owner") is True
@@ -115,18 +104,8 @@ async def test_screen_acknowledgements_bound_to_own_connection():
 
 @pytest.mark.asyncio
 async def test_disconnected_screen_cannot_leave_pending_command_running():
-    hub = AiOpenCursorHub()
-    screen = ScreenPrincipal("screen", "tenant-a")
-
-    class FakeSocket:
-        async def send_text(self, data: str) -> None:
-            return None
-
-    await hub.connect(
-        "screen",
-        FakeSocket(),
-        {"principal_id": screen.principal_id, "tenant_id": screen.tenant_id},
-    )
+    hub, screen = AiOpenCursorHub(), ScreenPrincipal("screen", "tenant-a")
+    await hub.connect("screen", _Sock(), _meta(screen))
     with screen_principal_scope(screen):
         work = asyncio.create_task(hub.dispatch("click", {}, session_id="screen", timeout=5))
         await asyncio.sleep(0)
