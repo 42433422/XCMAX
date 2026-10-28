@@ -6,7 +6,10 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.db_base import Base
 from app.utils.time import utc_now_naive
@@ -21,7 +24,7 @@ class MobileNotificationOutbox(Base):
     body = Column(Text, nullable=False, default="")
     route = Column(String(300), nullable=False, default="")
     channel = Column(String(64), nullable=False, default="")
-    data_json = Column(Text, nullable=False, default="{}")
-    delivered = Column(Boolean, nullable=False, default=False, index=True)
+    data_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    delivered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
-    delivered_at = Column(DateTime, nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

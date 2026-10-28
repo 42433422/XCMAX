@@ -141,7 +141,7 @@ def test_complete_attendance_approval_writes_real_workbook(attendance_store):
     with sqlite3.connect(store.attendance_db) as db:
         assert db.execute(
             "SELECT employee_name FROM attendance_employees ORDER BY employee_name"
-        ).fetchall() == [
+        ).fetchmany(3) == [
             ("SYNTHETIC-EXCLUDE",),
             ("SYNTHETIC-KEEP",),
         ]
