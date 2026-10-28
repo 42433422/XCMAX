@@ -107,7 +107,9 @@ def _dispatch_reviewed_query(tool_id: str, action: str, params: dict):
 
 from contextvars import ContextVar
 
-_catalog_context = ContextVar("controlled_catalog_dispatch", default=None)
+_catalog_context: ContextVar[tuple[str, str, dict[str, Any]] | None] = ContextVar(
+    "controlled_catalog_dispatch", default=None
+)
 
 
 def controlled_tool_context(tool_id, action):
