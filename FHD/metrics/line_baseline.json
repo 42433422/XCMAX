@@ -1,5 +1,5 @@
 {
-  "lines": 2330763,
+  "lines": 2330765,
   "updated": "2026-10-28",
-  "note": "安全 #2720：审计身份绑定 + ruff C408/format 测试排版；基线抬至与提交树一致，不断言削弱"
+  "note": "安全 #2720：审计身份绑定；旧 test_aiopen 断言改为可信 actor；ruff/format；基线与提交树一致"
 }
