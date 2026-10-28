@@ -225,7 +225,7 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   await Promise.resolve()
   expect(writeText).toHaveBeenCalledWith('系统显示 "正常"。')
   expect(wrapper.get('.message-copy-btn').attributes('aria-label')).toBe(success ? '已复制' : '复制失败，请重试')
-  expect(wrapper.get('.message-copy-btn .fa-copy').exists()).toBe(true)
+  expect(wrapper.get(success ? '.message-copy-btn .fa-check' : '.message-copy-btn .fa-exclamation-triangle').exists()).toBe(true)
  })
 
 it.each([true, false])('uses the native desktop clipboard and reports accepted=%s', async success => {
