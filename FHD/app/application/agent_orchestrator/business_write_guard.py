@@ -52,9 +52,7 @@ def restore_worker_claim(reference):
     )
 
     run_id, owner_id, count = reference
-    execution = AgentTaskExecution(
-        run_id=run_id, task_id="", user_id="", execution_count=count
-    )
+    execution = AgentTaskExecution(run_id=run_id, task_id="", user_id="", execution_count=count)
     with worker_claim_scope(SQLAlchemyAgentRunRepository(), execution, owner_id):
         yield
 

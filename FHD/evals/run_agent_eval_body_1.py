@@ -96,6 +96,64 @@ def run_eval(path: Path = DEFAULT_TASKS_PATH) -> dict[str, Any]:
     }
 
 
+@contextmanager
+def _authenticated_route_fixture(client, *, tenant_id=7):
+    """Real test-owned host session; never bypass the production principal verifier."""
+    from datetime import timedelta
+    from uuid import uuid4
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app import db as host_db
+    from app.db.db_base import Base
+    from app.db.models.permission import DEFAULT_PERMISSIONS, Permission, Role
+    from app.db.models.user import Session as UserSession
+    from app.db.models.user import User
+    from app.domain.shared_services.session_service import SessionService
+    from app.utils.time import utc_now_naive
+
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
+        engine = create_engine("sqlite:///" + str(Path(root) / "fixture-host.sqlite"))
+        Base.metadata.create_all(engine)
+        factory = sessionmaker(bind=engine)
+        sid = uuid4().hex
+        with factory.begin() as db:
+            role = Role(name="user")
+            role.permissions = [
+                Permission(code=p["code"], name=p["name"]) for p in DEFAULT_PERMISSIONS
+            ]
+            db.add(role)
+            user = User(
+                username="fixture-" + sid,
+                password="unused",
+                tenant_id=tenant_id,
+                role="user",
+                tier="enterprise",
+            )
+            db.add(user)
+            db.flush()
+            db.add(
+                UserSession(
+                    session_id=sid, user_id=user.id, expires_at=utc_now_naive() + timedelta(hours=1)
+                )
+            )
+        previous = client.headers.get("X-Session-ID")
+        client.headers["X-Session-ID"] = sid
+        try:
+            with (
+                patch.object(host_db, "HostSessionLocal", factory),
+                patch("app.application.facades.session_facade.get_session_service", SessionService),
+            ):
+                yield
+        finally:
+            if previous is None:
+                client.headers.pop("X-Session-ID", None)
+            else:
+                client.headers["X-Session-ID"] = previous
+            engine.dispose()
+
+
 def run_task(task: dict[str, Any]) -> dict[str, Any]:
     kind = str(task.get("kind") or "")
     if kind == "agent_plan":

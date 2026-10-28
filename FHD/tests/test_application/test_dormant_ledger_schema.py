@@ -1,6 +1,6 @@
 """SQLite schema-only preparation, not ledger/executor readiness."""
 
-import importlib
+import importlib.util
 import multiprocessing
 import os
 from pathlib import Path
@@ -54,16 +54,22 @@ def test_default_optin_import_and_missing_schema_are_dormant(connection):
 
     before = dump(connection)
     tables = set(Base.metadata.tables)
-    importlib.reload(schema)
+    # Execute a fresh import without replacing exception identities used by other tests.
+    original_error = schema.LedgerSchemaError
+    spec = importlib.util.spec_from_file_location("ledger_schema_import_probe", schema.__file__)
+    assert spec is not None and spec.loader is not None
+    imported = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(imported)
+    assert schema.LedgerSchemaError is original_error
     assert set(Base.metadata.tables) == tables
-    assert schema.TABLE_NAME not in Base.metadata.tables
-    assert schema.prepare_business_action_schema(operations(connection)) is False
+    assert imported.TABLE_NAME not in Base.metadata.tables
+    assert imported.prepare_business_action_schema(operations(connection)) is False
     assert dump(connection) == before
-    with pytest.raises(schema.LedgerSchemaError, match="missing"):
-        schema.validate_business_action_schema(operations(connection))
+    with pytest.raises(imported.LedgerSchemaError, match="missing"):
+        imported.validate_business_action_schema(operations(connection))
     for value in ["true", 1, None, [], object()]:
-        with pytest.raises(schema.LedgerSchemaError, match="boolean"):
-            schema.prepare_business_action_schema(operations(connection), opt_in=value)
+        with pytest.raises(imported.LedgerSchemaError, match="boolean"):
+            imported.prepare_business_action_schema(operations(connection), opt_in=value)
     assert dump(connection) == before
 
 

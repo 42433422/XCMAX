@@ -17,9 +17,7 @@ from app.desktop_runtime.windows_catalog_files import (
     observe_sqlite_family,
 )
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "win32", reason="requires real Windows kernel"
-)
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="requires real Windows kernel")
 
 
 def make_database(target):

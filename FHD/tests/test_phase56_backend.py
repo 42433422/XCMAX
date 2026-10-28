@@ -218,7 +218,8 @@ def test_ai_chat_is_pro_source_and_merge_context() -> None:
         "查产品",
         {"ui_surface": "chat", "excel_analysis": {"sheet": "S1"}},
     )
-    assert ctx["user_id"] == "u1"
+    assert ctx["conversation_id"] == "u1"
+    assert "user_id" not in ctx  # A conversation label is not an authenticated actor.
     assert ctx["excel_analysis"]["sheet"] == "S1"
 
 

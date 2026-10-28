@@ -29,29 +29,20 @@ from app.application.agent_orchestrator.task_execution_repository import (
 )
 from app.fastapi_routes.domains.agent.agent_routes import router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant() -> None:
-    request = Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/agent/tasks",
-            "headers": [],
-            "query_string": b"",
-            "server": ("test", 80),
-            "client": ("test", 1),
-            "scheme": "http",
-        }
-    )
+def test_agent_principal_keeps_actor_but_uses_verified_tutorial_tenant(trusted_actor) -> None:
+    actor = trusted_actor(user_id=17, tenant_id=7)
+    request = actor.request
     request.state.tutorial_active = True
     request.state.tenant_id = 29
-    user = MagicMock(id=17, username="learner", tenant_id=7, tier="", role="user")
-    with patch("app.infrastructure.auth.agent_principal.resolve_session_user", return_value=user):
-        principal = require_agent_principal(request)
+    principal = require_agent_principal(request)
 
     assert principal.user_id == "17"
     assert principal.tenant_id == "29"
+    assert principal.actor_authorization["tenant_id"] == "7"
+    assert principal.actor_authorization["execution_tenant_id"] == "29"
 
 
 @pytest.fixture(autouse=True)

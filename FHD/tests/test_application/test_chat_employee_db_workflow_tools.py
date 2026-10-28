@@ -4,6 +4,7 @@ import pytest
 
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_workflow_registry_exposes_employee_and_business_db_tools():
@@ -706,10 +707,11 @@ def test_chat_formats_employee_and_business_db_outputs():
     assert "output_preview" in node_results[0]
 
 
-def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools):
+def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools, trusted_actor):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-employee",
@@ -759,7 +761,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools):
             user_id="u1",
             message="call quality-validator",
             source="pro",
-            context={},
+            context={**actor.context, "conversation_id": "u1"},
             file_context={},
         )
 
@@ -778,7 +780,7 @@ def test_ai_chat_dynamic_workflow_executes_employee_tool(local_tools):
             user_id="u1",
             message="确认",
             source="pro",
-            context={},
+            context={**actor.context, "conversation_id": "u1"},
             file_context={},
         )
 
@@ -1227,10 +1229,11 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
     assert result["data"]["data"]["workflow_status"] == {}
 
 
-def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools):
+def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools, trusted_actor):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-employee-normal",
@@ -1280,7 +1283,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools):
             user_id="u1",
             message="调用员工 quality-validator 检查这个包",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1299,7 +1302,7 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools):
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1316,10 +1319,12 @@ def test_ai_chat_explicit_employee_intent_runs_without_pro_source(local_tools):
 
 def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_source(
     local_tools,
+    trusted_actor,
 ):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-db-normal",
@@ -1373,7 +1378,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1392,7 +1397,7 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1408,10 +1413,11 @@ def test_ai_chat_explicit_business_db_intent_skips_excel_shortcut_without_pro_so
     assert params["_runtime_context"]["run_id"] == result["run_id"]
 
 
-def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools):
+def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools, trusted_actor):
 
     from app.application.ai_chat_app_service import AIChatApplicationService
 
+    actor = trusted_actor(role="admin")
     repo = InMemoryAgentRunRepository()
     plan = PlanGraph(
         plan_id="p-db-confirm-agent",
@@ -1465,7 +1471,7 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools):
             user_id="u1",
             message="请把客户 星光贸易 写入数据库",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 
@@ -1480,7 +1486,7 @@ def test_ai_chat_medium_risk_confirmation_continues_same_agent_run(local_tools):
             user_id="u1",
             message="确认",
             source=None,
-            context={"tool_execution_profile": "normal"},
+            context={**actor.context, "conversation_id": "u1", "tool_execution_profile": "normal"},
             file_context={},
         )
 

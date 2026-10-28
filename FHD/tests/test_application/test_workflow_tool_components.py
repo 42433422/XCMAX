@@ -14,9 +14,9 @@ from app.application.tools import workflow
 
 @pytest.fixture
 def dispatch_ports(monkeypatch):
+    from app.application.tools.workflow_tools import dispatch
     from app.domain.app_pure import employee_pack_runner
     from app.mod_sdk import employee_tool_registry, planner_native_tools
-    from app.services import tools_workflow_registered
 
     ports = {
         "employee_match": Mock(return_value=False),
@@ -32,9 +32,7 @@ def dispatch_ports(monkeypatch):
     monkeypatch.setattr(employee_tool_registry, "execute_employee_tool", ports["employee"])
     monkeypatch.setattr(planner_native_tools, "try_execute_native_planner_tool", ports["native"])
     monkeypatch.setattr(employee_pack_runner, "try_execute_employee_planner_tool", ports["legacy"])
-    monkeypatch.setattr(
-        tools_workflow_registered, "execute_registered_workflow_tool", ports["registered"]
-    )
+    monkeypatch.setattr(dispatch, "execute_registered_workflow_tool", ports["registered"])
     monkeypatch.setattr(workflow, "handle_excel_analysis", ports["analysis"])
     monkeypatch.setattr(workflow, "try_execute_business_db_tool", ports["business"])
     monkeypatch.setattr(workflow, "_resolve_new_tool_dispatch", ports["crud"])

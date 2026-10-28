@@ -67,9 +67,7 @@ def test_parent_order_sidecar_snapshots_and_recheck_contract():
     ]
     assert snapshot.main.path == target
     assert snapshot.sidecars == (("-wal", None), ("-shm", None), ("-journal", None))
-    assert [call[0] for call in api.calls[4:]] == ["snapshot-only"] * 3 + [
-        "native-handle-recheck"
-    ]
+    assert [call[0] for call in api.calls[4:]] == ["snapshot-only"] * 3 + ["native-handle-recheck"]
     snapshot.recheck_main_and_ancestors()
     assert api.calls[-1] == ("native-handle-recheck",)
 
@@ -127,9 +125,7 @@ def test_recheck_uses_original_held_handle_not_a_path_reopen():
 
 
 def test_json_request_is_lossless_and_distinguishes_create_from_compare_swap():
-    first = files.prepare_json_publication(
-        r"C:\owner\catalog.json", {"b": 2, "a": "值"}
-    )
+    first = files.prepare_json_publication(r"C:\owner\catalog.json", {"b": 2, "a": "值"})
     again = files.prepare_json_publication(
         str(first.target), {"a": "值", "b": 2}, expected_previous_sha256=first.sha256
     )

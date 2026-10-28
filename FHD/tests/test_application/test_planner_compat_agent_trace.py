@@ -14,6 +14,7 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
     XcagiCompatChatBatchBody,
     XcagiCompatChatBody,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _patch_planner(name, *args, **kwargs):
@@ -86,10 +87,10 @@ def _stream_trace_context():
         yield
 
 
-def _make_request() -> Request:
+def _make_request(headers=None) -> Request:
     scope = {
         "type": "http",
-        "headers": [],
+        "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
         "method": "POST",
         "path": "/api/ai/chat",
         "client": ("127.0.0.1", 12345),
@@ -108,9 +109,8 @@ def _sse_payloads(chunks: list[bytes]) -> list[dict]:
 
 
 @pytest.fixture
-def durable_compat_history(tmp_path, monkeypatch):
+def durable_compat_history(tmp_path, monkeypatch, trusted_actor):
     from contextlib import contextmanager
-    from types import SimpleNamespace
 
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -142,12 +142,8 @@ def durable_compat_history(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "app.domain.shared_services.conversation_service.notify_user", lambda **kwargs: None
     )
-    monkeypatch.setattr(
-        "app.infrastructure.auth.dependencies.resolve_session_user",
-        lambda req: SimpleNamespace(id=2),
-    )
-    monkeypatch.setattr("app.infrastructure.auth.tenant_context.resolve_tenant_id", lambda req: 1)
-    yield conversation, service
+    actor = trusted_actor(user_id=2, tenant_id=1)
+    yield conversation, service, actor
     engine.dispose()
 
 
@@ -158,7 +154,7 @@ async def test_compat_turn_survives_history_reload_without_duplicates(
 ):
     from app.application import planner_compat_service as compat
 
-    conversation, service = durable_compat_history
+    conversation, service, actor = durable_compat_history
     reply = {"success": True, "response": "客户 ID 10：联系人为验收员", "data": {}}
     body = XcagiCompatChatBody(
         message="查询客户 ID10",
@@ -212,7 +208,7 @@ async def test_compat_turn_survives_history_reload_without_duplicates(
     for _ in range(2):
         if route == "batch":
             await compat.execute_compat_chat_batch(
-                _make_request(),
+                _make_request(actor.headers),
                 XcagiCompatChatBatchBody(
                     messages=["查询客户 ID10", "继续查询"],
                     context=body.context,
@@ -220,10 +216,15 @@ async def test_compat_turn_survives_history_reload_without_duplicates(
                 ),
             )
         elif route == "stream":
-            chunks = [part async for part in compat.compat_chat_stream_async(_make_request(), body)]
+            chunks = [
+                part
+                async for part in compat.compat_chat_stream_async(
+                    _make_request(actor.headers), body
+                )
+            ]
             assert _sse_payloads(chunks)[0]["result"] == reply
         else:
-            result = await compat.execute_compat_chat(_make_request(), body)
+            result = await compat.execute_compat_chat(_make_request(actor.headers), body)
             assert result["response"] == reply["response"]
     rows = conversation.get_session_messages("history-session")
     assert len(rows) == (4 if route == "batch" else 2)
@@ -238,7 +239,7 @@ async def test_compat_history_rejects_body_owner_without_authenticated_actor(
 ):
     from app.application import planner_compat_service as compat
 
-    conversation, _ = durable_compat_history
+    conversation, _, _ = durable_compat_history
     monkeypatch.setattr(
         "app.infrastructure.auth.dependencies.resolve_session_user", lambda req: None
     )
@@ -254,6 +255,52 @@ async def test_compat_history_rejects_body_owner_without_authenticated_actor(
             user_id="2",
             context={"session_id": "history-session", "local_user_id": 2},
         ),
+    )
+    assert conversation.get_session_messages("history-session") == []
+
+
+@pytest.mark.asyncio
+async def test_anonymous_mainline_cannot_persist_under_body_owner(
+    durable_compat_history, monkeypatch
+):
+    from app.application import planner_compat_service as compat
+
+    conversation, service, _ = durable_compat_history
+    reply = {"success": True, "response": "anonymous reply"}
+
+    async def mainline(request, body):
+        # Use the same persistence operation as the real mainline finalizer.
+        service._persist_chat_turn(body.user_id, body.message, body.context, reply)
+        return reply
+
+    monkeypatch.setattr(compat, "_execute_compat_chat_impl", mainline)
+    result = await compat.execute_compat_chat(
+        _make_request(),
+        XcagiCompatChatBody(
+            message="hello",
+            user_id="2",
+            context={
+                "session_id": "history-session",
+                "local_user_id": 2,
+                "actor_id": 2,
+                "tenant_id": 1,
+            },
+        ),
+    )
+    assert result == reply
+    assert conversation.get_session_messages("history-session") == []
+
+
+@pytest.mark.parametrize(
+    "identity", [{}, {"local_user_id": "bad"}, {"actor_id": 0}, {"local_user_id": 2, "actor_id": 3}]
+)
+def test_history_rejects_missing_or_inconsistent_owner(identity, durable_compat_history):
+    conversation, service, _ = durable_compat_history
+    service._persist_chat_turn(
+        "2",
+        "hello",
+        {"session_id": "history-session", **identity},
+        {"success": True, "response": "reply"},
     )
     assert conversation.get_session_messages("history-session") == []
 

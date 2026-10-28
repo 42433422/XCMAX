@@ -31,12 +31,8 @@ def test_only_reviewed_finance_read_is_exempt():
         assert not get_tool_action_spec("finance", action).read_only
 
 
-@pytest.mark.parametrize(
-    "params", [{}, {"account_code": "1000"}, {"account_code": "missing"}]
-)
-def test_real_ledger_route_preserves_result_and_never_writes(
-    trusted_actor, monkeypatch, params
-):
+@pytest.mark.parametrize("params", [{}, {"account_code": "1000"}, {"account_code": "missing"}])
+def test_real_ledger_route_preserves_result_and_never_writes(trusted_actor, monkeypatch, params):
     actor = trusted_actor(permissions=["tool.finance.ledger_query"])
     denied = trusted_actor(role="no-finance", permissions=[])
     for tenant, number in ((7, "visible"), (8, "foreign")):
@@ -66,10 +62,7 @@ def test_real_ledger_route_preserves_result_and_never_writes(
         assert expected["total"] == 1 and expected["data"][0]["entry_no"] == "visible"
     elif params["account_code"] == "1000":
         assert expected["total"] == 1 and expected["data"][0]["entry_no"] == "visible"
-        assert (
-            expected["account"]["name"] == "visible"
-            and expected["data"][0]["debit"] == 1
-        )
+        assert expected["account"]["name"] == "visible" and expected["data"][0]["debit"] == 1
     else:
         assert expected == {"success": False, "message": "科目不存在", "data": []}
 
@@ -109,10 +102,7 @@ def test_real_ledger_route_preserves_result_and_never_writes(
             params={**params, "tenant_id": 8},
         )
         result = executor.execute(forged, runtime_context=actor.context)
-        assert (
-            result["success"] is False
-            and result["error_code"] == "tool_identity_override"
-        )
+        assert result["success"] is False and result["error_code"] == "tool_identity_override"
     finally:
         event.remove(Engine, "before_cursor_execute", read_sql_only)
     assert dump() == before

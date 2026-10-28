@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # System routes
@@ -19,12 +20,12 @@ from app.application.agent_orchestrator import InMemoryAgentRunRepository
 
 
 @pytest.fixture
-def system_client() -> TestClient:
+def system_client(trusted_actor) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 def test_system_config_get(system_client: TestClient) -> None:

@@ -1370,13 +1370,15 @@ jobs:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: |
           $ErrorActionPreference = 'Stop'
-          $pytestVersion = python -c "import tomllib; p=tomllib.load(open('uv.lock','rb')); v=[x['version'] for x in p['package'] if x['name']=='pytest']; assert len(v)==1; print(v[0])"
-          if ($LASTEXITCODE -ne 0) { throw 'Locked pytest version unavailable' }
-          python -m pip install --disable-pip-version-check "pytest==$pytestVersion"
-          if ($LASTEXITCODE -ne 0) { throw 'Locked pytest installation failed' }
+          # Import the real desktop package without installing unrelated audio/ML services.
+          $nativePackages = 'pytest,pytest-asyncio,pygments,sqlalchemy,annotated-doc,annotated-types,anyio,click,cryptography,fastapi,httpx,idna,orjson,pydantic,pydantic-core,python-dotenv,python-multipart,redis,setuptools,sniffio,starlette,typing-inspection,typing-extensions,zstandard'
+          $nativeRequirements = python -c "import sys,tomllib; p=tomllib.load(open('uv.lock','rb')); names=sys.argv[1].split(','); v={n:[x['version'] for x in p['package'] if x['name'].lower().replace('_','-')==n] for n in names}; assert all(len(x)==1 for x in v.values()); print(' '.join(n+'=='+v[n][0] for n in names))" $nativePackages
+          if ($LASTEXITCODE -ne 0) { throw 'Locked native test dependencies unavailable' }
+          python -m pip install --disable-pip-version-check ($nativeRequirements -split ' ')
+          if ($LASTEXITCODE -ne 0) { throw 'Native catalog dependencies installation failed' }
           python -c "import sys; assert sys.platform == 'win32', 'Native Windows execution required'"
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows runtime unavailable' }
-          python -m pytest --noconftest -o addopts= -p no:cacheprovider -q tests/test_desktop/test_windows_catalog_files_native.py --junitxml=windows-catalog-native.xml
+          python -m pytest --noconftest -o addopts= -p no:cacheprovider -p pytest_asyncio.plugin -q tests/test_desktop/test_windows_catalog_files_native.py --junitxml=windows-catalog-native.xml
           if ($LASTEXITCODE -ne 0) { throw 'Native catalog observation tests failed' }
           @'
           import xml.etree.ElementTree as ET

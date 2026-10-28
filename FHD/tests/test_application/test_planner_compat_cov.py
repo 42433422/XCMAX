@@ -755,8 +755,7 @@ async def test_batch_mode_offline():
 
 async def test_stream_user_id_from_header():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(side_effect=lambda k: "42" if k == "X-User-Id" else None)
+    req.headers = {"X-User-Id": "42"}
 
     body = _body(message="stream msg", user_id=None, system_prompt=None)
 
@@ -782,8 +781,7 @@ async def test_stream_user_id_from_header():
 
 async def test_stream_persona_industry_from_ctx():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream with persona",
@@ -823,8 +821,7 @@ async def test_stream_persona_industry_from_ctx():
 
 async def test_stream_persona_industry_from_derive():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream derive industry",

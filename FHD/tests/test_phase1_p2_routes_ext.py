@@ -10,6 +10,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
 # ---------------------------------------------------------------------------
 # Conversation compat (stream / batch / context)
 # ---------------------------------------------------------------------------
@@ -417,12 +419,12 @@ def test_customers_post_ok(
 
 
 @pytest.fixture
-def system_client() -> TestClient:
+def system_client(trusted_actor) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 @patch("app.application.facades.session_facade.get_system_service")

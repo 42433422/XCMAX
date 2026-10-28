@@ -6,18 +6,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client() -> TestClient:
+def _client(actor) -> TestClient:
     from app.fastapi_routes.tools_execute import router
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_domain = Mock()
@@ -33,7 +34,7 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
         ),
         patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr_domain),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/tools/execute",
             json={
                 "tool_id": "ocr",
@@ -56,7 +57,7 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     assert run.status == "completed"
     assert run.intent == "tools_execute_ocr_request"
     assert run.tool_calls[0].tool_id == "ocr"
@@ -66,7 +67,7 @@ def test_tools_execute_route_runs_registered_tool_through_agent_orchestrator(
 
 
 def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     ocr_domain = Mock()
@@ -82,7 +83,7 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
         ),
         patch("app.neuro_bus.domains.ocr_domain.get_ocr_domain", return_value=ocr_domain),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/skills/execute",
             json={
                 "skill_id": "ocr",
@@ -113,6 +114,7 @@ def test_skills_execute_route_runs_registered_skill_through_agent_orchestrator(
 def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
     tmp_path,
     monkeypatch,
+    trusted_actor,
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -123,7 +125,7 @@ def test_tools_execute_route_puts_medium_risk_tool_behind_confirmation(
         "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
         return_value=repo,
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/tools/execute",
             json={
                 "tool_id": "business_db",

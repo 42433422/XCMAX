@@ -103,6 +103,9 @@ def test_client_cannot_supply_or_replace_mod_authorization():
 def test_authenticated_request_binds_server_session_without_persisting_token(
     mod_session, monkeypatch
 ):
+    # Authorization re-reads the persisted session owner, not the resolver stub.
+    with mod_session.begin() as db:
+        db.query(User).filter_by(id=1).one().tenant_id = 7
     monkeypatch.setattr(
         "app.infrastructure.auth.agent_principal.resolve_session_user",
         lambda request: SimpleNamespace(id=1, username="mod-owner", tenant_id=7),

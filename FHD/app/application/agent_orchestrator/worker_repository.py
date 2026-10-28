@@ -21,9 +21,7 @@ def lock_execution_claim(db, *, run_id, owner_id, execution_count):
             AgentTaskExecutionRecord.execution_count == execution_count,
             AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
         )
-        .update(
-            {AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False
-        )
+        .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
     )
     if owned != 1:
         raise WorkerLeaseLost("worker lease expired or replaced before business write")

@@ -98,7 +98,7 @@ class TestIsProSource:
 class TestMergeToolRuntimeContext:
     def test_basic_merge(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello")
-        assert result["user_id"] == "u1"
+        assert result["conversation_id"] == "u1"
         assert result["message"] == "hello"
 
     def test_context_ui_surface(self):
@@ -122,7 +122,7 @@ class TestMergeToolRuntimeContext:
 
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hi", None)
-        assert result == {"user_id": "u1", "message": "hi", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hi", "tenant_id": "1"}
 
 
 # ========================= _build_fallback_response ======================

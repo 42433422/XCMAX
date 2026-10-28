@@ -377,12 +377,12 @@ class TestExecuteWorkflowTool:
                 create=True,
             ),
             patch(
-                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
-                create=True,
-            ),
+            ) as dispatch,
         ):
             result = self._call("template_preview", {"action": "view"})
+            dispatch.assert_called_once_with("template_preview", "view", {"action": "view"})
         data = json.loads(result)
         assert "result" in data
 

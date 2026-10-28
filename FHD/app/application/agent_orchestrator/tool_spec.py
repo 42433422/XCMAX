@@ -292,6 +292,32 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             idempotent=False,
             version="catalog-price-v1",
             availability="shared",
+            # Schema examples only: no session, approval, source binding or receipt authority.
+            contract_samples=[
+                {
+                    "name": "synthetic_unverified_price_request",
+                    "input": {
+                        "operation_id": "00000000-0000-4000-8000-000000000001",
+                        "product_id": 1,
+                        "revision": "0" * 64,
+                        "action": action,
+                        "price": "12.00",
+                        "period_start": "2026-02-01",
+                        "period_end": "2026-03-01",
+                        "selected_sources": ["1" * 64] if action == "correct_price" else [],
+                        "reason": "Synthetic contract example; not an authorized write",
+                        "confirmed": True,
+                    },
+                    "output": {
+                        "success": False,
+                        "error_code": "catalog_verification_required",
+                        "outcome": "unknown",
+                        "retryable": False,
+                        "message": "查询未能在已授权数据范围内完成",
+                        "reconciliation_required": True,
+                    },
+                }
+            ],
         )
         specs[(spec.tool_id, spec.action)] = spec
     return specs

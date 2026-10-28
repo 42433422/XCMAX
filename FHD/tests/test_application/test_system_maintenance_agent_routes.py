@@ -6,14 +6,15 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client() -> TestClient:
+def _client(actor) -> TestClient:
     from app.fastapi_routes.domains.system.system_routes import router
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 def _patch_agent_repo(repo: InMemoryAgentRunRepository):
@@ -30,7 +31,7 @@ def _configure_billing(monkeypatch, tmp_path) -> None:
 
 
 def test_system_printer_post_executes_system_maintenance_tool_through_agent(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -41,7 +42,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
         _patch_agent_repo(repo),
         patch("app.application.facades.session_facade.get_system_service", return_value=service),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/system/printer",
             json={"printer_name": "HP"},
             headers={"X-User-Id": "tenant-a"},
@@ -55,7 +56,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     assert run.status == "completed"
     assert run.intent == "system_maintenance_set_default_printer"
     assert run.steps[0].risk == "medium"
@@ -69,7 +70,7 @@ def test_system_printer_post_executes_system_maintenance_tool_through_agent(
 
 
 def test_database_restore_executes_system_maintenance_tool_through_agent(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -80,7 +81,7 @@ def test_database_restore_executes_system_maintenance_tool_through_agent(
         _patch_agent_repo(repo),
         patch("app.application.facades.session_facade.get_database_service", return_value=service),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/database/restore",
             json={"backup_file": "backup.sql"},
             headers={"X-User-Id": "tenant-a"},
@@ -102,7 +103,7 @@ def test_database_restore_executes_system_maintenance_tool_through_agent(
 
 
 def test_performance_cache_invalidate_executes_system_maintenance_tool_through_agent(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -116,7 +117,7 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
             return_value=optimizer,
         ),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/performance/cache/invalidate",
             json={"keys": ["k1"]},
             headers={"X-User-Id": "tenant-a"},
@@ -137,7 +138,7 @@ def test_performance_cache_invalidate_executes_system_maintenance_tool_through_a
 
 
 def test_performance_reinitialize_executes_system_maintenance_tool_through_agent(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     _configure_billing(monkeypatch, tmp_path)
@@ -151,7 +152,7 @@ def test_performance_reinitialize_executes_system_maintenance_tool_through_agent
             return_value=optimizer,
         ),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/performance/optimize/reinitialize",
             headers={"X-User-Id": "tenant-a"},
         )

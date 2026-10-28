@@ -122,9 +122,7 @@ class _NativeFiles:
 
     def _identity(self, handle, path, directory):
         info = _FileInfo()
-        self._require(
-            self.kernel.GetFileInformationByHandle(handle, ctypes.byref(info))
-        )
+        self._require(self.kernel.GetFileInformationByHandle(handle, ctypes.byref(info)))
         buffer = ctypes.create_unicode_buffer(32768)
         size = self.kernel.GetFinalPathNameByHandleW(handle, buffer, len(buffer), 0)
         if not size or size >= len(buffer) or not buffer.value.startswith("\\\\?\\"):
@@ -138,9 +136,7 @@ class _NativeFiles:
             or (not directory and info.links != 1)
             or not file_id
         ):
-            raise WindowsCatalogUnsupported(
-                "reparse, alias, hardlink or native identity refused"
-            )
+            raise WindowsCatalogUnsupported("reparse, alias, hardlink or native identity refused")
         return FileObservation(actual, info.volume, file_id)
 
     def _close(self, handle):
@@ -230,9 +226,7 @@ class JsonPublicationRequest:
     expected_previous_sha256: str | None  # None requires atomic no-clobber creation.
 
 
-def prepare_json_publication(
-    target: str, value: dict, *, expected_previous_sha256=None
-):
+def prepare_json_publication(target: str, value: dict, *, expected_previous_sha256=None):
     """Pure request encoding only; not a publication, receipt or durable proof."""
     target = _local_path(target)
     if not isinstance(value, dict) or (
@@ -264,9 +258,7 @@ def publish_catalog_json(target: str, value: dict, *, expected_previous_sha256=N
     durable namespace acknowledgement. File flush or os.replace alone is not that
     contract. Callers must not turn this refusal into OPEN or an effect receipt.
     """
-    prepare_json_publication(
-        target, value, expected_previous_sha256=expected_previous_sha256
-    )
+    prepare_json_publication(target, value, expected_previous_sha256=expected_previous_sha256)
     raise WindowsCatalogUnsupported(
         "native durable JSON publication unavailable; no write attempted"
     )

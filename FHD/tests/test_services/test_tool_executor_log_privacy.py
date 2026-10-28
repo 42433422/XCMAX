@@ -9,7 +9,7 @@ from app.services.tools_execution import executor
 
 @pytest.mark.parametrize("route", ["registered", "legacy", "error"])
 def test_tool_execution_never_logs_request_or_exception_values(monkeypatch, caplog, route):
-    secret = "synthetic-private-canary-8731"
+    secret = "test-only-xxxxxxxxxxxxxxxxxxxxxxxx"
     payload = {
         "tool_id": secret,
         "action": secret,
