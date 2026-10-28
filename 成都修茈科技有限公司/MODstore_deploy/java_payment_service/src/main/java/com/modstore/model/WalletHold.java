@@ -43,6 +43,9 @@ public class WalletHold {
     @Column(name = "idempotency_key", nullable = false, unique = true, length = 128)
     private String idempotencyKey;
 
+    @Column(name = "billing_source", nullable = false, length = 16, columnDefinition = "VARCHAR(16) DEFAULT 'legacy'")
+    private String billingSource = "legacy";
+
     @Column(name = "preauth_transaction_id")
     private Long preauthTransactionId;
 
