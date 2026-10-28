@@ -370,16 +370,17 @@ def test_mcp_initialize_session_header(client, monkeypatch):
 
 
 def test_ui_tool_without_session(client, monkeypatch):
+    """Env/unbound keys authenticate the service but cannot operate screens."""
     monkeypatch.setenv("AIOPEN_API_KEY", "fixture-aiopen-key")
     AIOPEN_STATE["remote_control_enabled"] = True
     resp = client.post(
         "/api/aiopen/invoke",
         json={"tool": "ui_snapshot", "args": {}},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 403
     body = resp.json()
     assert body["success"] is False
-    assert "虚拟光标会话" in body["message"]
+    assert body["code"] == "SCREEN_PRINCIPAL_REQUIRED"
 
 
 def test_ui_tool_blocked_when_remote_control_off(client, monkeypatch):
@@ -551,10 +552,15 @@ def test_qclaw_openclaw_chat_attaches_agent_run(client):
 
 
 def test_screen_ws_command_roundtrip(client, monkeypatch):
-    """A trusted authenticated screen receives a server-owned session identifier."""
+    """A trusted authenticated screen is visible only to a matching bound key."""
+    from app.application.aiopen.service import generate_api_key
+    from app.domain.aiopen.principal import ScreenPrincipal
     from app.fastapi_routes import ai_open as ai_open_routes
 
     AIOPEN_STATE["remote_control_enabled"] = True
+    owner = ScreenPrincipal.from_ids(27, 42)
+    assert owner is not None
+    issued = generate_api_key("pytest-screen", principal=owner)["key"]
     monkeypatch.setattr(
         ai_open_routes,
         "resolve_session_user",
@@ -570,7 +576,9 @@ def test_screen_ws_command_roundtrip(client, monkeypatch):
         assert session_id != "attacker_supplied"
 
         sessions = client.post(
-            "/api/aiopen/invoke", json={"tool": "ui_sessions", "args": {}}
+            "/api/aiopen/invoke",
+            json={"tool": "ui_sessions", "args": {}},
+            headers={"X-AIOPEN-Key": issued},
         ).json()
         assert any(s["session_id"] == session_id for s in sessions["sessions"])
 

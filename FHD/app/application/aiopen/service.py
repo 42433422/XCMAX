@@ -17,6 +17,7 @@ from typing import Any
 
 from starlette.types import ASGIApp
 
+from app.domain.aiopen.principal import ScreenPrincipal
 from app.infrastructure.aiopen.cursor_hub import aiopen_cursor_hub
 from app.infrastructure.mods.manifest import host_xcagi_version
 
@@ -164,8 +165,14 @@ def verify_api_key(provided: str | None) -> bool:
     return _keys.verify(provided)
 
 
-def generate_api_key(label: str = "") -> dict[str, Any]:
-    return _keys.generate(label)
+def generate_api_key(
+    label: str = "", *, principal: ScreenPrincipal | None = None
+) -> dict[str, Any]:
+    return _keys.generate(label, principal=principal)
+
+
+def resolve_api_key_principal(provided: str | None) -> ScreenPrincipal | None:
+    return _keys.resolve_principal(provided)
 
 
 def revoke_api_key(key: str | None) -> bool:
