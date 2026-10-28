@@ -1,5 +1,5 @@
 {
-  "lines": 2352108,
+  "lines": 2352112,
   "updated": "2026-10-28",
-  "note": "安全 #2721：AIOPEN 屏幕按可信 owner/tenant 授权（叠 main #2686+#2720）；含 principal 绑定、WS ownership 用例对齐、结构门禁 G2 299/116；屏幕客户端需管理员重签 Key；实测 2352108"
+  "note": "安全 #2721：ruff format 展开 WS ownership 用例换行（+4）；叠 main #2686+#2720；屏幕客户端需管理员重签 Key；实测 2352112"
 }
