@@ -1,4 +1,5 @@
 """Bind screen authority from verified credentials, never headers claiming a user ID."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator

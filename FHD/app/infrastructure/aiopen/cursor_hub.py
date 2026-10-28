@@ -72,7 +72,8 @@ class AiOpenCursorHub:
     def session_ids(self) -> list[str]:
         principal = current_screen_principal()
         return [
-            sid for sid in self._sessions
+            sid
+            for sid in self._sessions
             if principal is not None and principal.owns(self._session_meta.get(sid, {}))
         ]
 
@@ -92,14 +93,20 @@ class AiOpenCursorHub:
         """Authorize the exact owner and tenant before selecting or sending to a screen."""
         principal = current_screen_principal()
         if principal is None:
-            return {"success": False, "code": "SCREEN_PRINCIPAL_REQUIRED",
-                    "message": "需要绑定用户与租户的屏幕访问凭据"}
+            return {
+                "success": False,
+                "code": "SCREEN_PRINCIPAL_REQUIRED",
+                "message": "需要绑定用户与租户的屏幕访问凭据",
+            }
         authorized = self.session_ids()
         target = session_id or (authorized[0] if authorized else None)
         if not target or target not in authorized:
             # Missing and foreign targets are intentionally indistinguishable.
-            return {"success": False, "code": "SCREEN_NOT_AUTHORIZED",
-                    "message": "目标屏幕不可访问"}
+            return {
+                "success": False,
+                "code": "SCREEN_NOT_AUTHORIZED",
+                "message": "目标屏幕不可访问",
+            }
         ws = self._sessions[target]
         req_id = uuid.uuid4().hex
         payload = {
@@ -173,8 +180,7 @@ class AiOpenCursorHub:
     def recent_commands(self, limit: int = 50) -> list[dict[str, Any]]:
         principal = current_screen_principal()
         owned = [
-            entry for entry in self._command_log
-            if principal is not None and principal.owns(entry)
+            entry for entry in self._command_log if principal is not None and principal.owns(entry)
         ]
         return [dict(entry) for entry in owned[-max(1, int(limit)) :]]
 

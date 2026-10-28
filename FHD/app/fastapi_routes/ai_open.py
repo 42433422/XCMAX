@@ -195,7 +195,9 @@ async def aiopen_invoke(
     result = await invoke_tool(tool, args, request.app)
     status = 200
     if result.get("code") in {
-        "ROUTE_NOT_WHITELISTED", "SCREEN_NOT_AUTHORIZED", "SCREEN_PRINCIPAL_REQUIRED"
+        "ROUTE_NOT_WHITELISTED",
+        "SCREEN_NOT_AUTHORIZED",
+        "SCREEN_PRINCIPAL_REQUIRED",
     }:
         status = 403
     elif result.get("code") == "UNKNOWN_TOOL":

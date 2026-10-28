@@ -1,4 +1,5 @@
 """Trusted, immutable owner/tenant binding for an AIOPEN screen capability."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,4 +1,5 @@
 """Request-scoped screen authority; reset on errors, cancellation and normal exit."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
