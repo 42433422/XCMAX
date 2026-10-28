@@ -11,8 +11,13 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.domain.aiopen.principal import ScreenPrincipal
 from app.fastapi_routes import ai_open as ai_open_routes
 from app.infrastructure.aiopen.cursor_hub import AiOpenCursorHub
+from app.infrastructure.aiopen.principal_context import screen_principal_scope
+
+OWNER = ScreenPrincipal("owner", "tenant-a")
+IMPOSTOR = ScreenPrincipal("impostor", "tenant-a")
 
 
 @pytest.mark.parametrize(
@@ -77,23 +82,33 @@ async def test_screen_acknowledgements_bound_to_own_connection():
     hub = AiOpenCursorHub()
 
     class FakeSocket:
-        sent: str = ""
+        def __init__(self) -> None:
+            self.sent = ""
 
         async def send_text(self, data: str) -> None:
             self.sent = data
 
     owner = FakeSocket()
     impostor = FakeSocket()
-    await hub.connect("owner", owner)
-    await hub.connect("impostor", impostor)
-    work = asyncio.create_task(hub.dispatch("snapshot", {}, session_id="owner", timeout=1))
-    await asyncio.sleep(0)
-    command = json.loads(owner.sent)
-    reply = json.dumps({"id": command["id"], "result": {"success": True, "data": "ok"}})
-    assert hub.handle_client_message(reply, session_id="impostor") is False
-    assert not work.done()
-    assert hub.handle_client_message(reply, session_id="owner") is True
-    assert (await work)["data"] == "ok"
+    await hub.connect(
+        "owner",
+        owner,
+        {"principal_id": OWNER.principal_id, "tenant_id": OWNER.tenant_id},
+    )
+    await hub.connect(
+        "impostor",
+        impostor,
+        {"principal_id": IMPOSTOR.principal_id, "tenant_id": IMPOSTOR.tenant_id},
+    )
+    with screen_principal_scope(OWNER):
+        work = asyncio.create_task(hub.dispatch("snapshot", {}, session_id="owner", timeout=1))
+        await asyncio.sleep(0)
+        command = json.loads(owner.sent)
+        reply = json.dumps({"id": command["id"], "result": {"success": True, "data": "ok"}})
+        assert hub.handle_client_message(reply, session_id="impostor") is False
+        assert not work.done()
+        assert hub.handle_client_message(reply, session_id="owner") is True
+        assert (await work)["data"] == "ok"
     await hub.disconnect("owner")
     await hub.disconnect("impostor")
 
@@ -101,14 +116,20 @@ async def test_screen_acknowledgements_bound_to_own_connection():
 @pytest.mark.asyncio
 async def test_disconnected_screen_cannot_leave_pending_command_running():
     hub = AiOpenCursorHub()
+    screen = ScreenPrincipal("screen", "tenant-a")
 
     class FakeSocket:
         async def send_text(self, data: str) -> None:
             return None
 
-    await hub.connect("screen", FakeSocket())
-    work = asyncio.create_task(hub.dispatch("click", {}, session_id="screen", timeout=5))
-    await asyncio.sleep(0)
-    await hub.disconnect("screen")
-    result = await asyncio.wait_for(work, timeout=1)
+    await hub.connect(
+        "screen",
+        FakeSocket(),
+        {"principal_id": screen.principal_id, "tenant_id": screen.tenant_id},
+    )
+    with screen_principal_scope(screen):
+        work = asyncio.create_task(hub.dispatch("click", {}, session_id="screen", timeout=5))
+        await asyncio.sleep(0)
+        await hub.disconnect("screen")
+        result = await asyncio.wait_for(work, timeout=1)
     assert result["code"] == "SCREEN_DISCONNECTED"
