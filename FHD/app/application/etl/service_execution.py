@@ -86,6 +86,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             require_unrolled_back=True,
         )
         bind_owner(db, operation)
+        committed = False
         try:
             # The ownership update locks this run. Read again under that lock,
             # rather than approving a stale ORM snapshot before a concurrent edit.
@@ -116,12 +117,14 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             run.error_message = None
             tenant_id = tenant_id_for_write()
             db.commit()
-        except BaseException:
-            # Rejected approval must not leave a durable lease or fail the run.
-            db.rollback()
-            raise
+            committed = True
         finally:
-            unbind_owner(db)
+            try:
+                # Rejected approval must not leave a durable lease or fail the run.
+                if not committed:
+                    db.rollback()
+            finally:
+                unbind_owner(db)
         try:
             self._submit_execution(
                 run.id, tenant_id, owner_user_id, valid_rows_only, operation_token=operation.token

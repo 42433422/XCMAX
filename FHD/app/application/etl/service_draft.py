@@ -105,6 +105,7 @@ class DraftServiceMixin:
             require_unrolled_back=True,
         )
         bind_owner(db, operation)
+        committed = False
         try:
             db.refresh(run)
             # Build from the latest draft only after obtaining the existing run lock.
@@ -120,11 +121,13 @@ class DraftServiceMixin:
             run.error_message = None
             tenant_id = tenant_id_for_write()
             db.commit()
-        except BaseException:
-            db.rollback()
-            raise
+            committed = True
         finally:
-            unbind_owner(db)
+            try:
+                if not committed:
+                    db.rollback()
+            finally:
+                unbind_owner(db)
         self._submit_revalidation(
             run.id,
             tenant_id,
