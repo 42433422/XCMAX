@@ -26,7 +26,8 @@ it('opens ticket results outside the chat layout and restores focus when closed'
   const { wrapper } = await setup(false)
   const trigger = wrapper.get('.repair-acceptance > button')
   expect(wrapper.find('dialog').exists()).toBe(false)
-  expect(trigger.text()).toBe('问题工单处理结果（1）')
+  expect(trigger.text()).toContain('问题工单处理结果')
+  expect(trigger.get('.repair-count').text()).toBe('1')
   await trigger.trigger('click')
   expect(wrapper.get('dialog').attributes('open')).toBeDefined()
   expect(wrapper.get('article').text()).toContain('保存订单失败')
@@ -34,6 +35,14 @@ it('opens ticket results outside the chat layout and restores focus when closed'
   expect(wrapper.find('dialog').exists()).toBe(false)
   expect(trigger.attributes('aria-expanded')).toBe('false')
   expect(apiFetch).toHaveBeenCalledTimes(1)
+  wrapper.unmount()
+})
+
+it('keeps an entry available when there are no tickets', async () => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(response([]))
+  const { wrapper } = await setup(false)
+  await wrapper.get('.repair-trigger').trigger('click')
+  expect(wrapper.get('dialog').text()).toContain('当前没有待核对的工单')
   wrapper.unmount()
 })
 

@@ -23,6 +23,7 @@ interface Window {
       }
     }>
     getDataDir: () => Promise<string>
+    clipboardWriteText?: (text: string) => Promise<{ ok: boolean; reason?: string }>
     /** One-shot, local-only renderer entry hint from Electron's persisted cookie store. */
     consumeBootstrapSessionHint?: () => Promise<boolean>
     checkForUpdates: () => Promise<unknown>

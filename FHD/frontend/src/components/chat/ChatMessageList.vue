@@ -114,8 +114,8 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
-          <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg)">
-            {{ copyLabels.get(msg) || '复制' }}
+          <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :aria-label="copyLabels.get(msg) || '复制正文'" :title="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg)">
+            <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
           <button
             v-if="msg.role === 'ai' && canSpeakMessage(msg)"
@@ -203,7 +203,13 @@ async function copyMessage(message: ChatMessage) {
   const text = copyableBody(message)
   if (!text) return
   try {
-    await navigator.clipboard.writeText(text)
+    const desktop = window.xcagiDesktop?.clipboardWriteText
+    if (desktop) {
+      const result = await desktop(text)
+      if (!result?.ok) throw new Error('clipboard denied')
+    } else {
+      await navigator.clipboard.writeText(text)
+    }
     copyLabels.value.set(message, '已复制')
   } catch {
     copyLabels.value.set(message, '复制失败，请重试')

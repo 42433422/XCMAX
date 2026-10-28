@@ -9,6 +9,7 @@ import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/u
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
 usePrivateDeliverySync()
@@ -31,6 +32,11 @@ usePrivateDeliverySync()
         <!-- 管理端与桌面壳不用 out-in：后台窗口的 requestAnimationFrame 可能暂停并卡住旧页面。 -->
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
+        <RouteErrorBoundary v-else-if="!isAdminConsoleSpa()" :path="route.fullPath">
+          <keep-alive :key="productReadAccountEpoch" :max="12">
+            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+          </keep-alive>
+        </RouteErrorBoundary>
         <RouteErrorBoundary v-else :path="route.fullPath">
           <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
         </RouteErrorBoundary>

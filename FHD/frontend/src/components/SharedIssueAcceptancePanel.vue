@@ -123,17 +123,17 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <section v-if="repairs.length || error || failed || opened" class="repair-acceptance">
-    <button ref="trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults">问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败</span></button>
+  <section class="repair-acceptance">
+    <button ref="trigger" class="repair-trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults"><i class="fa fa-clipboard" aria-hidden="true"></i> 问题工单处理结果 <span class="repair-count">{{ repairs.length }}</span><span v-if="error || failed" class="repair-warning">同步或保存失败</span></button>
     <Teleport to="body">
     <dialog v-if="opened" ref="dialog" aria-label="问题工单处理结果" class="repair-dialog" @cancel.prevent="closeResults" @click="($event.target === dialog) && closeResults()">
-    <header><strong>问题工单处理结果（{{ repairs.length }}）</strong><button type="button" :disabled="loading || busy !== null" @click="refresh">刷新</button><button type="button" autofocus @click="closeResults">关闭</button></header>
+    <header><div><strong>问题工单处理结果</strong><p>查看处理进度，并反馈验证结果</p></div><div class="repair-actions"><button type="button" :disabled="loading || busy !== null" @click="refresh">刷新</button><button type="button" autofocus @click="closeResults">关闭</button></div></header>
     <div class="repair-list">
     <p v-if="loading" role="status">正在同步工单…</p>
     <p v-else-if="!repairs.length && !error && !failed">当前没有待核对的工单。</p>
     <p v-if="error || failed" role="alert">{{ error || failed?.message }} <button type="button" :disabled="busy !== null" @click="retry">重试</button></p>
     <article v-for="repair in repairs" :key="repair.id">
-      <strong>{{ repair.ticket_no }}</strong>
+      <strong class="repair-ticket">{{ repair.ticket_no }}</strong>
       <details class="repair-description"><summary>{{ repair.summary.slice(0, 64) }}{{ repair.summary.length > 64 ? '…' : '' }}</summary><p>{{ repair.summary }}</p></details>
       <p>{{ stateText(repair) }}</p>
       <p v-if="repair.latest_result?.progress">AI 处理结果：{{ repair.latest_result.progress }}</p>
@@ -160,18 +160,25 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 
 <style scoped>
 .repair-acceptance { flex: none; min-width: 0; }
-.repair-dialog { box-sizing: border-box; width: min(720px, calc(100vw - 32px)); max-height: 80dvh; padding: 0; border: 1px solid var(--xc-color-border, #ddd); border-radius: 12px; color: var(--xc-color-text, #1f2329); background: var(--xc-color-surface, #fff); }
+.repair-trigger { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d8e4f4; border-radius: 999px; background: #f3f7ff; color: #245ca6; font: inherit; font-size: 13px; }
+.repair-trigger:hover { background: #e5efff; }
+.repair-count { min-width: 20px; padding: 1px 5px; border-radius: 999px; background: #dbeafe; text-align: center; }
+.repair-dialog { box-sizing: border-box; width: min(720px, calc(100vw - 32px)); max-height: 80dvh; padding: 0; border: 1px solid var(--xc-color-border, #ddd); border-radius: 16px; color: var(--xc-color-text, #1f2329); background: var(--xc-color-surface, #fff); box-shadow: 0 20px 60px #172b4d40; }
 .repair-dialog::backdrop { background: #0006; }
-.repair-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
-.repair-list { max-height: 65dvh; overflow: auto; padding: 0 16px 16px; overflow-wrap: anywhere; }
+.repair-dialog header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 18px 20px; border-bottom: 1px solid #e7edf5; }
+.repair-dialog header strong { font-size: 17px; }
+.repair-dialog header p { color: #64748b; font-size: 13px; }
+.repair-list { max-height: 60dvh; overflow: auto; padding: 4px 20px 20px; overflow-wrap: anywhere; }
 .repair-description summary { font-weight: normal; line-height: 1.5; }
-article { padding: 8px 0; border-top: 1px solid var(--border-color, #ddd); }
+article { padding: 16px; border: 1px solid #e3eaf3; border-radius: 12px; background: #f9fbfe; }
+.repair-ticket { color: #245ca6; }
 summary { cursor: pointer; }
-.repair-acceptance span { color: var(--xc-color-danger, #b42318); }
+.repair-warning { color: var(--xc-color-danger, #b42318); }
 article + article { margin-top: 16px; }
 p { margin: 8px 0; }
 input { box-sizing: border-box; display: block; margin: 8px 0; padding: 8px; width: min(360px, 100%); max-width: 100%; }
 button { padding: 8px 12px; cursor: pointer; }
+.repair-dialog button { border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1f2937; }
 button + button { margin-left: 8px; }
 button:disabled { cursor: default; opacity: .6; }
 </style>
