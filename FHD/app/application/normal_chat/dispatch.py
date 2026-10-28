@@ -71,6 +71,13 @@ def _admitted_text(
     logger: logging.Logger,
 ) -> str | None:
     text = str(message or "").strip()
+    from app.application.ai_chat.workflow_session import CANCEL_WORDS, CONFIRM_WORDS
+
+    # Control messages belong to the authenticated workflow/session handler,
+    # including its explicit no-pending reply. A raw conversation identifier
+    # cannot find scoped pending keys and must not send controls to intent AI.
+    if text.lower().rstrip("。.!！") in CONFIRM_WORDS | CANCEL_WORDS:
+        return None
     if not text or (user_id is not None and has_pending_workflow(user_id)):
         return None
     if explicit_workflow_intent(text):

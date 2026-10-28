@@ -1,6 +1,5 @@
 import hashlib
 import json
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -166,7 +165,11 @@ def test_test_candidate_keeps_explicit_frozen_upgrade_baselines() -> None:
         "from_sha",
         "to_version",
         "to_sha",
-        "product_from",
+        "toolchain_from",
+        "from_short",
+        "to_short",
+        "from_same_prefix",
+        "to_same_prefix",
         "toolchain_to",
         "suffix",
         "mode",
@@ -179,24 +182,14 @@ def test_snapshot_identity_contract_rejects_wrong_version_or_sha(baseline, chang
         "windows_acceptance_baselines"
     ][baseline]
     values = {
-        "baselineToolchainVersion": record["toolchain_version"],
         "OldSha": record["git_sha"],
-        "productVersion": "1.0.0.7",
         "CandidateSha": "a" * 40,
     }
-    assert values["baselineToolchainVersion"] == "1.0.0"
-    assert "$baselineToolchainVersion = $baseline.toolchain_version" in collector
     assert "throw 'Unknown frozen acceptance baseline'" in collector
-    expected = {}
-    for field in ("From", "To"):
-        version, sha = re.search(
-            rf'\$expected{field}Version = "\$(\w+)\+\$\(\$(\w+)\.Substring\(0, 12\)\)"', collector
-        ).groups()
-        assert (version, sha) == {
-            "From": ("baselineToolchainVersion", "OldSha"),
-            "To": ("productVersion", "CandidateSha"),
-        }[field]
-        expected[field] = f"{values[version]}+{values[sha][:12]}"
+    expected = {"From": f"{baseline}+{values['OldSha']}", "To": f"1.0.0.7+{values['CandidateSha']}"}
+    assert '$expectedFromVersion = "$BaselineVersion+$OldSha"' in collector
+    assert '$expectedToVersion = "$productVersion+$CandidateSha"' in collector
+    for field in expected:
         assert f"$naturalMarker.{field.lower()}Version -ceq $expected{field}Version" in collector
     assert "$naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity'" in collector
     actual = dict(expected)
@@ -206,12 +199,17 @@ def test_snapshot_identity_contract_rejects_wrong_version_or_sha(baseline, chang
         )
     elif change.endswith("_sha"):
         key = change.split("_")[0].title()
-        actual[key] = actual[key].split("+")[0] + "+" + "b" * 12
+        actual[key] = actual[key].split("+")[0] + "+" + "b" * 40
     elif change == "suffix":
         actual["From"] += "-wrong-build"
-    elif change == "product_from":
-        actual["From"] = f"{baseline}+{values['OldSha'][:12]}"
+    elif change.endswith("_short") or change.endswith("_same_prefix"):
+        key = change.split("_")[0].title()
+        version, sha = actual[key].split("+")
+        tail = "" if change.endswith("_short") else "0" * 28
+        actual[key] = f"{version}+{sha[:12]}{tail}"
+    elif change == "toolchain_from":
+        actual["From"] = f"1.0.0+{values['OldSha']}"
     elif change == "toolchain_to":
-        actual["To"] = f"1.0.0+{values['CandidateSha'][:12]}"
+        actual["To"] = f"1.0.0+{values['CandidateSha']}"
     mode = "not-windows-full" if change == "mode" else "windows-full"
     assert (actual == expected and mode == "windows-full") is (change == "none")

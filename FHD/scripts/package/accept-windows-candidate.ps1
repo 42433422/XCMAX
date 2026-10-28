@@ -171,11 +171,9 @@ function Invoke-AppUpdate {
   Check (Test-Path -LiteralPath $markerPath) 'app_update.natural_marker' 'application/installer produced rollback marker; harness never writes rollback state'
   $script:naturalMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
   Copy-Item -LiteralPath $markerPath -Destination (Join-Path $EvidenceDir 'natural-rollback-marker.json')
-  # Frozen 1.0.0.5/.6 rollback uses app.getVersion() (npm's three-part version), not build-info.version.
-  # Product version/full SHA are independently checked by Start-App and Assert-RollbackEvidence.
-  $baselineToolchainVersion = $baseline.toolchain_version
-  $expectedFromVersion = "$baselineToolchainVersion+$($OldSha.Substring(0, 12))"
-  $expectedToVersion = "$productVersion+$($CandidateSha.Substring(0, 12))"
+  # The installer replaces the Electron handoff with product versions and full build SHAs.
+  $expectedFromVersion = "$BaselineVersion+$OldSha"
+  $expectedToVersion = "$productVersion+$CandidateSha"
   Check ($naturalMarker.fromVersion -ceq $expectedFromVersion -and $naturalMarker.toVersion -ceq $expectedToVersion -and $naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity' "from=$($naturalMarker.fromVersion); to=$($naturalMarker.toVersion)"
   foreach ($fixture in (Get-Content (Join-Path $EvidenceDir 'owned-fixtures.json') -Raw | ConvertFrom-Json)) {
     $entry = $naturalMarker.expectedOwnedFiles.PSObject.Properties[$fixture.path]
