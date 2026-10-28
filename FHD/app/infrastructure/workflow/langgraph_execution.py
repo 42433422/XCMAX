@@ -56,6 +56,14 @@ class LangGraphExecutionMixin:
                 continue
             output = raw if isinstance(raw, dict) else {"output": raw}
             last_output = output
+            if (
+                output.get("retryable") is False
+                or output.get("outcome") == "unknown"
+                or output.get("outcome_unknown")
+                or output.get("reconciliation_required")
+                or output.get("requires_reconciliation")
+            ):
+                retryable = False
             if output.get("success", False):
                 return NodeExecutionResult(
                     node_id=node.node_id,
@@ -74,6 +82,8 @@ class LangGraphExecutionMixin:
             last_error = str(output.get("message") or output.get("error") or "未知错误")
             attempts.append({"error": last_error, "recoverable": True})
             retries += 1
+            if not retryable:
+                break
         return NodeExecutionResult(
             node_id=node.node_id,
             success=False,
@@ -84,7 +94,7 @@ class LangGraphExecutionMixin:
             error=last_error,
             retries=max(0, retries - 1),
             retryable=retryable,
-            recovery_hint=self._recovery_hint(node),
+            recovery_hint=self._recovery_hint(node, retryable=retryable),
             started_at=started,
             finished_at=_now_iso(),
             duration_ms=int((time.perf_counter() - begin) * 1000),
@@ -163,7 +173,9 @@ class LangGraphExecutionMixin:
         return output.get(key) == expected
 
     @staticmethod
-    def _recovery_hint(node: WorkflowNode) -> str:
+    def _recovery_hint(node: WorkflowNode, *, retryable: bool | None = None) -> str:
+        if retryable is False and (node.idempotent or node.risk == "low"):
+            return "本次调用可能已有副作用，系统未自动重试；请先核对业务状态后人工处理。"
         if node.idempotent:
             return "节点具备幂等性，可在修复后重试"
         if node.risk == "low":

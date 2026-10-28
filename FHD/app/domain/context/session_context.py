@@ -223,9 +223,9 @@ def format_runtime_context_for_llm(runtime_context: Mapping[str, Any] | None) ->
         if runtime_context.get("chat_db_write_authorized"):
             lines.append(
                 "- 【写入授权】本条请求已在前端声明已持有数据库写入令牌。"
-                "请直接调用 import_excel_to_database 并传入请求体中的 db_write_token；"
+                "调用 import_excel_to_database 时沿用请求体中的 db_write_token；"
                 "不要重复要求用户在聊天里粘贴令牌，也不要编造「尚未授权」而中断当前导入流程。"
-                "服务端在令牌校验通过后会将本次导入视为已确认（无需聊天里再问「是否确定导入」）。"
+                "写入令牌用于权限校验；先展示导入预览，仅在用户明确批准本次内容后传 confirm=true。"
             )
         else:
             lines.append(

@@ -72,6 +72,7 @@ class EtlDraftPatch(BaseModel):
 class EtlExecuteRequest(BaseModel):
     confirmed: bool = False
     valid_rows_only: bool = False
+    preview_revision: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-f]{64}$")
 
 
 class EtlShipmentTemplateRequest(BaseModel):

@@ -104,7 +104,7 @@ describe('ETL input through the actual kept-alive route and upload panel', () =>
     const router = await setup()
     const first = input().element
     await choose(new File(['model,price\nPM90-001,99'], 'products-create.csv'))
-    await button('上传并写入数据库').trigger('click')
+    await button('上传并解析').trigger('click')
     await flushPromises()
     await button('1 上传文件').trigger('click')
     await flushPromises()
@@ -128,7 +128,7 @@ describe('ETL input through the actual kept-alive route and upload panel', () =>
     if (folder) Object.defineProperty(nextFile, 'webkitRelativePath', { value: `客户产品/${name}` })
     await choose(nextFile, folder)
     expect(wrapper!.get('.etl-batch-card').text()).toContain(folder ? `客户产品/${name}` : name)
-    expect(button('上传并写入数据库').attributes('disabled')).toBeUndefined()
+    expect(button('上传并解析').attributes('disabled')).toBeUndefined()
     expect(api.upload).toHaveBeenCalledTimes(1)
   })
 })

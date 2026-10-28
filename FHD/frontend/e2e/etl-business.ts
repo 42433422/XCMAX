@@ -7,6 +7,7 @@ const apiBase = (process.env.MOD_PILOT_FHD_API || process.env.PLAYWRIGHT_BASE_UR
 type EtlRun = {
   id: string
   status: string
+  preview_revision: string | null
   target_type: string
   summary: Record<string, number>
   receipt: Record<string, string>
@@ -88,11 +89,14 @@ export async function importBusinessCsv(
   expect(ready.summary[expectedAction], JSON.stringify(ready)).toBe(1)
   expect(ready.summary.error, JSON.stringify(ready)).toBe(0)
 
-  const previewRows = await jsonRequest(page, `/api/etl/runs/${preview.id}/rows`) as { items: EtlRow[] }
+  const previewRows = await jsonRequest(page, `/api/etl/runs/${preview.id}/rows`) as { items: EtlRow[]; preview_revision: string | null }
   expect(previewRows.items).toHaveLength(1)
   expect(previewRows.items[0].final_action).toBe(expectedAction)
+  expect(ready.preview_revision).toMatch(/^[a-f0-9]{64}$/)
+  expect(previewRows.preview_revision).toBe(ready.preview_revision)
   await jsonRequest(page, `/api/etl/runs/${preview.id}/execute`, 'POST', {
     confirmed: true,
+    preview_revision: ready.preview_revision,
     valid_rows_only: false,
   })
   const completed = await waitForRun(page, preview.id, 'completed')

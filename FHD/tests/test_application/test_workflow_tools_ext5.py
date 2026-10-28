@@ -894,6 +894,7 @@ class TestImportProductsPreviewOrExecute:
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
                 "message": "ok",
@@ -920,11 +921,13 @@ class TestImportProductsPreviewOrExecute:
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
             }
             mock_ps.return_value = mock_svc
             mock_customer_svc = MagicMock()
+            mock_customer_svc.create.return_value = {"success": True}
             mock_cs.return_value = mock_customer_svc
             result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
@@ -934,7 +937,7 @@ class TestImportProductsPreviewOrExecute:
     def test_confirm_with_nested_result(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
 
-        df = pd.DataFrame({"产品名称": ["A"], "数量": [1]})
+        df = pd.DataFrame({"产品名称": list("ABCDEF"), "数量": [1] * 6})
         with (
             patch("app.bootstrap.get_products_service") as mock_ps,
             patch("app.bootstrap.get_customer_app_service"),
@@ -945,14 +948,16 @@ class TestImportProductsPreviewOrExecute:
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": False,
                 "data": {"success_count": 5, "failed_count": 1},
             }
             mock_ps.return_value = mock_svc
             result = _import_products_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["imported"] == 5
         assert parsed["failed"] == 1
+        assert parsed["retryable"] is False
 
     def test_confirm_skips_clause_like_rows(self):
         from app.application.tools.workflow import _import_products_preview_or_execute
@@ -973,6 +978,7 @@ class TestImportProductsPreviewOrExecute:
         ):
             mock_svc = MagicMock()
             mock_svc.batch_add_products.return_value = {
+                "success": True,
                 "success_count": 1,
                 "failed_count": 0,
             }
@@ -1026,7 +1032,7 @@ class TestImportCustomersPreviewOrExecute:
             mock_cs.return_value = mock_svc
             result = _import_customers_preview_or_execute(df, list(df.columns), True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
 
     def test_confirm_skips_rows_without_name(self):
@@ -1085,7 +1091,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_ss.return_value = mock_svc
             result = _import_orders_preview_or_execute(df, list(df.columns), "ACME", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
 
     def test_confirm_no_unit_name_skipped(self):
@@ -1098,7 +1104,7 @@ class TestImportOrdersPreviewOrExecute:
             mock_ss.return_value = mock_svc
             result = _import_orders_preview_or_execute(df, list(df.columns), "", True, 1)
         parsed = json.loads(result)
-        assert parsed["success"] is True
+        assert parsed["success"] is False
         assert parsed["failed"] == 1
         assert parsed["imported"] == 0
 

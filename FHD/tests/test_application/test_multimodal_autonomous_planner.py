@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 
 def test_multimodal_runtime_context_auto_plans_ingests_and_queries(
     tmp_path,
@@ -131,7 +133,9 @@ def test_multimodal_excel_artifact_auto_plans_import_after_approval(
             }
         ]
         assert waiting.metadata["artifact_count"] == 1
-        assert waiting.metadata["dataset_ingest_count"] == 1
+        assert waiting.metadata.get("dataset_ingest_count", 0) == 0
+        assert not (tmp_path / "dataset_store.json").exists()
+        assert not (tmp_path / "dataset_vectors.sqlite3").exists()
         assert waiting.metadata["plan"]["metadata"]["excel_import_record_count"] == 1
 
         products_service = Mock()
@@ -214,7 +218,9 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
         assert "risk-policy.pdf" in waiting.steps[0].params["user_request"]
         assert "human review" in waiting.steps[0].params["user_request"]
         assert waiting.metadata["artifact_count"] == 1
-        assert waiting.metadata["dataset_ingest_count"] == 1
+        assert waiting.metadata.get("dataset_ingest_count", 0) == 0
+        assert not (tmp_path / "dataset_store.json").exists()
+        assert not (tmp_path / "dataset_vectors.sqlite3").exists()
         assert (
             waiting.metadata["plan"]["metadata"]["document_export"]["requires_user_confirmation"]
             is True
@@ -265,3 +271,114 @@ def test_multimodal_pdf_artifact_auto_plans_document_export_after_approval(
     assert "step.approved" in event_types
     assert "tool.completed" in event_types
     assert "run.completed" in event_types
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        "completed",
+        "failed",
+        "unknown",
+        "outcome_unknown",
+        "requires_reconciliation",
+        "missing_approval",
+    ],
+)
+def test_plan_sources_require_all_write_steps_approved_and_successful(
+    tmp_path, monkeypatch, local_tools, outcome
+):
+    from app.application.agent_orchestrator import AgentOrchestrator, InMemoryAgentRunRepository
+    from app.application.dataset_rag_app_service import (
+        get_dataset_rag_app_service,
+        reset_dataset_rag_app_service_for_tests,
+    )
+    from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
+
+    store = tmp_path / "dataset_store.json"
+    monkeypatch.setenv("DATASET_RAG_STORE_PATH", str(store))
+    monkeypatch.setenv("DATASET_RAG_VECTOR_INDEX_PATH", str(tmp_path / "vectors.sqlite3"))
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "model_usage_ledger.json"))
+    monkeypatch.setenv("MODEL_USAGE_WALLET_BACKEND", "audit")
+    reset_dataset_rag_app_service_for_tests()
+    repo = InMemoryAgentRunRepository()
+    orchestrator = AgentOrchestrator(repository=repo)
+    plan = PlanGraph(
+        plan_id="review-both-imports",
+        intent="excel_import_to_db",
+        nodes=[
+            WorkflowNode(
+                node_id=f"import_{number}",
+                tool_id="excel_import",
+                action="import_records",
+                params={"records": [{"product_name": f"样例-{number}"}]},
+                risk="medium",
+                idempotent=False,
+            )
+            for number in (1, 2)
+        ],
+        metadata={"artifacts": [{"artifact_type": "excel_records", "fields": [{"name": "产品"}]}]},
+    )
+    second_result = {"success": outcome not in {"failed", "unknown"}}
+    if outcome == "unknown":
+        second_result.update(outcome="unknown", reconciliation_required=True, retryable=False)
+    if outcome in {"outcome_unknown", "requires_reconciliation"}:
+        second_result[outcome] = True
+    if outcome == "failed":
+        second_result["artifact"] = {
+            "artifact_type": "ocr_text",
+            "preview": {"text": "失败工具返回的附件只供审核，不应作为正式知识"},
+        }
+    try:
+        with patch(
+            "app.application.facades.tools_facade.execute_registered_workflow_tool",
+            side_effect=[{"success": True}, second_result],
+        ) as execute:
+            waiting = orchestrator.start_run_from_plan(
+                user_id="reviewer",
+                message="审核并导入两个来源",
+                plan=plan,
+                runtime_context={"dataset_id": "approved-sources", "tenant_id": "reviewer"},
+            )
+            assert waiting.status == "waiting_user"
+            execute.assert_not_called()
+            assert not store.exists()
+            second_wait = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+            assert second_wait.status == "waiting_user"
+            assert execute.call_count == 1
+            assert not store.exists()
+            assert not (tmp_path / "vectors.sqlite3").exists()
+            if outcome == "missing_approval":
+                second_wait.events = [
+                    event for event in second_wait.events if event.event_type != "step.approved"
+                ]
+                repo.save(second_wait)
+            final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+            assert execute.call_count == 2
+
+        if outcome != "completed":
+            assert final.status == {"failed": "failed", "unknown": "blocked"}.get(
+                outcome, "completed"
+            )
+            assert not store.exists()
+            assert final.metadata.get("dataset_ingest_count", 0) == 0
+            assert final.artifacts[0].metadata["dataset_ingest_pending_step_ids"]
+            return
+
+        assert final.status == "completed"
+        assert final.metadata["dataset_ingest_count"] == 1
+        reset_dataset_rag_app_service_for_tests()
+        stored = get_dataset_rag_app_service().status(dataset_id="approved-sources")
+        assert stored["document_count"] == 1
+        document = stored["documents"][0]
+        assert document["metadata"]["approved_step_ids"] == [step.step_id for step in final.steps]
+        # An interrupted optional bridge can replay the same source without a new version.
+        final.artifacts[0].metadata.pop("dataset_ingest")
+        final.artifacts[0].metadata["dataset_ingest_pending_step_ids"] = [
+            step.step_id for step in final.steps
+        ]
+        orchestrator._ingest_confirmed_plan_artifacts(final)
+        replayed = get_dataset_rag_app_service().status(dataset_id="approved-sources")
+        assert replayed["document_count"] == 1
+        assert replayed["documents"][0]["version"] == document["version"]
+    finally:
+        reset_dataset_rag_app_service_for_tests()

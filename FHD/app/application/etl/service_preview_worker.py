@@ -15,6 +15,7 @@ from app.application.etl.operation_owner import (
     finish_operation,
     unbind_owner,
 )
+from app.application.etl.preview_confirmation import publish_preview
 from app.application.etl.service_support import dump_json, load_json, safe_error
 from app.db.models.etl import EtlRunRow
 from app.infrastructure.tenant_scope import tenant_scope
@@ -151,6 +152,7 @@ class PreviewWorkerMixin:
             run.progress = 100
             run.processed_rows = run.total_rows
             self._update_linked_companion_summary(db, run, status="preview_ready")
+            publish_preview(db, run)
             finish_operation(db, operation)
             db.commit()
             self._record_preview_metrics(run, started_at, status="success")

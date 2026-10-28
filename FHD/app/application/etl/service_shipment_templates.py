@@ -264,6 +264,11 @@ class ShipmentTemplateServiceMixin:
             "version": version.version,
             "message": "已保存为当前用户私有发货单版式，后续开单会按客户名自动匹配",
         }
+        # Template extraction can overlap a new preview or approval. Merge its
+        # receipt into the current locked summary, preserving that revision.
+        db.refresh(run, attribute_names=["summary_json"], with_for_update=True)
+        details = load_json(run.summary_json, {})
+        existing_by_region = details.get("shipment_document_templates")
         saved_by_region = dict(existing_by_region) if isinstance(existing_by_region, dict) else {}
         saved_by_region[selected_region_id] = result
         details["shipment_document_templates"] = saved_by_region

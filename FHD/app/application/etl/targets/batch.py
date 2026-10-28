@@ -109,6 +109,23 @@ class AttendanceAdapter(TargetAdapter):
             reason="new_attendance_source",
         )
 
+    @staticmethod
+    def require_complete_selection(selected_rows: int, total_rows: int) -> None:
+        # The attendance writer reads the workbook itself, not a filtered row set.
+        if selected_rows <= 0:
+            raise EtlError(
+                "ETL_ATTENDANCE_EMPTY_SELECTION",
+                "没有可执行的考勤行；请修正文件并重新预演",
+                status_code=409,
+            )
+        if selected_rows != total_rows:
+            raise EtlError(
+                "ETL_ATTENDANCE_PARTIAL_SELECTION_UNSUPPORTED",
+                "考勤按完整工作簿导入，暂不支持跳过行或仅写入正确行；"
+                "请修正文件并重新预演，确认全部行后再执行",
+                status_code=409,
+            )
+
     def execute_batch(
         self, rows: Iterable[dict[str, Any]], context: dict[str, Any]
     ) -> dict[str, Any]:
@@ -123,6 +140,10 @@ class AttendanceAdapter(TargetAdapter):
                 "考勤文件在预演后已导入，请重新预演",
                 status_code=409,
             )
+        total_rows = int(context.get("total_rows") or 0)
+        self.require_complete_selection(int(context.get("row_count") or 0), total_rows)
+        row_count = sum(1 for _ in rows)
+        self.require_complete_selection(row_count, total_rows)
         db_path = self._db_path()
         result = import_attendance_workbook(
             source_path,
@@ -130,7 +151,6 @@ class AttendanceAdapter(TargetAdapter):
             source_file_key=self._source_file_key(context),
             sync_ui_tables=True,
         )
-        row_count = int(context.get("row_count") or 0)
         callback = context.get("progress_callback")
         if callable(callback):
             callback(row_count, row_count)

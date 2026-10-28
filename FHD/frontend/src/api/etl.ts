@@ -64,6 +64,7 @@ export type EtlRun = {
   template_version_id?: string | null
   target_type: string
   status: string
+  preview_revision?: string | null
   stage: string
   progress: number
   total_rows: number
@@ -206,7 +207,7 @@ export const etlApi = {
     request<EtlRun[]>(`/api/etl/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`),
   run: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}`),
   rows: (id: string, page = 1, pageSize = 50, action = '') =>
-    request<{ page: number; page_size: number; total: number; items: EtlRunRow[] }>(
+    request<{ page: number; page_size: number; total: number; items: EtlRunRow[]; preview_revision: string | null }>(
       `/api/etl/runs/${encodeURIComponent(id)}/rows?page=${page}&page_size=${pageSize}${action ? `&action=${encodeURIComponent(action)}` : ''}`,
     ),
   patchDraft: (id: string, body: Record<string, unknown>) =>
@@ -215,11 +216,11 @@ export const etlApi = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
-  execute: (id: string, validRowsOnly = false) =>
+  execute: (id: string, previewRevision: string, validRowsOnly = false) =>
     request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/execute`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ confirmed: true, valid_rows_only: validRowsOnly }),
+      body: JSON.stringify({ confirmed: true, preview_revision: previewRevision, valid_rows_only: validRowsOnly }),
     }),
   saveShipmentTemplate: (id: string, name = '', sourceRegionId = '') =>
     request<{

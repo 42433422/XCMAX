@@ -20,6 +20,12 @@ from app.application.etl.operation_owner import (
     unbind_owner,
 )
 from app.application.etl.parsers import MAX_ROWS
+from app.application.etl.preview_confirmation import (
+    invalidate_preview,
+    record_confirmation,
+    verify_execution,
+    verify_preview,
+)
 from app.application.etl.service_rollback import RollbackServiceMixin
 from app.application.etl.service_support import (
     EXECUTOR,
@@ -32,6 +38,7 @@ from app.application.etl.service_support import (
     utcnow,
 )
 from app.application.etl.targets import TargetAdapter, get_adapter
+from app.application.etl.targets.batch import AttendanceAdapter
 from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write, tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
@@ -59,6 +66,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         owner_user_id: int,
         confirmed: bool,
         valid_rows_only: bool,
+        preview_revision: str | None = None,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         if not confirmed:
@@ -70,12 +78,6 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 "ETL_INVALID_ROWS_BLOCKED",
                 "预演存在错误行；默认阻断整批。仅在明确选择“仅写入正确行”后才能继续",
             )
-        get_adapter(run.target_type)
-        self._owned_upload(db, run.upload_id, owner_user_id)
-        draft = load_json(run.draft_json, {})
-        if run.target_type == "webhook":
-            config_id = str(draft.get("target_config_id") or "")
-            self._owned_target_config(db, config_id, owner_user_id)
         operation = claim_operation(
             db,
             run,
@@ -84,15 +86,42 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             require_unrolled_back=True,
         )
         bind_owner(db, operation)
-        run.status = "executing"
-        run.stage = "executing"
-        run.progress = 0
-        run.confirmed_at = utcnow()
-        run.error_code = None
-        run.error_message = None
-        tenant_id = tenant_id_for_write()
-        db.commit()
-        unbind_owner(db)
+        try:
+            # The ownership update locks this run. Read again under that lock,
+            # rather than approving a stale ORM snapshot before a concurrent edit.
+            db.refresh(run)
+            if run.error_rows and not valid_rows_only:
+                raise EtlConflict(
+                    "ETL_INVALID_ROWS_BLOCKED", "预演存在错误行，请核对后明确选择执行范围"
+                )
+            get_adapter(run.target_type)
+            self._owned_upload(db, run.upload_id, owner_user_id)
+            draft = load_json(run.draft_json, {})
+            if run.target_type == "webhook":
+                self._owned_target_config(
+                    db, str(draft.get("target_config_id") or ""), owner_user_id
+                )
+            verify_preview(db, run, preview_revision)
+            if run.target_type == "attendance":
+                AttendanceAdapter.require_complete_selection(
+                    run.new_rows + run.update_rows, run.total_rows
+                )
+            assert preview_revision is not None
+            record_confirmation(run, preview_revision, valid_rows_only=valid_rows_only)
+            run.status = "executing"
+            run.stage = "executing"
+            run.progress = 0
+            run.confirmed_at = utcnow()
+            run.error_code = None
+            run.error_message = None
+            tenant_id = tenant_id_for_write()
+            db.commit()
+        except BaseException:
+            # Rejected approval must not leave a durable lease or fail the run.
+            db.rollback()
+            raise
+        finally:
+            unbind_owner(db)
         try:
             self._submit_execution(
                 run.id, tenant_id, owner_user_id, valid_rows_only, operation_token=operation.token
@@ -165,10 +194,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             db.commit()
             upload = self._owned_upload(db, run.upload_id, owner_user_id)
             draft = load_json(run.draft_json, {})
-            target_config = None
-            if run.target_type == "webhook":
-                config_id = str(draft.get("target_config_id") or "")
-                target_config = self._owned_target_config(db, config_id, owner_user_id)
+            # Recheck after queueing and dispatch using this exact target snapshot.
+            target_config = verify_execution(db, run, valid_rows_only=valid_rows_only)
 
             eligible_filters = (
                 EtlRunRow.run_id == run.id,
@@ -180,9 +207,12 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 ),
             )
             eligible_count = db.query(EtlRunRow).filter(*eligible_filters).count()
+            if run.target_type == "attendance":
+                AttendanceAdapter.require_complete_selection(eligible_count, run.total_rows)
             context = self._row_context(run, upload, 0)
             context["_execution_cache"] = {}
             context["row_count"] = eligible_count
+            context["total_rows"] = run.total_rows
             context["output_headers"] = [
                 str(item.get("target") or "")
                 for item in draft.get("field_mappings") or []
@@ -190,9 +220,9 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             ]
             if target_config:
                 context["target_config"] = {
-                    "endpoint_url": target_config.endpoint_url,
-                    "headers": load_json(target_config.headers_json, {}),
-                    "secret_ref": target_config.secret_ref,
+                    "endpoint_url": target_config["endpoint_url"],
+                    "headers": target_config["headers"],
+                    "secret_ref": target_config["secret_ref"],
                 }
 
             def progress_callback(processed: int, total: int) -> None:
@@ -410,6 +440,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             require_unrolled_back=True,
         )
         bind_owner(db, operation)
+        db.refresh(run)
+        invalidate_preview(run)
         run.status = "previewing"
         rerun_parse = run.executed_rows == 0 and (
             run.total_rows == 0
