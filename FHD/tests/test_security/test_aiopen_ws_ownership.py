@@ -60,7 +60,9 @@ def test_screen_rejects_anonymous_disabled_or_untrusted_origin(monkeypatch, prin
         ("wss", "http://testserver", False),
     ],
 )
-def test_screen_origin_scheme_must_match_transport_scheme(monkeypatch, request_scheme, origin, expected):
+def test_screen_origin_scheme_must_match_transport_scheme(
+    monkeypatch, request_scheme, origin, expected
+):
     monkeypatch.delenv("XCAGI_AIOPEN_WS_ALLOWED_ORIGINS", raising=False)
     websocket = SimpleNamespace(
         headers={"origin": origin, "host": "testserver"},
@@ -93,7 +95,9 @@ async def test_screen_acknowledgements_bound_to_own_connection():
     with screen_principal_scope(OWNER):
         work = asyncio.create_task(hub.dispatch("snapshot", {}, session_id="owner", timeout=1))
         await asyncio.sleep(0)
-        reply = json.dumps({"id": json.loads(owner.sent)["id"], "result": {"success": True, "data": "ok"}})
+        reply = json.dumps(
+            {"id": json.loads(owner.sent)["id"], "result": {"success": True, "data": "ok"}}
+        )
         assert hub.handle_client_message(reply, session_id="impostor") is False
         assert not work.done()
         assert hub.handle_client_message(reply, session_id="owner") is True
