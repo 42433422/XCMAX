@@ -10,10 +10,10 @@ from typing import Any, cast
 
 import httpx
 
+from app.application.tools.workflow_tools.dispatch import execute_registered_workflow_tool
 from app.domain.conversation.services.chat_tool_intent import (
     looks_like_business_db_write as _looks_like_business_db_write,
 )
-from app.domain.shared_services.tools_workflow_registered import execute_registered_workflow_tool
 from app.services import get_ai_conversation_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_io.path_utils import ensure_fhd_repo_on_syspath
@@ -235,7 +235,7 @@ class LLMWorkflowPlanner:
         from app.application.normal_chat_dispatch import route_normal_mode_message
 
         _route = route_normal_mode_message(str(message or ""))
-        if _route.get("intent") == "desktop":
+        if _route.get("intent") in {"desktop", "label_print"}:
             return self._fallback_plan(plan_id, message, registry_for_plan)
         if (
             "sales" in registry_for_plan
@@ -263,36 +263,39 @@ class LLMWorkflowPlanner:
                     warn=logger.warning,
                 ),
             )
-        try:
-            from app.application import get_user_memory_rag_app_service
+        from app.application.ai_chat.conversation_history import authorized_memory_context
 
-            rag = get_user_memory_rag_app_service()
-            rag_res = rag.query(user_id=user_id, query_text=message, top_k=3)
-            hits = (rag_res or {}).get("hits") if isinstance(rag_res, dict) else None
-            if isinstance(hits, list) and hits:
-                summary = rag.format_for_prompt(
-                    user_id=user_id, query_text=message, hits=hits, max_hits=4
+        if authorized_memory_context(user_id, context) is not None:
+            try:
+                from app.application import get_user_memory_rag_app_service
+
+                rag = get_user_memory_rag_app_service()
+                rag_res = rag.query(user_id=user_id, query_text=message, top_k=3)
+                hits = (rag_res or {}).get("hits") if isinstance(rag_res, dict) else None
+                if isinstance(hits, list) and hits:
+                    summary = rag.format_for_prompt(
+                        user_id=user_id, query_text=message, hits=hits, max_hits=4
+                    )
+                    context["user_memory_rag"] = {
+                        "summary": summary,
+                        "hits": [hit for hit in hits if isinstance(hit, dict)],
+                    }
+            except ImportError:
+                logger.debug("用户记忆 RAG 服务不可用（不阻断主流程）")
+            except RECOVERABLE_ERRORS as e:
+                logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
+            try:
+                from app.domain.shared_services.user_memory_service import get_user_memory_service
+
+                memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
+                    user_id=user_id, max_items=6
                 )
-                context["user_memory_rag"] = {
-                    "summary": summary,
-                    "hits": [hit for hit in hits if isinstance(hit, dict)],
-                }
-        except ImportError:
-            logger.debug("用户记忆 RAG 服务不可用（不阻断主流程）")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("用户记忆 RAG 不可用（不阻断主流程）: %s", e)
-        try:
-            from app.domain.shared_services.user_memory_service import get_user_memory_service
-
-            memory_v2_summary = get_user_memory_service().format_memory_v2_for_prompt(
-                user_id=user_id, max_items=6
-            )
-            if "无已确认记忆" not in memory_v2_summary:
-                context["memory_v2"] = {"summary": memory_v2_summary}
-        except ImportError:
-            logger.debug("Memory v2 服务不可用（不阻断主流程）")
-        except RECOVERABLE_ERRORS as e:
-            logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
+                if "无已确认记忆" not in memory_v2_summary:
+                    context["memory_v2"] = {"summary": memory_v2_summary}
+            except ImportError:
+                logger.debug("Memory v2 服务不可用（不阻断主流程）")
+            except RECOVERABLE_ERRORS as e:
+                logger.warning("Memory v2 不可用（不阻断主流程）: %s", e)
         from app.domain.neuro.cognition.plan_graph_hooks import finalize_planned_graph
 
         planned = None

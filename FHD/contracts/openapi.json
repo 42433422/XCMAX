@@ -3,7 +3,7 @@
   "info": {
     "title": "XCAGI FastAPI",
     "description": "XCAGI 企业 AI 员工平台 - FastAPI 版本",
-    "version": "1.0.0.6"
+    "version": "1.0.0.7"
   },
   "paths": {
     "/api/health": {
@@ -30794,6 +30794,7 @@
               "run.continue_ignored",
               "run.created",
               "run.failed",
+              "run.observation_interrupted",
               "step.approved",
               "step.blocked",
               "step.llm_repair_failed",
@@ -30805,6 +30806,7 @@
               "task.approval_required",
               "tool.completed",
               "tool.failed",
+              "tool.receipt_observed",
               "tool.started"
             ]
           },

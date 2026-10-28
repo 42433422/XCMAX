@@ -1641,6 +1641,8 @@ class TestGetRebuildJobBoundary:
 
     def test_dataset_not_found(self, tmp_path):
         svc = _make_svc(tmp_path)
+        with svc._lock:
+            svc._persist_locked()  # An existing empty snapshot differs from unavailable storage.
         result = svc.get_rebuild_job("nonexistent", "job1")
         assert result["success"] is False
         assert "not found" in result["message"]

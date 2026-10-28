@@ -1,0 +1,4 @@
+# Synthetic owner-isolation test token only; no service credential. Keep the exception commit/file/rule/line-specific.
+d733524a95ed99689c7bb704509c986f4053184f:FHD/tests/test_application/test_enterprise_cs_automation.py:generic-api-key:510
+# Owner-approved historical synthetic logging canary only; current test uses a low-entropy fixture.
+6c146fec41c4fca7cac059488586a7cf103c7a3e:FHD/tests/test_services/test_tool_executor_log_privacy.py:generic-api-key:12

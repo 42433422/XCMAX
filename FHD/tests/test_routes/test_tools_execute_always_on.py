@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.spa_fallback import register_spa_history_fallback
 from app.fastapi_routes.tools_execute import router as tools_execute_router
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def test_spa_fallback_alone_returns_405_for_tools_execute_post() -> None:
@@ -19,16 +20,20 @@ def test_spa_fallback_alone_returns_405_for_tools_execute_post() -> None:
     assert response.status_code == 405
 
 
-def test_tools_execute_post_not_405_when_router_mounted() -> None:
+def test_tools_execute_post_not_405_when_router_mounted(trusted_actor) -> None:
     app = FastAPI()
     app.include_router(tools_execute_router)
     register_spa_history_fallback(app)
     client = TestClient(app, raise_server_exceptions=False)
+    actor = trusted_actor()
     with patch(
         "app.fastapi_routes.tools_execute.run_tools_execute_agent",
         return_value=({"success": True, "message": "ok"}, 200),
-    ):
-        response = client.post("/api/tools/execute", json={"tool_id": "t1"})
+    ) as dispatch:
+        denied = client.post("/api/tools/execute", json={"tool_id": "t1"})
+        assert denied.status_code == 401
+        dispatch.assert_not_called()
+        response = client.post("/api/tools/execute", json={"tool_id": "t1"}, headers=actor.headers)
     assert response.status_code != 405
     assert response.status_code == 200
     assert response.json().get("success") is True

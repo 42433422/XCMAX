@@ -37,6 +37,7 @@ def cs_db(tmp_path, monkeypatch: pytest.MonkeyPatch):
             is_active=True,
             tier="enterprise",
             account_tier="pro",
+            market_user_id=501,
         )
     )
     session.commit()
@@ -341,3 +342,172 @@ async def test_unsupported_model_retains_message_and_records_safe_failure(cs_db,
         "status_code": 400,
     }
     assert "private-model-secret" not in json.dumps(audits)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mode,outcome", [("ai", "received"), ("human", "received"), ("ai", "unknown")]
+)
+async def test_explicit_issue_uses_authenticated_idempotent_intake_without_model(
+    cs_db,
+    monkeypatch,
+    mode,
+    outcome,
+):
+    from app.application import client_product_issue_intake as intake
+
+    svc, cs_id, conversation_id = _conversation(cs_db)
+    automation = EnterpriseCsAutomationService(cs_db)
+    if mode == "human":
+        automation.set_mode(conversation_id, mode, operator_user_id=99)
+    calls = []
+
+    async def remote(token, path, **kwargs):
+        calls.append((token, path, kwargs))
+        if kwargs.get("method") == "POST":
+            if outcome == "unknown":
+                raise ConnectionError("fixture response lost after sending")
+            return {"success": True, "ticket_id": 101, "ticket_no": "CS-fixture"}
+        if outcome == "unknown" and len(calls) == 2:
+            return {"items": []}
+        return {
+            "items": [
+                {
+                    "id": 101,
+                    "ticket_no": "CS-fixture",
+                    "evidence": {
+                        "source_ref": calls[0][2]["payload"]["source_ref"],
+                    },
+                }
+            ]
+        }
+
+    async def no_model(*args, **kwargs):
+        raise AssertionError("explicit intake must not invoke a model")
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", no_model)
+    text = (
+        "请提交故障工单：Windows版聊天思考过久会断连、报500并整页卡死，期望页面保持可用失败后能恢复"
+    )
+    message = svc.send_message(conversation_id, 7, text, origin="customer")["message"]
+    result = await automation.handle_customer_message(
+        conversation_id=conversation_id,
+        customer_user_id=7,
+        message_id=message["id"],
+        body="untrusted caller text is not evidence",
+        market_token="fixture-customer-token",
+    )
+    assert result["action"] == "issue_intake"
+    assert result["cs_mode"] == mode
+    assert calls[0][0] == "fixture-customer-token"
+    payload = calls[0][2]["payload"]
+    assert "Windows版聊天思考过久会断连、报500" in payload["description"]
+    assert payload["source_ref"].startswith(f"enterprise-cs:501:{conversation_id}:")
+    assert "user_id" not in payload
+    assert len([call for call in calls if call[2].get("method") == "POST"]) == 1
+    reply = result["message"]["body"]
+    assert ("CS-fixture" in reply) is (outcome == "received")
+    assert ("暂无法确认" in reply) is (outcome == "unknown")
+    assert "fixture-customer-token" not in json.dumps(result)
+    repeated = await automation.handle_customer_message(
+        conversation_id=conversation_id,
+        customer_user_id=7,
+        message_id=message["id"],
+        body=text,
+        market_token="fixture-customer-token",
+    )
+    assert repeated["intake"]["state"] == "RECEIVED"
+    assert (repeated["message"] is not None) is (outcome == "unknown")
+    followup = svc.send_message(conversation_id, 7, "提交工单", origin="customer")["message"]
+    resumed = await automation.handle_customer_message(
+        conversation_id=conversation_id,
+        customer_user_id=7,
+        message_id=followup["id"],
+        body=followup["body"],
+        market_token="fixture-customer-token",
+    )
+    assert resumed["intake"]["owner_ticket_no"] == "CS-fixture"
+    assert len([call for call in calls if call[2].get("method") == "POST"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_bare_issue_request_needs_context_and_bound_identity(cs_db, monkeypatch):
+    from app.application import client_product_issue_intake as intake
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("must not submit without description and authenticated identity")
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", forbidden)
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", forbidden)
+    svc, cs_id, cid = _conversation(cs_db)
+    automation = EnterpriseCsAutomationService(cs_db)
+    for text, expected in [
+        ("提交工单", "请说明"),
+        ("请提交故障工单：Windows500报错卡死", "暂无法确认"),
+    ]:
+        message = svc.send_message(cid, 7, text, origin="customer")["message"]
+        result = await automation.handle_customer_message(
+            conversation_id=cid,
+            customer_user_id=7,
+            message_id=message["id"],
+            body=text,
+        )
+        assert expected in result["message"]["body"]
+    result = await automation.handle_customer_message(
+        conversation_id=cid,
+        customer_user_id=7,
+        message_id=result["message"]["id"],
+        body="提交工单",
+        market_token="fixture-token",
+    )
+    assert result["reason"] == "invalid_customer_message"
+
+
+@pytest.mark.asyncio
+async def test_same_report_is_owner_scoped_and_rejects_other_customers_message(cs_db, monkeypatch):
+    from app.application import client_product_issue_intake as intake
+
+    cs_db.add(
+        User(
+            id=8,
+            username="second-customer",
+            password="!",
+            is_active=True,
+            tier="enterprise",
+            market_user_id=502,
+        )
+    )
+    cs_db.commit()
+    svc, cs_id, cid = _conversation(cs_db)
+    other_cid = svc.get_or_create_direct(8, cs_id)["id"]
+    calls = []
+
+    async def remote(token, path, **kwargs):
+        calls.append((token, kwargs["payload"]))
+        return {"success": True, "ticket_id": len(calls), "ticket_no": f"CS-{len(calls)}"}
+
+    monkeypatch.setattr(intake, "custom_delivery_remote_json", remote)
+    automation = EnterpriseCsAutomationService(cs_db)
+    for user_id, conv in [(7, cid), (8, other_cid)]:
+        msg = svc.send_message(conv, user_id, "请提交故障工单：Windows500卡死", origin="customer")[
+            "message"
+        ]
+        await automation.handle_customer_message(
+            conversation_id=conv,
+            customer_user_id=user_id,
+            message_id=msg["id"],
+            body=msg["body"],
+            market_token=f"fixture-owner-{user_id}",
+        )
+    assert calls[0][1]["source_ref"] != calls[1][1]["source_ref"]
+    assert [call[0] for call in calls] == ["fixture-owner-7", "fixture-owner-8"]
+    rejected = await automation.handle_customer_message(
+        conversation_id=cid,
+        customer_user_id=7,
+        message_id=msg["id"],
+        body="提交工单",
+        market_token="fixture-owner-7",
+    )
+    assert rejected["reason"] == "invalid_customer_message"
+    assert len(calls) == 2

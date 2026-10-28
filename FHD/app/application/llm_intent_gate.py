@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -179,8 +180,7 @@ def _normalize_slots(intent: str, raw_slots: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def llm_route_message(message: str) -> dict[str, Any] | None:
-    """规则未命中时的 LLM 分类。返回 route_normal_mode_message 形状的结果或 None。"""
+def _eligible_text(message: str) -> str | None:
     text = str(message or "").strip()
     if len(text) < 2 or not _gate_enabled():
         return None
@@ -195,6 +195,14 @@ def llm_route_message(message: str) -> dict[str, Any] | None:
     except RECOVERABLE_ERRORS:
         pass
 
+    return text
+
+
+def llm_route_message(message: str) -> dict[str, Any] | None:
+    """Synchronous compatibility entry; async chat uses the cancellable entry."""
+    text = _eligible_text(message)
+    if text is None:
+        return None
     cached = _cached(text)
     if cached is not None:
         return dict(cached) if cached.get("intent") not in (None, "unknown") else None
@@ -202,6 +210,26 @@ def llm_route_message(message: str) -> dict[str, Any] | None:
     result = _classify(text)
     _put_cache(text, result)
     return dict(result) if result and result.get("intent") != "unknown" else None
+
+
+async def llm_route_message_async(message: str) -> dict[str, Any] | None:
+    """Keep model I/O on the caller task; cancellation never becomes a fallback."""
+    text = await asyncio.to_thread(_eligible_text, message)
+    if text is None:
+        return None
+    cached = _cached(text)
+    if cached is not None:
+        return dict(cached) if cached.get("intent") not in (None, "unknown") else None
+    from app.infrastructure.llm.structured_output import complete_structured_bounded
+
+    try:
+        structured = await complete_structured_bounded(**_completion_request(text))
+    except BOUNDARY_ERRORS as exc:
+        logger.info("[LLM_INTENT_GATE] skipped: %s", type(exc).__name__)
+        return None
+    result = _parse_classification(structured)
+    _put_cache(text, result)
+    return dict(result) if result.get("intent") != "unknown" else None
 
 
 def _clarify_question(candidates: list[str]) -> str:
@@ -215,27 +243,33 @@ def _clarify_question(candidates: list[str]) -> str:
     return "您是想" + "，还是".join(labels[:3]) + "吗？告诉我具体一点，我马上帮您办。"
 
 
+def _completion_request(text: str) -> dict[str, Any]:
+    return {
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        "schema": _SCHEMA,
+        "max_repairs": 0,
+        "profile": "intent",
+        "temperature": 0.1,
+        "max_tokens": 160,
+        "timeout_seconds": 10.0,
+    }
+
+
 def _classify(text: str) -> dict[str, Any]:
-    unknown: dict[str, Any] = {"intent": "unknown", "slots": {}, "llm_routed": False}
+    from app.infrastructure.llm.structured_output import complete_structured_sync
+
     try:
-        from app.infrastructure.llm.structured_output import complete_structured_sync
-
-        structured = complete_structured_sync(
-            [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": text},
-            ],
-            schema=_SCHEMA,
-            max_repairs=0,
-            profile="intent",
-            temperature=0.1,
-            max_tokens=160,
-            timeout_seconds=10.0,
-        )
-    except BOUNDARY_ERRORS as exc:  # 闸层是适配器隔离边界：任何 LLM 失败都回退规则语义
+        return _parse_classification(complete_structured_sync(**_completion_request(text)))
+    except BOUNDARY_ERRORS as exc:
         logger.info("[LLM_INTENT_GATE] skipped: %s", type(exc).__name__)
-        return unknown
+        return {"intent": "unknown", "slots": {}, "llm_routed": False}
 
+
+def _parse_classification(structured: Any) -> dict[str, Any]:
+    unknown: dict[str, Any] = {"intent": "unknown", "slots": {}, "llm_routed": False}
     data = structured.data if hasattr(structured, "data") else {}
     intent = str(data.get("intent") or "")
     try:
@@ -284,4 +318,4 @@ def _classify(text: str) -> dict[str, Any]:
     return unknown
 
 
-__all__ = ["llm_route_message"]
+__all__ = ["llm_route_message", "llm_route_message_async"]

@@ -309,6 +309,7 @@
           "availability": "shared"
         },
         "exists": {
+          "read_only": true,
           "risk": "low",
           "idempotent": true,
           "required_params": [],
@@ -815,6 +816,7 @@
           "availability": "shared"
         },
         "ledger_query": {
+          "read_only": true,
           "risk": "low",
           "idempotent": true,
           "required_params": [],

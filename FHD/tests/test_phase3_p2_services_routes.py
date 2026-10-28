@@ -94,8 +94,12 @@ def test_registered_router_customers_query(mock_get: MagicMock) -> None:
 
 @patch("app.application.get_customer_app_service")
 def test_registered_router_customers_ensure_exists(mock_get: MagicMock) -> None:
-    mock_get.return_value.match_purchase_unit.return_value = None
-    mock_get.return_value.create.return_value = {"success": True}
+    mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+    mock_get.return_value.create.return_value = {"success": True, "data": {"id": 1}}
+    mock_get.return_value.get_by_id.return_value = {
+        "success": True,
+        "data": {"id": 1, "customer_name": "甲公司"},
+    }
     out = _registered_router_customers("ensure_exists", {"unit_name": "甲公司"}, {}, "pro", "")
     assert out["success"] is True
 

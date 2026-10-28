@@ -2330,9 +2330,15 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_matched(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            matched = MagicMock()
-            matched.unit_name = "matched_unit"
-            svc.match_purchase_unit.return_value = matched
+            svc.lookup_purchase_unit_for_ensure.return_value = {
+                "status": "matched",
+                "id": 1,
+                "unit_name": "matched_unit",
+            }
+            svc.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 1, "customer_name": "matched_unit"},
+            }
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
@@ -2343,8 +2349,9 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_create_new(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            svc.match_purchase_unit.return_value = None
-            svc.create.return_value = {"success": True}
+            svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+            svc.create.return_value = {"success": True, "data": {"id": 1}}
+            svc.get_by_id.return_value = {"success": True, "data": {"id": 1, "customer_name": "u1"}}
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
@@ -2355,14 +2362,17 @@ class TestTWRCustomers:
     def test_customers_ensure_exists_create_already_exists(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:
             svc = MagicMock()
-            svc.match_purchase_unit.return_value = None
+            svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
             svc.create.return_value = {"success": False, "message": "已存在"}
             mock_get.return_value = svc
             result = twr._registered_router_customers(
                 "ensure_exists", {"unit_name": "u1"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["exists"] is True
+            assert result["success"] is False
+            assert result["outcome"] == "unknown"
+            assert result["retryable"] is False
+            assert result["reconciliation_required"] is True
+            svc.get_by_id.assert_not_called()
 
     def test_customers_create_success(self) -> None:
         with patch("app.application.get_customer_app_service") as mock_get:

@@ -157,7 +157,7 @@ export const chatApi = {
   },
 
   getConversations(params: Record<string, unknown> = {}): Promise<ApiResponse<ChatSession[]>> {
-    return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params)
+    return api.get<ApiResponse<ChatSession[]>>('/api/conversations/sessions', params, { timeoutMs: 8000 })
   },
 
   clearConversations(data: Record<string, unknown> = {}): Promise<ApiResponse<{ deleted: number }>> {
@@ -165,7 +165,7 @@ export const chatApi = {
   },
 
   getConversation(sessionId: string): Promise<ApiResponse<ChatSession>> {
-    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`)
+    return api.get<ApiResponse<ChatSession>>(`/api/conversations/${sessionId}`, {}, { timeoutMs: 8000 })
   },
 
   renameConversation(sessionId: string, title: string): Promise<ApiResponse<{ success: boolean }>> {

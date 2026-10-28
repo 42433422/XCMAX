@@ -411,7 +411,9 @@ class TestVoiceCommandRoute:
         assert data["data"]["result"]["response"] == "找到 2 个产品"
         assert data["data"]["result"]["data"]["count"] == 2
         # 验证执行器收到正确参数
-        mock_exec.assert_called_once_with("products", "查询A产品", {"keyword": "A"}, "s3")
+        mock_exec.assert_called_once_with(
+            "products", "查询A产品", {"keyword": "A"}, "s3", runtime_context={}
+        )
 
     def test_auto_execute_true_high_risk_intent_blocks_execution(self, client: TestClient):
         """auto_execute=True + 高风险意图（delete/clear_all/customer_edit/wechat_send）→ 拒绝执行。"""

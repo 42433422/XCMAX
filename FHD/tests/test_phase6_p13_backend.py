@@ -171,18 +171,26 @@ class TestMergeToolRuntimeContext:
     def test_basic_merge(self) -> None:
         ctx = {"ui_surface": "normal", "intent_channel": "pro"}
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", ctx)
-        assert result["user_id"] == "u1"
+        assert result["conversation_id"] == "u1"
         assert result["message"] == "hello"
         assert result["ui_surface"] == "normal"
         assert result["intent_channel"] == "pro"
 
     def test_none_context(self) -> None:
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self) -> None:
-        result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not a dict")  # type: ignore[arg-type]
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1):
+            result = AIChatApplicationService._merge_tool_runtime_context(
+                "u1", "hello", "not a dict"
+            )  # type: ignore[arg-type]
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_skips_none_values(self) -> None:
         ctx = {"ui_surface": None, "intent_channel": "pro", "tool_execution_profile": None}

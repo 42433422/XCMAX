@@ -329,10 +329,6 @@ sync_site_static() {
 # publish step, homepage/nav fixes never become visible on xiu-ci.com.
 publish_site_static_to_live() {
   local git_site="${XCMAX_ROOT}/${SITE_SUBDIR}"
-  local live_site
-  live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
-  local git_real
-  git_real="$(readlink -f "$git_site" 2>/dev/null || printf '%s' "$git_site")"
   if [[ ! -d "$git_site" ]]; then
     log "WARN: git site tree missing: $git_site"
     return 0
@@ -349,6 +345,9 @@ publish_site_static_to_live() {
     log "ERROR: shared media reconstruction failed; stop before publishing static pages"
     return 1
   fi
+  local live_site git_real
+  live_site="$(readlink -f "$SITE_ROOT" 2>/dev/null || printf '%s' "$SITE_ROOT")"
+  git_real="$(readlink -f "$git_site" 2>/dev/null || printf '%s' "$git_site")"
   if [[ -z "$live_site" || ! -d "$live_site" ]]; then
     log "WARN: live site root missing: $SITE_ROOT"
     return 0
@@ -527,6 +526,14 @@ else
   exit 1
 fi
 
+# All live copies, including first-start market rebuilds, share one lock with
+# desktop pointer promotion and immutable activation. The subshell closes fd8;
+# functions below never reacquire it or invoke another publication entry point.
+(
+PUBLICATION_LOCK="${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}"
+mkdir -p "$(dirname "$PUBLICATION_LOCK")"
+exec 8>"$PUBLICATION_LOCK"
+flock -w 60 8 || { log "ERROR: public-site publication is busy"; exit 1; }
 REPO_CHANGED=false
 if [[ -z "$OLD_XCMAX_SHA" || "$OLD_XCMAX_SHA" != "$NEW_XCMAX_SHA" ]]; then
   REPO_CHANGED=true
@@ -601,6 +608,7 @@ ensure_market_dist || true
 validate_market_dist_identity || true
 
 restart_app_services
+)
 
 sync_nginx_corp_root() {
   local conf_src="${SITE_ROOT}/nginx-xiu-ci-root.conf"

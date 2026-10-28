@@ -6,18 +6,19 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application.agent_orchestrator import InMemoryAgentRunRepository
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
-def _client() -> TestClient:
+def _client(actor) -> TestClient:
     from app.fastapi_routes.domains.system.system_routes import router
 
     app = FastAPI()
     app.include_router(router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=actor.headers)
 
 
 def test_templates_analyze_route_executes_template_extract_through_agent_orchestrator(
-    tmp_path, monkeypatch, local_tools
+    tmp_path, monkeypatch, local_tools, trusted_actor
 ) -> None:
     repo = InMemoryAgentRunRepository()
     monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(tmp_path / "usage.json"))
@@ -53,7 +54,7 @@ def test_templates_analyze_route_executes_template_extract_through_agent_orchest
             return_value=["出货"],
         ),
     ):
-        response = _client().post(
+        response = _client(trusted_actor(user_id=17)).post(
             "/api/templates/analyze",
             files={
                 "file": (
@@ -75,7 +76,7 @@ def test_templates_analyze_route_executes_template_extract_through_agent_orchest
 
     run = repo.get(payload["run_id"])
     assert run is not None
-    assert run.user_id == "tenant-a"
+    assert run.user_id == "17"
     assert run.status == "completed"
     assert run.intent == "templates_analyze"
     assert run.tool_calls[0].tool_id == "template_extract"

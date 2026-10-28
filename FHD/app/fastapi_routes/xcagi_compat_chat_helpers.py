@@ -6,7 +6,7 @@ XCAGI 前端兼容 API — AI 聊天辅助函数与数据模型。
 
 from __future__ import annotations
 
-import asyncio
+import asyncio as asyncio
 import hashlib
 import json
 import logging
@@ -18,7 +18,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from fastapi import Request
+from fastapi import HTTPException, Request
 
 from app.application.agent_orchestrator.chat_trace import (
     attach_chat_trace_run as attach_chat_trace_run,
@@ -34,7 +34,6 @@ from app.application.modstore_conversation_app import (
     create_modstore_openai_client_from_request as create_modstore_openai_client_from_request,
 )
 from app.application.stream_status_events import MODEL_STREAM_ACCEPTED_EVENT
-from app.application.tutorial_v2.scope import validated_tutorial_tenant_id
 from app.domain.ai.tier import runtime_context_with_tier as runtime_context_with_tier
 from app.domain.app_pure.chat_reply_safety import (
     sanitize_model_chat_reply as sanitize_model_chat_reply,
@@ -46,10 +45,18 @@ from app.domain.context.session_context import (
     runtime_context_after_workflow_interrupt as runtime_context_after_workflow_interrupt,
 )
 from app.infrastructure.auth.db_token import effective_db_read_token
+from app.infrastructure.chat_stream_lifetime import (
+    StreamLifetime,
+    StreamObservationTimeout,
+    StreamWorker,
+    current_lifetime,
+)
 from app.infrastructure.llm.client import set_mode as set_llm_mode  # noqa: F401
-from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS as BOUNDARY_ERRORS
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+_STREAM_SAFETY_STORE_TIMEOUT = 5.0
 _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
@@ -124,43 +131,26 @@ def _runtime_context_with_authenticated_actor(
     request: Request,
     runtime_context: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Attach the local session actor and authenticated tenant.
-    Never trust chat body.user_id for approvals, and never trust any tenant_id
-    supplied by the request body/context: the tenant is derived only from the
-    authenticated session (``resolve_tenant_id``) so the resolved tenant wins.
-    """
-    context = dict(runtime_context or {})
-    # Every identity field crosses an untrusted HTTP boundary here. A missing
-    # session must not leave a client claim available to downstream services.
-    for key in (
-        "tenant_id",
-        "actor_id",
-        "local_user_id",
-        "authenticated_local_user_id",
-        "authenticated_username",
-        "authenticated_display_name",
-    ):
-        context.pop(key, None)
-    try:
-        from app.infrastructure.auth.dependencies import resolve_session_user
+    """Propagate a server session identity; anonymous chat carries no tool claim."""
+    from app.fastapi_routes.domains.agent.route_support import (
+        request_runtime_context,
+        without_runtime_identity,
+    )
 
-        user = resolve_session_user(request)
-        actor_id = int(getattr(user, "id", 0) or 0)
-        if actor_id > 0:
-            context["local_user_id"] = actor_id
-            context["actor_id"] = actor_id
-    except RECOVERABLE_ERRORS:
-        logger.debug("chat session actor resolution skipped", exc_info=True)
-    if (tutorial_tenant := validated_tutorial_tenant_id(request)) is not None:
-        return {**context, "tenant_id": int(tutorial_tenant)}
+    context = without_runtime_identity(dict(runtime_context or {}))
     try:
-        from app.infrastructure.auth.tenant_context import resolve_tenant_id
+        context = request_runtime_context(request, context)
+    except HTTPException as exc:
+        from app.infrastructure.auth.dependencies import session_id_from_request
 
-        resolved_tenant = resolve_tenant_id(request)
-        if resolved_tenant is not None:
-            context["tenant_id"] = int(resolved_tenant)
-    except RECOVERABLE_ERRORS:
-        logger.debug("chat session tenant resolution skipped", exc_info=True)
+        if exc.status_code != 401 or session_id_from_request(request):
+            raise
+        return context
+    # Retain the chat adapter's integer aliases; the sealed binding is unchanged.
+    context["local_user_id"] = int(context["user_id"])
+    context["actor_id"] = int(context["user_id"])
+    if context.get("tenant_id"):
+        context["tenant_id"] = int(context["tenant_id"])
     return context
 
 
@@ -358,71 +348,79 @@ def _xcagi_guarded_planner_stream_events(
     workspace_root: str,
     client: Any,
 ):
-    event_queue: queue.Queue[Any] = queue.Queue()
-    done_marker = object()
+    lifetime = current_lifetime.get() or StreamLifetime()
 
-    def _worker() -> None:
-        try:
-            from app.infrastructure.tenant_scope import tenant_scope
+    def events():
+        from app.infrastructure.chat_stream_lifetime import owned_model_read
+        from app.infrastructure.tenant_scope import tenant_scope
 
-            with tenant_scope((runtime_context or {}).get("tenant_id")):
-                for ev in chat_stream_sse_events(
+        with (
+            tenant_scope((runtime_context or {}).get("tenant_id")),
+            owned_model_read(
+                chat_stream_sse_events(
                     body.message,
                     runtime_context=runtime_context or None,
                     system_prompt=body.system_prompt,
                     workspace_root=workspace_root,
                     db_write_token=body.db_write_token,
                     client=client,
-                ):
-                    event_queue.put(ev)
-        except BOUNDARY_ERRORS as exc:
-            event_queue.put(exc)
-        finally:
-            event_queue.put(done_marker)
+                )
+            ) as stream,
+        ):
+            yield from stream
 
-    threading.Thread(target=_worker, daemon=True, name="xcagi-chat-stream-guard").start()
-
+    token = current_lifetime.set(lifetime)
+    try:
+        worker = StreamWorker(events)
+    finally:
+        current_lifetime.reset(token)
+    completed = False
     total_timeout = _xcagi_chat_timeout_seconds()
-    first_token_timeout = min(_xcagi_stream_first_token_timeout_seconds(), total_timeout)
     idle_notice_seconds = _xcagi_stream_idle_notice_seconds()
     started_at = time.monotonic()
-    first_event_seen = True
-    yield MODEL_STREAM_ACCEPTED_EVENT
+    try:
+        yield MODEL_STREAM_ACCEPTED_EVENT
 
-    while True:
-        elapsed = time.monotonic() - started_at
-        if elapsed >= total_timeout:
-            raise TimeoutError(
-                f"流式对话总超时（>{int(total_timeout)} 秒）。请稍后重试，或缩短问题范围。"
-            )
-
-        wait_timeout = first_token_timeout if not first_event_seen else idle_notice_seconds
-        wait_timeout = max(0.2, min(wait_timeout, total_timeout - elapsed))
-        try:
-            item = event_queue.get(timeout=wait_timeout)
-        except queue.Empty:
-            elapsed_int = int(time.monotonic() - started_at)
-            if not first_event_seen:
-                raise TimeoutError(
-                    f"流式对话首包超时（>{int(first_token_timeout)} 秒）。模型服务暂未返回首个分片，请稍后重试。"
+        next_notice = time.monotonic() + idle_notice_seconds
+        while True:
+            lifetime.check()
+            elapsed = time.monotonic() - started_at
+            if elapsed >= total_timeout:
+                lifetime.cancel("observation_timeout")
+                raise StreamObservationTimeout(
+                    f"对话观察超时（>{int(total_timeout)} 秒）。后台执行结果尚未确认，请到任务工作区核对，勿重复提交。"
                 )
-            yield {
-                "type": "token",
-                "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
-                "ephemeral": True,
-            }
-            continue
 
-        if item is done_marker:
-            return
-        if isinstance(item, Exception):
-            exc = _xcagi_chat_http_exc(item)
-            detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            yield {"type": "error", "message": detail, "status_code": exc.status_code}
-            return
+            try:
+                item = worker.queue.get(timeout=min(total_timeout - elapsed, 0.1))
+                # A read-close error after disconnect is not a business failure.
+                lifetime.check()
+            except queue.Empty:
+                if time.monotonic() < next_notice:
+                    continue
+                next_notice = time.monotonic() + idle_notice_seconds
+                elapsed_int = int(time.monotonic() - started_at)
+                yield {
+                    "type": "token",
+                    "text": f"\n（仍在处理中，已等待 {elapsed_int} 秒，请稍候…）\n",
+                    "ephemeral": True,
+                }
+                continue
 
-        first_event_seen = True
-        yield item
+            if item is worker.END:
+                completed = True
+                return
+            if isinstance(item, Exception):
+                exc = _xcagi_chat_http_exc(item)
+                detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+                yield {"type": "error", "message": detail, "status_code": exc.status_code}
+                return
+
+            yield item
+    finally:
+        worker.close()
+        if not completed:
+            lifetime.cancel("upstream_stream_stopped")
 
 
 def _sse_event_line(payload: dict) -> bytes:
@@ -464,38 +462,75 @@ async def _xcagi_planner_stream_bytes_async(
 ):
     """Async generator wrapper around _xcagi_planner_stream_bytes.
 
-    Runs the sync generator in a background thread and feeds items through an
-    asyncio.Queue so the event loop is NEVER blocked.  This avoids the
+    Runs the sync generator in a bounded, request-owned background bridge.
+    Cancellation closes only owned model reads; executed tools are not undone.  This avoids the
     Starlette BaseHTTPMiddleware / anyio thread-pool deadlock that occurs when
     a sync StreamingResponse generator is iterated via iterate_in_threadpool
     while the middleware task-group is still open.
     """
-    _SENTINEL = object()
-    async_q: asyncio.Queue = asyncio.Queue(maxsize=128)
-    loop = asyncio.get_running_loop()
-
-    def _feed_queue() -> None:
+    lifetime = StreamLifetime()
+    token = current_lifetime.set(lifetime)
+    try:
+        worker = StreamWorker(lambda: _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier))
+    finally:
+        current_lifetime.reset(token)
+    deadline = time.monotonic() + _xcagi_chat_timeout_seconds()
+    receive_deadline = min(deadline, time.monotonic() + _xcagi_stream_first_token_timeout_seconds())
+    try:
+        while True:
+            item = await asyncio.wait_for(
+                worker.receive(), timeout=max(0.0, receive_deadline - time.monotonic())
+            )
+            receive_deadline = deadline
+            if item is worker.END:
+                break
+            if isinstance(item, Exception):
+                yield _sse_event_line(
+                    {"type": "error", "message": str(item).strip() or item.__class__.__name__}
+                )
+                break
+            yield item
+    except TimeoutError as error:
+        reason = getattr(error, "reason", "observation_timeout")
+        lifetime.cancel(reason)
+        status_code = getattr(error, "status_code", 504)
         try:
-            for chunk in _xcagi_planner_stream_bytes(request, body, ai_tier=ai_tier):
-                asyncio.run_coroutine_threadsafe(async_q.put(chunk), loop).result(timeout=120)
-        except BOUNDARY_ERRORS as exc:
-            err_msg = str(exc).strip() or exc.__class__.__name__
-            err_line = _sse_event_line({"type": "error", "message": err_msg})
-            try:
-                asyncio.run_coroutine_threadsafe(async_q.put(err_line), loop).result(timeout=5)
-            except RECOVERABLE_ERRORS:
-                pass
-        finally:
-            asyncio.run_coroutine_threadsafe(async_q.put(_SENTINEL), loop).result(timeout=5)
+            if lifetime.run_snapshot is not None:
+                from app.application.agent_orchestrator.chat_trace import (
+                    mark_legacy_chat_stream_interrupted,
+                )
 
-    thread = threading.Thread(target=_feed_queue, daemon=True, name="xcagi-stream-async-bridge")
-    thread.start()
-
-    while True:
-        item = await async_q.get()
-        if item is _SENTINEL:
-            break
-        yield item
+                await asyncio.wait_for(
+                    asyncio.to_thread(
+                        mark_legacy_chat_stream_interrupted,
+                        lifetime.run_snapshot,
+                        pending=True,
+                        reason=reason,
+                    ),
+                    timeout=_STREAM_SAFETY_STORE_TIMEOUT,
+                )
+        except BOUNDARY_ERRORS as persistence_error:  # Request boundary; preserve unknown outcome.
+            status_code = 503
+            logger.warning(
+                "stream interruption persistence unavailable (%s)",
+                type(persistence_error).__name__,
+            )
+        yield _sse_event_line(
+            _sse_payload_with_run_id(
+                {
+                    "type": "error",
+                    "status_code": status_code,
+                    "message": str(error)
+                    or "对话观察超时；后台执行结果尚未确认，请核对任务，勿重复提交。",
+                    "execution_outcome": "unknown",
+                    "requires_reconciliation": True,
+                },
+                getattr(lifetime.run_snapshot, "run_id", None),
+            )
+        )
+    finally:
+        lifetime.cancel()
+        worker.close()
 
 
 from app.fastapi_routes.xcagi_compat_chat_stream import (

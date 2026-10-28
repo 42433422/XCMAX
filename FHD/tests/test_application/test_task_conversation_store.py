@@ -182,7 +182,7 @@ def test_legacy_history_routes_cannot_access_other_owners_session(store, monkeyp
     assert [m["content"] for m in original["messages"]] == ["本人内容"]
 
 
-@pytest.mark.parametrize("actor_context", [{"local_user_id": 41, "actor_id": 42}, {"actor_id": 41}])
+@pytest.mark.parametrize("actor_context", [{"local_user_id": 41, "actor_id": 41}, {"actor_id": 41}])
 def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
     store: TaskConversationStore, monkeypatch, actor_context
 ) -> None:

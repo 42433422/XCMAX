@@ -179,12 +179,12 @@ describe('Windows full application rollback helper', () => {
     if (scenario === 'retained-journal') expect(fs.readFileSync(`${databasePath}.xcagi-failed-journal`, 'utf8')).toBe('prior-journal')
   }, 60_000)
 
-  windowsIt.each(['consumed', 'legacy-operation', 'missing-operation', 'missing', 'log-only', 'malformed-json', 'missing-time', 'stale-operation', 'wrong-from', 'wrong-to', 'old-time', 'future-time', 'malformed-time', 'wrong-build', 'dirty-db', 'marker'])('collector independently rejects invalid evidence: %s', async (scenario) => {
+  windowsIt.each(['consumed', 'legacy-operation', 'missing-operation', 'missing', 'log-only', 'malformed-json', 'missing-time', 'stale-operation', 'wrong-from', 'wrong-to', 'old-time', 'future-time', 'malformed-time', 'wrong-build', 'wrong-product-version', 'dirty-db', 'marker'])('collector independently rejects invalid evidence: %s', async (scenario) => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-receipt-collector-')); cleanupRoots.push(root)
     const install = path.join(root, 'app'), data = path.join(root, 'data'), evidence = path.join(root, 'evidence')
     for (const dir of [path.join(install, 'resources'), data, evidence]) fs.mkdirSync(dir, { recursive: true })
     const old = '83939363ca2ccf7776c97f5c7895e29c1e5bc453', now = new Date().toISOString()
-    fs.writeFileSync(path.join(install, 'resources', 'build-info.json'), JSON.stringify({ gitSha: scenario === 'wrong-build' ? 'candidate' : old }))
+    fs.writeFileSync(path.join(install, 'resources', 'build-info.json'), JSON.stringify({ gitSha: scenario === 'wrong-build' ? 'candidate' : old, version: scenario === 'wrong-product-version' ? '1.0.0.7' : '1.0.0.5' }))
     const database = path.join(data, 'xcagi.db'); fs.writeFileSync(database, scenario === 'dirty-db' ? 'dirty' : 'original')
     const receipt = { operationId: 'this-operation', fromVersion: '1.0.0.6', toVersion: `1.0.0.5+${old.slice(0, 12)}`, reason: 'isolated startup failure', appliedAt: now, completedAt: now }
     if (scenario === 'missing-operation') receipt.operationId = ''
@@ -208,7 +208,7 @@ describe('Windows full application rollback helper', () => {
     const marker = { operationId: 'this-operation', fromVersion: `1.0.0.5+${old.slice(0, 12)}`, toVersion: '1.0.0.6', preparedAt: new Date(Date.now() - 30_000).toISOString() }
     if (['legacy-operation', 'missing-operation'].includes(scenario)) delete (marker as Partial<typeof marker>).operationId
     const script = `$ErrorActionPreference='Stop'; function Check([bool]$ok,[string]$name,[string]$detail) { if (-not $ok) { throw $name } }\n` +
-      `$installRoot=${quote(install)}; $dataRoot=${quote(data)}; $EvidenceDir=${quote(evidence)}; $db=${quote(database)}; $deadline=Get-Date\n` +
+      `$installRoot=${quote(install)}; $dataRoot=${quote(data)}; $EvidenceDir=${quote(evidence)}; $db=${quote(database)}; $deadline=Get-Date; $OldSha=${quote(old)}; $BaselineVersion='1.0.0.5'\n` +
       `$databaseBefore='${createHash('sha256').update('original').digest('hex')}'; $naturalMarker=${quote(JSON.stringify(marker))} | ConvertFrom-Json\n` + `${body}\nAssert-RollbackEvidence\n`
     const scriptPath = path.join(root, 'check.ps1'); fs.writeFileSync(scriptPath, script)
     const encoded = Buffer.from(buildWindowsRollbackFileLoader(scriptPath, createHash('sha256').update(script).digest('hex')), 'utf16le').toString('base64')
@@ -216,7 +216,7 @@ describe('Windows full application rollback helper', () => {
     try { await execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded], { timeout: 10000, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toUpperCase() !== 'PSMODULEPATH')) }) } catch (caught) { error = String(caught) }
     if (['consumed', 'legacy-operation'].includes(scenario)) {
       expect(error).toBe('')
-    } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
+    } else expect(error).toContain(scenario === 'wrong-build' || scenario === 'wrong-product-version' || scenario === 'marker' ? 'rollback.restored_build' : scenario === 'dirty-db' ? 'rollback.database_hash' : 'rollback.applied_record')
     if (!['missing', 'log-only'].includes(scenario)) expect(fs.readFileSync(path.join(evidence, 'rollback-applied.last.json'), 'utf8')).toBe(scenario === 'malformed-json' ? '{bad json' : JSON.stringify(receipt))
   }, 15000)
 })

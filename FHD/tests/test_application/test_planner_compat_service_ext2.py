@@ -203,7 +203,7 @@ class TestExecuteCompatChatDbReadToken:
         with (
             _chat_dependencies(),
             patch(
-                "app.application.normal_chat_dispatch.try_normal_slot_read_payload",
+                "app.application.normal_chat_dispatch.try_normal_slot_read_payload_async",
                 return_value=None,
             ),
             patch(

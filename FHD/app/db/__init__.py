@@ -229,6 +229,22 @@ def _create_engine_for_url(url: str):
         # 有界 QueuePool，让每个并发事务拥有独立连接，再由 WAL/busy_timeout
         # 负责 SQLite 的写入串行化。
         parsed = make_url(url)
+        if os.environ.get("XCAGI_OWNED_SOURCE_PROFILE") == "guarded-host-v1":
+            # Guarded startup admits existing storage; even a later unlink must
+            # never turn an ordinary connection into implicit DB provisioning.
+            import sqlite3
+
+            path = Path(parsed.database or "")
+            if not path.is_absolute() or parsed.query:
+                raise RuntimeError("guarded database requires an existing absolute file")
+            return create_engine(
+                url,
+                creator=lambda: sqlite3.connect(
+                    path.as_uri() + "?mode=rw", uri=True, check_same_thread=False, timeout=45
+                ),
+                poolclass=NullPool,
+                echo=False,
+            )
         if not parsed.database or parsed.database == ":memory:":
             return create_engine(
                 url,
@@ -278,9 +294,14 @@ _session_local_cache: dict[str, sessionmaker] = {}
 
 def _database_url_cache_key(url: str) -> str:
     try:
-        return make_url(url).render_as_string(hide_password=False)
+        key = make_url(url).render_as_string(hide_password=False)
     except RECOVERABLE_ERRORS:
-        return str(url)
+        key = str(url)
+    # A previously opened, creating engine/session factory must never be reused
+    # after switching to the explicit existing-only process policy.
+    if os.environ.get("XCAGI_OWNED_SOURCE_PROFILE") == "guarded-host-v1":
+        return "guarded-existing:" + key
+    return key
 
 
 def _get_engine_for_url(url: str) -> Engine:

@@ -72,6 +72,7 @@ const {
   },
   mockAccountProfileStore: {
     loaded: true,
+    sessionCheckUnavailable: false,
     isAdminAccount: false,
     accountKind: 'personal' as string,
     marketIsAdmin: false,
@@ -168,6 +169,8 @@ vi.mock('@/api/auth', () => ({
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
+  isEnterpriseProductSkuBuild: () => false,
+  INDUSTRY_DELIVERY_ERP_MENU_KEYS: [],
   isPlatformShellModeEnabled: mockIsPlatformShellModeEnabled,
   isShellEditionBuild: () => false,
   isIndustryDeliveryRouteName: mockIsIndustryDeliveryRouteName,
@@ -293,6 +296,7 @@ function resetMockDefaults() {
   mockModsStore.mods = []
   mockModsStore.activeModId = ''
   mockAccountProfileStore.loaded = true
+  mockAccountProfileStore.sessionCheckUnavailable = false
   mockAccountProfileStore.isAdminAccount = false
   mockAccountProfileStore.accountKind = 'personal'
   mockAccountProfileStore.marketIsAdmin = false
@@ -538,7 +542,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(freshRouter.currentRoute.value.query.redirect).toBe('/xcmax-admin')
     })
 
-    it('admin console 冷启动 profile refresh 异常时闭锁到登录页', async () => {
+    it('admin console 冷启动瞬态异常取消导航，不误称账号失效', async () => {
       mockIsAdminConsoleSpa.mockReturnValue(true)
       mockAccountProfileStore.loaded = false
       mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
@@ -546,8 +550,8 @@ describe('router/index 覆盖率补齐', () => {
       vi.resetModules()
       const { default: freshRouter } = await import('./index')
       await freshRouter.push('/')
-      expect(freshRouter.currentRoute.value.name).toBe('login')
-      expect(freshRouter.currentRoute.value.query.error).toBe('管理员会话校验失败，请重新登录')
+      expect(freshRouter.currentRoute.value.name).toBeUndefined()
+      expect(freshRouter.currentRoute.value.query.error).toBeUndefined()
     })
   })
 
@@ -894,19 +898,72 @@ describe('router/index 覆盖率补齐', () => {
       expect(router.currentRoute.value.name).toBe('login')
     })
 
-    it('fetchProductSku 异常 + 非 enterprise 时允许导航', async () => {
-      mockFetchProductSku.mockRejectedValueOnce(new Error('network'))
-      mockFetchProductSku.mockResolvedValueOnce('generic')
-      mockIsEnterpriseEdition.mockReturnValue(false)
+    it.each([false, true])('SKU unavailability cancels protected navigation without changing authentication: %s', async enterprise => {
+      await router.push('/login')
+      mockFetchProductSku.mockRejectedValue(new Error('network'))
+      mockIsEnterpriseEdition.mockReturnValue(enterprise)
+      await router.push('/settings')
+      expect(router.currentRoute.value.fullPath).toBe('/login')
+      expect(router.currentRoute.value.query.error).toBeUndefined()
+    })
+
+    it.each([new Error('network'), Object.assign(new Error('timeout'), { name: 'AbortError' }), Object.assign(new Error('unavailable'), { status: 503 })])('retains the current page on transient session validation errors', async error => {
+      await router.push('/')
+      const before = router.currentRoute.value.fullPath
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockRejectedValueOnce(error)
+      await router.push('/settings')
+      expect(router.currentRoute.value.fullPath).toBe(before)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
       await router.push('/settings')
       expect(router.currentRoute.value.name).toBe('settings')
     })
 
-    it('fetchProductSku 异常 + enterprise 时重定向到 login', async () => {
-      mockFetchProductSku.mockRejectedValue(new Error('network'))
-      mockIsEnterpriseEdition.mockReturnValue(true)
+    it.each(['admin', 'enterprise', 'desktop', 'generic'])('retries a loaded unavailable %s profile on each navigation and recovers', async shell => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell !== 'generic')
+      mockAccountProfileStore.isAdminAccount = shell === 'admin'
+      mockAccountProfileStore.sessionCheckUnavailable = true
       await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledOnce()
       expect(router.currentRoute.value.name).toBe('login')
+      mockAccountProfileStore.refreshFromServer.mockImplementationOnce(async () => { mockAccountProfileStore.sessionCheckUnavailable = false })
+      await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalledTimes(2)
+      expect(router.currentRoute.value.name).toBe('settings')
+    })
+
+    it.each(['admin', 'enterprise', 'desktop', 'generic'])('keeps a recovered but rejected %s profile out of protected routes', async shell => {
+      mockIsAdminConsoleSpa.mockReturnValue(shell === 'admin')
+      mockIsDesktopShell.mockReturnValue(shell === 'desktop')
+      mockIsEnterpriseEdition.mockReturnValue(shell !== 'generic')
+      mockAccountProfileStore.sessionCheckUnavailable = true
+      mockAccountProfileStore.refreshFromServer.mockImplementation(async () => {
+        mockAccountProfileStore.sessionCheckUnavailable = false
+        mockAccountProfileStore.loaded = false
+        mockAccountProfileStore.isAdminAccount = false
+      })
+      mockValidateEnterpriseSession.mockResolvedValue(false)
+      await router.push('/settings')
+      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('login')
+    })
+
+    it('supersedes a pending sidebar guard without applying its late redirect', async () => {
+      const { navigateFromSidebarKey, resetSidebarNavigationForTests } = await import('@/utils/sidebarNavigation')
+      resetSidebarNavigationForTests()
+      await router.push('/login')
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      let finish!: (valid: boolean) => void
+      mockValidateEnterpriseSession.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+      const old = navigateFromSidebarKey(router, 'settings')
+      await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+      const latest = navigateFromSidebarKey(router, 'chat')
+      finish(false)
+      await Promise.all([old, latest])
+      expect(router.currentRoute.value.name).toBe('chat')
+      resetSidebarNavigationForTests()
     })
 
     it('publicAccess 路由跳过 enterprise session 检查', async () => {

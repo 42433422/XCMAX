@@ -79,7 +79,16 @@ def _registered_router_products(
             page=1,
             per_page=10,
         )
-        rows = result.get("data") or []
+        if isinstance(result, dict) and result.get("success") is False:
+            return result
+        if (
+            not isinstance(result, dict)
+            or result.get("success") is not True
+            or not isinstance(result.get("data"), list)
+            or any(not isinstance(row, dict) for row in result["data"])
+        ):
+            return {"success": False, "error_code": "product_query_invalid_response"}
+        rows = result["data"]
         exists = False
         for row in rows:
             row_name = str(row.get("name") or row.get("product_name") or "").strip()

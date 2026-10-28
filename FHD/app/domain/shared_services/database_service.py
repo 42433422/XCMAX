@@ -5,7 +5,7 @@ import os
 import sqlite3
 import tempfile
 import time
-from contextlib import closing
+from contextlib import closing, nullcontext
 from datetime import datetime
 from itertools import groupby
 from pathlib import Path
@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 _LIVE_AUDIT_TABLES = frozenset(
     {
         "agent_runs",
+        "agent_business_actions",
+        "agent_product_edit_claims",
         "agent_tasks",
         "agent_task_commands",
         "agent_task_executions",
@@ -131,80 +133,116 @@ class DatabaseService(NeuroEventPublisherMixin):
             if not db_path:
                 return {"success": False, "message": "仅支持 SQLite 数据库恢复"}
 
-            if not os.path.isabs(backup_file):
-                backup_dir = self._get_backup_dir()
-                backup_path = os.path.join(backup_dir, backup_file)
-            else:
-                backup_path = backup_file
+            from app.desktop_runtime.database_generation_registry import owned_source_lifecycle
 
-            if not os.path.exists(backup_path):
-                return {"success": False, "message": f"备份文件不存在：{backup_path}"}
+            # Hold the real lifecycle lock through staging and in-place restore.
+            # Once enrolled, legacy restore cannot rewind source authority.
+            with owned_source_lifecycle(host_target=Path(db_path), legacy_restore=True):
+                if not os.path.isabs(backup_file):
+                    backup_dir = self._get_backup_dir()
+                    backup_path = os.path.join(backup_dir, backup_file)
+                else:
+                    backup_path = backup_file
 
-            db_dir = os.path.dirname(db_path)
-            if db_dir and not os.path.exists(db_dir):
-                os.makedirs(db_dir, exist_ok=True)
+                if not os.path.exists(backup_path):
+                    return {"success": False, "message": f"备份文件不存在：{backup_path}"}
 
-            if os.path.exists(db_path) and os.path.samefile(backup_path, db_path):
-                return {"success": False, "message": "备份与当前数据库不能是同一文件"}
-            with closing(
-                sqlite3.connect(Path(backup_path).resolve().as_uri() + "?mode=ro", uri=True)
-            ) as source:
-                if source.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                    return {"success": False, "message": "备份完整性检查失败，未恢复"}
-                with tempfile.TemporaryDirectory(
-                    prefix="xcagi-restore-", dir=db_dir or "."
-                ) as work:
-                    with (
-                        closing(sqlite3.connect(db_path, timeout=0)) as watcher,
-                        closing(sqlite3.connect(os.path.join(work, "staged.db"))) as staged,
-                    ):
-                        version = self._stage_restore(source, watcher, staged)
-                        deadline = time.monotonic() + 2.0
-                        locked = False
+                db_dir = os.path.dirname(db_path)
+                if db_dir and not os.path.exists(db_dir):
+                    os.makedirs(db_dir, exist_ok=True)
 
-                        def check_progress(status: int, remaining: int, total: int) -> None:
-                            nonlocal locked
-                            if (
-                                status in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
-                                and time.monotonic() >= deadline
-                            ):
-                                raise sqlite3.OperationalError(
-                                    "恢复被数据库占用阻断，未完成；请稍后重试"
-                                )
-                            if not locked and status == sqlite3.SQLITE_OK:
-                                # The first page holds the destination write lock. Refuse a
-                                # snapshot if another writer changed evidence before that lock.
-                                if watcher.execute("PRAGMA data_version").fetchone()[0] != version:
+                if os.path.exists(db_path) and os.path.samefile(backup_path, db_path):
+                    return {"success": False, "message": "备份与当前数据库不能是同一文件"}
+                with closing(
+                    sqlite3.connect(Path(backup_path).resolve().as_uri() + "?mode=ro", uri=True)
+                ) as source:
+                    if source.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                        return {"success": False, "message": "备份完整性检查失败，未恢复"}
+                    with tempfile.TemporaryDirectory(
+                        prefix="xcagi-restore-", dir=db_dir or "."
+                    ) as work:
+                        with (
+                            closing(sqlite3.connect(db_path, timeout=0)) as watcher,
+                            closing(sqlite3.connect(os.path.join(work, "staged.db"))) as staged,
+                        ):
+                            mode = watcher.execute("PRAGMA journal_mode").fetchone()[0]
+                            # Versions are connection-local; baseline precedes staging.
+                            version = watcher.execute("PRAGMA data_version").fetchone()[0]
+                            self._stage_restore(source, watcher, staged)
+                            if staged.execute("PRAGMA page_count").fetchone()[0] < 2:
+                                raise sqlite3.OperationalError("备份缺少业务表，未恢复")
+                            if mode == "delete":
+                                if watcher.execute("PRAGMA locking_mode=EXCLUSIVE").fetchone() != (
+                                    "exclusive",
+                                ):
+                                    raise sqlite3.OperationalError("恢复无法独占目标数据库，未恢复")
+                                watcher.execute("BEGIN EXCLUSIVE")
+                                if (
+                                    watcher.execute("PRAGMA journal_mode").fetchone()[0] != mode
+                                    or watcher.execute("PRAGMA data_version").fetchone()[0]
+                                    != version
+                                ):
                                     raise sqlite3.OperationalError(
-                                        "恢复准备期间数据库已变化，未恢复；请重试"
+                                        "恢复准备期间数据库已变化，未恢复"
                                     )
-                                locked = True
+                                # Retain the file lock, but end the transaction required
+                                # by native backup. Closing releases it on every outcome.
+                                watcher.commit()
+                            deadline = time.monotonic() + 2.0
+                            checked = mode == "delete"
 
-                        if staged.execute("PRAGMA page_count").fetchone()[0] < 2:
-                            raise sqlite3.OperationalError("备份缺少业务表，未恢复")
-                        with closing(sqlite3.connect(db_path, timeout=0)) as target:
-                            staged.backup(target, pages=1, progress=check_progress, sleep=0.01)
-                            if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
-                                return {
-                                    "success": False,
-                                    "message": "恢复完整性检查失败",
-                                }
+                            def check_progress(status: int, remaining: int, total: int) -> None:
+                                nonlocal checked
+                                if (
+                                    status in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}
+                                    and time.monotonic() >= deadline
+                                ):
+                                    raise sqlite3.OperationalError("恢复被数据库占用阻断，未完成")
+                                if not checked and status == sqlite3.SQLITE_OK:
+                                    # Preserve WAL's live-reader compatibility. The first
+                                    # copied page holds the write lock; this is a separate
+                                    # observer, NEVER the destination connection.
+                                    if (
+                                        watcher.execute("PRAGMA journal_mode").fetchone()[0] != mode
+                                        or watcher.execute("PRAGMA data_version").fetchone()[0]
+                                        != version
+                                    ):
+                                        raise sqlite3.OperationalError(
+                                            "恢复准备期间数据库已变化，未恢复"
+                                        )
+                                    checked = True
 
-            logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
+                            destination = (
+                                nullcontext(watcher)
+                                if mode == "delete"
+                                else closing(sqlite3.connect(db_path, timeout=0))
+                            )
+                            with destination as target:
+                                if target.execute("PRAGMA journal_mode").fetchone()[0] != mode:
+                                    raise sqlite3.OperationalError("恢复目标日志模式已变化，未恢复")
+                                staged.backup(target, pages=1, progress=check_progress, sleep=0.01)
+                                if target.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                                    return {"success": False, "message": "恢复完整性检查失败"}
 
-            data_root = os.environ.get("XCAGI_DATA_DIR")
-            if (
-                os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
-                in {"1", "true", "yes", "on"}
-                and data_root
-                and Path(db_path).resolve() == Path(data_root).resolve() / "data" / "xcagi.db"
-            ):
-                from app.desktop_runtime.desktop_runtime_paths import clear_database_recovery_marker
+                logger.info("数据库恢复成功：从 %s 恢复到 %s", backup_path, db_path)
 
-                if clear_database_recovery_marker(data_root):
-                    os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{Path(backup_path).name}"
+                data_root = os.environ.get("XCAGI_DATA_DIR")
+                if (
+                    os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower()
+                    in {"1", "true", "yes", "on"}
+                    and data_root
+                    and Path(db_path).resolve() == Path(data_root).resolve() / "data" / "xcagi.db"
+                ):
+                    from app.desktop_runtime.desktop_runtime_paths import (
+                        clear_database_recovery_marker,
+                    )
 
-            return {"success": True, "message": "数据库恢复成功"}
+                    if clear_database_recovery_marker(data_root):
+                        os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = (
+                            f"restored:{Path(backup_path).name}"
+                        )
+
+                return {"success": True, "message": "数据库恢复成功"}
 
         except _RestoreAuditReferenceError as error:
             logger.warning("数据库恢复被审计关联阻断：%s", error)

@@ -64,6 +64,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   const tenantIsOwner = ref(false)
   const userRole = ref('')
   const loaded = ref(false)
+  const sessionCheckUnavailable = ref(false)
   const workspaceEpoch = ref(-1)
   const workspaceReady = computed(() => loaded.value && workspaceEpoch.value === productReadAccountEpoch.value)
   let hydrationEpoch = 0
@@ -79,6 +80,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   })
 
   function applySessionFields(data: Record<string, unknown>): Promise<void> {
+    sessionCheckUnavailable.value = false
     const epoch = ++hydrationEpoch
     const kind = String(data.account_kind || 'enterprise').trim()
     if (kind === 'personal' || kind === 'enterprise' || kind === 'admin') {
@@ -143,6 +145,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
   }
 
   async function refreshFromServer() {
+    const retryUnavailable = sessionCheckUnavailable.value
     let requestEpoch = hydrationEpoch
     try {
       let sku = 'generic'
@@ -152,7 +155,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
         /* ignore */
       }
       if (isEnterpriseEdition(sku)) {
-        const valid = await validateEnterpriseSessionCached()
+        const valid = await validateEnterpriseSessionCached(retryUnavailable)
         if (requestEpoch !== hydrationEpoch) return
         if (!valid) {
           clear()
@@ -173,7 +176,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
       if (requestEpoch !== hydrationEpoch) return
       // 仅当服务端明确判定会话失效（401/403）才清空资料；超时/被取代/网络抖动属瞬时失败，清空会隐藏依赖权限的入口。
       const status = (error as { status?: unknown } | null | undefined)?.status
-      if (status !== 401 && status !== 403) return
+      if (status !== 401 && status !== 403) { sessionCheckUnavailable.value = true; return }
       invalidateEnterpriseSessionCache()
       clear()
     }
@@ -181,6 +184,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
 
   function clear(hydrate = true) {
     hydrationEpoch++
+    sessionCheckUnavailable.value = false
     workspaceEpoch.value = -1
     accountKind.value = 'enterprise'
     companyBrand.value = ''
@@ -232,6 +236,7 @@ export const useAccountProfileStore = defineStore('accountProfile', () => {
     applyFromMeData,
     applyFromLoginPayload,
     refreshFromServer,
+    sessionCheckUnavailable,
     clear,
   }
 })

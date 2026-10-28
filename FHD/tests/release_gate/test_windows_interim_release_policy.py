@@ -1,7 +1,10 @@
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
+
+import pytest
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 ACCEPTANCE = FHD_ROOT / "config" / "windows_signing_acceptance.json"
@@ -120,3 +123,95 @@ def test_owner_signing_acceptance_term_is_three_years_and_unexpired() -> None:
     # 业主指定 3 年（含 2028 闰日，共 1096 天），而非既有的 30 天重估惯例。
     assert (expires_at - accepted_at).days == 1096
     assert expires_at > datetime.now(UTC)
+
+
+def test_test_candidate_keeps_explicit_frozen_upgrade_baselines() -> None:
+    workflow = (FHD_ROOT / ".github/workflows/windows-candidate-acceptance.yml").read_text()
+    collector = (FHD_ROOT / "scripts/package/accept-windows-candidate.ps1").read_text("utf-8-sig")
+    for version in ("1.0.0.5", "1.0.0.6"):
+        assert f"inputs.baseline_version == '{version}'" in workflow
+    metadata = json.loads((FHD_ROOT / "config/download_release.json").read_text())
+    baselines = metadata["windows_acceptance_baselines"]
+    assert (
+        baselines["1.0.0.6"]["sha256"]
+        == "5d4b75c831a78185eab53787c7dfd3ebe9d066fe27daadd147e208d4666cb855"
+    )
+    assert (
+        baselines["1.0.0.5"]["sha256"]
+        == "92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf"
+    )
+    assert baselines["1.0.0.6"]["size"] == 345730149
+    assert baselines["1.0.0.6"]["git_sha"] == "13fccf867a592708dbd2347ca52b30f92e899550"
+    assert "$OldSha = $baseline.git_sha; $OldSha256 = $baseline.sha256" in collector
+    assert "$installer.Length -ne $baseline.size -or $hash -ne $baseline.sha256" in workflow
+    assert "baseline_sha=$OldSha" in collector and "baseline_sha256=$OldSha256" in collector
+    assert "$restored.version -eq $BaselineVersion" in collector
+    assert (
+        "($baseline.allow_missing_health_identity -eq $true -and -not $health.git_sha)" in collector
+    )
+    assert baselines["1.0.0.5"]["allow_missing_health_identity"] is True
+    assert baselines["1.0.0.6"]["allow_missing_health_identity"] is False
+    metadata = json.loads((FHD_ROOT / "config/download_release.json").read_text())
+    assert metadata["release_ready"] is False
+    assert "测试候选" in metadata["windows_interim_release"]["title"]
+    assert metadata["release_history"][0]["version"] == "1.0.0.6"
+
+
+@pytest.mark.parametrize("baseline", ["1.0.0.5", "1.0.0.6"])
+@pytest.mark.parametrize(
+    "change",
+    [
+        "none",
+        "from_version",
+        "from_sha",
+        "to_version",
+        "to_sha",
+        "product_from",
+        "toolchain_to",
+        "suffix",
+        "mode",
+    ],
+)
+def test_snapshot_identity_contract_rejects_wrong_version_or_sha(baseline, change):
+    """Validate the collector's exact string contract; Windows executes PowerShell in CI."""
+    collector = (FHD_ROOT / "scripts/package/accept-windows-candidate.ps1").read_text("utf-8-sig")
+    record = json.loads((FHD_ROOT / "config/download_release.json").read_text())[
+        "windows_acceptance_baselines"
+    ][baseline]
+    values = {
+        "baselineToolchainVersion": record["toolchain_version"],
+        "OldSha": record["git_sha"],
+        "productVersion": "1.0.0.7",
+        "CandidateSha": "a" * 40,
+    }
+    assert values["baselineToolchainVersion"] == "1.0.0"
+    assert "$baselineToolchainVersion = $baseline.toolchain_version" in collector
+    assert "throw 'Unknown frozen acceptance baseline'" in collector
+    expected = {}
+    for field in ("From", "To"):
+        version, sha = re.search(
+            rf'\$expected{field}Version = "\$(\w+)\+\$\(\$(\w+)\.Substring\(0, 12\)\)"', collector
+        ).groups()
+        assert (version, sha) == {
+            "From": ("baselineToolchainVersion", "OldSha"),
+            "To": ("productVersion", "CandidateSha"),
+        }[field]
+        expected[field] = f"{values[version]}+{values[sha][:12]}"
+        assert f"$naturalMarker.{field.lower()}Version -ceq $expected{field}Version" in collector
+    assert "$naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity'" in collector
+    actual = dict(expected)
+    if change.endswith("_version"):
+        actual[change.split("_")[0].title()] = (
+            "9.9.9.9+" + actual[change.split("_")[0].title()].split("+")[1]
+        )
+    elif change.endswith("_sha"):
+        key = change.split("_")[0].title()
+        actual[key] = actual[key].split("+")[0] + "+" + "b" * 12
+    elif change == "suffix":
+        actual["From"] += "-wrong-build"
+    elif change == "product_from":
+        actual["From"] = f"{baseline}+{values['OldSha'][:12]}"
+    elif change == "toolchain_to":
+        actual["To"] = f"1.0.0+{values['CandidateSha'][:12]}"
+    mode = "not-windows-full" if change == "mode" else "windows-full"
+    assert (actual == expected and mode == "windows-full") is (change == "none")

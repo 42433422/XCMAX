@@ -72,7 +72,7 @@ def test_remote_bridge_uses_canonical_market_user_and_schedules_ai(bridge_db) ->
         sent = client.post(
             "/api/im/enterprise-cs/remote/messages",
             headers={"Authorization": "Bearer market-token"},
-            json={"body": "请说明常规帮助范围"},
+            json={"body": "请说明常规帮助范围", "user_id": 999, "market_user_id": 999},
         )
 
     assert first.status_code == 200
@@ -83,6 +83,8 @@ def test_remote_bridge_uses_canonical_market_user_and_schedules_ai(bridge_db) ->
     assert sent.json()["message"]["origin"] == "customer"
     background.assert_awaited_once()
     assert background.await_args.args[1] == 39
+    assert background.await_args.kwargs == {"market_token": "market-token"}
+    assert "market-token" not in sent.text
     with bridge_db() as db:
         row = db.execute(
             select(ImMessage).where(ImMessage.body == "请说明常规帮助范围")
@@ -98,7 +100,10 @@ def test_remote_bridge_uses_canonical_market_user_and_schedules_ai(bridge_db) ->
 
 
 @pytest.mark.asyncio
-async def test_market_identity_rejects_non_enterprise() -> None:
+@pytest.mark.parametrize(
+    "flags", [{"is_enterprise": False}, {"is_enterprise": True, "is_admin": True}]
+)
+async def test_market_identity_rejects_non_enterprise(flags) -> None:
     from app.fastapi_routes import im_cs_client_routes as routes
 
     request = type(
@@ -106,7 +111,7 @@ async def test_market_identity_rejects_non_enterprise() -> None:
         (),
         {"headers": {"Authorization": "Bearer market-token"}},
     )()
-    payload = {"id": 7, "username": "personal-user", "is_enterprise": False}
+    payload = {"id": 7, "username": "personal-user", **flags}
     with patch("app.fastapi_routes.market_account._proxy_json", AsyncMock(return_value=payload)):
         with pytest.raises(HTTPException) as exc:
             await routes._validate_market_identity(request)

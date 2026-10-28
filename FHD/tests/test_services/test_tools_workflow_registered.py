@@ -95,47 +95,78 @@ class TestCustomersRouter:
 
     def test_ensure_exists_matched(self):
         mock_svc = MagicMock()
-        mock_match = MagicMock()
-        mock_match.unit_name = "TestCo"
-        mock_svc.match_purchase_unit.return_value = mock_match
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {
+            "status": "matched",
+            "id": 7,
+            "unit_name": "TestCo",
+        }
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 7, "customer_name": "TestCo"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "TestCo"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["exists"] is True
+        assert result["success"] is True and result["exists"] is True
+        assert result["id"] == 7
+        mock_svc.lookup_purchase_unit_for_ensure.assert_called_once_with("TestCo")
+        mock_svc.get_by_id.assert_called_once_with(7)
+        mock_svc.create.assert_not_called()
 
     def test_ensure_exists_creates_new(self):
         mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": True}
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
+        mock_svc.get_by_id.return_value = {
+            "success": True,
+            "data": {"id": 8, "customer_name": "NewCo"},
+        }
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
             )
-            assert result["success"] is True
-            assert result["created"] is True
+        assert result["success"] is True and result["created"] is True
+        assert result["id"] == 8
+        mock_svc.create.assert_called_once_with({"customer_name": "NewCo"})
+        mock_svc.get_by_id.assert_called_once_with(8)
 
-    def test_ensure_exists_create_fails_with_duplicate(self):
+    @pytest.mark.parametrize("message", ["客户已存在", "DB error"])
+    def test_ensure_exists_create_failure_never_claims_success(self, message):
         mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": False, "message": "客户已存在"}
-        with patch("app.application.get_customer_app_service", return_value=mock_svc):
-            result = _registered_router_customers(
-                "ensure_exists", {"unit_name": "DupCo"}, {}, "normal", ""
-            )
-            assert result["success"] is True
-            assert result["exists"] is True
-
-    def test_ensure_exists_create_fails_other(self):
-        mock_svc = MagicMock()
-        mock_svc.match_purchase_unit.return_value = None
-        mock_svc.create.return_value = {"success": False, "message": "DB error"}
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": False, "message": message}
         with patch("app.application.get_customer_app_service", return_value=mock_svc):
             result = _registered_router_customers(
                 "ensure_exists", {"unit_name": "FailCo"}, {}, "normal", ""
             )
-            assert result["success"] is False
+        assert result["success"] is False and result["outcome"] == "unknown"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
+        mock_svc.create.assert_called_once_with({"customer_name": "FailCo"})
+        mock_svc.get_by_id.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "readback",
+        [
+            {"success": False},
+            {"success": True, "data": {"id": 9, "customer_name": "NewCo"}},
+            {"success": True, "data": {"id": 8, "customer_name": "OtherCo"}},
+        ],
+    )
+    def test_ensure_exists_unverified_receipt_is_not_success(self, readback):
+        mock_svc = MagicMock()
+        mock_svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+        mock_svc.create.return_value = {"success": True, "data": {"id": 8}}
+        mock_svc.get_by_id.return_value = readback
+        with patch("app.application.get_customer_app_service", return_value=mock_svc):
+            result = _registered_router_customers(
+                "ensure_exists", {"unit_name": "NewCo"}, {}, "normal", ""
+            )
+        assert result["success"] is False
+        assert result["error_code"] == "customer_receipt_unverified"
+        assert result["retryable"] is False and result["reconciliation_required"] is True
+        mock_svc.create.assert_called_once()
+        mock_svc.get_by_id.assert_called_once_with(8)
 
     def test_ensure_exists_missing_name(self):
         result = _registered_router_customers("ensure_exists", {}, {}, "normal", "")

@@ -57,7 +57,7 @@ interface UseChatMessagesReturn {
 
 const SHIPMENT_PREVIEW_COLUMNS = ['单位', '型号', '产品名称', '桶数', '规格', '单价', '总价']
 
-export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Ref<ShipmentTask | null>) {
+export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Ref<ShipmentTask | null>, captureCurrent: () => () => boolean = () => () => true) {
   const lastShipmentExecution = ref<{
     filePath: string
     purchaseUnit: string
@@ -67,9 +67,9 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
     taskListId?: string
   } | null>(null)
 
-  async function handleModifyCommand(message: string): Promise<boolean> {
+  async function handleModifyCommand(message: string, isCurrent = captureCurrent()): Promise<boolean> {
     const task = currentTask.value
-    if (!task || task?.type !== 'shipment_generate' || task?.completed) {
+    if (!isCurrent() || !task || task?.type !== 'shipment_generate' || task?.completed) {
       return false
     }
 
@@ -78,11 +78,12 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
       return false
     }
 
-    const products = [...((task.payload?.params?.products as ShipmentProduct[]) || [])]
+    const originalProducts = task.payload?.params?.products
+    const products = [...(originalProducts || [])]
 
     switch (command.action) {
       case 'add':
-        return await handleAddProduct(products, command, task)
+        return await handleAddProduct(products, command, task, () => isCurrent() && currentTask.value === task && !task.completed && task.payload?.params?.products === originalProducts)
       case 'remove':
         return handleRemoveProduct(products, command, task)
       case 'edit':
@@ -96,6 +97,7 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
     products: ShipmentProduct[],
     command: { product?: { model_number: string; quantity_tins: number; tin_spec: number } },
     task: ShipmentTask,
+    isCurrent: () => boolean,
   ): Promise<boolean> {
     if (!command.product?.model_number) {
       const tip = '再加格式示例：再加 1桶 9803 规格 28'
@@ -106,7 +108,8 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
     const productMeta = await fetchProductMetaForPreview({
       model: command.product.model_number,
       unitName: task.payload?.params?.unit_name || '',
-    })
+    }, isCurrent)
+    if (!isCurrent()) return true
 
     const unitPrice = productMeta?.unit_price
     const newProduct: ShipmentProduct = {
@@ -183,18 +186,20 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
   }: {
     model: string
     unitName?: string
-  }): Promise<{ name?: string; unit_price?: number; tin_spec?: number } | null> {
+  }, isCurrent: () => boolean = () => true): Promise<{ name?: string; unit_price?: number; tin_spec?: number } | null> {
     const normalizedModel = normalizeModel(model)
     if (!normalizedModel) return null
 
     // 先按单位查，未命中再回退到不带单位查询（保持原有裸 fetch 的降级顺序）
     const unitCandidates = unitName ? [unitName, ''] : ['']
     for (const unit of unitCandidates) {
+      if (!isCurrent()) return null
       try {
         const res = await shipmentApi.getProductMetaForPreview({
           model: normalizedModel,
           unitName: unit || undefined,
         })
+        if (!isCurrent()) return null
         if (!res?.success) continue
         const rows = Array.isArray(res.data) ? res.data : []
         const best = pickBestProductRecord(rows, normalizedModel)
@@ -292,14 +297,15 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
     return shipmentApi.fetchNextOrderNumber()
   }
 
-  async function hydrateTaskOrderNumber(task: ShipmentTask, options?: { force?: boolean }): Promise<void> {
-    if (!task || task?.type !== 'shipment_generate' || task?.completed) return
+  async function hydrateTaskOrderNumber(task: ShipmentTask, options?: { force?: boolean; isCurrent?: () => boolean }): Promise<void> {
+    const isCurrent = options?.isCurrent || captureCurrent()
+    if (!isCurrent() || !task || task?.type !== 'shipment_generate' || task?.completed) return
     if (!options?.force && String(task?.customOrderNumber || '').trim()) return
 
     const nextOrderNo = await fetchNextOrderNumber()
     if (!nextOrderNo) return
 
-    if (currentTask.value !== task) return
+    if (!isCurrent() || currentTask.value !== task || task.completed) return
     if (!options?.force && String(task?.customOrderNumber || '').trim()) return
 
     task.customOrderNumber = nextOrderNo
@@ -307,7 +313,10 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
     task.payload.params = { ...(task.payload?.params || {}), order_number: nextOrderNo }
   }
 
-  async function enrichShipmentPreviewProducts(task: ShipmentTask): Promise<void> {
+  async function enrichShipmentPreviewProducts(task: ShipmentTask, isCurrent = captureCurrent()): Promise<void> {
+    const originalProducts = task?.payload?.params?.products
+    const canApply = () => isCurrent() && currentTask.value === task && !task.completed && task.payload?.params?.products === originalProducts
+    if (!canApply()) return
     const currentProducts = Array.isArray(task?.payload?.params?.products) ? [...task.payload.params.products] : []
     if (!currentProducts.length) return
 
@@ -328,7 +337,8 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
         continue
       }
 
-      const productMeta = await fetchProductMetaForPreview({ model, unitName })
+      const productMeta = await fetchProductMetaForPreview({ model, unitName }, canApply)
+      if (!canApply()) return
       if (productMeta) {
         if (needsName && productMeta?.name) {
           product.name = productMeta.name
@@ -347,7 +357,7 @@ export function useShipmentTask(messages: UseChatMessagesReturn, currentTask: Re
       nextProducts.push(product)
     }
 
-    if (changed) {
+    if (changed && canApply()) {
       updateShipmentTaskPreview(task, nextProducts)
     }
   }

@@ -125,7 +125,6 @@ class PlannedWorkflowDispatch:
         from app.application.normal_chat_dispatch import (
             build_customers_query_response_dict,
             build_inventory_alert_response_dict,
-            build_label_print_response_dict,
             build_product_query_response_dict,
             resolve_tool_execution_profile,
             route_normal_mode_message,
@@ -162,10 +161,6 @@ class PlannedWorkflowDispatch:
                 ia = build_inventory_alert_response_dict(rr)
                 if ia:
                     return ia
-            if rr.get("intent") == "label_print":
-                lp = build_label_print_response_dict(rr)
-                if lp:
-                    return lp
             if rr.get("intent") == "price_list":
                 customer_name_match = re.search(
                     "([^\\s，,。]{2,}(?:有限公司|集团有限公司|实业有限公司|公司\\s|单位|客户|厂|店))",

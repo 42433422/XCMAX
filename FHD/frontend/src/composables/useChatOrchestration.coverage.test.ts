@@ -291,6 +291,7 @@ vi.mock('./useChatRequest', () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: mockEnqueueChatBatchMessage,
+    cancelPendingChatBatch: vi.fn(),
     buildPlannerChatRequestPayload: mockBuildPlannerChatRequestPayload,
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
@@ -1593,6 +1594,7 @@ describe('useChatOrchestration coverage – maybePrefetchProductAssistantFloat',
 
 describe('useChatOrchestration coverage – copyAssistantPushContent', () => {
   beforeEach(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } })
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()

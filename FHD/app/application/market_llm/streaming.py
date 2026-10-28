@@ -6,6 +6,8 @@ from collections.abc import AsyncGenerator, Iterator
 
 import httpx
 
+from app.infrastructure.chat_stream_lifetime import check_stream_active, owned_model_read
+
 from .protocols import ChatInput, Connection, Route, StreamPorts
 
 
@@ -17,6 +19,7 @@ def stream_sync(
     candidates = ports.candidates(*route)
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
+        check_stream_active()
         messages = ports.prepare_sync(request.messages, *candidate)
         payload = request.payload(
             connection, candidate, messages, stream=True, allow_failover=index == 0
@@ -26,9 +29,13 @@ def stream_sync(
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             headers=connection.headers(),
         ) as client:
-            with client.stream(
-                "POST", f"{connection.platform_url}/api/llm/chat/stream", json=payload
-            ) as response:
+            with (
+                client.stream(
+                    "POST", f"{connection.platform_url}/api/llm/chat/stream", json=payload
+                ) as response,
+                owned_model_read(response),
+            ):
+                check_stream_active()
                 status = ports.status_code(response, 200)
                 if status < 400:
                     # No retry after output has begun: replaying a partial answer

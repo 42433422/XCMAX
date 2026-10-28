@@ -195,6 +195,7 @@ describe('useAccountProfileStore', () => {
     await store.refreshFromServer()
     // 会话明确失效才清空；瞬时失败保留最近资料，否则依赖权限的入口（如「角色与权限」）会消失
     expect(store.loaded).toBe(keeps)
+    expect(store.sessionCheckUnavailable).toBe(keeps)
   })
 
   it('waits for tenant preference hydration before refresh resolves', async () => {
@@ -247,4 +248,42 @@ describe('useAccountProfileStore', () => {
     expect(store.workspaceReady).toBe(true)
   })
 
+})
+
+ it.each(['recover', 'timeout', '401', '403', 'invalid'])('forces authoritative validation after an outage: %s', async outcome => {
+  setActivePinia(createPinia())
+  vi.clearAllMocks()
+  const { authApi } = await import('@/api/auth')
+  const { validateEnterpriseSessionCached } = await import('@/utils/authSessionCache')
+  const { isEnterpriseEdition } = await import('@/utils/productSku')
+  vi.mocked(isEnterpriseEdition).mockReturnValueOnce(true)
+  if (outcome === 'timeout') vi.mocked(validateEnterpriseSessionCached).mockRejectedValueOnce(new DOMException('timeout', 'AbortError'))
+  else if (outcome === '401' || outcome === '403') vi.mocked(validateEnterpriseSessionCached).mockRejectedValueOnce({ status: Number(outcome) })
+  else vi.mocked(validateEnterpriseSessionCached).mockResolvedValueOnce(outcome !== 'invalid')
+  vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({ success: true, data: {} })
+  const store = useAccountProfileStore()
+  store.loaded = true
+  store.sessionCheckUnavailable = true
+  await store.refreshFromServer()
+  expect(validateEnterpriseSessionCached).toHaveBeenLastCalledWith(true)
+  expect(store.sessionCheckUnavailable).toBe(outcome === 'timeout')
+  expect(store.loaded).toBe(outcome === 'recover' || outcome === 'timeout')
+ })
+
+it('keeps a loaded outage unknown until the authoritative retry finishes', async () => {
+  setActivePinia(createPinia())
+  vi.clearAllMocks()
+  const { validateEnterpriseSessionCached } = await import('@/utils/authSessionCache')
+  const { isEnterpriseEdition } = await import('@/utils/productSku')
+  vi.mocked(isEnterpriseEdition).mockReturnValueOnce(true)
+  let finish!: (valid: boolean) => void
+  vi.mocked(validateEnterpriseSessionCached).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  const store = useAccountProfileStore()
+  store.loaded = true; store.sessionCheckUnavailable = true
+  const refreshing = store.refreshFromServer()
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(store.sessionCheckUnavailable).toBe(true)
+  finish(false); await refreshing
+  expect(store.loaded).toBe(false)
+  expect(store.sessionCheckUnavailable).toBe(false)
 })

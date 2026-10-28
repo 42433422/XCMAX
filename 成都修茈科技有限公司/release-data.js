@@ -40,9 +40,13 @@
     }
     function interim() {
       var artifact = hotfix && hotfix.artifact
-      if (!version || !intact(artifact) || hotfix.schema !== 'xcagi.windows_interim_release/v1' || hotfix.version !== version) return null
+      var testRelease = hotfix && hotfix.release && hotfix.release.test_only === true
+      var disclosed = testRelease && hotfix.release.version === hotfix.version && Array.isArray(hotfix.release.notes) && hotfix.release.notes.length && hotfix.release.notes.every(function (note) { return typeof note === 'string' && note.trim() })
+      if (!intact(artifact) || hotfix.schema !== 'xcagi.windows_interim_release/v1' || !versionPattern.test(hotfix.version || '') ||
+        (testRelease ? !disclosed : !version || hotfix.version !== version)) return null
+      var base = origin + '/xcagi-v' + hotfix.version
       var status = hotfix.signature_status
-      var name = 'XCAGI-Enterprise-Setup-' + version + '-x64-' + status + '.exe'
+      var name = 'XCAGI-Enterprise-Setup-' + hotfix.version + '-x64-' + status + '.exe'
       var accepted = status === 'unsigned' && hotfix.risk_acceptance && Date.parse(hotfix.risk_acceptance.expires_at) > Date.now()
       if (hotfix.download_allowed !== true || hotfix.stable_auto_update !== false || (status !== 'signed' && !accepted) ||
         !commitPattern.test(hotfix.git_sha || '') || artifact.platform !== 'windows' || artifact.arch !== 'x64' || artifact.filename !== name ||
@@ -64,8 +68,8 @@
     function platform(platform, arch) {
       var temporary = platform === 'win' ? interim() : null
       var artifact = temporary ? temporary.artifact : entry(platform, arch)
-      return { artifact: artifact, version: platform === 'android' ? androidVersion : version,
-        channel: platform === 'android' ? '实验版·非签约级' : temporary ? '临时手动下载·不进入自动更新' : '手动下载·自动更新状态未核实',
+      return { artifact: artifact, version: temporary ? temporary.version : platform === 'android' ? androidVersion : version,
+        channel: platform === 'android' ? '实验版·非签约级' : temporary ? (temporary.release && temporary.release.test_only ? '测试版·手动下载·不进入自动更新' : '临时手动下载·不进入自动更新') : '手动下载·自动更新状态未核实',
         status: artifact ? '可下载' : '未开放（制品清单缺失、未就绪或身份不一致）', temporary: temporary }
     }
     return { version: version, androidVersion: androidVersion, filename: filename, entry: entry, interim: interim, platform: platform }

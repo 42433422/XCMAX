@@ -30,9 +30,10 @@ import { useApprovalMode } from './useApprovalMode'
 import { useCanonicalChatTaskBridge } from './useCanonicalChatTaskBridge'
 import type { UseChatViewOptions } from './useChatView'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
 import { isStartPrintMessage } from '../utils/textParser'
-import { generateSessionId, normalizeServerContentToHtml } from './chat-orchestration/chatOrchestrationShared'
+import { generateSessionId, normalizeServerContentToHtml, type ChatLocalScope } from './chat-orchestration/chatOrchestrationShared'
 import { useChatOrchestrationAutoActions } from './chat-orchestration/useChatOrchestrationAutoActions'
 import { useChatOrchestrationTaskExecution } from './chat-orchestration/useChatOrchestrationTaskExecution'
 import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrchestrationPrintFlow'
@@ -51,6 +52,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    flushMessagesCache,
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -79,6 +81,16 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const orderNumberFetching = ref(false)
   const chatSessionActivity = useChatSessionActivity(sessionId)
   const { isLoading, isStreamingReply } = chatSessionActivity
+  let localViewRevision = 0
+  watch(sessionId, () => { localViewRevision++ }, { flush: 'sync' })
+  function captureLocalScope(): ChatLocalScope {
+    const targetSessionId = String(sessionId.value || '').trim() || 'default'
+    const identity = resolveChatIdentity(String(modsStore.activeModId || ''))
+    const accountEpoch = productReadAccountEpoch.value, revision = localViewRevision
+    const isGenerationCurrent = chatSessionActivity.captureGeneration(targetSessionId)
+    const isOwnerCurrent = () => accountEpoch === productReadAccountEpoch.value && identity === resolveChatIdentity(String(modsStore.activeModId || ''))
+    return { sessionId: targetSessionId, isOwnerCurrent, isCurrent: () => isOwnerCurrent() && revision === localViewRevision && targetSessionId === (String(sessionId.value || '').trim() || 'default') && isGenerationCurrent() }
+  }
   const isExecuting = ref(false)
   // 工作流「步骤进度」：消费后方 state.update 事件，维护正在执行/已完成的节点列表
   const stateSteps = ref<
@@ -221,6 +233,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     onIdentityChange: () => {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
+      chatSessionActivity.cancelAll()
+      chatRequest.cancelPendingChatBatch()
       chatSessionActivity.runningIds.value.clear()
       chatSessionActivity.streamingIds.value.clear()
       clearVoiceQueue()
@@ -258,7 +272,6 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     refreshTasks: agentTaskRuntime.refreshTasks,
   })
   const onboardingFirstOrderRun = useOnboardingFirstOrderRun({
-    sessionId: () => String(sessionId.value || '').trim() || 'default',
     saveMessage,
     addAndSaveMessage,
     refreshTasks: agentTaskRuntime.refreshTasks,
@@ -271,7 +284,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     getTaskTableColumns,
     getTaskTableItems,
     getTaskOrderNumber,
-  } = useShipmentTask({ addAndSaveMessage }, currentTask)
+  } = useShipmentTask({ addAndSaveMessage }, currentTask, () => captureLocalScope().isCurrent)
 
   const { isPrinting, executePrintTask, buildPrintSummaryMessage } = usePrintService()
 
@@ -333,6 +346,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // 打印链路
   const printFlow = useChatOrchestrationPrintFlow({
     modsStore,
+    captureLocalScope,
+    saveMessage,
     addAndSaveMessage,
     taskList,
     createTaskId,
@@ -383,6 +398,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     queueVoice,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    flushMessagesCache,
     ttsEnabled,
     chatSessionActivity,
     pendingDbWriteChatRetryMessages,
@@ -424,50 +440,76 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     { deep: true },
   )
 
+  function stopReply() {
+    localViewRevision++
+    const stopped = chatSessionActivity.cancelSession()
+    chatRequest.cancelPendingChatBatch()
+    chatRequest.stopLoadingProgress()
+    clearVoiceQueue()
+    pendingDbWriteChatRetryMessages.value = null
+    plannerWriteUnlockResumeDraft.value = ''
+    if (stopped) {
+      for (const msg of messages.value) delete msg.streamingShell
+      addMessage('已停止接收本轮回复。已执行的工具不会撤销；后台任务请到任务工作区核对，勿重复提交。', 'ai')
+    }
+  }
+
   async function sendMessage(message: string) {
     const taskSessionId = String(sessionId.value || '').trim() || 'default'
+    if (isLoading.value) stopReply()
+    const generation = chatSessionActivity.beginRound(taskSessionId)
+    generation.setLoading(true)
     addMessage(message, 'user')
     const requestScope = {
       identity: resolveChatIdentity(String(modsStore.activeModId || '')),
+      signal: generation.signal,
+      isCurrent: generation.isCurrent,
       sessionId: taskSessionId,
       messages: [...messages.value],
       turnId: createBusinessHarnessId('turn'),
       taskId: createBusinessHarnessId('task'),
     }
-    if (await onboardingFirstOrderRun.tryStart(message)) {
-      await refreshHistorySessions()
-      return
-    }
-    const isCurrent = () => requestScope.identity === resolveChatIdentity(String(modsStore.activeModId || ''))
-    if (!isCurrent()) return
-    const previewModified = await handleShipmentModify(message)
-    if (!isCurrent()) return
-    if (previewModified) {
-      await saveMessage('user', message, taskSessionId)
-      await refreshHistorySessions()
-      return
-    }
-
-    const printHandled = await handleStartPrintCommand(message)
-    if (!isCurrent()) return
-    if (printHandled) {
-      await saveMessage('user', message, taskSessionId)
-      await refreshHistorySessions()
-      return
-    }
-
-    const debounceMs = getChatBatchDebounceMs()
-    if (debounceMs <= 0) {
-      try {
-        await executeRemoteChatRound([message], undefined, requestScope)
-      } finally {
+    const localScope = captureLocalScope()
+    let queued = false
+    try {
+      if (await onboardingFirstOrderRun.tryStart(message, localScope)) {
         await refreshHistorySessions()
+        return
       }
-      return
+      const isCurrent = localScope.isCurrent
+      if (!isCurrent()) return
+      const previewModified = await handleShipmentModify(message, localScope.isCurrent)
+      if (!isCurrent()) return
+      if (previewModified) {
+        await saveMessage('user', message, taskSessionId)
+        await refreshHistorySessions()
+        return
+      }
+
+      const printHandled = await handleStartPrintCommand(message, localScope)
+      if (!isCurrent()) return
+      if (printHandled) {
+        await saveMessage('user', message, taskSessionId)
+        await refreshHistorySessions()
+        return
+      }
+
+      const debounceMs = getChatBatchDebounceMs()
+      if (debounceMs <= 0) {
+        try {
+          await executeRemoteChatRound([message], undefined, requestScope)
+        } finally {
+          await refreshHistorySessions()
+        }
+        return
+      }
+      queued = true
+      enqueueChatBatchMessage(message, debounceMs, (msgs) => {
+        void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
+      })
+    } finally {
+      if (!queued) generation.setLoading(false)
     }
-    enqueueChatBatchMessage(message, debounceMs, (msgs) => {
-      void executeRemoteChatRound(msgs, undefined, requestScope).finally(() => refreshHistorySessions())
-    })
   }
 
   async function confirmWorkflowFromCard() {
@@ -523,9 +565,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
 
   onBeforeUnmount(() => {
+    localViewRevision++
     window.removeEventListener(FHD_DB_WRITE_UNLOCKED_EVENT, dbGate.onDbWriteUnlockedForChatRetry)
     workflowPanel.unmountWorkflowPanel()
     agentTaskRuntime.stop()
+    chatSessionActivity.cancelAll()
+    chatRequest.cancelPendingChatBatch()
   })
 
   return {
@@ -565,6 +610,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     generateSessionId,
     scrollToBottom,
     sendMessage,
+    stopReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

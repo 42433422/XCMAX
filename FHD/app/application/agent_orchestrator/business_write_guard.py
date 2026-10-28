@@ -1,18 +1,20 @@
 """Hold durable ownership through a business transaction, preserving Mod database routing."""
 
+import copy
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-from app.application.agent_orchestrator.run_models import utc_now_iso
-from app.application.agent_orchestrator.worker_repository import WorkerLeaseLost
-from app.db.models.agent import AgentTaskExecutionRecord
+from app.application.agent_orchestrator.worker_repository import (
+    WorkerLeaseLost as WorkerLeaseLost,
+)
+from app.application.agent_orchestrator.worker_repository import lock_execution_claim
 
 _claim = ContextVar("agent_business_write_claim", default=None)
 
 
 @contextmanager
 def worker_claim_scope(repository, execution, owner_id):
-    token = _claim.set((repository, execution, owner_id))
+    token = _claim.set((repository, copy.deepcopy(execution), owner_id))
     try:
         yield
     finally:
@@ -20,19 +22,39 @@ def worker_claim_scope(repository, execution, owner_id):
 
 
 def _lock_claim(db, execution, owner_id):
-    owned = (
-        db.query(AgentTaskExecutionRecord)
-        .filter(
-            AgentTaskExecutionRecord.run_id == execution.run_id,
-            AgentTaskExecutionRecord.state == "claimed",
-            AgentTaskExecutionRecord.lease_owner == owner_id,
-            AgentTaskExecutionRecord.execution_count == execution.execution_count,
-            AgentTaskExecutionRecord.lease_expires_at > utc_now_iso(),
-        )
-        .update({AgentTaskExecutionRecord.lease_owner: owner_id}, synchronize_session=False)
+    lock_execution_claim(
+        db,
+        run_id=execution.run_id,
+        owner_id=owner_id,
+        execution_count=execution.execution_count,
     )
-    if owned != 1:
-        raise WorkerLeaseLost("worker lease expired or replaced before business write")
+
+
+def capture_worker_claim():
+    """Pass only the server-held fence across spawn, never caller runtime fields."""
+    claim = _claim.get()
+    if claim is None:
+        return None
+    _, execution, owner_id = claim
+    return (execution.run_id, owner_id, execution.execution_count)
+
+
+@contextmanager
+def restore_worker_claim(reference):
+    if reference is None:
+        yield
+        return
+    from app.application.agent_orchestrator.run_sql_repository import (
+        SQLAlchemyAgentRunRepository,
+    )
+    from app.application.agent_orchestrator.task_execution_models import (
+        AgentTaskExecution,
+    )
+
+    run_id, owner_id, count = reference
+    execution = AgentTaskExecution(run_id=run_id, task_id="", user_id="", execution_count=count)
+    with worker_claim_scope(SQLAlchemyAgentRunRepository(), execution, owner_id):
+        yield
 
 
 @contextmanager

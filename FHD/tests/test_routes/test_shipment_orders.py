@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,23 +11,22 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes import shipment_orders
 from app.utils.path_io.path_utils import get_shipment_output_dir
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(trusted_actor) -> TestClient:
     app = FastAPI()
     app.include_router(shipment_orders.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
+    )
 
 
 @pytest.fixture(autouse=True)
 def _mock_svc(tmp_path, monkeypatch: pytest.MonkeyPatch):
     """默认 mock shipment application service。"""
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(
-        "app.infrastructure.auth.agent_principal.resolve_session_user",
-        lambda _r: SimpleNamespace(id="tenant-a", is_active=True, tenant_id=None),
-    )
     Path(get_shipment_output_dir()).mkdir(parents=True, exist_ok=True)
     mock = MagicMock()
     with patch.object(shipment_orders, "_svc", return_value=mock):
@@ -394,14 +392,34 @@ class TestShipmentRecordsDashboardAlias:
 
 
 @pytest.mark.parametrize("method", ["POST", "PATCH", "DELETE"])
-def test_shipment_record_requires_inputs(client, _mock_svc, method):
+def test_shipment_record_requires_inputs(client, _mock_svc, method, trusted_actor):
+    client.headers.update(trusted_actor(tenant_id=7).headers)
     assert (
         client.request(method, "/api/shipment/shipment-records/record", json={}).status_code == 400
     )
 
 
 class TestShipmentRecordsExport:
-    def test_no_file(self, client: TestClient, _mock_svc: MagicMock):
+    def test_no_file(self, client: TestClient, _mock_svc: MagicMock, trusted_actor):
+        client.headers.update(trusted_actor(tenant_id=7).headers)
         _mock_svc.export_shipment_records.return_value = {"success": False, "message": "无数据"}
         r = client.get("/api/shipment/shipment-records/export")
         assert r.status_code == 500
+
+
+def test_shipment_write_requires_session(client, _mock_svc):
+    client.headers.pop("X-Session-ID")
+    response = client.post(
+        "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
+    )
+    assert response.status_code == 401
+    _mock_svc.generate_shipment_document.assert_not_called()
+
+
+def test_legacy_shipment_write_rejects_tenant_session(client, trusted_actor, _mock_svc):
+    client.headers.update(trusted_actor(tenant_id=7).headers)
+    response = client.post(
+        "/api/shipment/generate", json={"unit_name": "单位", "products": [{"name": "A"}]}
+    )
+    assert response.status_code == 403
+    _mock_svc.generate_shipment_document.assert_not_called()

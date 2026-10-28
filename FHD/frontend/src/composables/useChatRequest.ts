@@ -5,6 +5,8 @@ import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { plainTextFromChatHtml } from '@/utils/sanitizeHtml'
 import { createBusinessHarnessId } from '@/utils/businessHarnessIds'
 export type ChatRequestScope = {
+  signal?: AbortSignal
+  isCurrent?: () => boolean
   identity?: string
   sessionId: string
   messages: ChatMessage[]
@@ -191,45 +193,47 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     setLoadingProgress('处理中...', key)
   }
 
-  async function requestChatByModeWithTimeout(
-    message: string,
-    timeoutMs: number = 90_000,
-    plannerOpts?: { fromWriteUnlock?: boolean },
-    scope?: ChatRequestScope,
-  ): Promise<ChatPlannerPayload> {
+  async function withRequestTimeout<T>(request: (signal: AbortSignal) => Promise<T>, timeoutMs: number, signal?: AbortSignal): Promise<T> {
     const controller = new AbortController()
-    let timeoutId: number | null = null
-    const timeoutPromise = new Promise<never>((_, reject) => {
+    const abort = () => controller.abort()
+    signal?.addEventListener('abort', abort, { once: true })
+    if (signal?.aborted) abort()
+    let timeoutId: number | undefined
+    const stopped = new Promise<never>((_, reject) => {
+      const rejectAbort = () => reject(new DOMException('请求已中断', 'AbortError'))
+      controller.signal.addEventListener('abort', rejectAbort, { once: true })
+      if (controller.signal.aborted) rejectAbort()
       timeoutId = window.setTimeout(() => {
+        reject(new Error(`请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查连接，勿重复提交可能已执行的任务`))
         controller.abort()
-        reject(new Error(`请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
       }, timeoutMs)
     })
     try {
-      return await Promise.race([requestChatByMode(message, { signal: controller.signal }, plannerOpts, scope), timeoutPromise])
+      if (controller.signal.aborted) return await stopped
+      return await Promise.race([request(controller.signal), stopped])
     } finally {
-      if (timeoutId != null) window.clearTimeout(timeoutId)
+      window.clearTimeout(timeoutId)
+      signal?.removeEventListener('abort', abort)
     }
   }
 
-  async function requestChatByModeBatchWithTimeout(
-    batchTexts: string[],
-    timeoutMs: number = 90_000,
+  function requestChatByModeWithTimeout(
+    message: string,
+    timeoutMs = 90_000,
+    plannerOpts?: { fromWriteUnlock?: boolean },
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
-    const controller = new AbortController()
-    let timeoutId: number | null = null
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = window.setTimeout(() => {
-        controller.abort()
-        reject(new Error(`批量请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
-      }, timeoutMs)
-    })
-    try {
-      return await Promise.race([requestChatByModeBatch(batchTexts, { signal: controller.signal }, scope), timeoutPromise])
-    } finally {
-      if (timeoutId != null) window.clearTimeout(timeoutId)
-    }
+    return withRequestTimeout(signal => requestChatByMode(message, { signal }, plannerOpts, scope), timeoutMs, scope?.signal)
+  }
+
+  function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs = 90_000, scope?: ChatRequestScope): Promise<ChatPlannerPayload> {
+    return withRequestTimeout(signal => requestChatByModeBatch(batchTexts, { signal }, scope), timeoutMs, scope?.signal)
+  }
+
+  function cancelPendingChatBatch() {
+    if (chatBatchTimer != null) window.clearTimeout(chatBatchTimer)
+    chatBatchTimer = null
+    chatBatchQueue.length = 0
   }
 
   function resolveChatTimeoutMs(message: string): number {
@@ -253,6 +257,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   return {
     loadingProgressText,
     chatBatchQueue,
+    cancelPendingChatBatch,
     enqueueChatBatchMessage,
     buildPlannerChatRequestPayload,
     requestChatByMode,

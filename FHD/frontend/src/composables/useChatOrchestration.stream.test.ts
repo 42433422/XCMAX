@@ -14,7 +14,7 @@ const {
   syncAgentRunFromPayload,
   attachApprovalCardToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
-  queueVoice, addMessage, searchProducts, observeTool, streamMode, modState,
+  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, streamMode, modState,
 } = vi.hoisted(() => ({
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
@@ -27,8 +27,8 @@ const {
   syncAgentRunFromPayload: vi.fn().mockResolvedValue(undefined),
   attachApprovalCardToLastAiMessage: vi.fn(),
   attachAgentRunTraceToLastAiMessage: vi.fn(),
-  queueVoice: vi.fn(), addMessage: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
-  streamMode: { enabled: true }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
+  queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
+  streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -37,7 +37,7 @@ vi.mock('./useChatMessages', async () => {
     useChatMessages: () => ({
       messages: ref([]),
       addMessage,
-      addAndSaveMessage: vi.fn().mockResolvedValue(undefined),
+      addAndSaveMessage,
       saveMessage,
       pushStreamingAiShell,
       applyPlainTextToMessageIndex,
@@ -103,10 +103,11 @@ vi.mock('./useExcelAnalysis', async () => {
     }),
   }
 })
-vi.mock('./useShipmentTask', async () => {
+vi.mock('./useShipmentTask', async importOriginal => {
+  const actual = await importOriginal<typeof import('./useShipmentTask')>()
   const { ref } = await import('vue')
   return {
-    useShipmentTask: () => ({
+    useShipmentTask: (...args: Parameters<typeof actual.useShipmentTask>) => streamMode.realShipment ? actual.useShipmentTask(...args) : ({
       lastShipmentExecution: ref(null),
       handleModifyCommand: vi.fn(),
       hydrateTaskOrderNumber: vi.fn(),
@@ -169,6 +170,7 @@ vi.mock('./useChatRequest', () => ({
     loadingProgressText: ref(''),
     chatBatchQueue: ref([]),
     enqueueChatBatchMessage: vi.fn(),
+    cancelPendingChatBatch: vi.fn(),
     buildPlannerChatRequestPayload: vi.fn(() => ({ body: { message: 'hello' } })),
     requestChatByMode: vi.fn(),
     requestChatByModeBatch: vi.fn(),
@@ -193,7 +195,8 @@ vi.mock('./useChatResponseAttach', () => ({
     syncTaskFromChatResponse: vi.fn(),
   }),
 }))
-vi.mock('./useAgentRunEvents', () => ({
+vi.mock('./useAgentRunEvents', async importOriginal => ({
+  ...await importOriginal<typeof import('./useAgentRunEvents')>(),
   useAgentRunEventSync: () => ({ syncAgentRunFromPayload }),
 }))
 vi.mock('./useChatSessionHistory', () => ({
@@ -219,6 +222,7 @@ vi.mock('@/api/chat', () => ({
   default: { sendChatStream },
   parseChatStreamErrorResponse: vi.fn().mockResolvedValue('流式接口错误'),
 }))
+vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
 vi.mock('@/api/agentRuns', () => ({ default: { observeTool } }))
 vi.mock('@/utils/chatSseStream', async (importOriginal) => {
@@ -246,6 +250,7 @@ describe('useChatOrchestration stream', () => {
     localStorage.clear()
     vi.clearAllMocks()
     streamMode.enabled = true
+    streamMode.realShipment = false
     modState.activeModId = ''
     setRuntimeTenantStorageScopeInput({ tenantId: 1, localUserId: 1 })
     vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
@@ -332,13 +337,13 @@ describe('useChatOrchestration stream', () => {
     }, { timeout: 1000 })
     await sending
     expect(sendError).toBeUndefined()
-    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_iterations' }, '先聊聊每日摘要')
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_iterations' }, '先聊聊每日摘要', expect.any(Function))
   })
 
   it.each([false, true])('shows approval before tracking resolves and guards a later reply: %s', async laterReply => {
     let finishTracking!: () => void
     syncAgentRunFromPayload.mockImplementation(() => new Promise<void>(resolve => { finishTracking = resolve }))
-    const payload = { response: '等待确认', data: { action: 'approval_pending', data: { approval_request_ids: ['approval-1'] } } }
+    const payload = { run_id: 'approval-run', response: '等待确认', data: { action: 'approval_pending', data: { approval_request_ids: ['approval-1'] } } }
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'done', result: payload }))
     const api = useChatOrchestration({ sessionId: ref('s') })
     const sending = api.sendMessage('读取已登记应用')
@@ -351,13 +356,13 @@ describe('useChatOrchestration stream', () => {
     finishTracking()
     await Promise.resolve()
     expect(attachAgentRunTraceToLastAiMessage).toHaveBeenCalledTimes(laterReply ? 0 : 1)
-    expect(syncAgentRunFromPayload).toHaveBeenCalledWith(payload, '读取已登记应用')
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith(payload, '读取已登记应用', expect.any(Function))
   })
 
   it('retains the run id carried only by a terminal error', async () => {
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', run_id: 'run_terminal', message: '未完成' }))
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('先聊聊每日摘要')
-    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_terminal' }, '先聊聊每日摘要')
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'run_terminal' }, '先聊聊每日摘要', expect.any(Function))
   })
 
   const switchIdentity = (kind: string) => {
@@ -423,6 +428,79 @@ describe('useChatOrchestration stream', () => {
     syncAgentRunFromPayload.mockImplementation(async () => switchIdentity(kind))
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
     expect(attachAgentRunTraceToLastAiMessage).not.toHaveBeenCalled()
+  })
+
+  it.each(['stop', 'correct'])('fences late tokens, authorization, results and cleanup after %s', async action => {
+    const callbacks: Array<(event: unknown) => void> = []
+    const finishes: Array<() => void> = []
+    readPlannerSseResponse.mockImplementation((_res, onEvent) => {
+      callbacks.push(onEvent)
+      return new Promise<void>(resolve => finishes.push(resolve))
+    })
+    const api = useChatOrchestration({ sessionId: ref('same-session') })
+    const old = api.sendMessage('old synthetic request')
+    await vi.waitFor(() => expect(callbacks).toHaveLength(1))
+    const oldSignal = sendChatStream.mock.calls[0][1].signal
+    let current: Promise<void> | undefined
+    if (action === 'stop') api.stopReply()
+    else {
+      current = api.sendMessage('corrected synthetic request')
+      await vi.waitFor(() => expect(callbacks).toHaveLength(2))
+    }
+    expect(oldSignal.aborted).toBe(true)
+    callbacks[0]({ type: 'token', text: 'late old answer' })
+    callbacks[0]({ type: 'requires_token', token_name: 'DB_WRITE' })
+    callbacks[0]({ type: 'done', result: { success: true, response: 'late old answer' } })
+    finishes[0]()
+    await old
+    expect(applyPlainTextToMessageIndex).not.toHaveBeenCalled()
+    expect(handleChatRequiresToken).not.toHaveBeenCalled()
+    expect(queueVoice).not.toHaveBeenCalled()
+    expect(api.isLoading.value).toBe(action === 'correct')
+    if (current) {
+      callbacks[1]({ type: 'done', result: { success: true, response: 'correct answer' } })
+      finishes[1]()
+      await current
+      expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, 'correct answer')
+    }
+    expect(api.isLoading.value).toBe(false)
+  })
+
+  it('discards a stopped non-stream response even if transport ignores abort', async () => {
+    streamMode.enabled = false
+    let finish!: (value: unknown) => void
+    requestChatByModeWithTimeout.mockImplementation(() => new Promise(resolve => { finish = resolve }))
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    const sending = api.sendMessage('synthetic request')
+    await vi.waitFor(() => expect(requestChatByModeWithTimeout).toHaveBeenCalled())
+    api.stopReply()
+    finish({ success: true, response: 'late answer', requires_token: true, token_name: 'DB_WRITE' })
+    await sending
+    expect(addMessage.mock.calls.some(call => call[0] === 'late answer')).toBe(false)
+    expect(handleChatRequiresToken).not.toHaveBeenCalled()
+    expect(syncAgentRunFromPayload).not.toHaveBeenCalled()
+  })
+
+  it.each(['correct', 'stop', 'session', 'return-session', 'owner', 'mod'])('fences the real local shipment helper after %s', async change => {
+    streamMode.realShipment = true
+    const sid = ref('original')
+    const api = useChatOrchestration({ sessionId: sid })
+    api.currentTask.value = { type: 'shipment_generate', payload: { params: { products: [] } } }
+    const originalTask = api.currentTask.value
+    let finish!: (value: unknown) => void
+    previewMeta.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    previewMeta.mockResolvedValue({ success: true, data: [{ model_number: 'B002', name: 'B' }] })
+    const old = api.sendMessage('再加 1桶 A001 规格10')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    if (change === 'correct') await api.sendMessage('再加 1桶 B002 规格10')
+    else if (change === 'stop') api.stopReply()
+    else if (change.includes('session')) { sid.value = 'other'; if (change === 'return-session') sid.value = 'original' }
+    else switchIdentity(change)
+    finish({ success: true, data: [{ model_number: 'A001', name: 'A' }] })
+    await old
+    expect(originalTask.payload?.params?.products?.map(product => product.model_number)).toEqual(change === 'correct' ? ['B002'] : [])
+    expect(addAndSaveMessage.mock.calls.some(call => String(call[0]).includes('A001'))).toBe(false)
+    expect(sendChatStream).not.toHaveBeenCalled()
   })
 
 })

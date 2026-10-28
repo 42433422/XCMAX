@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import logging
 import os
@@ -217,27 +218,54 @@ def _current_trace_id() -> str | None:
         return None
 
 
+async def complete_structured_bounded(
+    messages: list[dict[str, str]], *, timeout_seconds: float = 120.0, **kwargs: Any
+) -> StructuredResult:
+    """Bound completion and its retries; cancellation must reach the provider."""
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    try:
+        result = await asyncio.wait_for(
+            complete_structured(messages, **kwargs), timeout=timeout_seconds
+        )
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
+        if asyncio.get_running_loop().time() >= deadline:
+            raise TimeoutError
+        return result
+    except TimeoutError as exc:
+        raise StructuredOutputError(0, ["structured completion timeout"], "") from exc
+
+
 def complete_structured_sync(
     messages: list[dict[str, str]],
     *,
     timeout_seconds: float = 120.0,
     **kwargs: Any,
 ) -> StructuredResult:
-    """同步上下文桥：无运行 loop 直接 asyncio.run；有 loop 则独立线程执行。"""
+    """Compatibility for sync callers; async routes must await the bounded API."""
+
+    def run() -> StructuredResult:
+        return asyncio.run(
+            complete_structured_bounded(messages, timeout_seconds=timeout_seconds, **kwargs)
+        )
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(complete_structured(messages, **kwargs))
+        return run()
 
     box: dict[str, Any] = {}
 
-    def _runner() -> None:
+    def runner() -> None:
         try:
-            box["result"] = asyncio.run(complete_structured(messages, **kwargs))
+            box["result"] = run()
         except BOUNDARY_ERRORS as exc:
             box["error"] = exc
 
-    thread = threading.Thread(target=_runner, daemon=True)
+    # Legacy callers retain their synchronous contract, but their coroutine now
+    # has its own deadline/cancellation and keeps tenant/request context.
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(runner,), daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
     if "error" in box:

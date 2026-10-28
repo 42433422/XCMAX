@@ -67,6 +67,7 @@ domains:
       - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
       - FHD/scripts/package/build-installer.ps1#default-version
       - FHD/release/VERSION
+      - FHD/.github/workflows/release-orchestrator.yml#product_version
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本

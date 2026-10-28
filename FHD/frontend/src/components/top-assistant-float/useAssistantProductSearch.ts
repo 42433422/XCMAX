@@ -1,7 +1,12 @@
-import { computed } from 'vue'
+import { computed, reactive, watch } from 'vue'
 import { ApiError } from '@/api'
 import productsApi from '@/api/products'
+import { useModsStore } from '@/stores/mods'
+import { productReadScopeKey } from '@/utils/productReadAccountScope'
+import { getApiBase } from '@/utils/apiBase'
 import type { useIndustryUiText } from '@/composables/useIndustryUiText'
+import { useAssistantCatalogPrices } from './useAssistantCatalogPrices'
+import { useAssistantProductEdit } from './useAssistantProductEdit'
 import type { AssistantFloatState, AssistantProductRow } from './useAssistantFloatState'
 
 const PRODUCT_SEARCH_TIMEOUT_MS = 30000
@@ -40,9 +45,23 @@ export function useAssistantProductSearch(
 
   /** 产品副窗查询并发序号；仅最后一次请求可结束 loading */
   let productSearchSeq = 0
+  const mods = useModsStore()
+  const catalog = reactive(useAssistantCatalogPrices(id => recordOperation('save_catalog_price', { id })))
+  const edit = useAssistantProductEdit(id => recordOperation('save_product', { id }))
+  const scope = () => JSON.stringify([productReadScopeKey(String(mods.activeModId || '')), getApiBase()])
+  watch(() => [scope(), catalog.selected], () => {
+    productSearchSeq++
+    productRows.value = []
+    loadingProducts.value = false
+    lastProductSearchQuery.value = ''
+    lastProductSearchTotal.value = null
+    productSearchFailed.value = false
+    productSearchErrorText.value = ''
+  }, { flush: 'sync' })
 
   const searchProducts = async () => {
     const kw = String(productKeyword.value || '').trim()
+    if (catalog.selected) { await catalog.search(kw); return }
     if (!kw) {
       productRows.value = []
       lastProductSearchQuery.value = ''
@@ -122,30 +141,22 @@ export function useAssistantProductSearch(
     return `未找到与「${kw}」匹配的${uiText.entityName.value}。${totalHint}可缩短关键词、只输入${uiText.modelLabel.value}，或到左侧「${uiText.entityListName.value}」浏览全库核对${uiText.nameLabel.value}/${uiText.modelLabel.value}。`
   })
 
-  const saveProductRow = async (row: AssistantProductRow) => {
-    if (!row?.id) return
-    savingProductId.value = row.id
-    try {
-      await productsApi.updateProduct(row.id, {
-        model_number: row.model_number || '',
-        name: row.name || '',
-        price: Number(row.price || 0),
-        unit: row.unit || '',
-      })
-      recordOperation('save_product', {
-        id: row.id,
-        name: row.name || '',
-        model: row.model_number || '',
-      })
-    } finally {
-      savingProductId.value = null
-    }
+  watch(edit.busyId, value => { savingProductId.value = value }, { flush: 'sync' })
+  // ERP paths may target a Mod-owned writer that does not create an Agent run.
+  // Keep the surface read-only until the selected Mod has a verified reviewed-write contract.
+  const saveProductRow = async (row: AssistantProductRow | null) => {
+    if (Number(row?.id) > 0) throw new Error('当前数据源不可保存，未提交')
   }
+  const submitProductRow = (_row: AssistantProductRow) => undefined
 
   return {
+    catalog,
     PRODUCT_SEARCH_TIMEOUT_MS,
     searchProducts,
     productEmptyMessage,
     saveProductRow,
+    submitProductRow,
+    checkProductRow: async (_row: AssistantProductRow) => undefined,
+    productEditStatus: edit.statusFor,
   }
 }

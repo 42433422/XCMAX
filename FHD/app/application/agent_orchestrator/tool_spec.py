@@ -49,6 +49,9 @@ class ToolActionSpecV2:
     required_params: list[str] = field(default_factory=list)
     availability: str = "shared"
     contract_samples: list[dict[str, Any]] = field(default_factory=list)
+    version: str = "2"
+    read_only: bool = False
+    owner_mod_id: str = ""
 
     @property
     def test_fixtures(self) -> list[dict[str, Any]]:
@@ -68,6 +71,9 @@ class ToolActionSpecV2:
             "timeout_seconds": self.timeout_seconds,
             "retry": self.retry,
             "idempotent": self.idempotent,
+            "version": self.version,
+            "read_only": self.read_only,
+            "owner_mod_id": self.owner_mod_id,
             "required_params": self.required_params,
             "availability": self.availability,
             "contract_samples": self.contract_samples,
@@ -107,6 +113,10 @@ def _schema_from_required(required_params: list[str]) -> dict[str, Any]:
 
 
 def _special_permission(tool_id: str, action: str) -> str:
+    if (tool_id, action) == ("products", "exists"):
+        return "product.view"
+    if (tool_id, action) == ("customers", "ensure_exists"):
+        return "customer.edit"
     if tool_id in PERMISSION_BARE_PREFIX_TOOLS:
         return f"{tool_id}.{action}"
     if tool_id == "dataset_rag":
@@ -245,6 +255,7 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
                 timeout_seconds=int(action_meta.get("timeout_seconds") or DEFAULT_TIMEOUT_SECONDS),
                 retry=dict(action_meta.get("retry") or DEFAULT_RETRY),
                 idempotent=bool(action_meta.get("idempotent", False)),
+                read_only=action_meta.get("read_only") is True,
                 required_params=required_params,
                 availability=str(
                     action_meta.get("availability") or tool_meta.get("availability") or "shared"
@@ -253,6 +264,62 @@ def build_tool_specs_v2() -> dict[tuple[str, str], ToolActionSpecV2]:
             )
             specs[(spec.tool_id, spec.action)] = spec
     _add_aiopen_tool_specs(specs)
+    for action in ("append_price", "correct_price"):
+        spec = ToolActionSpecV2(
+            tool_id="catalog_products_v1",
+            action=action,
+            permission="product.edit",
+            description="Reviewed protected mixed-source price edit with independent receipt verification",
+            input_schema={
+                "type": "object",
+                "required": [
+                    "operation_id",
+                    "product_id",
+                    "revision",
+                    "reason",
+                    "price",
+                    "action",
+                    "confirmed",
+                ],
+                "properties": {
+                    "product_id": {"type": "integer"},
+                    "action": {"enum": [action]},
+                    "confirmed": {"enum": [True]},
+                },
+            },
+            risk="medium",
+            retry={"max_attempts": 1},
+            idempotent=False,
+            version="catalog-price-v1",
+            availability="shared",
+            # Schema examples only: no session, approval, source binding or receipt authority.
+            contract_samples=[
+                {
+                    "name": "synthetic_unverified_price_request",
+                    "input": {
+                        "operation_id": "00000000-0000-4000-8000-000000000001",
+                        "product_id": 1,
+                        "revision": "0" * 64,
+                        "action": action,
+                        "price": "12.00",
+                        "period_start": "2026-02-01",
+                        "period_end": "2026-03-01",
+                        "selected_sources": ["1" * 64] if action == "correct_price" else [],
+                        "reason": "Synthetic contract example; not an authorized write",
+                        "confirmed": True,
+                    },
+                    "output": {
+                        "success": False,
+                        "error_code": "catalog_verification_required",
+                        "outcome": "unknown",
+                        "retryable": False,
+                        "message": "查询未能在已授权数据范围内完成",
+                        "reconciliation_required": True,
+                    },
+                }
+            ],
+        )
+        specs[(spec.tool_id, spec.action)] = spec
     return specs
 
 

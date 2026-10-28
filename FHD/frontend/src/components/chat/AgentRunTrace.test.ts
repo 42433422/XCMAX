@@ -230,3 +230,16 @@ it('rerenders an opened execution graph when new steps arrive and reports render
   expect(wrapper.text()).toContain('任务结束')
   wrapper.unmount(); mermaidRender.mockClear()
 })
+
+ it('preserves explicit disclosure choices across execution updates', async () => {
+  const wrapper = mount(AgentRunTrace, { props: { trace: makeTrace('waiting') } })
+  await wrapper.get('.art-summary').trigger('click')
+  await wrapper.get('.art-step.is-tool > summary').trigger('click')
+  await wrapper.setProps({ trace: makeTrace('success') })
+  await wrapper.setProps({ trace: makeTrace('failed') })
+  expect((wrapper.get('.art-trace').element as HTMLDetailsElement).open).toBe(false)
+  expect((wrapper.get('.art-step.is-tool').element as HTMLDetailsElement).open).toBe(false)
+  await wrapper.get('.art-summary').trigger('click')
+  await wrapper.setProps({ trace: makeTrace('success') })
+  expect((wrapper.get('.art-trace').element as HTMLDetailsElement).open).toBe(true)
+ })

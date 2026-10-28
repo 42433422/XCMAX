@@ -12,6 +12,7 @@ from app.application.workflow.planner import (
     get_tool_registry,
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode, validate_plan_graph
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ========================= get_tool_registry =============================
 
@@ -205,7 +206,12 @@ class TestLLMWorkflowPlanner:
         # Should have medium risk since add operations are medium
         assert plan.risk_level in ("low", "medium", "high")
 
-    def test_plan_injects_active_memory_v2_into_context_and_metadata(self):
+    def test_plan_injects_active_memory_v2_into_context_and_metadata(self, trusted_actor):
+        from app.application.agent_task_context import scoped_conversation_user_id
+
+        actor = trusted_actor(user_id=7, tenant_id=2)
+        context = {**actor.context, "session_id": "memory-v2-regression"}
+        namespace = scoped_conversation_user_id("7", context)
         planner = self._make_planner()
         memory_summary = (
             '【MemoryV2】已确认记忆:\n1. type=preference; key=favorite_customer; value="ACME"'
@@ -242,11 +248,13 @@ class TestLLMWorkflowPlanner:
                 return_value=mock_memory,
             ),
         ):
-            plan = planner.plan("u1", "查询上次客户的5003", get_tool_registry(), {})
+            plan = planner.plan(namespace, "查询上次客户的5003", get_tool_registry(), context)
 
         assert captured_context["memory_v2"]["summary"] == memory_summary
         assert "favorite_customer" in plan.metadata["memory_v2_summary"]
-        mock_memory.format_memory_v2_for_prompt.assert_called_once_with(user_id="u1", max_items=6)
+        mock_memory.format_memory_v2_for_prompt.assert_called_once_with(
+            user_id=namespace, max_items=6
+        )
 
 
 # ========================= _validate_required_params =====================

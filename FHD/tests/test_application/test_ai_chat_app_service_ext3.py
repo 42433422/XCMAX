@@ -111,11 +111,11 @@ class TestIsProSourceExtended:
 class TestMergeToolRuntimeContextExtended:
     def test_none_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", None)
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_non_dict_context(self):
         result = AIChatApplicationService._merge_tool_runtime_context("u1", "hello", "not a dict")
-        assert result == {"user_id": "u1", "message": "hello", "tenant_id": "1"}
+        assert result == {"conversation_id": "u1", "message": "hello", "tenant_id": "1"}
 
     def test_context_with_ui_surface(self):
         result = AIChatApplicationService._merge_tool_runtime_context(
@@ -1319,7 +1319,7 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17, "actor_id": 17},
                 {
                     "success": True,
                     "response": "world",
@@ -1327,6 +1327,7 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
     def test_with_conversation_id_persists(self):
         service = _make_service()
@@ -1335,10 +1336,11 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"conversation_id": "conv1"},
+                {"conversation_id": "conv1", "local_user_id": 17, "actor_id": 17},
                 {"success": True, "response": "world", "data": {}},
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
     def test_with_tool_call_data(self):
         service = _make_service()
@@ -1347,7 +1349,7 @@ class TestPersistChatTurnDeep:
             service._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17, "actor_id": 17},
                 {
                     "success": True,
                     "response": "done",
@@ -1360,6 +1362,7 @@ class TestPersistChatTurnDeep:
                 },
             )
         assert mock_conv.save_message.call_count == 2
+        assert all(call.kwargs["user_id"] == "17" for call in mock_conv.save_message.call_args_list)
 
 
 # ========================= _inject_excel_vector_context - deep ============

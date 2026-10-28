@@ -15,6 +15,7 @@ from app.application.ai_chat_app_service import (
     AIChatApplicationService,
     _skip_pro_excel_deterministic_import,
 )
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 # ---------------------------------------------------------------------------
 # ai_chat helpers
@@ -61,12 +62,12 @@ def test_ai_chat_build_error_response(mock_conv: MagicMock) -> None:
 
 
 @pytest.fixture
-def system_client() -> TestClient:
+def system_client(trusted_actor) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
 
     app = FastAPI()
     app.include_router(system_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 @patch("app.application.facades.session_facade.get_system_service")

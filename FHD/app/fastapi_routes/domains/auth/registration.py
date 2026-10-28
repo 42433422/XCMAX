@@ -122,6 +122,13 @@ class Registration:
 
     async def register(self, request: Request, body: JsonObject) -> RouteResult:
         """Register locally (PostgreSQL users) and optionally on Xiuci market; then create session."""
+        from app.db.bootstrap.guarded import enabled
+
+        if enabled():
+            return JSONResponse(
+                {"success": False, "message": "Guarded serving does not provision accounts"},
+                status_code=409,
+            )
         username = (body.get("username") or "").strip()
         password = body.get("password", "")
         email = (body.get("email") or "").strip()

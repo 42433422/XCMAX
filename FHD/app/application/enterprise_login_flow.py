@@ -161,6 +161,13 @@ async def ensure_local_user_after_market(
         )
 
     if not exists:
+        from app.db.bootstrap.guarded import enabled
+
+        if enabled():
+            return None, JSONResponse(
+                {"success": False, "message": "Guarded login requires an existing account"},
+                status_code=409,
+            )
         email = market_user_email_from_raw(market_result.get("raw"))
         blob = extract_market_user_blob(market_result)
         if not email and blob.get("email"):
@@ -194,6 +201,18 @@ def bind_tenant_for_login(
     username: str,
 ) -> dict[str, Any]:
     """登录后绑定/创建租户，返回 tenant_id / tenant_name。"""
+    from app.db.bootstrap.guarded import enabled
+
+    if enabled():
+        from app.db.models import Tenant, User
+        from app.db.session import get_host_db
+
+        with get_host_db() as db:
+            user = db.get(User, user_id)
+            tenant = db.get(Tenant, user.tenant_id) if user and user.tenant_id else None
+            if user is None or not user.is_active or tenant is None or not tenant.is_active:
+                raise RuntimeError("guarded login requires existing tenant binding")
+            return {"tenant_id": tenant.id, "tenant_name": tenant.name}
     out: dict[str, Any] = {"tenant_id": None, "tenant_name": ""}
     try:
         from app.application.tenant_subscription_app_service import (

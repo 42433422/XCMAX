@@ -24,6 +24,13 @@ class InvocationBudget:
 _DEADLINE: ContextVar[InvocationBudget | None] = ContextVar("tool_execution_deadline", default=None)
 
 
+def check_invocation_deadline() -> None:
+    """Check only the trusted invocation scope, never a caller's context fields."""
+    budget = _DEADLINE.get()
+    if budget is not None and time.monotonic() >= budget.deadline:
+        raise TimeoutError("invocation deadline expired before dispatch")
+
+
 @contextmanager
 def invocation_deadline(deadline: float) -> Iterator[InvocationBudget]:
     parent = _DEADLINE.get()

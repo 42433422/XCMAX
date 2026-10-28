@@ -40,10 +40,13 @@ def persist_chat_turn(
     from app.application.task_conversation_store import durable_user_id
 
     # The web_normal_* id scopes model memory, not the authenticated history owner.
-    owner_id = durable_user_id(context.get("local_user_id")) or durable_user_id(
-        context.get("actor_id")
-    )
-    history_user_id = str(owner_id) if owner_id is not None else user_id
+    owners = [
+        durable_user_id(context[key]) for key in ("local_user_id", "actor_id") if key in context
+    ]
+    # Conversation identifiers and body user_id never authorize durable ownership.
+    if not owners or None in owners or len(set(owners)) != 1:
+        return
+    history_user_id = str(owners[0])
 
     inner = response_data.get("data") if isinstance(response_data.get("data"), dict) else {}
     if not isinstance(inner, dict):
@@ -167,6 +170,57 @@ def persist_chat_turn(
     )
 
 
+def authorized_memory_context(
+    user_id: str, context: dict[str, Any], *, write: bool = False
+) -> tuple[str, dict[str, Any] | None] | None:
+    """Validate a live actor and preserve its existing personal memory namespace.
+
+    Dataset/Persy capture additionally needs server-derived dataset permissions;
+    ordinary personal memory requires actor ownership, not a dataset grant.
+    """
+    from app.application.agent_task_context import scoped_conversation_user_id
+    from app.application.task_conversation_store import durable_user_id
+    from app.infrastructure.auth.agent_mod_scope import (
+        AgentModAuthorizationError,
+        agent_dataset_access_context,
+        validate_actor_context,
+    )
+    from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+    if validate_actor_context(context) is not None:
+        return None
+    owner = durable_user_id(context.get("user_id"))
+    if (
+        owner is None
+        or not (context.get("local_user_id") or context.get("actor_id"))
+        or any(
+            durable_user_id(context[key]) != owner
+            for key in ("local_user_id", "actor_id")
+            if key in context
+        )
+    ):
+        return None
+    if not context.get("session_id") and not context.get("conversation_id"):
+        return None
+    normalized = str(user_id or "").strip()
+    if normalized != scoped_conversation_user_id(normalized, context):
+        return None
+    access = None
+    if context.get("_dataset_access_context_trusted") or context.get("_dataset_access_context"):
+        access_errors: tuple[type[Exception], ...] = (
+            AgentModAuthorizationError,
+        ) + RECOVERABLE_ERRORS
+        try:
+            principal = agent_dataset_access_context(context)
+        except access_errors:
+            return None
+        required = "dataset.write" if write else "dataset.read"
+        if not principal.is_admin and required not in principal.permissions:
+            return None
+        access = principal.to_dict()
+    return normalized, access
+
+
 def persist_recallable_chat_turn(
     *,
     user_id: str,
@@ -177,14 +231,10 @@ def persist_recallable_chat_turn(
 ) -> None:
     if context.get("memory_capture_enabled") is False or not response_data.get("success"):
         return
-    normalized_user_id = str(user_id or "").strip()
-    if not normalized_user_id:
+    authorized = authorized_memory_context(user_id, context, write=True)
+    if authorized is None:
         return
-    from app.utils.deployment import is_desktop_mode
-
-    trusted_principal = context.get("_dataset_access_context_trusted") is True
-    if not trusted_principal and (not is_desktop_mode()):
-        return
+    normalized_user_id, access_context = authorized
     raw_inner = response_data.get("data")
     inner: dict[str, Any] = raw_inner if isinstance(raw_inner, dict) else {}
     action = str(response_data.get("action") or inner.get("action") or "").strip().lower()
@@ -222,8 +272,7 @@ def persist_recallable_chat_turn(
         source=str(source or "chat"),
     )
     service.ingest_chunks(normalized_user_id, [chunk])
-    access_context = context.get("_dataset_access_context")
-    if trusted_principal and isinstance(access_context, dict):
+    if access_context is not None:
         from app.application.persy_memory_app_service import get_persy_memory_app_service
 
         get_persy_memory_app_service().capture_conversation_turn(

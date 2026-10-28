@@ -33,6 +33,34 @@ def _patch_modules(replacements):
         yield
 
 
+@contextmanager
+def _execution_context():
+    """Apply the common permitted single-message execution environment in order."""
+    with (
+        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
+        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
+        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
+        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
+        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
+        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
+        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
+        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
+        patch.object(_pcs, "set_llm_mode"),
+        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+    ):
+        yield
+
+
+@contextmanager
+def _kitten_context(runtime_context):
+    """Provide fresh enrichment module mocks for one execution."""
+    kitten_mod = MagicMock()
+    kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value=runtime_context)
+    kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
+    with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        yield
+
+
 def _req(**headers) -> MagicMock:
     req = MagicMock()
     req.headers = headers
@@ -289,10 +317,7 @@ async def test_execute_compat_chat_db_read_authorized():
         patch.object(_pcs, "set_llm_mode"),
     ):
         # Patch kitten enrichment inside execute_compat_chat
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={"x": 1})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({"x": 1}):
             result = await execute_compat_chat(req, body)
 
     assert result is not None
@@ -319,21 +344,9 @@ async def test_execute_compat_chat_requires_token_with_prerun():
         ),
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -350,16 +363,7 @@ async def test_execute_compat_chat_timeout_with_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -370,10 +374,7 @@ async def test_execute_compat_chat_timeout_with_prerun():
         if False
         else patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -388,16 +389,7 @@ async def test_execute_compat_chat_timeout_without_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", side_effect=RuntimeError("skip")),
         patch.object(_pcs, "attach_chat_trace_run", attach_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -406,10 +398,7 @@ async def test_execute_compat_chat_timeout_without_prerun():
         ),
         patch.object(_pcs.asyncio, "wait_for", side_effect=TimeoutError("timeout")),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert attach_mock.called
@@ -425,16 +414,7 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
     with (
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(_pcs.asyncio, "wait_for", side_effect=ValueError("bad value")),
         patch.object(
@@ -443,10 +423,7 @@ async def test_execute_compat_chat_recoverable_error_with_prerun():
             side_effect=lambda e: fastapi.HTTPException(status_code=500, detail=str(e)),
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             with pytest.raises(fastapi.HTTPException):
                 await execute_compat_chat(req, body)
 
@@ -464,16 +441,7 @@ async def test_execute_compat_chat_final_with_prerun():
         patch.object(_pcs, "start_legacy_chat_run", return_value=pre_run_mock),
         patch.object(_pcs, "finalize_legacy_chat_run", finalize_mock),
         patch.object(_pcs, "run_agent_chat", return_value={"success": True, "message": "reply"}),
-        patch.object(_pcs, "_ensure_chat_db_read_authorized", return_value=(True, None)),
-        patch.object(_pcs, "_message_requires_db_read_token", return_value=False),
-        patch.object(_pcs, "planner_workflow_interrupt_reply", return_value=None),
-        patch.object(_pcs, "_ensure_vector_index_if_needed", return_value=None),
-        patch.object(_pcs, "assert_p2_elevated_claim_or_raise"),
-        patch.object(_pcs, "resolve_ai_tier", return_value="standard"),
-        patch.object(_pcs, "runtime_context_with_tier", side_effect=lambda ctx, _t: ctx or {}),
-        patch.object(_pcs, "create_modstore_openai_client_from_request", return_value=MagicMock()),
-        patch.object(_pcs, "set_llm_mode"),
-        patch.object(_pcs, "_merge_runtime_context_with_message_paths", return_value=({}, [])),
+        _execution_context(),
         patch.object(_pcs, "_xcagi_chat_timeout_seconds", return_value=30),
         patch.object(
             _pcs,
@@ -481,10 +449,7 @@ async def test_execute_compat_chat_final_with_prerun():
             side_effect=lambda r, **kw: {"success": True, "r": r},
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             result = await execute_compat_chat(req, body)
 
     assert finalize_mock.called
@@ -517,10 +482,7 @@ async def test_execute_compat_chat_mode_online():
             _pcs, "_xcagi_compat_reply_payload", side_effect=lambda r, **kw: {"success": True}
         ),
     ):
-        kitten_mod = MagicMock()
-        kitten_mod.enrich_kitten_analyzer_runtime = AsyncMock(return_value={})
-        kitten_mod.kitten_reply_attachments = MagicMock(return_value={})
-        with _patch_modules({"app.application.kitten_planner_context": kitten_mod}):
+        with _kitten_context({}):
             await execute_compat_chat(req, body)
 
     set_mode_mock.assert_called_once_with("online")
@@ -793,8 +755,7 @@ async def test_batch_mode_offline():
 
 async def test_stream_user_id_from_header():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(side_effect=lambda k: "42" if k == "X-User-Id" else None)
+    req.headers = {"X-User-Id": "42"}
 
     body = _body(message="stream msg", user_id=None, system_prompt=None)
 
@@ -820,8 +781,7 @@ async def test_stream_user_id_from_header():
 
 async def test_stream_persona_industry_from_ctx():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream with persona",
@@ -861,8 +821,7 @@ async def test_stream_persona_industry_from_ctx():
 
 async def test_stream_persona_industry_from_derive():
     req = _req()
-    req.headers = MagicMock()
-    req.headers.get = MagicMock(return_value=None)
+    req.headers = {}
 
     body = _body(
         message="stream derive industry",

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import re
 import shlex
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -28,6 +31,22 @@ def _run(tmp: Path, *extra: str) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+def _atomic_switch_compat() -> str:
+    if sys.platform != "darwin":
+        return ""
+    # BSD mv has no -T. Execute the same-filesystem atomic symlink replacement,
+    # rather than skipping the real activation/rollback filesystem assertions.
+    command = shlex.join(
+        [
+            sys.executable,
+            "-c",
+            "import os, sys; assert len(sys.argv) == 4 and sys.argv[1] == '-Tf'; "
+            "os.replace(sys.argv[2], sys.argv[3])",
+        ]
+    )
+    return "\nmv() { " + command + ' "$@"; }\n'
 
 
 def test_preserves_exact_public_identity_and_history_not_newest_candidate(
@@ -139,61 +158,9 @@ def test_check_is_read_only_and_requires_exact_pointer_set(tmp_path: Path, stale
 @pytest.mark.parametrize("rollback", [False, True])
 @pytest.mark.parametrize("stale", [False, True])
 def test_real_activation_and_rollback_blocks_preserve_public_bytes(
-    tmp_path: Path, rollback, stale
+    tmp_path: Path, rollback: bool, stale: bool
 ) -> None:
-    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
-    current, site = tmp_path / "current", tmp_path / "site"
-    for name, content in (
-        ("active", '{"version":"1.0.0.6"}'),
-        ("prepared", '{"version":"1.0.0.5"}' if stale else '{"version":"1.0.0.6"}'),
-    ):
-        target = tmp_path / name / "site"
-        target.mkdir(parents=True)
-        (target / "download-release.json").write_text(content)
-    current.symlink_to(tmp_path / "active")
-    site.symlink_to(current / "site")
-    before = (site / "download-release.json").read_bytes()
-    verify = re.search(r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S).group()
-    # Isolate only filesystem guards/switches; no production commands or paths run.
-    verify = verify.replace(
-        '"/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"',
-        shlex.quote(str(tmp_path / "absent-hotfix")),
-    )
-    if rollback:
-        body = re.search(r"rollback\(\) \{.*?^}", script, re.M | re.S).group()
-        body += '\nrollback || status=$?; exit "${status:-0}"'  # errexit is suppressed here in real EXIT recovery.
-    else:
-        body = script[script.rindex('verify_public_pointers "$FINAL_ROOT"') :]
-        body = body[: body.index("install_cli_launcher")]
-    variables = {
-        "POINTER_SYNC": SCRIPT,
-        "SITE_SUBDIR": "site",
-        "SITE_LINK": site,
-        "CURRENT_LINK": current,
-        "FINAL_ROOT": tmp_path / "prepared",
-        "PREVIOUS_ROOT": tmp_path / "prepared",
-        "PREVIOUS_SHA": "",
-        "PREVIOUS_ARTIFACT_SHA": "",
-    }
-    setup = "\n".join(f"{key}={shlex.quote(str(value))}" for key, value in variables.items())
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            "set -e;\n"
-            + setup
-            + "\nlog() { :; }; fail() { exit 1; }; systemctl() { :; };\n"
-            + verify
-            + "\n"
-            + body,
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    assert result.returncode == (1 if stale else 0), result.stderr
-    assert current.resolve() == tmp_path / ("active" if stale else "prepared")
-    assert (site / "download-release.json").read_bytes() == before
+    _assert_public_switch(tmp_path, rollback, stale, wait=False)
 
 
 def test_prepared_reuse_is_checked_before_migrations_with_controller_helper() -> None:
@@ -210,3 +177,138 @@ def test_prepared_reuse_is_checked_before_migrations_with_controller_helper() ->
         ':成都修茈科技有限公司/MODstore_deploy/scripts/sync_site_download_release.py" > "$BOOTSTRAP/sync_site_download_release.py"'
         in workflow
     )
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+@pytest.mark.parametrize("changed_while_waiting", [False, True])
+def test_publication_lock_serializes_switch_and_rechecks_waited_pointer(
+    tmp_path: Path, rollback: bool, changed_while_waiting: bool
+) -> None:
+    _assert_public_switch(tmp_path, rollback, changed_while_waiting, wait=True)
+
+
+def _assert_public_switch(tmp_path: Path, rollback: bool, stale: bool, *, wait: bool) -> None:
+    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    current, site = tmp_path / "current", tmp_path / "site"
+    original = b'{"version":"1.0.0.6"}\n'
+    for name in ("active", "prepared"):
+        target = tmp_path / name / "site"
+        target.mkdir(parents=True)
+        content = (
+            b'{"version":"1.0.0.5"}' if stale and not wait and name == "prepared" else original
+        )
+        (target / "download-release.json").write_bytes(content)
+    current.symlink_to(tmp_path / "active")
+    site.symlink_to(current / "site")
+    lock, attempted, protected = (tmp_path / name for name in ("lock", "attempted", "protected"))
+    # Exercise real kernel flock on macOS too, where the flock CLI is absent.
+    flock = tmp_path / "flock"
+    flock.write_text(
+        f"#!{sys.executable}\nimport fcntl, os, pathlib, sys\n"
+        "pathlib.Path(os.environ['FLOCK_ATTEMPT']).touch()\n"
+        "fcntl.flock(int(sys.argv[-1]), fcntl.LOCK_EX)\n"
+    )
+    flock.chmod(0o755)
+    acquire = re.search(r"acquire_publication_lock\(\) \{.*?^}", script, re.M | re.S).group()
+    verify = re.search(r"verify_public_pointers\(\) \{.*?^}", script, re.M | re.S).group()
+    verify = verify.replace(
+        '"/var/www/update/releases/stable/enterprise/download-windows-hotfix.json"',
+        shlex.quote(str(tmp_path / "absent-hotfix")),
+    )
+    if rollback:
+        body = re.search(r"rollback\(\) \{.*?^}", script, re.M | re.S).group()
+        body += '\nacquire_publication_lock\nrollback || exit "$?"\n'
+    else:
+        body = script[script.rindex("\nacquire_publication_lock\n") :]
+        body = body[: body.index("install_cli_launcher")]
+    variables = {
+        "PUBLICATION_LOCK": lock,
+        "POINTER_SYNC": SCRIPT,
+        "SITE_SUBDIR": "site",
+        "SITE_LINK": site,
+        "CURRENT_LINK": current,
+        "FINAL_ROOT": tmp_path / "prepared",
+        "PREVIOUS_ROOT": tmp_path / "prepared",
+        "PREVIOUS_SHA": "",
+        "PREVIOUS_ARTIFACT_SHA": "",
+    }
+    setup = "\n".join(f"{key}={shlex.quote(str(value))}" for key, value in variables.items())
+    # A second open must still contend after the switch, during health/rollback.
+    probe = (
+        "import fcntl, pathlib, sys\n"
+        "with open(sys.argv[1], 'a') as handle:\n"
+        " try: fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)\n"
+        " except BlockingIOError: pathlib.Path(sys.argv[2]).touch()\n"
+        " else: raise SystemExit('publication lock released before health')\n"
+    )
+    command = (
+        "set -e\n"
+        + setup
+        + "\nlog() { :; }; fail() { exit 1; }; systemctl() { :; };\n"
+        + _atomic_switch_compat()
+        + acquire
+        + "\n"
+        + verify
+        + "\n"
+        + body
+        + "\n"
+        + shlex.join([sys.executable, "-c", probe, str(lock), str(protected)])
+    )
+    with lock.open("a") as held:
+        if wait:
+            fcntl.flock(held, fcntl.LOCK_EX)
+        process = subprocess.Popen(
+            ["bash", "-c", command],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={
+                **os.environ,
+                "PATH": f"{tmp_path}:{os.environ['PATH']}",
+                "FLOCK_ATTEMPT": str(attempted),
+            },
+        )
+        try:
+            if wait:
+                deadline = time.monotonic() + 5
+                while (
+                    not attempted.exists()
+                    and process.poll() is None
+                    and time.monotonic() < deadline
+                ):
+                    time.sleep(0.01)
+                assert attempted.exists(), "switch did not reach the shared lock"
+                assert process.poll() is None, "switch passed another publisher's held lock"
+                assert current.resolve() == tmp_path / "active"
+                if stale:
+                    (site / "download-release.json").write_bytes(b'{"version":"1.0.0.7"}')
+                fcntl.flock(held, fcntl.LOCK_UN)
+            stdout, stderr = process.communicate(timeout=10)
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate()
+    assert process.returncode == (1 if stale else 0), stdout + stderr
+    assert current.resolve() == tmp_path / ("active" if stale else "prepared")
+    expected = b'{"version":"1.0.0.7"}' if stale and wait else original
+    assert (site / "download-release.json").read_bytes() == expected
+    assert protected.exists() is not stale
+
+
+def test_all_site_writers_share_one_lock_without_nested_acquisition() -> None:
+    script = (ROOT / "scripts/xcmax-immutable-release.sh").read_text()
+    updater = (ROOT / "scripts/xcmax-site-auto-update.sh").read_text()
+    workflow = (ROOT.parents[1] / ".github/workflows/corp-site-deploy.yml").read_text()
+    for source in (script, updater, workflow):
+        assert "${XCMAX_PUBLICATION_LOCK:-/run/lock/xcmax-publication.lock}" in source
+        assert 'exec 8>"$PUBLICATION_LOCK"' in source
+        assert "flock -w 60 8" in source
+    activation = script.rindex("\nacquire_publication_lock\n")
+    assert script.index("migrate_delivery_state false") < activation
+    assert activation < script.rindex('verify_public_pointers "$FINAL_ROOT"')
+    assert "exec 8>&-" not in script[activation:]
+    assert updater.count("flock -w 60 8") == 1
+    assert updater.index("flock -w 60 8") < updater.index("REPO_CHANGED=false")
+    assert "restart_app_services\n)" in updater
+    assert workflow.index("flock -w 60 8") < workflow.index('LIVE_SITE="$(readlink')
+    assert workflow.index("exec 8>&-") > workflow.index("[ok] live site chrome published")

@@ -149,20 +149,21 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
     return merged
   }
 
-  function syncTaskPanel(runId: string, userText: string, events: AgentRunEvent[]): void {
+  function syncTaskPanel(runId: string, userText: string, events: AgentRunEvent[], messageRef: string): void {
     const update = buildAgentRunTaskUpdate({
       runId,
       userText,
       events,
-      messageRef: options.getLastAiMessageRef?.() || '',
+      messageRef,
     })
     if (update) options.upsertTask(update)
     else options.removeTask?.(`agent_${runId}`)
   }
 
-  async function syncAgentRunEvents(runId: string, userText = ''): Promise<void> {
+  async function syncAgentRunEvents(runId: string, userText = '', isGenerationCurrent: () => boolean = () => true): Promise<void> {
     const identity = resolveChatIdentity()
-    const isCurrent = () => identity === resolveChatIdentity()
+    const messageRef = options.getLastAiMessageRef?.() || ''
+    const isCurrent = () => isGenerationCurrent() && identity === resolveChatIdentity()
     if (lastIdentity !== identity) {
       lastEventByRunId.clear()
       eventsByRunId.clear()
@@ -193,20 +194,20 @@ export function useAgentRunEventSync(options: UseAgentRunEventSyncOptions) {
       if (run) completeFirstAiTaskFromRun(run)
       if (durableTask) {
         options.removeTask?.(`agent_${normalizedRunId}`)
-        options.upsertTask(durableTask)
+        options.upsertTask({ ...durableTask, messageRef })
       } else {
-        syncTaskPanel(normalizedRunId, userText, events)
+        syncTaskPanel(normalizedRunId, userText, events, messageRef)
       }
     } catch {
       if (isCurrent()) options.removeTask?.(`agent_${normalizedRunId}`)
     }
   }
 
-  async function syncAgentRunFromPayload(payload: unknown, userText = ''): Promise<void> {
+  async function syncAgentRunFromPayload(payload: unknown, userText = '', isCurrent: () => boolean = () => true): Promise<void> {
     const runId = extractAgentRunId(payload)
-    if (!runId) return
+    if (!runId || !isCurrent()) return
     bindPendingFirstAiTaskRun(runId, userText)
-    await syncAgentRunEvents(runId, userText)
+    await syncAgentRunEvents(runId, userText, isCurrent)
   }
 
   return {

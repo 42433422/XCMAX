@@ -1174,10 +1174,10 @@
           var platforms = [['Windows x64', 'win'], ['macOS Apple Silicon', 'mac', 'arm64'], ['macOS Intel', 'mac', 'x64'], ['Android', 'android']]
           var statuses = platforms.map(function (platform) { return { name: platform[0], result: current.platform(platform[1], platform[2]) } })
           var available = statuses.filter(function (row) { return row.result.artifact })
-          text('summary-status', !current.version ? '版本信息暂不可用' : available.length ? '清单已校验 ' + available.length + ' 个下载入口' : '当前制品未开放或身份待核验')
+          text('summary-status', available.length ? '清单已校验 ' + available.length + ' 个下载入口' : !current.version ? '版本信息暂不可用' : '当前制品未开放或身份待核验')
           text('summary-channel', '按平台与制品分别核验')
           document.getElementById('summary-changes').replaceChildren(...statuses.map(function (row) {
-            return node('li', '', row.name + (row.result.version ? ' v' + row.result.version : '') + '：' + row.result.status + (row.result.artifact ? ' · ' + row.result.channel : ''))
+            return node('li', '', row.name + (row.result.version ? ' v' + row.result.version : '') + '：' + row.result.status + (row.result.artifact ? ' · ' + row.result.channel : '') + (row.result.temporary && row.result.temporary.release && row.result.temporary.release.test_only ? ' · 已知问题与范围：' + row.result.temporary.release.notes.join('；') : ''))
           }))
         }
         function unavailable() {

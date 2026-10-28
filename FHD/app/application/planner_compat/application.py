@@ -32,7 +32,7 @@ class BusinessAction(Protocol):
 
 
 class SlotRead(Protocol):
-    def __call__(self, message: str, *, request: Request, user_id: str) -> Payload | None: ...
+    async def __call__(self, message: str, *, request: Request, user_id: str) -> Payload | None: ...
 
 
 @dataclass(frozen=True)
@@ -84,7 +84,7 @@ class CompatChatApplication:
         if business is not None:
             return business
         context, kitten_extra = await self.fast_paths.kitten(context, body.message)
-        slot = self.fast_paths.slot(
+        slot = await self.fast_paths.slot(
             body.message, request=request, user_id=str(body.user_id or "default")
         )
         if isinstance(slot, dict) and slot.get("response"):

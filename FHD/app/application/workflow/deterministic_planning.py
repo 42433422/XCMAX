@@ -82,6 +82,41 @@ def desktop_action_plan(
     return PlanGraph(plan_id=plan_id, intent="desktop_action", nodes=[node], risk_level=risk)
 
 
+def label_print_plan(
+    plan_id: str, route: dict[str, Any], tool_registry: dict[str, Any]
+) -> PlanGraph:
+    """Physical printing belongs to the approved, traceable workflow, never a read worker."""
+    slots = route.get("slots") or {}
+    model = str(slots.get("model_number") or "").strip()
+    quantity = slots.get("quantity", 1)
+    action = "workflow_label_dispatch"
+    available = action in (tool_registry.get("print", {}).get("actions") or {})
+    if model and type(quantity) is int and 1 <= quantity <= 100 and available:
+        node = WorkflowNode(
+            node_id="print_label",
+            tool_id="print",
+            action=action,
+            params={"model_number": model, "quantity": quantity},
+            risk="high",
+            idempotent=False,
+            description=f"确认后打印标签：{model} × {quantity} 张",
+        )
+    else:
+        node = build_clarify_node(
+            "请指定唯一产品型号和 1–100 张标签数量，确认后才会提交打印。"
+            if available
+            else "标签打印工具当前不可用，未提交打印。"
+        )
+        node.branches.clear()  # No executable target until valid parameters are supplied.
+    return PlanGraph(
+        plan_id=plan_id,
+        intent="label_print",
+        nodes=[node],
+        risk_level=node.risk,
+        todo_steps=[node.description],
+    )
+
+
 @dataclass(frozen=True)
 class DeterministicDependencies:
     looks_like_write: Callable[[str, str], bool]
@@ -112,6 +147,8 @@ class DeterministicPlanner:
         route = route_normal_mode_message(message)
         if route.get("intent") == "desktop":
             return desktop_action_plan(plan_id, route, tool_registry)
+        if route.get("intent") == "label_print":
+            return label_print_plan(plan_id, route, tool_registry)
         lower = (message or "").lower()
         nodes: list[WorkflowNode] = []
         todo = ["理解用户目标", "执行可用工具", "输出执行结果"]

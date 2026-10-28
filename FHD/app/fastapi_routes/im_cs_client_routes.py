@@ -260,6 +260,7 @@ async def remote_enterprise_cs_send(
             int(customer.id),
             message_id,
             text,
+            market_token=_bearer_token(request),
         )
         return {
             "success": True,

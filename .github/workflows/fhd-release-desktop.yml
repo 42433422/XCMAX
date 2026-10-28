@@ -9,9 +9,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "1.0.0.6"
+        default: "1.0.0.7"
         type: choice
         options:
+          - "1.0.0.7"
           - "1.0.0.6"
           - "1.0.0.5"
           - "1.0.0.4"
@@ -25,12 +26,12 @@ on:
       windows_installer_only:
         description: "Windows installer delivery: auto-sign if configured, otherwise explicitly unsigned; no stable feed publication"
         required: false
-        default: false
+        default: true
         type: boolean
       candidate_only:
         description: "Keep the Windows installer as a private acceptance candidate; do not publish the download pointer"
         required: false
-        default: false
+        default: true
         type: boolean
       candidate_run_id:
         description: "Existing frozen installer run ID; publish its exact artifact without rebuilding"
@@ -206,6 +207,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+      - name: Verify frozen mainline source and original run provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          CANDIDATE_RUN: ${{ inputs.candidate_run_id }}
+          ACCEPTANCE_RUN: ${{ inputs.acceptance_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN}" \
+            | jq -e --arg sha "$RELEASE_SHA" '.conclusion == "success" and .head_sha == $sha and .head_branch == "main" and .path == ".github/workflows/fhd-release-desktop.yml"' >/dev/null
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ACCEPTANCE_RUN}" \
+            | jq -e '.conclusion == "success" and .head_branch == "main" and .path == ".github/workflows/fhd-windows-candidate-acceptance.yml"' >/dev/null
       - uses: actions/download-artifact@v8
         with:
           name: xcagi-windows-installer-${{ inputs.release_sha }}
@@ -311,6 +329,12 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${official_dir}' '${staging_dir}' && chmod 0700 '${staging_dir}'"
+          # Snapshot exact old bytes before a slow upload; a concurrent publisher invalidates this CAS.
+          pointer_guard="${staging_dir}/pointer-guard.py"
+          pointer_archive="/var/www/update/releases/rollback/interim-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          scp "${SSH_OPTS[@]}" "成都修茈科技有限公司/MODstore_deploy/scripts/sync_site_download_release.py" "root@${HOST}:${pointer_guard}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "python3 '${pointer_guard}' --snapshot --pointer-target '${pointer_target}' --archive-dir '${pointer_archive}'"
           uploaded=0
           for attempt in 1 2 3; do
             if scp "${SSH_OPTS[@]}" "$artifact" "$sha_file" "root@${HOST}:${staging_dir}/"; then
@@ -340,7 +364,6 @@ jobs:
           mv -f "$staging_dir/$filename.sha256" "$official_dir/$filename.sha256"
           chmod 0644 "$official_dir/$filename" "$official_dir/$filename.sha256"
           rm -f -- "$staging_dir/$filename"
-          rmdir "$staging_dir"
           REMOTE_INTERIM
 
           # 公开可下载性用真实 HTTP + 远端 SHA256 双验证，不接受“上传即成功”的假设。
@@ -357,14 +380,19 @@ jobs:
             exit 1
           fi
 
-          pointer_tmp="${pointer_target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          pointer_tmp="${staging_dir}/incoming.json"
           scp "${SSH_OPTS[@]}" "$pointer" "root@${HOST}:${pointer_tmp}"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "chmod 0644 '${pointer_tmp}' && mv -f '${pointer_tmp}' '${pointer_target}'"
-
-          curl --http1.1 -fsS --max-time 60 "https://xiu-ci.com/download-windows-hotfix.json" \
-            | jq -e --arg sha "$local_sha" --arg url "$url" \
-                '.download_allowed == true and .artifact.sha256 == $sha and .artifact.url == $url' >/dev/null
+            "python3 '${pointer_guard}' --promote-source '${pointer_tmp}' --pointer-target '${pointer_target}' --archive-dir '${pointer_archive}'"
+          if ! curl --http1.1 -fsS --max-time 60 "https://xiu-ci.com/download-windows-hotfix.json?release-run=${GITHUB_RUN_ID}" \
+              -o "${RUNNER_TEMP}/public-hotfix.json" || ! cmp "$pointer" "${RUNNER_TEMP}/public-hotfix.json"; then
+            # Restore only our own replacement, never a later publication; retain the archive and old EXE.
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+              "python3 '${pointer_guard}' --restore --pointer-target '${pointer_target}' --archive-dir '${pointer_archive}'" \
+              || echo "::error::Pointer changed again; automatic rollback refused, reconcile from archived bytes."
+            exit 1
+          fi
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -f '${pointer_tmp}' '${pointer_guard}' && rmdir '${staging_dir}'"
           echo "Windows interim download is publicly available; the Windows stable update feed was not touched."
 
   release-preflight:
@@ -397,6 +425,17 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+      - name: Reject a test-only version from the stable publication lane
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY_POLICY'
+          import json, os
+          from pathlib import Path
+          release = json.loads(Path("FHD/config/download_release.json").read_text())["windows_interim_release"]
+          if release.get("test_only") and release["version"] == os.environ["REQUESTED_VERSION"]:
+              raise SystemExit("Test-only release: use the Windows candidate/manual-download lane; stable OTA is closed.")
+          PY_POLICY
       - name: Download normalized security evidence
         uses: actions/download-artifact@v8
         with:

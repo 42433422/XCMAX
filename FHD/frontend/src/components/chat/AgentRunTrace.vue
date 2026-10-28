@@ -1,10 +1,10 @@
 <template>
   <details
     :class="['art-trace', `is-${trace.status}`]"
-    :open="defaultOpen"
+    :open="userOpen ?? defaultOpen"
     data-testid="agent-run-trace"
   >
-    <summary class="art-summary">
+    <summary class="art-summary" @click.prevent="userOpen = !(userOpen ?? defaultOpen)">
       <span class="art-disclosure" aria-hidden="true">
         <i class="fa fa-chevron-right"></i>
       </span>
@@ -36,12 +36,12 @@
           v-for="(phase, idx) in trace.phases"
           :key="phase.started_event_id || idx"
           :class="['art-step', `is-${phase.kind}`, `is-${phase.status}`, { 'has-detail': hasPhaseDetails(phase) }]"
-          :open="shouldOpenPhase(phase)"
+          :open="phaseOpen[phase.started_event_id || idx] ?? shouldOpenPhase(phase)"
         >
           <summary
             class="art-step-summary"
             :aria-disabled="hasPhaseDetails(phase) ? undefined : 'true'"
-            @click="!hasPhaseDetails(phase) && $event.preventDefault()"
+            @click.prevent="hasPhaseDetails(phase) && (phaseOpen[phase.started_event_id || idx] = !(phaseOpen[phase.started_event_id || idx] ?? shouldOpenPhase(phase)))"
           >
             <span class="art-step-icon" aria-hidden="true">
               <i class="fa" :class="phaseIconClass(phase)"></i>
@@ -180,7 +180,10 @@ const INTENT_LABELS: Record<string, string> = {
 }
 
 const statusLabel = computed(() => STATUS_LABELS[props.trace.status] || props.trace.status)
-const defaultOpen = computed(() => props.trace.status !== 'success')
+const defaultOpen = computed(() => props.trace.status === 'waiting')
+const userOpen = ref<boolean>()
+const phaseOpen = ref<Record<string, boolean>>({})
+watch(() => props.trace.run_id, () => { userOpen.value = undefined; phaseOpen.value = {} })
 const showPlanGraph = computed(() => shouldShowAgentRunPlanGraph(props.trace))
 const toolPhases = computed(() => props.trace.phases.filter((phase): phase is TraceToolPhase => phase.kind === 'tool'))
 const toolCount = computed(() => toolPhases.value.length)

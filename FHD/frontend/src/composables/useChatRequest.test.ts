@@ -253,7 +253,7 @@ describe('useChatRequest', () => {
     vi.mocked(chatApi.sendUnifiedChatBatch).mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve({} as any), 60000)))
     const promise = request.requestChatByModeBatchWithTimeout(['msg1'], 100)
     vi.advanceTimersByTime(200)
-    await expect(promise).rejects.toThrow('批量请求超时')
+    await expect(promise).rejects.toThrow('请求超时')
     vi.useRealTimers()
   })
 
@@ -283,3 +283,18 @@ describe('useChatRequest', () => {
     expect(body.db_read_token).toBe('token123')
   })
 })
+
+ it('aborts pending JSON transport and releases its timer when corrected', async () => {
+  vi.useFakeTimers()
+  const chatApi = (await import('@/api/chat')).default
+  vi.mocked(chatApi.sendUnifiedChat).mockImplementation(() => new Promise(() => {}))
+  const request = useChatRequest(makeDeps())
+  const controller = new AbortController()
+  const pending = request.requestChatByModeWithTimeout('synthetic', 90_000, undefined, { sessionId: 's', messages: [], signal: controller.signal })
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejected
+  expect(vi.mocked(chatApi.sendUnifiedChat).mock.calls.at(-1)?.[1]?.signal?.aborted).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
+  vi.useRealTimers()
+ })

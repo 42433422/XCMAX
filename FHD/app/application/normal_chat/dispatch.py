@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Callable, Iterator, Mapping
+import threading
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any
 
@@ -61,6 +63,50 @@ def request_scope(
                 pass
 
 
+def _admitted_text(
+    message: str,
+    user_id: str | None,
+    has_pending_workflow: Callable[[str], bool],
+    explicit_workflow_intent: Callable[[str], bool],
+    logger: logging.Logger,
+) -> str | None:
+    text = str(message or "").strip()
+    if not text or (user_id is not None and has_pending_workflow(user_id)):
+        return None
+    if explicit_workflow_intent(text):
+        logger.info(
+            "chat dispatch decision: dispatch_path=normal_slot intent=workflow_tool_intent matched=False"
+        )
+        return None
+    return text
+
+
+def _dispatch_route(
+    route: JsonObject,
+    handlers: Mapping[str, SlotHandler],
+    logger: logging.Logger,
+) -> JsonObject | None:
+    intent = str(route.get("intent") or "").strip()
+    handler = handlers.get(intent)
+    if handler is None:
+        logger.info(
+            "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=False",
+            intent or "unmatched",
+        )
+        return None
+    payload = handler(route)
+    if not isinstance(payload, dict) or (
+        payload.get("success") is False and not payload.get("response")
+    ):
+        return None
+    logger.info(
+        "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=True channel=%s",
+        intent,
+        "agent_tool" if payload.get("agent_tool_dispatch") else "slot",
+    )
+    return payload
+
+
 def dispatch_read(
     message: str,
     *,
@@ -73,32 +119,44 @@ def dispatch_read(
     handlers: Mapping[str, SlotHandler],
     logger: logging.Logger,
 ) -> JsonObject | None:
-    text = str(message or "").strip()
-    if not text or (user_id is not None and has_pending_workflow(user_id)):
-        return None
-    if explicit_workflow_intent(text):
-        logger.info(
-            "chat dispatch decision: dispatch_path=normal_slot intent=workflow_tool_intent matched=False"
-        )
+    text = _admitted_text(message, user_id, has_pending_workflow, explicit_workflow_intent, logger)
+    if text is None:
         return None
     with scope(request):
-        route = route_message(text)
-        intent = str(route.get("intent") or "").strip()
-        handler = handlers.get(intent)
-        if handler is None:
-            logger.info(
-                "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=False",
-                intent or "unmatched",
-            )
-            return None
-        payload = handler(route)
-    if not isinstance(payload, dict):
-        return None
-    if payload.get("success") is False and not payload.get("response"):
-        return None
-    logger.info(
-        "chat dispatch decision: dispatch_path=normal_slot intent=%s matched=True channel=%s",
-        intent,
-        "agent_tool" if payload.get("agent_tool_dispatch") else "slot",
+        return _dispatch_route(route_message(text), handlers, logger)
+
+
+async def dispatch_read_async(
+    message: str,
+    *,
+    request: Any | None,
+    user_id: str | None,
+    route_message: Callable[[str], Awaitable[JsonObject]],
+    has_pending_workflow: Callable[[str], bool],
+    explicit_workflow_intent: Callable[[str], bool],
+    scope: Callable[[Any | None], AbstractContextManager[None]],
+    handlers: Mapping[str, SlotHandler],
+    logger: logging.Logger,
+) -> JsonObject | None:
+    text = await asyncio.to_thread(
+        _admitted_text, message, user_id, has_pending_workflow, explicit_workflow_intent, logger
     )
-    return payload
+    if text is None:
+        return None
+    with scope(request):
+        route = await route_message(text)
+        task = asyncio.current_task()
+        if task is not None and task.cancelling():
+            raise asyncio.CancelledError
+        stopped = threading.Event()
+
+        def dispatch() -> JsonObject | None:
+            # A cancelled queued read must not start after its caller has left.
+            if not stopped.is_set():
+                return _dispatch_route(route, handlers, logger)
+            return None
+
+        try:
+            return await asyncio.to_thread(dispatch)
+        finally:
+            stopped.set()

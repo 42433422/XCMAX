@@ -233,3 +233,36 @@ describe('shipment preview fallbacks and asynchronous edits', () => {
     expect(task.value!.customOrderNumber).toBeUndefined()
   })
 })
+
+ describe('local preview ownership fences', () => {
+  it.each(['generation', 'session', 'task'])('drops a pending add before mutation or reply after %s changes', async change => {
+    const m = makeMessages(), task = ref<ShipmentTask | null>(shipmentTask())
+    const s = useShipmentTask(m, task)
+    let current = true
+    let finish!: (value: Response) => void
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const original = task.value!
+    const pending = s.handleModifyCommand('再加 1桶 A001 规格10', () => current)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    if (change === 'task') task.value = shipmentTask()
+    else current = false
+    finish({ ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: [{ model_number: 'A001', name: 'synthetic' }] }) } as Response)
+    expect(await pending).toBe(true)
+    expect(original.payload!.params!.products).toEqual([])
+    expect(m.addAndSaveMessage).not.toHaveBeenCalled()
+  })
+
+  it.each(['enrich', 'order'])('fences automatic %s hydration after a round changes', async kind => {
+    const task = ref<ShipmentTask | null>(shipmentTask([{ model_number: 'A001' }]))
+    let current = true, finish!: (value: Response) => void
+    const s = useShipmentTask(makeMessages(), task, () => () => current)
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    const pending = kind === 'enrich' ? s.enrichShipmentPreviewProducts(task.value!) : s.hydrateTaskOrderNumber(task.value!)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    current = false
+    finish({ ok: true, headers: { get: () => 'application/json' }, json: async () => ({ success: true, data: kind === 'enrich' ? [{ model_number: 'A001', name: 'old' }] : { order_number: 'OLD' } }) } as Response)
+    await pending
+    expect(task.value!.payload!.params!.products![0].name).toBeUndefined()
+    expect(task.value!.customOrderNumber).toBeUndefined()
+  })
+ })
