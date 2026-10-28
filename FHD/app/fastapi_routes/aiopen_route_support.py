@@ -84,7 +84,7 @@ def trace_tool_call(
                 "tool": tool,
                 "protocol": "mcp" if channel == "aiopen_mcp" else "rest",
             },
-            user_id=user_id or str(args.get("user_id") or args.get("userId") or "aiopen"),
+            user_id=user_id or "aiopen-api-key",
             source="aiopen",
             channel=channel,
             intent="aiopen_tool_call",
@@ -105,6 +105,7 @@ def trace_control_result(
     body: dict[str, Any] | None = None,
     channel: str = "aiopen_control",
     intent: str = "aiopen_control_update",
+    user_id: str = "",
 ) -> dict[str, Any]:
     if not isinstance(payload, dict) or payload.get("run_id") or payload.get("agent_run_id"):
         return payload
@@ -125,9 +126,7 @@ def trace_control_result(
                 "action": action,
                 "request": safe_body,
             },
-            user_id=str(
-                (body or {}).get("user_id") or (body or {}).get("userId") or "aiopen-control"
-            ),
+            user_id=user_id or "aiopen-control",
             source="aiopen",
             channel=channel,
             intent=intent,
