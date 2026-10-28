@@ -224,5 +224,50 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
   await wrapper.get('.message-copy-btn').trigger('click')
   await Promise.resolve()
   expect(writeText).toHaveBeenCalledWith('系统显示 "正常"。')
-  expect(wrapper.get('.message-copy-btn').text()).toBe(success ? '已复制' : '复制失败，请重试')
+  expect(wrapper.get('.message-copy-btn').attributes('aria-label')).toBe(success ? '已复制' : '复制失败，请重试')
  })
+
+
+it('uses the native bridge and excludes hidden content and code controls', async () => {
+  const nativeWrite = vi.fn().mockResolvedValue({ ok: true })
+  Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: { clipboardWriteText: nativeWrite } })
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+    { role: 'user', time: '', content: '<p>第一段</p><p hidden>秘密</p><p>第二段<br>下一行</p>' },
+    { role: 'ai', time: '', content: '清单：\n- 第一项\n- 第二项\n\n```js\nlet a = 1;\nlet b = 2;\n```' },
+  ] } })
+  await wrapper.findAll('.message-copy-btn')[0].trigger('click'); await Promise.resolve()
+  expect(nativeWrite).toHaveBeenNthCalledWith(1, '第一段\n第二段\n下一行')
+  await wrapper.findAll('.message-copy-btn')[1].trigger('click'); await Promise.resolve()
+  const copied = nativeWrite.mock.calls[1][0] as string
+  expect(copied).toContain('第一项\n第二项'); expect(copied).toContain('let a = 1;\nlet b = 2;')
+  expect(copied).not.toContain('复制'); expect(copied).not.toContain('js')
+  nativeWrite.mockResolvedValueOnce({ ok: false })
+  await wrapper.findAll('.message-copy-btn')[0].trigger('click'); await Promise.resolve()
+  expect(wrapper.findAll('.message-copy-btn')[0].attributes('aria-label')).toBe('复制失败，请重试')
+  delete window.xcagiDesktop
+})
+
+it('copies the rendered body while excluding CSS-hidden and inherited-hidden content', async () => {
+  const css = document.createElement('style')
+  css.textContent = '.private-copy-test { display:none } .masked-copy-test { visibility:hidden } .concealed-copy-test { content-visibility:hidden }'
+  document.head.append(css)
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  const wrapper = mount(ChatMessageList, { attachTo: document.body, props: { ...defaultProps, messages: [{
+    role: 'user', time: '', content: '<p>公开</p><p class="private-copy-test">机密</p><div class="masked-copy-test"><span>继承机密</span></div><div class="concealed-copy-test">渲染隐藏机密</div><p>第二段</p>',
+  }] } })
+  await wrapper.get('.message-copy-btn').trigger('click'); await Promise.resolve()
+  expect(writeText).toHaveBeenCalledWith('公开\n第二段')
+  wrapper.unmount(); css.remove()
+})
+
+it('copies the condensed visible summary when a plan is collapsed', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined)
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  const wrapper = mount(ChatMessageList, { attachTo: document.body, props: { ...defaultProps, isMessageCollapsed: () => true, messages: [{
+    role: 'ai', time: '', content: '动态工作流计划：内部明细', agentRunTrace: { run_id: '1', intent: '', status: 'running', phases: [], terminal: false },
+  }] } })
+  await wrapper.get('.message-copy-btn').trigger('click'); await Promise.resolve()
+  expect(writeText).toHaveBeenCalledWith('执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。')
+  wrapper.unmount()
+})
