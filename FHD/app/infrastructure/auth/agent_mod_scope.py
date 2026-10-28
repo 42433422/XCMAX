@@ -137,9 +137,10 @@ def _bound_actor(context: dict[str, Any]) -> Any:
 def validate_actor_context(runtime_context: dict[str, Any]) -> dict[str, Any] | None:
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+    actor_errors: tuple[type[Exception], ...] = (AgentModAuthorizationError,) + RECOVERABLE_ERRORS
     try:
         _bound_actor(runtime_context)
-    except (AgentModAuthorizationError, *RECOVERABLE_ERRORS):
+    except actor_errors:
         return {
             "success": False,
             "error_code": "tool_identity_required",

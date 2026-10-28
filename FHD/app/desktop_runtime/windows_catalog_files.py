@@ -22,7 +22,7 @@ class WindowsCatalogUnsupported(RuntimeError):
     pass
 
 
-def _local_path(value):
+def _local_path(value) -> PureWindowsPath:
     if not isinstance(value, str) or not re.match(r"^[A-Za-z]:\\", value):
         raise ValueError("absolute local Windows path required")
     path = PureWindowsPath(value)
@@ -213,9 +213,9 @@ def observe_sqlite_family(target: str):
     This does not prove SQLite uses that file or make sidecar/namespace snapshots
     race-proof. It does not fence another principal, process or pre-opened handle.
     """
-    target = _local_path(target)
+    path = _local_path(target)
     with _NativeFiles() as api:
-        yield _observe_family(api, target)
+        yield _observe_family(api, path)
         api.recheck()
 
 
@@ -229,7 +229,7 @@ class JsonPublicationRequest:
 
 def prepare_json_publication(target: str, value: dict, *, expected_previous_sha256=None):
     """Pure request encoding only; not a publication, receipt or durable proof."""
-    target = _local_path(target)
+    path = _local_path(target)
     if not isinstance(value, dict) or (
         expected_previous_sha256 is not None
         and (
@@ -248,7 +248,7 @@ def prepare_json_publication(target: str, value: dict, *, expected_previous_sha2
     if len(payload) > 128 * 1024 * 1024 or json.loads(payload) != value:
         raise ValueError("bounded lossless JSON object required")
     return JsonPublicationRequest(
-        target, payload, hashlib.sha256(payload).hexdigest(), expected_previous_sha256
+        path, payload, hashlib.sha256(payload).hexdigest(), expected_previous_sha256
     )
 
 

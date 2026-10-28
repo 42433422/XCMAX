@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from sqlalchemy import inspect
+from sqlalchemy import Table, inspect
 
 
 def enabled() -> bool:
@@ -25,6 +25,8 @@ def validate_auth_schema(bind) -> None:
         Tenant.__table__,
         role_permissions,
     ):
+        if not isinstance(table, Table):
+            raise RuntimeError("guarded authentication requires physical mapped tables")
         if table.name not in tables or not set(table.columns.keys()).issubset(
             {column["name"] for column in inspector.get_columns(table.name)}
         ):

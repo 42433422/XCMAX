@@ -12,7 +12,11 @@ from app.application.agent_orchestrator.param_references import (
     unresolved_placeholders,
 )
 from app.application.agent_orchestrator.run_models import AgentStep
-from app.application.agent_orchestrator.tool_spec import validate_tool_call, validate_tool_result
+from app.application.agent_orchestrator.tool_spec import (
+    ToolActionSpecV2,
+    validate_tool_call,
+    validate_tool_result,
+)
 from app.application.tool_execution_deadline import invocation_deadline
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -48,7 +52,9 @@ def _query_failure(code: str) -> dict[str, Any]:
     }
 
 
-def _reviewed_query_tenant(spec, params: dict, context: dict):
+def _reviewed_query_tenant(
+    spec: ToolActionSpecV2 | None, params: dict[str, Any], context: dict[str, Any]
+) -> tuple[int | None, dict[str, Any] | None]:
     """Two audited action policies, not a generic read-only authorization lane."""
     from fastapi import HTTPException
 
@@ -78,10 +84,10 @@ def _reviewed_query_tenant(spec, params: dict, context: dict):
         return None, _query_failure("tool_contract_unavailable")
     # _bound_actor verifies the signed execution tenant. Never choose an ambient
     # or default tenant to turn a hidden/empty result into confirmed absence.
-    tenant = str(context.get("tenant_id") or "")
-    if not tenant.isdigit() or int(tenant) <= 0:
+    tenant_text = str(context.get("tenant_id") or "")
+    if not tenant_text.isdigit() or int(tenant_text) <= 0:
         return None, _query_failure("tool_scope_unavailable")
-    return int(tenant), None
+    return int(tenant_text), None
 
 
 def _dispatch_reviewed_query(tool_id: str, action: str, params: dict):
@@ -109,7 +115,7 @@ def controlled_tool_context(tool_id, action):
     return dict(held[2]) if held and held[:2] == (tool_id, action) else None
 
 
-def _execute_catalog(step, context):
+def _execute_catalog(step: AgentStep, context: dict[str, Any]) -> dict[str, Any]:
     from app.application.agent_orchestrator.business_action_ledger import (
         BusinessActionLedger,
         canonical_hash,

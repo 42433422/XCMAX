@@ -8,6 +8,7 @@ import json
 import os
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
 from app.application.etl.batch_owned_source import OwnedSqlSessions
@@ -602,7 +603,9 @@ def verify_operation(principal, operation_id, *, release=False):
         factory.engine.dispose()
 
 
-def verify_catalog_action(params, context, *, release=False):
+def verify_catalog_action(
+    params: dict[str, Any], context: dict[str, Any], *, release: bool = False
+) -> dict[str, Any]:
     from app.application.agent_orchestrator.catalog_product_edit import trusted_original
 
     principal, run, claim = trusted_original(params, context)

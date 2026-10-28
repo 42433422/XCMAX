@@ -207,9 +207,12 @@ def authorized_memory_context(
         return None
     access = None
     if context.get("_dataset_access_context_trusted") or context.get("_dataset_access_context"):
+        access_errors: tuple[type[Exception], ...] = (
+            AgentModAuthorizationError,
+        ) + RECOVERABLE_ERRORS
         try:
             principal = agent_dataset_access_context(context)
-        except (AgentModAuthorizationError, *RECOVERABLE_ERRORS):
+        except access_errors:
             return None
         required = "dataset.write" if write else "dataset.read"
         if not principal.is_admin and required not in principal.permissions:

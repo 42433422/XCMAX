@@ -30,9 +30,8 @@ def _authenticated_tool_body(request: Request, body: dict[str, Any]) -> dict[str
     )
 
     trusted = request_runtime_context(request)
-    params = without_runtime_identity(
-        body.get("params") if isinstance(body.get("params"), dict) else {}
-    )
+    raw_params = body.get("params")
+    params = without_runtime_identity(raw_params if isinstance(raw_params, dict) else {})
     params["_runtime_context"] = trusted
     return {**body, "user_id": trusted["user_id"], "params": params}
 

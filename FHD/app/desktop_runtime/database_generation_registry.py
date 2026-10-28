@@ -191,7 +191,9 @@ def observe_generation(
 
 # V1 only invalidates trust; V2 is reserved for explicitly enrolled fresh sources.
 # The permanent cooperative lock is separate from the atomically replaced JSON.
-_active_restores = ContextVar("etl_active_restore_epochs", default=frozenset())
+_active_restores: ContextVar[frozenset[str]] = ContextVar(
+    "etl_active_restore_epochs", default=frozenset()
+)
 
 
 def _sync_epoch_directory(path: Path):
@@ -244,7 +246,7 @@ def _epoch_paths(target: Path, data_root, *, create: bool):
     return directory / (key + ".json"), directory / (key + ".lock"), key
 
 
-def _read_closed_epoch(path: Path, key: str):
+def _read_closed_epoch(path: Path, key: str) -> dict | None:
     def pairs(rows):
         result = {}
         for name, value in rows:
@@ -852,7 +854,7 @@ OWNED_SOURCE_SCHEMA = """CREATE TABLE etl_owned_source (
 )"""
 
 
-def _owned_record(value, key):
+def _owned_record(value, key) -> OwnedSource:
     fields = set(OwnedSource.__dataclass_fields__)
     if (
         set(value) != fields | {"version", "state"}
@@ -984,6 +986,9 @@ def enroll_owned_source(
 ) -> OwnedSource:
     """Host-only explicit creation. Existing files/markers are never adopted or removed."""
     require_owned_source_profile(data_root=data_root)
+    profile = _owned_profile
+    if profile is None:
+        raise GenerationObservationError("owned source profile is unavailable")
     _user, tenant, mod = _scope(context)
     with (
         owned_source_lifecycle(data_root=data_root) as lifecycle,
@@ -1006,8 +1011,8 @@ def enroll_owned_source(
         info = os.fstat(fd)
         os.close(fd)
         _publish_epoch(
-            owned_host_anchor(_owned_profile[1][0]),
-            {"version": 2, "control_root": str(_owned_profile[0])},
+            owned_host_anchor(profile[1][0]),
+            {"version": 2, "control_root": str(profile[0])},
         )
         _publish_epoch(lifecycle, {"version": 2, "state": "owned_sources_enrolled"})
         source = OwnedSource(

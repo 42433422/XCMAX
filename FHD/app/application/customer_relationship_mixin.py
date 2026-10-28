@@ -113,6 +113,7 @@ class CustomerRelationshipMixin:
         name = str(input_name or "").strip()
         if not name or current_tenant_id() is None:
             return {"status": "unknown"}
+        lookup_errors: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQLAlchemyError,)
         try:
             session = self._get_session()
             try:
@@ -135,7 +136,7 @@ class CustomerRelationshipMixin:
                 return {"status": "matched", "id": matches[0].id, "unit_name": matches[0].unit_name}
             finally:
                 session.close()
-        except (*RECOVERABLE_ERRORS, SQLAlchemyError):
+        except lookup_errors:
             logger.exception("Customer ensure lookup unavailable")
             return {"status": "unknown"}
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable, Mapping
-from contextlib import nullcontext
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 
 from app.application.tools.workflow_tools.contracts import (
@@ -90,7 +90,7 @@ def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | N
 
     params = dict(params or {})
     runtime_context = dict(params.pop("_runtime_context", None) or {})
-    customer_scope = nullcontext()
+    customer_scope: AbstractContextManager[object] = nullcontext()
     customer_tenant = None
     if tool_id == "customers" and action == "ensure_exists":
         from fastapi import HTTPException

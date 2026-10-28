@@ -7,6 +7,7 @@ import logging
 import os
 import threading
 from contextlib import ExitStack
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +45,9 @@ from .static_mounts import (
     mount_xcmax_dashboard_static,
 )
 
+if TYPE_CHECKING:
+    from .guarded_catalog import CatalogAdmission
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +67,12 @@ def create_fastapi_app(
         return app
 
 
-def _create_fastapi_app(config_object, enable_cors, enable_docs, admission):
+def _create_fastapi_app(
+    config_object: type[Config] | None,
+    enable_cors: bool,
+    enable_docs: bool,
+    admission: CatalogAdmission | None,
+) -> FastAPI:
     global _app_singleton
     if config_object is None:
         config_object = get_config("default")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from fastapi import BackgroundTasks, HTTPException
 
@@ -344,7 +344,14 @@ async def finalize_enterprise_login(
     return result
 
 
-def _existing_guarded_login(result, session_id, market_result, account_kind, username, invitation):
+def _existing_guarded_login(
+    result: dict[str, Any],
+    session_id: str,
+    market_result: dict[str, Any] | None,
+    account_kind: AccountKind,
+    username: str,
+    invitation: str,
+) -> dict[str, Any]:
     """Read an already-bound identity; market login is not an enrollment protocol."""
     from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.db.bootstrap.guarded import validate_auth_schema
@@ -352,7 +359,7 @@ def _existing_guarded_login(result, session_id, market_result, account_kind, use
     from app.db.session import get_host_db
     from app.utils.time import utc_now_naive
 
-    def refuse():
+    def refuse() -> NoReturn:
         raise HTTPException(409, "Guarded login requires an existing unchanged identity")
 
     if invitation or not result.get("success"):

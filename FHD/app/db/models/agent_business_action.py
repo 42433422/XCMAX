@@ -8,7 +8,7 @@ this mapping grants no authorization or claim/replay semantics.
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.orm import Session, registry
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session
 
 from app.db.schema_migrations.business_action_ledger import (
     TABLE_NAME,
@@ -17,15 +17,32 @@ from app.db.schema_migrations.business_action_ledger import (
 )
 
 ledger_metadata = sa.MetaData()
-_ledger_registry = registry(metadata=ledger_metadata)
 
 
-@_ledger_registry.mapped
-class AgentBusinessActionRecord:
+class _LedgerBase(DeclarativeBase):
+    metadata = ledger_metadata
+
+
+class AgentBusinessActionRecord(_LedgerBase):
     """The same durable host table, not a shadow database or replacement API."""
 
     __tablename__ = TABLE_NAME
     __table__ = sa.Table(TABLE_NAME, ledger_metadata, *business_action_columns())
+
+    action_key: Mapped[str]
+    tenant_id: Mapped[str]
+    mod_id: Mapped[str]
+    business_action_id: Mapped[str]
+    tool_id: Mapped[str]
+    action: Mapped[str]
+    user_id: Mapped[str]
+    fingerprint: Mapped[str]
+    owner: Mapped[str]
+    run_id: Mapped[str]
+    state: Mapped[str]
+    receipt_json: Mapped[str]
+    created_at: Mapped[str]
+    updated_at: Mapped[str]
 
 
 def validate_ledger_storage(session: Session) -> None:

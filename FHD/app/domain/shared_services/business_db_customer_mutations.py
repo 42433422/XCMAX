@@ -57,7 +57,7 @@ def _create_customer(params: dict[str, Any], svc: CustomerMutationService) -> di
 
 
 def _ensure_customer(params: dict[str, Any], svc: CustomerMutationService) -> dict[str, Any]:
-    unit_name = _customer_name(params)
+    unit_name: str | None = _customer_name(params)
     if not unit_name:
         return {"success": False, "message": "缺少 unit_name"}
     uncertain = {
@@ -100,9 +100,10 @@ def _ensure_customer(params: dict[str, Any], svc: CustomerMutationService) -> di
 
     from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+    lookup_errors: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQLAlchemyError,)
     try:
         readback = svc.get_by_id(customer_id)
-    except (*RECOVERABLE_ERRORS, SQLAlchemyError):
+    except lookup_errors:
         return uncertain
     row = readback.get("data") if isinstance(readback, dict) else None
     if (
