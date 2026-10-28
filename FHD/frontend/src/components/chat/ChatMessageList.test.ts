@@ -228,10 +228,10 @@ it('renders execution progress, safe user text, diagnostic errors and forwards m
  })
 
 
-it('uses the native bridge and excludes hidden content and code controls', async () => {
+it.each([true, false])('uses the native bridge for collapsed=%s and excludes hidden content', async collapsed => {
   const nativeWrite = vi.fn().mockResolvedValue({ ok: true })
   Object.defineProperty(window, 'xcagiDesktop', { configurable: true, value: { clipboardWriteText: nativeWrite } })
-  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [
+  const wrapper = mount(ChatMessageList, { props: { ...defaultProps, isMessageCollapsed: () => collapsed, messages: [
     { role: 'user', time: '', content: '<p>第一段</p><p hidden>秘密</p><p>第二段<br>下一行</p>' },
     { role: 'ai', time: '', content: '清单：\n- 第一项\n- 第二项\n\n```js\nlet a = 1;\nlet b = 2;\n```' },
   ] } })
@@ -247,14 +247,14 @@ it('uses the native bridge and excludes hidden content and code controls', async
   delete window.xcagiDesktop
 })
 
-it('copies the rendered body while excluding CSS-hidden and inherited-hidden content', async () => {
+it.each([true, false])('copies visible content safely when collapsed=%s', async collapsed => {
   const css = document.createElement('style')
   css.textContent = '.private-copy-test { display:none } .masked-copy-test { visibility:hidden } .concealed-copy-test { content-visibility:hidden }'
   document.head.append(css)
   const writeText = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
-  const wrapper = mount(ChatMessageList, { attachTo: document.body, props: { ...defaultProps, messages: [{
-    role: 'user', time: '', content: '<p>公开</p><p class="private-copy-test">机密</p><div class="masked-copy-test"><span>继承机密</span></div><div class="concealed-copy-test">渲染隐藏机密</div><p>第二段</p>',
+  const wrapper = mount(ChatMessageList, { attachTo: document.body, props: { ...defaultProps, isMessageCollapsed: () => collapsed, messages: [{
+    role: 'user', time: '', content: '<script>secret</script><p>公开</p><p class="private-copy-test">机密</p><div class="masked-copy-test"><span>继承机密</span></div><div class="concealed-copy-test">渲染隐藏机密</div><p>第二段</p>',
   }] } })
   await wrapper.get('.message-copy-btn').trigger('click'); await Promise.resolve()
   expect(writeText).toHaveBeenCalledWith('公开\n第二段')

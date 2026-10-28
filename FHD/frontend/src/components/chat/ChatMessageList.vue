@@ -217,8 +217,7 @@ async function copyMessage(message: ChatMessage, event: MouseEvent) {
   let body = container.querySelector<HTMLElement>('.message-html, .message-orchestration-intro')
   let temporary: HTMLElement | undefined
   if (!body) {
-    // A collapsed message has no body in the DOM. Render the same sanitized body in
-    // its message context offscreen so external CSS and inherited visibility apply.
+    // Render the sanitized collapsed body offscreen in its message context.
     temporary = document.createElement('div')
     temporary.className = 'message-html'
     temporary.style.position = 'fixed'
@@ -226,9 +225,10 @@ async function copyMessage(message: ChatMessage, event: MouseEvent) {
     if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) {
       temporary.textContent = '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
     } else {
-      temporary.innerHTML = message.role === 'ai'
+      const html = message.role === 'ai'
         ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content))
         : sanitizeChatBubbleHtml(message.content)
+      temporary.append(...new DOMParser().parseFromString(html, 'text/html').body.childNodes)
     }
     container.appendChild(temporary)
     body = temporary
