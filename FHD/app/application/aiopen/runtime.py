@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from secrets import compare_digest
 from typing import Any
 
+from app.domain.aiopen.principal import ScreenPrincipal
+
 
 @dataclass
 class RuntimeState:
@@ -58,11 +60,28 @@ class ApiKeyRegistry:
             return True
         return got in runtime_keys
 
-    def generate(self, label: str = "") -> dict[str, Any]:
+    def generate(
+        self, label: str = "", *, principal: ScreenPrincipal | None = None
+    ) -> dict[str, Any]:
         key = "aiopen_" + self._token(24)
         entry = {"label": (label or "").strip() or "未命名", "created_at": self._clock()}
+        if principal is not None:
+            entry.update(principal_id=principal.principal_id, tenant_id=principal.tenant_id)
         self._state.keys(create=True)[key] = entry
         return {"key": key, **entry}
+
+    def resolve_principal(self, provided: str | None) -> ScreenPrincipal | None:
+        """Legacy/environment keys authenticate a service, not a screen owner."""
+        if not self.verify(provided):
+            return None
+        key = (provided or "").strip()
+        env_key = self._env_key()
+        if env_key and compare_digest(key.encode("utf-8"), env_key.encode("utf-8")):
+            return None
+        entry = self._state.keys().get(key)
+        if not isinstance(entry, dict):
+            return None
+        return ScreenPrincipal.from_ids(entry.get("principal_id"), entry.get("tenant_id"))
 
     def revoke(self, key: str | None) -> bool:
         return self._state.keys(create=True).pop((key or "").strip(), None) is not None
