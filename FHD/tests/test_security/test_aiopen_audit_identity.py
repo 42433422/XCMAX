@@ -29,7 +29,7 @@ def capture(monkeypatch):
 @pytest.mark.parametrize("explicit", ["", "verified-actor"])
 def test_trace_helpers_never_trust_payload_actor(field, explicit):
     recorder = Mock(return_value=SimpleNamespace(run_id="audit-test"))
-    common = dict(create_trace_run=recorder, logger=logging.getLogger(__name__), user_id=explicit)
+    common = {"create_trace_run": recorder, "logger": logging.getLogger(__name__), "user_id": explicit}
     payload = {"success": True}
     forged = {field: "forged-admin"}
     trace_tool_call(route="/api/aiopen/invoke", channel="aiopen_rest", tool="chat",
