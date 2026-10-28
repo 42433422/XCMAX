@@ -114,9 +114,10 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
-          <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg)">
-            {{ copyLabels.get(msg) || '复制' }}
+          <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :title="copyLabels.get(msg) || '复制正文'" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg, $event)">
+            <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
+          <span v-if="copyLabels.get(msg)" class="message-copy-status" role="status">{{ copyLabels.get(msg) }}</span>
           <button
             v-if="msg.role === 'ai' && canSpeakMessage(msg)"
             class="message-tts-btn"
@@ -144,7 +145,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
-import { plainTextFromChatHtml, sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
@@ -191,19 +192,57 @@ function waitingRunId(message: ChatMessage): string {
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 const copyLabels = ref(new Map<ChatMessage, string>())
-function copyableBody(message: ChatMessage): string {
-  if (message.streamingShell) return ''
-  if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) return '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
-  const html = message.role === 'ai'
-    ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content))
-    : sanitizeChatBubbleHtml(message.content)
-  return plainTextFromChatHtml(html).trim()
+function visibleBodyText(root: HTMLElement): string {
+  const blocks = new Set(['P', 'DIV', 'LI', 'PRE', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TR'])
+  let text = ''
+  function visit(node: Node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const parent = node.parentElement
+      if (parent && getComputedStyle(parent).visibility !== 'hidden' && getComputedStyle(parent).visibility !== 'collapse') text += node.textContent || ''
+      return
+    }
+    if (!(node instanceof HTMLElement)) return
+    const style = getComputedStyle(node)
+    if (style.display === 'none' || style.contentVisibility === 'hidden' || (style.opacity !== '' && Number(style.opacity) === 0) || node.hidden || node.getAttribute('aria-hidden') === 'true' || node.matches('button, .md-code__head')) return
+    if (node.tagName === 'BR') { if (style.visibility !== 'hidden' && style.visibility !== 'collapse') text += '\n'; return }
+    node.childNodes.forEach(visit)
+    if (blocks.has(node.tagName) && text && !text.endsWith('\n')) text += '\n'
+  }
+  visit(root)
+  return text.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
 }
-async function copyMessage(message: ChatMessage) {
-  const text = copyableBody(message)
-  if (!text) return
+async function copyMessage(message: ChatMessage, event: MouseEvent) {
+  const container = (event.currentTarget as HTMLElement).closest('.message')
+  if (!container || message.streamingShell) return
+  let body = container.querySelector<HTMLElement>('.message-html, .message-orchestration-intro')
+  let temporary: HTMLElement | undefined
+  if (!body) {
+    // Render the sanitized collapsed body offscreen in its message context.
+    temporary = document.createElement('div')
+    temporary.className = 'message-html'
+    temporary.style.position = 'fixed'
+    temporary.style.left = '-10000px'
+    if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) {
+      temporary.textContent = '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
+    } else {
+      const html = message.role === 'ai'
+        ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content))
+        : sanitizeChatBubbleHtml(message.content)
+      temporary.append(...new DOMParser().parseFromString(html, 'text/html').body.childNodes)
+    }
+    container.appendChild(temporary)
+    body = temporary
+  }
+  const text = visibleBodyText(body)
+  temporary?.remove()
+  if (!text) { copyLabels.value.set(message, '没有可复制的正文'); return }
   try {
-    await navigator.clipboard.writeText(text)
+    if (window.xcagiDesktop?.clipboardWriteText) {
+      const result = await window.xcagiDesktop.clipboardWriteText(text)
+      if (!result?.ok) throw new Error('clipboard write failed')
+    } else {
+      await navigator.clipboard.writeText(text)
+    }
     copyLabels.value.set(message, '已复制')
   } catch {
     copyLabels.value.set(message, '复制失败，请重试')
