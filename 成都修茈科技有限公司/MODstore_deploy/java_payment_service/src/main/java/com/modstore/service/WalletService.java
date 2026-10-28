@@ -210,7 +210,16 @@ public class WalletService {
         String safeIdempotencyKey = requireIdempotencyKey(idempotencyKey);
         Optional<WalletHold> existing = walletHoldRepository.findByIdempotencyKey(safeIdempotencyKey);
         if (existing.isPresent()) {
-            return existing.get();
+            WalletHold hold = existing.get();
+            if (user.getId() == null || hold.getUser() == null
+                    || !user.getId().equals(hold.getUser().getId())
+                    || hold.getAmount() == null || hold.getAmount().compareTo(amount) != 0
+                    || !trim(provider, 64).equals(hold.getProvider())
+                    || !trim(model, 128).equals(hold.getModel())
+                    || !trim(requestId, 128).equals(hold.getRequestId())) {
+                throw new IllegalStateException("预授权请求冲突");
+            }
+            return hold;
         }
 
         String holdNo = "AIH" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
@@ -242,11 +251,24 @@ public class WalletService {
 
     @Transactional
     public WalletHold settleAiUsage(User user, String holdNo, BigDecimal actualAmount, String idempotencyKey) {
+        return settleAiUsageInternal(user, holdNo, actualAmount, idempotencyKey, false);
+    }
+
+    @Transactional
+    public WalletHold settleServiceAiUsage(User user, String holdNo, BigDecimal actualAmount, String idempotencyKey) {
+        return settleAiUsageInternal(user, holdNo, actualAmount, idempotencyKey, true);
+    }
+
+    private WalletHold settleAiUsageInternal(User user, String holdNo, BigDecimal actualAmount, String idempotencyKey, boolean service) {
         if (actualAmount == null || actualAmount.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("结算金额不能小于 0");
         }
         WalletHold hold = requireOwnedHold(user, holdNo);
+        requireHoldSource(hold, service);
         if ("settled".equals(hold.getStatus())) {
+            if (service && (hold.getSettledAmount() == null || hold.getSettledAmount().compareTo(actualAmount) != 0)) {
+                throw new IllegalStateException("预授权请求冲突");
+            }
             return hold;
         }
         if ("released".equals(hold.getStatus())) {
@@ -300,7 +322,17 @@ public class WalletService {
 
     @Transactional
     public WalletHold releaseAiUsage(User user, String holdNo, String reason, String idempotencyKey) {
+        return releaseAiUsageInternal(user, holdNo, reason, idempotencyKey, false);
+    }
+
+    @Transactional
+    public WalletHold releaseServiceAiUsage(User user, String holdNo, String reason, String idempotencyKey) {
+        return releaseAiUsageInternal(user, holdNo, reason, idempotencyKey, true);
+    }
+
+    private WalletHold releaseAiUsageInternal(User user, String holdNo, String reason, String idempotencyKey, boolean service) {
         WalletHold hold = requireOwnedHold(user, holdNo);
+        requireHoldSource(hold, service);
         if ("released".equals(hold.getStatus()) || "settled".equals(hold.getStatus())) {
             return hold;
         }
@@ -408,12 +440,18 @@ public class WalletService {
         if (safeHoldNo.isEmpty()) {
             throw new IllegalArgumentException("预授权单号不能为空");
         }
-        WalletHold hold = walletHoldRepository.findByHoldNo(safeHoldNo)
+        WalletHold hold = walletHoldRepository.findByHoldNoForUpdate(safeHoldNo)
                 .orElseThrow(() -> new IllegalArgumentException("预授权不存在"));
         if (!hold.getUser().getId().equals(user.getId())) {
             throw new IllegalStateException("无权操作该预授权");
         }
         return hold;
+    }
+
+    private void requireHoldSource(WalletHold hold, boolean service) {
+        if (!(service ? "llm-service" : "legacy").equals(hold.getBillingSource())) {
+            throw new IllegalStateException("预授权请求冲突");
+        }
     }
 
     private String requireIdempotencyKey(String raw) {

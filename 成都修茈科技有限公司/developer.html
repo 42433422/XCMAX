@@ -165,13 +165,13 @@
           <div class="dev-api-meta reveal" data-delay="40">
             <p class="dev-api-base">
               XCauto 基址：<code id="xcauto-api-base">https://xiu-ci.com/v1</code> · 凭证
-              <code>Authorization: Bearer &lt;PAT 或 JWT&gt;</code>
+              <code>Authorization: Bearer &lt;登录 JWT 或已启用的 llm:use PAT&gt;</code>
             </p>
             <p class="dev-api-footnote">
               OpenAI SDK：设
               <code>OPENAI_BASE_URL=https://xiu-ci.com/v1</code
-              >、<code>OPENAI_API_KEY=pat_…</code>，模型用 <code>xcauto-account</code> 或
-              <code>deepseek/deepseek-chat</code>。
+              >、<code>OPENAI_API_KEY=&lt;登录 JWT&gt;</code>，模型用 <code>xcauto-account</code> 或
+              <code>deepseek/deepseek-chat</code>。PAT 仅在模型专用计费服务配置并启用后可用。
             </p>
           </div>
 
@@ -262,7 +262,7 @@
                     <tr>
                       <td><span class="dev-api-method dev-api-method--post">POST</span></td>
                       <td><code>/api/developer/tokens</code></td>
-                      <td>创建 PAT，勾选 <code>llm:use</code></td>
+                      <td>创建 PAT；模型调用须启用专用计费服务并授予 <code>llm:use</code></td>
                     </tr>
                   </tbody>
                 </table>
@@ -317,7 +317,7 @@
               <code>Authorization: Bearer &lt;token&gt;</code>
             </p>
             <div class="dev-api-doc-links">
-              <a class="btn btn-secondary btn-sm" href="/market/developer/docs" target="_blank" rel="noopener noreferrer">打开开发者 API 文档</a>
+              <a class="btn btn-secondary btn-sm" href="/market/dev" target="_blank" rel="noopener noreferrer">打开开发者门户及 API 文档</a>
             </div>
           </div>
 
@@ -504,7 +504,7 @@
             </div>
             <p class="dev-api-footnote dev-api-footnote--center">
               完整接口定义与接入说明请查看
-              <a href="/market/developer/docs" target="_blank" rel="noopener noreferrer">开发者 API 文档</a>。
+              <a href="/market/dev" target="_blank" rel="noopener noreferrer">开发者门户及 API 文档</a>。
             </p>
           </div>
         </div>

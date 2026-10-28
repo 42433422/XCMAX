@@ -1,8 +1,9 @@
 # mypy: disable-error-code="call-overload"
 """OpenAI-compatible gateway for **XCauto** (修茈模型中转) and XCAGI desktop clients.
 
-Uses the same auth as the market API (``Authorization: Bearer`` JWT or developer PAT
-with ``llm:use``). Billing / wallet preauthorize-settle mirrors ``POST /api/llm/chat``.
+Uses a login JWT. A PAT with ``llm:use`` is accepted only when the dedicated
+service-to-service wallet configuration is explicitly enabled on both services.
+Billing / wallet preauthorize-settle mirrors ``POST /api/llm/chat``.
 
 **Model parameter**
 
@@ -14,7 +15,7 @@ with ``llm:use``). Billing / wallet preauthorize-settle mirrors ``POST /api/llm/
 **Client configuration (OpenAI SDK compatible)**
 
 - ``OPENAI_BASE_URL=https://<market-host>/v1``
-- ``OPENAI_API_KEY=<JWT or PAT with llm:use>``
+- ``OPENAI_API_KEY=<login JWT or configured llm:use PAT>``
 
 ``stream=true`` is not implemented here; use ``POST /api/llm/chat/stream`` for SSE.
 
@@ -25,16 +26,18 @@ with ``llm:use``). Billing / wallet preauthorize-settle mirrors ``POST /api/llm/
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from modstore_server.api.deps import _get_current_user
+from modstore_server.auth_service import PAT_PREFIX, resolve_pat_identity
 from modstore_server.infrastructure.db import get_db
 from modstore_server.llm_api import resolve_default_llm_route, run_billed_llm_chat
 from modstore_server.llm_billing import merge_catalog_pricing
@@ -48,6 +51,43 @@ from modstore_server.operational_errors import BOUNDARY_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["openai-gateway", "xcauto"])
+
+
+def _get_llm_gateway_user(request: Request, authorization: Optional[str] = Header(None)) -> User:
+    """PAT access is limited to the model gateway and requires explicit configuration."""
+    raw = (authorization or "").strip()
+    token = raw[7:].strip() if raw.startswith("Bearer ") else ""
+    if token.startswith(PAT_PREFIX):
+        if os.environ.get("MODSTORE_LLM_PAT_ENABLED") != "1":
+            return _get_current_user(authorization, request)
+        if (
+            os.environ.get("PAYMENT_BACKEND", "python").strip().lower() != "java"
+            or not os.environ.get("MODSTORE_LLM_WALLET_SIGNING_KEY_PATH")
+            or not os.environ.get("MODSTORE_LLM_WALLET_KEY_ID")
+            or not os.environ.get("MODSTORE_LLM_WALLET_MAX_CENTS", "").isdigit()
+            or int(os.environ["MODSTORE_LLM_WALLET_MAX_CENTS"]) <= 0
+        ):
+            raise HTTPException(503, "模型密钥计费服务未配置")
+        try:
+            from modstore_server.llm_wallet_assertion import load_signing_key
+
+            load_signing_key(os.environ["MODSTORE_LLM_WALLET_SIGNING_KEY_PATH"])
+        except (OSError, ValueError, TypeError) as exc:
+            raise HTTPException(503, "模型密钥计费服务未配置") from exc
+        identity = resolve_pat_identity(token)
+        if not identity or str(identity.user.account_state or "").strip().lower() in {
+            "deleted",
+            "disabled",
+            "suspended",
+            "blocked",
+        }:
+            raise HTTPException(401, "凭证无效或已过期")
+        if "llm:use" not in identity.scopes:
+            raise HTTPException(403, "凭证权限不足")
+        request.state.llm_pat_user_id = int(identity.user.id)
+        return identity.user
+    return _get_current_user(authorization, request)
+
 
 # 账户路由虚拟名（XCauto 对外主品牌 + 历史 xiuci 别名）
 XCauto_VIRTUAL_MODELS = frozenset(
@@ -226,7 +266,7 @@ async def _build_catalog_model_entries(db: Session, user_id: int) -> List[Dict[s
 @router.get("/models")
 async def openai_list_models(
     db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
+    user: User = Depends(_get_llm_gateway_user),
 ):
     """OpenAI-compatible model list for XCauto gateway clients.
 
@@ -270,7 +310,7 @@ async def openai_chat_completions(
     request: Request,
     body: OAIChatCompletionRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(_get_current_user),
+    user: User = Depends(_get_llm_gateway_user),
 ):
     if body.stream:
         raise HTTPException(
