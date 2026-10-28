@@ -2703,8 +2703,10 @@ class TestImportOrdersPreviewOrExecute:
                 df, list(df.columns), None, confirm=True, row_count=1
             )
             parsed = json.loads(result)
-            assert parsed["success"] is True
-            assert parsed["failed"] >= 1
+            assert parsed["success"] is False
+            assert parsed["imported"] == 0
+            assert parsed["failed"] == 1
+            mock_svc.create_shipment.assert_not_called()
 
     def test_empty_df(self) -> None:
         df = pd.DataFrame({"产品名称": []})
