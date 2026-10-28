@@ -55,7 +55,9 @@ def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:
     from fastapi.testclient import TestClient
 
     from app import db as host_db
+    from app.db.models.user import User
     from app.infrastructure.auth.agent_principal import require_agent_principal
+    from app.utils.security.password_hash import check_password_hash
 
     app = FastAPI()
 
@@ -67,6 +69,10 @@ def test_route_fixture_uses_real_session_and_restores_auth_boundary() -> None:
         original_factory = host_db.HostSessionLocal
         assert client.post("/fixture-write").status_code == 401
         with eval_module._authenticated_route_fixture(client):
+            with host_db.HostSessionLocal() as db:
+                stored = db.query(User).one().password
+                assert stored.startswith("pbkdf2:sha256:")
+                assert not check_password_hash(stored, "unused")
             assert client.post("/fixture-write").json() == {"tenant_id": "7", "sealed": True}
             assert (
                 client.post("/fixture-write", headers={"X-Session-ID": "forged"}).status_code == 401

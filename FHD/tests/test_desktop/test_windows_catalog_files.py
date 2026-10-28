@@ -80,7 +80,10 @@ def test_failed_boundary_does_not_return_a_successful_snapshot(failure):
 
 
 @pytest.mark.parametrize("error_type", [files.WindowsCatalogUnsupported, KeyboardInterrupt])
-def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_failure(error_type):
+@pytest.mark.parametrize("directory,share_delete", [(False, False), (True, False), (False, True)])
+def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_failure(
+    error_type, directory, share_delete
+):
     calls = []
     native = files._NativeFiles.__new__(files._NativeFiles)
     native.active = True
@@ -92,9 +95,17 @@ def test_native_open_requests_mutable_data_sharing_and_closes_on_validation_fail
 
     native._identity = rejected
     with pytest.raises(error_type):
-        native._open(PureWindowsPath(r"C:\db.sqlite"), False)
+        native._open(PureWindowsPath(r"C:\db.sqlite"), directory, share_delete=share_delete)
     assert calls == [
-        (r"\\?\C:\db.sqlite", 0x80, 3, None, 3, 0x02200000, None),
+        (
+            r"\\?\C:\db.sqlite",
+            0x80 if share_delete else 0x81,
+            7 if share_delete else 3,
+            None,
+            3,
+            0x02200000,
+            None,
+        ),
         ("close", 41),
     ]
 

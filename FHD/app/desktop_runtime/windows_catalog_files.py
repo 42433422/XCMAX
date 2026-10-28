@@ -145,11 +145,12 @@ class _NativeFiles:
     def _open(self, path, directory, *, share_delete=False):
         if not self.active:
             raise WindowsCatalogUnsupported("native observation scope is closed")
-        # READ_ATTRIBUTES; SHARE_READ | SHARE_WRITE; only sidecar probes share DELETE.
+        # Pins need READ_DATA (LIST_DIRECTORY for ancestors), not metadata-only access,
+        # to participate in share checks. Sidecar probes remain READ_ATTRIBUTES only.
         # This is NOT an immutable bundle pin and does not exclude content writers.
         handle = self.kernel.CreateFileW(
             "\\\\?\\" + str(path),
-            0x80,
+            0x80 if share_delete else 0x81,
             7 if share_delete else 3,
             None,
             3,

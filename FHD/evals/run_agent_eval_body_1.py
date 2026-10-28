@@ -111,6 +111,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7):
     from app.db.models.user import Session as UserSession
     from app.db.models.user import User
     from app.domain.shared_services.session_service import SessionService
+    from app.utils.security.password_hash import generate_password_hash
     from app.utils.time import utc_now_naive
 
     with tempfile.TemporaryDirectory(dir=Path.cwd()) as root:
@@ -126,7 +127,7 @@ def _authenticated_route_fixture(client, *, tenant_id=7):
             db.add(role)
             user = User(
                 username="fixture-" + sid,
-                password="unused",
+                password=generate_password_hash(uuid4().hex),
                 tenant_id=tenant_id,
                 role="user",
                 tier="enterprise",
