@@ -76,16 +76,22 @@ def _intake_excluded(text: str) -> bool:
     # Reject intake withdrawal commands, not defect descriptions such as
     # "cannot cancel an order" or error messages containing "not found".
     text = text.strip()
-    if re.match(r"^(?:请|帮我|给我)?(?:查询|查一下|查查|查看|统计)", text) and not re.search(
-        r"按钮|软件|页面|界面|客户端|模块", text
-    ):
-        return True
+    query = re.match(r"^(?:请|帮我|给我|麻烦|\s)*(?:查询|查一下|查查|查看|统计)", text)
+    if query:
+        ui_failure = re.match(
+            r"[^，。！？；,\n]{0,12}(?:按钮|功能|页面|界面|模块|组件)"
+            r"[^，。！？；,\n]{0,20}(?:报错|失败|异常|失效|没反应|无法|不能|卡死|闪退)",
+            text[query.end() :],
+        )
+        if not ui_failure:
+            return True
     return bool(
         re.search(
-            r"已(?:经)?(?:解决|修复)(?:了|完成)?(?:谢谢|感谢)?[。！!?\s]*$"
-            r"|(?:^|[，。！？；,!?;\n])\s*(?:我)?(?:请|帮我|给我)?"
+            r"已(?:经)?(?:解决|修复)(?:了|完成)?(?:[，,\s]*(?:谢谢|感谢)(?:你|您)?)?[。！!?\s]*$"
+            r"|(?:^|[，。！？；,!?;\n])\s*(?:我|请|帮我|给我|麻烦)*"
             r"(?:(?:取消|撤回|停止|不要|不用|别|无需|不必|不想|暂不|不需要)"
-            r"[^，。！？；,\n]{0,12}(?:工单|建单|登记|提交)"
+            r"(?:再|继续|帮我|给我|替我|这个|这次|该|本次|\s)*"
+            r"(?:工单|建单|处理|(?:登记|提交|上报|反馈|创建|建立)(?!按钮|功能|页面|界面|模块|组件))"
             r"|(?:取消|算了|不用了)(?:[，。！？；,!?;\s]|$))",
             text,
         )
@@ -288,7 +294,7 @@ class EnterpriseCsAutomationService:
         if _intake_excluded(text):
             return None
         if not _plain_intake_match(text):
-            if not looks_like_issue_report(text):
+            if not (looks_like_issue_report(text) or re.search(r"卡死|闪退|按钮失效", text)):
                 return None
             previous = self._db.scalar(
                 select(ImMessage)
