@@ -949,6 +949,32 @@ describe('SettingsView functions – persyFoldMeta computed', () => {
 describe('SettingsView functions – loadPersyProfile', () => {
   beforeEach(resetSettingsTest)
 
+  it('keeps the previous profile on read failure, displays retry, and distinguishes a successful empty result', async () => {
+    const profile = {
+      user_id: 1, identity_primary: '保留的助手', identity_composite: '',
+      four_axes: { warmth: 50, verbosity: 50, proactiveness: 50, structuredness: 50 },
+      mbti_type: 'INTJ', mbti_confidence: 0.8, interaction_count: 2, last_inferred_at: null,
+    }
+    mockButlerProfileGet.mockResolvedValue({ success: true, profile })
+    const wrapper = await mountSettings()
+    const vm = wrapper.vm as any
+    await vm.loadPersyProfile()
+    mockButlerProfileGet.mockRejectedValue({ status: 403, message: 'raw upstream details' })
+    await vm.loadPersyProfile()
+    await nextTick()
+    const panel = wrapper.get('.persy-profile')
+    expect(panel.text()).toContain('保留的助手')
+    expect(panel.text()).toContain('暂时无法更新')
+    expect(panel.text()).not.toContain('暂无人设数据')
+    expect(panel.text()).not.toContain('raw upstream details')
+    mockButlerProfileGet.mockResolvedValue({ success: true, profile: null })
+    await panel.get('[role="alert"] button').trigger('click')
+    await flushPromises()
+    expect(panel.text()).toContain('暂无人设数据')
+    expect(panel.find('[role="alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('成功加载 profile', async () => {
     const profile = {
       user_id: 1,

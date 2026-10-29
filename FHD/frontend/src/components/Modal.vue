@@ -1,9 +1,9 @@
 <template>
   <!-- Teleport 到 body，避免侧栏 transform/overflow 把 fixed 遮罩困在侧栏里 -->
   <Teleport to="body">
-    <div class="modal" :class="{ visible: modelValue }" @click.self="handleClose">
-      <div class="modal-content" :style="contentStyle">
-        <div class="modal-header" v-if="title">
+    <div class="modal" :class="{ visible: modelValue }" :aria-hidden="!modelValue || undefined" @click.self="handleClose">
+      <div ref="panel" class="modal-content" :style="contentStyle" role="dialog" aria-modal="true" :aria-labelledby="title ? titleId : undefined" :aria-label="title ? undefined : '对话框'" tabindex="-1">
+        <div class="modal-header" v-if="title" :id="titleId">
           {{ title }}
         </div>
         <div class="modal-body">
@@ -18,7 +18,8 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, useId } from 'vue'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 const props = defineProps({
   modelValue: {
@@ -49,6 +50,9 @@ const handleClose = () => {
   emit('update:modelValue', false)
   emit('close')
 }
+const panel = ref(null)
+const titleId = useId()
+useDialogFocus(panel, () => props.modelValue, handleClose)
 </script>
 
 <style scoped>

@@ -90,11 +90,11 @@ export function loginPageTitle(sku: LoginSku): string {
 export const LOGIN_HELP_SECTIONS: LoginHelpSection[] = [
   {
     title: '账号或密码错误',
-    items: ['核对账号密码', '记下错误编号联系管理员'],
+    items: ['核对账号密码；忘记密码时使用下方找回入口', '仍无法登录时，复制本页诊断信息联系管理员'],
   },
   {
-    title: '无法连接后端',
-    items: ['确认本机后端已启动（桌面默认 17500 端口）', '检查数据库是否运行'],
+    title: '无法连接应用服务',
+    items: ['点击“检查连接”，按检测结果重试登录', '桌面用户可退出并重新打开应用；仍失败时复制诊断信息联系管理员'],
   },
   {
     title: '账号同步',

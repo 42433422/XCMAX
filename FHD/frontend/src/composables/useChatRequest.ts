@@ -179,7 +179,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       key,
       window.setInterval(() => {
         const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
-        const hint = elapsedSec >= 8 ? ' 若持续无响应，请确认后端已启动，且 VITE_API_BASE_URL（如有）与浏览器能访问的地址一致。' : ''
+        const hint = elapsedSec >= 8 ? ' 等待较久，可点击“停止回复”；操作可能仍在执行，请先到任务面板核对，勿重复提交。网络异常时请恢复连接后重试（故障编号：CHAT_WAIT）。' : ''
         setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
       }, 1000),
     )

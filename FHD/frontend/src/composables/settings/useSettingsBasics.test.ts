@@ -153,6 +153,34 @@ describe('Mac settings runtime boundaries', () => {
     expect(ui.loading.value).toBe(false)
   })
 
+  it('reports partial success by setting and retries only the failed preference', async () => {
+    const ui = await open()
+    ui.desktopDatabaseVisible.value = true
+    ui.assistantName.value = '新助手'
+    boundary.put.mockResolvedValue({ success: true, restartRequired: true })
+    boundary.post.mockImplementation(async (_url, body) => {
+      if (body.key === 'assistantName') throw new Error('upstream failed with private details')
+      return { success: true }
+    })
+    await ui.saveSettings()
+    expect(ui.settingsSaveSummary.value).toContain('AI 部署模式：已保存')
+    expect(ui.settingsSaveSummary.value).toContain('AI 模式：已保存')
+    expect(ui.settingsSaveSummary.value).toContain('助手名称：保存失败')
+    expect(ui.settingsSaveSummary.value).toContain('重启')
+    expect(ui.settingsSaveSummary.value).not.toContain('private details')
+    expect(localStorage.getItem('assistantName')).toBeNull()
+    boundary.post.mockResolvedValue({ success: true })
+    await ui.saveSettings()
+    expect(boundary.put).toHaveBeenCalledTimes(1)
+    expect(boundary.post.mock.calls.filter(([, body]) => body.key === 'aiMode')).toHaveLength(1)
+    expect(boundary.post.mock.calls.filter(([, body]) => body.key === 'assistantName')).toHaveLength(2)
+    expect(ui.settingsSaveHadFailures.value).toBe(false)
+    expect(localStorage.getItem('assistantName')).toBe('新助手')
+    await ui.saveSettings()
+    expect(boundary.put).toHaveBeenCalledTimes(2)
+    expect(boundary.post.mock.calls.filter(([, body]) => body.key === 'aiMode')).toHaveLength(2)
+  })
+
   it.each(['local', 'online'])('migrates a legacy %s model preference while retaining the assistant name', async (model) => {
     const ui = await open()
     boundary.get.mockResolvedValue({ success: true, preferences: { aiModel: model, assistantName: '升级前助手' } })
