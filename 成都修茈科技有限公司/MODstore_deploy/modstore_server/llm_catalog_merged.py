@@ -311,6 +311,33 @@ async def get_models_for_credentials(
     user_id: int, provider: str, *, api_key, base_url, force_refresh: bool = False
 ) -> _facade().Dict[str, _facade().Any]:
     """Fetch a catalog after the caller has released its credential connection."""
+    from modstore_server.platform_model_config import configured_model
+
+    configured = configured_model(provider, api_key, base_url)
+    if configured:
+        model = configured["model"]
+        return {
+            "models": [model],
+            "runtime_models": [model],
+            "models_detailed": [
+                {
+                    "id": model,
+                    "display_name": configured["display_name"],
+                    "category": "llm",
+                    "runtime_selectable": True,
+                    "capabilities": {
+                        "input_modalities": ["text"],
+                        "output_modalities": ["text"],
+                        "operations": ["chat"],
+                    },
+                    "capability_source": "administrator_configuration",
+                }
+            ],
+            "source": "platform_configuration",
+            "fetched_at": None,
+            "error": None,
+            "from_cache": False,
+        }
     if not api_key:
         models = _facade()._merge_fallback(provider, [])
         detailed = _facade()._models_detailed(provider, models)

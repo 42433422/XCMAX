@@ -28,7 +28,7 @@ async def resolve_default_llm_route(
 
     uid = int(user_id)
 
-    def _load_prefs_and_keys() -> tuple[str, str, dict[str, str]]:
+    def _load_prefs_and_keys() -> tuple[str, str, dict[str, str], set[str]]:
         sf = get_session_factory()
         with sf() as _db:
             urow = _db.query(UserModel).filter(UserModel.id == uid).first()
@@ -44,13 +44,16 @@ async def resolve_default_llm_route(
             pref_p = str(prefs.get("provider") or "").strip()
             pref_m = str(prefs.get("model") or "").strip()
             keys: dict[str, str] = {}
+            byok: set[str] = set()
             for p in _facade().KNOWN_PROVIDERS:
-                k, _ = _facade().resolve_api_key(_db, uid, p)
+                k, source = _facade().resolve_api_key(_db, uid, p)
                 if k:
                     keys[p] = k
-        return (pref_p, pref_m, keys)
+                    if source == "user_override":
+                        byok.add(p)
+        return (pref_p, pref_m, keys, byok)
 
-    pref_p, pref_m, keys = await asyncio.to_thread(_load_prefs_and_keys)
+    pref_p, pref_m, keys, byok = await asyncio.to_thread(_load_prefs_and_keys)
 
     async def first_model_id(provider: str) -> str:
         block = await _facade().get_models_for_provider(db, uid, provider, force_refresh=False)
@@ -68,6 +71,22 @@ async def resolve_default_llm_route(
                 "model": m0,
                 "source": "preference_first_model",
             }
+    # Preserve user-owned credentials before considering a shared platform default.
+    for p in _facade().KNOWN_PROVIDERS:
+        if p in byok:
+            m0 = await first_model_id(p)
+            if m0:
+                return {"ok": True, "provider": p, "model": m0, "source": "byok"}
+    from modstore_server.platform_model_config import default_config
+
+    configured = default_config()
+    if configured and configured["provider"] in keys:
+        return {
+            "ok": True,
+            "provider": configured["provider"],
+            "model": configured["model"],
+            "source": "platform_configuration",
+        }
     for p in _facade().KNOWN_PROVIDERS:
         if p not in keys:
             continue

@@ -66,11 +66,13 @@ class TokenLifecycle:
             self.save(sid, access, new_refresh)
         return access
 
-    async def resolve(self, session_id: str, *, fast: bool = False) -> str:
+    async def resolve(
+        self, session_id: str, *, fast: bool = False, allow_latest: bool = True
+    ) -> str:
         sid = (session_id or "").strip()
         owner = self.user_id(sid)
         token = self.normalize(self.access_token(sid))
-        if not token and owner is not None:
+        if allow_latest and not token and owner is not None:
             token = self.normalize(self.latest_token(user_id=owner))
         if not token or self.is_demo(token):
             return token
