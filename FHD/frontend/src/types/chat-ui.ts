@@ -30,6 +30,13 @@ export interface UiChatMessage {
   role: 'user' | 'ai' | 'task'
   content: string
   time: string
+  persistence?: {
+    id: string
+    status: 'local' | 'saving' | 'saved' | 'failed'
+    localSaved?: boolean
+    error?: string
+    request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string }
+  }
   thinkingSteps?: string
   todoSteps?: string[]
   workflowAction?: string

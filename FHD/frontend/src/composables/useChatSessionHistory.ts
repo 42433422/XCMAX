@@ -10,6 +10,7 @@ import {
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
 import { chatMessageExtrasFromServerRow, type ChatMessage } from './useChatMessages'
+import { samePersistedMessage } from './useChatMessagePersistence'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { resolveChatStorageScope, writeAiSessionIdToStorage } from '@/utils/chatStorageKeys'
@@ -73,6 +74,10 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   const historySessions = ref<HistorySessionItem[]>([])
   const historyLoading = ref(false)
   const historyError = ref('')
+  const historyHasMore = ref(false)
+  const historyLoadingMore = ref(false)
+  let serverHistory: unknown[] = []
+  let nextHistoryOffset = 0
   let requestEpoch = 0
   if (getCurrentScope()) onScopeDispose(() => { requestEpoch += 1 })
 
@@ -88,44 +93,54 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   }
 
   function finishRequest(epoch: number) {
-    if (epoch === requestEpoch) historyLoading.value = false
+    if (epoch === requestEpoch) { historyLoading.value = false; historyLoadingMore.value = false }
   }
 
   const normalizeLocalMessages = (messages: ChatMessage[]): ChatMessage[] => messages.map((msg) => {
     const row = asRecord(msg)
     const roleRaw = asString(row.role || (msg as { role?: string }).role)
+    const extras = chatMessageExtrasFromServerRow({ ui_payload: row })
+    if (extras.persistence?.status === 'saving') {
+      extras.persistence.status = 'failed'
+      extras.persistence.error = '上次保存未确认，请仅重试保存。'
+    }
     return {
       role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
       // 本地缓存已可展示，不要再次 HTML 转义。
       content: asString(row.content || (msg as { content?: string }).content),
       time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
-      ...chatMessageExtrasFromServerRow({ ui_payload: row }),
+      ...extras,
     }
   })
 
-  async function refreshHistorySessions() {
-    if (historyLoading.value) return
+  async function fetchHistoryPage(append = false) {
+    if (historyLoading.value || historyLoadingMore.value || (append && !historyHasMore.value)) return
     const request = captureRequest()
-    historyLoading.value = true
+    historyLoading.value = !append
+    historyLoadingMore.value = append
     historyError.value = ''
     try {
-      const data = await chatApi.getConversations({ limit: 20 })
+      const data = await chatApi.getConversations({ limit: 20, offset: append ? nextHistoryOffset : 0 })
       if (!request.isCurrent()) return
       if (!data?.success) throw new Error(String(data?.message || '加载历史失败'))
-
       const dataRow = asRecord(data)
-      const sessionsRaw = asArray(dataRow.sessions ?? dataRow.data ?? dataRow.conversations)
-      historySessions.value = mergeHistorySessions(sessionsRaw) as HistorySessionItem[]
+      const page = asArray(dataRow.sessions ?? dataRow.data ?? dataRow.conversations)
+      if (append && dataRow.next_offset === undefined) throw new Error('当前服务尚不支持历史分页，请更新服务后重新加载')
+      serverHistory = append ? [...serverHistory, ...page] : page
+      historySessions.value = mergeHistorySessions(serverHistory) as HistorySessionItem[]
+      nextHistoryOffset = Number(dataRow.next_offset ?? page.length)
+      historyHasMore.value = dataRow.has_more === true || (dataRow.has_more === undefined && page.length === 20)
     } catch (e) {
       if (!request.isCurrent()) return
-      const localFallback = mergeHistorySessions([]) as HistorySessionItem[]
-      historySessions.value = localFallback
-      historyError.value = localFallback.length ? '' : e instanceof Error ? e.message : '加载历史失败，请稍后重试'
-      console.error('加载历史失败:', e)
+      if (!append) historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
+      historyError.value = e instanceof Error ? e.message : '加载历史失败，请稍后重试'
     } finally {
       finishRequest(request.epoch)
     }
   }
+
+  async function refreshHistorySessions() { await fetchHistoryPage() }
+  async function loadMoreHistorySessions() { await fetchHistoryPage(true) }
 
   async function showHistoryPanel() {
     showHistory.value = true
@@ -150,7 +165,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       if (!request.isCurrent() || sessionId.value !== sid) return
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages)
-      const localMessages = readLocalMessagesBySession(sid)
+      const localMessages = normalizeLocalMessages(readLocalMessagesBySession(sid))
       if (data.success && serverMessages.length > 0) {
         const merged = [...localMessages]
         const matched = new Set<number>()
@@ -165,8 +180,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           }
         })) {
           const index = localMessages.findIndex((local, i) => !matched.has(i)
-            && local.role === message.role && local.time === message.time
-            && historyPersistence.toPlainText(local.content) === historyPersistence.toPlainText(message.content))
+            && samePersistedMessage(local, message, historyPersistence.toPlainText))
           if (index < 0) merged.push(message)
           else {
             matched.add(index)
@@ -175,9 +189,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         }
         loadMessages(merged)
       } else if (localMessages.length > 0) {
-        loadMessages(
-          normalizeLocalMessages(localMessages)
-        )
+        loadMessages(localMessages)
       } else if (data.success) {
         loadMessages([
           {
@@ -224,6 +236,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       const data = await chatApi.clearConversations({ user_id: 'default' })
       if (!request.isCurrent()) return
       if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '清空历史失败'))
+      serverHistory = []
+      nextHistoryOffset = 0
+      historyHasMore.value = false
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
     } catch (e) {
       if (!request.isCurrent()) return
@@ -267,6 +282,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       if (!request.isCurrent()) return false
       if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '删除会话失败'))
       removeLocalSessionCache(sid)
+      const beforeCount = serverHistory.length
+      serverHistory = serverHistory.filter((row) => asString(asRecord(row).session_id) !== sid)
+      nextHistoryOffset = Math.max(0, nextHistoryOffset - (beforeCount - serverHistory.length))
       historySessions.value = historySessions.value.filter((s) => s.session_id !== sid)
       if (sid === String(sessionId.value || '').trim()) {
         newConversation()
@@ -297,6 +315,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   function newConversation() {
     requestEpoch += 1
     historyLoading.value = false
+    historyLoadingMore.value = false
     const prev = String(sessionId.value || '').trim() || 'default'
     persistTaskPanelStateForSession(prev)
     persistExcelAnalysisContext(prev, null)
@@ -312,6 +331,10 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         requestEpoch += 1
         deps.onIdentityChange?.()
         historyLoading.value = false
+        historyLoadingMore.value = false
+        historyHasMore.value = false
+        serverHistory = []
+        nextHistoryOffset = 0
         historyError.value = ''
         resetConversationView()
         historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
@@ -319,6 +342,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
           void showHistoryPanelFn()
         }
       },
+      { flush: 'sync' },
     )
   }
 
@@ -327,6 +351,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historySessions,
     historyLoading,
     historyError,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistorySessions,
     refreshHistorySessions,
     showHistoryPanel,
     loadSession,

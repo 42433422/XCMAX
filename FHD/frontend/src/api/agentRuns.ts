@@ -257,7 +257,7 @@ export const agentRunsApi = {
   },
 
   listTasks(params: { limit?: number; include_archived?: boolean } = {}): Promise<AgentTaskListResponse> {
-    return api.get<AgentTaskListResponse>('/api/agent/tasks', params)
+    return api.get<AgentTaskListResponse>('/api/agent/tasks', params, { timeoutMs: 8000 })
   },
 
   getTask(taskId: string): Promise<AgentTaskResponse> {
@@ -296,21 +296,21 @@ export const agentRunsApi = {
   },
 
   pauseRun(runId: string): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/pause`, {})
+    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/pause`, {}, { timeoutMs: 15000 })
   },
 
   cancelRun(runId: string): Promise<ApiResponse<AgentRun>> {
-    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, {})
+    return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/cancel`, {}, { timeoutMs: 15000 })
   },
 
   resumeRun(runId: string, runtimeContext: Record<string, unknown> = {}): Promise<ApiResponse<AgentRun>> {
     return api.post<ApiResponse<AgentRun>>(`/api/agent/runs/${encodeURIComponent(runId)}/resume`, {
       runtime_context: runtimeContext,
-    })
+    }, { timeoutMs: 15000 })
   },
 
   retryRun(runId: string): Promise<ApiResponse<AgentRunReference>> {
-    return api.post<ApiResponse<AgentRunReference>>(`/api/agent/runs/${encodeURIComponent(runId)}/retry`, {})
+    return api.post<ApiResponse<AgentRunReference>>(`/api/agent/runs/${encodeURIComponent(runId)}/retry`, {}, { timeoutMs: 15000 })
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {
@@ -318,7 +318,7 @@ export const agentRunsApi = {
   },
 
   listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
-    return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params)
+    return api.get<ApiResponse<AgentRun[]>>('/api/agent/runs', params, { timeoutMs: 8000 })
   },
 
   listEvents(runId: string, params: { after_event_id?: string } = {}): Promise<AgentRunEventsResponse> {

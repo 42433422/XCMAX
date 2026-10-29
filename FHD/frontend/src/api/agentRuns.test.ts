@@ -64,7 +64,7 @@ describe('agentRunsApi', () => {
     await agentRunsApi.listEvents('run/1', { after_event_id: 'evt_1' })
 
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1', {}, { timeoutMs: 8000 })
-    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 })
+    expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs', { limit: 10 }, { timeoutMs: 8000 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/runs/run%2F1/events', {
       after_event_id: 'evt_1',
     }, { timeoutMs: 8000 })
@@ -80,7 +80,7 @@ describe('agentRunsApi', () => {
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks', {
       limit: 25,
       include_archived: false,
-    })
+    }, { timeoutMs: 8000 })
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/tasks/task-1')
     expect(apiMock.get).toHaveBeenCalledWith('/api/agent/task-runtime')
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/tasks/task-1/archive', {})
@@ -93,11 +93,11 @@ describe('agentRunsApi', () => {
     await agentRunsApi.retryRun('run/1')
     await agentRunsApi.cancelRun('run/1')
 
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {})
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/pause', {}, { timeoutMs: 15000 })
     expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/resume', {
       runtime_context: { source: 'resume-test' },
-    })
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {})
-    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {})
+    }, { timeoutMs: 15000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/retry', {}, { timeoutMs: 15000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/agent/runs/run%2F1/cancel', {}, { timeoutMs: 15000 })
   })
 })

@@ -47,6 +47,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const { sessionId } = options
   const {
     messages,
+    cacheError,
+    retryMessagesCache,
+    retryMessageSave,
     addMessage,
     addAndSaveMessage: addAndSaveMessageRaw,
     saveMessage,
@@ -245,6 +248,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historySessions,
     historyLoading,
     historyError,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistorySessions,
     refreshHistorySessions,
     showHistoryPanel,
     loadSession: loadSessionFromHistory,
@@ -575,6 +581,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
 
   return {
     messages,
+    cacheError,
+    retryMessagesCache,
+    retryMessageSave,
     lastMessage: computed(() => messages.value[messages.value.length - 1] ?? null),
     currentTask,
     orderNumberFetching,
@@ -593,6 +602,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     historySessions,
     historyLoading,
     historyError,
+    historyHasMore,
+    historyLoadingMore,
+    loadMoreHistorySessions,
     refreshHistorySessions,
     chatMessagesRef,
     pushCopied,

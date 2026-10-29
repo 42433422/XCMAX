@@ -28,6 +28,21 @@ describe('ChatHistoryModal', () => {
     i18n.global.locale.value = 'zh-CN'
   })
 
+  it('keeps loaded history accessible after paging fails and exposes a single pending load-more action', async () => {
+    const wrapper = mountModal({ historyHasMore: true, historyError: '网络暂时不可用' })
+    expect(wrapper.findAll('.history-session-item')).toHaveLength(1)
+    const more = wrapper.findAll('button').find(button => button.text() === '加载更早的会话')!
+    await more.trigger('click')
+    expect(wrapper.emitted('load-more')).toEqual([[]])
+    await wrapper.setProps({ historyLoadingMore: true })
+    expect(more.attributes('disabled')).toBeDefined()
+    await more.trigger('click')
+    expect(wrapper.emitted('load-more')).toHaveLength(1)
+    await wrapper.setProps({ historyHasMore: false, historyLoadingMore: false, historyError: '' })
+    expect(wrapper.text()).toContain('已显示全部可用会话')
+    wrapper.unmount()
+  })
+
   it('uses Chinese user-facing labels and shows the session date', () => {
     const wrapper = mountModal()
     expect(wrapper.text()).toContain('历史对话')

@@ -1,6 +1,7 @@
 import { ref, computed, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
+import { localMessagePersistence, samePersistedMessage, useChatMessagePersistence } from './useChatMessagePersistence'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
 import { useModsStore } from '@/stores/mods'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
@@ -103,6 +104,23 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
       .map((item) => asRecord(item))
       .filter((item) => Object.keys(item).length > 0)
   const extras: ChatMessageExtras = {}
+  const savedId = asString(metadata.client_message_id || row.client_message_id).trim()
+  const persisted = asRecord(ui.persistence)
+  const localId = asString(persisted.id).trim()
+  if (row.id != null || savedId) {
+    extras.persistence = { id: savedId || `server:${row.id}`, status: row.id != null ? 'saved' : 'local' }
+  } else if (localId && ['local', 'saving', 'saved', 'failed'].includes(asString(persisted.status))) {
+    const request = asRecord(persisted.request)
+    extras.persistence = {
+      id: localId,
+      status: persisted.status as NonNullable<ChatMessage['persistence']>['status'],
+      ...(typeof persisted.localSaved === 'boolean' ? { localSaved: persisted.localSaved } : {}),
+      ...(persisted.error ? { error: asString(persisted.error) } : {}),
+      ...(['user', 'ai', 'task'].includes(asString(request.role)) && typeof request.content === 'string' ? {
+        request: { role: request.role as ChatMessage['role'], content: request.content, ...(typeof request.metadata === 'string' ? { metadata: request.metadata } : {}) },
+      } : {}),
+    }
+  }
   const thinkingSteps = asString(ui.thinkingSteps).trim()
   const workflowAction = asString(ui.workflowAction).trim()
   const contextSummary = asString(ui.contextSummary).trim()
@@ -153,6 +171,8 @@ export function useChatMessages(sessionId: Ref<string>) {
     ]
   }
 
+  const cacheError = ref('')
+
   function readCachedMessages(): ChatMessage[] {
     try {
       const raw = localStorage.getItem(storageKey.value)
@@ -160,6 +180,12 @@ export function useChatMessages(sessionId: Ref<string>) {
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
       const sanitized = sanitizeMessagesList(parsed)
+      for (const message of sanitized) {
+        if (message.persistence?.status === 'saving') {
+          message.persistence.status = 'failed'
+          message.persistence.error = '上次保存未确认，请仅重试保存。'
+        }
+      }
       if (!sanitized.length) return getDefaultWelcome()
       if (isWelcomeMessage(sanitized[0]) && /<[a-z]+[\s>]/i.test(sanitized[0].content)) {
         sanitized[0] = getDefaultWelcome()[0]
@@ -192,14 +218,17 @@ export function useChatMessages(sessionId: Ref<string>) {
     cacheTimer = undefined
     pendingCacheWrite = undefined
     try {
+      for (const message of list) if (message.persistence) message.persistence.localSaved = true
       const sanitized = sanitizeMessagesList(list)
       if (list === messages.value && sanitized.length !== messages.value.length) {
         messages.value = sanitized
       }
       localStorage.setItem(key, JSON.stringify(sanitized))
       persistSessionMeta(sanitized, metaKey, sid)
+      if (key === storageKey.value) cacheError.value = ''
     } catch (_e) {
-      // ignore storage errors
+      for (const message of list) if (message.persistence) message.persistence.localSaved = false
+      if (key === storageKey.value) cacheError.value = '本机保存失败。服务端未确认的消息请勿关闭页面，可重试本机保存或复制消息。'
     }
   }
 
@@ -356,6 +385,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       role,
       content: safeContent,
       time,
+      persistence: localMessagePersistence(),
       ...(extras || {}),
     })
     persistMessagesCache()
@@ -366,26 +396,18 @@ export function useChatMessages(sessionId: Ref<string>) {
     }
   }
 
-  async function saveMessage(
-    role: 'user' | 'ai' | 'task',
-    content: string,
-    targetSessionId?: string,
-    extras?: ChatMessageExtras,
-  ): Promise<void> {
-    const visibleContent = role === 'ai' ? stripModelToolProtocol(content) : content
-    if (!hasMeaningfulContent(visibleContent)) return
-    try {
-      await chatApi.saveMessage({
-        session_id: targetSessionId || sessionId.value,
-        user_id: 'default',
-        role,
-        content: visibleContent,
-        ...(extras && Object.keys(extras).length ? { metadata: JSON.stringify({ ui: extras }) } : {}),
-      })
-    } catch (e) {
-      console.error('保存消息失败:', e)
-    }
-  }
+  const { saveMessage, retryMessageSave } = useChatMessagePersistence({
+    messages, sessionId,
+    scope: () => `${buildChatMessagesKey('scope', String(activeModId.value || ''))}:${productReadAccountEpoch.value}`,
+    read: (sid) => {
+      if (sid === sessionId.value) return messages.value
+      try { return sanitizeMessagesList(JSON.parse(localStorage.getItem(buildChatMessagesKey(sid, String(activeModId.value || ''))) || '[]')) }
+      catch { return [] }
+    },
+    persist: (list, sid) => persistMessagesCache(list, buildChatMessagesKey(sid, String(activeModId.value || '')), buildChatSessionMetaKey(sid, String(activeModId.value || '')), sid),
+    plainText: toPlainText,
+    html: (text) => escapeHtml(text).replace(/\n/g, '<br>'),
+  })
 
   async function addAndSaveMessage(
     content: string,
@@ -406,6 +428,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       content: '',
       time,
       streamingShell: true,
+      persistence: localMessagePersistence(),
     })
     persistMessagesCache()
     return messages.value.length - 1
@@ -462,7 +485,9 @@ export function useChatMessages(sessionId: Ref<string>) {
       })
       const sanitized = sanitizeMessagesList(mapped)
       if (!sanitized.length) return false
-      loadMessages(sanitized)
+      const unsaved = messages.value.filter(local => local.persistence?.status !== 'saved'
+        && !sanitized.some(server => samePersistedMessage(local, server, toPlainText)))
+      loadMessages([...sanitized, ...unsaved.filter(message => !isWelcomeMessage(message))])
       return true
     } catch (_e) {
       return false
@@ -473,6 +498,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     () => sessionId.value,
     () => {
       flushMessagesCache()
+      cacheError.value = ''
       messages.value = readCachedMessages()
     },
     { flush: 'sync' },
@@ -481,9 +507,10 @@ export function useChatMessages(sessionId: Ref<string>) {
   // 切换当前扩展（Mod）时：同一会话 ID 下不同 Mod 的消息缓存相互隔离，
   // 切换后应重新读取当前 Mod 对应的本地消息（若无缓存则展示欢迎语）。
   watch(
-    () => String(activeModId.value || ''),
+    () => [String(activeModId.value || ''), productReadAccountEpoch.value],
     () => {
       flushMessagesCache()
+      cacheError.value = ''
       messages.value = readCachedMessages()
     },
     { flush: 'sync' },
@@ -515,6 +542,9 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   return {
     messages,
+    cacheError,
+    retryMessagesCache: () => persistMessagesCache(),
+    retryMessageSave,
     lastMessage,
     addMessage,
     saveMessage,

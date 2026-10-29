@@ -46,6 +46,24 @@ function mountList(showDiagnosticMetadata = false) {
 }
 
 describe('ChatMessageList', () => {
+  it('shows server and cache failures separately and retries only the same saved-message identity', async () => {
+    const message = { role: 'user' as const, content: '记录', time: '12:00', persistence: {
+      id: 'message-a', status: 'failed' as const, localSaved: false, error: '消息保存未确认。不会重新执行任务。',
+      request: { role: 'user' as const, content: '记录' },
+    } }
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages: [message] } })
+    expect(wrapper.get('.message-save-status').text()).toContain('本机副本保存失败')
+    expect(wrapper.get('.message-save-error').text()).toContain('不会重新执行任务')
+    await wrapper.findAll('button').find(button => button.text() === '仅重试保存')!.trigger('click')
+    expect(wrapper.emitted('retry-save')).toEqual([['message-a']])
+    await wrapper.setProps({ messages: [{ ...message, persistence: { ...message.persistence, status: 'saving', error: '' } }] })
+    expect(wrapper.text()).toContain('正在保存')
+    expect(wrapper.text()).not.toContain('仅重试保存')
+    await wrapper.setProps({ messages: [{ ...message, persistence: { id: 'message-a', status: 'saved', localSaved: true } }] })
+    expect(wrapper.text()).toContain('已保存到服务端')
+    expect(wrapper.text()).not.toContain('保存失败')
+  })
+
   it('renders restored quote entities as normal punctuation', () => {
     const wrapper = mountList()
     expect(wrapper.get('.message-html').text()).toContain('"正常"')

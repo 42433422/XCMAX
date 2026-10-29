@@ -213,7 +213,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { showHistoryPanel, historySessions, historyError } = makeHistory(deps)
       await showHistoryPanel()
       expect(historySessions.value.length).toBe(1)
-      expect(historyError.value).toBe('') // local fallback exists, error suppressed
+      expect(historyError.value).toBe('Network error') // cached history remains usable, but the failed sync is visible
     })
 
     it('shows error message when API throws and no local fallback', async () => {
@@ -903,6 +903,61 @@ describe('useChatSessionHistory — coverage ramp', () => {
     expect(deps.clearMessages).toHaveBeenCalledTimes(cleared + 1)
     expect(onIdentityChange).toHaveBeenCalledTimes(identityChanges + 1)
     expect(deps.taskList.value).toEqual([])
+  })
+
+  it('loads the twenty-first to twenty-fifth server conversations on an empty device', async () => {
+    const sessions = Array.from({ length: 25 }, (_, index) => ({ session_id: `server-${index}`, title: `会话${index}` }))
+    chatApiMock.getConversations.mockImplementation(async ({ limit, offset }) => ({
+      success: true, sessions: sessions.slice(offset, offset + limit), has_more: offset + limit < sessions.length,
+      next_offset: Math.min(sessions.length, offset + limit),
+    }))
+    const history = makeHistory(makeDeps().deps)
+    await history.refreshHistorySessions()
+    expect(history.historySessions.value).toHaveLength(20)
+    expect(history.historyHasMore.value).toBe(true)
+    await history.loadMoreHistorySessions()
+    expect(history.historySessions.value).toHaveLength(25)
+    expect(history.historySessions.value.map(row => row.session_id)).toContain('server-24')
+    expect(history.historyHasMore.value).toBe(false)
+    expect(chatApiMock.getConversations).toHaveBeenLastCalledWith({ limit: 20, offset: 20 })
+  })
+
+  it.each(['message-b', ''])('keeps the first repeated message retryable when the server only saved the second (client id=%s)', async clientId => {
+    const body = { role: 'user', content: '相同消息', time: '12:00' }
+    localStorage.setItem('xcagi_chat_messages_repeat', JSON.stringify([
+      { ...body, persistence: { id: 'message-a', status: clientId ? 'failed' : 'saving', request: { role: 'user', content: '相同消息' } } },
+      { ...body, persistence: { id: 'message-b', status: 'saved' } },
+    ]))
+    chatApiMock.getConversation.mockResolvedValueOnce({ success: true, messages: [
+      { ...body, id: 2, metadata: JSON.stringify({ client_message_id: clientId }) },
+    ] })
+    const { deps, mocks } = makeDeps()
+    await makeHistory(deps).loadSession('repeat')
+    const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].persistence).toMatchObject({ id: 'message-a', status: 'failed', request: { content: '相同消息' } })
+    expect(loaded[1].persistence).toMatchObject({ id: clientId || 'server:2', status: 'saved' })
+  })
+
+  it('retains loaded pages on failure and discards a late page after an owner switch', async () => {
+    const first = [{ session_id: 'owner-a-page-one' }]
+    chatApiMock.getConversations.mockResolvedValueOnce({ success: true, sessions: first, next_offset: 20, has_more: true })
+    const history = makeHistory(makeDeps().deps)
+    history.registerHistoryModWatch(async () => {})
+    await history.refreshHistorySessions()
+    chatApiMock.getConversations.mockRejectedValueOnce(new Error('503'))
+    await history.loadMoreHistorySessions()
+    expect(history.historySessions.value[0].session_id).toBe('owner-a-page-one')
+    expect(history.historyError.value).toBe('503')
+    let resolve!: (value: unknown) => void
+    chatApiMock.getConversations.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = history.loadMoreHistorySessions()
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
+    resolve({ success: true, sessions: [{ session_id: 'owner-a-secret' }], next_offset: 21, has_more: false })
+    await pending
+    expect(history.historySessions.value).toEqual([])
+    expect(history.historyHasMore.value).toBe(false)
+    expect(history.historyLoadingMore.value).toBe(false)
   })
 
 })

@@ -114,6 +114,11 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
+          <span v-if="msg.persistence" class="message-save-status" role="status">
+            {{ saveLabels[msg.persistence.status] }}{{ msg.persistence.localSaved === false ? ' · 本机副本保存失败' : '' }}
+            <span v-if="msg.persistence.error" class="message-save-error">{{ msg.persistence.error }}</span>
+          </span>
+          <button v-if="msg.persistence?.request && ['failed', 'local'].includes(msg.persistence.status)" type="button" class="btn btn-secondary btn-sm" @click="$emit('retry-save', msg.persistence.id)">仅重试保存</button>
           <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :title="copyLabels.get(msg) || '复制正文'" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg, $event)">
             <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
@@ -157,6 +162,8 @@ import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 
 useI18n()
 
+const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正在保存…', saved: '已保存到服务端', failed: '保存未确认' }
+
 const props = defineProps<{
   messages: ChatMessage[]
   isLoading: boolean
@@ -179,6 +186,7 @@ defineEmits<{
   'toggle-message-tts': [idx: number, content: string]
   'shipment-download-click': []
   'approval-confirm': []
+  'retry-save': [id: string]
   'approval-cancel': []
   'approve-run': [runId: string]
 }>()
@@ -302,6 +310,9 @@ watch(
 </script>
 
 <style scoped>
+.message-save-status { font-size: 12px; }
+.message-save-error { display: block; color: var(--app-text-danger, #b42318); }
+
 .run-approve-row {
   margin-top: 6px;
 }

@@ -6,6 +6,7 @@ import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
 import { useChatTaskRuntimeBridge } from '@/composables/useChatTaskRuntimeBridge'
 import { taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
+import type { UiChatMessage } from '@/types/chat-ui'
 
 const api = vi.hoisted(() => ({
   listTasks: vi.fn(), listRuns: vi.fn(), markTaskRead: vi.fn(), getRun: vi.fn(),
@@ -65,6 +66,8 @@ function summary(status = 'waiting_user'): AgentTaskSummary {
 function inertApi(): Record<string, unknown> {
   return {
     messages: ref([]), currentTask: ref(null), orderNumberFetching: ref(false), isLoading: ref(false), isStreamingReply: ref(false),
+    cacheError: ref(''), retryMessagesCache: vi.fn(), retryMessageSave: vi.fn(),
+    historyHasMore: ref(false), historyLoadingMore: ref(false), loadMoreHistorySessions: vi.fn(),
     isExecuting: ref(false), latestAssistantPush: ref(null), taskList, filteredTaskList: taskList, activeTaskId, expandedTaskIds,
     taskFilter: ref('all'), showHistory: ref(false), historySessions: ref([]), historyLoading: ref(false), historyError: ref(''),
     pushCopied: ref(false), loadingProgressText: ref(''), excelAnalyzeUploading: ref(false), multimodalPendingCount: ref(0),
@@ -77,7 +80,7 @@ function inertApi(): Record<string, unknown> {
       'addAndSaveMessage', 'stageExcelAnalysisContext'].map(name => [name, vi.fn()])),
   }
 }
-async function mountView(task = summary()) {
+async function mountView(task = summary(), feedback = false) {
   taskList.value = taskSummariesToTaskItems([task])
   api.listTasks.mockResolvedValue({ success: true, data: [task] })
   api.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'fresh-action-bound-grant' } })
@@ -86,6 +89,16 @@ async function mountView(task = summary()) {
     newConversation: vi.fn(), jumpToMessage: vi.fn(), toggleExpanded, clearLocalHistory: vi.fn(),
   })
   chatApi = { ...inertApi(), ...bridge }
+  if (feedback) {
+    chatApi.messages = ref<UiChatMessage[]>([{ role: 'user', content: '待保存记录', time: '12:00', persistence: {
+      id: 'message-retry', status: 'failed', localSaved: false, error: '消息保存未确认，不会重新执行任务。',
+      request: { role: 'user', content: '待保存记录' },
+    } }])
+    chatApi.cacheError = ref('本机保存失败，请重试')
+    chatApi.showHistory = ref(true)
+    chatApi.historySessions = ref([{ session_id: 'first-page', title: '第一批历史' }])
+    chatApi.historyHasMore = ref(true)
+  }
   const router = createRouter({ history: createMemoryHistory(), routes: [
     { path: '/chat', component: { template: '<div />' } },
     { path: '/workspaces/:taskId', name: 'task-workspace', component: { template: '<div />' } },
@@ -93,8 +106,8 @@ async function mountView(task = summary()) {
   await router.push('/chat')
   await router.isReady()
   wrapper = mount(ModChatView, { global: { plugins: [router], stubs: {
-    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: true, ChatInputToolbar: true,
-    ChatHistoryModal: true, ChatOfficeDockingReview: true,
+    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: !feedback, ChatInputToolbar: true,
+    ChatHistoryModal: !feedback, ChatOfficeDockingReview: true,
   } } })
   return { router, bridge }
 }
@@ -176,8 +189,27 @@ describe('shipped chat Mod task navigation', () => {
   it('retains the fresh-grant refusal at the real task bridge', async () => {
     const { bridge } = await mountView()
     api.getRun.mockResolvedValue({ success: true, data: summary().active_run, approval: {} })
-    await expect(bridge.approveTask(taskList.value[0].id)).rejects.toThrow('任务当前没有可用的审批凭证')
+    await bridge.approveTask(taskList.value[0].id)
+    expect(bridge.taskControlStates.value[taskList.value[0].id]).toMatchObject({ needsVerification: true, error: expect.stringContaining('审批未确认成功') })
     expect(api.continueRun).not.toHaveBeenCalled()
+  })
+
+  it('wires save retry, cache recovery, history paging and stale-state verification in the shipped desktop view', async () => {
+    const { bridge } = await mountView(summary(), true)
+    expect(wrapper!.get('.chat-cache-warning').text()).toContain('本机保存失败')
+    await button('仅重试保存').trigger('click')
+    await button('重试本机保存').trigger('click')
+    await button('加载更早的会话').trigger('click')
+    expect(chatApi.retryMessageSave).toHaveBeenCalledExactlyOnceWith('message-retry')
+    expect(chatApi.retryMessagesCache).toHaveBeenCalledTimes(1)
+    expect(chatApi.loadMoreHistorySessions).toHaveBeenCalledTimes(1)
+    bridge.taskSyncState.value = { stale: true, checking: false, lastVerifiedAt: 1, error: '无法核实任务状态' }
+    await flushPromises()
+    expect(wrapper!.get('.task-sync-status').text()).toContain('无法核实任务状态')
+    await wrapper!.get('.task-sync-status button').trigger('click')
+    await flushPromises()
+    expect(bridge.taskSyncState.value.stale).toBe(false)
+    controls().forEach(control => expect(control).not.toHaveBeenCalled())
   })
 
   it.each([

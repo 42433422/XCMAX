@@ -2,9 +2,13 @@
 <template>
   <div class="chat-view page-view active" id="view-chat">
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
+      {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
+    </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
         :messages="messages"
+        @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
         :loading-progress-text="loadingProgressText"
@@ -34,6 +38,9 @@
         v-if="hasTaskPanelContent"
         :current-task="currentTask"
         :task-list="taskList"
+        :task-control-states="taskControlStates"
+        :task-sync-state="taskSyncState"
+        @refresh-tasks="refreshTasks"
         :filtered-task-list="filteredTaskList"
         :active-task-id="activeTaskId"
         :expanded-task-ids="expandedTaskIds"
@@ -153,6 +160,9 @@
       </div>
     </div>
     <ChatHistoryModal
+      :history-has-more="historyHasMore"
+      :history-loading-more="historyLoadingMore"
+      @load-more="loadMoreHistorySessions"
       :show="showHistory"
       :history-sessions="historySessions"
       :history-loading="historyLoading"
@@ -232,6 +242,9 @@ const chatRefBag = {
 
 const {
   messages,
+  cacheError,
+  retryMessagesCache,
+  retryMessageSave,
   currentTask,
   orderNumberFetching,
   isLoading,
@@ -239,6 +252,9 @@ const {
   isExecuting,
   latestAssistantPush,
   taskList,
+  taskControlStates,
+  taskSyncState,
+  refreshTasks,
   filteredTaskList,
   activeTaskId,
   expandedTaskIds,
@@ -247,6 +263,9 @@ const {
   historySessions,
   historyLoading,
   historyError,
+  historyHasMore,
+  historyLoadingMore,
+  loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
   excelAnalyzeUploading,

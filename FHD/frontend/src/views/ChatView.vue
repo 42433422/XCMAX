@@ -7,9 +7,13 @@
       @control="controlWorkspaceTask"
     />
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
+      {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
+    </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
         :messages="messages"
+        @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
         :loading-progress-text="loadingProgressText"
@@ -39,6 +43,9 @@
       <ChatSidePanel
         :current-task="currentTask"
         :task-list="visibleTaskList"
+        :task-control-states="taskControlStates"
+        :task-sync-state="taskSyncState"
+        @refresh-tasks="refreshTasks"
         :filtered-task-list="visibleFilteredTaskList"
         :active-task-id="visibleActiveTaskId"
         :expanded-task-ids="expandedTaskIds"
@@ -58,6 +65,9 @@
         :current-session-id="currentSessionId"
         :history-loading="historyLoading"
         :history-error="historyError"
+        :history-has-more="historyHasMore"
+        :history-loading-more="historyLoadingMore"
+        @load-more-history="loadMoreHistorySessions"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -171,6 +181,9 @@
       </div>
     </div>
     <ChatHistoryModal
+      :history-has-more="historyHasMore"
+      :history-loading-more="historyLoadingMore"
+      @load-more="loadMoreHistorySessions"
       :show="showHistory"
       :history-sessions="historySessions"
       :history-loading="historyLoading"
@@ -266,6 +279,9 @@ const chatRefBag = {
 
 const {
   messages,
+  cacheError,
+  retryMessagesCache,
+  retryMessageSave,
   currentTask,
   orderNumberFetching,
   isLoading,
@@ -273,6 +289,9 @@ const {
   isExecuting,
   latestAssistantPush,
   taskList,
+  taskControlStates,
+  taskSyncState,
+  refreshTasks,
   activeTaskId,
   filteredTaskList,
   expandedTaskIds,
@@ -281,6 +300,9 @@ const {
   historySessions,
   historyLoading,
   historyError,
+  historyHasMore,
+  historyLoadingMore,
+  loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
   excelAnalyzeUploading,
