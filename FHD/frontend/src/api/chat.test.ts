@@ -20,12 +20,21 @@ vi.mock('@/utils/chatSseStream', () => ({
 }))
 
 import chatApi, { parseChatStreamErrorResponse } from './chat'
+import { persistMarketTokensFromHandoff } from './marketAccount'
+import { setRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime'
+
+function setMarketToken(token: string) {
+  setRuntimeTenantStorageScopeInput({ tenantId: 9, marketUserId: 1, accountKind: 'enterprise' })
+  persistMarketTokensFromHandoff({ token, market_base_url: '' })
+}
 
 beforeEach(() => {
   apiMock.get.mockReset().mockResolvedValue({ success: true })
   apiMock.post.mockReset().mockResolvedValue({ success: true })
   sse.readPlannerSseResponse.mockClear()
   globalThis.fetch = vi.fn()
+  localStorage.clear()
+  setRuntimeTenantStorageScopeInput(null)
   document.cookie = 'csrf_token=desktop-csrf'
 })
 
@@ -49,12 +58,25 @@ describe('chatApi thin wrappers', () => {
   })
 
   it('merges market authorization header when token present', async () => {
-    window.localStorage.setItem('xcagi_market_access_token', 'abc')
+    setMarketToken('abc')
     await chatApi.sendChat({ message: 'hi' } as never)
     const [, , options] = apiMock.post.mock.calls[0]
     expect((options as { headers: Record<string, string> }).headers.Authorization).toContain('Bearer')
     expect((options as { headers: Record<string, string> }).headers['X-CSRF-Token']).toBe('desktop-csrf')
     window.localStorage.removeItem('xcagi_market_access_token')
+  })
+
+  it('does not send an unowned or another account token on normal or streaming chat', async () => {
+    localStorage.setItem('xcagi_market_access_token', 'unowned')
+    await chatApi.sendChat({ message: 'hi' } as never)
+    expect(apiMock.post.mock.calls[0][2]?.headers?.Authorization).toBeUndefined()
+    setMarketToken('account-a')
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, marketUserId: 2, accountKind: 'enterprise' })
+    await chatApi.sendChat({ message: 'hi' } as never)
+    expect(apiMock.post.mock.calls[1][2]?.headers?.Authorization).toBeUndefined()
+    ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true } as Response)
+    await chatApi.sendChatStream({ message: 'hi' } as never)
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].headers.Authorization).toBeUndefined()
   })
 })
 
@@ -103,7 +125,7 @@ describe('chatApi stream methods', () => {
   })
 
   it('keeps csrf header when market bearer is present', async () => {
-    window.localStorage.setItem('xcagi_market_access_token', 'market-token')
+    setMarketToken('market-token')
     ;(globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true } as Response)
     await chatApi.sendChatStream({ message: 'hi' } as never)
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]

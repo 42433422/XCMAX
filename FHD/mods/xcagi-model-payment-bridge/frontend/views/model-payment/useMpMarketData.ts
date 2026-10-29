@@ -1,7 +1,10 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch, getCurrentScope, onScopeDispose } from 'vue';
 import type { Ref } from 'vue';
+import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache';
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope';
+import { getRuntimeTenantStorageScopeInput } from '@/utils/tenantStorageScopeRuntime';
 import {
-  LS_MARKET_ACCESS_TOKEN,
+  readCurrentMarketAccessToken,
   LS_MARKET_USER_JSON,
   fetchMarketAccountOverview,
   fetchMarketLlmCatalog,
@@ -16,6 +19,7 @@ import {
   getCacheAge,
   getCachedData,
   setCachedData,
+  marketCacheOwner,
 } from './mpMarketCache';
 import { marketBase } from './mpHandoff';
 import { formatInteger, formatMoney, providersFromOverview } from './useMpCatalog';
@@ -33,19 +37,42 @@ export function useMpMarketData(deps: {
   const llmCatalog = ref<MarketLlmCatalogData | null>(null);
   const llmCatalogLoading = ref(false);
   const llmCatalogMessage = ref('');
-  const marketToken = ref(window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '');
+  const marketToken = ref(readCurrentMarketAccessToken());
   const hasSessionMarketToken = ref(false);
 
   const lastSyncTime = ref<number | null>(null);
   const isRefreshing = ref(false);
+  let lifetime = 0;
+  let overviewRequest = 0;
+  let catalogRequest = 0;
+  let refreshRequest = 0;
+  const stop = watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
+    lifetime++;
+    marketOverview.value = null;
+    llmCatalog.value = null;
+    marketToken.value = '';
+    hasSessionMarketToken.value = false;
+    marketSyncWarning.value = '';
+    llmCatalogMessage.value = '';
+    lastSyncTime.value = null;
+    llmCatalogLoading.value = false;
+    isRefreshing.value = false;
+  }, { flush: 'sync' });
+  if (getCurrentScope()) onScopeDispose(() => { lifetime++; stop(); });
+
+  function currentRequest(): () => boolean {
+    const current = captureAuthSession();
+    const generation = lifetime;
+    return () => current() && generation === lifetime;
+  }
 
   function applyMarketToken(token: string): boolean {
     const next = (token || '').trim();
     if (!next) return false;
-    const prev = (marketToken.value || window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '').trim();
+    const prev = (marketToken.value || readCurrentMarketAccessToken()).trim();
     const changed = Boolean(prev && prev !== next);
     marketToken.value = next;
-    window.localStorage.setItem(LS_MARKET_ACCESS_TOKEN, next);
+    // The handoff caller commits credentials only after checking its session owner.
     if (changed) {
       clearCachedMarketData();
       marketOverview.value = null;
@@ -56,7 +83,7 @@ export function useMpMarketData(deps: {
   }
 
   function readStoredMarketToken(): string {
-    return (marketToken.value || window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '').trim();
+    return marketCacheOwner() ? (marketToken.value || readCurrentMarketAccessToken()).trim() : '';
   }
 
   function shouldRetryOverviewWithStoredToken(error: unknown): boolean {
@@ -93,6 +120,10 @@ export function useMpMarketData(deps: {
   // ========== 数据加载函数（带智能缓存）==========
 
   async function refreshMarketOverview(auth?: string, forceRefresh = false) {
+    const sessionCurrent = currentRequest();
+    const request = ++overviewRequest;
+    const owner = marketCacheOwner();
+    const current = () => sessionCurrent() && request === overviewRequest;
     // 账户概览优先走后端当前会话绑定的 market token；若 handoff 未确认，则用登录时写入的本地 token 兜底。
     const storedToken = readStoredMarketToken();
     let token = auth === undefined ? (hasSessionMarketToken.value ? '' : storedToken) : (auth || storedToken);
@@ -110,6 +141,7 @@ export function useMpMarketData(deps: {
       try {
         data = await fetchMarketAccountOverview(token, forceRefresh);
       } catch (e) {
+        if (!current()) return;
         if (!token && storedToken && shouldRetryOverviewWithStoredToken(e)) {
           token = storedToken;
           data = await fetchMarketAccountOverview(token);
@@ -117,13 +149,18 @@ export function useMpMarketData(deps: {
           throw e;
         }
       }
+      if (!current()) return;
+      const expectedUser = getRuntimeTenantStorageScopeInput()?.marketUserId;
+      if (expectedUser != null && data.user?.id != null && String(expectedUser) !== String(data.user.id)) {
+        throw new Error('返回账户与当前账号不一致，请重新登录。');
+      }
       marketOverview.value = data;
       marketSyncWarning.value =
         (typeof data.sync_warning === 'string' && data.sync_warning.trim()) ||
         (data.degraded || data.market_unreachable
           ? `无法连接修茈市场（${data.market_base_url || marketBase}），请使用顶部按钮打开钱包充值。`
           : '');
-      setCachedData(CACHE_KEYS.OVERVIEW, data);
+      setCachedData(CACHE_KEYS.OVERVIEW, data, owner);
       lastSyncTime.value = Date.now();
 
       if (!llmCatalog.value?.providers?.length) {
@@ -133,20 +170,18 @@ export function useMpMarketData(deps: {
             providers: fallbackProviders,
             market_base_url: data.market_base_url,
           };
-          setCachedData(CACHE_KEYS.LLM_CATALOG, llmCatalog.value);
+          setCachedData(CACHE_KEYS.LLM_CATALOG, llmCatalog.value, owner);
         }
       }
 
-      if (token) {
-        marketToken.value = token;
-        window.localStorage.setItem(LS_MARKET_ACCESS_TOKEN, token);
-      }
-      window.localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify(data.user));
+      if (token) marketToken.value = token;
+      try { window.localStorage.setItem(LS_MARKET_USER_JSON, JSON.stringify(data.user)); } catch { /* private mode */ }
     } catch (e) {
+      if (!current()) return;
       const msg = e instanceof Error ? e.message : String(e);
-      marketSyncWarning.value = `账户同步失败：${msg}。请确认后端已启动且 XCAGI_MARKET_BASE_URL 指向可用市场（如生产 119.27.178.147:9999）。`;
+      marketSyncWarning.value = `账户同步失败：${msg}。请重试或重新登录。`;
       if (!marketOverview.value) {
-        const cached = getCachedData<MarketAccountOverviewData>(CACHE_KEYS.OVERVIEW);
+        const cached = getCachedData<MarketAccountOverviewData>(CACHE_KEYS.OVERVIEW, owner);
         if (cached) {
           marketOverview.value = cached;
           console.warn('[ModelPayment] API请求失败，使用缓存数据');
@@ -157,7 +192,11 @@ export function useMpMarketData(deps: {
   }
 
   async function refreshLlmCatalog(auth?: string, forceRefresh = false) {
-    const token = auth || marketToken.value || window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '';
+    const sessionCurrent = currentRequest();
+    const request = ++catalogRequest;
+    const owner = marketCacheOwner();
+    const current = () => sessionCurrent() && request === catalogRequest;
+    const token = auth || readStoredMarketToken();
 
     if (!forceRefresh) {
       const cacheAge = getCacheAge(CACHE_KEYS.LLM_CATALOG);
@@ -170,12 +209,15 @@ export function useMpMarketData(deps: {
     llmCatalogLoading.value = true;
     llmCatalogMessage.value = '';
     try {
-      llmCatalog.value = await fetchMarketLlmCatalog(token, forceRefresh);
-      setCachedData(CACHE_KEYS.LLM_CATALOG, llmCatalog.value);
+      const data = await fetchMarketLlmCatalog(token, forceRefresh);
+      if (!current()) return;
+      llmCatalog.value = data;
+      setCachedData(CACHE_KEYS.LLM_CATALOG, data, owner);
       lastSyncTime.value = Date.now();
-    } catch (e: any) {
+    } catch (e) {
+      if (!current()) return;
       if (!llmCatalog.value) {
-        const cached = getCachedData<MarketLlmCatalogData>(CACHE_KEYS.LLM_CATALOG);
+        const cached = getCachedData<MarketLlmCatalogData>(CACHE_KEYS.LLM_CATALOG, owner);
         if (cached) {
           llmCatalog.value = cached;
           llmCatalogMessage.value = '模型目录接口暂不可用，已加载本地缓存。';
@@ -194,18 +236,20 @@ export function useMpMarketData(deps: {
       }
       console.warn('[ModelPayment] 拉取模型目录失败:', e);
     } finally {
-      llmCatalogLoading.value = false;
-      isRefreshing.value = false;
+      if (current()) llmCatalogLoading.value = false;
     }
   }
 
   // 强制刷新（用户点击按钮）
   async function forceRefreshAll() {
+    const current = currentRequest();
+    const request = ++refreshRequest;
     isRefreshing.value = true;
-    await Promise.all([
-      refreshMarketOverview(undefined, true),
-      refreshLlmCatalog(undefined, true),
-    ]);
+    try {
+      await Promise.all([refreshMarketOverview(undefined, true), refreshLlmCatalog(undefined, true)]);
+    } finally {
+      if (current() && request === refreshRequest) isRefreshing.value = false;
+    }
   }
 
   const marketBalanceText = computed(() => {

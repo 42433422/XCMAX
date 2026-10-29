@@ -429,8 +429,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
       data: { username: 'sessuser', user_id: 5 },
     })
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.localUser).toBeTruthy()
     expect(vm.localUser.username).toBe('sessuser')
@@ -438,7 +437,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     wrapper.unmount()
   })
 
-  it('session validate 无 username 时回退到 market storage', async () => {
+  it('session validate 无 username 时保留有效会话但不收养无归属的 market storage', async () => {
     mockAuthApiGetCurrentUser.mockResolvedValueOnce({ success: false })
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: true, data: {} })
     localStorage.setItem(
@@ -451,16 +450,14 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
       }),
     )
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
-    expect(vm.localUser).toBeTruthy()
-    expect(vm.localUser.username).toBe('marketuser')
-    expect(vm.localUser.id).toBe(9)
+    expect(vm.localUser).toBeNull()
+    expect(vm.isLoggedIn).toBe(true)
     wrapper.unmount()
   })
 
-  it('getCurrentUser 抛异常时走 session validate 兜底', async () => {
+  it('getCurrentUser 网络异常显示状态不可用且不串行等待第二次校验', async () => {
     mockAuthApiGetCurrentUser.mockRejectedValueOnce(new Error('network'))
     mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
@@ -469,6 +466,8 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
     const vm = wrapper.vm as any
     expect(vm.localUser).toBeNull()
     expect(vm.isLoggedIn).toBe(false)
+    expect(vm.accountError).toBe(true)
+    expect(mockAuthApiValidateSession).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -526,8 +525,7 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
   it('无 brand 无 user 时返回未登录提示', async () => {
     mockAccountProfileStore.displayBrand = ''
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileBrandTitle).toBe('未登录')
     wrapper.unmount()
@@ -563,8 +561,7 @@ describe('SettingsView – profileSubline 计算属性', () => {
 
   it('无 user 时返回登录提示', async () => {
     const wrapper = await mountSettings()
-    await nextTick()
-    await nextTick()
+    await flushPromises()
     const vm = wrapper.vm as any
     expect(vm.profileSubline).toBe('登录后同步修茈市场')
     wrapper.unmount()
@@ -752,11 +749,11 @@ describe('SettingsView – avatarInitial 与 profileAvatarUrl', () => {
     wrapper.unmount()
   })
 
-  it('profileAvatarUrl 从 market storage 读取 http url', async () => {
+  it('profileAvatarUrl 不采用未经当前身份确认的 market storage', async () => {
     localStorage.setItem('xcagi_market_user_json', JSON.stringify({ avatar_url: 'https://market.test/avatar.png' }))
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    expect(vm.profileAvatarUrl).toBe('https://market.test/avatar.png')
+    expect(vm.profileAvatarUrl).toBe('')
     wrapper.unmount()
   })
 

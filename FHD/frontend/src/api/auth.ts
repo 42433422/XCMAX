@@ -1,7 +1,7 @@
 import { clearEnterpriseCsRecovery } from '@/utils/enterpriseCsRecovery'
-import { api, primeCsrfCookie } from './core'
-import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount'
-import { invalidateEnterpriseSessionCache, markEnterpriseSessionValid } from '@/utils/authSessionCache'
+import { api, primeCsrfCookie, type RequestOptions } from './core'
+import { clearMarketCredentials } from './marketAccount'
+import { getAuthSessionEpoch, invalidateEnterpriseSessionCache, markEnterpriseSessionValid } from '@/utils/authSessionCache'
 import { clearAutoLoginPreference } from '@/utils/loginPreferences'
 import type { ApiResponse } from '@/types/api'
 
@@ -63,81 +63,100 @@ export interface RegisterRequest {
 }
 
 const LOGIN_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const
+type AuthOperationOptions = { signal?: AbortSignal }
+
+async function withAuthDeadline<T>(operation: (signal: AbortSignal) => Promise<T>, timeoutMs: number, caller?: AbortSignal): Promise<T> {
+  caller?.throwIfAborted()
+  const controller = new AbortController()
+  const abortFromCaller = () => controller.abort(caller?.reason)
+  caller?.addEventListener('abort', abortFromCaller, { once: true })
+  const timer = setTimeout(() => controller.abort(Object.assign(new Error(`请求超时（>${timeoutMs / 1000}s）`), { status: 0 })), timeoutMs)
+  let rejectOnAbort!: () => void
+  const aborted = new Promise<never>((_, reject) => {
+    rejectOnAbort = () => reject(controller.signal.reason)
+    controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation(controller.signal), aborted])
+  } finally {
+    clearTimeout(timer)
+    controller.signal.removeEventListener('abort', rejectOnAbort)
+    caller?.removeEventListener('abort', abortFromCaller)
+  }
+}
 
 function isTransientLoginError(error: unknown): boolean {
   const status = Number((error as { status?: unknown } | null)?.status)
   return status === 0 || status >= 500
 }
 
-async function withTransientLoginRetry<T>(operation: () => Promise<T>): Promise<T> {
+async function withTransientLoginRetry<T>(operation: () => Promise<T>, signal: AbortSignal): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
+    signal.throwIfAborted()
     try {
       return await operation()
     } catch (error) {
+      signal.throwIfAborted()
       if (!isTransientLoginError(error) || attempt >= LOGIN_RETRY_DELAYS_MS.length) {
         throw error
       }
-      await new Promise((resolve) => window.setTimeout(resolve, LOGIN_RETRY_DELAYS_MS[attempt]))
+      await new Promise<void>((resolve, reject) => {
+        const cancel = () => { clearTimeout(timer); reject(signal.reason) }
+        const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve() }, LOGIN_RETRY_DELAYS_MS[attempt])
+        signal.addEventListener('abort', cancel, { once: true })
+      })
     }
   }
 }
 
-async function invalidateSessionScopedUiCaches(): Promise<void> {
-  invalidateEnterpriseSessionCache()
+async function clearSessionScopedUiCaches(current: () => boolean): Promise<void> {
   try {
     const { clearDeliverableStatusCache } = await import('@/utils/platformShellApi')
-    clearDeliverableStatusCache()
+    if (current()) clearDeliverableStatusCache()
   } catch {
     /* ignore */
   }
 }
 
-export const authApi = {
-  async login(username: string, password: string, accountKind: AccountKind = 'enterprise', invitationCode = ''): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie()
+function authOperationOwner(signal: AbortSignal) {
+  const epoch = getAuthSessionEpoch()
+  const current = () => epoch === getAuthSessionEpoch() && !signal.aborted
+  const assertCurrent = () => {
+    signal.throwIfAborted()
+    if (!current()) throw new DOMException('登录会话已改变', 'AbortError')
+  }
+  return { current, assertCurrent }
+}
+
+function loginRequest(path: string, payload: Record<string, unknown>, options: AuthOperationOptions, retry = true) {
+  return withAuthDeadline(async (signal) => {
     invalidateEnterpriseSessionCache()
-    const res = await withTransientLoginRetry(() =>
-      api.post<ApiResponse<LoginResponse>>(
-        '/api/auth/login',
-        {
-          username,
-          password,
-          account_kind: accountKind,
-          ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
-        },
-        {
-          timeoutMs: 30_000,
-        },
-      ),
-    )
-    await invalidateSessionScopedUiCaches()
-    if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid()
+    clearMarketCredentials()
+    const { current, assertCurrent } = authOperationOwner(signal)
+    await primeCsrfCookie({ signal })
+    const request = () => {
+      assertCurrent()
+      return api.post<ApiResponse<LoginResponse>>(path, payload, { timeoutMs: 30_000, signal })
     }
+    const res = await (retry ? withTransientLoginRetry(request, signal) : request())
+    assertCurrent()
+    await clearSessionScopedUiCaches(current)
+    assertCurrent()
+    if (res?.success === true || res?.data?.success === true) markEnterpriseSessionValid()
     return res
+  }, 30_000, options.signal)
+}
+
+export const authApi = {
+  async login(username: string, password: string, accountKind: AccountKind = 'enterprise', invitationCode = '', options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
+    return loginRequest('/api/auth/login', {
+      username, password, account_kind: accountKind,
+      ...(invitationCode.trim() ? { invitation_code: invitationCode.trim() } : {}),
+    }, options)
   },
 
-  async loginWithPhoneCode(phone: string, code: string, accountKind: AccountKind = 'enterprise'): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie()
-    invalidateEnterpriseSessionCache()
-    const res = await withTransientLoginRetry(() =>
-      api.post<ApiResponse<LoginResponse>>(
-        '/api/auth/login-with-phone-code',
-        {
-          phone,
-          code,
-          account_kind: accountKind,
-        },
-        {
-          timeoutMs: 30_000,
-        },
-      ),
-    )
-    await invalidateSessionScopedUiCaches()
-    if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid()
-    }
-    return res
+  async loginWithPhoneCode(phone: string, code: string, accountKind: AccountKind = 'enterprise', options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
+    return loginRequest('/api/auth/login-with-phone-code', { phone, code, account_kind: accountKind }, options)
   },
 
   async sendPhoneCode(phone: string): Promise<ApiResponse<{ message?: string }>> {
@@ -179,15 +198,8 @@ export const authApi = {
     return api.post('/api/auth/company-brand', { company_brand: companyBrand })
   },
 
-  async register(payload: RegisterRequest): Promise<ApiResponse<LoginResponse>> {
-    await primeCsrfCookie()
-    invalidateEnterpriseSessionCache()
-    const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload)
-    await invalidateSessionScopedUiCaches()
-    if (res?.success === true || res?.data?.success === true) {
-      markEnterpriseSessionValid()
-    }
-    return res
+  async register(payload: RegisterRequest, options: AuthOperationOptions = {}): Promise<ApiResponse<LoginResponse>> {
+    return loginRequest('/api/auth/register', { ...payload }, options, false)
   },
 
   async sendRegisterVerificationCode(email: string): Promise<ApiResponse<{ message?: string }>> {
@@ -195,28 +207,32 @@ export const authApi = {
     return api.post<ApiResponse<{ message?: string }>>('/api/market/send-register-code', { email })
   },
 
-  async logout(): Promise<ApiResponse<void>> {
+  async logout(options: AuthOperationOptions = {}): Promise<ApiResponse<void>> {
     clearEnterpriseCsRecovery()
     clearAutoLoginPreference()
-    await invalidateSessionScopedUiCaches()
-    try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile')
-      useAccountProfileStore().clear()
-    } catch {
-      /* ignore */
-    }
-    try {
-      window.localStorage.removeItem(LS_MARKET_ACCESS_TOKEN)
-      window.localStorage.removeItem(LS_MARKET_USER_JSON)
-    } catch {
-      /* ignore */
-    }
-    await primeCsrfCookie()
-    return api.post<ApiResponse<void>>('/api/auth/logout', {}, { timeoutMs: 10_000 })
+    clearMarketCredentials()
+    return withAuthDeadline(async (signal) => {
+      invalidateEnterpriseSessionCache()
+      const { current, assertCurrent } = authOperationOwner(signal)
+      await clearSessionScopedUiCaches(current)
+      assertCurrent()
+      try {
+        const { useAccountProfileStore } = await import('@/stores/accountProfile')
+        assertCurrent()
+        useAccountProfileStore().clear()
+      } catch (error) {
+        if (!current()) throw error
+      }
+      await primeCsrfCookie({ signal })
+      assertCurrent()
+      const res = await api.post<ApiResponse<void>>('/api/auth/logout', {}, { timeoutMs: 10_000, signal })
+      assertCurrent()
+      return res
+    }, 10_000, options.signal)
   },
 
-  async getCurrentUser(): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
-    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000 })
+  async getCurrentUser(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
+    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000, ...options })
   },
 
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
@@ -235,8 +251,8 @@ export const authApi = {
     return api.post<ApiResponse<{ avatar_url: string }>>('/api/auth/profile/avatar', form)
   },
 
-  async validateSession(): Promise<ApiResponse<unknown>> {
-    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000 })
+  async validateSession(options: Pick<RequestOptions, 'signal' | 'timeoutMs'> = {}): Promise<ApiResponse<unknown>> {
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000, ...options })
   },
 
   async forgotAccount(email: string): Promise<ApiResponse<{ usernames: string[]; found: boolean }>> {

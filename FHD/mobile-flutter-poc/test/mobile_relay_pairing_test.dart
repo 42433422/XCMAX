@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,76 @@ import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 void main() {
   const qr = '{"v":3,"kind":"xcagi_relay_pairing",'
       '"relay_id":"relay-12345678","code":"345678"}';
+
+  for (final transition in ['logout', 'switch', 'same-account-login']) {
+    test('failed pairing rollback cannot undo $transition', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final http = HttpClient();
+      addTearDown(() => http.close(force: true));
+      addTearDown(() => server.close(force: true));
+      final base = 'http://127.0.0.1:${server.port}/';
+      final binding = Completer<void>();
+      final release = Completer<void>();
+      final subscription = server.listen((request) async {
+        request.response.headers.contentType = ContentType.json;
+        if (request.uri.path.endsWith('/pairing/exchange')) {
+          request.response.write(jsonEncode({
+            'success': true,
+            'data': {
+              'api_base_url': base,
+              'relay_id': 'relay-new',
+            }
+          }));
+        } else {
+          binding.complete();
+          await release.future;
+          request.response
+              .write(jsonEncode({'success': false, 'message': 'expired'}));
+        }
+        await request.response.close();
+      });
+      addTearDown(subscription.cancel);
+      final store = MemoryMobileSessionStore(const MobileSessionData(
+          accessToken: 'access-A', username: 'account-A', userId: 1));
+      final api = MobileApiClient(
+          config: MobileApiConfig(baseUrl: base),
+          sessionStore: store,
+          httpClient: http);
+      final repository = MobileRepository(client: api);
+      final result = expectLater(
+          repository.exchangePairingCode(jsonEncode({
+            'v': 2,
+            'nonce': 'legacy-nonce-123',
+            'api_base_url': base,
+          })),
+          throwsA(anyOf(
+              isA<MobileApiException>(), isA<MobileRepositoryException>())));
+      await binding.future;
+      if (transition == 'logout') {
+        await api.clearActiveAuth();
+      } else {
+        final account = transition == 'switch' ? 'B' : 'A';
+        await api.persistLoginSession({
+          'access_token': 'access-$account',
+          'user': {'id': account == 'A' ? 1 : 2, 'username': 'account-$account'}
+        },
+            fallbackUsername: 'account-$account',
+            fallbackAccountKind: 'enterprise');
+        await api.saveLocalSettings(themeMode: 'dark');
+      }
+      release.complete();
+      await result;
+      final saved = await store.load();
+      expect(
+          saved.accessToken,
+          transition == 'logout'
+              ? ''
+              : transition == 'switch'
+                  ? 'access-B'
+                  : 'access-A');
+      if (transition != 'logout') expect(saved.themeMode, 'dark');
+    });
+  }
 
   for (final input in <String>[qr, '345678']) {
     test('signed-in phone binds ${input == qr ? 'QR' : 'device code'}',
