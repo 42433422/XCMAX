@@ -264,7 +264,7 @@ def inspect_workbook(body: bytes) -> dict:
         if found:
             try:
                 read_only_print_areas = _read_only_print_area_warnings(body, found)
-            except Exception:
+            except BOUNDARY_ERRORS:
                 wb.close()
                 raise
     except (BadZipFile, KeyError, OSError, ParseError, InvalidFileException) as exc:

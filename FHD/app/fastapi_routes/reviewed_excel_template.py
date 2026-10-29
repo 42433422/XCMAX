@@ -1307,7 +1307,7 @@ async def reviewed_excel_save(
                     )
                 _unlock_review_classification(db, classification_lock, tenant, owner)
                 db.commit()
-            except Exception:
+            except BOUNDARY_ERRORS:
                 # The legacy library commits in a separate transaction; do not retry or remove
                 # files when its outcome may have succeeded but its receipt was lost.
                 raise
