@@ -8,13 +8,12 @@ import logging
 import os
 import sqlite3
 import time
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
-
-from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +194,8 @@ def outbox_status_summary() -> dict[str, Any]:
         "counts": counts,
         "pending_count": counts.get("pending", 0),
         "recovery_pending_count": counts.get("recovery_pending", 0),
+        "delivery_unknown_count": counts.get("delivery_unknown", 0),
+        "sending_count": counts.get("sending", 0),
         "oldest_pending_at": str(oldest[0] or ""),
     }
 
@@ -279,27 +280,125 @@ def enqueue_webhook(
 
 
 def _deliver_row(row: sqlite3.Row) -> tuple[bool, str]:
-    payload = json.loads(row["payload_json"] or "{}")
-    headers = json.loads(row["headers_json"] or "{}")
+    """Require an explicit channel receipt; a redirect is not delivery."""
     try:
+        payload = json.loads(row["payload_json"] or "{}")
+        headers = json.loads(row["headers_json"] or "{}")
         resp = httpx.post(
-            str(row["target_url"]),
-            json=payload,
-            headers=headers,
-            timeout=12.0,
+            str(row["target_url"]), json=payload, headers=headers,
+            timeout=12.0, follow_redirects=False,
         )
-        if resp.status_code >= 400:
-            return False, f"HTTP {resp.status_code}: {resp.text[:300]}"
-        data = (
-            resp.json()
-            if resp.headers.get("content-type", "").startswith("application/json")
-            else {}
+        if not 200 <= resp.status_code < 300:
+            prefix = "delivery_outcome_unknown: " if resp.status_code >= 500 else ""
+            return False, f"{prefix}HTTP {resp.status_code}"
+        if "application/json" not in resp.headers.get("content-type", "").lower():
+            return False, "delivery_outcome_unknown: missing JSON receipt"
+        try:
+            data = resp.json()
+        except ValueError:
+            return False, "delivery_outcome_unknown: invalid JSON receipt"
+        if not isinstance(data, dict):
+            return False, "delivery_outcome_unknown: invalid receipt shape"
+        if data.get("success") is False or data.get("ok") is False:
+            return False, "channel rejected delivery"
+        if data.get("success") is True or data.get("ok") is True:
+            return True, ""
+        return False, "delivery_outcome_unknown: missing affirmative receipt"
+    except (httpx.HTTPError, OSError):
+        # The peer may have committed before the response was lost. Automatic
+        # redelivery is unsafe without a verified idempotent receiver.
+        return False, "delivery_outcome_unknown: transport interrupted"
+    except (TypeError, ValueError):
+        return False, "invalid persisted webhook payload"
+
+
+def _expire_claims() -> None:
+    with _connect() as conn:
+        conn.execute(
+            """UPDATE cs_webhook_outbox SET status='delivery_unknown',
+               last_error='delivery_outcome_unknown: worker lease expired'
+               WHERE status='sending' AND next_retry_at <= ?""",
+            (_now_iso(),),
         )
-        if isinstance(data, dict) and data.get("success") is False:
-            return False, str(data.get("error") or "success=false")[:300]
-        return True, ""
-    except RECOVERABLE_ERRORS as exc:
-        return False, str(exc)[:500]
+
+
+def _claim_outbox_item(
+    outbox_id: int, *, manual: bool = False, ignore_due: bool = False
+) -> tuple[sqlite3.Row | None, str]:
+    """Commit an exclusive attempt before network IO; never hold a DB lock in IO."""
+    now = _now_iso()
+    with _connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM cs_webhook_outbox WHERE id=?", (int(outbox_id),)
+        ).fetchone()
+        if row is None:
+            return None, "not_found"
+        status = str(row["status"])
+        allowed = {"pending", "failed", "recovery_pending"} if manual else {"pending"}
+        if status not in allowed:
+            return None, status
+        if not manual and int(row["attempts"]) >= int(row["max_attempts"]):
+            conn.execute("UPDATE cs_webhook_outbox SET status='failed' WHERE id=?", (outbox_id,))
+            return None, "failed"
+        if not manual and not ignore_due and row["next_retry_at"] and row["next_retry_at"] > now:
+            return None, "not_due"
+        try:
+            headers = json.loads(row["headers_json"] or "{}")
+            if not isinstance(headers, dict) or any(
+                not isinstance(key, str) or not isinstance(value, str)
+                for key, value in headers.items()
+            ):
+                raise ValueError("invalid persisted headers")
+        except (TypeError, ValueError):
+            conn.execute(
+                "UPDATE cs_webhook_outbox SET status='failed', last_error='invalid persisted headers' WHERE id=?",
+                (int(outbox_id),),
+            )
+            return None, "failed"
+        if not any(key.lower() == "idempotency-key" for key in headers):
+            headers["Idempotency-Key"] = "xcagi-cs-" + uuid.uuid4().hex
+        lease_until = (datetime.now(UTC) + timedelta(seconds=60)).isoformat()
+        conn.execute(
+            """UPDATE cs_webhook_outbox SET status='sending', attempts=attempts+1,
+               headers_json=?, updated_at=?, next_retry_at=?, last_error='' WHERE id=?""",
+            (json.dumps(headers, ensure_ascii=False), now, lease_until, int(outbox_id)),
+        )
+        claimed = conn.execute(
+            "SELECT * FROM cs_webhook_outbox WHERE id=?", (int(outbox_id),)
+        ).fetchone()
+        conn.commit()
+        return claimed, "sending"
+
+
+def _attempt_delivery(
+    outbox_id: int, *, manual: bool = False, ignore_due: bool = False
+) -> dict[str, Any]:
+    row, status = _claim_outbox_item(outbox_id, manual=manual, ignore_due=ignore_due)
+    if row is None:
+        return {"ok": status == "delivered", "error": "" if status == "delivered" else status,
+                "status": status, "attempted": False}
+    ok, error = _deliver_row(row)
+    attempts = int(row["attempts"])
+    if ok:
+        status = "delivered"
+    elif error.startswith("delivery_outcome_unknown:"):
+        status = "delivery_unknown"
+    elif attempts >= int(row["max_attempts"]):
+        status = "failed"
+    else:
+        status = "pending"
+    delay = min(3600, 30 * (2 ** min(attempts - 1, 7)))
+    retry_at = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat() if status == "pending" else None
+    with _connect() as conn:
+        changed = conn.execute(
+            """UPDATE cs_webhook_outbox SET status=?, last_error=?, updated_at=?, next_retry_at=?
+               WHERE id=? AND status='sending' AND attempts=? AND updated_at=?""",
+            (status, error, _now_iso(), retry_at, int(outbox_id), attempts, row["updated_at"]),
+        ).rowcount
+    if changed != 1:
+        return {"ok": False, "error": "delivery_outcome_unknown: claim lost", "status": "delivery_unknown", "attempted": True}
+    return {"ok": ok, "error": error, "status": status, "attempted": True}
 
 
 def deliver_webhook_with_retry(
@@ -309,96 +408,53 @@ def deliver_webhook_with_retry(
     headers: dict[str, str] | None = None,
     inline_attempts: int = 3,
 ) -> bool:
-    """立即投递；失败则写入 outbox 并由 process_pending 重试。"""
-    hdrs = dict(headers or {})
-    last_err = ""
-    for i in range(max(1, inline_attempts)):
-        try:
-            resp = httpx.post(target_url, json=payload, headers=hdrs, timeout=12.0)
-            if resp.status_code < 400:
-                data = (
-                    resp.json()
-                    if "application/json" in resp.headers.get("content-type", "")
-                    else {}
-                )
-                if not isinstance(data, dict) or data.get("success") is not False:
-                    return True
-                last_err = str(data.get("error") or "success=false")
-            else:
-                last_err = f"HTTP {resp.status_code}"
-        except RECOVERABLE_ERRORS as exc:
-            last_err = str(exc)
-        if i < inline_attempts - 1:
-            time.sleep(0.5 * (2**i))
-    enqueue_webhook(target_url=target_url, payload=payload, headers=hdrs)
-    logger.warning("cs webhook queued after inline failures: %s", last_err[:200])
+    """Persist before the first send; inline and background attempts share one key."""
+    outbox_id = enqueue_webhook(target_url=target_url, payload=payload, headers=headers)
+    attempts = max(1, min(int(inline_attempts), 5))
+    for index in range(attempts):
+        result = _attempt_delivery(outbox_id, ignore_due=True)
+        if result["ok"]:
+            return True
+        if result["status"] != "pending":
+            break
+        if index < attempts - 1:
+            time.sleep(0.5 * (2**index))
+    logger.warning("cs webhook not confirmed; persisted outbox_id=%s", outbox_id)
     return False
 
 
 def process_pending_outbox(*, limit: int = 20) -> dict[str, int]:
     ensure_outbox_schema()
+    _expire_claims()
     stats = {"delivered": 0, "failed": 0, "skipped": 0}
-    now = _now_iso()
     with _connect() as conn:
         rows = conn.execute(
-            """
-            SELECT * FROM cs_webhook_outbox
-            WHERE status = 'pending' AND (next_retry_at IS NULL OR next_retry_at <= ?)
-            ORDER BY id ASC LIMIT ?
-            """,
-            (now, int(limit)),
+            """SELECT id FROM cs_webhook_outbox WHERE status='pending'
+               AND (next_retry_at IS NULL OR next_retry_at <= ?) ORDER BY id ASC LIMIT ?""",
+            (_now_iso(), max(0, int(limit))),
         ).fetchall()
-        for row in rows:
-            ok, err = _deliver_row(row)
-            attempts = int(row["attempts"]) + 1
-            max_a = int(row["max_attempts"])
-            if ok:
-                conn.execute(
-                    "UPDATE cs_webhook_outbox SET status='delivered', attempts=?, updated_at=?, last_error='' WHERE id=?",
-                    (attempts, _now_iso(), int(row["id"])),
-                )
-                stats["delivered"] += 1
-            elif attempts >= max_a:
-                conn.execute(
-                    "UPDATE cs_webhook_outbox SET status='failed', attempts=?, last_error=?, updated_at=? WHERE id=?",
-                    (attempts, err, _now_iso(), int(row["id"])),
-                )
-                stats["failed"] += 1
-            else:
-                delay_sec = min(3600, 30 * (2 ** (attempts - 1)))
-                next_at = (datetime.now(UTC) + timedelta(seconds=delay_sec)).isoformat()
-                conn.execute(
-                    """
-                    UPDATE cs_webhook_outbox SET attempts=?, last_error=?, updated_at=?,
-                      next_retry_at=?
-                    WHERE id=?
-                    """,
-                    (attempts, err, _now_iso(), next_at, int(row["id"])),
-                )
-                stats["skipped"] += 1
-        conn.commit()
+    for row in rows:
+        result = _attempt_delivery(int(row["id"]))
+        if not result["attempted"]:
+            stats["skipped"] += 1
+            continue
+        bucket = "delivered" if result["ok"] else (
+            "failed" if result["status"] in {"failed", "delivery_unknown"} else "skipped"
+        )
+        stats[bucket] += 1
     return stats
 
 
 def replay_outbox_item(outbox_id: int) -> dict[str, Any]:
+    """Replay a known failed attempt, not an in-flight or unknown delivery.
+
+    Unknown outcomes require channel reconciliation; a second send cannot be
+    made safe merely by choosing a new worker or by adding an HTTP header.
+    """
     ensure_outbox_schema()
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT * FROM cs_webhook_outbox WHERE id = ?", (int(outbox_id),)
-        ).fetchone()
-        if not row:
-            return {"ok": False, "error": "not_found"}
-        ok, err = _deliver_row(row)
-        status = "delivered" if ok else "pending"
-        conn.execute(
-            """
-            UPDATE cs_webhook_outbox SET status=?, attempts=attempts+1, last_error=?, updated_at=?
-            WHERE id=?
-            """,
-            (status, err, _now_iso(), int(outbox_id)),
-        )
-        conn.commit()
-    return {"ok": ok, "error": err}
+    _expire_claims()
+    result = _attempt_delivery(int(outbox_id), manual=True)
+    return {"ok": result["ok"], "error": result["error"]}
 
 
 def replay_by_landing_contact_id(landing_contact_id: int) -> dict[str, Any]:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from retort_engine.employee_queue import RetortEmployeeQueue
-from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskRecord, ImprovementTask
+
+if TYPE_CHECKING:
+    from retort_engine.history import RetortHistoryStore
 
 
 class EmployeeRuntimeHook(Protocol):
@@ -13,7 +16,7 @@ class EmployeeRuntimeHook(Protocol):
 
 
 class RetortEmployeeRuntimeAdapter:
-    """Bridge Retort tasks into an employee_runtime, agent_loop, or workflow_scheduler."""
+    """Bridge durable logical tasks into an employee runtime without replaying hooks."""
 
     def __init__(
         self,
@@ -23,9 +26,11 @@ class RetortEmployeeRuntimeAdapter:
         dispatch_hook: EmployeeRuntimeHook | None = None,
     ) -> None:
         self.queue = RetortEmployeeQueue(queue_path)
-        self.history_store = (
-            RetortHistoryStore(history_store) if history_store else None
-        )
+        self.history_store: RetortHistoryStore | None = None
+        if history_store:
+            from retort_engine.history import RetortHistoryStore
+
+            self.history_store = RetortHistoryStore(history_store)
         self.dispatch_hook = dispatch_hook
 
     def submit_tasks(
@@ -33,13 +38,24 @@ class RetortEmployeeRuntimeAdapter:
     ) -> tuple[EmployeeTaskRecord, ...]:
         records = self.queue.enqueue_tasks(tasks, source=source)
         for record in records:
-            if self.history_store:
-                self.history_store.record_employee_task(record)
             self.dispatch_to_employee_runtime(record)
         return records
 
     def dispatch_to_employee_runtime(self, record: EmployeeTaskRecord) -> bool:
         if self.dispatch_hook is None:
             return False
-        self.dispatch_hook(record)
+        claimed = self.queue.claim_dispatch(record)
+        if claimed is None:
+            return False
+        try:
+            if self.history_store:
+                self.history_store.record_employee_task(claimed)
+            self.dispatch_hook(claimed)
+        except BaseException:
+            # A hook may have acted before raising. Do not automatically repeat
+            # a side effect whose outcome is unknown, including after restart.
+            with suppress(OSError, ValueError):
+                self.queue.finish_dispatch(claimed.queue_id, status="dispatch_unknown")
+            raise
+        self.queue.finish_dispatch(claimed.queue_id, status="dispatched")
         return True
