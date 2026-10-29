@@ -13,7 +13,7 @@
     "name": "XCAGI",
     "internal_platform": "XCMAX",
     "brand_note": "XCAGI 是对外产品名称；XCMAX 是其内部工程与平台体系名称。",
-    "version": "1.0.0.6",
+    "version": "1.0.0.7",
     "toolchain_version": "1.0.0"
   },
   "data_updated_at": "2026-09-29",
@@ -279,7 +279,7 @@
     "principle": "No Evidence, No Claim：总体状态由各平台实机验收记录自动汇总，目录不存放可手写的状态；缺证据的平台固定显示「待验证」。"
   },
   "downloads": {
-    "version_lock": "1.0.0.6",
+    "version_lock": "1.0.0.7",
     "matches_version_ssot": true,
     "scope": "release_intent_not_publication",
     "release_ready": false,

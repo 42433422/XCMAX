@@ -30,7 +30,18 @@ def _json_scalar(value):
     raise TypeError("unsupported tool result value")
 
 
-def _worker(executor_type, payload, folder, ready, start, done, deadline, llm_scope=None):
+def _worker(
+    executor_type,
+    payload,
+    folder,
+    ready,
+    start,
+    done,
+    deadline,
+    llm_scope=None,
+    catalog_profile=None,
+    catalog_claim=None,
+):
     from app.application.agent_orchestrator.run_models import agent_step_from_dict
     from app.application.tool_execution_deadline import invocation_deadline
     from app.infrastructure.llm.client import llm_client_factory_scope, restore_worker_llm_client
@@ -42,7 +53,14 @@ def _worker(executor_type, payload, folder, ready, start, done, deadline, llm_sc
         return
     try:
         data = json.loads(payload)
+        from app.application.agent_orchestrator.catalog_product_worker import (
+            restore_catalog_claim,
+            restore_catalog_worker_profile,
+        )
+
+        restore_catalog_worker_profile(catalog_profile)
         with (
+            restore_catalog_claim(catalog_claim),
             invocation_deadline(deadline) as budget,
             llm_client_factory_scope(lambda: restore_worker_llm_client(llm_scope))
             if llm_scope is not None
@@ -139,6 +157,13 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
         }
     if getattr(executor, "_tool_cleanup_failed", False):
         return {"success": False, "error_code": "tool_cleanup_unresolved", "retryable": False}
+    from app.application.agent_orchestrator.business_write_guard import capture_worker_claim
+    from app.application.agent_orchestrator.catalog_product_worker import (
+        capture_catalog_worker_profile,
+    )
+
+    catalog_profile = capture_catalog_worker_profile(step)
+    catalog_claim = capture_worker_claim() if catalog_profile is not None else None
     ctx = multiprocessing.get_context("spawn")
     ready, start, done = (ctx.Event() for _ in range(3))
     folder = tempfile.mkdtemp(prefix="xcagi-tool-")
@@ -153,6 +178,8 @@ def execute_isolated(executor, step, context, deadline) -> dict[str, Any]:
             done,
             deadline,
             capture_worker_llm_scope(context),
+            catalog_profile,
+            catalog_claim,
         ),
     )
     armed = False

@@ -38,7 +38,7 @@
 
 旧 market 下载页已由 `ca8bd212e` 迁出；本次退役无生产消费者的 `xcagiDownloadLinks` 静态猜 URL 工具、专属测试及构建参数/v8上传脚本，现役入口只使用经校验的官网数据。
 
-当前 `deliveries` 校验是目录录入门禁，尚未强制所有桌面发布器消费它。后续须以同一纯生成器输出 OTA/GitHub notes，并让现有晋级入口共用逐制品验收门禁；不新增平行台账。服务器 fresh/reuse/activation/rollback 已增加当前公开指针字节与缺省集合校验，stale immutable 目标必须显式对账，不能偷偷改写；与并发桌面发布之间尚无共享锁，因此不能宣称完全消除 TOCTOU。
+当前 `deliveries` 校验是目录录入门禁，尚未强制所有桌面发布器消费它。后续须以同一纯生成器输出 OTA/GitHub notes，并让现有晋级入口共用逐制品验收门禁；不新增平行台账。服务器 fresh/reuse/activation/rollback 已增加当前公开指针字节与缺省集合校验，stale immutable 目标必须显式对账，不能偷偷改写；网站复制/激活与 Windows interim 指针晋级共用服务器 publication 锁；interim 另以归档原字节作 CAS、失败只恢复自身替换。其他 stable/OTA 晋级与跨作业回滚仍有独立入口，未宣称全部发布器已收敛。
 
 ## 每次贡献与发布
 

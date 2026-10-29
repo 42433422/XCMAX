@@ -147,6 +147,7 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
+        <button v-if="isLoading" type="button" class="btn" data-testid="stop-reply" @click="stopReply">停止回复</button>
         <button
           class="btn btn-primary send-message-btn"
           id="sendMessageBtn"
@@ -155,7 +156,7 @@
           :title="sendButtonTitle"
           @click="sendMessage"
         >
-          发送
+          {{ isLoading ? '发送纠正' : '发送' }}
         </button>
       </div>
       <div
@@ -291,6 +292,7 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  stopReply,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
   confirmTask,
@@ -404,15 +406,15 @@ const inputPlaceholder = computed(() => {
   return preset.placeholderNormal
 })
 
-const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
+const canSendMessage = computed(() => !!messageInput.value.trim())
 const sendButtonTitle = computed(() => {
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请先输入内容'
   return '发送消息'
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
-  if (isLoading.value) return '正在发送，请稍候'
+  if (isLoading.value) return '可停止回复或发送纠正；已执行的工具不会撤销'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
 })
@@ -421,7 +423,7 @@ const sendMessage = async () => {
   const domInput = document.getElementById('messageInput') as HTMLTextAreaElement | null
   const raw = messageInput.value || (domInput && domInput.value) || ''
   const message = raw.trim()
-  if (!message || isLoading.value) return
+  if (!message) return
   messageInput.value = ''
   await chatSendMessage(message)
 }

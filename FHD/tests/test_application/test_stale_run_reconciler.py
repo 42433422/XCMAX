@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import importlib
 import json
+import sqlite3
+import subprocess
+import sys
+import threading
 import types
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -21,6 +26,15 @@ from app.db.db_base import Base
 
 reconciler = importlib.import_module("app.application.agent_orchestrator.stale_run_reconciler")
 task_dispatcher = importlib.import_module("app.application.agent_orchestrator.task_dispatcher")
+
+
+@pytest.fixture(autouse=True)
+def _offline_recovery(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("restart recovery tests prohibit network/model access")
+
+    monkeypatch.setattr("socket.socket.connect", forbidden)
+    monkeypatch.setattr("socket.create_connection", forbidden)
 
 
 def _iso(offset_seconds: float = 0.0) -> str:
@@ -158,6 +172,9 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         _backdate_run(factory, queued.run_id, status="queued", updated_at=_iso(-600))
 
         leased = AgentRun(user_id="u1", message="租约仍有效", status="running")
+        from app.application.agent_orchestrator.run_models import AgentStep
+
+        leased.steps = [AgentStep("write", "sales", "quote", status="running")]
         repo.save(leased)
         executions = SQLAlchemyTaskExecutionRepository(session_factory=factory)
         executions.enqueue(leased)
@@ -170,6 +187,7 @@ def test_recoverable_queue_and_live_lease_are_left_alone(tmp_path) -> None:
         assert reconciler.reconcile_stale_running_runs(stale_after_seconds=60, now=_iso()) == 0
         assert repo.get(queued.run_id).status == "queued"
         assert repo.get(leased.run_id).status == "running"
+        assert "non_retryable" not in repo.get(leased.run_id).metadata
         assert repo.get(fresh.run_id).status == "running"
     finally:
         set_agent_run_repository_for_tests(None)
@@ -212,3 +230,180 @@ def test_reconcile_failure_does_not_block_dispatcher_start(monkeypatch) -> None:
     task_dispatcher.start_agent_task_dispatcher()
 
     assert calls == ["start"]
+
+
+@pytest.mark.parametrize(
+    "tool,action,persisted_idempotent,step_status,trace_mode,unsafe",
+    [
+        ("sales", "quote", True, "running", "", True),
+        ("business_db", "read", False, "running", "", True),
+        ("unregistered", "write", True, "running", "", True),
+        ("business_db", "read", True, "running", "", False),
+        ("sales", "quote", False, "completed", "", False),
+        ("business_db", "read", True, "completed", "legacy_planner_run", True),
+        (
+            "business_db",
+            "read",
+            True,
+            "completed",
+            "legacy_planner_run_with_tools",
+            True,
+        ),
+    ],
+)
+def test_startup_recovery_requires_both_persisted_and_current_replay_safety(
+    tmp_path, tool, action, persisted_idempotent, step_status, trace_mode, unsafe
+):
+    from app.application.agent_orchestrator.run_models import AgentStep
+
+    engine, factory, repo = _make_repo(tmp_path, "replay-safety.db")
+    try:
+        set_agent_run_repository_for_tests(repo)
+        step = AgentStep(
+            "original",
+            tool,
+            action,
+            idempotent=persisted_idempotent,
+            status=step_status,
+            output={"success": True} if step_status == "completed" else {},
+        )
+        run = AgentRun(
+            user_id="synthetic",
+            message="restart boundary",
+            status="running",
+            steps=[step],
+        )
+        if trace_mode:
+            run.metadata["trace_mode"] = trace_mode
+        repo.save(run)
+        _backdate_run(factory, run.run_id, status="running", updated_at=_iso(-300))
+
+        assert reconciler.reconcile_stale_running_runs() == 1
+        with sqlite3.connect(tmp_path / "replay-safety.db") as reopened:
+            stored = json.loads(
+                reopened.execute(
+                    "SELECT payload_json FROM agent_runs WHERE run_id=?", (run.run_id,)
+                ).fetchone()[0]
+            )
+        assert stored["status"] == "failed"
+        assert stored["steps"] == [step.to_dict()]
+        assert bool(stored["metadata"].get("non_retryable")) is unsafe
+        if unsafe:
+            assert stored["metadata"]["recovery"]["state"] == "manual_reconciliation_required"
+            assert stored["metadata"]["recovery"]["step_ids"] == (
+                [step.step_id] if step_status == "running" else []
+            )
+        else:
+            assert "recovery" not in stored["metadata"]
+    finally:
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()
+
+
+@pytest.mark.parametrize("previous_recovery", [None, {"state": "waiting", "original": "keep"}])
+def test_committed_write_process_exit_startup_dispatch_and_retry_never_reexecute(
+    tmp_path, monkeypatch, previous_recovery
+):
+    from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.agent_orchestrator.run_models import AgentStep, ToolCall
+
+    path = tmp_path / "crashed-writer.db"
+    engine, factory, repo = _make_repo(tmp_path, path.name)
+    queue = SQLAlchemyTaskExecutionRepository(session_factory=factory)
+    step = AgentStep("quote", "sales", "quote", status="running", idempotent=True)
+    run = AgentRun(
+        user_id="synthetic",
+        message="original committed write",
+        status="running",
+        steps=[step],
+    )
+    run.tool_calls = [
+        ToolCall(step.step_id, step.node_id, step.tool_id, step.action, status="running")
+    ]
+    if previous_recovery:
+        run.metadata["recovery"] = dict(previous_recovery)
+    repo.save(run)
+    queue.enqueue(run)
+    assert queue.claim("exited-process", lease_seconds=60) is not None
+    with engine.begin() as db:
+        db.exec_driver_sql("CREATE TABLE synthetic_effects(id INTEGER PRIMARY KEY, run_id TEXT)")
+        db.exec_driver_sql(
+            "UPDATE agent_task_executions SET lease_expires_at=? WHERE run_id=?",
+            (_iso(-300), run.run_id),
+        )
+    _backdate_run(factory, run.run_id, status="running", updated_at=_iso(-300))
+    # The child commits its effect, then exits without returning a tool receipt.
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import os,sqlite3,sys; db=sqlite3.connect(sys.argv[1]); "
+            "db.execute('INSERT INTO synthetic_effects(run_id) VALUES(?)',(sys.argv[2],)); "
+            "db.commit(); os._exit(23)",
+            str(path),
+            run.run_id,
+        ],
+        check=False,
+        timeout=10,
+        capture_output=True,
+    )
+    assert child.returncode == 23, child.stderr
+
+    unexpected_dispatches = []
+
+    def forbidden(*args, **kwargs):
+        unexpected_dispatches.append((args, kwargs))
+        raise AssertionError("an unknown original write must never reach planning or tool dispatch")
+
+    monkeypatch.setattr(AgentOrchestrator, "_plan", forbidden)
+    finished = threading.Event()
+    original_finish = queue.finish
+
+    def finish(*args, **kwargs):
+        result = original_finish(*args, **kwargs)
+        finished.set()
+        return result
+
+    monkeypatch.setattr(queue, "finish", finish)
+    dispatcher = task_dispatcher.AgentTaskDispatcher(
+        execution_repository=queue,
+        run_repository=repo,
+        max_workers=1,
+        poll_seconds=0.02,
+        orchestrator_factory=lambda repository: AgentOrchestrator(
+            repository=repository,
+            tool_executor=types.SimpleNamespace(execute=forbidden),
+        ),
+    )
+    monkeypatch.setattr(task_dispatcher, "get_agent_task_dispatcher", lambda: dispatcher)
+    set_agent_run_repository_for_tests(repo)
+    try:
+        assert task_dispatcher.start_agent_task_dispatcher() is dispatcher
+        assert finished.wait(5), "real dispatcher did not settle the expired original claim"
+        dispatcher.stop()
+        stored = repo.get(run.run_id)
+        assert stored.status == "failed" and stored.metadata["non_retryable"] is True
+        assert stored.metadata["recovery"]["state"] == "manual_reconciliation_required"
+        if previous_recovery:
+            assert stored.metadata["recovery"]["original"] == "keep"
+        with pytest.raises(ValueError, match="人工核对"):
+            AgentOrchestrator(repository=repo).retry_run(run.run_id)
+        assert unexpected_dispatches == []
+        with sqlite3.connect(path) as reopened:
+            assert reopened.execute("SELECT run_id FROM synthetic_effects").fetchall() == [
+                (run.run_id,)
+            ]
+            rows = reopened.execute("SELECT status,payload_json FROM agent_runs").fetchall()
+            assert len(rows) == 1 and rows[0][0] == "failed"
+            payload = json.loads(rows[0][1])
+            assert payload["steps"][0]["status"] == "running"
+            assert payload["steps"][0]["output"] == {}
+            assert len(payload["tool_calls"]) == 1
+            assert reopened.execute("SELECT status FROM agent_tasks").fetchall() == [("failed",)]
+        execution = queue.get(run.run_id)
+        assert execution.state == "failed"
+        assert execution.execution_count == 2 and execution.recovery_count == 1
+    finally:
+        dispatcher.stop()
+        set_agent_run_repository_for_tests(None)
+        engine.dispose()

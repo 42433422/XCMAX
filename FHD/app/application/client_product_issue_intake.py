@@ -10,6 +10,7 @@ import platform
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from app.application.private_mod_delivery_artifacts import custom_delivery_remote_json
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -22,7 +23,7 @@ _EXPLICIT_INTAKE_RE = re.compile(
     r"(提交|上报|反馈|建|创).{0,24}(产品|软件|功能|缺陷).{0,12}(问题|工单|故障|缺陷)"
 )
 _PLAIN_INTAKE_RE = re.compile(
-    r"(?:提交|上报|反馈|建立?|创建|提|登记|报|记)(?:一?[个张条项]|一下)?(?:客服|问题|反馈)?工单"
+    r"(?:提交|上报|反馈|建立?|创建|提|登记|报|记)(?:一?[个张条项]|一下)?(?:客服|问题|反馈|故障)?工单"
     r"|(?:刚才|刚|上面|这个|这项|那个).{0,12}(?:记|登记)一?单"
     r"|(?:也给我|也帮我)开一张(?:吧|[。！!\s])*$"
 )
@@ -339,27 +340,37 @@ async def _receive_pending_report(
     )
 
     token = await _private_delivery_market_token(request)
-    if not token:
-        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
-    reason = message.strip()[:1000]
     digest = hashlib.sha256(
         json.dumps([f"tenant:{int(tenant_id or 0)}", message.strip()], ensure_ascii=False).encode()
     ).hexdigest()
-    source_ref = f"client-pending:{digest}"
+    return await receive_pending_report(
+        token, message, missing, source_ref=f"client-pending:{digest}"
+    )
+
+
+async def receive_pending_report(
+    token: str, message: str, missing: list[str], *, source_ref: str, readback_only: bool = False
+) -> dict[str, Any]:
+    """Accept a report with the caller's authenticated market identity, never admin delegation."""
+    if not token:
+        return {"state": "OWNER_ROUTE_UNAVAILABLE"}
+    reason = message.strip()[:1000]
+    result = {}
     try:
-        result = await custom_delivery_remote_json(
-            token,
-            "/api/customer-service/issues/intake",
-            method="POST",
-            payload={
-                "source": "customer_feedback",
-                "source_ref": source_ref,
-                "title": f"客户端产品问题 · {reason[:100]}",
-                "description": f"客户原话：{reason}",
-                "issue_domain": "platform",
-                "acceptance_criteria": "在原工单补充期望、实际与诊断证据后复现验证。",
-            },
-        )
+        if not readback_only:
+            result = await custom_delivery_remote_json(
+                token,
+                "/api/customer-service/issues/intake",
+                method="POST",
+                payload={
+                    "source": "customer_feedback",
+                    "source_ref": source_ref,
+                    "title": f"客户端产品问题 · {reason[:100]}",
+                    "description": f"客户原话：{reason}",
+                    "issue_domain": "platform",
+                    "acceptance_criteria": "在原工单补充期望、实际与诊断证据后复现验证。",
+                },
+            )
     except (RuntimeError, ConnectionError):
         result = {}
     if (
@@ -381,7 +392,9 @@ async def _receive_pending_report(
 async def _existing_ticket_for_source_ref(token: str, source_ref: str) -> dict[str, Any] | None:
     """Read back an existing formal ticket within the authenticated account."""
     try:
-        listing = await custom_delivery_remote_json(token, "/api/customer-service/tickets?limit=50")
+        listing = await custom_delivery_remote_json(
+            token, f"/api/customer-service/tickets?limit=50&source_ref={quote(source_ref, safe='')}"
+        )
     except (RuntimeError, ConnectionError):
         logger.info("client issue ticket lookup unavailable", exc_info=True)
         return None

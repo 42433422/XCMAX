@@ -3,6 +3,7 @@ import { authApi } from '@/api/auth'
 let cachedValid: boolean | null = null
 let cachedAt = 0
 let cacheEpoch = 0
+let validationInFlight: Promise<boolean> | null = null
 let desktopBootstrapSessionHint: boolean | null = null
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000
@@ -88,7 +89,10 @@ function resetDesktopSessionBootstrapHint(): void {
 
 function readValid(res: unknown): boolean {
   const r = res as { success?: boolean; valid?: boolean; data?: { valid?: boolean } }
-  return r?.success === true || r?.valid === true || r?.data?.valid === true
+  if (typeof r?.valid === 'boolean') return r.valid
+  if (typeof r?.data?.valid === 'boolean') return r.data.valid
+  if (r?.success === true) return true
+  throw new Error('会话校验暂不可用，请稍后重试')
 }
 
 export async function validateEnterpriseSessionCached(force = false): Promise<boolean> {
@@ -96,24 +100,36 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
   if (!force && cachedValid !== null && now - cachedAt < SESSION_TTL_MS) {
     return cachedValid
   }
+  if (validationInFlight) return validationInFlight
   const requestEpoch = cacheEpoch
-  const res = await authApi.validateSession()
-  const valid = readValid(res)
-  if (requestEpoch !== cacheEpoch) {
-    return cachedValid === true
-  }
-  cachedValid = valid
-  cachedAt = Date.now()
-  if (valid) writeEnterpriseSessionHint(cachedAt)
-  else {
-    clearEnterpriseSessionHint()
-    clearDesktopSessionBootstrapHint()
-  }
-  return valid
+  const pending = (async () => {
+    let valid: boolean
+    try { valid = readValid(await authApi.validateSession()) }
+    catch (error) {
+      const status = (error as { status?: number })?.status
+      if (status !== 401 && status !== 403) throw error
+      valid = false
+    }
+    if (requestEpoch !== cacheEpoch) {
+      return cachedValid === true
+    }
+    cachedValid = valid
+    cachedAt = Date.now()
+    if (valid) writeEnterpriseSessionHint(cachedAt)
+    else {
+      clearEnterpriseSessionHint()
+      clearDesktopSessionBootstrapHint()
+    }
+    return valid
+  })()
+  validationInFlight = pending
+  try { return await pending }
+  finally { if (validationInFlight === pending) validationInFlight = null }
 }
 
 export function invalidateEnterpriseSessionCache(): void {
   cacheEpoch += 1
+  validationInFlight = null
   cachedValid = null
   cachedAt = 0
   clearEnterpriseSessionHint()
@@ -123,6 +139,7 @@ export function invalidateEnterpriseSessionCache(): void {
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
   cacheEpoch += 1
+  validationInFlight = null
   cachedValid = true
   cachedAt = Date.now()
   writeEnterpriseSessionHint(cachedAt)

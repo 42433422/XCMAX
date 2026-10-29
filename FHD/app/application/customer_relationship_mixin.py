@@ -104,6 +104,42 @@ class CustomerRelationshipMixin:
             logger.exception("匹配购买单位失败：%s", e)
             return None
 
+    def lookup_purchase_unit_for_ensure(self, input_name: str) -> dict[str, Any]:
+        """Distinguish absence from unavailable or ambiguous evidence without changing fuzzy API."""
+        from sqlalchemy.exc import SQLAlchemyError
+
+        from app.infrastructure.tenant_scope import apply_tenant_filter, current_tenant_id
+
+        name = str(input_name or "").strip()
+        if not name or current_tenant_id() is None:
+            return {"status": "unknown"}
+        lookup_errors: tuple[type[Exception], ...] = RECOVERABLE_ERRORS + (SQLAlchemyError,)
+        try:
+            session = self._get_session()
+            try:
+                from app.db.models.purchase_unit import PurchaseUnit as PurchaseUnitModel
+
+                units = (
+                    apply_tenant_filter(session.query(PurchaseUnitModel), PurchaseUnitModel)
+                    .filter(PurchaseUnitModel.is_active == True)
+                    .all()
+                )
+                matches = [unit for unit in units if unit.unit_name == name]
+                if not matches and len(name) >= 2:
+                    matches = [
+                        unit
+                        for unit in units
+                        if unit.unit_name and (name in unit.unit_name or unit.unit_name in name)
+                    ]
+                if len(matches) != 1:
+                    return {"status": "ambiguous" if matches else "absent"}
+                return {"status": "matched", "id": matches[0].id, "unit_name": matches[0].unit_name}
+            finally:
+                session.close()
+        except lookup_errors:
+            logger.exception("Customer ensure lookup unavailable")
+            return {"status": "unknown"}
+
     def add_address(self, data: dict[str, Any]) -> dict[str, Any]:
         """新增客户地址（送货 delivery / 发票 invoice）。
 

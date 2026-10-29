@@ -48,6 +48,133 @@ logger = logging.getLogger(__name__)
 _INTERNAL_RUN_ERROR = "agent_run_internal_error"
 
 
+def _verified_catalog_terminal(run: AgentRun, step: AgentStep) -> dict[str, Any] | None:
+    """A terminal receipt is not permission to replay a non-retryable operation."""
+    output = step.output
+    recovery = run.metadata.get("recovery")
+    if (
+        len(run.steps) != 1
+        or run.steps[0] is not step
+        or step.tool_id != "catalog_products_v1"
+        or step.action not in {"append_price", "correct_price"}
+        or not isinstance(step.params, dict)
+        or step.params.get("action") != step.action
+        or not isinstance(output, dict)
+        or not isinstance(output.get("outcome"), str)
+        or not isinstance(output.get("operation_outcome"), str)
+        or not isinstance(run.metadata.get("catalog_price_binding"), dict)
+        or not isinstance(run.metadata.get("runtime_context"), dict)
+        or type(output.get("fresh_save")) is not bool
+        or any(
+            type(output.get(key)) is not bool
+            for key in ("success", "historical_effect_verified", "current_matches")
+        )
+        or (
+            output.get("outcome"),
+            output.get("operation_outcome"),
+            output.get("success"),
+            output.get("historical_effect_verified"),
+            output.get("current_matches"),
+        )
+        not in {
+            ("success", "saved", True, True, True),
+            ("historical_saved", "saved", False, True, False),
+            ("rejected_no_effect", "rejected_no_effect", False, False, False),
+        }
+        or (output.get("success") is False and output.get("fresh_save") is not False)
+        or step.status != ("completed" if output.get("success") is True else "failed")
+        or output.get("retryable") is not False
+        or not isinstance(output.get("message"), str)
+        or not output.get("message")
+        or output.get("reconciliation_required")
+        or output.get("error")
+        or output.get("error_code")
+        or (recovery is not None and not isinstance(recovery, dict))
+        or (
+            isinstance(recovery, dict) and recovery.get("state") == "manual_reconciliation_required"
+        )
+        or output.get("business_action_id") != f"agent:{run.run_id}:{step.step_id}"
+        or output.get("data")
+        != {"id": step.params.get("product_id"), "operation_id": step.params.get("operation_id")}
+        or len(run.tool_calls) != 1
+    ):
+        return None
+    verification = output.get("business_verification")
+    data = output.get("data")
+    if (
+        not isinstance(verification, dict)
+        or verification.get("verified") is not True
+        or verification.get("source_binding_verified") is not True
+        or not isinstance(data, dict)
+        or type(data.get("id")) is not int
+        or not isinstance(data.get("operation_id"), str)
+    ):
+        return None
+    call = run.tool_calls[0]
+    if (
+        (call.step_id, call.node_id, call.tool_id, call.action, call.params)
+        != (step.step_id, step.node_id, step.tool_id, step.action, step.params)
+        or call.status != step.status
+        or call.output != output
+    ):
+        return None
+    try:
+        from app.application.agent_orchestrator.catalog_product_edit import (
+            action_context,
+            original,
+            principal_from_context,
+        )
+        from app.mod_sdk.catalog_product_store import source_view, verify_catalog_action
+
+        if output.get("business_verification") != {
+            "verified": True,
+            "method": "catalog_price_receipt_v1",
+            "source_binding_verified": True,
+            **source_view(run.metadata["catalog_price_binding"]),
+        }:
+            return None
+        context = action_context(run)
+        stored, claim, state = original(
+            principal_from_context(context), step.params["operation_id"]
+        )
+        if (
+            state != ("verified" if output["operation_outcome"] == "saved" else "rejected")
+            or (stored.run_id, stored.user_id, stored.steps[0].step_id)
+            != (run.run_id, run.user_id, step.step_id)
+            or claim["binding"] != run.metadata["catalog_price_binding"]
+            or claim["operation_digest"] != run.metadata.get("catalog_operation_digest")
+        ):
+            return None
+        # Pure independent readback re-joins the signed original run/step/approval,
+        # ledger owner and source receipt. Never release a head or dispatch here.
+        verified = verify_catalog_action(step.params, context)
+        if not all(
+            output.get(key) == verified.get(key)
+            for key in (
+                "operation_outcome",
+                "historical_effect_verified",
+                "retryable",
+                "data",
+                "business_action_id",
+                "business_verification",
+            )
+        ) or verified.get("reconciliation_required"):
+            return None
+        if all(
+            output.get(key) == verified.get(key)
+            for key in ("success", "outcome", "current_matches")
+        ):
+            return output
+        # A concurrent later legitimate edit can make a just-saved receipt
+        # historical. Keep the verified original outcome but never claim a fresh
+        # current save from that stale projection.
+        if output["outcome"] == "success" and verified.get("outcome") == "historical_saved":
+            return verified
+        return None
+    except RECOVERABLE_ERRORS:
+        return None
+
+
 def _runtime_dependencies() -> RuntimeDependencies:
     # Keep the public module's established patch points at the composition root.
     # Components receive explicit ports and never import this module back.
@@ -331,9 +458,21 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                     run, step, runtime_context=runtime_context, node_outputs=node_outputs
                 )
                 if run.metadata.get("non_retryable"):
-                    run.status = "blocked"
-                    run.error = step.error
-                    return
+                    terminal = _verified_catalog_terminal(run, step)
+                    if terminal is None:
+                        run.status = "blocked"
+                        run.error = step.error
+                        return
+                    # Complete only this one-step receipt consumer, not another
+                    # business effect. Rejections/history remain unsuccessful
+                    # business outputs while the workflow itself is terminal.
+                    # Preserve immutable executed step/call facts. A later READ
+                    # observation belongs in the final projection, not over the
+                    # original successful receipt or its completed status.
+                    node_outputs[step.node_id] = dict(terminal)
+                    if self._apply_requested_control(run):
+                        return
+                    break
                 if self._apply_requested_control(run):
                     return
                 if step.status == "completed":

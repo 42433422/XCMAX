@@ -284,8 +284,11 @@ export const agentRunsApi = {
     return api.post<ApiResponse<AgentRunReference>>('/api/agent/runs/observed-tool', payload)
   },
 
-  continueRun(runId: string, payload: ContinueAgentRunPayload): Promise<AgentRunResponse> {
-    return api.post<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/continue`, payload)
+  continueRun(runId: string, payload: ContinueAgentRunPayload, activeModId?: string): Promise<AgentRunResponse> {
+    const url = `/api/agent/runs/${encodeURIComponent(runId)}/continue`
+    return activeModId
+      ? api.post<AgentRunResponse>(url, payload, { headers: { 'X-XCAGI-Active-Mod-Id': activeModId } })
+      : api.post<AgentRunResponse>(url, payload)
   },
 
   answerClarification(runId: string, payload: { step_id: string; parameters: Record<string, unknown> }): Promise<AgentRunResponse> {
@@ -311,7 +314,7 @@ export const agentRunsApi = {
   },
 
   getRun(runId: string): Promise<AgentRunResponse> {
-    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`)
+    return api.get<AgentRunResponse>(`/api/agent/runs/${encodeURIComponent(runId)}`, {}, { timeoutMs: 8000 })
   },
 
   listRuns(params: { limit?: number } = {}): Promise<ApiResponse<AgentRun[]>> {
@@ -319,7 +322,7 @@ export const agentRunsApi = {
   },
 
   listEvents(runId: string, params: { after_event_id?: string } = {}): Promise<AgentRunEventsResponse> {
-    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params)
+    return api.get<AgentRunEventsResponse>(`/api/agent/runs/${encodeURIComponent(runId)}/events`, params, { timeoutMs: 8000 })
   },
 
   eventStreamPath(runId: string, afterEventId?: string): string {

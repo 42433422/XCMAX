@@ -66,6 +66,8 @@ const CHAT_BUBBLE_CONFIG: Config = {
     'lang',
     'dir',
     'style',
+    'hidden',
+    'aria-hidden',
   ],
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
 }

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+from collections.abc import Callable
 from typing import Any, cast
 
 from app.application.normal_chat import presentation, product_queries
-from app.application.normal_chat.dispatch import dispatch_read, request_scope
+from app.application.normal_chat.dispatch import dispatch_read, dispatch_read_async, request_scope
 from app.application.normal_chat.dispatch import request_tenant_id as _request_tenant_id
 from app.application.normal_chat.product_queries import (
     resolve_tool_execution_profile as resolve_tool_execution_profile,
@@ -53,7 +55,7 @@ def _label_slots(text: str) -> JsonObject:
     return extract_label_print_slots(text)
 
 
-def route_normal_mode_message(message: str) -> dict[str, Any]:
+def _route_with_gate(message: str, llm_route: Callable[[str], JsonObject | None]) -> dict[str, Any]:
     from app.application.workflow.sql_execution_policy import database_maintenance_request
     from app.desktop_automation.service import desktop_action_request
     from app.domain.shared_services.intent_service import is_negation
@@ -68,10 +70,31 @@ def route_normal_mode_message(message: str) -> dict[str, Any]:
             _parse_sales_write_request,
             _label_slots,
             is_full_product_list_phrase,
-            _llm_route,
+            llm_route,
             logger,
         ),
     )
+
+
+def route_normal_mode_message(message: str) -> dict[str, Any]:
+    return _route_with_gate(message, _llm_route)
+
+
+async def route_normal_mode_message_async(message: str) -> dict[str, Any]:
+    deferred: list[str] = []
+
+    def defer(text: str) -> None:
+        deferred.append(text)
+
+    # Rules and synchronous dependency checks retain their worker/request context.
+    route = await asyncio.to_thread(_route_with_gate, message, defer)
+    if deferred:
+        from app.application.llm_intent_gate import llm_route_message_async
+
+        classified = await llm_route_message_async(deferred[0])
+        if classified is not None:
+            return classified
+    return route
 
 
 def _query_products(keyword: str | None, per_page: int) -> JsonObject:
@@ -137,17 +160,33 @@ def _has_pending_workflow(user_id: str) -> bool:
 def try_normal_slot_read_payload(
     message: str, *, request: Any | None = None, user_id: str | None = None
 ) -> dict[str, Any] | None:
-    """Resolve the current public callbacks, then dispatch inside one request scope."""
-    text = str(message or "").strip()
     return dispatch_read(
-        text,
-        request=request,
-        user_id=user_id,
+        message,
         route_message=route_normal_mode_message,
-        has_pending_workflow=_has_pending_workflow,
-        explicit_workflow_intent=looks_like_explicit_workflow_tool_intent,
-        scope=lambda req: request_scope(req, _request_tenant_id),
-        handlers={
+        **_slot_ports(message, request, user_id),
+    )
+
+
+async def try_normal_slot_read_payload_async(
+    message: str, *, request: Any | None = None, user_id: str | None = None
+) -> dict[str, Any] | None:
+    return await dispatch_read_async(
+        message,
+        route_message=route_normal_mode_message_async,
+        **_slot_ports(message, request, user_id),
+    )
+
+
+def _slot_ports(message: str, request: Any | None, user_id: str | None) -> dict[str, Any]:
+    """Read/clarification handlers only; physical printing requires the approved workflow."""
+    text = str(message or "").strip()
+    return {
+        "request": request,
+        "user_id": user_id,
+        "has_pending_workflow": _has_pending_workflow,
+        "explicit_workflow_intent": looks_like_explicit_workflow_tool_intent,
+        "scope": lambda req: request_scope(req, _request_tenant_id),
+        "handlers": {
             "clarify": build_clarify_response_dict,
             "customers_query": lambda route: build_customers_query_response_dict(
                 route, request=request
@@ -157,7 +196,6 @@ def try_normal_slot_read_payload(
             "inventory_count": build_inventory_count_response_dict,
             "mrp_production": build_mrp_production_response_dict,
             "aging_report": build_aging_report_response_dict,
-            "label_print": build_label_print_response_dict,
             "materials_query": build_materials_query_response_dict,
             "shipment_records_query": build_shipment_records_query_response_dict,
             "purchase_query": lambda route: build_purchase_query_response_dict(route, message=text),
@@ -167,8 +205,8 @@ def try_normal_slot_read_payload(
             "reports_query": lambda route: build_reports_query_response_dict(route, message=text),
             "replenishment_suggest": build_replenishment_suggest_response_dict,
         },
-        logger=logger,
-    )
+        "logger": logger,
+    }
 
 
 def _keyword(route: JsonObject) -> str:

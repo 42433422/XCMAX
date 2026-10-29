@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from 'vue'
+import { ref, computed, watch, getCurrentScope, onScopeDispose, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import chatApi from '../api/chat'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '../utils/tts'
@@ -170,14 +170,34 @@ export function useChatMessages(sessionId: Ref<string>) {
     }
   }
 
-  function persistMessagesCache(): void {
+  let cacheTimer: ReturnType<typeof setTimeout> | undefined
+  let pendingCacheWrite: (() => void) | undefined
+  function flushMessagesCache() {
+    clearTimeout(cacheTimer)
+    cacheTimer = undefined
+    const write = pendingCacheWrite
+    pendingCacheWrite = undefined
+    write?.()
+  }
+  function scheduleMessagesCache() {
+    if (cacheTimer !== undefined) return
+    const list = messages.value, key = storageKey.value, metaKey = sessionMetaKey.value, sid = sessionId.value
+    pendingCacheWrite = () => persistMessagesCache(list, key, metaKey, sid)
+    cacheTimer = setTimeout(flushMessagesCache, 250)
+  }
+  if (getCurrentScope()) onScopeDispose(flushMessagesCache)
+
+  function persistMessagesCache(list = messages.value, key = storageKey.value, metaKey = sessionMetaKey.value, sid = sessionId.value): void {
+    clearTimeout(cacheTimer)
+    cacheTimer = undefined
+    pendingCacheWrite = undefined
     try {
-      const sanitized = sanitizeMessagesList(messages.value)
-      if (sanitized.length !== messages.value.length) {
+      const sanitized = sanitizeMessagesList(list)
+      if (list === messages.value && sanitized.length !== messages.value.length) {
         messages.value = sanitized
       }
-      localStorage.setItem(storageKey.value, JSON.stringify(messages.value))
-      persistSessionMeta(messages.value)
+      localStorage.setItem(key, JSON.stringify(sanitized))
+      persistSessionMeta(sanitized, metaKey, sid)
     } catch (_e) {
       // ignore storage errors
     }
@@ -277,17 +297,17 @@ export function useChatMessages(sessionId: Ref<string>) {
     return plain.length > 32 ? `${plain.slice(0, 32)}...` : plain
   }
 
-  function persistSessionMeta(list: ChatMessage[]): void {
+  function persistSessionMeta(list: ChatMessage[], metaKey = sessionMetaKey.value, sid = sessionId.value): void {
     try {
       const meaningful = list.filter((msg) => hasMeaningfulContent(msg.content) && !isWelcomeMessage(msg))
       if (!meaningful.length) {
-        localStorage.removeItem(sessionMetaKey.value)
+        localStorage.removeItem(metaKey)
         return
       }
       localStorage.setItem(
-        sessionMetaKey.value,
+        metaKey,
         JSON.stringify({
-          session_id: String(sessionId.value || 'default'),
+          session_id: String(sid || 'default'),
           title: deriveSessionTitle(list),
           message_count: meaningful.length,
           updated_at: new Date().toISOString(),
@@ -403,7 +423,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     } else {
       row.streamingShell = true
     }
-    persistMessagesCache()
+    scheduleMessagesCache()
   }
 
   function clearMessages() {
@@ -452,8 +472,10 @@ export function useChatMessages(sessionId: Ref<string>) {
   watch(
     () => sessionId.value,
     () => {
+      flushMessagesCache()
       messages.value = readCachedMessages()
     },
+    { flush: 'sync' },
   )
 
   // 切换当前扩展（Mod）时：同一会话 ID 下不同 Mod 的消息缓存相互隔离，
@@ -461,8 +483,10 @@ export function useChatMessages(sessionId: Ref<string>) {
   watch(
     () => String(activeModId.value || ''),
     () => {
+      flushMessagesCache()
       messages.value = readCachedMessages()
     },
+    { flush: 'sync' },
   )
 
   // Cards and traces are mutated after a reply is inserted. Observe only these
@@ -497,6 +521,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     addAndSaveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    flushMessagesCache,
     clearMessages,
     loadMessages,
     syncFromServer,

@@ -325,6 +325,18 @@ def ensure_runtime_auth_bootstrap(
     database_url: str | None = None,
     swallow_errors: bool = False,
 ) -> None:
+    from app.db.bootstrap.guarded import enabled, validate_auth_schema
+
+    if enabled():
+        from app.db import get_host_engine
+
+        selected = get_host_engine()
+        if (engine is not None and engine is not selected) or (
+            database_url is not None and database_url != str(selected.url)
+        ):
+            raise RuntimeError("guarded authentication must use the admitted HOST")
+        validate_auth_schema(selected)
+        return
     from app.fastapi_app.sqlite_paths import is_sqlite_url, resolve_effective_database_url
 
     RuntimeBootstrap(

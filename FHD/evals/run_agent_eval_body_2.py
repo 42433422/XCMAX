@@ -194,6 +194,7 @@ def _run_system_maintenance_route_agent_task(task: dict[str, Any]) -> dict[str, 
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_authenticated_route_fixture(client))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1301,6 +1302,7 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_authenticated_route_fixture(client))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1309,12 +1311,6 @@ def _run_shipment_records_route_agent_task(task: dict[str, Any]) -> dict[str, An
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
-            stack.enter_context(
-                patch(
-                    "app.infrastructure.auth.agent_principal.resolve_session_user",
-                    return_value=SimpleNamespace(id=user_id, is_active=True, tenant_id=None),
-                )
-            )
             headers = {"X-User-Id": user_id}
             if method == "DELETE":
                 response = client.request("DELETE", path, json=body, headers=headers)
@@ -1418,6 +1414,9 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            # Preserve this legacy fixture's original tenantless local-account scope.
+            # Enterprise tenant requests are separately asserted to fail closed.
+            stack.enter_context(_authenticated_route_fixture(client, tenant_id=None))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1426,12 +1425,6 @@ def _run_shipment_orders_route_agent_task(task: dict[str, Any]) -> dict[str, Any
                 )
             )
             stack.enter_context(patch.object(shipment_orders, "_svc", lambda: service))
-            stack.enter_context(
-                patch(
-                    "app.infrastructure.auth.agent_principal.resolve_session_user",
-                    return_value=SimpleNamespace(id=user_id, is_active=True, tenant_id=None),
-                )
-            )
             headers = {"X-User-Id": user_id}
             response = client.request(method, path, json=body, headers=headers)
 
@@ -1606,6 +1599,7 @@ def _run_tools_execute_route_agent_task(task: dict[str, Any]) -> dict[str, Any]:
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_authenticated_route_fixture(client))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -1689,6 +1683,7 @@ def _run_templates_analyze_route_agent_task(task: dict[str, Any]) -> dict[str, A
             "MODEL_USAGE_WALLET_REQUIRED": "",
         }
         with ExitStack() as stack:
+            stack.enter_context(_authenticated_route_fixture(client))
             stack.enter_context(patch.dict(os.environ, env_patch, clear=False))
             stack.enter_context(
                 patch(
@@ -2029,6 +2024,7 @@ def _run_document_template_route_agent_task(task: dict[str, Any]) -> dict[str, A
             patch_target = "app.legacy.routes.document_templates_compat.run_archive_template_create"
         mocked_status = int(task.get("mock_status_code") or 200)
         with (
+            _authenticated_route_fixture(client),
             patch.dict(os.environ, env_patch, clear=False),
             patch(
                 "app.application.agent_orchestrator.orchestrator.get_agent_run_repository",
@@ -2265,6 +2261,13 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
     from app.application.workflow.planner import LLMWorkflowPlanner, get_tool_registry
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 
+    from starlette.requests import Request
+
+    from app.application.agent_task_context import scoped_conversation_user_id
+    from app.fastapi_routes.domains.agent.route_support import authenticated_runtime_context
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    client = SimpleNamespace(headers={})
     expected = dict(task.get("expected") or {})
     checks: list[dict[str, Any]] = []
     active_summary = str(task.get("active_summary") or "")
@@ -2297,6 +2300,7 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
 
     memory_service = SimpleNamespace(format_memory_v2_for_prompt=lambda **_: active_summary)
     with (
+        _authenticated_route_fixture(client),
         patch("app.application.workflow.planner.get_ai_conversation_service"),
         patch("app.application.get_user_memory_rag_app_service", side_effect=ImportError),
         patch(
@@ -2307,13 +2311,22 @@ def _run_memory_v2_planner_context_task(task: dict[str, Any]) -> dict[str, Any]:
             "app.domain.shared_services.user_memory_service.get_user_memory_service", return_value=memory_service
         ),
     ):
+        request = Request({
+            "type": "http", "method": "POST", "path": "/api/agent/plan",
+            "headers": [(b"x-session-id", client.headers["X-Session-ID"].encode())],
+        })
+        principal = require_agent_principal(request, x_user_id=None)
+        context = authenticated_runtime_context(
+            {"conversation_id": str(task.get("user_id") or "eval-memory-user")}, principal
+        )
+        namespace = scoped_conversation_user_id(principal.user_id, context)
         planner = LLMWorkflowPlanner()
         with patch.object(planner, "_plan_with_react_multiagent", side_effect=fake_react):
             plan = planner.plan(
-                str(task.get("user_id") or "eval-memory-user"),
+                namespace,
                 str(task.get("message") or "query product"),
                 get_tool_registry(),
-                {},
+                context,
             )
 
     summary = str(dict(captured_context.get("memory_v2") or {}).get("summary") or "")

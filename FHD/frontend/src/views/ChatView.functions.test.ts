@@ -318,13 +318,13 @@ describe('ChatView functions – sendMessage', () => {
     wrapper.unmount()
   })
 
-  it('isLoading 时不发送', async () => {
+  it('isLoading 时允许发送纠正', async () => {
     const { wrapper } = await mountChatView()
     const vm = wrapper.vm as any
     mockChatViewApi.isLoading.value = true
     vm.messageInput = '测试消息'
     await vm.sendMessage()
-    expect(mockChatSendMessage).not.toHaveBeenCalled()
+    expect(mockChatSendMessage).toHaveBeenCalledWith('测试消息')
     mockChatViewApi.isLoading.value = false
     wrapper.unmount()
   })

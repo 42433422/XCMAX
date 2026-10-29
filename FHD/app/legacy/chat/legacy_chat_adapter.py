@@ -7,7 +7,7 @@ import json
 import os
 import threading
 from collections.abc import Sequence
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import Context, ContextVar, copy_context
 from typing import Any, cast
 
@@ -35,6 +35,7 @@ from app.infrastructure.llm.client import (
 from app.infrastructure.llm.client import (
     resolve_chat_model,
 )
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 _PLANNER_TOOL_STREAM_LABELS: dict[str, str] = {
     "generate_office_document": "生成可下载文档（Word 或 Excel）",
@@ -173,6 +174,9 @@ def _append_last_tool_record(
         }
     )
     _LAST_TOOL_TRACE.records = records
+    from app.infrastructure.chat_stream_lifetime import publish_stream_tool_record
+
+    publish_stream_tool_record(copy.deepcopy(records[-1]))
 
 
 def reset_last_tool_result() -> None:
@@ -408,6 +412,11 @@ def append_tool_messages(
                 dedup_state.add(key)
                 to_run.append((i, name, raw_eff))
 
+    for i, (tc, name, raw_eff, _key) in enumerate(parsed):
+        duplicate_payload = payloads[i]
+        if duplicate_payload is not None:
+            _append_last_tool_record(tc, name, raw_eff, duplicate_payload)
+
     def _execute_idx(idx: int, name: str, raw_eff: str) -> tuple[int, dict[str, Any]]:
         raw = execute_tool(
             name,
@@ -423,19 +432,28 @@ def append_tool_messages(
     ) -> tuple[int, dict[str, Any]]:
         return context.run(_execute_idx, *item)
 
+    first_error = None
     if to_run:
         workers = min(max_workers, len(to_run))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = [pool.submit(_execute_in_context, copy_context(), t) for t in to_run]
-            for future in futures:
-                idx, mapped_payload = future.result()
-                payloads[idx] = mapped_payload
+            for future in as_completed(futures):
+                try:
+                    idx, mapped_payload = future.result()
+                    payloads[idx] = mapped_payload
+                    tc, name, raw_eff, _key = parsed[idx]
+                    _append_last_tool_record(tc, name, raw_eff, mapped_payload)
+                except BOUNDARY_ERRORS as exc:  # adapter boundary drains receipts then re-raises
+                    if first_error is None:
+                        first_error = exc
+
+    if first_error is not None:
+        raise first_error
 
     for i, (tc, _name, _raw_eff, _key) in enumerate(parsed):
         parallel_payload = payloads[i]
         if parallel_payload is None:
             continue
-        _append_last_tool_record(tc, _name, _raw_eff, parallel_payload)
         if parallel_payload.get("requires_token"):
             return parallel_payload
         messages.append(

@@ -100,4 +100,13 @@ def _xcagi_compat_reply_payload(
             if v is not None:
                 data[k] = v
 
+    # A successful partial tool result must not erase the chat's terminal failure.
+    if isinstance(reply, dict) and reply.get("success") is False:
+        return {
+            "success": False,
+            "response": text,
+            "data": data,
+            "message": str(reply.get("message") or text),
+            "error": str(reply.get("error") or "planner_failed"),
+        }
     return {"success": True, "response": text, "data": data}

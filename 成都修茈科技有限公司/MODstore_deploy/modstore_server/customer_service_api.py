@@ -219,6 +219,7 @@ async def list_tickets(
     intent: str = Query("", max_length=64),
     submitter_type: str = Query("", max_length=16),
     search: str = Query("", max_length=200),
+    source_ref: str = Query("", max_length=128),
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -229,6 +230,16 @@ async def list_tickets(
         q = q.filter(CustomerServiceTicket.user_id.in_(user.owner_ids))
     elif not user.is_admin:
         q = q.filter(CustomerServiceTicket.user_id == user.id)
+    if source_ref:
+        from modstore_server.customer_issue_intake import request_identity
+
+        if isinstance(user, TicketReader):
+            raise HTTPException(403, "工单受理回查需要提交账号身份")
+        q = q.filter(
+            CustomerServiceTicket.user_id == user.id,
+            CustomerServiceTicket.ticket_no
+            == request_identity(user.id, "customer_feedback", source_ref),
+        )
     if status:
         q = q.filter(CustomerServiceTicket.status == status)
     # 分类筛选只对管理端启用；客户仍只能读取自己的工单。

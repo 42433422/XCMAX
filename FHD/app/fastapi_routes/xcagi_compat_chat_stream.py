@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 from typing import TYPE_CHECKING
 
 from fastapi import Request
+
+from app.application.agent_orchestrator.chat_trace import (
+    mark_legacy_chat_stream_interrupted,
+    record_legacy_stream_tool_receipt,
+)
+from app.infrastructure.chat_stream_lifetime import (
+    StreamObservationTimeout,
+    StreamStopped,
+    watch_stream_interruption,
+    watch_stream_tool_records,
+)
 
 if TYPE_CHECKING:
     from app.fastapi_routes.xcagi_compat_chat_helpers import XcagiCompatChatBody
@@ -285,7 +297,7 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
     if vector_error:
         yield _facade()._sse_event_line({"type": "error", "message": vector_error})
         return
-    workspace_root = _facade().os.environ.get("WORKSPACE_ROOT", _facade().os.getcwd())
+    workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
     llm_client = _facade().create_modstore_openai_client_from_request(request)
     reply_parts: list[str] = []
     pre_run = None
@@ -300,6 +312,13 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         )
         planner_runtime_context["run_id"] = pre_run.run_id
         planner_runtime_context["agent_run_id"] = pre_run.run_id
+        watch_stream_interruption(
+            lambda **state: mark_legacy_chat_stream_interrupted(pre_run, **state),
+            run_snapshot=pre_run,
+        )
+        watch_stream_tool_records(
+            lambda **receipt: record_legacy_stream_tool_receipt(pre_run, **receipt)
+        )
         yield _facade()._sse_event_line(
             {
                 "type": "tool_progress",
@@ -312,6 +331,8 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         _facade().logger.debug("legacy stream planner AgentRun pre-create skipped", exc_info=True)
 
     def finalize(payload):
+        if pre_run is None:
+            raise ValueError("cannot finalize a stream without its original run")
         return _facade().finalize_legacy_chat_run(
             pre_run.run_id,
             payload,
@@ -440,6 +461,29 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
                 channel="compat_chat_stream",
             )
         yield _facade()._sse_event_line({"type": "done", "result": payload})
+    except (StreamObservationTimeout, StreamStopped) as observation_error:
+        # An observation deadline cannot settle execution as failed: the inner
+        # worker may have committed a write and still be running. Persist the
+        # existing reconciliation gate synchronously before exposing the 504.
+        if pre_run is not None:
+            mark_legacy_chat_stream_interrupted(
+                pre_run,
+                pending=True,
+                reason=getattr(observation_error, "reason", "observation_timeout"),
+            )
+        yield _facade()._sse_event_line(
+            _facade()._sse_payload_with_run_id(
+                {
+                    "type": "error",
+                    "message": str(observation_error)
+                    or "对话观察已中断，执行结果尚未确认，请核对任务，勿重复提交。",
+                    "status_code": getattr(observation_error, "status_code", 504),
+                    "execution_outcome": "unknown",
+                    "requires_reconciliation": True,
+                },
+                getattr(pre_run, "run_id", None),
+            )
+        )
     except _facade().RECOVERABLE_ERRORS as e:
         exc = _facade()._xcagi_chat_http_exc(e)
         message = exc.detail if isinstance(exc.detail, str) else str(exc.detail)

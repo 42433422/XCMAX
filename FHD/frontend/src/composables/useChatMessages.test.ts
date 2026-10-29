@@ -472,3 +472,24 @@ describe('queueVoice and clearVoiceQueue', () => {
     // No error
   })
 })
+
+ it('batches synthetic token cache writes and flushes into the original session', async () => {
+  vi.useFakeTimers()
+  const sid = ref('synthetic-a')
+  const api = useChatMessages(sid)
+  const index = api.pushStreamingAiShell()
+  await nextTick()
+  const writes = vi.spyOn(Storage.prototype, 'setItem')
+  writes.mockClear()
+  for (let i = 1; i <= 200; i++) api.applyPlainTextToMessageIndex(index, 'x'.repeat(i))
+  expect(writes).not.toHaveBeenCalled()
+  expect(api.messages.value[index].content).toHaveLength(200)
+  await vi.advanceTimersByTimeAsync(250)
+  expect(writes).toHaveBeenCalledTimes(2)
+  api.applyPlainTextToMessageIndex(index, 'final old session')
+  sid.value = 'synthetic-b'
+  expect(JSON.parse(localStorage.getItem('chat_synthetic-a_') || '[]')[index].content).toBe('final old session')
+  expect(localStorage.getItem('chat_synthetic-b_')).toBeNull()
+  writes.mockRestore()
+  vi.useRealTimers()
+ })

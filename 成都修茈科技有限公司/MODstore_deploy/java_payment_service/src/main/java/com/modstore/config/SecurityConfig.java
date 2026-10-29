@@ -36,6 +36,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/api/payment/notify/alipay", "/api/payment/notify/wechat").permitAll()
                 .requestMatchers("/api/internal/payment/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/internal/llm-wallet/preauthorize",
+                        "/api/internal/llm-wallet/settle", "/api/internal/llm-wallet/release").permitAll()
                 .requestMatchers("/api/payment/plans", "/api/payment/account-plans").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()

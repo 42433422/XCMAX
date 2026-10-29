@@ -57,6 +57,13 @@ class ModActivation:
             self._ports.clear_missing(mid)
             return True
         mm = self._ports.manager()
+        from app.db.bootstrap.guarded import enabled
+
+        if enabled() and mm.resolve_mod_directory(mid) is None:
+            # Serving an already-enrolled source may load installed artifacts,
+            # but a request must never install/repair bundled or employee Mods.
+            self._ports.mark_missing(mid)
+            return False
         employee_pack_ready = self._ports.employee_ready(
             mm,
             mid,

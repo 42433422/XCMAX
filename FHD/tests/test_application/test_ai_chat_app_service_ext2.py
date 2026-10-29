@@ -18,6 +18,7 @@ from app.application.ai_chat_app_service import (
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.domain.autonomy.risk_types import RiskDecision
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _make_service():
@@ -291,10 +292,13 @@ class TestTryHandleDynamicWorkflowExtended:
         service.workflow_engine.run.assert_not_called()
         service.approval_service.create_approval_request.assert_not_called()
 
-    def test_pro_import_with_db_file_success(self, local_tools):
+    def test_pro_import_with_db_file_success(self, local_tools, trusted_actor):
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
+            **runtime,
             "conversation_id": "import-chat",
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -351,7 +355,7 @@ class TestTryHandleDynamicWorkflowExtended:
                 assert repo.get(result["run_id"]).status == "waiting_user"
                 mock_import_svc.import_unit_products.assert_not_called()
             completed = service._try_handle_dynamic_workflow(
-                "u1", "确认", "pro", {"conversation_id": ctx["conversation_id"]}, {}
+                "u1", "确认", "pro", {**runtime, "conversation_id": ctx["conversation_id"]}, {}
             )
         assert completed["success"] is True
         assert completed["run_id"] == result["run_id"]
@@ -365,10 +369,13 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.final_output["node_outputs"]["import_unit_products"]["imported"] == 5
         mock_import_svc.import_unit_products.assert_called_once()
 
-    def test_pro_import_with_db_file_failure(self, local_tools):
+    def test_pro_import_with_db_file_failure(self, local_tools, trusted_actor):
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
+            **runtime,
             "conversation_id": "import-chat",
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -395,7 +402,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
             mock_import_svc.import_unit_products.assert_not_called()
             failed = service._try_handle_dynamic_workflow(
-                "u1", "确认", "pro", {"conversation_id": ctx["conversation_id"]}, {}
+                "u1", "确认", "pro", {**runtime, "conversation_id": ctx["conversation_id"]}, {}
             )
         assert result["success"] is True
         assert result["run_id"]
@@ -409,10 +416,13 @@ class TestTryHandleDynamicWorkflowExtended:
         mock_import_svc.import_unit_products.assert_called_once()
         assert run.steps[0].output["message"] == "导入出错"
 
-    def test_pro_import_with_db_file_exception(self, local_tools):
+    def test_pro_import_with_db_file_exception(self, local_tools, trusted_actor):
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
+            **runtime,
             "conversation_id": "import-chat",
             "file_analysis": {
                 "suggested_use": "unit_products_db",
@@ -434,7 +444,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "导入", "pro", ctx, {})
             import_service.assert_not_called()
             failed = service._try_handle_dynamic_workflow(
-                "u1", "确认", "pro", {"conversation_id": ctx["conversation_id"]}, {}
+                "u1", "确认", "pro", {**runtime, "conversation_id": ctx["conversation_id"]}, {}
             )
         assert result["success"] is True
         assert result["data"]["action"] == "workflow_confirmation_required"
@@ -467,10 +477,13 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.status == "completed"
         assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
 
-    def test_pro_excel_deterministic_import_customer_unavailable(self, local_tools, dataset_store):
+    def test_pro_excel_deterministic_import_customer_unavailable(self, local_tools, dataset_store, trusted_actor):
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = InMemoryAgentRunRepository()
         ctx = {
+            **runtime,
             "conversation_id": "import-chat",
             "excel_analysis": {
                 "summary": "test",
@@ -501,7 +514,7 @@ class TestTryHandleDynamicWorkflowExtended:
             result = service._try_handle_dynamic_workflow("u1", "导入数据库", "pro", ctx, {})
             mock_products_svc.create_product.assert_not_called()
             completed = service._try_handle_dynamic_workflow(
-                "u1", "确认", "pro", {"conversation_id": ctx["conversation_id"]}, {}
+                "u1", "确认", "pro", {**runtime, "conversation_id": ctx["conversation_id"]}, {}
             )
         assert result["success"] is True
         assert completed["success"] is False
@@ -514,13 +527,15 @@ class TestTryHandleDynamicWorkflowExtended:
         assert not dataset_store.exists()
 
     @pytest.mark.parametrize("control", ["确认", "取消"])
-    def test_pro_excel_deterministic_import_success(self, local_tools, dataset_store, control):
+    def test_pro_excel_deterministic_import_success(self, local_tools, dataset_store, control, trusted_actor):
         from app.application.dataset_rag_app_service import (
             get_dataset_rag_app_service,
             reset_dataset_rag_app_service_for_tests,
         )
         from app.bootstrap import get_customer_app_service, get_products_service
 
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = SQLAlchemyAgentRunRepository()
         unit_name = f"确认边界回归公司-{uuid.uuid4().hex}"
@@ -531,6 +546,7 @@ class TestTryHandleDynamicWorkflowExtended:
             "unit_price": 100.0,
         }
         context = {
+            **runtime,
             "conversation_id": "isolated-import-chat",
             "excel_analysis": {
                 "summary": "待用户审阅确认的样例产品导入资料",
@@ -576,11 +592,11 @@ class TestTryHandleDynamicWorkflowExtended:
                 assert repo.get(waiting["run_id"]).status == "waiting_user"
                 assert_no_formal_writes()
             result = service._try_handle_dynamic_workflow(
-                "u1", control, "pro", {"conversation_id": context["conversation_id"]}, {}
+                "u1", control, "pro", {**runtime, "conversation_id": context["conversation_id"]}, {}
             )
             if control == "取消":
                 rejected = service._try_handle_dynamic_workflow(
-                    "u1", "确认", "pro", {"conversation_id": context["conversation_id"]}, {}
+                    "u1", "确认", "pro", {**runtime, "conversation_id": context["conversation_id"]}, {}
                 )
                 assert rejected["data"]["action"] == "clarification_required"
 
@@ -624,10 +640,13 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.metadata["dataset_ingest_count"] == 1
 
     @pytest.mark.parametrize("failure", ["owner", "session", "persistence"])
-    def test_pending_import_cancel_preserves_unresolved_run(self, dataset_store, failure):
+    def test_pending_import_cancel_preserves_unresolved_run(self, dataset_store, failure, trusted_actor):
+        actor = trusted_actor(role="admin")
+        runtime = actor.context
         service = _make_service()
         repo = SQLAlchemyAgentRunRepository()
         context = {
+            **runtime,
             "conversation_id": "cancel-import-chat",
             "excel_analysis": {"fields": [{"label": "产品名称"}]},
         }
@@ -653,7 +672,7 @@ class TestTryHandleDynamicWorkflowExtended:
                 if failure == "persistence":
                     save.side_effect = OSError("test storage unavailable")
                 result = service._try_handle_dynamic_workflow(
-                    "u1", "取消", "pro", {"conversation_id": context["conversation_id"]}, {}
+                    "u1", "取消", "pro", {**runtime, "conversation_id": context["conversation_id"]}, {}
                 )
             assert result["success"] is False
             assert result["data"]["action"] == "workflow_cancel_failed"
@@ -775,10 +794,12 @@ class TestTryHandleDynamicWorkflowExtended:
             patch(
                 "app.application.normal_chat_dispatch.build_label_print_response_dict",
                 return_value={"success": True, "response": "标签打印"},
-            ),
+            ) as print_builder,
         ):
             result = service._try_handle_dynamic_workflow("u1", "打印标签", "pro", ctx, {})
         assert result is not None
+        print_builder.assert_not_called()
+        service.workflow_planner.plan.assert_called_once()
 
     def test_pro_normal_profile_no_match_runs_planning(self):
         # 全局启用多步编排后：pro 源 + normal profile + 槽位未命中，仍进入 LLM 工作流规划

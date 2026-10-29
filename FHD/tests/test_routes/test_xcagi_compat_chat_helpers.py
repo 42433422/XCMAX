@@ -15,6 +15,7 @@ from app.application.workflow.checkpointer import WorkflowCheckpointer
 from app.application.workflow.engine import WorkflowEngine
 from app.application.workflow.planner import LLMWorkflowPlanner
 from app.fastapi_routes import xcagi_compat_chat_helpers as ch
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 EXACT_SENTENCE = "把 A 产品卖给客户B，10 个，单价 100，开票收款"
 
@@ -68,51 +69,47 @@ def _sse_payloads(chunks):
     return [json.loads(c.decode("utf-8")[len("data: ") :].strip()) for c in chunks]
 
 
-def test_runtime_context_uses_authenticated_session_actor():
-    request = MagicMock()
-    user = MagicMock(id=17)
-    with (
-        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
-        patch(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=7,
-        ),
-    ):
-        context = ch._runtime_context_with_authenticated_actor(
-            request, {"user_id": "web_pro_session", "tenant_id": 999}
-        )
+def test_runtime_context_uses_authenticated_session_actor(trusted_actor):
+    actor = trusted_actor(user_id=17, tenant_id=7)
+    context = ch._runtime_context_with_authenticated_actor(
+        actor.request, {"user_id": "forged", "conversation_id": "web_pro_session", "tenant_id": 999}
+    )
     assert context["local_user_id"] == 17
     assert context["actor_id"] == 17
-    assert context["user_id"] == "web_pro_session"
+    assert context["user_id"] == "17"
+    assert context["conversation_id"] == "web_pro_session"
     assert context["tenant_id"] == 7
 
 
 def test_runtime_context_discards_untrusted_tenant_when_session_has_none():
-    request = MagicMock()
-    with (
-        patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user",
-            return_value=None,
-        ),
-        patch(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=None,
-        ),
-    ):
-        context = ch._runtime_context_with_authenticated_actor(
-            request, {"user_id": "web_pro_session", "tenant_id": 999}
-        )
+    from starlette.requests import Request
 
+    context = ch._runtime_context_with_authenticated_actor(
+        Request({"type": "http", "headers": []}), {"user_id": "forged", "tenant_id": 999}
+    )
     assert "tenant_id" not in context
+    assert "user_id" not in context
 
 
 @pytest.mark.parametrize("session_state", ["missing", "failed", "authenticated"])
-def test_runtime_context_discards_client_actor_claims(session_state):
-    from types import SimpleNamespace
+def test_runtime_context_discards_client_actor_claims(session_state, trusted_actor):
+    from datetime import timedelta
 
-    from fastapi import Request
+    from fastapi import HTTPException
+    from starlette.requests import Request
 
-    request = Request({"type": "http", "headers": []})
+    from app.db.models.user import Session
+    from app.utils.time import utc_now_naive
+
+    actor = trusted_actor(user_id=17)
+    request = (
+        actor.request if session_state != "missing" else Request({"type": "http", "headers": []})
+    )
+    if session_state == "failed":
+        with actor.factory.begin() as db:
+            db.get(Session, actor.session_row_id).expires_at = utc_now_naive() - timedelta(
+                seconds=1
+            )
     claims = {
         "actor_id": 999,
         "local_user_id": 999,
@@ -120,51 +117,38 @@ def test_runtime_context_discards_client_actor_claims(session_state):
         "authenticated_username": "victim",
         "authenticated_display_name": "victim",
     }
-    mod_authorization = {"mod_id": "authorized-mod"}
     original = {
         **claims,
-        "user_id": "web_pro_session",
-        "_mod_authorization": mod_authorization,
+        "user_id": "forged",
+        "conversation_id": "web_pro_session",
+        "_mod_authorization": {"mod_id": "forged-mod"},
     }
-    with (
-        patch(
-            "app.infrastructure.auth.dependencies.resolve_session_user",
-            return_value=SimpleNamespace(id=17) if session_state == "authenticated" else None,
-            side_effect=RuntimeError("session unavailable") if session_state == "failed" else None,
-        ),
-        patch("app.infrastructure.auth.tenant_context.resolve_tenant_id", return_value=None),
-    ):
+    if session_state == "failed":
+        with pytest.raises(HTTPException) as denied:
+            ch._runtime_context_with_authenticated_actor(request, original)
+        assert denied.value.status_code == 401
+    else:
         context = ch._runtime_context_with_authenticated_actor(request, original)
-
-    expected = {"actor_id": 17, "local_user_id": 17} if session_state == "authenticated" else {}
-    assert {key: context[key] for key in claims if key in context} == expected
-    assert context["user_id"] == "web_pro_session"
-    assert context["_mod_authorization"] is mod_authorization
+        expected = {"actor_id": 17, "local_user_id": 17} if session_state == "authenticated" else {}
+        assert {key: context[key] for key in claims if key in context} == expected
+        assert context.get("user_id") == ("17" if session_state == "authenticated" else None)
+        assert context["conversation_id"] == "web_pro_session"
+        assert "_mod_authorization" not in context
     assert all(original[key] == value for key, value in claims.items())
 
 
-def test_runtime_context_uses_server_verified_tutorial_tenant():
-    request = MagicMock()
-    request.state.tutorial_active = True
-    request.state.tenant_id = 29
-    user = MagicMock(id=17)
-    with (
-        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
-        patch(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=7,
-        ) as session_tenant,
-    ):
-        context = ch._runtime_context_with_authenticated_actor(
-            request, {"user_id": "web_pro_session", "tenant_id": 999}
-        )
-
+def test_runtime_context_uses_server_verified_tutorial_tenant(trusted_actor):
+    actor = trusted_actor(user_id=17, tenant_id=7)
+    actor.request.state.tutorial_active = True
+    actor.request.state.tenant_id = 29
+    context = ch._runtime_context_with_authenticated_actor(
+        actor.request, {"user_id": "forged", "tenant_id": 999}
+    )
     assert context["local_user_id"] == 17
     assert context["tenant_id"] == 29
-    session_tenant.assert_not_called()
 
 
-def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts():
+def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(trusted_actor):
     """W1-10 租户隔离：活跃 compat SSE 处理销售闭环句时，真实 process_chat 在
     current_tenant_id() == 认证解析租户 的 tenant_scope 内执行；即使请求体上下文
     携带冲突 tenant_id，也以认证解析租户为准（resolved tenant wins）。不执行审批、
@@ -181,9 +165,7 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
 
     svc.process_chat = _spy_process_chat
 
-    request = MagicMock()
-    request.headers = {}
-    request.cookies = {}
+    request = trusted_actor(user_id=17, tenant_id=7).request
     body = ch.XcagiCompatChatBody(
         message=EXACT_SENTENCE,
         user_id="web_pro_session",
@@ -193,10 +175,6 @@ def test_sales_sse_uses_authenticated_resolved_tenant_even_if_context_conflicts(
 
     with (
         patch("app.application.get_ai_chat_app_service", return_value=svc),
-        patch(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=7,
-        ),
         patch.object(ch, "runtime_context_with_tier", side_effect=lambda c, _t: c),
     ):
         chunks = list(ch._xcagi_planner_stream_bytes(request, body, ai_tier="standard"))

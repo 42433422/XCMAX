@@ -1,15 +1,20 @@
-﻿param(
+param(
   [Parameter(Mandatory=$true)][ValidateSet('Clean','Upgrade','Gui','Recovery','Rollback')][string]$Mode,
   [Parameter(Mandatory=$true)][string]$CandidatePath,
   [Parameter(Mandatory=$true)][string]$CandidateSha,
   [Parameter(Mandatory=$true)][string]$EvidenceDir,
   [string]$OldPath = '',
-  [string]$OldSha256 = '92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf'
+  [string]$BaselineVersion = ''
 )
 $ErrorActionPreference = 'Stop'; . (Join-Path $PSScriptRoot 'product-version.ps1'); $productVersion = Resolve-ProductVersion
+$baselines = (Get-Content (Join-Path $PSScriptRoot '../../config/download_release.json') -Raw | ConvertFrom-Json).windows_acceptance_baselines
+if (-not $BaselineVersion) { $BaselineVersion = $baselines.default }
+$baselineProperty = $baselines.PSObject.Properties[$BaselineVersion]
+if (-not $baselineProperty -or $BaselineVersion -eq 'default' -or $BaselineVersion -eq '_doc') { throw 'Unknown frozen acceptance baseline' }
+$baseline = $baselineProperty.Value; $OldSha = $baseline.git_sha; $OldSha256 = $baseline.sha256
 $installRoot = Join-Path $env:RUNNER_TEMP "xcagi-candidate-$Mode"; $dataRoot = Join-Path $env:APPDATA 'XCAGI'; if ($Mode -in @('Upgrade','Rollback')) { $installRoot = Join-Path $env:LOCALAPPDATA 'Programs\XCAGI' }; $base = 'http://127.0.0.1:17500'; git merge-base --is-ancestor $CandidateSha origin/main
 if ($LASTEXITCODE -gt 1) { throw 'Unable to verify candidate mainline ancestry' }
-$evidence = [ordered]@{ mode=$Mode; candidate_sha=$CandidateSha; candidate_on_main=($LASTEXITCODE -eq 0); customer_acceptance='not_verified'; started_at=(Get-Date).ToUniversalTime().ToString('o'); checks=@(); result='running' }; $global:LASTEXITCODE = 0; New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+$evidence = [ordered]@{ mode=$Mode; candidate_sha=$CandidateSha; baseline_version=$BaselineVersion; baseline_sha=$OldSha; baseline_sha256=$OldSha256; candidate_on_main=($LASTEXITCODE -eq 0); customer_acceptance='not_verified'; started_at=(Get-Date).ToUniversalTime().ToString('o'); checks=@(); result='running' }; $global:LASTEXITCODE = 0; New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
 function Check([bool]$ok, [string]$name, [string]$detail) {
   $script:evidence.checks += @{ name=$name; passed=$ok; detail=$detail }
   if (-not $ok) { throw "$name failed: $detail" }
@@ -47,7 +52,7 @@ function Start-App([string]$label) {
     Start-Sleep -Seconds 2
   }
   Check ($health.status -ne 'unhealthy' -and @($health.runtime.blockers).Count -eq 0 -and $status.readyForUi -eq $true) "$label.first_start_ready" "health=$($health.status); blockers=$(@($health.runtime.blockers).Count); readyForUi=$($status.readyForUi); pid=$($p.Id)"; $installed = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
-  Check (($label -eq 'old' -and $installed.gitSha -eq '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -and (-not $health.git_sha -or $health.git_sha -eq $installed.gitSha)) -or ($label -ne 'old' -and $installed.gitSha -eq $CandidateSha -and $health.git_sha -eq $CandidateSha)) "$label.runtime_build_identity" "installed=$($installed.gitSha); running=$($health.git_sha); legacy_health_identity_missing=$(-not $health.git_sha); release=$($health.release_id)"; $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
+  Check (($label -eq 'old' -and $installed.gitSha -eq $OldSha -and ($installed.version -eq $BaselineVersion -and ($health.git_sha -eq $installed.gitSha -or ($baseline.allow_missing_health_identity -eq $true -and -not $health.git_sha)))) -or ($label -ne 'old' -and $installed.gitSha -eq $CandidateSha -and $health.git_sha -eq $CandidateSha)) "$label.runtime_build_identity" "installed=$($installed.gitSha); running=$($health.git_sha); legacy_health_identity_missing=$(-not $health.git_sha); release=$($health.release_id)"; $listener = Get-NetTCPConnection -LocalPort 17500 -State Listen -ErrorAction Stop | Select-Object -First 1
   $backend = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"; $dataArgument = [regex]::Match($backend.CommandLine, '--data-dir\s+(?:"([^"]+)"|(\S+))'); $actualDataRoot = if ($dataArgument.Groups[1].Success) { $dataArgument.Groups[1].Value } else { $dataArgument.Groups[2].Value }
   $expectedDataRoot = if ($env:XCAGI_DESKTOP_USER_DATA_DIR) { $env:XCAGI_DESKTOP_USER_DATA_DIR } else { $dataRoot }; Check (($backend.ExecutablePath -match ('^' + [regex]::Escape($installRoot + [IO.Path]::DirectorySeparatorChar))) -and $dataArgument.Success -and $actualDataRoot -eq $expectedDataRoot) "$label.port_owner" "pid=$($backend.ProcessId); exe=$($backend.ExecutablePath); actual_data=$actualDataRoot; expected_data=$expectedDataRoot"
   $p.Refresh(); Check (-not $p.HasExited) "$label.no_restart" "original pid=$($p.Id)"
@@ -166,7 +171,10 @@ function Invoke-AppUpdate {
   Check (Test-Path -LiteralPath $markerPath) 'app_update.natural_marker' 'application/installer produced rollback marker; harness never writes rollback state'
   $script:naturalMarker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
   Copy-Item -LiteralPath $markerPath -Destination (Join-Path $EvidenceDir 'natural-rollback-marker.json')
-  Check ($naturalMarker.fromVersion -match '^1\.0\.0\.5\+' -and $naturalMarker.toVersion -match ('^' + [regex]::Escape($productVersion) + '\+') -and $naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity' "from=$($naturalMarker.fromVersion); to=$($naturalMarker.toVersion)"
+  # The installer replaces the Electron handoff with product versions and full build SHAs.
+  $expectedFromVersion = "$BaselineVersion+$OldSha"
+  $expectedToVersion = "$productVersion+$CandidateSha"
+  Check ($naturalMarker.fromVersion -ceq $expectedFromVersion -and $naturalMarker.toVersion -ceq $expectedToVersion -and $naturalMarker.mode -eq 'windows-full') 'app_update.snapshot_identity' "from=$($naturalMarker.fromVersion); to=$($naturalMarker.toVersion)"
   foreach ($fixture in (Get-Content (Join-Path $EvidenceDir 'owned-fixtures.json') -Raw | ConvertFrom-Json)) {
     $entry = $naturalMarker.expectedOwnedFiles.PSObject.Properties[$fixture.path]
     Check ($entry -and $entry.Value -eq $fixture.sha256) 'app_update.owned_manifest' "path=$($fixture.path); length=$($fixture.absolute_length)"
@@ -183,7 +191,7 @@ function Assert-RollbackEvidence {
     Check (Test-Path -LiteralPath $appliedPath -PathType Leaf) 'rollback.applied_record' 'persistent automatic rollback receipt exists'
     try { $applied = Get-Content -LiteralPath $appliedPath -Raw | ConvertFrom-Json } catch { Check $false 'rollback.applied_record' 'persistent receipt is unreadable' }
     $restored = Get-Content (Join-Path $installRoot 'resources/build-info.json') -Raw | ConvertFrom-Json
-    Check ($restored.gitSha -eq '83939363ca2ccf7776c97f5c7895e29c1e5bc453' -and -not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'rollback.restored_build' 'original build restored and natural pending marker consumed'
+    Check ($restored.gitSha -eq $OldSha -and $restored.version -eq $BaselineVersion -and -not (Test-Path (Join-Path $dataRoot 'rollback-marker.json'))) 'rollback.restored_build' 'original build restored and natural pending marker consumed'
     Check ((Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash.ToLowerInvariant() -eq $databaseBefore) 'rollback.database_hash' "sha256=$databaseBefore"
     $validTimes = $false
     try { $appliedAt = [DateTimeOffset]$applied.appliedAt; $completedAt = [DateTimeOffset]$applied.completedAt; $validTimes = $true } catch {}

@@ -18,17 +18,22 @@ router = APIRouter(tags=["tools-execute"])
 
 
 def user_id_from_tool_request(request: Request, body: dict[str, Any]) -> str:
-    params = body.get("params") if isinstance(body.get("params"), dict) else {}
-    if not isinstance(params, dict):
-        params = {}
-    return str(
-        request.headers.get("X-User-Id")
-        or request.headers.get("X-User-ID")
-        or body.get("user_id")
-        or body.get("userId")
-        or params.get("user_id")
-        or "tools-route"
-    ).strip()
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    return require_agent_principal(request, x_user_id=None).user_id
+
+
+def _authenticated_tool_body(request: Request, body: dict[str, Any]) -> dict[str, Any]:
+    from app.fastapi_routes.domains.agent.route_support import (
+        request_runtime_context,
+        without_runtime_identity,
+    )
+
+    trusted = request_runtime_context(request)
+    raw_params = body.get("params")
+    params = without_runtime_identity(raw_params if isinstance(raw_params, dict) else {})
+    params["_runtime_context"] = trusted
+    return {**body, "user_id": trusted["user_id"], "params": params}
 
 
 def tool_route_agent_payload(run: Any, node_id: str) -> dict[str, Any]:
@@ -87,7 +92,9 @@ def run_tools_execute_agent(
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
     from app.application.workflow_registry_app import _normalize_action, get_workflow_tool_registry
+    from app.fastapi_routes.domains.agent.route_support import request_runtime_context
 
+    trusted = request_runtime_context(request)
     raw_tool_id = body.get("tool_id") or body.get("skill_id")
     tool_id = str(raw_tool_id or "").strip()
     if not tool_id:
@@ -95,6 +102,7 @@ def run_tools_execute_agent(
     params = body.get("params")
     if not isinstance(params, dict):
         params = {}
+    params = {key: value for key, value in params.items() if key != "_runtime_context"}
     action = _normalize_action(str(body.get("action") or "view"), params)
     registry = get_workflow_tool_registry()
     if tool_id not in registry or action not in dict(registry[tool_id].get("actions") or {}):
@@ -123,12 +131,13 @@ def run_tools_execute_agent(
         ),
         metadata={"source": "tools_execute_route", "route": route_path},
     )
-    user_id = user_id_from_tool_request(request, body)
+    user_id = trusted["user_id"]
     run = AgentOrchestrator().start_run_from_plan(
         user_id=user_id,
         message=str(body.get("message") or f"Execute {tool_id}.{action}"),
         plan=plan,
         runtime_context={
+            **trusted,
             "source": "tools_execute_route",
             "route": route_path,
             "request_path": str(request.url.path),
@@ -143,6 +152,7 @@ def run_tools_execute_agent(
 
 @router.post("/api/skills/execute")
 def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
+    body = _authenticated_tool_body(request, body or {})
     agent_result = run_tools_execute_agent(
         request=request,
         body=body or {},
@@ -158,6 +168,7 @@ def skills_execute(request: Request, body: dict = Body(default_factory=dict)):
 
 @router.post("/api/tools/execute")
 def tools_execute_route(request: Request, body: dict = Body(default_factory=dict)):
+    body = _authenticated_tool_body(request, body or {})
     agent_result = run_tools_execute_agent(
         request=request,
         body=body or {},

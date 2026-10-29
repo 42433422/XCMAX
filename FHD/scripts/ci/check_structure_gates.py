@@ -31,8 +31,10 @@ BASELINE = {
     "mixin_total": 12,
     "mixin_ge_20kb": 0,
     "mixin_ge_15kb": 1,
-    "routes_total": 298,
-    "routes_top_level": 115,
+    # Raised 2026-10-28 Asia/Shanghai for #2721: new top-level
+    # aiopen_access_dependency.py (trusted ScreenPrincipal binding helper).
+    "routes_total": 299,
+    "routes_top_level": 116,
     "legacy_prod_ref_files": 27,
     "application_ports_py": 1,
     "workflow_ports_py": 1,

@@ -271,9 +271,17 @@ class SQLAlchemyTaskExecutionRepository:
     def clear(self) -> None:
         self._ensure_schema()
         with self._session_scope() as db:
+            from app.application.agent_orchestrator.catalog_authority_retention import (
+                catalog_retention,
+                lock_catalog_cleanup,
+            )
             from app.db.models.agent import AgentTaskExecutionRecord
 
-            db.query(AgentTaskExecutionRecord).delete()
+            lock_catalog_cleanup(db)
+            retained = catalog_retention(db)
+            db.query(AgentTaskExecutionRecord).filter(
+                AgentTaskExecutionRecord.run_id.not_in(retained.run_ids)
+            ).delete(synchronize_session=False)
 
     @contextmanager
     def transaction(self, *, read_only: bool = False) -> Iterator[Session]:

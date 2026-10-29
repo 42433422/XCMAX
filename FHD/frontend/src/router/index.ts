@@ -3,7 +3,10 @@ import {
   createWebHistory,
   START_LOCATION,
   type RouteRecordRaw,
+  type RouteLocationRaw,
 } from 'vue-router'
+import { getSidebarNavigationGeneration } from '@/utils/sidebarNavigation'
+import { showAppToast } from '@/composables/useAppToast'
 import { useLanGate } from '@/composables/useLanGate'
 import { isPlatformShellModeEnabled, isIndustryDeliveryRouteName, SHELL_CORE_ROUTE_NAMES } from '@/constants/platformShellMode'
 import { shouldRouteToProductOnboarding } from '@/composables/useProductFlow'
@@ -63,7 +66,19 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 })
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach(async (to, _from, finish) => {
+  const generation = getSidebarNavigationGeneration()
+  const next = (target?: RouteLocationRaw | boolean | Error) => {
+    if (generation !== getSidebarNavigationGeneration()) finish(false)
+    else if (target === undefined) finish()
+    else if (typeof target === 'boolean') finish(target)
+    else if (target instanceof Error) finish(target)
+    else finish(target)
+  }
+  const unavailable = () => {
+    if (generation === getSidebarNavigationGeneration()) showAppToast('连接暂不可用，未能验证会话。请检查连接后重试；没有判定账号失效。', 'warning')
+    next(false)
+  }
   let provisionalDesktopEntry = false
   if (to.name === 'duty-roster-graph') {
     const nextView = normalizeDutyRosterGraphView(to.query.view)
@@ -99,7 +114,8 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
-      if (!profile.loaded) await profile.refreshFromServer()
+      if (!profile.loaded || profile.sessionCheckUnavailable) await profile.refreshFromServer()
+      if (profile.sessionCheckUnavailable) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({
           name: 'login',
@@ -116,14 +132,7 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
     } catch {
-      next({
-        name: 'login',
-        query: {
-          redirect: to.path === '/' ? '/xcmax-admin' : to.fullPath,
-          error: '管理员会话校验失败，请重新登录',
-        },
-        replace: true,
-      })
+      unavailable()
       return
     }
   }
@@ -132,11 +141,12 @@ router.beforeEach(async (to, _from, next) => {
     const { useAccountProfileStore } = await import('@/stores/accountProfile')
     const profile = useAccountProfileStore()
     // Settings is safe during the desktop session hint's background refresh.
-    if ((!profile.loaded || profile.workspaceReady === false) && !(isDesktopShell() && to.name === 'settings')) {
+    if ((!profile.loaded || profile.workspaceReady === false || profile.sessionCheckUnavailable) && !(isDesktopShell() && to.name === 'settings')) {
       const sku = await fetchProductSku().catch(() => null)
-      if (sku === null || isEnterpriseEdition(sku)) {
-        await profile.refreshFromServer().catch(() => undefined)
-        if (!profile.loaded || profile.workspaceReady === false) {
+      if (profile.sessionCheckUnavailable || sku === null || isEnterpriseEdition(sku)) {
+        try { await profile.refreshFromServer() } catch { unavailable(); return }
+        if (profile.sessionCheckUnavailable) { unavailable(); return }
+        if (!profile.loaded || profile.workspaceReady === false || profile.sessionCheckUnavailable) {
           next({ name: 'login', query: { redirect: to.fullPath }, replace: true })
           return
         }
@@ -287,9 +297,10 @@ router.beforeEach(async (to, _from, next) => {
       if (useSessionHint) {
         provisionalDesktopEntry = true
         refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
-      } else if (!profile.loaded) {
+      } else if (!profile.loaded || profile.sessionCheckUnavailable) {
         await profile.refreshFromServer()
       }
+      if (profile.sessionCheckUnavailable) { unavailable(); return }
       if (!provisionalDesktopEntry && profile.isAdminAccount && to.name !== 'login') {
         try {
           const { authApi } = await import('@/api/auth')
@@ -307,7 +318,8 @@ router.beforeEach(async (to, _from, next) => {
         return
       }
     } catch {
-      /* ignore — 后续企业会话校验会兜底 */
+      unavailable()
+      return
     }
   }
 
@@ -315,9 +327,10 @@ router.beforeEach(async (to, _from, next) => {
     try {
       const { useAccountProfileStore } = await import('@/stores/accountProfile')
       const profile = useAccountProfileStore()
-      if (!profile.loaded) {
+      if (!profile.loaded || profile.sessionCheckUnavailable) {
         await profile.refreshFromServer()
       }
+      if (profile.sessionCheckUnavailable) { unavailable(); return }
       if (!profile.isAdminAccount) {
         next({ name: 'chat' })
         return
@@ -349,9 +362,10 @@ router.beforeEach(async (to, _from, next) => {
           const profile = useAccountProfileStore()
           if (provisionalDesktopEntry && !profile.loaded) {
             refreshDesktopSessionInBackground(router, profile, to.fullPath !== '/login' ? to.fullPath : '/')
-          } else if (!profile.loaded) {
+          } else if (!profile.loaded || profile.sessionCheckUnavailable) {
             await profile.refreshFromServer()
           }
+          if (profile.sessionCheckUnavailable) { unavailable(); return }
           if (!provisionalDesktopEntry && !isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
             // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
@@ -386,19 +400,12 @@ router.beforeEach(async (to, _from, next) => {
             return
           }
         } catch {
-          /* ignore */
+          unavailable()
+          return
         }
       }
     } catch {
-      const sku = await fetchProductSku().catch(() => 'generic')
-      if (!isEnterpriseEdition(sku)) {
-        next()
-        return
-      }
-      next({
-        name: 'login',
-        query: { redirect: to.fullPath !== '/login' ? to.fullPath : '/' },
-      })
+      unavailable()
       return
     }
   }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace as NS
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import Request
@@ -50,11 +51,13 @@ def test_intake_precedes_normal_slot_fast_path(monkeypatch, guide, message):
 
     monkeypatch.setattr(
         dispatch,
-        "try_normal_slot_read_payload",
-        lambda message, **kwargs: {
-            "response": "当前没有采购订单。",
-            "data": {"intent": "purchase_query"},
-        },
+        "try_normal_slot_read_payload_async",
+        AsyncMock(
+            return_value={
+                "response": "当前没有采购订单。",
+                "data": {"intent": "purchase_query"},
+            }
+        ),
         raising=False,
     )
 

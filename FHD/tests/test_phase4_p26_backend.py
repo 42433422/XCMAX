@@ -72,8 +72,15 @@ def test_normal_slot_shipment_preview(mock_run: MagicMock) -> None:
 
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_already_matched(mock_get: MagicMock) -> None:
-    matched = SimpleNamespace(unit_name="七彩乐园")
-    mock_get.return_value.match_purchase_unit.return_value = matched
+    mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {
+        "status": "matched",
+        "id": 1,
+        "unit_name": "七彩乐园",
+    }
+    mock_get.return_value.get_by_id.return_value = {
+        "success": True,
+        "data": {"id": 1, "customer_name": "七彩乐园"},
+    }
     out = _registered_router_customers("ensure_exists", {"unit_name": "七彩"}, {}, "pro", "")
     assert out["success"] is True
     assert out["exists"] is True
@@ -82,8 +89,9 @@ def test_customers_ensure_exists_already_matched(mock_get: MagicMock) -> None:
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_creates(mock_get: MagicMock) -> None:
     svc = mock_get.return_value
-    svc.match_purchase_unit.return_value = None
-    svc.create.return_value = {"success": True}
+    svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
+    svc.create.return_value = {"success": True, "data": {"id": 2}}
+    svc.get_by_id.return_value = {"success": True, "data": {"id": 2, "customer_name": "新单位"}}
     out = _registered_router_customers("ensure_exists", {"unit_name": "新单位"}, {}, "pro", "")
     assert out["success"] is True
     assert out.get("created") is True
@@ -92,11 +100,14 @@ def test_customers_ensure_exists_creates(mock_get: MagicMock) -> None:
 @patch("app.application.get_customer_app_service")
 def test_customers_ensure_exists_duplicate_message(mock_get: MagicMock) -> None:
     svc = mock_get.return_value
-    svc.match_purchase_unit.return_value = None
+    svc.lookup_purchase_unit_for_ensure.return_value = {"status": "absent"}
     svc.create.return_value = {"success": False, "message": "客户已存在"}
     out = _registered_router_customers("ensure_exists", {"unit_name": "重复"}, {}, "pro", "")
-    assert out["success"] is True
-    assert out["exists"] is True
+    assert out["success"] is False
+    assert out["outcome"] == "unknown"
+    assert out["retryable"] is False
+    assert out["reconciliation_required"] is True
+    svc.get_by_id.assert_not_called()
 
 
 def test_customers_ensure_exists_missing_name() -> None:

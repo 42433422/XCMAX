@@ -16,6 +16,24 @@ class ProductQuery(Protocol):
     def __call__(self, keyword: str | None, per_page: int) -> JsonObject: ...
 
 
+def _product_query_failure(
+    route: JsonObject, message: str, error: str, receipt: JsonObject | None = None
+) -> JsonObject:
+    return {
+        "success": False,
+        "error": error,
+        "message": message,
+        "response": f"产品查询未成功：{message}",
+        "data": {
+            "routing": "normal_slot_dispatch",
+            "intent": "product_query",
+            "slots": route.get("slots") or {},
+            "query_status": "failed",
+            **({"query_receipt": receipt} if receipt is not None else {}),
+        },
+    }
+
+
 def product_window(
     route: JsonObject, query: ProductQuery, logger: logging.Logger
 ) -> JsonObject | None:
@@ -28,8 +46,23 @@ def product_window(
     preview_lines = []
     preview_count = 0
     try:
-        result = query(keyword or model_number or None, 5) or {}
+        result = query(keyword or model_number or None, 5)
+        if not isinstance(result, dict) or not result:
+            return _product_query_failure(
+                route, "查询服务未返回可确认的结果。", "product_query_unavailable"
+            )
+        if result.get("success") is False:
+            return _product_query_failure(
+                route,
+                str(result.get("message") or "查询服务未完成请求。"),
+                str(result.get("error") or result.get("error_code") or "product_query_failed"),
+                result,
+            )
         rows = result.get("data") or []
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return _product_query_failure(
+                route, "查询结果格式不可用。", "product_query_invalid_result"
+            )
         preview_count = len(rows)
         for row in rows[:3]:
             model = (row.get("model_number") or "").strip()
@@ -39,6 +72,9 @@ def product_window(
             )
     except RECOVERABLE_ERRORS as error:
         logger.warning("产品查询预览失败：%s", error, exc_info=True)
+        return _product_query_failure(
+            route, "查询服务暂不可用，请稍后重试。", "product_query_unavailable"
+        )
     description = []
     if unit_name:
         description.append(f"单位：{unit_name}")
@@ -52,14 +88,24 @@ def product_window(
     )
     return {
         "success": True,
-        "message": "已在副窗打开产品查询",
-        "response": f"已帮你打开产品副窗并带入「{keyword or model_number or query_desc}」。你可以直接在卡片里查看和修改。{preview}",
+        "message": "产品查询已返回，已请求打开查询窗口",
+        "response": (
+            f"产品查询{'已返回结果' if preview_count else '未找到匹配项'}，"
+            f"已请求在副窗展示「{keyword or model_number or query_desc}」。"
+            f"窗口是否打开请以实际界面为准。{preview}"
+        ),
         "autoAction": {
             "type": "show_products_float",
             "feature": "products",
             "query": keyword or model_number,
         },
-        "data": {"routing": "normal_slot_dispatch", "intent": "product_query", "slots": slots},
+        "data": {
+            "routing": "normal_slot_dispatch",
+            "intent": "product_query",
+            "slots": slots,
+            "query_status": "succeeded",
+            "window_status": "requested",
+        },
     }
 
 

@@ -11,17 +11,18 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.application import approval_workspace_app_service as approval_ws
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def system_client() -> TestClient:
+def system_client(trusted_actor, local_tools) -> TestClient:
     from app.fastapi_routes.domains.system import routes as system_routes
     from app.fastapi_routes.tools_execute import router as tools_execute_router
 
     app = FastAPI()
     app.include_router(system_routes.router)
     app.include_router(tools_execute_router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 # ---------------------------------------------------------------------------
@@ -116,11 +117,14 @@ def test_performance_slow_queries(mock_get: MagicMock, system_client: TestClient
     assert r.status_code == 200
 
 
-@patch("app.utils.performance.performance_initializer.get_performance_optimizer")
-def test_performance_reinitialize(mock_get: MagicMock, system_client: TestClient) -> None:
-    mock_get.return_value = _optimizer_mock()
+@patch("app.utils.performance.performance_initializer.init_performance_optimization")
+def test_performance_reinitialize(mock_init: MagicMock, system_client: TestClient) -> None:
+    optimizer = _optimizer_mock()
+    mock_init.return_value = optimizer
     r = system_client.post("/api/performance/optimize/reinitialize")
     assert r.status_code == 200
+    mock_init.assert_called_once_with()
+    optimizer.get_status.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------

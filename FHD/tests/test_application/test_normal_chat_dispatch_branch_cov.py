@@ -63,22 +63,31 @@ class TestRouteNormalModeMessageShipment:
     def test_shipment_actions_keep_queries_and_negation_separate(self, text, expected):
         assert route_normal_mode_message(text)["intent"] == expected
 
-    def test_unspecified_print_is_not_assumed_to_be_a_shipment(self):
-        result = route_normal_mode_message("打印一下")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("打印一下", id="unspecified-print"),
+            pytest.param(None, id="none"),
+            pytest.param("   ", id="whitespace"),
+            # 「预览送货单模板」含「送货单」但属模板预览意图，不应路由到 shipment
+            pytest.param("预览送货单模板", id="template-preview"),
+            pytest.param("看看发货单的模板", id="template-variant"),
+        ],
+    )
+    def test_unknown_inputs(self, message):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "unknown"
 
-    def test_shipment_number_style_order_arabic(self):
-        result = route_normal_mode_message("10桶A001规格25")
-        assert result["intent"] == "shipment"
-        assert result["slots"]["number_style_order"] is True
-
-    def test_shipment_number_style_order_chinese_numerals(self):
-        result = route_normal_mode_message("十桶A001规格25")
-        assert result["intent"] == "shipment"
-        assert result["slots"]["number_style_order"] is True
-
-    def test_shipment_number_style_order_two_buckets(self):
-        result = route_normal_mode_message("两桶B-002规格10.5")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("10桶A001规格25", id="arabic"),
+            pytest.param("十桶A001规格25", id="chinese_numerals"),
+            pytest.param("两桶B-002规格10.5", id="two_buckets"),
+        ],
+    )
+    def test_shipment_number_style_order(self, message):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "shipment"
         assert result["slots"]["number_style_order"] is True
 
@@ -86,23 +95,6 @@ class TestRouteNormalModeMessageShipment:
         result = route_normal_mode_message("")
         assert result["intent"] == "unknown"
         assert result["slots"] == {}
-
-    def test_none_message_returns_unknown(self):
-        result = route_normal_mode_message(None)
-        assert result["intent"] == "unknown"
-
-    def test_whitespace_message_returns_unknown(self):
-        result = route_normal_mode_message("   ")
-        assert result["intent"] == "unknown"
-
-    def test_template_preview_not_hijacked_by_bill_keyword(self):
-        # 「预览送货单模板」含「送货单」但属模板预览意图，不应路由到 shipment
-        result = route_normal_mode_message("预览送货单模板")
-        assert result["intent"] == "unknown"
-
-    def test_template_preview_variant(self):
-        result = route_normal_mode_message("看看发货单的模板")
-        assert result["intent"] == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -113,60 +105,36 @@ class TestRouteNormalModeMessageShipment:
 class TestRouteNormalModeMessageCustomersQuery:
     """route_normal_mode_message customers_query 槽位分支。"""
 
-    def test_customer_keyword_客户(self):
-        result = route_normal_mode_message("查询客户")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("查询客户", id="客户"),
+            pytest.param("购买单位列表", id="购买单位"),
+            pytest.param("买家信息", id="买家"),
+            pytest.param("客户列表", id="客户列表"),
+            pytest.param("客户信息", id="客户信息"),
+        ],
+    )
+    def test_customer_keyword(self, message):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "customers_query"
 
-    def test_customer_keyword_购买单位(self):
-        result = route_normal_mode_message("购买单位列表")
-        assert result["intent"] == "customers_query"
-
-    def test_customer_keyword_买家(self):
-        result = route_normal_mode_message("买家信息")
-        assert result["intent"] == "customers_query"
-
-    def test_customer_keyword_客户列表(self):
-        result = route_normal_mode_message("客户列表")
-        assert result["intent"] == "customers_query"
-
-    def test_customer_keyword_客户信息(self):
-        result = route_normal_mode_message("客户信息")
-        assert result["intent"] == "customers_query"
-
-    def test_customer_keyword_有哪些客户(self):
-        result = route_normal_mode_message("有哪些客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_keyword_有哪些客户_question(self):
-        result = route_normal_mode_message("有哪些客户？")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_count_ask_查看我有多少个客户(self):
-        """计数问法：实体路由到 customers.query，keyword 必须为空（禁止把前缀当客户名）。"""
-        result = route_normal_mode_message("查看我有多少个客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_keyword_客户名单(self):
-        result = route_normal_mode_message("客户名单")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_named_ask_does_not_regex_extract_keyword(self):
-        """指名句也不再靠正则抽 keyword；由 Agent 工具参数决定过滤。"""
-        result = route_normal_mode_message("七彩乐园的客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_without_keyword_match_empty_slot(self):
-        result = route_normal_mode_message("客户")
-        assert result["intent"] == "customers_query"
-        assert result["slots"]["keyword"] == ""
-
-    def test_customer_entity_route_keeps_keyword_empty(self):
-        result = route_normal_mode_message("七彩乐园客户")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("有哪些客户", id="list"),
+            pytest.param("有哪些客户？", id="question"),
+            # 计数问法：实体路由到 customers.query，keyword 必须为空（禁止把前缀当客户名）。
+            pytest.param("查看我有多少个客户", id="count"),
+            pytest.param("客户名单", id="roster"),
+            # 指名句也不再靠正则抽 keyword；由 Agent 工具参数决定过滤。
+            pytest.param("七彩乐园的客户", id="named-question"),
+            pytest.param("客户", id="bare-customer"),
+            pytest.param("七彩乐园客户", id="named-customer"),
+        ],
+    )
+    def test_customer_keyword_keeps_filter_empty(self, message):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "customers_query"
         assert result["slots"]["keyword"] == ""
 
@@ -223,32 +191,20 @@ class TestRouteNormalModeMessageCustomersQuery:
 class TestRouteNormalModeMessageInventoryAlert:
     """route_normal_mode_message inventory_alert 槽位分支。"""
 
-    def test_inventory_keyword_库存(self):
-        result = route_normal_mode_message("库存")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_库存预警(self):
-        result = route_normal_mode_message("库存预警")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_低库存(self):
-        result = route_normal_mode_message("低库存")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_库存不足(self):
-        result = route_normal_mode_message("库存不足")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_缺货(self):
-        result = route_normal_mode_message("缺货")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_原材料库存(self):
-        result = route_normal_mode_message("原材料库存")
-        assert result["intent"] == "inventory_alert"
-
-    def test_inventory_keyword_仓库(self):
-        result = route_normal_mode_message("仓库")
+    @pytest.mark.parametrize(
+        "message",
+        [
+            pytest.param("库存", id="库存"),
+            pytest.param("库存预警", id="库存预警"),
+            pytest.param("低库存", id="低库存"),
+            pytest.param("库存不足", id="库存不足"),
+            pytest.param("缺货", id="缺货"),
+            pytest.param("原材料库存", id="原材料库存"),
+            pytest.param("仓库", id="仓库"),
+        ],
+    )
+    def test_inventory_keyword(self, message):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "inventory_alert"
 
 
@@ -378,26 +334,20 @@ class TestRouteNormalModeMessageProductQuery:
         result = route_normal_mode_message("查询七彩A001")
         assert result["intent"] == "product_query"
 
-    def test_product_query_tail_model_excludes_api_keyword(self):
-        result = route_normal_mode_message("查询API")
+    @pytest.mark.parametrize(
+        "message,excluded_model",
+        [
+            # API 应该被排除
+            pytest.param("查询API", "API", id="api_keyword"),
+            pytest.param("查询HTTP", "HTTP", id="http_keyword"),
+            pytest.param("查询JSON", "JSON", id="json_keyword"),
+            pytest.param("查询XML", "XML", id="xml_keyword"),
+        ],
+    )
+    def test_product_query_tail_model_excludes_protocol_keyword(self, message, excluded_model):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "unknown"
-        # API 应该被排除
-        assert result["slots"].get("model_number") != "API"
-
-    def test_product_query_tail_model_excludes_http_keyword(self):
-        result = route_normal_mode_message("查询HTTP")
-        assert result["intent"] == "unknown"
-        assert result["slots"].get("model_number") != "HTTP"
-
-    def test_product_query_tail_model_excludes_json_keyword(self):
-        result = route_normal_mode_message("查询JSON")
-        assert result["intent"] == "unknown"
-        assert result["slots"].get("model_number") != "JSON"
-
-    def test_product_query_tail_model_excludes_xml_keyword(self):
-        result = route_normal_mode_message("查询XML")
-        assert result["intent"] == "unknown"
-        assert result["slots"].get("model_number") != "XML"
+        assert result["slots"].get("model_number") != excluded_model
 
     def test_product_query_no_keyword_no_unit_no_model(self):
         """没有查询对象时不能默认查产品。"""
@@ -497,7 +447,9 @@ class TestBuildProductQueryResponseDict:
         ):
             result = build_product_query_response_dict(route)
         assert result is not None
-        assert result["success"] is True  # 仍返回响应，只是无预览
+        assert result["success"] is False
+        assert result["error"] == "product_query_unavailable"
+        assert "autoAction" not in result
 
     def test_product_query_no_description_bits(self):
         """无 unit/model/keyword 时，query_desc 为 '按当前输入'。"""
@@ -558,7 +510,16 @@ class TestRunWorkflowProductsQueryNormalProfile:
         assert result["success"] is True
         assert mock_svc.get_products.call_args.kwargs["keyword"] is None
 
-    def test_with_non_product_query_intent_uses_node_params(self):
+    @pytest.mark.parametrize(
+        "slot_name,slot_value",
+        [
+            pytest.param("keyword", "ABC", id="keyword"),
+            pytest.param("model_number", "X001", id="model-number"),
+            pytest.param("product_name", "涂料", id="product-name"),
+            pytest.param("name", "涂料", id="name"),
+        ],
+    )
+    def test_node_parameter_fallback(self, slot_name, slot_value):
         with patch("app.bootstrap.get_products_service") as mock_get:
             mock_svc = MagicMock()
             mock_svc.get_products.return_value = {
@@ -567,37 +528,7 @@ class TestRunWorkflowProductsQueryNormalProfile:
             }
             mock_get.return_value = mock_svc
             result = run_workflow_products_query_normal_profile(
-                "你好", node_params={"keyword": "ABC"}
-            )
-        assert result["success"] is True
-
-    def test_with_node_params_model_number(self):
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = run_workflow_products_query_normal_profile(
-                "你好", node_params={"model_number": "X001"}
-            )
-        assert result["success"] is True
-
-    def test_with_node_params_product_name(self):
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = run_workflow_products_query_normal_profile(
-                "你好", node_params={"product_name": "涂料"}
-            )
-        assert result["success"] is True
-
-    def test_with_node_params_name(self):
-        with patch("app.bootstrap.get_products_service") as mock_get:
-            mock_svc = MagicMock()
-            mock_svc.get_products.return_value = {"success": True, "data": []}
-            mock_get.return_value = mock_svc
-            result = run_workflow_products_query_normal_profile(
-                "你好", node_params={"name": "涂料"}
+                "你好", node_params={slot_name: slot_value}
             )
         assert result["success"] is True
 
@@ -654,44 +585,36 @@ class TestRunWorkflowProductsQueryNormalProfile:
 class TestResolveToolExecutionProfile:
     """resolve_tool_execution_profile 分支测试。"""
 
-    def test_explicit_normal(self):
-        assert resolve_tool_execution_profile({"tool_execution_profile": "normal"}) == "normal"
+    @pytest.mark.parametrize(
+        "expected,profile",
+        [
+            pytest.param("normal", "normal", id="normal"),
+            pytest.param("pro_default", "pro_default", id="pro-default"),
+            pytest.param("pro_default", "pro", id="pro"),
+            pytest.param("pro_default", "professional", id="professional"),
+            pytest.param("normal", "NORMAL", id="uppercase"),
+            pytest.param("normal", "  normal  ", id="spaces"),
+            pytest.param("pro_default", "", id="empty"),
+            pytest.param("pro_default", "unknown", id="unknown"),
+        ],
+    )
+    def test_explicit_profile(self, expected, profile):
+        assert resolve_tool_execution_profile({"tool_execution_profile": profile}) == expected
 
-    def test_explicit_pro_default(self):
-        assert (
-            resolve_tool_execution_profile({"tool_execution_profile": "pro_default"})
-            == "pro_default"
-        )
-
-    def test_explicit_pro(self):
-        assert resolve_tool_execution_profile({"tool_execution_profile": "pro"}) == "pro_default"
-
-    def test_explicit_professional(self):
-        assert (
-            resolve_tool_execution_profile({"tool_execution_profile": "professional"})
-            == "pro_default"
-        )
-
-    def test_explicit_normal_uppercase(self):
-        assert resolve_tool_execution_profile({"tool_execution_profile": "NORMAL"}) == "normal"
-
-    def test_explicit_normal_with_spaces(self):
-        assert resolve_tool_execution_profile({"tool_execution_profile": "  normal  "}) == "normal"
-
-    def test_ui_normal_intent_pro_returns_normal(self):
-        result = resolve_tool_execution_profile({"ui_surface": "normal", "intent_channel": "pro"})
-        assert result == "normal"
-
-    def test_ui_normal_intent_normal_returns_pro_default(self):
-        """ui=normal 但 intent_channel != pro → pro_default。"""
+    @pytest.mark.parametrize(
+        "expected,ui_surface,intent_channel",
+        [
+            pytest.param("normal", "normal", "pro", id="normal-pro"),
+            # ui=normal 但 intent_channel != pro → pro_default。
+            pytest.param("pro_default", "normal", "normal", id="normal-normal"),
+            pytest.param("pro_default", "pro", "pro", id="pro-pro"),
+        ],
+    )
+    def test_ui_and_intent_profile(self, expected, ui_surface, intent_channel):
         result = resolve_tool_execution_profile(
-            {"ui_surface": "normal", "intent_channel": "normal"}
+            {"ui_surface": ui_surface, "intent_channel": intent_channel}
         )
-        assert result == "pro_default"
-
-    def test_ui_pro_intent_pro_returns_pro_default(self):
-        result = resolve_tool_execution_profile({"ui_surface": "pro", "intent_channel": "pro"})
-        assert result == "pro_default"
+        assert result == expected
 
     def test_no_context_returns_pro_default(self):
         assert resolve_tool_execution_profile(None) == "pro_default"
@@ -703,14 +626,6 @@ class TestResolveToolExecutionProfile:
         """未指定 intent_channel 时默认为 pro。"""
         result = resolve_tool_execution_profile({"ui_surface": "normal"})
         assert result == "normal"
-
-    def test_explicit_empty_string_returns_pro_default(self):
-        assert resolve_tool_execution_profile({"tool_execution_profile": ""}) == "pro_default"
-
-    def test_explicit_unknown_value_returns_pro_default(self):
-        assert (
-            resolve_tool_execution_profile({"tool_execution_profile": "unknown"}) == "pro_default"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -1195,53 +1110,26 @@ class TestBuildLabelPrintResponseDict:
 class TestRouteErpIntents:
     """route_normal_mode_message 销售/报表/补货预警槽位分支。"""
 
-    def test_sales_keyword_销售订单(self):
-        result = route_normal_mode_message("销售订单")
-        assert result["intent"] == "sales_query"
-
-    def test_sales_keyword_报价单(self):
-        result = route_normal_mode_message("报价单")
-        assert result["intent"] == "sales_query"
-
-    def test_sales_keyword_销售(self):
-        result = route_normal_mode_message("销售明细")
-        assert result["intent"] == "sales_query"
-
-    def test_sales_keyword_收款(self):
-        result = route_normal_mode_message("收款记录")
-        assert result["intent"] == "sales_query"
-
-    def test_sales_keyword_开票(self):
-        result = route_normal_mode_message("开票情况")
-        assert result["intent"] == "sales_query"
-
-    def test_report_keyword_报表(self):
-        result = route_normal_mode_message("报表")
-        assert result["intent"] == "reports_query"
-
-    def test_report_keyword_销售报表(self):
-        result = route_normal_mode_message("销售报表")
-        assert result["intent"] == "reports_query"
-
-    def test_report_keyword_库存报表(self):
-        result = route_normal_mode_message("库存报表")
-        assert result["intent"] == "reports_query"
-
-    def test_report_keyword_看板(self):
-        result = route_normal_mode_message("经营看板")
-        assert result["intent"] == "reports_query"
-
-    def test_report_keyword_汇总(self):
-        result = route_normal_mode_message("月度汇总")
-        assert result["intent"] == "reports_query"
-
-    def test_replenish_keyword_补货(self):
-        result = route_normal_mode_message("补货建议")
-        assert result["intent"] == "replenishment_suggest"
-
-    def test_replenish_keyword_采购建议(self):
-        result = route_normal_mode_message("采购建议")
-        assert result["intent"] == "replenishment_suggest"
+    @pytest.mark.parametrize(
+        "message,expected",
+        [
+            pytest.param("销售订单", "sales_query", id="sales_keyword_销售订单"),
+            pytest.param("报价单", "sales_query", id="sales_keyword_报价单"),
+            pytest.param("销售明细", "sales_query", id="sales_keyword_销售"),
+            pytest.param("收款记录", "sales_query", id="sales_keyword_收款"),
+            pytest.param("开票情况", "sales_query", id="sales_keyword_开票"),
+            pytest.param("报表", "reports_query", id="report_keyword_报表"),
+            pytest.param("销售报表", "reports_query", id="report_keyword_销售报表"),
+            pytest.param("库存报表", "reports_query", id="report_keyword_库存报表"),
+            pytest.param("经营看板", "reports_query", id="report_keyword_看板"),
+            pytest.param("月度汇总", "reports_query", id="report_keyword_汇总"),
+            pytest.param("补货建议", "replenishment_suggest", id="replenish_keyword_补货"),
+            pytest.param("采购建议", "replenishment_suggest", id="replenish_keyword_采购建议"),
+        ],
+    )
+    def test_erp_keyword(self, message, expected):
+        result = route_normal_mode_message(message)
+        assert result["intent"] == expected
 
 
 class TestBuildSalesQueryResponseDict:
@@ -1425,76 +1313,47 @@ class TestBuildReplenishmentSuggestResponseDict:
 class TestRouteNormalModeMessageRemaining:
     """route_normal_mode_message 删除/物料/出货记录/采购/财务/知识库分支。"""
 
-    def test_delete_keyword_删除(self):
-        result = route_normal_mode_message("删除A001")
+    @pytest.mark.parametrize(
+        "message,target",
+        [
+            pytest.param("删除A001", "A001", id="delete-model"),
+            pytest.param("移除七彩乐园", "七彩乐园", id="remove-customer"),
+            pytest.param("删除", "", id="missing-target"),
+        ],
+    )
+    def test_delete_keyword(self, message, target):
+        result = route_normal_mode_message(message)
         assert result["intent"] == "delete_entity"
-        assert result["slots"]["keyword"] == "A001"
+        assert result["slots"]["keyword"] == target
 
-    def test_delete_keyword_移除(self):
-        result = route_normal_mode_message("移除七彩乐园")
-        assert result["intent"] == "delete_entity"
-        assert result["slots"]["keyword"] == "七彩乐园"
-
-    def test_delete_keyword_without_target(self):
-        result = route_normal_mode_message("删除")
-        assert result["intent"] == "delete_entity"
-        assert result["slots"]["keyword"] == ""
-
-    def test_materials_keyword_物料(self):
-        result = route_normal_mode_message("物料")
-        assert result["intent"] == "materials_query"
-
-    def test_materials_keyword_原材料(self):
-        result = route_normal_mode_message("原材料")
-        assert result["intent"] == "materials_query"
-
-    def test_materials_keyword_材料(self):
-        result = route_normal_mode_message("材料")
-        assert result["intent"] == "materials_query"
-
-    def test_shipment_records_keyword_出货记录(self):
-        result = route_normal_mode_message("出货记录")
-        assert result["intent"] == "shipment_records_query"
-
-    def test_shipment_records_keyword_发货记录(self):
-        result = route_normal_mode_message("发货记录")
-        assert result["intent"] == "shipment_records_query"
-
-    def test_shipment_records_keyword_出货明细(self):
-        result = route_normal_mode_message("出货明细")
-        assert result["intent"] == "shipment_records_query"
-
-    def test_purchase_keyword_采购(self):
-        result = route_normal_mode_message("采购")
-        assert result["intent"] == "purchase_query"
-
-    def test_purchase_keyword_供应商(self):
-        result = route_normal_mode_message("供应商")
-        assert result["intent"] == "purchase_query"
-
-    def test_purchase_keyword_进货(self):
-        result = route_normal_mode_message("进货")
-        assert result["intent"] == "purchase_query"
-
-    def test_finance_keyword_财务(self):
-        result = route_normal_mode_message("财务")
-        assert result["intent"] == "finance_query"
-
-    def test_finance_keyword_凭证(self):
-        result = route_normal_mode_message("凭证")
-        assert result["intent"] == "finance_query"
-
-    def test_finance_keyword_对账(self):
-        result = route_normal_mode_message("对账")
-        assert result["intent"] == "finance_query"
-
-    def test_knowledge_keyword_知识库(self):
-        result = route_normal_mode_message("知识库")
-        assert result["intent"] == "knowledge_query"
-
-    def test_knowledge_keyword_帮助文档(self):
-        result = route_normal_mode_message("帮助文档")
-        assert result["intent"] == "knowledge_query"
+    @pytest.mark.parametrize(
+        "message,expected",
+        [
+            pytest.param("物料", "materials_query", id="materials_keyword_物料"),
+            pytest.param("原材料", "materials_query", id="materials_keyword_原材料"),
+            pytest.param("材料", "materials_query", id="materials_keyword_材料"),
+            pytest.param(
+                "出货记录", "shipment_records_query", id="shipment_records_keyword_出货记录"
+            ),
+            pytest.param(
+                "发货记录", "shipment_records_query", id="shipment_records_keyword_发货记录"
+            ),
+            pytest.param(
+                "出货明细", "shipment_records_query", id="shipment_records_keyword_出货明细"
+            ),
+            pytest.param("采购", "purchase_query", id="purchase_keyword_采购"),
+            pytest.param("供应商", "purchase_query", id="purchase_keyword_供应商"),
+            pytest.param("进货", "purchase_query", id="purchase_keyword_进货"),
+            pytest.param("财务", "finance_query", id="finance_keyword_财务"),
+            pytest.param("凭证", "finance_query", id="finance_keyword_凭证"),
+            pytest.param("对账", "finance_query", id="finance_keyword_对账"),
+            pytest.param("知识库", "knowledge_query", id="knowledge_keyword_知识库"),
+            pytest.param("帮助文档", "knowledge_query", id="knowledge_keyword_帮助文档"),
+        ],
+    )
+    def test_entity_keyword(self, message, expected):
+        result = route_normal_mode_message(message)
+        assert result["intent"] == expected
 
 
 # ---------------------------------------------------------------------------
@@ -1852,48 +1711,38 @@ class TestRequestTenantId:
         with tenant_scope(None):
             assert _request_tenant_id(None) is None
 
-    def test_state_tenant_id(self):
+    @pytest.mark.parametrize(
+        "tenant_id,expected",
+        [
+            pytest.param(7, 7, id="integer"),
+            pytest.param(0, 0, id="zero"),
+            pytest.param("9", 9, id="string"),
+        ],
+    )
+    def test_state_tenant_id(self, tenant_id, expected):
         from app.application.normal_chat_dispatch import _request_tenant_id
 
         request = MagicMock()
-        request.state.tenant_id = 7
-        assert _request_tenant_id(request) == 7
+        request.state.tenant_id = tenant_id
+        assert _request_tenant_id(request) == expected
 
-    def test_state_tenant_id_zero(self):
+    @pytest.mark.parametrize(
+        "tenant_id,resolved_tenant,expected",
+        [
+            pytest.param(None, 3, 3, id="none"),
+            pytest.param("abc", 4, 4, id="invalid-string"),
+        ],
+    )
+    def test_invalid_state_tenant_id_falls_back(self, tenant_id, resolved_tenant, expected):
         from app.application.normal_chat_dispatch import _request_tenant_id
 
         request = MagicMock()
-        request.state.tenant_id = 0
-        assert _request_tenant_id(request) == 0
-
-    def test_state_tenant_id_str(self):
-        from app.application.normal_chat_dispatch import _request_tenant_id
-
-        request = MagicMock()
-        request.state.tenant_id = "9"
-        assert _request_tenant_id(request) == 9
-
-    def test_state_tenant_id_none_falls_back(self):
-        from app.application.normal_chat_dispatch import _request_tenant_id
-
-        request = MagicMock()
-        request.state.tenant_id = None
+        request.state.tenant_id = tenant_id
         with patch(
             "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=3,
+            return_value=expected,
         ):
-            assert _request_tenant_id(request) == 3
-
-    def test_state_tenant_id_invalid_falls_back(self):
-        from app.application.normal_chat_dispatch import _request_tenant_id
-
-        request = MagicMock()
-        request.state.tenant_id = "abc"
-        with patch(
-            "app.infrastructure.auth.tenant_context.resolve_tenant_id",
-            return_value=4,
-        ):
-            assert _request_tenant_id(request) == 4
+            assert _request_tenant_id(request) == resolved_tenant
 
     def test_resolve_raises_returns_none(self):
         from app.application.normal_chat_dispatch import _request_tenant_id
@@ -1948,89 +1797,72 @@ class TestTryNormalSlotReadPayloadMore:
         with patch(
             "app.application.normal_chat_dispatch.build_label_print_response_dict",
             return_value={"success": False, "response": "请补充型号"},
-        ):
+        ) as print_builder:
             payload = try_normal_slot_read_payload("标签")
-        assert payload is not None
-        assert "请补充型号" in payload["response"]
+        assert payload is None
+        print_builder.assert_not_called()
 
-    def test_materials_query(self):
+    @pytest.mark.parametrize(
+        "builder_path,message,response",
+        [
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_materials_query_response_dict",
+                "物料",
+                "物料结果",
+                id="materials",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_shipment_records_query_response_dict",
+                "出货记录",
+                "出货记录",
+                id="shipment-records",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_purchase_query_response_dict",
+                "采购",
+                "采购结果",
+                id="purchase",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_finance_query_response_dict",
+                "财务",
+                "财务结果",
+                id="finance",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_knowledge_query_response_dict",
+                "知识库",
+                "知识库",
+                id="knowledge",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_sales_query_response_dict",
+                "销售订单",
+                "销售结果",
+                id="sales",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_reports_query_response_dict",
+                "报表",
+                "报表结果",
+                id="reports",
+            ),
+            pytest.param(
+                "app.application.normal_chat_dispatch.build_replenishment_suggest_response_dict",
+                "补货建议",
+                "补货结果",
+                id="replenishment",
+            ),
+        ],
+    )
+    def test_query_payload(self, builder_path, message, response):
         from app.application.normal_chat_dispatch import try_normal_slot_read_payload
 
         with patch(
-            "app.application.normal_chat_dispatch.build_materials_query_response_dict",
-            return_value={"success": True, "response": "物料结果"},
+            builder_path,
+            return_value={"success": True, "response": response},
         ):
-            payload = try_normal_slot_read_payload("物料")
-        assert payload is not None
-
-    def test_shipment_records_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_shipment_records_query_response_dict",
-            return_value={"success": True, "response": "出货记录"},
-        ):
-            payload = try_normal_slot_read_payload("出货记录")
-        assert payload is not None
-
-    def test_purchase_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_purchase_query_response_dict",
-            return_value={"success": True, "response": "采购结果"},
-        ):
-            payload = try_normal_slot_read_payload("采购")
-        assert payload is not None
-
-    def test_finance_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_finance_query_response_dict",
-            return_value={"success": True, "response": "财务结果"},
-        ):
-            payload = try_normal_slot_read_payload("财务")
-        assert payload is not None
-
-    def test_knowledge_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_knowledge_query_response_dict",
-            return_value={"success": True, "response": "知识库"},
-        ):
-            payload = try_normal_slot_read_payload("知识库")
-        assert payload is not None
-
-    def test_sales_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_sales_query_response_dict",
-            return_value={"success": True, "response": "销售结果"},
-        ):
-            payload = try_normal_slot_read_payload("销售订单")
-        assert payload is not None
-
-    def test_reports_query(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_reports_query_response_dict",
-            return_value={"success": True, "response": "报表结果"},
-        ):
-            payload = try_normal_slot_read_payload("报表")
-        assert payload is not None
-
-    def test_replenishment_suggest(self):
-        from app.application.normal_chat_dispatch import try_normal_slot_read_payload
-
-        with patch(
-            "app.application.normal_chat_dispatch.build_replenishment_suggest_response_dict",
-            return_value={"success": True, "response": "补货结果"},
-        ):
-            payload = try_normal_slot_read_payload("补货建议")
+            payload = try_normal_slot_read_payload(message)
         assert payload is not None
 
     def test_payload_success_false_no_response_returns_none(self):

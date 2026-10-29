@@ -1,9 +1,9 @@
 import agentRunsApi from '@/api/agentRuns'
 import { bindPendingFirstAiTaskRun, isFirstAiTaskPending } from '@/constants/productFlow'
+import type { ChatLocalScope } from './chat-orchestration/chatOrchestrationShared'
 import type { ChatMessageExtras } from './useChatMessages'
 
 interface UseOnboardingFirstOrderRunOptions {
-  sessionId: () => string
   saveMessage: (role: 'user' | 'ai' | 'task', content: string, targetSessionId?: string) => Promise<void>
   addAndSaveMessage: (
     content: string,
@@ -20,10 +20,12 @@ function isFirstOrderPrompt(message: string): boolean {
 
 /** Route the seeded onboarding prompt through the durable AgentRun path. */
 export function useOnboardingFirstOrderRun(options: UseOnboardingFirstOrderRunOptions) {
-  async function tryStart(message: string): Promise<boolean> {
+  async function tryStart(message: string, scope: ChatLocalScope): Promise<boolean> {
     if (!isFirstOrderPrompt(message)) return false
-    const targetSessionId = options.sessionId()
+    if (!scope.isCurrent()) return true
+    const targetSessionId = scope.sessionId
     await options.saveMessage('user', message, targetSessionId)
+    if (!scope.isCurrent()) return true
     try {
       const response = await agentRunsApi.createRun({
         message,
@@ -34,6 +36,10 @@ export function useOnboardingFirstOrderRun(options: UseOnboardingFirstOrderRunOp
         },
       })
       const runId = String(response?.data?.run_id || '').trim()
+      if (!scope.isCurrent()) {
+        if (scope.isOwnerCurrent()) await options.saveMessage('ai', runId ? `新手第一单已创建任务 ${runId}。请到原任务工作区核对状态；停止回复不会撤销已执行操作。` : '新手第一单启动结果未确认，请到任务工作区核对，勿重复提交。', targetSessionId)
+        return true
+      }
       if (!runId || !bindPendingFirstAiTaskRun(runId, message)) {
         throw new Error('未能绑定新手第一单任务')
       }
@@ -43,9 +49,14 @@ export function useOnboardingFirstOrderRun(options: UseOnboardingFirstOrderRunOp
         undefined,
         targetSessionId,
       )
-      await options.refreshTasks()
+      if (scope.isCurrent()) await options.refreshTasks()
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error || '未知错误')
+      if (!scope.isOwnerCurrent()) return true
+      if (!scope.isCurrent()) {
+        await options.saveMessage('ai', `AI 第一单启动返回错误：${detail}。请先核对任务状态，勿重复提交。`, targetSessionId)
+        return true
+      }
       await options.addAndSaveMessage(
         `AI 第一单启动失败：${detail}。新手任务已保留，可再次发送重试。`,
         'ai',

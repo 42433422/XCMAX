@@ -3,15 +3,10 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 
 from app.domain.shared_services.tools_workflow_business_db import (
     _registered_router_business_db,
-)
-from app.domain.shared_services.tools_workflow_common import (
-    _normalize_business_db_entity,
-    _remember_business_db_target,
 )
 from app.domain.shared_services.tools_workflow_erp import (
     _registered_router_customers,
@@ -63,9 +58,6 @@ from app.domain.shared_services.tools_workflow_workspace import (
     _registered_router_settings,
     _registered_router_template_preview,
 )
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
-logger = logging.getLogger(__name__)
 
 
 class _WorkflowRouterMap(dict):
@@ -118,40 +110,9 @@ _REGISTERED_WORKFLOW_ROUTERS: dict[str, Callable[..., dict]] = _WorkflowRouterMa
 
 
 def execute_registered_workflow_tool(tool_id: str, action: str, params: dict | None = None) -> dict:
-    """统一 dispatcher（供 WorkflowEngine 与 /api/tools/execute 复用）。"""
-    from app.application.normal_chat_dispatch import resolve_tool_execution_profile
+    """Legacy entry point; authorization and execution belong to the application layer."""
+    from app.application.tools.workflow_tools.dispatch import (
+        execute_registered_workflow_tool as execute,
+    )
 
-    params = dict(params or {})
-    runtime_context = dict(params.pop("_runtime_context", None) or {})
-    profile = resolve_tool_execution_profile(runtime_context)
-    user_message = str(runtime_context.get("message") or "").strip()
-    router = _REGISTERED_WORKFLOW_ROUTERS.get(tool_id)
-    if router is not None:
-        result = router(action, params, runtime_context, profile, user_message)
-        if tool_id == "business_db" and action == "write" and isinstance(result, dict):
-            payload = params.get("payload")
-            if isinstance(payload, dict):
-                result = _remember_business_db_target(
-                    runtime_context,
-                    _normalize_business_db_entity(params.get("entity"), user_message),
-                    str(params.get("operation") or params.get("op") or "create").strip().lower(),
-                    result,
-                )
-        return result
-    try:
-        from app.mod_sdk.employee_tool_registry import execute_employee_tool, is_employee_tool
-
-        if is_employee_tool(tool_id):
-            workspace_root = runtime_context.get("workspace_root")
-            raw = execute_employee_tool(
-                tool_id,
-                {**params, "task": params.get("task") or user_message},
-                str(workspace_root) if workspace_root else None,
-            )
-            import json
-
-            parsed = json.loads(raw)
-            return parsed if isinstance(parsed, dict) else {"success": False, "message": raw}
-    except RECOVERABLE_ERRORS:
-        logger.debug("employee tool direct dispatch skipped tool=%s", tool_id, exc_info=True)
-    return {"success": False, "message": f"未注册的工具动作: {tool_id}.{action}"}
+    return execute(tool_id, action, params)

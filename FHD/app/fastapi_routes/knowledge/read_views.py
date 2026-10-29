@@ -8,7 +8,10 @@ from typing import Any, cast
 
 from fastapi import Request
 
-from app.application.dataset_rag_app_service import DatasetRagApplicationService
+from app.application.dataset_rag_app_service import (
+    DatasetRagApplicationService,
+    read_dataset_rebuild_job,
+)
 from app.application.knowledge.protocols import AccessResolver
 from app.application.persy_memory_app_service import PersyMemoryApplicationService
 from app.fastapi_routes.knowledge.schemas import QueryRequest
@@ -80,12 +83,11 @@ class DatasetViews:
         )
 
     def job(self, dataset_id: str, job_id: str, request: Request) -> dict[str, Any]:
+        access = self._access(request)
         return cast(
             "dict[str, Any]",
             _public_dataset_payload(
-                self._service().get_rebuild_job(
-                    dataset_id, job_id, access_context=self._access(request)
-                )
+                read_dataset_rebuild_job(dataset_id, job_id, access_context=access)
             ),
         )
 

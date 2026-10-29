@@ -217,10 +217,10 @@ def _business_action(
     )
 
 
-def _slot_read(message: str, *, request: Request, user_id: str) -> Payload | None:
-    from app.application.normal_chat_dispatch import try_normal_slot_read_payload
+async def _slot_read(message: str, *, request: Request, user_id: str) -> Payload | None:
+    from app.application.normal_chat_dispatch import try_normal_slot_read_payload_async
 
-    return try_normal_slot_read_payload(message, request=request, user_id=user_id)
+    return await try_normal_slot_read_payload_async(message, request=request, user_id=user_id)
 
 
 async def _kitten_context(context: Context, message: str) -> tuple[Context, Payload]:

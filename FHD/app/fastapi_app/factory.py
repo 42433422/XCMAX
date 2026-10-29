@@ -6,6 +6,8 @@ import inspect
 import logging
 import os
 import threading
+from contextlib import ExitStack
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +45,9 @@ from .static_mounts import (
     mount_xcmax_dashboard_static,
 )
 
+if TYPE_CHECKING:
+    from .guarded_catalog import CatalogAdmission
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +55,23 @@ def create_fastapi_app(
     config_object: type[Config] | None = None,
     enable_cors: bool = True,
     enable_docs: bool = True,
+) -> FastAPI:
+    from .guarded_catalog import admit, release
+
+    config_object = config_object or get_config("default")
+    admission = admit(config_object, _app_singleton)
+    with ExitStack() as rollback:
+        rollback.callback(release, admission)
+        app = _create_fastapi_app(config_object, enable_cors, enable_docs, admission)
+        rollback.pop_all()
+        return app
+
+
+def _create_fastapi_app(
+    config_object: type[Config] | None,
+    enable_cors: bool,
+    enable_docs: bool,
+    admission: CatalogAdmission | None,
 ) -> FastAPI:
     global _app_singleton
     if config_object is None:
@@ -79,13 +101,16 @@ def create_fastapi_app(
     app = FastAPI(
         title="XCAGI FastAPI",
         description="XCAGI 企业 AI 员工平台 - FastAPI 版本",
-        version="1.0.0.6",
+        version="1.0.0.7",
         docs_url="/docs" if enable_docs else None,
         redoc_url="/redoc" if enable_docs else None,
         lifespan=lifespan,
     )
 
     app.state.config = config_object
+    app.state.catalog_admission = admission
+
+    from .guarded_catalog import CatalogAdmissionMiddleware
 
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
@@ -127,7 +152,7 @@ def create_fastapi_app(
         ),
     )
 
-    if _desktop_fast_start_enabled():
+    if admission is None and _desktop_fast_start_enabled():
         from app.fastapi_routes import register_bootstrap_routes
 
         register_bootstrap_routes(app)
@@ -155,7 +180,10 @@ def create_fastapi_app(
     try:
         from app.fastapi_app.mod_startup import bootstrap_mod_extensions_sync
 
-        if _desktop_fast_start_enabled():
+        if admission is not None:
+            # Existing-source admission never installs/repairs Mods at startup.
+            pass
+        elif _desktop_fast_start_enabled():
             app.state.mods_deferred_bootstrap = True
         else:
             # Register the staged routes now, but do not let the background
@@ -188,7 +216,11 @@ def create_fastapi_app(
     hide_trailing_slash_openapi_duplicates(app)
     install_openapi_enrichment(app)
 
-    if not _desktop_fast_start_enabled() and not getattr(app.state, "mods_full_load_done", False):
+    if (
+        admission is None
+        and not _desktop_fast_start_enabled()
+        and not getattr(app.state, "mods_full_load_done", False)
+    ):
         from app.fastapi_app.mod_startup import schedule_background_mod_load
 
         schedule_background_mod_load(app)
@@ -197,6 +229,9 @@ def create_fastapi_app(
     # that serving instance as the process singleton so later login/entitlement
     # callbacks mount dynamic MOD routes on the app that is actually listening.
     # Previously ``get_fastapi_app()`` created a second, invisible FastAPI app.
+    # Last registered is outermost: reject stale/unready admission before Mod,
+    # industry or authentication middleware can read or refresh session state.
+    app.add_middleware(CatalogAdmissionMiddleware, admission=admission)
     _app_singleton = app
     return app
 

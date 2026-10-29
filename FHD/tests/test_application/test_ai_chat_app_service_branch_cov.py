@@ -2093,7 +2093,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "sess1"},
+                {"session_id": "sess1", "local_user_id": 17},
                 {
                     "success": True,
                     "response": "reply",
@@ -2109,7 +2109,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"conversation_id": "conv1"},
+                {"conversation_id": "conv1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"tool_key": "products"}},
@@ -2125,7 +2125,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"intent": "excel_import_to_db", "result": {"imported": 5}}},
@@ -2142,7 +2142,7 @@ class TestPersistChatTurn:
             svc._persist_chat_turn(
                 "u1",
                 "hello",
-                {"session_id": "s1"},
+                {"session_id": "s1", "local_user_id": 17},
                 {
                     "success": True,
                     "data": {"data": {"document": {"doc_name": "test.docx"}}},

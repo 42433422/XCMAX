@@ -70,6 +70,55 @@ def _rebuild_job_queue_position_locked(state: _DatasetState, job: DatasetRebuild
     return 0
 
 
+def read_rebuild_job(
+    repository: DatasetRepository,
+    dataset_id: str,
+    job_id: str,
+    *,
+    max_concurrent_jobs: int,
+    access_context: DatasetAccessContext | dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Read one committed generation without constructing workers or repairing state."""
+    dataset_key = _clean_key(dataset_id, default="default")
+    context = _coerce_access_context(access_context)
+    denied = _ensure_dataset_permission(context, DATASET_READ_PERMISSION, dataset_id=dataset_key)
+    if denied is not None:
+        return denied
+    try:
+        state = repository.read_rebuild_state(dataset_key)
+    except (OSError, ValueError, TypeError, OverflowError):
+        return {
+            "success": False,
+            "dataset_id": dataset_key,
+            "job_id": job_id,
+            "error_code": "dataset_rebuild_readback_unavailable",
+            "message": "rebuild status snapshot unavailable",
+        }
+    job = state.rebuild_jobs.get(job_id) if state is not None else None
+    if state is None or job is None:
+        return {
+            "success": False,
+            "dataset_id": dataset_key,
+            "job_id": job_id,
+            "message": "rebuild job not found",
+        }
+    denied = _ensure_tenant_allowed(
+        context, job.tenant_id, dataset_id=dataset_key, operation="get_rebuild_job"
+    )
+    if denied is not None:
+        denied["job_id"] = job_id
+        return denied
+    return {
+        "success": True,
+        "dataset_id": dataset_key,
+        "job": dict(
+            job.to_dict(),
+            queue_position=_rebuild_job_queue_position_locked(state, job),
+            max_concurrent_jobs=max_concurrent_jobs,
+        ),
+    }
+
+
 class RebuildCoordinator:
     """Admit durable rebuild jobs, claim capacity, and fence worker completion."""
 
@@ -221,36 +270,13 @@ class RebuildCoordinator:
         *,
         access_context: DatasetAccessContext | dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        dataset_key = _clean_key(dataset_id, default="default")
-        context = _coerce_access_context(access_context)
-        denied = _ensure_dataset_permission(
-            context, DATASET_READ_PERMISSION, dataset_id=dataset_key
+        return read_rebuild_job(
+            self._repository,
+            dataset_id,
+            job_id,
+            max_concurrent_jobs=self.max_concurrent_jobs,
+            access_context=access_context,
         )
-        if denied is not None:
-            return denied
-        with self._repository.lock:
-            state = self._repository.datasets.get(dataset_key)
-            job = state.rebuild_jobs.get(job_id) if state is not None else None
-            if job is None:
-                return {
-                    "success": False,
-                    "dataset_id": dataset_key,
-                    "job_id": job_id,
-                    "message": "rebuild job not found",
-                }
-            if state is None:
-                return {"success": False, "dataset_id": dataset_key, "message": "dataset not found"}
-            denied = _ensure_tenant_allowed(
-                context, job.tenant_id, dataset_id=dataset_key, operation="get_rebuild_job"
-            )
-            if denied is not None:
-                denied["job_id"] = job_id
-                return denied
-            return {
-                "success": True,
-                "dataset_id": dataset_key,
-                "job": self._rebuild_job_to_dict_locked(state, job),
-            }
 
     def _schedule_rebuild_jobs(self) -> None:
         if not self.workers_enabled or self.shutdown:

@@ -15,6 +15,7 @@ from app.application.agent_orchestrator.approval_grant import (
     consume_approval_grant,
 )
 from app.application.agent_orchestrator.approval_transaction import approve_and_enqueue
+from app.application.agent_orchestrator.catalog_product_edit import create_edit, original
 from app.application.agent_orchestrator.clarification import ClarificationAnswerError
 from app.application.agent_orchestrator.run_control import run_operation_lock
 from app.application.agent_orchestrator.run_lifecycle import requires_retry_reconciliation
@@ -70,6 +71,7 @@ from app.fastapi_routes.domains.agent.route_support import (
 )
 from app.fastapi_routes.domains.agent.task_routes import router as task_router
 from app.infrastructure.auth.agent_principal import AgentPrincipal, require_agent_principal
+from app.mod_sdk.catalog_product_store import read_products, reconcile_operation, verify_operation
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -80,6 +82,105 @@ logger = logging.getLogger(__name__)
 # registration/golden-snapshot boundary even though direct TestClient calls
 # could still traverse them.
 router = task_router
+
+
+# Owned catalog edits share the authenticated agent run router; no ERP fallback.
+def _catalog_unavailable():
+    return JSONResponse(
+        {
+            "success": False,
+            "outcome": "unknown",
+            "retryable": False,
+            "reconciliation_required": True,
+            "message": "原目录、价格或操作不可核验；未重放修改，请核对原操作",
+        },
+        status_code=409,
+    )
+
+
+@router.get("/api/etl/owned-mixed-v1/products")
+def list_catalog_products(
+    keyword: str = Query(default="", max_length=100),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+):
+    try:
+        return {"success": True, **read_products(principal, keyword=keyword)}
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
+
+
+@router.get("/api/etl/owned-mixed-v1/products/edits/{operation_id}")
+def lookup_catalog_edit(
+    operation_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
+):
+    try:
+        run, claim, status = original(principal, operation_id)
+        # Revalidate current mixed scope and barrier even when only returning a run.
+        read_products(
+            principal,
+            product_id=claim["params"]["product_id"],
+            operation_key=claim["operation_key"],
+        )
+        return {
+            **_run_response(run, principal=principal),
+            "operation": {
+                "state": status,
+                "operation_id": operation_id,
+                "run_id": run.run_id,
+                "request_digest": claim["request_digest"],
+            },
+        }
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
+
+
+@router.get("/api/etl/owned-mixed-v1/products/edits/{operation_id}/verification")
+def verify_catalog_edit(
+    operation_id: str, principal: AgentPrincipal = Depends(require_agent_principal)
+):
+    try:
+        return _success(verify_operation(principal, operation_id))
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
+
+
+@router.post("/api/etl/owned-mixed-v1/products/edits/{operation_id}/reconciliation")
+def reconcile_catalog_edit(
+    operation_id: str,
+    body: dict = Body(...),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+):
+    try:
+        if body != {"confirmed": True} or body.get("confirmed") is not True:
+            raise ValueError("explicit original-operation reconciliation confirmation required")
+        # Same original owner and current full WRITE grants; verify existing
+        # source evidence only. This never dispatches or retries a source effect.
+        return _success(reconcile_operation(principal, operation_id))
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
+
+
+@router.get("/api/etl/owned-mixed-v1/products/{product_id}")
+def get_catalog_product(
+    product_id: int, principal: AgentPrincipal = Depends(require_agent_principal)
+):
+    try:
+        return _success(read_products(principal, product_id=product_id))
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
+
+
+@router.post("/api/etl/owned-mixed-v1/products/{product_id}/edits")
+def post_catalog_edit(
+    product_id: int,
+    body: dict = Body(...),
+    principal: AgentPrincipal = Depends(require_agent_principal),
+):
+    try:
+        run = create_edit(principal, product_id, body)
+        return JSONResponse(_run_response(run, principal=principal), status_code=202)
+    except RECOVERABLE_ERRORS:
+        return _catalog_unavailable()
 
 
 @router.post("/api/agent/runs", response_model=None)

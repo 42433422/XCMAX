@@ -926,7 +926,7 @@ class TestExecuteWorkflowToolMisc:
                 create=True,
             ),
             patch(
-                "app.domain.shared_services.tools_workflow_registered.execute_registered_workflow_tool",
+                "app.application.tools.workflow_tools.dispatch.execute_registered_workflow_tool",
                 return_value={"result": "ok"},
                 create=True,
             ),

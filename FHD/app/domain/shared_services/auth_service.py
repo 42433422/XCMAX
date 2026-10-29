@@ -98,6 +98,10 @@ class AuthService(NeuroEventPublisherMixin):
         return cast("User | None", self.session_service.validate_session(session_id))
 
     def get_user_permissions(self, user: User) -> list:
+        from app.db.bootstrap.guarded import enabled, existing_permissions
+
+        if enabled():
+            return existing_permissions(user)
         from app.application.tenant_rbac_policy import (
             TENANT_PERMISSION_CODES,
             is_tenant_role,
@@ -123,6 +127,10 @@ class AuthService(NeuroEventPublisherMixin):
             return codes
 
     def has_permission(self, user: User, permission_code: str) -> bool:
+        from app.db.bootstrap.guarded import enabled
+
+        if enabled():
+            return permission_code in self.get_user_permissions(user)
         if user.role == "admin" and user.tier == "admin" and user.tenant_id is None:
             return True
 

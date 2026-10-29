@@ -29,6 +29,12 @@ logger = logging.getLogger(__name__)
 class AgentRunRepository(Protocol):
     def save(self, run: AgentRun) -> AgentRun: ...
 
+    def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
+
+    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
+
+    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool: ...
+
     def get(self, run_id: str) -> AgentRun | None: ...
 
     def list_recent(
@@ -93,10 +99,12 @@ class InMemoryAgentRunRepository:
         from app.application.agent_orchestrator.business_harness import (
             ensure_terminal_business_result,
         )
+        from app.application.agent_orchestrator.run_sql_repository import preserve_run_evidence
 
-        ensure_terminal_business_result(run)
-        run.touch()
         with self._lock:
+            preserve_run_evidence(run, self._runs.get(run.run_id))
+            ensure_terminal_business_result(run)
+            run.touch()
             self._runs[run.run_id] = copy.deepcopy(run)
             key = self._task_key(
                 tenant_id_of_run(run),
@@ -105,6 +113,41 @@ class InMemoryAgentRunRepository:
             )
             self._tasks[key] = copy.deepcopy(task_from_run(run, existing=self._tasks.get(key)))
             return copy.deepcopy(run)
+
+    def save_stream_interruption_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        from app.application.agent_orchestrator.run_sql_repository import (
+            valid_stream_interruption_update,
+        )
+
+        if not valid_stream_interruption_update(run, previous):
+            return False
+        return self._save_if_unchanged(run, previous)
+
+    def save_control_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        from app.application.agent_orchestrator.run_sql_repository import valid_control_update
+
+        return valid_control_update(run, previous) and self._save_if_unchanged(run, previous)
+
+    def save_stream_tool_audit_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        from app.application.agent_orchestrator.run_sql_repository import (
+            valid_stream_tool_audit_update,
+        )
+
+        return valid_stream_tool_audit_update(run, previous) and self._save_if_unchanged(
+            run, previous
+        )
+
+    def _save_if_unchanged(self, run: AgentRun, previous: AgentRun) -> bool:
+        with self._lock:
+            current = self._runs.get(previous.run_id)
+            if (
+                run.run_id != previous.run_id
+                or current is None
+                or current.to_dict() != previous.to_dict()
+            ):
+                return False
+            self.save(run)
+            return True
 
     def get(self, run_id: str) -> AgentRun | None:
         with self._lock:

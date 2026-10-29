@@ -96,7 +96,14 @@ def test_manual_installer_is_part_of_official_workflow_without_stable_publicatio
     assert "Invoke-FailedRollback $oldAuth.tenant" in lifecycle
     assert "robocopy $installRoot" not in collector
     assert "[IO.File]::WriteAllText((Join-Path $dataRoot 'rollback-marker.json')" not in collector
-    assert "92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf" in collector
+    baselines = json.loads((ROOT / "config/download_release.json").read_text())[
+        "windows_acceptance_baselines"
+    ]
+    assert (
+        baselines["1.0.0.5"]["sha256"]
+        == "92810ed68e146e886888f0ab58ec6b1788f195eb8bd284b38b114c186dd27acf"
+    )
+    assert "$OldSha256 = $baseline.sha256" in collector
     assert "XCAGI_DESKTOP_TEST" not in collector
     assert "Run-Gui 'identity' (Join-Path $EvidenceDir 'rollback-gui')" in collector
     assert "@('Gui','Upgrade','Recovery','Rollback')" in collector

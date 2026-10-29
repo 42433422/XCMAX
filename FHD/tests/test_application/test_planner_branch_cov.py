@@ -23,6 +23,17 @@ from app.application.workflow.planner import (
 )
 from app.application.workflow.workflow_types import PlanGraph, WorkflowNode
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
+
+
+@pytest.fixture
+def memory_actor(trusted_actor):
+    from app.application.agent_task_context import scoped_conversation_user_id
+
+    actor = trusted_actor(user_id=7, tenant_id=2)
+    context = {**actor.context, "session_id": "memory-error-regression"}
+    return scoped_conversation_user_id("7", context), context
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2353,8 +2364,9 @@ class TestPlanIntegration:
                     )
                     assert result is not None
 
-    def test_plan_user_memory_rag_import_error_handled(self) -> None:
+    def test_plan_user_memory_rag_import_error_handled(self, memory_actor) -> None:
         """用户记忆 RAG ImportError 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2390,16 +2402,17 @@ class TestPlanIntegration:
 
                     with patch("builtins.__import__", side_effect=unavailable_memory):
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
                     assert blocked == ["app.application"]
 
-    def test_plan_user_memory_rag_recoverable_error_handled(self) -> None:
+    def test_plan_user_memory_rag_recoverable_error_handled(self, memory_actor) -> None:
         """用户记忆 RAG RECOVERABLE_ERRORS 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2420,17 +2433,19 @@ class TestPlanIntegration:
                     with patch(
                         "app.application.get_user_memory_rag_app_service",
                         side_effect=RuntimeError("rag fail"),
-                    ):
+                    ) as unavailable:
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
+                        unavailable.assert_called_once_with()
 
-    def test_plan_memory_v2_import_error_handled(self) -> None:
+    def test_plan_memory_v2_import_error_handled(self, memory_actor) -> None:
         """Memory v2 ImportError 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2448,28 +2463,33 @@ class TestPlanIntegration:
                 return_value=_sample_registry(),
             ):
                 with patch.object(planner, "_plan_with_react_multiagent", return_value=valid_plan):
-                    # 让 user_memory_service 导入失败
-                    import sys
+                    import builtins
 
-                    original = sys.modules.get("app.domain.shared_services.user_memory_service")
-                    if original is not None:
-                        sys.modules["app.domain.shared_services.user_memory_service"] = None  # type: ignore[assignment]
-                    try:
+                    original_import = builtins.__import__
+                    blocked = []
+
+                    def unavailable_memory(name, globals=None, locals=None, fromlist=(), level=0):
+                        if (
+                            name == "app.domain.shared_services.user_memory_service"
+                            and "get_user_memory_service" in fromlist
+                        ):
+                            blocked.append(name)
+                            raise ImportError("memory v2 unavailable")
+                        return original_import(name, globals, locals, fromlist, level)
+
+                    with patch("builtins.__import__", side_effect=unavailable_memory):
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
-                    finally:
-                        if original is not None:
-                            sys.modules["app.domain.shared_services.user_memory_service"] = original
-                        else:
-                            sys.modules.pop("app.domain.shared_services.user_memory_service", None)
+                    assert blocked == ["app.domain.shared_services.user_memory_service"]
 
-    def test_plan_memory_v2_recoverable_error_handled(self) -> None:
+    def test_plan_memory_v2_recoverable_error_handled(self, memory_actor) -> None:
         """Memory v2 RECOVERABLE_ERRORS 不阻断主流程。"""
+        namespace, context = memory_actor
         planner = _make_planner()
         valid_plan = PlanGraph(
             plan_id="pid",
@@ -2490,11 +2510,12 @@ class TestPlanIntegration:
                     with patch(
                         "app.domain.shared_services.user_memory_service.get_user_memory_service",
                         side_effect=RuntimeError("v2 fail"),
-                    ):
+                    ) as unavailable:
                         result = planner.plan(
-                            user_id="u1",
+                            user_id=namespace,
                             message="test",
                             tool_registry=_sample_registry(),
-                            context={},
+                            context=context,
                         )
                         assert result is not None
+                        unavailable.assert_called_once_with()

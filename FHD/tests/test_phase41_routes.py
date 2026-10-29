@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from contextlib import contextmanager
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,6 +18,7 @@ from app.db.db_base import Base
 from app.db.models.approval import ApprovalFlow, ApprovalFlowNode, ApprovalStatus
 from app.fastapi_routes import approval as approval_routes
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 try:
     from app.fastapi_routes import finance as finance_routes
@@ -58,17 +58,17 @@ def mock_shipment_svc() -> MagicMock:
 
 
 @pytest.fixture
-def shipment_client(mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr(
-        "app.infrastructure.auth.agent_principal.resolve_session_user",
-        lambda _request: SimpleNamespace(id="phase41-user", is_active=True, tenant_id=None),
-    )
+def shipment_client(
+    mock_shipment_svc: MagicMock, monkeypatch: pytest.MonkeyPatch, trusted_actor
+) -> TestClient:
     monkeypatch.setattr(
         shipment_routes, "get_shipment_application_service_core", lambda: mock_shipment_svc
     )
     app = FastAPI()
     app.include_router(shipment_routes.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(
+        app, raise_server_exceptions=False, headers=trusted_actor(tenant_id=None).headers
+    )
 
 
 @pytest.fixture
@@ -85,12 +85,12 @@ def compat_customer_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 @pytest.fixture
-def tools_client() -> TestClient:
+def tools_client(trusted_actor) -> TestClient:
     app = FastAPI()
     app.include_router(tools_execute_router)
     app.include_router(legacy_system_routes.router)
     app.include_router(compat_misc.router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 @pytest.fixture
@@ -127,11 +127,37 @@ def _patch_get_db(session_factory):
 
 
 @pytest.fixture
-def approval_client(approval_db):
+def approval_client(approval_db, monkeypatch):
+    from app import db as host_db
+    from app.domain.shared_services.session_service import SessionService
+
+    monkeypatch.setattr(host_db, "HostSessionLocal", approval_db)
+    monkeypatch.setattr(
+        "app.application.facades.session_facade.get_session_service", SessionService
+    )
     app = FastAPI()
     app.include_router(approval_routes.router)
     with _patch_get_db(approval_db):
         yield TestClient(app, raise_server_exceptions=False)
+
+
+def _approval_headers(factory, user_id):
+    from datetime import timedelta
+    from uuid import uuid4
+
+    from app.db.models.user import Session as UserSession
+    from app.utils.time import utc_now_naive
+
+    session_id = uuid4().hex
+    with factory.begin() as db:
+        db.add(
+            UserSession(
+                session_id=session_id,
+                user_id=user_id,
+                expires_at=utc_now_naive() + timedelta(hours=1),
+            )
+        )
+    return {"X-Session-ID": session_id}
 
 
 def _ensure_user(session, username: str) -> int:
@@ -198,14 +224,14 @@ def test_approval_withdraw_pending_request(
         submit = approval_client.post(
             "/api/approval/requests",
             json={"flow_key": "withdraw", "title": "撤回单"},
-            headers={"X-User-ID": str(applicant_id)},
+            headers=_approval_headers(approval_db, applicant_id),
         )
         assert submit.status_code == 200
         req_id = submit.json()["data"]["id"]
         withdraw = approval_client.post(
             f"/api/approval/requests/{req_id}/withdraw",
             json={},
-            headers={"X-User-ID": str(applicant_id)},
+            headers=_approval_headers(approval_db, applicant_id),
         )
         assert withdraw.status_code == 200
         assert withdraw.json()["data"]["status"] == ApprovalStatus.WITHDRAWN.value
@@ -228,13 +254,13 @@ def test_approval_withdraw_forbidden_for_non_applicant(
         submit = approval_client.post(
             "/api/approval/requests",
             json={"flow_key": "forbid", "title": "他人撤回"},
-            headers={"X-User-ID": str(applicant_id)},
+            headers=_approval_headers(approval_db, applicant_id),
         )
         req_id = submit.json()["data"]["id"]
         withdraw = approval_client.post(
             f"/api/approval/requests/{req_id}/withdraw",
             json={},
-            headers={"X-User-ID": str(other_id)},
+            headers=_approval_headers(approval_db, other_id),
         )
         assert withdraw.status_code == 403
         assert "申请人" in withdraw.json()["message"]
@@ -256,17 +282,17 @@ def test_approval_delete_final_request(
         submit = approval_client.post(
             "/api/approval/requests",
             json={"flow_key": "phase41_delete", "title": "删除单"},
-            headers={"X-User-ID": str(applicant_id)},
+            headers=_approval_headers(approval_db, applicant_id),
         )
         req_id = submit.json()["data"]["id"]
         approval_client.post(
             f"/api/approval/requests/{req_id}/approve",
             json={"opinion": "ok"},
-            headers={"X-User-ID": str(approver_id)},
+            headers=_approval_headers(approval_db, approver_id),
         )
         deleted = approval_client.delete(
             f"/api/approval/requests/{req_id}",
-            headers={"X-User-ID": str(applicant_id)},
+            headers=_approval_headers(approval_db, applicant_id),
         )
         assert deleted.status_code == 200
         missing = approval_client.get(f"/api/approval/requests/{req_id}")

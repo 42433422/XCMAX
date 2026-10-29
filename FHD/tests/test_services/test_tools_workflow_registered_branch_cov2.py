@@ -716,9 +716,17 @@ class TestBusinessDbRouter:
         assert result["success"] is True
 
     def test_write_customers_ensure_exists(self):
-        with patch("app.application.get_customer_app_service") as mock_get:
-            mock_get.return_value.match_purchase_unit.return_value = None
-            mock_get.return_value.create.return_value = {"success": True}
+        from app.infrastructure.tenant_scope import tenant_scope
+
+        with tenant_scope(1), patch("app.application.get_customer_app_service") as mock_get:
+            mock_get.return_value.lookup_purchase_unit_for_ensure.return_value = {
+                "status": "absent"
+            }
+            mock_get.return_value.create.return_value = {"success": True, "data": {"id": 9}}
+            mock_get.return_value.get_by_id.return_value = {
+                "success": True,
+                "data": {"id": 9, "customer_name": "X"},
+            }
             result = _registered_router_business_db(
                 "write",
                 {
@@ -730,7 +738,7 @@ class TestBusinessDbRouter:
                 "admin",
                 "",
             )
-        assert result["success"] is True
+        assert result["success"] is True, result
 
     def test_write_customers_upsert(self):
         with (

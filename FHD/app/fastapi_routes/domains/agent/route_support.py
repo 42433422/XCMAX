@@ -26,15 +26,47 @@ PUBLIC_APPROVAL_ERROR = "approval_grant 无效、过期或与当前步骤不匹�
 _INTERNAL_ERROR_KEYS = frozenset({"error", "exception", "stack_trace", "traceback"})
 
 
-def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+def without_runtime_identity(raw: dict[str, Any]) -> dict[str, Any]:
+    """Discard caller identity fields before resolving any server principal."""
     context = dict(raw)
-    context.pop("tenant_id", None)
-    context.pop("_mod_authorization", None)
+    for key in (
+        "tenant_id",
+        "user_id",
+        "actor_id",
+        "local_user_id",
+        "authenticated_local_user_id",
+        "_mod_authorization",
+        "_actor_authorization",
+        "mod_id",
+        "active_mod_id",
+        "authenticated_username",
+        "authenticated_display_name",
+        "_dataset_access_context_trusted",
+        "dataset_access_context",
+    ):
+        context.pop(key, None)
+    return context
+
+
+def authenticated_runtime_context(raw: dict[str, Any], principal: AgentPrincipal) -> dict[str, Any]:
+    context = without_runtime_identity(raw)
+    context.update(user_id=principal.user_id, actor_id=principal.user_id)
     if principal.tenant_id:
         context["tenant_id"] = principal.tenant_id
     if principal.mod_authorization:
         context["_mod_authorization"] = dict(principal.mod_authorization)
+        context["mod_id"] = str(principal.mod_authorization["mod_id"])
+    if principal.actor_authorization:
+        context["_actor_authorization"] = dict(principal.actor_authorization)
     return context
+
+
+def request_runtime_context(request: Any, raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    from app.infrastructure.auth.agent_principal import require_agent_principal
+
+    return authenticated_runtime_context(
+        dict(raw or {}), require_agent_principal(request, x_user_id=None)
+    )
 
 
 def success(data: Any, **extra: Any) -> dict[str, Any]:
@@ -62,7 +94,11 @@ def redact_internal_errors(value: Any) -> Any:
 
 
 def public_run_dict(run: Any) -> dict[str, Any]:
-    return cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
+    # to_dict shares metadata with the stored run: redact only the recursive copy.
+    data = cast("dict[str, Any]", redact_internal_errors(run.to_dict()))
+    if isinstance(data.get("metadata"), dict):
+        data["metadata"].pop("_tool_approval_grants", None)
+    return data
 
 
 def public_event_dict(event: Any) -> dict[str, Any]:

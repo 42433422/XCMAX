@@ -180,3 +180,15 @@ it('keeps long original reports inside per-ticket expandable descriptions', asyn
   expect(wrapper.get('.repair-list').find('input').exists()).toBe(true)
   wrapper.unmount()
 })
+
+
+it('keeps the entry available for an empty result and allows reopening', async () => {
+  vi.mocked(apiFetch).mockResolvedValue(response([]))
+  const { wrapper } = await setup(false)
+  await wrapper.get('.repair-trigger').trigger('click')
+  expect(wrapper.text()).toContain('当前没有待核对的工单')
+  await wrapper.get('dialog').trigger('cancel')
+  await wrapper.get('.repair-trigger').trigger('click')
+  expect(wrapper.get('dialog').attributes('open')).toBeDefined()
+  wrapper.unmount()
+})

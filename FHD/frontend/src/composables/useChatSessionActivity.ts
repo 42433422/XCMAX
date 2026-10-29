@@ -15,6 +15,39 @@ export function useChatSessionActivity(activeSessionId: Ref<string>) {
   const isLoading = computed(() => runningIds.value.has(activeSessionId.value))
   const isStreamingReply = computed(() => streamingIds.value.has(activeSessionId.value))
 
+  const generations = new Map<string, AbortController>()
+  function cancelSession(sessionId = activeSessionId.value): boolean {
+    const id = String(sessionId || '').trim() || 'default'
+    const wasRunning = runningIds.value.has(id)
+    generations.get(id)?.abort()
+    generations.delete(id)
+    updateIds(runningIds, id, false)
+    updateIds(streamingIds, id, false)
+    return wasRunning
+  }
+  function cancelAll() {
+    for (const id of generations.keys()) cancelSession(id)
+  }
+  function beginRound(sessionId = activeSessionId.value) {
+    const id = String(sessionId || '').trim() || 'default'
+    cancelSession(id)
+    const controller = new AbortController()
+    generations.set(id, controller)
+    const isCurrent = () => generations.get(id) === controller && !controller.signal.aborted
+    const activity = forSession(id)
+    return {
+      signal: controller.signal,
+      isCurrent,
+      setLoading: (value: boolean) => { if (isCurrent()) activity.setLoading(value) },
+    }
+  }
+
+  function captureGeneration(sessionId = activeSessionId.value) {
+    const id = String(sessionId || '').trim() || 'default'
+    const generation = generations.get(id)
+    return () => generations.get(id) === generation && !generation?.signal.aborted
+  }
+
   function forSession(sessionId = activeSessionId.value) {
     const id = String(sessionId || '').trim() || 'default'
     return {
@@ -25,7 +58,7 @@ export function useChatSessionActivity(activeSessionId: Ref<string>) {
     }
   }
 
-  return { isLoading, isStreamingReply, forSession, runningIds, streamingIds }
+  return { isLoading, isStreamingReply, forSession, captureGeneration, beginRound, cancelSession, cancelAll, runningIds, streamingIds }
 }
 
 export async function persistDetachedPlannerResult(

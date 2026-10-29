@@ -11,6 +11,7 @@ from app.application.persy_memory_app_service import (
     merge_memory_graph,
 )
 from app.domain.shared_services.user_memory_service import UserMemoryService, UserMemoryStore
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 def _access(actor: str = "7", tenant: str = "2") -> DatasetAccessContext:
@@ -244,17 +245,23 @@ def test_missing_trusted_scope_fails_closed() -> None:
     assert result["error_code"] == "persy_memory_scope_missing"
 
 
-def test_completed_chat_turn_is_sent_to_vector_and_structured_memory() -> None:
+def test_completed_chat_turn_is_sent_to_vector_and_structured_memory(trusted_actor) -> None:
+    from app.application.agent_task_context import scoped_conversation_user_id
+
+    actor = trusted_actor(user_id=7, tenant_id=2, permissions=["dataset.read", "dataset.write"])
     vector_service = MagicMock()
     vector_service.build_chat_turn_chunk.return_value = object()
     persy_service = MagicMock()
     context = {
+        **actor.context,
+        "local_user_id": 7,
         "session_id": "chat-9",
         "_dataset_access_context_trusted": True,
         "_dataset_access_context": {
             "actor_id": "7",
             "tenant_id": "2",
             "permissions": ["dataset.read", "dataset.write"],
+            "is_admin": False,
         },
         "persy_memory_scope": "tenant",
     }
@@ -270,7 +277,7 @@ def test_completed_chat_turn_is_sent_to_vector_and_structured_memory() -> None:
         ),
     ):
         AIChatApplicationService._persist_recallable_chat_turn(
-            user_id="7",
+            user_id=scoped_conversation_user_id("7", context),
             message="客户北辰科技的负责人是李明",
             source="smart-chat",
             context=context,

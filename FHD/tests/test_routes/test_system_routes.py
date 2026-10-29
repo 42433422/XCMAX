@@ -13,14 +13,15 @@ from fastapi.testclient import TestClient
 
 from app.fastapi_routes.domains.system import routes
 from app.fastapi_routes.tools_execute import router as tools_execute_router
+from tests.fixtures.backend_ci_isolation import trusted_actor as trusted_actor
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(trusted_actor, local_tools) -> TestClient:
     app = FastAPI()
     app.include_router(routes.router)
     app.include_router(tools_execute_router)
-    return TestClient(app, raise_server_exceptions=False)
+    return TestClient(app, raise_server_exceptions=False, headers=trusted_actor().headers)
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +101,7 @@ class TestSystemPrinter:
         ):
             r = client.post("/api/system/printer", json={"printer_name": "HP"})
             assert r.status_code == 200
+        mock_svc.set_default_printer.assert_called_once_with("HP")
 
     def test_post_fail(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
@@ -142,6 +144,7 @@ class TestSystemStartup:
         ):
             r = client.post("/api/system/startup")
             assert r.status_code == 200
+        mock_svc.enable_startup.assert_called_once_with()
 
     def test_delete_success(self, client: TestClient, local_tools):
         mock_svc = MagicMock()
@@ -151,6 +154,7 @@ class TestSystemStartup:
         ):
             r = client.delete("/api/system/startup")
             assert r.status_code == 200
+        mock_svc.disable_startup.assert_called_once_with()
 
     def test_delete_error(self, client: TestClient):
         with patch(
@@ -192,6 +196,7 @@ class TestDatabaseBackups:
         ):
             r = client.post("/api/database/backup")
             assert r.status_code == 200
+        mock_svc.backup_database.assert_called_once_with()
 
     def test_backup_error(self, client: TestClient, local_tools):
         with patch(
@@ -209,6 +214,7 @@ class TestDatabaseBackups:
         ):
             r = client.delete("/api/database/backup/test.sql")
             assert r.status_code == 200
+        mock_svc.delete_backup.assert_called_once_with("test.sql")
 
     def test_delete_backup_error(self, client: TestClient):
         with patch(
@@ -230,6 +236,7 @@ class TestDatabaseBackups:
         ):
             r = client.post("/api/database/restore", json={"backup_file": "backup.sql"})
             assert r.status_code == 200
+        mock_svc.restore_database.assert_called_once_with("backup.sql")
 
     def test_restore_error(self, client: TestClient, local_tools):
         with patch(
@@ -429,6 +436,7 @@ class TestPerformanceCacheClear:
         ):
             r = client.post("/api/performance/cache/clear?pattern=test:*")
             assert r.json()["success"] is True
+        mock_opt.redis_cache.clear_pattern.assert_called_once_with("test:*")
 
     def test_clear_local(self, client: TestClient, local_tools):
         mock_opt = MagicMock()
@@ -439,6 +447,7 @@ class TestPerformanceCacheClear:
         ):
             r = client.post("/api/performance/cache/clear")
             assert r.json()["success"] is True
+        mock_opt.redis_cache.clear_local_cache.assert_called_once_with()
 
 
 class TestPerformanceCacheInvalidate:
@@ -465,6 +474,7 @@ class TestPerformanceCacheInvalidate:
         ):
             r = client.post("/api/performance/cache/invalidate", json={"keys": ["k1"]})
             assert r.json()["success"] is True
+        mock_opt.redis_cache.delete.assert_called_once_with("k1")
 
 
 class TestPerformanceTasksStatus:

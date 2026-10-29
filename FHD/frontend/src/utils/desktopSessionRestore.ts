@@ -2,6 +2,7 @@ import { validateEnterpriseSessionCached } from '@/utils/authSessionCache'
 
 export type DesktopProfileHydrator = {
   loaded: boolean
+  sessionCheckUnavailable?: boolean
   refreshFromServer: () => Promise<void>
 }
 
@@ -25,7 +26,7 @@ export function refreshDesktopSessionInBackground(router: DesktopSessionRouter, 
         return
       }
       await profile.refreshFromServer()
-      if (!profile.loaded) {
+      if (!profile.loaded && !profile.sessionCheckUnavailable) {
         await router.replace({ name: 'login', query: { redirect } })
       }
     })

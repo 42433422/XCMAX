@@ -92,3 +92,5 @@ bash FHD/scripts/move_archive_off_workspace.sh   # 根 _archive → xcmax-archiv
 **与 #2544 共存**：`evidence-materialization.json` 登记的 FHD 源媒体（约 289MB）与 `retained_sources` 仍留在 git，供 `evidence_assets.materialize` 校验/生成公开别名；能力中心运行时仍优先 COS 预签名。
 
 **保留（有意）**：根目录 `XCAGI-*.html`；`太阳鸟/` 说明；`成都修茈科技有限公司/` 活代码；materialization 源媒体。
+
+2026-10-26 交接整改：`成都修茈科技有限公司/docs/planning/腾讯云Pages部署指南.md` 为根目录同名文件的逐字重复副本（342 行），无该路径消费者；校验外置至 `~/XCMAX-archives/docs-20261026-duplicate-pages-guide/`。保留员工清单所用根目录原件，原文、来源提交及 SHA256 见 `MANIFEST.json`；未删除测试或改变部署流程。
