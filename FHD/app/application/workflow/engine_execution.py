@@ -55,6 +55,14 @@ class NodeExecutor:
                 output = self._dispatch(tool_id=tool_id, action=action, params=prepare_params())
                 if isinstance(output, dict):
                     result.output = output
+                    if (
+                        output.get("retryable") is False
+                        or output.get("outcome") == "unknown"
+                        or output.get("outcome_unknown")
+                        or output.get("reconciliation_required")
+                        or output.get("requires_reconciliation")
+                    ):
+                        result.retryable = False
                 if output.get("success", False):
                     result.success = True
                     result.attempts.append(attempt_summary(retries + 1, True, "", attempt_started))
@@ -72,6 +80,8 @@ class NodeExecutor:
                 )
             result.attempts.append(attempt_summary(retries + 1, False, last_error, attempt_started))
             retries += 1
+            if not result.retryable:
+                break
         result.params = dict(params or {})
         result.retries = retries if result.success else max(0, retries - 1)
         result.finished_at = datetime.now(UTC).isoformat()
@@ -83,7 +93,7 @@ class NodeExecutor:
                 action=action,
                 error=last_error,
                 output=result.output,
-                retryable=retryable,
+                retryable=result.retryable,
             )
         return result
 

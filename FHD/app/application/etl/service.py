@@ -20,6 +20,7 @@ from app.application.etl.service_draft import DraftServiceMixin
 from app.application.etl.service_execution import ExecutionServiceMixin
 from app.application.etl.service_history import HistoryServiceMixin
 from app.application.etl.service_preview import PreviewServiceMixin
+from app.application.etl.service_replay import ReplayServiceMixin
 from app.application.etl.service_shipment_templates import ShipmentTemplateServiceMixin
 from app.application.etl.service_support import MAX_FILE_BYTES
 from app.application.etl.service_targets import TargetConfigServiceMixin
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 class EtlService(
     UploadServiceMixin,
     PreviewServiceMixin,
+    ReplayServiceMixin,
     HistoryServiceMixin,
     DraftServiceMixin,
     ExecutionServiceMixin,
@@ -66,6 +68,10 @@ class EtlService(
             "targets": target_capabilities(),
             "compatibility_presets": compatibility_presets,
             "execution_policy": {
+                "pipeline": "extract_load_transform",
+                "source_snapshot_retention_days": 90,
+                "source_snapshot_replay": True,
+                "original_required_targets": ["knowledge", "attendance"],
                 "preview_required": True,
                 "confirmation_required": True,
                 "default_duplicate_action": "skip",

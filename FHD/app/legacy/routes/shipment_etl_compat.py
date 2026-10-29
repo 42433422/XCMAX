@@ -152,6 +152,7 @@ async def shipment_etl_execute(
     etl_run_id: str = Form(""),
     confirmed: str = Form("0"),
     valid_rows_only: str = Form("0"),
+    preview_revision: str = Form(""),
     db: Session = Depends(get_db_dependency),
     user: Any = Depends(require_identified_user),
 ):
@@ -178,6 +179,7 @@ async def shipment_etl_execute(
                     owner_user_id=owner_user_id,
                     confirmed=_form_truthy(confirmed, False),
                     valid_rows_only=_form_truthy(valid_rows_only, False),
+                    preview_revision=str(preview_revision or ""),
                 )
             except EtlError as exc:
                 return JSONResponse(

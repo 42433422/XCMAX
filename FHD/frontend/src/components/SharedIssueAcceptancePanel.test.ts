@@ -182,11 +182,19 @@ it('keeps long original reports inside per-ticket expandable descriptions', asyn
 })
 
 
-it('keeps the entry available for an empty result and allows reopening', async () => {
-  vi.mocked(apiFetch).mockResolvedValue(response([]))
+it.each([200, 401])('keeps the entry available after status %s and allows recovery', async (status) => {
+  vi.mocked(apiFetch).mockResolvedValueOnce(status === 401 ? new Response('', { status }) : response([]))
   const { wrapper } = await setup(false)
   await wrapper.get('.repair-trigger').trigger('click')
-  expect(wrapper.text()).toContain('当前没有待核对的工单')
+  if (status === 401) {
+    expect(wrapper.get('[role="alert"]').text()).toContain('登录已失效')
+    expect(wrapper.text()).not.toContain('当前没有待核对的工单')
+    vi.mocked(apiFetch).mockResolvedValueOnce(response())
+    await wrapper.get('[role="alert"] button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    expect(wrapper.get('article').text()).toContain(repair.ticket_no)
+  } else expect(wrapper.text()).toContain('当前没有待核对的工单')
   await wrapper.get('dialog').trigger('cancel')
   await wrapper.get('.repair-trigger').trigger('click')
   expect(wrapper.get('dialog').attributes('open')).toBeDefined()

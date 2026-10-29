@@ -288,7 +288,12 @@ def test_customer_products_csv_preview_and_confirmed_execution_persist_aggregate
     with store.factory() as db:
         assert db.query(PurchaseUnit).count() == db.query(Product).count() == 0
         store.service.execute(
-            db, run_id=run_id, owner_user_id=7, confirmed=True, valid_rows_only=False
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=preview["preview_revision"],
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
@@ -346,9 +351,15 @@ def test_unexpected_database_execution_error_rolls_back_chunk_without_replay(
         return result
 
     monkeypatch.setattr(adapter, "execute_row", write_then_fail)
+    reviewed = snapshot(store, run_id)
     with store.factory() as db:
         store.service.execute(
-            db, run_id=run_id, owner_user_id=7, confirmed=True, valid_rows_only=False
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=reviewed["preview_revision"],
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)
@@ -372,9 +383,15 @@ def test_unexpected_external_batch_error_retains_unknown_outcome_and_rejects_ret
         raise TypeError("external result contract changed after dispatch")
 
     monkeypatch.setattr(get_adapter("export_csv"), "execute_batch", external_then_fail)
+    reviewed = snapshot(store, run_id)
     with store.factory() as db:
         store.service.execute(
-            db, run_id=run_id, owner_user_id=7, confirmed=True, valid_rows_only=False
+            db,
+            run_id=run_id,
+            owner_user_id=7,
+            confirmed=True,
+            valid_rows_only=False,
+            preview_revision=reviewed["preview_revision"],
         )
     store.executor.futures[-1].result(timeout=10)
     result = snapshot(store, run_id)

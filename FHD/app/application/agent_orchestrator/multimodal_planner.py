@@ -69,8 +69,8 @@ def build_multimodal_autonomous_plan(
             plan_id=f"plan_multimodal_excel_{uuid.uuid4().hex[:12]}",
             intent="multimodal_excel_import_to_db",
             todo_steps=[
-                "将 Excel Artifact 附加到 AgentRun 并进入 Dataset/RAG 审计",
-                "等待用户确认后把解析出的 Excel 记录写入业务数据库",
+                "暂存 Excel 解析结果供用户审阅",
+                "等待用户确认后写入业务数据库，成功后将来源附件保存到知识库用于溯源",
             ],
             nodes=[
                 WorkflowNode(
@@ -108,8 +108,8 @@ def build_multimodal_autonomous_plan(
             plan_id=f"plan_multimodal_doc_export_{uuid.uuid4().hex[:12]}",
             intent="multimodal_document_export",
             todo_steps=[
-                "将 PDF/Office Artifact 进入 Dataset/RAG 作为生成依据",
-                "等待用户确认后生成可下载 Office 文档",
+                "暂存 PDF/Office 解析结果作为生成依据，供用户审阅",
+                "等待用户确认后生成可下载 Office 文档，成功后将来源附件保存到知识库用于溯源",
             ],
             nodes=[
                 WorkflowNode(

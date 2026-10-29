@@ -156,8 +156,8 @@ def excel_tool_specs() -> list[Payload]:
                 },
                 "confirm": {
                     "type": "boolean",
-                    "description": "是否执行写入。默认 true（直接导入）；仅显式传 false 时返回预览。已配置令牌且请求已携带正确 "
-                    "db_write_token 时，服务端仍按已确认写入处理。",
+                    "description": "是否执行写入。默认 false，仅返回预览；用户审核本次内容并明确确认后才可传 true。"
+                    "写入令牌用于权限校验，不能代替本次内容确认。",
                 },
                 "preview_only": {
                     "type": "boolean",

@@ -6,6 +6,8 @@
         <p class="muted" style="margin:0;font-size:13px;">展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」或可从文件名推断则归入对应分组，否则在各分组中均显示。</p>
       </div>
 
+      <ReviewedExcelTemplate @saved="refreshTemplates" />
+
       <div class="template-preview-toolbar" style="display:flex;gap:8px;align-items:center;margin:12px 0 16px;flex-wrap:wrap;">
         <button
           v-for="tab in scopeTabs"
@@ -68,6 +70,7 @@
 <script setup lang="ts">
 // 原超大 SFC 已拆分至 ./template-preview/（子组件 + composables + 独立 CSS）；
 // 入口保持对外路径/默认导出不变，仅做组装。
+import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import TpTemplateCard from './template-preview/TpTemplateCard.vue'
 import TpCreateModal from './template-preview/TpCreateModal.vue'
 import TpPreviewModal from './template-preview/TpPreviewModal.vue'

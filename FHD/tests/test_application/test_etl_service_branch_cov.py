@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import uuid
@@ -22,6 +23,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
+from app.application.etl.preview_confirmation import (
+    preview_revision,
+    publish_preview,
+    record_confirmation,
+)
 from app.application.etl.service_draft import DraftServiceMixin
 from app.application.etl.service_execution import ExecutionServiceMixin
 from app.application.etl.service_history import HistoryServiceMixin
@@ -341,12 +347,14 @@ def _make_upload(
 def _make_upload_file(tmp_path, db, **kw):
     p = tmp_path / (kw.pop("file_name", "a.xlsx"))
     p.write_bytes(b"test-bytes")
+    kw.setdefault("sha256", hashlib.sha256(b"test-bytes").hexdigest())
     return _make_upload(db, storage_path=str(p), **kw)
 
 
 def _make_run(
     db, *, id=None, upload_id="up-1", target_type="shipment_records", status="preview_ready", **kw
 ):
+    upload = db.get(EtlUpload, upload_id)
     run = EtlRun(
         id=id or _nid(),
         tenant_id=1,
@@ -356,13 +364,22 @@ def _make_run(
         status=status,
         stage=status,
         progress=100 if status == "preview_ready" else 0,
-        file_sha256="abc123",
+        file_sha256=upload.sha256 if upload else "abc123",
         reversible=True,
         **kw,
     )
     db.add(run)
     db.commit()
     return run
+
+
+def _confirm_worker_preview(db, run):
+    """Arrange an explicitly approved preview for low-level worker tests."""
+    run.status = "preview_ready"
+    publish_preview(db, run)
+    record_confirmation(run, preview_revision(run), valid_rows_only=False)
+    run.status = "executing"
+    db.commit()
 
 
 def _make_row(
@@ -1031,7 +1048,7 @@ class TestServiceDraft:
         assert run.error_rows == 4
 
     def test_update_draft_applies_overrides(self, etl_db, svc, app_data, fake_adapter):
-        _make_upload(etl_db, id="up-1")
+        _make_upload_file(app_data, etl_db, id="up-1")
         run = _make_run(etl_db)
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
         d = svc.update_draft(
@@ -1043,7 +1060,7 @@ class TestServiceDraft:
     def test_record_correction_metrics(
         self, etl_db, svc, app_data, fake_adapter, no_background, mock_etl_metrics
     ):
-        _make_upload(etl_db, id="up-1")
+        _make_upload_file(app_data, etl_db, id="up-1")
         run = _make_run(etl_db)
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new")
         svc.update_draft(
@@ -1162,8 +1179,16 @@ class TestServiceExecution:
         )
         etl_db.add(cfg)
         etl_db.commit()
+        publish_preview(etl_db, run)
+        etl_db.commit()
+        reviewed_revision = preview_revision(run)
         d = svc.execute(
-            etl_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=True
+            etl_db,
+            run_id=run.id,
+            owner_user_id=1,
+            confirmed=True,
+            valid_rows_only=True,
+            preview_revision=reviewed_revision,
         )
         assert d["id"] == run.id
         assert run.status == "executing"
@@ -1173,8 +1198,16 @@ class TestServiceExecution:
         run = _make_run(etl_db, upload_id="upx", target_type="shipment_records")
         run.draft_json = dump_json({"field_mappings": []})
         etl_db.commit()
+        publish_preview(etl_db, run)
+        etl_db.commit()
+        reviewed_revision = preview_revision(run)
         d = svc.execute(
-            etl_db, run_id=run.id, owner_user_id=1, confirmed=True, valid_rows_only=True
+            etl_db,
+            run_id=run.id,
+            owner_user_id=1,
+            confirmed=True,
+            valid_rows_only=True,
+            preview_revision=reviewed_revision,
         )
         assert d["id"] == run.id
         assert run.status == "executing"
@@ -1287,6 +1320,7 @@ class TestServiceExecution:
         etl_db.add(cfg)
         etl_db.commit()
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _confirm_worker_preview(etl_db, run)
         svc._execute_worker(run.id, 1, False)
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "completed"
@@ -1298,6 +1332,7 @@ class TestServiceExecution:
         run = _make_run(etl_db, upload_id="upx", status="executing")
         fake_adapter.fail_execute_batch = True
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
+        _confirm_worker_preview(etl_db, run)
         svc._execute_worker(run.id, 1, False)
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "outcome_unknown"
@@ -1311,6 +1346,7 @@ class TestServiceExecution:
         del fake_adapter.execute_batch
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
         _make_row(etl_db, run_id=run.id, id_seq=2, final_action="update", execution_status=None)
+        _confirm_worker_preview(etl_db, run)
         svc._execute_worker(run.id, 1, False)
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "completed"
@@ -1325,6 +1361,7 @@ class TestServiceExecution:
         fake_adapter.fail_for_value = "O2"
         _make_row(etl_db, run_id=run.id, id_seq=1, final_action="new", execution_status=None)
         _make_row(etl_db, run_id=run.id, id_seq=2, final_action="new", execution_status=None)
+        _confirm_worker_preview(etl_db, run)
         svc._execute_worker(run.id, 1, False)
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "failed"
@@ -1538,7 +1575,7 @@ class TestServicePreview:
             lambda *a, **k: [{"region_id": "r1"}],
         )
         monkeypatch.setattr(
-            "app.application.etl.service_preview.apply_mapping",
+            "app.application.etl.service_draft.apply_mapping",
             lambda source, mappings: (
                 {"order_number": source["order_number"]}
                 if source["order_number"] != "O2"
@@ -1611,7 +1648,9 @@ class TestServicePreview:
         mappings = svc._suggest_mappings(ds, fake_adapter)
         assert isinstance(mappings, list)
 
-    def test_update_linked_companion_summary(self, etl_db, svc, app_data, fake_adapter):
+    def test_update_linked_companion_summary(
+        self, etl_db, etl_factory, svc, app_data, fake_adapter
+    ):
         parent = _make_run(etl_db, id="par", status="preview_ready")
         parent.summary_json = dump_json(
             {
@@ -1628,10 +1667,18 @@ class TestServicePreview:
         child.tenant_id = 1
         child.summary_json = dump_json({"linked_from_shipment_preview": "par"})
         etl_db.commit()
+        assert "_preview_review" not in load_json(parent.summary_json, {})
+        with etl_factory() as other:
+            current = other.get(EtlRun, "par")
+            details = load_json(current.summary_json, {})
+            details["_preview_review"] = {"nonce": "new-preview", "revision": "a" * 64}
+            current.summary_json = dump_json(details)
+            other.commit()
         svc._update_linked_companion_summary(etl_db, child, status="preview_ready")
         parent = etl_db.get(EtlRun, "par")
         link = json.loads(parent.summary_json)["linked_customer_products_preview"]
         assert link["status"] == "preview_ready"
+        assert load_json(parent.summary_json, {})["_preview_review"]["revision"] == "a" * 64
 
     def test_update_linked_no_parent(self, etl_db, svc, app_data, fake_adapter):
         child = _make_run(etl_db, id="child1")
@@ -1792,7 +1839,7 @@ class TestShipmentTemplateService:
         assert result["template_id"] == "etl:t2"
 
     def test_save_run_shipment_template_success(
-        self, etl_db, svc, app_data, fake_adapter, monkeypatch
+        self, etl_db, etl_factory, svc, app_data, fake_adapter, monkeypatch
     ):
         up = _make_upload_file(app_data, etl_db, id="upx", file_name="a.xlsx")
         run = _make_run(
@@ -1814,13 +1861,22 @@ class TestShipmentTemplateService:
             }
         )
         etl_db.commit()
+
+        def extract_while_review_changes(*_args, **_kwargs):
+            with etl_factory() as other:
+                current = other.get(EtlRun, run.id)
+                current.summary_json = dump_json({"_preview_review": {"revision": "b" * 64}})
+                other.commit()
+            return {"source_region_id": "r1"}
+
         monkeypatch.setattr(
             "app.application.etl.service_shipment_templates.extract_shipment_template",
-            lambda *a, **k: {"source_region_id": "r1"},
+            extract_while_review_changes,
         )
         result = svc.save_run_shipment_template(etl_db, run_id=run.id, owner_user_id=1)
         assert result["source_region_id"] == "r1"
         assert result["template_id"].startswith("etl:")
+        assert load_json(run.summary_json, {})["_preview_review"]["revision"] == "b" * 64
 
     def test_save_private_shipment_document_template_new_and_reuse(
         self, etl_db, svc, app_data, fake_adapter
