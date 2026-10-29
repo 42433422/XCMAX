@@ -12,7 +12,7 @@ import { useProductsStore } from '@/stores/products'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import type { EtlRun } from '@/api/etl'
 
-const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), upload: vi.fn(), preview: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn() }))
+const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), upload: vi.fn(), preview: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: api }))
 vi.mock('@/api/etl', () => ({ etlApi: api }))
 vi.mock('@/api/customers', () => ({ default: api }))
@@ -25,7 +25,7 @@ let wrapper: VueWrapper | undefined
 const Table = defineComponent({ props: ['data'], template: '<div><div v-for="row in data" :key="row.id" class="product-row"><span class="product-price">{{ row.price }}</span><slot name="actions" :row="row" /></div></div>' })
 const Shell = defineComponent({ template: '<RouterView v-slot="{ Component }"><KeepAlive><component :is="Component" /></KeepAlive></RouterView>' })
 function fixture(status = 'preview_ready'): EtlRun {
-  return { id: 'run-price-update', upload_id: 'upload-1', file_name: 'prices.xlsx', file_sha256: 'abc', target_type: 'products', status,
+  return { id: 'run-price-update', upload_id: 'upload-1', file_name: 'prices.xlsx', file_sha256: 'abc', target_type: 'products', status, preview_revision: 'a'.repeat(64),
     stage: status, progress: 100, total_rows: 1, processed_rows: 1, summary: { new: 0, update: 1, skip: 0, error: 0, executed: status === 'preview_ready' ? 0 : 1 },
     details: {}, source_features: {}, draft: {}, receipt: {}, reversible: true }
 }
@@ -39,6 +39,7 @@ async function setup(view = ModProductsView) {
   await flushPromises()
   const state = createEtlCenterState(); state.currentRun.value = run
   const etl = createEtlCenterRuns({ state, router, route: { query: {} }, canExecute: computed(() => true), canRollback: computed(() => true), shipmentTemplateCandidates: computed(() => []), bulkNewRows: computed(() => []) })
+  await etl.loadRows()
   return { router, etl, state, store: useProductsStore() }
 }
 const rowPrice = () => wrapper!.get('.product-price').text()
@@ -47,6 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks(); updateProductReadAccountScope({ tenantId: 1, marketUserId: 11 }); price = 99; run = fixture()
   api.getCustomers.mockResolvedValue({ success: true, data: [{ unit_name: '客户甲' }] })
   api.getProducts.mockImplementation(async () => ({ success: true, data: [{ id: 1, name: 'PM90', model_number: 'PM90-001', specification: '人工规格', price }], total: 1 }))
+  api.rows.mockResolvedValue({ items: [], total: 1, preview_revision: 'a'.repeat(64) })
   api.run.mockImplementation(async () => run); api.runs.mockImplementation(async () => [run])
   api.execute.mockImplementation(async () => { price = 109; run = fixture('completed'); return run })
   api.rollback.mockImplementation(async () => { price = 99; run = { ...run, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 1 } } }; return run })
@@ -90,7 +92,7 @@ describe('kept-alive product freshness', () => {
       batch = useEtlFolderBatch({ capabilities: state.capabilities, targetType: state.targetType,
         templateId: ref(''), compatibilityPresetId: ref(''), targetConfigId: ref(''), runs: state.runs,
         currentRun: state.currentRun, activeTab: state.activeTab, busy: state.busy, pageError: state.pageError,
-        router, autoWriteEnabled: ref(true), markAutoWrite: etl.markAutoWrite, tryAutoWrite: etl.tryAutoWrite,
+        router,
         syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows })
       return () => h('div')
     } })
@@ -111,11 +113,9 @@ describe('kept-alive product freshness', () => {
     } finally { harness.unmount(); replace.mockRestore(); vi.useRealTimers() }
   })
 
-  it('auto-write refreshes a visible product list through the same notification path', async () => {
-    const { etl, state } = await setup()
-    state.autoWriteEnabled.value = true
-    etl.markAutoWrite(run.id)
-    await etl.tryAutoWrite(run); await flushPromises()
+  it('a confirmed write refreshes a visible product list through the same notification path', async () => {
+    const { etl } = await setup()
+    await etl.executeCurrentRun(); await flushPromises()
     expect(rowPrice()).toBe('109'); expect(api.execute).toHaveBeenCalledTimes(1)
   })
 

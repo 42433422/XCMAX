@@ -2018,13 +2018,14 @@ def test_attendance_execute_and_rollback(tmp_path, monkeypatch):
         "upload_path": str(tmp_path / "a.xlsx"),
         "file_sha256": "f",
         "row_count": 3,
+        "total_rows": 3,
         "progress_callback": lambda *a: None,
     }
     with patch(
         "app.application.attendance_import_app_service.import_attendance_workbook",
         return_value={"ok": True},
     ):
-        r = a.execute_batch([], ctx2)
+        r = a.execute_batch([{}, {}, {}], ctx2)
     assert r["executed"] == 3
 
     # rollback data missing

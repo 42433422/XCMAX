@@ -8,7 +8,9 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
+from app.application.etl.errors import EtlConflict
 from app.application.etl.operation_owner import recover_stale_owner
+from app.application.etl.preview_confirmation import REVIEW_KEY, preview_revision
 from app.application.etl.service_support import (
     SUBMITTED,
     SUBMITTED_LOCK,
@@ -163,6 +165,7 @@ class HistoryServiceMixin:
         relative_path: str | None = None,
     ) -> dict[str, Any]:
         details = load_json(run.summary_json, {})
+        details.pop(REVIEW_KEY, None)
         return {
             "id": run.id,
             "upload_id": run.upload_id,
@@ -174,6 +177,7 @@ class HistoryServiceMixin:
             "template_version_id": run.template_version_id,
             "target_type": run.target_type,
             "status": run.status,
+            "preview_revision": preview_revision(run),
             "stage": run.stage,
             "progress": run.progress,
             "total_rows": run.total_rows,
@@ -209,7 +213,8 @@ class HistoryServiceMixin:
         page_size: int,
         action: str | None = None,
     ) -> dict[str, Any]:
-        self._owned_run(db, run_id, owner_user_id)
+        run = self._owned_run(db, run_id, owner_user_id)
+        revision = preview_revision(run)
         query = db.query(EtlRunRow).filter(
             EtlRunRow.run_id == run_id, EtlRunRow.owner_user_id == owner_user_id
         )
@@ -222,11 +227,16 @@ class HistoryServiceMixin:
             .limit(page_size)
             .all()
         )
+        items = [self.row_dict(row) for row in rows]
+        db.refresh(run)
+        if preview_revision(run) != revision:
+            raise EtlConflict("ETL_PREVIEW_CHANGED", "预演内容已变化，请刷新当前预演")
         return {
             "page": max(page, 1),
             "page_size": page_size,
             "total": total,
-            "items": [self.row_dict(row) for row in rows],
+            "items": items,
+            "preview_revision": revision,
         }
 
     def row_dict(self, row: EtlRunRow) -> dict[str, Any]:

@@ -4,7 +4,7 @@
  */
 import type { ComputedRef } from 'vue'
 import type { Router } from 'vue-router'
-import { etlApi, type EtlRun } from '@/api/etl'
+import { etlApi } from '@/api/etl'
 import { tabForRunStatus } from '@/utils/etlRunView'
 import type { EtlCenterState } from './etlCenterState'
 import { createTargetLabel } from './etlCenterShared'
@@ -15,8 +15,6 @@ export interface EtlCenterExtrasDeps {
   shipmentTemplateCandidate: ComputedRef<Record<string, unknown> | null>
   linkedCustomerProductPreview: ComputedRef<Record<string, unknown> | null>
   schedulePoll: () => void
-  tryAutoWrite: (run: EtlRun) => Promise<void>
-  markAutoWrite: (runId: string) => void
   syncDraft: () => void
   loadRows: () => Promise<void>
 }
@@ -27,8 +25,6 @@ export function createEtlCenterExtras({
   shipmentTemplateCandidate,
   linkedCustomerProductPreview,
   schedulePoll,
-  tryAutoWrite,
-  markAutoWrite,
   syncDraft,
   loadRows,
 }: EtlCenterExtrasDeps) {
@@ -41,7 +37,6 @@ export function createEtlCenterExtras({
     templates,
     targetConfigs,
     targetConfigId,
-    autoWriteEnabled,
     runRows,
     rowPage,
     rowTotal,
@@ -195,18 +190,14 @@ export function createEtlCenterExtras({
       const retainedRuns = runs.value.some((run) => run.id === sourceRun.id) ? runs.value : [sourceRun, ...runs.value]
       runs.value = [customerProductRun, ...retainedRuns.filter((run) => run.id !== customerProductRun.id)]
       customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品导入任务；请核对后点击“写入数据库”。'
-      if (autoWriteEnabled.value) markAutoWrite(customerProductRun.id)
       syncDraft()
       activeTab.value = 'preview'
       await router.replace({
         path: '/business-docking',
         query: { run_id: customerProductRun.id },
       })
-      if (customerProductRun.status === 'preview_ready' && autoWriteEnabled.value) {
-        await tryAutoWrite(customerProductRun)
-      } else {
-        schedulePoll()
-      }
+      if (customerProductRun.status === 'preview_ready') await loadRows()
+      schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '创建客户及产品导入失败'
     } finally {

@@ -17,6 +17,7 @@ from app.application.etl.operation_owner import (
     unbind_owner,
 )
 from app.application.etl.parsers import MAX_ROWS
+from app.application.etl.preview_confirmation import invalidate_preview, publish_preview
 from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_support import (
     ALLOWED_VALIDATION_OPS,
@@ -79,7 +80,10 @@ class DraftServiceMixin:
                 )
                 bind_owner(db, operation)
                 try:
+                    db.refresh(run)
+                    invalidate_preview(run)
                     self._apply_row_overrides(db, run.id, owner_user_id, overrides)
+                    publish_preview(db, run)
                     finish_operation(db, operation)
                     db.commit()
                 except RECOVERABLE_ERRORS as exc:
@@ -93,11 +97,6 @@ class DraftServiceMixin:
                 "dict[str, Any]", self.get_run(db, run_id=run.id, owner_user_id=owner_user_id)
             )
 
-        draft = load_json(run.draft_json, {})
-        for key in draft_keys:
-            if key in patch:
-                draft[key] = patch[key]
-        self._validate_draft(draft, get_adapter(run.target_type))
         operation = claim_operation(
             db,
             run,
@@ -106,15 +105,29 @@ class DraftServiceMixin:
             require_unrolled_back=True,
         )
         bind_owner(db, operation)
-        run.draft_json = dump_json(draft)
-        run.status = "previewing"
-        run.stage = "validating"
-        run.progress = 20
-        run.error_code = None
-        run.error_message = None
-        tenant_id = tenant_id_for_write()
-        db.commit()
-        unbind_owner(db)
+        committed = False
+        try:
+            db.refresh(run)
+            # Build from the latest draft only after obtaining the existing run lock.
+            draft = load_json(run.draft_json, {})
+            draft.update({key: patch[key] for key in draft_keys if key in patch})
+            self._validate_draft(draft, get_adapter(run.target_type))
+            invalidate_preview(run)
+            run.draft_json = dump_json(draft)
+            run.status = "previewing"
+            run.stage = "validating"
+            run.progress = 20
+            run.error_code = None
+            run.error_message = None
+            tenant_id = tenant_id_for_write()
+            db.commit()
+            committed = True
+        finally:
+            try:
+                if not committed:
+                    db.rollback()
+            finally:
+                unbind_owner(db)
         self._submit_revalidation(
             run.id,
             tenant_id,
@@ -177,6 +190,7 @@ class DraftServiceMixin:
                     self._revalidate_existing_rows(db, run_id, owner_user_id)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
+                    publish_preview(db, self._owned_run(db, run_id, owner_user_id))
                     finish_operation(db, operation)
                     db.commit()
             except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.

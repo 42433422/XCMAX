@@ -78,6 +78,7 @@ function previewRun(id = 'preview-run') {
   return {
     ...queuedRun(id, '客户产品.xlsx'),
     status: 'preview_ready',
+    preview_revision: 'a'.repeat(64),
     stage: 'preview_ready',
     progress: 100,
     total_rows: 3,
@@ -193,6 +194,7 @@ function buttonByText(wrapper: Awaited<ReturnType<typeof mountView>>, text: stri
 describe('EtlCenterView folder workflow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     currentUserMock.mockResolvedValue({ success: true, data: { permissions: ['etl.read', 'etl.execute', 'etl.rollback', 'etl.template.manage', 'etl.target.manage'] } })
     etlApiMock.capabilities.mockResolvedValue({
       enabled: true,
@@ -267,6 +269,7 @@ describe('EtlCenterView folder workflow', () => {
       page_size: 50,
       total: 3,
       items: previewRows(),
+      preview_revision: 'a'.repeat(64),
     })
     etlApiMock.exportUrl.mockImplementation((id: string) => `/api/etl/runs/${id}/download`)
     etlApiMock.errorExportUrl.mockImplementation((id: string) => `/api/etl/runs/${id}/errors/export`)
@@ -289,14 +292,14 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
   })
 
-  it('keeps the single-file list current through queued, auto-write, and completed states', async () => {
+  it('keeps upload and polling read-only until the reviewed preview is explicitly confirmed', async () => {
     vi.useFakeTimers()
     const queued = queuedRun('single-file', 'products.csv')
     let latest = queued
     etlApiMock.upload.mockResolvedValue({ upload_id: queued.upload_id })
     etlApiMock.preview.mockResolvedValue(queued)
     etlApiMock.run.mockImplementation(async () => latest)
-    etlApiMock.runs.mockImplementation(async () => latest.status === 'queued' ? [] : [latest])
+    etlApiMock.runs.mockImplementation(async () => latest.status === 'queued' ? [] : [{ ...latest }])
     etlApiMock.execute.mockImplementation(async () => {
       latest = { ...latest, status: 'executing', stage: 'executing', progress: 10 }
       return latest
@@ -306,14 +309,17 @@ describe('EtlCenterView folder workflow', () => {
       const input = wrapper.find('input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'products.csv')] })
       await input.trigger('change')
-      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await buttonByText(wrapper, '上传并解析')?.trigger('click')
       await flushPromises()
       expect(wrapper.find('.etl-batch-card').text()).toContain('已排队')
 
       latest = { ...previewRun(queued.id), summary: { new: 2, update: 0, skip: 0, error: 0, executed: 0 } }
       await vi.advanceTimersByTimeAsync(1200)
       await flushPromises()
-      expect(etlApiMock.execute).toHaveBeenCalledTimes(1)
+      expect(etlApiMock.execute).not.toHaveBeenCalled()
+      await buttonByText(wrapper, '写入数据库')?.trigger('click')
+      await flushPromises()
+      expect(etlApiMock.execute).toHaveBeenCalledWith(queued.id, 'a'.repeat(64), false)
       latest = { ...latest, status: 'completed', stage: 'completed', progress: 100, summary: { ...latest.summary, executed: 2 } }
       await vi.advanceTimersByTimeAsync(1200)
       await flushPromises()
@@ -347,9 +353,9 @@ describe('EtlCenterView folder workflow', () => {
       const input = wrapper.find('input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'duplicates.csv')] })
       await input.trigger('change')
-      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await buttonByText(wrapper, '上传并解析')?.trigger('click')
       await flushPromises()
-      expect(wrapper.find('[role="alert"]').text()).toContain('没有可写入行')
+      expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeDefined()
       expect(etlApiMock.execute).not.toHaveBeenCalled()
 
       await buttonByText(wrapper, '字段映射')?.trigger('click')
@@ -386,7 +392,7 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
-  it('opens a ready auto-detected shipment preview and auto-writes valid rows on upload', async () => {
+  it('keeps a ready shipment in review and requires an explicit valid-row policy and confirmation', async () => {
     const shipment = {
       ...previewRun('auto-shipment-run'),
       file_name: '侯雪梅.xlsx',
@@ -438,7 +444,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [source] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+    await buttonByText(wrapper, '上传并解析')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(
@@ -447,8 +453,18 @@ describe('EtlCenterView folder workflow', () => {
         target_type: 'auto',
       }),
     )
-    // 解析就绪后自动写入业务库；存在 1 行错误，仅写入正确行。
-    expect(etlApiMock.execute).toHaveBeenCalledWith(shipment.id, true)
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeDefined()
+    const validRows = wrapper.findAll('input[type="checkbox"]').find(input => input.element.parentElement?.textContent?.includes('仅写入正确行'))!
+    expect((validRows.element as HTMLInputElement).checked).toBe(false)
+    await validRows.setValue(true)
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await buttonByText(wrapper, '写入数据库')?.trigger('click')
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    await buttonByText(wrapper, '写入数据库')?.trigger('click')
+    await flushPromises()
+    expect(window.confirm).toHaveBeenLastCalledWith(expect.stringContaining('排除 1 行错误'))
+    expect(etlApiMock.execute).toHaveBeenCalledWith(shipment.id, shipment.preview_revision, true)
     expect(wrapper.text()).toContain('运行历史')
     wrapper.unmount()
   })
@@ -473,7 +489,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     Object.defineProperty(input.element, 'files', { value: [file] })
     await input.trigger('change')
-    await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+    await buttonByText(wrapper, '上传并解析')?.trigger('click')
     await flushPromises()
 
     expect(etlApiMock.preview).toHaveBeenCalledWith(
@@ -525,7 +541,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('华东批次 · 2 个可处理文件')
     expect(wrapper.text()).toContain('华东批次/客户/customers.csv')
     expect(wrapper.text()).toContain('华东批次/产品/products.csv')
-    expect(wrapper.text()).toContain('批量上传并写入 2 个文件')
+    expect(wrapper.text()).toContain('批量上传并解析 2 个文件')
     wrapper.unmount()
   })
 
@@ -543,7 +559,7 @@ describe('EtlCenterView folder workflow', () => {
     const files = [folderFile('customers.csv', '华东批次/客户/customers.csv'), folderFile('products.csv', '华东批次/产品/products.csv')]
     Object.defineProperty(input.element, 'files', { value: files })
     await input.trigger('change')
-    const start = wrapper.findAll('button').find((button) => button.text().includes('批量上传并写入 2 个文件'))
+    const start = wrapper.findAll('button').find((button) => button.text().includes('批量上传并解析 2 个文件'))
     await start?.trigger('click')
     await flushPromises()
 
@@ -553,6 +569,32 @@ describe('EtlCenterView folder workflow', () => {
     expect(options.map((item) => item.relativePath)).toEqual(['华东批次/客户/customers.csv', '华东批次/产品/products.csv'])
     expect(etlApiMock.preview).toHaveBeenCalledTimes(2)
     wrapper.unmount()
+  })
+
+  it('keeps every folder file staged when polling finds both clean and erroneous previews', async () => {
+    vi.useFakeTimers()
+    etlApiMock.upload.mockImplementation(async (file: File) => ({ upload_id: file.name }))
+    etlApiMock.preview.mockImplementation(async ({ upload_id }: { upload_id: string }) => queuedRun(upload_id, upload_id))
+    const wrapper = await mountView()
+    try {
+      const input = wrapper.find('input[type="file"][webkitdirectory]')
+      Object.defineProperty(input.element, 'files', { value: [folderFile('clean.csv', '批次/clean.csv'), folderFile('errors.csv', '批次/errors.csv')] })
+      await input.trigger('change')
+      await buttonByText(wrapper, '批量上传并解析 2 个文件')?.trigger('click')
+      await flushPromises()
+      etlApiMock.runs.mockResolvedValue([
+        { ...previewRun('clean.csv'), summary: { new: 1, update: 0, skip: 0, error: 0, executed: 0 } },
+        previewRun('errors.csv'),
+      ])
+      await vi.advanceTimersByTimeAsync(1500)
+      await flushPromises()
+      expect(wrapper.find('.etl-batch-card').text()).toContain('2/2 已完成解析')
+      expect(wrapper.findAll('.etl-status--preview_ready')).toHaveLength(2)
+      expect(etlApiMock.execute).not.toHaveBeenCalled()
+      expect(window.confirm).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   it('edits safe mappings, confirms OCR, saves a template, and executes only valid rows', async () => {
@@ -618,7 +660,7 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '写入数据库')?.trigger('click')
     await flushPromises()
 
-    expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, true)
+    expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, run.preview_revision, true)
     expect(wrapper.text()).toContain('运行历史')
     wrapper.unmount()
   })
@@ -630,7 +672,7 @@ describe('EtlCenterView folder workflow', () => {
     const rows = previewRows()
     etlApiMock.rows.mockImplementation(async (_id: string, page: number, pageSize: number, action = '') => {
       const items = action ? rows.filter((row) => row.final_action === action) : rows
-      return { page, page_size: pageSize, total: items.length, items }
+      return { page, page_size: pageSize, total: items.length, items, preview_revision: run.preview_revision }
     })
     const wrapper = await mountView(run.id)
 
@@ -1044,7 +1086,7 @@ describe('EtlCenterView folder workflow', () => {
       const input = wrapper.find('input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'rollback.csv')] })
       await input.trigger('change')
-      await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
+      await buttonByText(wrapper, '上传并解析')?.trigger('click')
       await flushPromises()
       await buttonByText(wrapper, '撤销本次写入')?.trigger('click')
       await flushPromises()
@@ -1148,6 +1190,8 @@ describe('EtlCenterView folder workflow', () => {
     const vm = wrapper.vm as any
     const run = previewRun()
     vm.currentRun = run
+    vm.runsApi.syncDraft()
+    await vm.loadRows()
     vm.validRowsOnly = true
     vm.runRows = previewRows()
     etlApiMock.run.mockRejectedValue(new Error('readback offline'))
@@ -1161,38 +1205,57 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
-  it.each([new Error('automatic write offline'), 'offline'])('returns a failed automatic write to review: %s', async (error) => {
-    const wrapper = await mountView()
-    const vm = wrapper.vm as any
+  it('blocks execution when row readback and run details belong to different preview revisions', async () => {
     const run = previewRun()
-    etlApiMock.execute.mockRejectedValueOnce(error)
-    etlApiMock.run.mockRejectedValueOnce(new Error('readback offline'))
-    vm.runsApi.markAutoWrite(run.id)
-    await vm.runsApi.tryAutoWrite(run)
-    expect(vm.pageError).toBe(error instanceof Error ? error.message : '自动写入失败')
-    expect(vm.currentRun.id).toBe(run.id)
-    expect(vm.activeTab).toBe('preview')
-    expect(vm.runRows).toHaveLength(3)
-    expect(vm.busy).toBe(false)
-    expect(vm.state.autoWriteInFlight.size).toBe(0)
-    expect(vm.state.pendingAutoWriteIds.value.has(run.id)).toBe(false)
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.rows.mockResolvedValue({ items: previewRows(), total: 3, preview_revision: 'b'.repeat(64) })
+    const wrapper = await mountView(run.id)
+    const vm = wrapper.vm as any
+    vm.validRowsOnly = true
+    await vm.executeCurrentRun()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(window.confirm).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('does not auto-write disabled, unrequested, unfinished, or already-running previews', async () => {
-    const wrapper = await mountView()
-    const vm = wrapper.vm as any
+  it('requires a new review and error-row choice after the preview revision changes', async () => {
     const run = previewRun()
-    vm.state.autoWriteEnabled.value = false
-    await vm.runsApi.tryAutoWrite(run)
-    vm.state.autoWriteEnabled.value = true
-    await vm.runsApi.tryAutoWrite(run)
-    vm.runsApi.markAutoWrite(run.id)
-    await vm.runsApi.tryAutoWrite({ ...run, status: 'previewing' })
-    vm.state.autoWriteInFlight.add(run.id)
-    await vm.runsApi.tryAutoWrite(run)
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    const vm = wrapper.vm as any
+    vm.validRowsOnly = true
+    vm.currentRun = { ...run }
+    await flushPromises()
+    expect(vm.validRowsOnly).toBe(true)
+    expect(vm.state.reviewedPreviewRevision.value).toBe(run.preview_revision)
+    vm.currentRun = { ...run, preview_revision: 'b'.repeat(64) }
+    await flushPromises()
+    expect(vm.validRowsOnly).toBe(false)
+    await vm.executeCurrentRun()
     expect(etlApiMock.execute).not.toHaveBeenCalled()
-    expect(vm.state.pendingAutoWriteIds.value.has(run.id)).toBe(true)
+    etlApiMock.rows.mockResolvedValue({ items: previewRows(), total: 3, preview_revision: 'b'.repeat(64) })
+    await vm.loadRows()
+    vm.validRowsOnly = true
+    etlApiMock.execute.mockResolvedValue({ ...run, status: 'executing' })
+    await vm.executeCurrentRun()
+    expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, 'b'.repeat(64), true)
+    wrapper.unmount()
+  })
+
+  it('does not write with unsaved mapping changes or without a preview revision', async () => {
+    const run = previewRun()
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    const vm = wrapper.vm as any
+    vm.validRowsOnly = true
+    vm.mappingUiTransformJson['0'] = '[{"op":"trim"}]'
+    await vm.executeCurrentRun()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    vm.runsApi.syncDraft()
+    vm.currentRun = { ...run, preview_revision: null }
+    await vm.executeCurrentRun()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    expect(window.confirm).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

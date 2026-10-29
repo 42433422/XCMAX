@@ -498,6 +498,7 @@ class AgentOrchestrator(AgentOrchestratorTaskMixin):
                 return
             completed_node_ids.add(step.node_id)
         run.status = "completed"
+        self._ingest_confirmed_plan_artifacts(run)
         self._refresh_run_cost_metadata(run)
         self._refresh_repair_metadata(run)
         run.final_output = {

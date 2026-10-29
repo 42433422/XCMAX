@@ -201,6 +201,36 @@ class WorkflowSession:
             )
             return False
 
+    def _cancel_pending_agent_run(
+        self, user_id: str, pending: dict[str, Any], runtime: dict[str, Any]
+    ) -> bool:
+        run_id = str(pending.get("agent_run_id") or "").strip()
+        if not run_id:
+            return True
+        try:
+            from app.application.agent_orchestrator import AgentOrchestrator
+
+            orchestrator = AgentOrchestrator()
+            run = orchestrator.get_run(run_id)
+            if run is None or run.user_id not in {
+                user_id,
+                self.callbacks._task_owner_id(user_id, runtime),
+            }:
+                return False
+            run_runtime = dict(run.metadata.get("runtime_context") or {})
+            if (
+                run.plan_id != pending["plan"].plan_id
+                or str(run_runtime.get("tenant_id") or "") != str(runtime.get("tenant_id") or "")
+                or str(run_runtime.get("session_id") or run_runtime.get("conversation_id") or "")
+                != str(runtime.get("session_id") or runtime.get("conversation_id") or "")
+            ):
+                return False
+            cancelled = orchestrator.cancel_run(run_id, requested_by=user_id)
+            return cancelled is not None and cancelled.status == "cancelled"
+        except RECOVERABLE_ERRORS:
+            logger.warning("待确认 AgentRun 取消未完成 run_id=%s", run_id)
+            return False
+
     def run_workflow_with_state_updates(
         self,
         *,
@@ -604,6 +634,14 @@ class WorkflowSession:
                 runtime = dict(pending.get("runtime_context") or {})
                 runtime.setdefault("user_id", user_id)
                 plan = pending["plan"]
+                if not self._cancel_pending_agent_run(user_id, pending, runtime):
+                    return _control_reply(
+                        "任务取消尚未完成，请重试；待办仍保留。",
+                        "workflow_cancel_failed",
+                        {"plan_id": plan.plan_id, "run_id": pending.get("agent_run_id", "")},
+                        success=False,
+                        message="任务取消尚未完成",
+                    )
                 if not self.callbacks._persist_plan_state(plan, runtime, status="cancelled"):
                     return True, {
                         "success": False,

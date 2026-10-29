@@ -29,8 +29,24 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
   const bulkNewRows = computed(() =>
     runRows.value.filter((row) => row.validation_issues.length === 0 && !row.match_ref && row.suggested_action !== 'skip'),
   )
+  const draftChanged = computed(() => {
+    if (!currentRun.value) return false
+    try {
+      const mappings = state.editableMappings.value.map((mapping, index) => ({
+        ...mapping, transforms: JSON.parse(state.mappingUiTransformJson[String(index)] || '[]'),
+      }))
+      const draft = currentRun.value.draft
+      return JSON.stringify(mappings) !== JSON.stringify(draft.field_mappings || [])
+        || JSON.stringify(allowedUpdateFields.value) !== JSON.stringify(draft.allowed_update_fields || [])
+        || state.ocrConfirmed.value !== Boolean(draft.ocr_confirmed)
+    } catch {
+      return true
+    }
+  })
   const canExecute = computed(() => {
     if (!currentRun.value || currentRun.value.status !== 'preview_ready') return false
+    if (draftChanged.value) return false
+    if (!currentRun.value.preview_revision || currentRun.value.preview_revision !== state.reviewedPreviewRevision.value) return false
     if (currentRun.value.summary.error && !validRowsOnly.value) return false
     return currentRun.value.summary.new + currentRun.value.summary.update > 0
   })
@@ -114,6 +130,7 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
     updatableFields,
     allowedActionsForRow,
     bulkNewRows,
+    draftChanged,
     canExecute,
     summaryCards,
     savedShipmentTemplate,

@@ -527,7 +527,11 @@ class TestImportProductsPreview:
 
         df = self._make_df()
         mock_svc = MagicMock()
-        mock_svc.batch_add_products.return_value = {"success_count": 1, "failed_count": 0}
+        mock_svc.batch_add_products.return_value = {
+            "success": True,
+            "success_count": 1,
+            "failed_count": 0,
+        }
         mock_customer_svc = MagicMock()
         mock_customer_svc.create.return_value = {"success": True}
         mock_find_pu = MagicMock(return_value=MagicMock())  # unit already exists

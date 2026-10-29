@@ -40,7 +40,7 @@ describe('etlApi', () => {
     await etlApi.run('run/1')
     await etlApi.rows('run/1', 2, 25, 'new')
     await etlApi.patchDraft('run/1', { allowed_update_fields: ['phone'] })
-    await etlApi.execute('run/1', true)
+    await etlApi.execute('run/1', 'reviewed-revision', true)
     await etlApi.saveShipmentTemplate('run/1', '侯雪梅-发货单版式')
     await etlApi.retry('run/1')
     await etlApi.rollback('run/1')
@@ -82,6 +82,7 @@ describe('etlApi', () => {
       '/api/etl/targets/target%2F1',
       '/api/etl/targets/target%2F1/test',
     ])
+    expect(JSON.parse(apiFetchMock.mock.calls[8][1].body)).toEqual({ confirmed: true, preview_revision: 'reviewed-revision', valid_rows_only: true })
     const uploadBody = apiFetchMock.mock.calls[1]?.[1]?.body as FormData
     expect(uploadBody.get('batch_id')).toBe('11111111-1111-4111-8111-111111111111')
     expect(uploadBody.get('relative_path')).toBe('客户资料/test.csv')

@@ -211,6 +211,7 @@ def execute_run(
             owner_user_id=_user_id(user),
             confirmed=body.confirmed,
             valid_rows_only=body.valid_rows_only,
+            preview_revision=body.preview_revision,
         ),
     }
 
