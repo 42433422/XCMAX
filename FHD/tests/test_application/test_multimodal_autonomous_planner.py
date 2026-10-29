@@ -348,11 +348,19 @@ def test_plan_sources_require_all_write_steps_approved_and_successful(
             assert not store.exists()
             assert not (tmp_path / "vectors.sqlite3").exists()
             if outcome == "missing_approval":
-                second_wait.events = [
-                    event for event in second_wait.events if event.event_type != "step.approved"
+                # Persisted audit events are immutable; inspect an incomplete detached
+                # snapshot at the knowledge materialization boundary instead.
+                with patch.object(orchestrator, "_ingest_confirmed_plan_artifacts"):
+                    final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+                final.events = [
+                    event
+                    for event in final.events
+                    if event.event_type != "step.approved"
+                    or event.data.get("step_id") != final.steps[0].step_id
                 ]
-                repo.save(second_wait)
-            final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
+                orchestrator._ingest_confirmed_plan_artifacts(final)
+            else:
+                final = orchestrator.continue_run(waiting.run_id, approved_by="reviewer")
             assert execute.call_count == 2
 
         if outcome != "completed":
