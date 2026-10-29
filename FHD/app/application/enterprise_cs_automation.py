@@ -69,6 +69,7 @@ _HIGH_RISK_PHRASES = (
     "定制承诺",
 )
 _ALLOWED_MODES = {"ai", "human"}
+_ISSUE_DESCRIPTION_PROMPT = "请说明要登记的故障现象；暂未建立工单。"
 
 
 def _enabled() -> bool:
@@ -265,7 +266,30 @@ class EnterpriseCsAutomationService:
         from app.application.im_app_service import ImApplicationService
 
         if not _plain_intake_match(text):
-            return None
+            from app.domain.shared_services.intent_service import is_negation_intent
+
+            if (
+                not looks_like_issue_report(text)
+                or is_negation_intent(text)
+                or re.search(
+                    r"已(?:经)?(?:解决|修复)|^(?:请|帮我|给我)?(?:查询|查一下|查查|查看|统计)", text
+                )
+            ):
+                return None
+            previous = self._db.scalar(
+                select(ImMessage)
+                .where(ImMessage.conversation_id == conversation_id, ImMessage.id < message_id)
+                .order_by(ImMessage.id.desc())
+                .limit(1)
+            )
+            if not (
+                previous is not None
+                and previous.origin == "system"
+                and previous.sender_user_id
+                == ImApplicationService(self._db).enterprise_cs_user_id()
+                and previous.body == _ISSUE_DESCRIPTION_PROMPT
+            ):
+                return None
 
         def normalized(value: str) -> str:
             return re.sub(
@@ -307,7 +331,7 @@ class EnterpriseCsAutomationService:
         market_owner_id = int(getattr(owner, "market_user_id", 0) or 0)
         result: dict[str, Any] = {}
         if not report:
-            reply = "请说明要登记的故障现象；暂未建立工单。"
+            reply = _ISSUE_DESCRIPTION_PROMPT
         else:
             if market_owner_id and market_token:
                 digest = hashlib.sha256(report.encode()).hexdigest()
@@ -329,6 +353,7 @@ class EnterpriseCsAutomationService:
                 ImMessage.conversation_id == conversation_id,
                 ImMessage.origin == "system",
                 ImMessage.body == reply,
+                ImMessage.id > message_id if not report else True,
             )
             .order_by(ImMessage.id.desc())
             .limit(1)

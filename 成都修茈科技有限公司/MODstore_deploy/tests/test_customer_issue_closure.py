@@ -436,6 +436,15 @@ def test_customer_feedback_keeps_work_order_and_verified_bundle_in_owner_event(
     assert first.status_code == 200, first.text
     replay = client.post("/api/customer-service/issues/intake", json=body, headers=headers)
     assert replay.json()["ticket_id"] == first.json()["ticket_id"] and replay.json()["replayed"]
+    readback = client.get(
+        "/api/customer-service/tickets", params={"source_ref": wo_id}, headers=headers
+    )
+    assert readback.status_code == 200, readback.text
+    rows = readback.json()["items"]
+    assert len(rows) == 1
+    assert rows[0]["id"] == first.json()["ticket_id"]
+    assert rows[0]["ticket_no"] == first.json()["ticket_no"]
+    assert rows[0]["status"] == first.json()["ticket"]["status"]
     with sf() as db:
         ticket = db.get(CustomerServiceTicket, first.json()["ticket_id"])
         evidence = json.loads(ticket.evidence_json)

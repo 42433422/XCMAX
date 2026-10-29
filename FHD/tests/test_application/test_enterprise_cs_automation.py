@@ -465,6 +465,67 @@ async def test_bare_issue_request_needs_context_and_bound_identity(cs_db, monkey
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "clarification,submit",
+    [
+        ("客户端信息页点击提交后报错，无法提交", True),
+        ("不用了，问题已经解决了", False),
+        ("不要提交问题工单", False),
+        ("取消建单，客户端报错已经恢复正常", False),
+        ("现在有多少客户？", False),
+        ("查询目前失败的订单", False),
+    ],
+)
+async def test_issue_description_answers_pending_clarification(
+    cs_db, monkeypatch, clarification, submit
+):
+    from app.application import client_product_issue_intake as intake
+
+    calls = []
+
+    async def receive(token, report, missing, **kwargs):
+        calls.append((token, report))
+        return {"state": "RECEIVED", "owner_ticket_no": "CS-clarification"}
+
+    async def completion(*args, **kwargs):
+        assert not submit, "issue clarification must continue the pending intake"
+        return {
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps(
+                            {
+                                "action": "reply",
+                                "reply": "已了解您的当前要求。",
+                                "confidence": 0.9,
+                                "risk_level": "low",
+                            }
+                        )
+                    }
+                }
+            ]
+        }
+
+    monkeypatch.setattr(intake, "receive_pending_report", receive)
+    monkeypatch.setattr("app.infrastructure.llm.invoke.chat_completion_openai_format", completion)
+    svc, _, cid = _conversation(cs_db)
+    automation = EnterpriseCsAutomationService(cs_db)
+    for text in ("提交工单", "提交工单", clarification):
+        message = svc.send_message(cid, 7, text, origin="customer")["message"]
+        result = await automation.handle_customer_message(
+            conversation_id=cid,
+            customer_user_id=7,
+            message_id=message["id"],
+            body=text,
+            market_token="fixture-token",
+        )
+        assert result["action"] == ("issue_intake" if text != clarification or submit else "reply")
+        assert result["message"] is not None
+    assert calls == ([("fixture-token", clarification)] if submit else [])
+    assert ("CS-clarification" in result["message"]["body"]) is submit
+
+
+@pytest.mark.asyncio
 async def test_same_report_is_owner_scoped_and_rejects_other_customers_message(cs_db, monkeypatch):
     from app.application import client_product_issue_intake as intake
 
