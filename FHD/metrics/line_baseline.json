@@ -1,5 +1,5 @@
 {
-  "lines": 2354184,
-  "updated": "2026-10-28",
-  "note": "2026-10-29（UTC+8，UTC 2026-10-28）经 42433422 批准 PR #2730 在原模型 PAT 修复净增 1931 行基础上追加 CI 修复净增 10 行：生产代码 4 行收窄请求及金额类型，测试 6 行覆盖 NaN 和 Infinity；能力页生成更新净增 0 行。仅限本 PR，生产启用另需批准。"
+  "lines": 2354188,
+  "updated": "2026-10-29",
+  "note": "security re-vendor langgraph-sdk 0.4.4->0.4.6 (CVE-2026-118667): +4 lines for CVE fix imports/call-sites and provenance notes"
 }

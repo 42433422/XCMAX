@@ -2,7 +2,7 @@
 """XCAGI vendored langgraph-sdk 来源与许可证锁定验证脚本 (LG-W0-11).
 
 本脚本为「git tag -> SHA」来源校验（与 xcagi_langgraph_checkpoint 的 LG-W0-03 同型）：
-锁定的上游 tag 与 commit 见同目录 PROVENANCE.json（当前 sdk==0.4.4 @ d5f4b2aa960940effc8430165ab3604038e817af）。
+锁定的上游 tag 与 commit 见同目录 PROVENANCE.json（当前 sdk==0.4.6 @ 55b0e36c51d2922b11640b980fcfca1064243a96）。
 
 职责:
   1. 校验本目录下所有 vendored 文件 (langgraph_sdk 包 + LICENSE) 的 SHA-256 与 MANIFEST.sha256 一致。
