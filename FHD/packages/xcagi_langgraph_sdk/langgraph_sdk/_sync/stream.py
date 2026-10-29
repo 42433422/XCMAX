@@ -23,6 +23,7 @@ from langchain_core.language_models.chat_model_stream import ChatModelStream
 from langchain_protocol import Event, SubscribeParams
 
 from langgraph_sdk._exception_policy import BOUNDARY_ERRORS
+from langgraph_sdk._shared.utilities import _quote_path_param
 from langgraph_sdk._sync.http import SyncHttpClient
 from langgraph_sdk.schema import LangSmithTracing, QueryParamTypes
 from langgraph_sdk.stream.decoders import (
@@ -195,7 +196,7 @@ class _SyncAgentModule:
             query_params.update(dict(params))
         request_headers = {**self._owner._headers, **dict(headers or {})}
         return self._owner._http.get(
-            f"/assistants/{self._owner.assistant_id}/graph",
+            f"/assistants/{_quote_path_param(self._owner.assistant_id)}/graph",
             params=query_params,
             headers=request_headers or None,
         )
@@ -1553,7 +1554,7 @@ class SyncThreadStream:
     def _fetch_state(self) -> dict[str, Any]:
         """Fetch the current thread state from the REST endpoint."""
         return self._http.get(
-            f"/threads/{self.thread_id}/state",
+            f"/threads/{_quote_path_param(self.thread_id)}/state",
             headers=self._headers or None,
         )
 
