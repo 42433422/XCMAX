@@ -25,6 +25,27 @@ def input_digest(messages):
     ).hexdigest()
 
 
+def test_clean_formula_workbook_without_calculation_properties():
+    wb = Workbook()
+    wb.active["A1"] = 12
+    wb.active["B1"] = "=A1*2"
+    wb.calculation = None  # calcPr is optional in a valid XLSX workbook.
+    output = BytesIO()
+    wb.save(output)
+    wb.close()
+    source = output.getvalue()
+    info = inspect_workbook(source)
+    cleaned = clean_workbook(source, info["sha256"], [{"sheet": "Sheet", "cell": "A1"}])
+    result = load_workbook(BytesIO(cleaned))
+    try:
+        assert result.active["A1"].value is None
+        assert result.active["B1"].value == "=A1*2"
+        assert result.calculation.fullCalcOnLoad is True
+        assert result.calculation.forceFullCalc is True
+    finally:
+        result.close()
+
+
 def test_clean_copy_preserves_layout_and_ambiguous_cells():
     fixture = Path(__file__).parents[1] / "fixtures" / "etl_template"
     expected = json.loads((fixture / "expected" / "quotation.json").read_text())
@@ -51,17 +72,37 @@ def test_clean_copy_preserves_layout_and_ambiguous_cells():
         clean_workbook(source, "wrong", selected)
 
 
-def test_archived_document_rebuild_is_byte_stable_across_save_times():
-    import time
+def test_archived_document_rebuild_is_byte_stable_across_save_times(monkeypatch):
+    from datetime import datetime, timezone
+    from zipfile import ZipFile
 
     from app.application.reviewed_excel_template import derive_document_workbook
 
     original = sample()
     fragments = [{"sheet": "报价", "range": "A1:C4"}]
+    clock = [datetime(2026, 10, 29, 1, 2, 4)]
+    observed = []
+
+    class SaveClock:
+        @staticmethod
+        def now(tz=None):
+            return clock[0].replace(tzinfo=tz)
+
+    def zip_time(*args):
+        observed.append(clock[0])
+        return clock[0].timetuple()
+
+    monkeypatch.setattr(
+        "openpyxl.writer.excel.datetime", SimpleNamespace(datetime=SaveClock, timezone=timezone)
+    )
+    monkeypatch.setattr("zipfile.time", SimpleNamespace(localtime=zip_time, time=lambda: 0))
     first = derive_document_workbook(original, fragments)
-    time.sleep(2.1)  # ZIP timestamps and openpyxl's modified time normally change.
+    clock[0] = datetime(2030, 12, 31, 23, 58, 58)
     second = derive_document_workbook(original, fragments)
+    assert len(set(observed)) == 2
     assert first == second
+    with ZipFile(BytesIO(second)) as archived:
+        assert all(item.date_time == (1980, 1, 1, 0, 0, 0) for item in archived.infolist())
 
 
 def test_dates_hidden_sheets_print_and_formula_cache_are_explicit():
@@ -322,6 +363,7 @@ def review_store(tmp_path, monkeypatch):
     from app.db import session as db_session
     from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
     from app.domain.shared_services.document_templates import crud
+    from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
     from app.infrastructure.templates import tenant_scope as template_scope
 
@@ -343,6 +385,7 @@ def review_store(tmp_path, monkeypatch):
     monkeypatch.setattr(template_scope, "ensure_templates_tenant_column", lambda: None)
     monkeypatch.setattr(service_uploads, "get_app_data_dir", lambda: str(tmp_path))
     monkeypatch.setattr(routes, "get_app_data_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(archive_routes, "get_app_data_dir", lambda: str(tmp_path))
     actor = {"id": 7, "tenant": 1, "manage": True, "read": True, "admin": True}
 
     def authorize(permission):
@@ -356,6 +399,7 @@ def review_store(tmp_path, monkeypatch):
             raise HTTPException(status_code=403, detail="身份已改变")
 
     monkeypatch.setattr(routes, "_recheck", recheck)
+    monkeypatch.setattr(archive_routes, "_recheck", recheck)
 
     app = FastAPI()
     app.include_router(product_template_router)
@@ -1278,6 +1322,7 @@ def test_model_feedback_is_versioned_and_rejects_unknown_or_protected_cells(monk
 
 def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, review_store):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
 
     calls = []
@@ -1355,6 +1400,7 @@ def test_feedback_endpoint_requires_consent_and_uses_stub_model(monkeypatch, rev
 
 def test_initial_model_only_for_authorized_samples_and_reports_coverage(monkeypatch, review_store):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.fastapi_routes.reviewed_excel import archive as archive_routes
     from app.fastapi_routes.template_api import router as product_template_router
 
     calls = []
@@ -4352,3 +4398,67 @@ def test_legacy_prompt_history_remains_but_is_not_copied_to_new_confirmation(rev
     versions = client.get(url).json()["versions"]
     assert versions[0]["input_messages"][0]["content"] == "旧历史合成内容"
     assert "input_messages" not in versions[1]
+
+
+@pytest.mark.parametrize("commit_unknown", [False, True])
+def test_archive_classification_cleans_only_uncommitted_upload_copy(
+    review_store, monkeypatch, commit_unknown
+):
+    from sqlalchemy.orm import Session
+
+    from app.db.models.etl import EtlRun
+    from app.fastapi_routes.reviewed_excel import archive as archive_routes
+
+    body = sample()
+    client = review_store.client
+    assert (
+        client.post(
+            "/api/templates/reviewed-excel/archive-quota",
+            data={"expected_actor": "1:7", "limit_bytes": 1000000},
+        ).status_code
+        == 200
+    )
+    if commit_unknown:
+        original_commit = Session.commit
+
+        def commit_then_lose_receipt(db):
+            classification = any(
+                isinstance(item, EtlRun) and item.target_type == "template_classification"
+                for item in db.new
+            )
+            original_commit(db)
+            if classification:
+                raise RuntimeError("synthetic lost commit receipt")
+
+        monkeypatch.setattr(Session, "commit", commit_then_lose_receipt)
+    else:
+
+        def fail_after_upload(*args, **kwargs):
+            raise ValueError("synthetic failure before commit")
+
+        monkeypatch.setattr(archive_routes, "_classification_version", fail_after_upload)
+    url = "/api/templates/reviewed-excel/archive-classify"
+    data = {"expected_actor": "1:7", "request_key": "copy-cleanup"}
+    if commit_unknown:
+        with pytest.raises(RuntimeError, match="lost commit receipt"):
+            client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+    else:
+        response = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        assert response.status_code == 400
+    copies = list((review_store.root / "etl" / "uploads").rglob("*.xlsx"))
+    assert len(copies) == int(commit_unknown)
+    originals = list((review_store.root / "etl" / "archive" / "1" / "7").iterdir())
+    assert len(originals) == 1 and originals[0].read_bytes() == body
+    with review_store.engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM etl_uploads")).scalar_one() == int(
+            commit_unknown
+        )
+        classification_id = connection.execute(
+            text("SELECT classification_id FROM etl_archive_versions")
+        ).scalar_one()
+        assert bool(classification_id) is commit_unknown
+    if commit_unknown:
+        assert copies[0].read_bytes() == body
+        replay = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
+        assert replay.status_code == 200
+        assert replay.json()["classification_id"] == classification_id

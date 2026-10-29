@@ -1,5 +1,21 @@
 """Bounded and fair evidence selection from the complete inspected workbook."""
 
+from collections import deque
+
+
+def bounded_range(value: str) -> tuple[int, int, int, int]:
+    from openpyxl.utils.cell import range_boundaries
+
+    c1, r1, c2, r2 = range_boundaries(value)
+    if (
+        not isinstance(c1, int)
+        or not isinstance(r1, int)
+        or not isinstance(c2, int)
+        or not isinstance(r2, int)
+    ):
+        raise ValueError("Evidence ranges must include both row and column coordinates")
+    return c1, r1, c2, r2
+
 
 def summarize_model_input(
     messages: list[dict],
@@ -44,7 +60,6 @@ def candidate_sheets(review: dict, rules: list[dict]) -> list[dict]:
         column_index_from_string,
         coordinate_from_string,
         get_column_letter,
-        range_boundaries,
     )
 
     overviews = {sheet["sheet"]: sheet for sheet in review["sheet_overview"]}
@@ -77,7 +92,7 @@ def candidate_sheets(review: dict, rules: list[dict]) -> list[dict]:
             if any(
                 mr1 < current <= mr2
                 for merge in overviews[name].get("merged_regions", [])
-                for _, mr1, _, mr2 in [range_boundaries(merge)]
+                for _, mr1, _, mr2 in [bounded_range(merge)]
             ):
                 continue
             boundaries.append(current)
@@ -122,7 +137,6 @@ def build_relationship_context(structure_map: list[dict], sent_cells: list[dict]
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
-        range_boundaries,
     )
 
     sent = {(cell["sheet"], cell["cell"]) for cell in sent_cells}
@@ -135,8 +149,8 @@ def build_relationship_context(structure_map: list[dict], sent_cells: list[dict]
         for left, right in zip(regions, regions[1:]):
             if pair_budget == 0:
                 break
-            lc1, lr1, lc2, lr2 = range_boundaries(left["range"])
-            rc1, rr1, rc2, rr2 = range_boundaries(right["range"])
+            lc1, lr1, lc2, lr2 = bounded_range(left["range"])
+            rc1, rr1, rc2, rr2 = bounded_range(right["range"])
             pairs.append(
                 {
                     "first": left["range"],
@@ -151,7 +165,8 @@ def build_relationship_context(structure_map: list[dict], sent_cells: list[dict]
         merges = sheet.get("merged_regions", [])
         included_merges = merges[:merge_budget]
         merge_budget -= len(included_merges)
-        refs, total_refs = [], 0
+        refs: list[dict] = []
+        total_refs = 0
         for region in regions:
             for field, kind in [
                 ("evidence", "possible_title"),
@@ -167,7 +182,7 @@ def build_relationship_context(structure_map: list[dict], sent_cells: list[dict]
                     total_refs += 1
                     if len(refs) < 100:
                         refs.append(entry)
-        rows = {}
+        rows: dict[int, list[tuple[int, str, str]]] = {}
         for cell in sent_cells:
             if cell["sheet"] != name or cell["kind"] == "formula":
                 continue
@@ -231,11 +246,11 @@ def unresolved_fragments(
     candidate: dict, model_regions: list[dict], merges: list[str]
 ) -> list[dict]:
     """Retain disjoint unmodelled rectangles; never manufacture a split through a merge."""
-    from openpyxl.utils.cell import get_column_letter, range_boundaries
+    from openpyxl.utils.cell import get_column_letter
 
-    fragments = [range_boundaries(candidate["range"])]
+    fragments = [bounded_range(candidate["range"])]
     for region in model_regions:
-        x1, y1, x2, y2 = range_boundaries(region["range"])
+        x1, y1, x2, y2 = bounded_range(region["range"])
         next_fragments = []
         for c1, r1, c2, r2 in fragments:
             ic1, ir1, ic2, ir2 = max(c1, x1), max(r1, y1), min(c2, x2), min(r2, y2)
@@ -257,7 +272,7 @@ def unresolved_fragments(
     for c1, r1, c2, r2 in fragments:
         cut_merge = False
         for merged in merges:
-            mc1, mr1, mc2, mr2 = range_boundaries(merged)
+            mc1, mr1, mc2, mr2 = bounded_range(merged)
             if (
                 c1 <= mc2
                 and mc1 <= c2
@@ -292,17 +307,16 @@ def flag_repeated_header_conflicts(regions: list[dict], sent_cells: list[dict]) 
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
-        range_boundaries,
     )
 
     def row_signatures(region):
-        c1, r1, c2, r2 = range_boundaries(region["range"])
+        c1, r1, c2, r2 = bounded_range(region["range"])
         rows = {}
         for cell in sent_cells:
             if cell["sheet"] != region["sheet"] or cell["kind"] == "formula":
                 continue
-            col, row = coordinate_from_string(cell["cell"])
-            col = column_index_from_string(col)
+            column, row = coordinate_from_string(cell["cell"])
+            col = column_index_from_string(column)
             value = " ".join(cell["value"][:160].casefold().split())
             if (
                 c1 <= col <= c2
@@ -331,7 +345,7 @@ def flag_repeated_header_conflicts(regions: list[dict], sent_cells: list[dict]) 
     for current in output:
         if current["labels"] == ["unknown"]:
             continue
-        c1, r1, c2, _ = range_boundaries(current["range"])
+        c1, r1, c2, _ = bounded_range(current["range"])
         prior = []
         for other in regions:
             if (
@@ -340,7 +354,7 @@ def flag_repeated_header_conflicts(regions: list[dict], sent_cells: list[dict]) 
                 or other["labels"] == ["unknown"]
             ):
                 continue
-            oc1, _or1, oc2, or2 = range_boundaries(other["range"])
+            oc1, _or1, oc2, or2 = bounded_range(other["range"])
             if (
                 0 <= r1 - or2 - 1 <= 3
                 and min(c2, oc2) - max(c1, oc1) + 1 >= min(c2 - c1 + 1, oc2 - oc1 + 1) * 0.8
@@ -350,14 +364,14 @@ def flag_repeated_header_conflicts(regions: list[dict], sent_cells: list[dict]) 
             continue
         parent = max(prior, key=lambda entry: entry[0])[1]
         parent_rows, current_rows = row_signatures(parent), row_signatures(current)
-        matches = [
+        header_matches = [
             (pr, cr, sorted(old & new))
             for pr, old in parent_rows.items()
             for cr, new in current_rows.items()
             if len(old & new) >= 2
         ]
-        if matches:
-            parent_row, current_row, matches = matches[0]
+        if header_matches:
+            parent_row, current_row, matched_columns = header_matches[0]
             if not (set(parent["labels"]) & set(current["labels"])):
                 current["suggested_labels"] = current["labels"]
                 current["labels"] = ["unknown"]
@@ -369,7 +383,7 @@ def flag_repeated_header_conflicts(regions: list[dict], sent_cells: list[dict]) 
                 "parent_range": parent["range"],
                 "parent_header_row": parent_row,
                 "header_row": current_row,
-                "matched_columns": [col for col, _ in matches],
+                "matched_columns": [col for col, _ in matched_columns],
             }
     return output
 
@@ -380,15 +394,14 @@ def value_extent(region: dict, cells: list[dict]) -> str | None:
         column_index_from_string,
         coordinate_from_string,
         get_column_letter,
-        range_boundaries,
     )
 
-    c1, r1, c2, r2 = range_boundaries(region["range"])
+    c1, r1, c2, r2 = bounded_range(region["range"])
     points = []
     for cell in cells:
         if cell["sheet"] == region["sheet"]:
-            col, row = coordinate_from_string(cell["cell"])
-            col = column_index_from_string(col)
+            column, row = coordinate_from_string(cell["cell"])
+            col = column_index_from_string(column)
             if c1 <= col <= c2 and r1 <= row <= r2:
                 points.append((col, row))
     if not points:
@@ -402,7 +415,6 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
         column_index_from_string,
         coordinate_from_string,
         get_column_letter,
-        range_boundaries,
     )
 
     cells = {(c["sheet"], c["cell"]): c for c in (sent_cells or [])}
@@ -419,7 +431,7 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
     }
 
     def identities(region):
-        c1, r1, c2, r2 = range_boundaries(region["range"])
+        c1, r1, c2, r2 = bounded_range(region["range"])
         found = {}
         for (sheet, coordinate), cell in cells.items():
             if sheet != region["sheet"] or cell.get("kind") == "formula":
@@ -437,7 +449,8 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
         return found
 
     identity_cache = [identities(region) for region in regions]
-    links, total = [], 0
+    links: list[dict] = []
+    total = 0
     for index, first in enumerate(regions):
         for second_index in range(index + 1, len(regions)):
             second = regions[second_index]
@@ -455,7 +468,8 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
             if not shared and not repeated:
                 continue
             left_identity, right_identity = identity_cache[index], identity_cache[second_index]
-            matches, conflicts = [], []
+            matches: list[dict] = []
+            conflicts: list[dict] = []
             for field in sorted(left_identity.keys() & right_identity.keys()):
                 left, right = left_identity[field], right_identity[field]
                 if len(left) != 1 or len(right) != 1:
@@ -496,7 +510,6 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
-        range_boundaries,
     )
 
     cells = review["cells"]
@@ -507,13 +520,13 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
     ):
         return [list(cells)]
     lookup = {(cell["sheet"], cell["cell"]): cell for cell in cells}
-    batches = []
+    batches: list[list[dict]] = []
     for sheet in candidate_sheets(review, rules):
         name = sheet["sheet"]
         for region in sheet["regions"]:
             start_batch = len(batches)
-            c1, r1, c2, r2 = range_boundaries(region["range"])
-            grouped = {}
+            c1, r1, c2, r2 = bounded_range(region["range"])
+            grouped: dict[int, list[dict]] = {}
             for cell in cells:
                 if cell["sheet"] != name:
                     continue
@@ -533,7 +546,7 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
                     seen.add(key)
                     if len(contexts) == 10:
                         break
-            current = []
+            current: list[dict] = []
             for row in sorted(grouped):
                 row_cells = grouped[row]
                 # An indivisible row beyond the hard budget remains explicitly unread.
@@ -580,9 +593,7 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
     if not batches:
         raise ValueError("单行超出模型安全预算，未调用模型；请人工检查并分开文件")
     # Fair across sheets without disturbing contiguous order within any sheet.
-    from collections import deque
-
-    queues = {}
+    queues: dict[str, deque[list[dict]]] = {}
     for batch in batches:
         queues.setdefault(batch[0]["sheet"], deque()).append(batch)
     fair = []

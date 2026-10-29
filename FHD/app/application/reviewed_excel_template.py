@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import warnings
 from io import BytesIO
+from typing import Any
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
@@ -12,7 +13,10 @@ from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.utils.exceptions import InvalidFileException
+from openpyxl.worksheet.print_settings import PrintArea
+from openpyxl.worksheet.worksheet import Worksheet
 
+from app.application.reviewed_excel_evidence import bounded_range
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
 MAX_BYTES = 20 * 1024 * 1024
@@ -104,7 +108,7 @@ def _validate_template_schema(schema: dict, payload: object) -> bool:
             return False
         return "enum" not in rule or value in rule["enum"]
 
-    return supported(schema) and matches(schema, payload)
+    return bool(supported(schema) and matches(schema, payload))
 
 
 def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int):
@@ -271,8 +275,8 @@ def inspect_workbook(body: bytes) -> dict:
                 raise
     except (BadZipFile, KeyError, OSError, ParseError, InvalidFileException) as exc:
         raise ValueError("无法读取 XLSX 工作簿") from exc
-    cells = []
-    layout = []
+    cells: list[dict[str, Any]] = []
+    layout: list[dict[str, Any]] = []
     try:
         if len(wb.worksheets) > 100:
             raise ValueError("工作表超过 100 张，暂不能安全预览")
@@ -304,7 +308,7 @@ def inspect_workbook(body: bytes) -> dict:
             if len(layout) < 20:
                 max_row, max_col = min(sheet.max_row, 40), min(sheet.max_column, 20)
                 merged = {}
-                covered = set()
+                covered: set[tuple[int, int]] = set()
                 for region in sheet.merged_cells.ranges:
                     if region.min_row > max_row or region.min_col > max_col:
                         continue
@@ -473,7 +477,6 @@ def derive_document_workbook(
     import re
 
     from openpyxl.formula.tokenizer import Tokenizer, TokenizerError
-    from openpyxl.utils.cell import range_boundaries
 
     info = inspect_workbook(body)
     if print_area_mode not in {"source", "selected"}:
@@ -495,7 +498,7 @@ def derive_document_workbook(
     rectangles = []
     for item in fragments:
         try:
-            bounds = range_boundaries(item["range"])
+            bounds = bounded_range(item["range"])
             c1, r1, c2, r2 = bounds
             if not all(isinstance(x, int) for x in bounds) or not (
                 1 <= c1 <= c2 <= dimensions["columns"] and 1 <= r1 <= r2 <= dimensions["rows"]
@@ -522,6 +525,8 @@ def derive_document_workbook(
     try:
         original_modified = wb.properties.modified
         ws = wb[sheet_name]
+        if not isinstance(ws, Worksheet):
+            raise ValueError("所选对象不是工作表")
         if ws.sheet_state != "visible":
             raise ValueError("隐藏工作表暂不能作为独立模板提取")
         if (
@@ -546,8 +551,8 @@ def derive_document_workbook(
         headers = {name: str(getattr(ws, name)) for name in header_names}
         print_settings = (str(ws.page_setup), str(ws.page_margins), str(ws.print_options))
         source_print = (
-            [range_boundaries(str(item)) for item in ws._print_area.ranges]
-            if ws._print_area
+            [bounded_range(str(item)) for item in PrintArea.from_string(ws.print_area).ranges]
+            if ws.print_area
             else []
         )
         if (
@@ -560,7 +565,7 @@ def derive_document_workbook(
         if mapped_print:
             ws.print_area = [item["range"] for item in fragments]
         for merge in list(ws.merged_cells.ranges):
-            bounds = range_boundaries(str(merge))
+            bounds = bounded_range(str(merge))
             if intersects(bounds) and not contained(bounds):
                 raise ValueError("所选范围切断合并单元格")
             if not intersects(bounds):
@@ -606,7 +611,7 @@ def derive_document_workbook(
                                 r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
                             ):
                                 raise ValueError("公式含外部或名称引用，暂不能提取")
-                            if not contained(range_boundaries(token.value.replace("$", ""))):
+                            if not contained(bounded_range(token.value.replace("$", ""))):
                                 raise ValueError("公式引用跨越所选文档，暂不能提取")
         for name in list(wb.sheetnames):
             if name != sheet_name:
@@ -622,6 +627,8 @@ def derive_document_workbook(
         checked = load_workbook(BytesIO(result), data_only=False, keep_links=True, rich_text=True)
         try:
             saved_sheet = checked[sheet_name]
+            if not isinstance(saved_sheet, Worksheet):
+                raise ValueError("派生对象不是工作表")
             if headers != {
                 name: str(getattr(saved_sheet, name)) for name in header_names
             } or print_settings != (
@@ -632,7 +639,8 @@ def derive_document_workbook(
                 raise ValueError("派生页眉或打印设置写出后核验失败")
             if mapped_print:
                 actual = sorted(
-                    range_boundaries(str(item)) for item in checked[sheet_name]._print_area.ranges
+                    bounded_range(str(item))
+                    for item in PrintArea.from_string(saved_sheet.print_area).ranges
                 )
                 if actual != sorted(rectangles):
                     raise ValueError("派生打印区域写出后核验失败")
@@ -642,10 +650,10 @@ def derive_document_workbook(
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()
         with ZipFile(BytesIO(result)) as source, ZipFile(normalized, "w") as target:
-            for item in source.infolist():
-                item.date_time = (1980, 1, 1, 0, 0, 0)
-                contents = source.read(item.filename)
-                if item.filename == "docProps/core.xml":
+            for entry in source.infolist():
+                entry.date_time = (1980, 1, 1, 0, 0, 0)
+                contents = source.read(entry.filename)
+                if entry.filename == "docProps/core.xml":
                     modified = (
                         original_modified.strftime("%Y-%m-%dT%H:%M:%SZ")
                         if original_modified
@@ -658,7 +666,7 @@ def derive_document_workbook(
                     )
                     if count != 1:
                         raise ValueError("派生文件元数据无法稳定重建")
-                target.writestr(item, contents)
+                target.writestr(entry, contents)
         return normalized.getvalue()
     finally:
         wb.close()
@@ -693,6 +701,10 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
         if any(item["kind"] == "formula" for item in inspection["cells"]):
             # openpyxl does not preserve formula caches. Ask spreadsheet software
             # to recalculate when the cleaned copy is opened.
+            if wb.calculation is None:
+                from openpyxl.workbook.properties import CalcProperties
+
+                wb.calculation = CalcProperties()
             wb.calculation.fullCalcOnLoad = True
             wb.calculation.forceFullCalc = True
         output = BytesIO()
@@ -747,10 +759,10 @@ def make_proposals(review: dict) -> dict:
         "税",
         "稅",
     )
-    by_row = defaultdict(dict)
+    by_row: defaultdict[tuple[str, int], dict[int, dict[str, Any]]] = defaultdict(dict)
     for cell in review["cells"]:
-        col, row = coordinate_from_string(cell["cell"])
-        by_row[(cell["sheet"], row)][column_index_from_string(col)] = cell
+        column_letter, row = coordinate_from_string(cell["cell"])
+        by_row[(cell["sheet"], row)][column_index_from_string(column_letter)] = cell
     fixed = set()
     identity = []
     table = []
@@ -866,7 +878,7 @@ def refine_proposal(
         for items in by_sheet.values():
             if items:
                 sample.append(items[round(index * (len(items) - 1) / 99)])
-    unique = {}
+    unique: dict[tuple[str, str], dict[str, Any]] = {}
     for cell in prioritized + sample:
         unique.setdefault((cell["sheet"], cell["cell"]), cell)
     chosen = list(unique.values())[:100]
@@ -980,7 +992,7 @@ def refine_proposal(
     answers = result.data.get("candidates") if initial else [result.data]
     if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
         raise ValueError("模型未返回所需候选，原候选未改变")
-    validated = []
+    validated: list[dict[str, Any]] = []
     for answer in answers:
         if (
             not isinstance(answer, dict)

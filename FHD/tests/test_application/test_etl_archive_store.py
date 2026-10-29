@@ -137,3 +137,54 @@ def test_concurrent_admissions_cannot_exceed_quota(tmp_path):
     with Session(engine) as db, tenant_scope(1):
         assert db.get(EtlArchiveQuota, 1).reserved_bytes == 4
     engine.dispose()
+
+
+def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkeypatch):
+    import importlib.util
+
+    from sqlalchemy import inspect, text
+
+    migration_path = (
+        Path(__file__).parents[2] / "alembic" / "versions" / "2026_10_29_etl_archive.py"
+    )
+    spec = importlib.util.spec_from_file_location("etl_archive_migration", migration_path)
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    engine = create_engine("sqlite://")
+    model_engine = create_engine("sqlite://")
+    tables = [EtlArchiveQuota.__table__, EtlArchiveAsset.__table__, EtlArchiveVersion.__table__]
+    try:
+        Base.metadata.create_all(model_engine, tables=tables)
+        with engine.begin() as connection:
+            monkeypatch.setattr(migration.op, "get_bind", lambda: connection)
+            migration.upgrade()
+            migration.upgrade()  # Existing bootstrap-created tables remain valid.
+            actual, expected = inspect(connection), inspect(model_engine)
+            for table in tables:
+                name = table.name
+                actual_columns, expected_columns = (
+                    inspector.get_columns(name) for inspector in (actual, expected)
+                )
+                assert [{**column, "type": str(column["type"])} for column in actual_columns] == [
+                    {**column, "type": str(column["type"])} for column in expected_columns
+                ]
+                assert actual.get_pk_constraint(name) == expected.get_pk_constraint(name)
+                assert actual.get_indexes(name) == expected.get_indexes(name)
+                assert actual.get_unique_constraints(name) == expected.get_unique_constraints(name)
+                assert actual.get_foreign_keys(name) == expected.get_foreign_keys(name)
+            connection.execute(
+                text(
+                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) "
+                    "VALUES (1, 10, 4)"
+                )
+            )
+            migration.downgrade()
+            assert (
+                connection.execute(
+                    text("SELECT reserved_bytes FROM etl_archive_quotas WHERE tenant_id = 1")
+                ).scalar_one()
+                == 4
+            )
+    finally:
+        engine.dispose()
+        model_engine.dispose()

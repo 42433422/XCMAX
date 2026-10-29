@@ -40,6 +40,7 @@ from app.fastapi_routes.reviewed_excel_template import (
     _recheck,
 )
 from app.infrastructure.tenant_scope import tenant_scope
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter()
@@ -344,39 +345,51 @@ def _create_archive_classification(
     if claimed.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="分类正在创建，请按原请求标识核对")
-    upload = UploadServiceMixin().save_upload(
-        db, owner_user_id=owner, file_name=name, content_type=content_type, stream=BytesIO(body)
-    )
-    upload_record = db.get(EtlUpload, upload["upload_id"])
-    os.chmod(upload_record.storage_path, 0o600)
-    version = _classification_version(review["sha256"], "", sheets)
-    db.add(
-        EtlRun(
-            id=classification_id,
-            tenant_id=tenant,
-            owner_user_id=owner,
-            upload_id=upload["upload_id"],
-            target_type="template_classification",
-            status=_CLASS_READY,
-            stage=_CLASS_READY,
-            file_sha256=review["sha256"],
-            draft_json=dump_json(
-                {
-                    "versions": [
-                        {
-                            "version": version,
-                            "sheets": sheets,
-                            "model_status": "not_called",
-                            "confirmed": False,
-                            "read_only_print_areas": review["read_only_print_areas"],
-                        }
-                    ]
-                }
-            ),
-            summary_json=dump_json({"kind": "classification", "archive_version_id": archived.id}),
+    created_paths: list[Path] = []
+    commit_attempted = False
+    try:
+        upload = UploadServiceMixin().save_upload(
+            db, owner_user_id=owner, file_name=name, content_type=content_type, stream=BytesIO(body)
         )
-    )
-    db.commit()
+        upload_record = db.get(EtlUpload, upload["upload_id"])
+        created_paths.append(Path(upload_record.storage_path))
+        os.chmod(upload_record.storage_path, 0o600)
+        version = _classification_version(review["sha256"], "", sheets)
+        db.add(
+            EtlRun(
+                id=classification_id,
+                tenant_id=tenant,
+                owner_user_id=owner,
+                upload_id=upload["upload_id"],
+                target_type="template_classification",
+                status=_CLASS_READY,
+                stage=_CLASS_READY,
+                file_sha256=review["sha256"],
+                draft_json=dump_json(
+                    {
+                        "versions": [
+                            {
+                                "version": version,
+                                "sheets": sheets,
+                                "model_status": "not_called",
+                                "confirmed": False,
+                                "read_only_print_areas": review["read_only_print_areas"],
+                            }
+                        ]
+                    }
+                ),
+                summary_json=dump_json(
+                    {"kind": "classification", "archive_version_id": archived.id}
+                ),
+            )
+        )
+        commit_attempted = True
+        db.commit()
+    except BOUNDARY_ERRORS:
+        if not commit_attempted:
+            for path in created_paths:
+                path.unlink(missing_ok=True)
+        raise
     return {
         "asset_id": archived.asset_id,
         "archive_version_id": archived.id,

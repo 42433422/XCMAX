@@ -101,6 +101,7 @@ dev = [
     "types-aiofiles",
     "types-pillow",
     "types-openpyxl",
+    "types-defusedxml",
     "celery-types",
     "pip-audit>=2.9",
     "bandit>=1.7",
@@ -274,7 +275,6 @@ module = [
     "xlrd.*",
 ]
 ignore_missing_imports = true
-
 
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，

@@ -7,8 +7,10 @@ remain pending for operator reconciliation; they are never silently retried.
 import hashlib
 import os
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import func, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.application.etl.archive_policy import ArchivePolicy, ArchivePolicyError
@@ -57,7 +59,7 @@ def create_original(
         )
         .values(reserved_bytes=EtlArchiveQuota.reserved_bytes + len(body))
     )
-    if reserved.rowcount != 1:
+    if cast(CursorResult, reserved).rowcount != 1:
         db.rollback()
         raise ArchivePolicyError("归档配额不足")
     asset_id, version_id = new_id(), new_id()
@@ -139,7 +141,7 @@ def append_original_version(
         )
         .values(state=EtlArchiveAsset.state)
     )
-    if locked.rowcount != 1:
+    if cast(CursorResult, locked).rowcount != 1:
         db.rollback()
         raise ArchivePolicyError("归档不存在或已撤回")
     reserved = db.execute(
@@ -150,7 +152,7 @@ def append_original_version(
         )
         .values(reserved_bytes=EtlArchiveQuota.reserved_bytes + len(body))
     )
-    if reserved.rowcount != 1:
+    if cast(CursorResult, reserved).rowcount != 1:
         db.rollback()
         raise ArchivePolicyError("归档配额不足或尚未配置")
     root = root.resolve()
@@ -248,7 +250,7 @@ def recover_complete_pending(db: Session, *, owner: int, version_id: str, root: 
         )
         .values(status="ready")
     )
-    if changed.rowcount != 1:
+    if cast(CursorResult, changed).rowcount != 1:
         db.rollback()
         raise ArchivePolicyError("归档状态已改变，请刷新")
     db.commit()

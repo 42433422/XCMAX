@@ -7,6 +7,7 @@ import json
 import os
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -33,7 +34,11 @@ from app.application.reviewed_excel_classification_store import (
     _classification_run,
     _classification_version,
 )
-from app.application.reviewed_excel_evidence import build_structure_map, unresolved_fragments
+from app.application.reviewed_excel_evidence import (
+    bounded_range,
+    build_structure_map,
+    unresolved_fragments,
+)
 from app.application.reviewed_excel_template import (
     MAX_BYTES,
     classify_review_workbook,
@@ -723,14 +728,13 @@ async def reviewed_excel_classification_analyze(
             from openpyxl.utils.cell import (
                 column_index_from_string,
                 coordinate_from_string,
-                range_boundaries,
             )
 
             sheets = []
             for rule_sheet in rule_sheets:
                 regions = []
                 for region in (r for r in result["regions"] if r["sheet"] == rule_sheet["sheet"]):
-                    c1, r1, c2, r2 = range_boundaries(region["range"])
+                    c1, r1, c2, r2 = bounded_range(region["range"])
 
                     def inside(ref):
                         col, row = coordinate_from_string(ref["cell"])
@@ -749,7 +753,7 @@ async def reviewed_excel_classification_analyze(
                     merged = []
                     for candidate in rule_regions:
                         for item in candidate["merged_ranges"]:
-                            mc1, mr1, mc2, mr2 = range_boundaries(item)
+                            mc1, mr1, mc2, mr2 = bounded_range(item)
                             if (
                                 c1 <= mc1 <= mc2 <= c2
                                 and r1 <= mr1 <= mr2 <= r2
@@ -849,7 +853,7 @@ async def reviewed_excel_preview(
     try:
         body = await _body(file)
         review = inspect_workbook(body)
-        selected_region = None
+        selected_region: dict[str, Any] | None = None
         if classification_id:
             with tenant_scope(tenant), get_db() as db:
                 classification = _classification_run(db, classification_id, tenant, owner)
@@ -893,7 +897,6 @@ async def reviewed_excel_preview(
                 from openpyxl.utils.cell import (
                     column_index_from_string,
                     coordinate_from_string,
-                    range_boundaries,
                 )
 
                 def inside_fragment(ref):
@@ -902,7 +905,7 @@ async def reviewed_excel_preview(
                     return any(
                         ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
                         for part in fragments
-                        for c1, r1, c2, r2 in [range_boundaries(part["range"])]
+                        for c1, r1, c2, r2 in [bounded_range(part["range"])]
                     )
 
                 for sheet in latest["sheets"]:
@@ -1064,7 +1067,7 @@ def reviewed_excel_candidate_download(
             ),
             None,
         )
-        if not candidate or not proposal.get("result_previews"):
+        if proposal is None or not candidate or not proposal.get("result_previews"):
             raise HTTPException(status_code=404, detail="候选模板不存在")
         body = _source(db, run, tenant, owner)
         cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])

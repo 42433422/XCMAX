@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from openpyxl.utils import get_column_letter
 
+from app.application.reviewed_excel_evidence import bounded_range
+
 
 def classify_review_workbook(review: dict) -> list[dict]:
     """Suggest non-exclusive document labels from inspected cell text only."""
     import re
 
-    from openpyxl.utils.cell import coordinate_from_string, range_boundaries
+    from openpyxl.utils.cell import coordinate_from_string
 
     from app.application.etl.target_detection import _ATTENDANCE_RE, _DELIVERY_RE, _PURCHASE_RE
 
@@ -24,18 +26,13 @@ def classify_review_workbook(review: dict) -> list[dict]:
         cells = [cell for cell in review["cells"] if cell["sheet"] == sheet]
         evidence = []
         for label, pattern in patterns.items():
-            match = next(
-                (
-                    (cell, pattern.search(cell["value"]))
-                    for cell in cells
-                    if pattern.search(cell["value"])
-                ),
-                None,
-            )
-            if match:
-                evidence.append(
-                    {"label": label, "cell": match[0]["cell"], "matched": match[1].group(0)}
-                )
+            for cell in cells:
+                match = pattern.search(cell["value"])
+                if match is not None:
+                    evidence.append(
+                        {"label": label, "cell": cell["cell"], "matched": match.group(0)}
+                    )
+                    break
         headings = {
             "quotation": re.compile(r"^(报价单|報價單|quotation|sales quote)$", re.I),
             "delivery": re.compile(r"^(送货单|发货单|出货单|delivery note)$", re.I),
@@ -50,7 +47,9 @@ def classify_review_workbook(review: dict) -> list[dict]:
                     anchors.setdefault(row, []).append(
                         {"label": label, "cell": cell["cell"], "matched": cell["value"]}
                     )
-        dimensions = next((item for item in review["sheet_overview"] if item["sheet"] == sheet), {})
+        dimensions: dict = next(
+            (item for item in review["sheet_overview"] if item["sheet"] == sheet), {}
+        )
         max_row = max(1, int(dimensions.get("rows", 1)))
         max_col = max(1, int(dimensions.get("columns", 1)))
         rows = sorted(anchors)
@@ -59,7 +58,7 @@ def classify_review_workbook(review: dict) -> list[dict]:
         if split and any(
             min_row < boundary <= max_row_of_merge
             for merged in merges
-            for _min_col, min_row, _max_col, max_row_of_merge in [range_boundaries(merged)]
+            for _min_col, min_row, _max_col, max_row_of_merge in [bounded_range(merged)]
             for boundary in rows[1:]
         ):
             split = False
@@ -92,7 +91,7 @@ def classify_review_workbook(review: dict) -> list[dict]:
             ]
             merged_in_region = []
             for merged in merges:
-                _min_col, min_row, _max_col, max_row_of_merge = range_boundaries(merged)
+                _min_col, min_row, _max_col, max_row_of_merge = bounded_range(merged)
                 if min_row <= end and max_row_of_merge >= start:
                     merged_in_region.append(merged)
             regions.append(
@@ -131,7 +130,6 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
-        range_boundaries,
     )
 
     if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
@@ -404,7 +402,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         ):
             raise ValueError("模型分类无效，原分类未改变")
         try:
-            c1, r1, c2, r2 = range_boundaries(area)
+            c1, r1, c2, r2 = bounded_range(area)
             dimensions = by_dimensions[sheet]
             if not all(isinstance(x, int) for x in (c1, r1, c2, r2)) or not (
                 1 <= r1 <= r2 <= dimensions["rows"] and 1 <= c1 <= c2 <= dimensions["columns"]
@@ -417,7 +415,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 raise ValueError("模型区域重叠，原分类未改变")
         rects[sheet].append((c1, r1, c2, r2))
         for merge in dimensions.get("merged_regions", []):
-            mc1, mr1, mc2, mr2 = range_boundaries(merge)
+            mc1, mr1, mc2, mr2 = bounded_range(merge)
             intersects = c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2
             if intersects and not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
                 raise ValueError("模型区域切断合并单元格，原分类未改变")
@@ -550,16 +548,14 @@ def combine_semantic_batches(
     review: dict, batches: list[list[dict]], results: list[dict], max_calls: int
 ) -> dict:
     """Combine only validated results; reject overlap across batches."""
-    from openpyxl.utils.cell import range_boundaries
-
     from app.application.reviewed_excel_evidence import build_structure_map
 
     rules = classify_review_workbook(review)
     accepted = []
-    rectangles = {}
-    sent = set()
+    rectangles: dict[str, list[tuple[int, int, int, int, dict]]] = {}
+    sent: set[tuple[str, str]] = set()
     input_summaries = []
-    merge_sent = {}
+    merge_sent: dict[str, int] = {}
     for batch, result in zip(batches, results, strict=True):
         input_summaries.append(result["input_summary"])
         sent.update((cell["sheet"], cell["cell"]) for cell in batch)
@@ -568,7 +564,7 @@ def combine_semantic_batches(
                 merge_sent.get(coverage["sheet"], 0), coverage["merged_sent"]
             )
         for region in result["regions"]:
-            c1, r1, c2, r2 = range_boundaries(region["range"])
+            c1, r1, c2, r2 = bounded_range(region["range"])
             prior = rectangles.setdefault(region["sheet"], [])
             overlaps = [
                 old
@@ -605,7 +601,7 @@ def combine_semantic_batches(
             _model_cell_cost,
         )
 
-        rows = {}
+        rows: dict[int, list[dict]] = {}
         for cell in cells:
             _col, row = coordinate_from_string(cell["cell"])
             rows.setdefault(row, []).append(cell)
@@ -646,7 +642,7 @@ def combine_semantic_batches(
     batch_keys = [{(cell["sheet"], cell["cell"]) for cell in batch} for batch in batches]
     for region in accepted:
         region["value_extent"] = value_extent(region, review["cells"])
-        c1, r1, c2, r2 = range_boundaries(region["range"])
+        c1, r1, c2, r2 = bounded_range(region["range"])
         region_keys = set()
         for cell in review["cells"]:
             if cell["sheet"] != region["sheet"]:
@@ -760,11 +756,10 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
-        range_boundaries,
     )
 
     dimensions = {sheet["sheet"]: sheet for sheet in review["sheet_overview"]}
-    rectangles = {}
+    rectangles: dict[str, list[tuple[int, int, int, int]]] = {}
     for item in labels:
         if (
             not isinstance(item, dict)
@@ -784,7 +779,7 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
         if key in supplied or key not in expected:
             raise ValueError("分类区域不属于该版本")
         try:
-            c1, r1, c2, r2 = range_boundaries(item["range"])
+            c1, r1, c2, r2 = bounded_range(item["range"])
             size = dimensions[item["sheet"]]
             if not all(isinstance(x, int) for x in (c1, r1, c2, r2)) or not (
                 1 <= c1 <= c2 <= size["columns"] and 1 <= r1 <= r2 <= size["rows"]
@@ -797,7 +792,7 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
                 raise ValueError("分类区域重叠")
         rectangles[item["sheet"]].append((c1, r1, c2, r2))
         for merged in size.get("merged_regions", []):
-            mc1, mr1, mc2, mr2 = range_boundaries(merged)
+            mc1, mr1, mc2, mr2 = bounded_range(merged)
             if (
                 c1 <= mc2
                 and mc1 <= c2
@@ -818,7 +813,7 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
         region["range"] = item["range"]
         if old_range != item["range"]:
             region["range_source"] = "user"
-            c1, r1, c2, r2 = range_boundaries(item["range"])
+            c1, r1, c2, r2 = bounded_range(item["range"])
 
             def in_region(ref):
                 col, row = coordinate_from_string(ref["cell"])
@@ -828,7 +823,7 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
             region["header_cells"] = [ref for ref in region["header_cells"] if in_region(ref)]
             region["merged_ranges"] = []
             for merged in dimensions[key[0]].get("merged_regions", []):
-                mc1, mr1, mc2, mr2 = range_boundaries(merged)
+                mc1, mr1, mc2, mr2 = bounded_range(merged)
                 if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2:
                     region["merged_ranges"].append(merged)
             region["parent_heading"] = ""
