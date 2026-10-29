@@ -1,5 +1,4 @@
 import { onMounted } from 'vue'
-import { appAlert } from '@/utils/appDialog'
 import { useApprovalData } from './useApprovalData'
 import { useApprovalDetails } from './useApprovalDetails'
 import { useApprovalActions } from './useApprovalActions'
@@ -14,7 +13,7 @@ import {
  */
 export function assembleApprovalWorkspace() {
   const details = useApprovalDetails({ getCurrentUserId: () => data.getCurrentUserId() })
-  const data = useApprovalData({ viewDetails: (id) => details.viewDetails(id) })
+  const data = useApprovalData({ viewDetails: (id) => details.viewDetails(id), closeDetails: details.closeDetails })
   const actions = useApprovalActions({
     getCurrentUserId: () => data.getCurrentUserId(),
     loadData: data.loadData,
@@ -25,15 +24,7 @@ export function assembleApprovalWorkspace() {
     showDetails: details.showDetails,
   })
 
-  onMounted(async () => {
-    try {
-      await data.resolveCurrentUserId()
-      await data.loadData()
-    } catch (error) {
-      console.error('无法从登录会话解析审批用户:', error)
-      await appAlert('登录会话无效，无法打开审批工作台')
-    }
-  })
+  onMounted(data.reloadAccount)
 
   return {
     ...data,

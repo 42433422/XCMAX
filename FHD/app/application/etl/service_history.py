@@ -217,6 +217,8 @@ class HistoryServiceMixin:
         page: int,
         page_size: int,
         action: str | None = None,
+        source_sheet: str | None = None,
+        source_row: int | None = None,
     ) -> dict[str, Any]:
         run = self._owned_run(db, run_id, owner_user_id)
         revision = preview_revision(run)
@@ -225,6 +227,10 @@ class HistoryServiceMixin:
         )
         if action:
             query = query.filter(EtlRunRow.final_action == action)
+        if source_sheet:
+            query = query.filter(EtlRunRow.source_sheet == source_sheet)
+        if source_row is not None:
+            query = query.filter(EtlRunRow.source_row == source_row)
         total = query.count()
         rows = (
             query.order_by(EtlRunRow.id)

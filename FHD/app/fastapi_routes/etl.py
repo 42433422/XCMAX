@@ -156,6 +156,8 @@ def get_run_rows(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=200),
     action: str | None = Query(default=None),
+    source_sheet: str | None = Query(default=None, max_length=255),
+    source_row: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db_dependency),
     user: Any = Depends(_read),
 ):
@@ -168,6 +170,8 @@ def get_run_rows(
             page=page,
             page_size=page_size,
             action=action,
+            source_sheet=source_sheet,
+            source_row=source_row,
         ),
     }
 

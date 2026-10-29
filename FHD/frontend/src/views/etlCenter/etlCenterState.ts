@@ -27,6 +27,12 @@ export function createEtlCenterState() {
   const rowPage = ref(1)
   const rowTotal = ref(0)
   const rowActionFilter = ref('')
+  const sourceSheetFilter = ref('')
+  const sourceRowFilter = ref<number | ''>('')
+  const sourceSheetInput = ref('')
+  const sourceRowInput = ref<number | ''>('')
+  const requestedRowPage = ref<number | ''>(1)
+  const rowsLoading = ref(false)
   const busy = ref(false)
   const pageError = ref('')
   const reviewedPreviewRevision = ref<string | null>(null)
@@ -34,6 +40,15 @@ export function createEtlCenterState() {
   watch([() => currentRun.value?.id, () => currentRun.value?.preview_revision], () => {
     reviewedPreviewRevision.value = null
     validRowsOnly.value = false
+  }, { flush: 'sync' })
+  watch(() => currentRun.value?.id, () => {
+    rowPage.value = 1
+    requestedRowPage.value = 1
+    rowActionFilter.value = ''
+    sourceSheetFilter.value = sourceSheetInput.value = ''
+    sourceRowFilter.value = sourceRowInput.value = ''
+    runRows.value = []
+    rowTotal.value = 0
   }, { flush: 'sync' })
   const editableMappings = ref<EtlFieldMapping[]>([])
   const mappingUiTransform = reactive<Record<string, string>>({})
@@ -62,6 +77,12 @@ export function createEtlCenterState() {
     rowPage,
     rowTotal,
     rowActionFilter,
+    sourceSheetFilter,
+    sourceRowFilter,
+    sourceSheetInput,
+    sourceRowInput,
+    requestedRowPage,
+    rowsLoading,
     busy,
     pageError,
     reviewedPreviewRevision,

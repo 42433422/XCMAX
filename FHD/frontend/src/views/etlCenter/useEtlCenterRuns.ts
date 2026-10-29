@@ -8,6 +8,7 @@ import { etlApi, type EtlRun, type EtlRunRow } from '@/api/etl'
 import { tabForRunStatus } from '@/utils/etlRunView'
 import type { EtlCenterState } from './etlCenterState'
 import { createEtlProductInvalidation } from '@/utils/etlProductInvalidation'
+import { createTargetLabel, resultNeedsVerification, targetOperation } from './etlCenterShared'
 
 export interface EtlCenterRunsDeps {
   state: EtlCenterState
@@ -34,6 +35,12 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     rowPage,
     rowTotal,
     rowActionFilter,
+    sourceSheetFilter,
+    sourceRowFilter,
+    sourceSheetInput,
+    sourceRowInput,
+    requestedRowPage,
+    rowsLoading,
     reviewedPreviewRevision,
     validRowsOnly,
     editableMappings,
@@ -114,30 +121,87 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     }))
     for (const [index, mapping] of editableMappings.value.entries()) {
       const firstOp = String(mapping.transforms?.[0]?.op || '')
-      mappingUiTransform[String(index)] = ['', 'trim', 'number', 'date'].includes(firstOp) ? firstOp : 'custom'
+      const simple = mapping.transforms.length <= 1 && Object.keys(mapping.transforms[0] || {}).every(key => key === 'op')
+      mappingUiTransform[String(index)] = simple && ['', 'trim', 'number', 'date'].includes(firstOp) ? firstOp : 'custom'
       mappingUiTransformJson[String(index)] = JSON.stringify(mapping.transforms || [])
     }
     allowedUpdateFields.value = [...(currentRun.value.draft.allowed_update_fields || [])]
     ocrConfirmed.value = Boolean(currentRun.value.draft.ocr_confirmed)
   }
 
+  let rowRequest = 0
   async function loadRows() {
+    const request = ++rowRequest
     reviewedPreviewRevision.value = null
     if (!currentRun.value || currentRun.value.total_rows === 0) {
+      rowsLoading.value = false
       runRows.value = []
       rowTotal.value = 0
       return
     }
     const run = currentRun.value
     const revision = run.preview_revision
-    const result = await etlApi.rows(run.id, rowPage.value, 50, rowActionFilter.value)
-    if (currentRun.value?.id !== run.id || currentRun.value.preview_revision !== revision) return
-    runRows.value = result.items
-    rowTotal.value = result.total
-    hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
-    if (run.status === 'preview_ready' && revision && result.preview_revision === revision) {
-      reviewedPreviewRevision.value = revision
+    const page = rowPage.value, action = rowActionFilter.value, sheet = sourceSheetFilter.value, sourceRow = sourceRowFilter.value
+    const isCurrent = () => request === rowRequest && currentRun.value?.id === run.id && currentRun.value.preview_revision === revision &&
+      rowPage.value === page && rowActionFilter.value === action && sourceSheetFilter.value === sheet && sourceRowFilter.value === sourceRow
+    rowsLoading.value = true
+    try {
+      const result = sheet || sourceRow
+        ? await etlApi.rows(run.id, page, 50, action, { sheet, row: sourceRow || undefined })
+        : await etlApi.rows(run.id, page, 50, action)
+      if (!isCurrent()) return
+      if (result.preview_revision !== revision) {
+        runRows.value = []
+        pageError.value = '预演内容已变化，请重新读取任务后核对。'
+        return
+      }
+      rowTotal.value = result.total
+      const lastPage = Math.max(1, Math.ceil(result.total / 50))
+      if (page > lastPage) {
+        rowPage.value = lastPage
+        await loadRows()
+        return
+      }
+      requestedRowPage.value = page
+      runRows.value = result.items
+      hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
+      if (run.status === 'preview_ready' && revision && result.items.length) reviewedPreviewRevision.value = revision
+    } catch (error) {
+      if (isCurrent()) {
+        runRows.value = []
+        pageError.value = error instanceof Error ? error.message : '读取核对数据失败，请重试。'
+      }
+    } finally {
+      if (request === rowRequest) rowsLoading.value = false
     }
+  }
+
+  async function goToRowPage(page = Number(requestedRowPage.value)) {
+    const lastPage = Math.max(1, Math.ceil(rowTotal.value / 50))
+    if (!Number.isSafeInteger(page) || page < 1 || page > lastPage) {
+      pageError.value = `请输入 1 至 ${lastPage} 之间的页码。`
+      return
+    }
+    pageError.value = ''
+    rowPage.value = page
+    await loadRows()
+  }
+
+  async function locateSourceRow(clear = false) {
+    if (clear) {
+      sourceSheetInput.value = ''
+      sourceRowInput.value = ''
+    }
+    const row = sourceRowInput.value
+    if (row !== '' && (!Number.isSafeInteger(row) || row < 1)) {
+      pageError.value = '来源行号须为大于 0 的整数。'
+      return
+    }
+    sourceSheetFilter.value = sourceSheetInput.value.trim()
+    sourceRowFilter.value = row
+    rowPage.value = 1
+    pageError.value = ''
+    await loadRows()
   }
 
   async function setRowActionFilter(action: string) {
@@ -191,8 +255,12 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     const revision = run?.preview_revision
     if (busy.value || !run || !canExecute.value || !revision || reviewedPreviewRevision.value !== revision) return
     const onlyValid = validRowsOnly.value
-    const scope = onlyValid ? `仅写入正确行，排除 ${run.summary.error} 行错误。` : '发现错误时停止写入。'
-    if (!window.confirm(`确认写入“${run.file_name}”？新增 ${run.summary.new} 行、更新 ${run.summary.update} 行、跳过 ${run.summary.skip} 行。\n${scope}`)) return
+    const operation = targetOperation(run.target_type)
+    const config = state.targetConfigs.value.find(item => item.id === run.draft.target_config_id)
+    const target = config ? `${config.name}（${config.endpoint_url}）` : createTargetLabel(state.capabilities)(run.target_type)
+    const scope = onlyValid ? `仅处理正确行，排除 ${run.summary.error} 行错误。` : '发现错误时停止处理。'
+    const irreversible = run.reversible ? '' : '\n此目标不支持撤销，请确认目标与内容。'
+    if (!window.confirm(`确认${operation.action}：“${run.file_name}”？\n目标：${target}\n新增 ${run.summary.new} 行、更新 ${run.summary.update} 行、跳过 ${run.summary.skip} 行。\n${scope}${irreversible}`)) return
     busy.value = true
     pageError.value = ''
     try {
@@ -234,7 +302,8 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function retryRun() {
-    if (!currentRun.value) return
+    if (!currentRun.value || busy.value || currentRun.value.rollback_status || resultNeedsVerification(currentRun.value) ||
+      !['failed', 'interrupted'].includes(currentRun.value.status)) return
     busy.value = true
     pageError.value = ''
     try {
@@ -274,6 +343,10 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
 
   async function rollbackRun() {
     if (!currentRun.value) return
+    if (resultNeedsVerification(currentRun.value)) {
+      pageError.value = '上次操作结果尚未确认，请先核对实际数据并联系管理员处理。'
+      return
+    }
     if (!canRollback.value) {
       pageError.value = '当前账号没有撤销权限，请联系管理员授权后重试。'
       return
@@ -296,6 +369,8 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     schedulePoll,
     syncDraft,
     loadRows,
+    goToRowPage,
+    locateSourceRow,
     setRowActionFilter,
     onRowActionFilterChange,
     overrideRow,

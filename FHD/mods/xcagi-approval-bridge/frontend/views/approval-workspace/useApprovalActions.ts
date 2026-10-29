@@ -78,12 +78,6 @@ export function useApprovalActions(deps: {
     }
   }
 
-  // 查看全部
-  const viewAll = (type: string) => {
-    // TODO: 跳转到完整列表页
-    console.log('查看全部:', type)
-  }
-
   // 删除单条已完成记录
   const deleteSingle = async (item: ApprovalRequest) => {
     if (!isFinalStatus(item.status)) {
@@ -162,6 +156,6 @@ export function useApprovalActions(deps: {
 
   return {
     cleanupLoading, completedInitiatedCount,
-    approve, reject, viewAll, deleteSingle, cleanupCompleted,
+    approve, reject, deleteSingle, cleanupCompleted,
   }
 }
