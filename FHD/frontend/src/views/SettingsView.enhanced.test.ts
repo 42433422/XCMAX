@@ -14,7 +14,7 @@ import { ref, type Ref, nextTick } from 'vue'
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiPut = vi.fn().mockResolvedValue({ success: true })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -291,8 +291,9 @@ describe('SettingsView.vue – profile section', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
+    await flushPromises()
     // When not logged in, should show login link (router-link with primary btn class)
     const loginBtn = wrapper.find('.settings-profile__btn--primary')
     expect(loginBtn.exists()).toBe(true)
@@ -647,7 +648,7 @@ describe('SettingsView.vue – computed properties', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     const vm = wrapper.vm as Record<string, unknown>
     expect(vm.isLoggedIn).toBe(false)
@@ -760,7 +761,7 @@ describe('SettingsView.vue – audit logs', () => {
       success: false,
       data: { user: null, permissions: [] },
     })
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     expect(wrapper.find('[data-tutorial-id="settings-audit-logs"]').exists()).toBe(false)
     wrapper.unmount()

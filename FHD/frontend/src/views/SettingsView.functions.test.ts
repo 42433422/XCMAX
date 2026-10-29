@@ -14,7 +14,7 @@ import { ref, type Ref, nextTick } from 'vue'
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiDelete = vi.fn().mockResolvedValue({ success: true, message: 'ok' })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -392,7 +392,7 @@ function resetApiMocks() {
   mockApiGet.mockResolvedValue({ data: {}, success: false })
   mockApiPost.mockResolvedValue({ success: true })
   mockApiDelete.mockResolvedValue({ success: true, message: 'ok' })
-  mockAuthApiValidateSession.mockResolvedValue({ success: false })
+  mockAuthApiValidateSession.mockResolvedValue({ success: true, valid: false })
   mockAuthApiGetCurrentUser.mockResolvedValue({
     success: false,
     data: { user: null, permissions: [] },

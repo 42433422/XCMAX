@@ -87,7 +87,7 @@ function resetDesktopSessionBootstrapHint(): void {
   desktopBootstrapSessionHint = null
 }
 
-function readValid(res: unknown): boolean {
+export function readValid(res: unknown): boolean {
   const r = res as { success?: boolean; valid?: boolean; data?: { valid?: boolean } }
   if (typeof r?.valid === 'boolean') return r.valid
   if (typeof r?.data?.valid === 'boolean') return r.data.valid
