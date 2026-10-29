@@ -1,4 +1,5 @@
 """Generate project-owned synthetic Excel fixtures; never use customer data."""
+
 from io import BytesIO
 from pathlib import Path
 
@@ -33,15 +34,15 @@ def sample():
 def large_quotation(rows=601):
     wb = Workbook()
     ws = wb.active
-    ws.title = '报价'
+    ws.title = "报价"
     for row in range(1, rows + 1):
-        ws.cell(row, 1, f'记录{row}')
-    ws['A1'] = '报价单'
+        ws.cell(row, 1, f"记录{row}")
+    ws["A1"] = "报价单"
     out = BytesIO()
     wb.save(out)
     wb.close()
     return out.getvalue()
 
 
-if __name__ == '__main__':
-    Path(__file__).with_name('synthetic_quotation.xlsx').write_bytes(sample())
+if __name__ == "__main__":
+    Path(__file__).with_name("synthetic_quotation.xlsx").write_bytes(sample())

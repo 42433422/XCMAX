@@ -18,7 +18,9 @@ class EtlArchiveAsset(TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "etl_archive_assets"
     __table_args__ = (
         Index("ix_etl_archive_owner", "tenant_id", "owner_user_id"),
-        UniqueConstraint("tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_request"),
+        UniqueConstraint(
+            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_request"
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -32,7 +34,9 @@ class EtlArchiveVersion(TimestampMixin, TenantScopedMixin, Base):
     __tablename__ = "etl_archive_versions"
     __table_args__ = (
         UniqueConstraint("asset_id", "version", name="uq_etl_archive_asset_version"),
-        UniqueConstraint("tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_version_request"),
+        UniqueConstraint(
+            "tenant_id", "owner_user_id", "request_key", name="uq_etl_archive_version_request"
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     asset_id: Mapped[str] = mapped_column(ForeignKey("etl_archive_assets.id"), nullable=False)

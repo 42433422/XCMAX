@@ -7,8 +7,14 @@ from app.application.etl.archive_policy import ArchivePolicy, ArchivePolicyError
 
 @pytest.mark.parametrize(
     "days,quota,rule",
-    [(0, 100, "manual"), (1, 100, "manual"), (None, 0, "manual"),
-     (1, 100, ""), (True, 100, "expire"), (1, True, "expire")],
+    [
+        (0, 100, "manual"),
+        (1, 100, "manual"),
+        (None, 0, "manual"),
+        (1, 100, ""),
+        (True, 100, "expire"),
+        (1, True, "expire"),
+    ],
 )
 def test_archive_policy_requires_explicit_valid_choices(days, quota, rule):
     with pytest.raises(ArchivePolicyError):
@@ -27,4 +33,6 @@ def test_archive_admission_checks_quota_and_records_expiry():
 
 def test_manual_retention_never_expires_automatically():
     policy = ArchivePolicy(None, 100, "manual")
-    assert policy.admission(size_bytes=1, used_bytes=0, now=datetime(2026, 1, 1, tzinfo=UTC)) is None
+    assert (
+        policy.admission(size_bytes=1, used_bytes=0, now=datetime(2026, 1, 1, tzinfo=UTC)) is None
+    )
