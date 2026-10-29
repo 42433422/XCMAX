@@ -305,7 +305,7 @@ const {
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
-} = useChatVoiceInput({ messageInput, isLoading })
+} = useChatVoiceInput({ messageInput, isLoading, sessionId: currentSessionId })
 
 const {
   messageHeights,

@@ -1,7 +1,7 @@
 /**
  * 数据对接中心共享状态（拆分自 views/EtlCenterView.vue，行为保持一致）。
  */
-import { reactive, ref, watch } from 'vue'
+import { getCurrentScope, onScopeDispose, reactive, ref, watch } from 'vue'
 import type { EtlCapabilities, EtlFieldMapping, EtlRun, EtlRunRow, EtlTargetConfig, EtlTemplate } from '@/api/etl'
 import type { EtlRunTab } from '@/utils/etlRunView'
 
@@ -31,10 +31,6 @@ export function createEtlCenterState() {
   const pageError = ref('')
   const reviewedPreviewRevision = ref<string | null>(null)
   const validRowsOnly = ref(false)
-  watch([() => currentRun.value?.id, () => currentRun.value?.preview_revision], () => {
-    reviewedPreviewRevision.value = null
-    validRowsOnly.value = false
-  }, { flush: 'sync' })
   const editableMappings = ref<EtlFieldMapping[]>([])
   const mappingUiTransform = reactive<Record<string, string>>({})
   const mappingUiTransformJson = reactive<Record<string, string>>({})
@@ -48,6 +44,41 @@ export function createEtlCenterState() {
   const customerProductPreviewMessage = ref('')
   const selectedShipmentTemplateRegionId = ref('')
   const pollTimer: { value: ReturnType<typeof setTimeout> | null } = { value: null }
+  // Invalidate async results even when the operator switches away and back to the same query.
+  let readGeneration = 0
+  let busyGeneration = 0
+  let disposed = false
+  watch([() => currentRun.value?.id, () => currentRun.value?.preview_revision, () => currentRun.value?.status, rowPage, rowActionFilter],
+    ([id, revision], [previousId, previousRevision]) => {
+      readGeneration += 1
+      reviewedPreviewRevision.value = null
+      runRows.value = []
+      hasOcrRows.value = false
+      if (id !== previousId || revision !== previousRevision) validRowsOnly.value = false
+      if (id !== previousId) {
+        rowPage.value = 1
+        rowActionFilter.value = ''
+        rowTotal.value = 0
+      }
+    }, { flush: 'sync' })
+  function captureReadContext() {
+    const generation = readGeneration
+    return () => !disposed && generation === readGeneration
+  }
+  function beginBusy() {
+    const generation = ++busyGeneration
+    busy.value = true
+    return () => {
+      // An older completion must not release a newer operation's loading state.
+      if (!disposed && generation === busyGeneration) busy.value = false
+    }
+  }
+  if (getCurrentScope()) onScopeDispose(() => {
+    disposed = true
+    readGeneration += 1
+    if (pollTimer.value) clearTimeout(pollTimer.value)
+    pollTimer.value = null
+  })
 
   return {
     activeTab,
@@ -79,6 +110,8 @@ export function createEtlCenterState() {
     customerProductPreviewMessage,
     selectedShipmentTemplateRegionId,
     pollTimer,
+    captureReadContext,
+    beginBusy,
   }
 }
 

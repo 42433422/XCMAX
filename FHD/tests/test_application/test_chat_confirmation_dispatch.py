@@ -122,3 +122,53 @@ def test_missing_or_no_longer_hydratable_plan_is_explicit_not_a_new_intent(contr
     assert handled and "没有待确认" in response["response"]
     callbacks._run_workflow_with_state_updates.assert_not_called()
     route.assert_not_called()
+
+
+@pytest.mark.parametrize("control", ["确认", "取消"])
+@pytest.mark.parametrize("expected", ["clicked-plan", "", None, 3])
+def test_card_control_rejects_another_pending_plan_before_any_effect(control, expected):
+    callbacks = MagicMock()
+    callbacks._hydrate_pending_workflow.return_value = False
+    current = {"plan": PlanGraph(plan_id="newer-plan", intent="write")}
+    pending = {"user": current}
+    handled, response = WorkflowSession(pending, callbacks).resume_pending_dynamic_workflow(
+        "user", control, control, {"expected_workflow_plan_id": expected}
+    )
+    assert handled and response["success"] is False
+    assert response["data"]["action"] == "workflow_confirmation_stale"
+    assert pending["user"] is current
+    callbacks._run_workflow_with_state_updates.assert_not_called()
+    callbacks._persist_plan_state.assert_not_called()
+    callbacks._continue_after_clarification.assert_not_called()
+
+
+@pytest.mark.parametrize("control", ["确认", "取消"])
+def test_card_control_rejects_expired_target_instead_of_acknowledging_it(control):
+    callbacks = MagicMock()
+    callbacks._hydrate_pending_workflow.return_value = False
+    handled, response = WorkflowSession({}, callbacks).resume_pending_dynamic_workflow(
+        "user", control, control,
+        {"session_id": "original", "expected_workflow_plan_id": "expired-plan"},
+    )
+    assert handled and response["success"] is False
+    assert response["data"]["action"] == "workflow_confirmation_stale"
+    callbacks._run_workflow_with_state_updates.assert_not_called()
+
+
+@pytest.mark.parametrize("control", ["确认", "取消"])
+def test_matching_plan_only_card_preserves_confirmation_and_cancellation(control):
+    callbacks = MagicMock()
+    callbacks._run_workflow_with_state_updates.return_value = (object(), {})
+    callbacks._format_workflow_run_response.return_value = {"success": True, "response": "done"}
+    callbacks._persist_plan_state.return_value = True
+    pending = {"user": {"plan": PlanGraph(
+        plan_id="clicked-plan", intent="write",
+        nodes=[WorkflowNode("n1", "customers", "create", params={"unit_name": "synthetic"})],
+    )}}
+    handled, response = WorkflowSession(pending, callbacks).resume_pending_dynamic_workflow(
+        "user", control, control, {"expected_workflow_plan_id": "clicked-plan"}
+    )
+    assert handled and response["success"] is True
+    assert "user" not in pending
+    assert callbacks._run_workflow_with_state_updates.call_count == (control == "确认")
+    assert callbacks._persist_plan_state.call_count == (control == "取消")

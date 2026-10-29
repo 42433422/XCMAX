@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { afterEach } from 'vitest'
 enableAutoUnmount(afterEach)
 import ChatMessageList from './ChatMessageList.vue'
+import AgentRunTrace from './AgentRunTrace.vue'
 
 const defaultProps = {
   isLoading: false, isStreamingReply: false, loadingProgressText: '',
@@ -117,6 +118,8 @@ describe('ChatMessageList', () => {
     })
     await wrapper.get('[data-testid="chat-run-approve"]').trigger('click')
     expect(wrapper.emitted('approve-run')).toEqual([['run_wait_2']])
+    wrapper.getComponent(AgentRunTrace).vm.$emit('auto-approve-tool', 'business_db')
+    expect(wrapper.emitted('approve-run')).toEqual([['run_wait_2'], ['run_wait_2']])
     await wrapper.setProps({ messages: [{ role: 'ai' as const, content: '完成', time: '12:01', agentRunTrace: { ...trace, status: 'success' as const, terminal: true } }] })
     expect(wrapper.find('[data-testid="chat-run-approve"]').exists()).toBe(false)
   })

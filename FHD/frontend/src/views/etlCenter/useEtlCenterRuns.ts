@@ -46,9 +46,19 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     customerProductPreviewMessage,
     pollTimer,
   } = state
+  let selectionGeneration = 0
+  let rowReadGeneration = 0
+  let runReadGeneration = 0
+  let historyGeneration = 0
+  let bootstrapGeneration = 0
+  let pollGeneration = 0
 
   async function bootstrap() {
-    busy.value = true
+    const request = ++bootstrapGeneration
+    const historyRequest = ++historyGeneration
+    const selection = selectionGeneration
+    const isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
       const [caps, templateRows, history, configs] = await Promise.all([
@@ -57,48 +67,52 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
         readRuns(),
         etlApi.targetConfigs(),
       ])
+      if (request !== bootstrapGeneration || !isCurrent()) return
       state.capabilities.value = caps
       state.templates.value = templateRows
-      runs.value = history
+      if (historyRequest === historyGeneration) runs.value = history
       state.targetConfigs.value = configs
       if (targetType.value !== 'auto' && !caps.targets.some((item) => item.type === targetType.value)) {
         targetType.value = 'auto'
       }
       const requestedRun = String(route.query.run_id || '')
-      if (requestedRun) {
-        currentRun.value = await readRun(requestedRun)
-        syncDraft()
-        activeTab.value = tabForRunStatus(currentRun.value.status)
-        if (currentRun.value.status === 'preview_ready') await loadRows()
-        schedulePoll()
-      }
+      if (requestedRun && selection === selectionGeneration) await selectRun({ id: requestedRun })
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '数据对接中心加载失败'
+      if (request === bootstrapGeneration && isCurrent()) pageError.value = error instanceof Error ? error.message : '数据对接中心加载失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   function schedulePoll() {
+    const polling = ++pollGeneration
     if (pollTimer.value) clearTimeout(pollTimer.value)
-    if (!currentRun.value || !['queued', 'previewing', 'executing'].includes(currentRun.value.status)) return
+    pollTimer.value = null
+    const run = currentRun.value
+    const isCurrent = state.captureReadContext()
+    if (!isCurrent() || !run || !['queued', 'previewing', 'executing'].includes(run.status)) return
     pollTimer.value = setTimeout(async () => {
-      if (!currentRun.value) return
+      const request = ++runReadGeneration
       try {
-        currentRun.value = await readRun(currentRun.value.id)
+        if (polling !== pollGeneration || !isCurrent()) return
+        const latest = await readRun(run.id)
+        if (request !== runReadGeneration || polling !== pollGeneration || !isCurrent()) return
+        currentRun.value = latest
         syncDraft()
+        const ownsUpdatedRun = state.captureReadContext()
         if (currentRun.value.status === 'preview_ready') {
           activeTab.value = 'preview'
           await loadRows()
-          await refreshRuns()
+          if (ownsUpdatedRun()) await refreshRuns()
         } else if (currentRun.value.status === 'completed') {
           activeTab.value = 'history'
           await refreshRuns()
         }
       } catch (error) {
-        pageError.value = error instanceof Error ? error.message : '读取运行进度失败'
+        if (request === runReadGeneration && polling === pollGeneration && isCurrent()) pageError.value = error instanceof Error ? error.message : '读取运行进度失败'
+      } finally {
+        if (polling === pollGeneration) schedulePoll()
       }
-      schedulePoll()
     }, 1200)
   }
 
@@ -122,21 +136,31 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function loadRows() {
+    const request = ++rowReadGeneration
+    const isCurrent = state.captureReadContext()
     reviewedPreviewRevision.value = null
+    runRows.value = []
+    hasOcrRows.value = false
     if (!currentRun.value || currentRun.value.total_rows === 0) {
-      runRows.value = []
       rowTotal.value = 0
       return
     }
     const run = currentRun.value
     const revision = run.preview_revision
-    const result = await etlApi.rows(run.id, rowPage.value, 50, rowActionFilter.value)
-    if (currentRun.value?.id !== run.id || currentRun.value.preview_revision !== revision) return
-    runRows.value = result.items
-    rowTotal.value = result.total
-    hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
-    if (run.status === 'preview_ready' && revision && result.preview_revision === revision) {
-      reviewedPreviewRevision.value = revision
+    const page = rowPage.value
+    const filter = rowActionFilter.value
+    try {
+      const result = await etlApi.rows(run.id, page, 50, filter)
+      if (request !== rowReadGeneration || !isCurrent()) return
+      if (result.preview_revision !== revision || (result.page != null && result.page !== page)) return
+      runRows.value = result.items
+      rowTotal.value = result.total
+      hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
+      if (run.status === 'preview_ready' && revision && result.items.length && page > 0 && (page - 1) * 50 < result.total) {
+        reviewedPreviewRevision.value = revision
+      }
+    } catch (error) {
+      if (request === rowReadGeneration && isCurrent()) pageError.value = error instanceof Error ? error.message : '读取预览行失败'
     }
   }
 
@@ -152,37 +176,47 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function overrideRow(row: EtlRunRow, event: Event) {
-    if (!currentRun.value) return
+    const run = currentRun.value
+    if (busy.value || !run) return
     const action = (event.target as HTMLSelectElement).value
-    busy.value = true
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
-      currentRun.value = await etlApi.patchDraft(currentRun.value.id, {
+      const updated = await etlApi.patchDraft(run.id, {
         row_overrides: { [String(row.id)]: action },
       })
+      if (!isCurrent()) return
+      currentRun.value = updated
+      isCurrent = state.captureReadContext()
       await loadRows()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '逐行动作保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '逐行动作保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function bulkOverride(action: 'new' | 'skip') {
-    if (!currentRun.value) return
+    const run = currentRun.value
+    if (busy.value || !run) return
     const candidates = action === 'new' ? bulkNewRows.value : runRows.value.filter((row) => row.validation_issues.length === 0)
     if (!candidates.length) return
-    busy.value = true
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
-      currentRun.value = await etlApi.patchDraft(currentRun.value.id, {
+      const updated = await etlApi.patchDraft(run.id, {
         row_overrides: Object.fromEntries(candidates.map((row) => [String(row.id), action])),
       })
+      if (!isCurrent()) return
+      currentRun.value = updated
+      isCurrent = state.captureReadContext()
       await loadRows()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '批量动作保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '批量动作保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
@@ -193,67 +227,106 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     const onlyValid = validRowsOnly.value
     const scope = onlyValid ? `仅写入正确行，排除 ${run.summary.error} 行错误。` : '发现错误时停止写入。'
     if (!window.confirm(`确认写入“${run.file_name}”？新增 ${run.summary.new} 行、更新 ${run.summary.update} 行、跳过 ${run.summary.skip} 行。\n${scope}`)) return
-    busy.value = true
+    const finishBusy = state.beginBusy()
     pageError.value = ''
+    let isCurrent = state.captureReadContext()
     try {
-      currentRun.value = await productChanges.mutate(run, () => etlApi.execute(run.id, revision, onlyValid))
+      const executed = await productChanges.mutate(run, () => etlApi.execute(run.id, revision, onlyValid))
+      if (!isCurrent()) return
+      currentRun.value = executed
       activeTab.value = 'history'
-      await refreshRuns()
+      isCurrent = state.captureReadContext()
       schedulePoll()
+      await refreshRuns()
     } catch (error) {
+      if (!isCurrent()) return
       pageError.value = error instanceof Error ? error.message : '执行失败'
       reviewedPreviewRevision.value = null
-      currentRun.value = await readRun(run.id).catch(() => run)
+      const request = ++runReadGeneration
+      const latest = await readRun(run.id).catch(() => run)
+      if (request !== runReadGeneration || !isCurrent()) return
+      currentRun.value = latest
       syncDraft()
       if (currentRun.value.status === 'preview_ready') {
         activeTab.value = 'preview'
         await loadRows().catch(() => undefined)
       }
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function refreshRuns() {
-    runs.value = await readRuns()
-    if (currentRun.value) {
-      const latest = runs.value.find((item) => item.id === currentRun.value?.id)
-      if (latest) currentRun.value = latest
+    const request = ++historyGeneration
+    const runRequest = ++runReadGeneration
+    const isCurrent = state.captureReadContext()
+    try {
+      const history = await readRuns()
+      if (request !== historyGeneration || !isCurrent()) return
+      runs.value = history
+      if (currentRun.value && runRequest === runReadGeneration) {
+        const latest = history.find((item) => item.id === currentRun.value?.id)
+        if (latest) currentRun.value = latest
+      }
+    } catch (error) {
+      if (request === historyGeneration && isCurrent()) pageError.value = error instanceof Error ? error.message : '读取运行历史失败'
     }
   }
 
-  async function selectRun(run: EtlRun) {
+  async function selectRun(run: Pick<EtlRun, 'id'>) {
+    const selection = ++selectionGeneration
+    runReadGeneration += 1
     pageError.value = ''
     customerProductPreviewMessage.value = ''
-    currentRun.value = await readRun(run.id)
-    syncDraft()
-    activeTab.value = tabForRunStatus(currentRun.value.status)
-    if (currentRun.value.status === 'preview_ready') await loadRows()
-    await router.replace({ path: '/business-docking', query: { run_id: run.id } })
+    currentRun.value = null
+    rowPage.value = 1
+    rowActionFilter.value = ''
     schedulePoll()
+    let isCurrent = state.captureReadContext()
+    try {
+      const latest = await readRun(run.id)
+      if (selection !== selectionGeneration || !isCurrent()) return
+      currentRun.value = latest
+      syncDraft()
+      activeTab.value = tabForRunStatus(latest.status)
+      isCurrent = state.captureReadContext()
+      await router.replace({ path: '/business-docking', query: { run_id: run.id } })
+      if (selection !== selectionGeneration || !isCurrent()) return
+      if (latest.status === 'preview_ready') await loadRows()
+      if (selection === selectionGeneration && isCurrent()) schedulePoll()
+    } catch (error) {
+      if (selection === selectionGeneration && isCurrent()) pageError.value = error instanceof Error ? error.message : '读取运行详情失败'
+    }
   }
 
   async function retryRun() {
-    if (!currentRun.value) return
-    busy.value = true
+    const run = currentRun.value
+    if (busy.value || !run) return
+    const isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
-      currentRun.value = await etlApi.retry(currentRun.value.id)
+      const retried = await etlApi.retry(run.id)
+      if (!isCurrent()) return
+      currentRun.value = retried
       activeTab.value = 'upload'
       schedulePoll()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '重试失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '重试失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function replayRun() {
-    if (!currentRun.value || busy.value) return
-    busy.value = true
+    const run = currentRun.value
+    if (!run || busy.value) return
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
-      const replayed = await etlApi.replay(currentRun.value.id)
+      const replayed = await etlApi.replay(run.id)
+      if (!isCurrent()) return
       currentRun.value = replayed
       validRowsOnly.value = false
       rowPage.value = 1
@@ -261,33 +334,41 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
       customerProductPreviewMessage.value = ''
       syncDraft()
       activeTab.value = 'preview'
-      await loadRows()
-      await refreshRuns()
+      isCurrent = state.captureReadContext()
       await router.replace({ path: '/business-docking', query: { run_id: replayed.id } })
+      if (!isCurrent()) return
+      await loadRows()
+      if (!isCurrent()) return
       schedulePoll()
+      await refreshRuns()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '重新处理失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '重新处理失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function rollbackRun() {
-    if (!currentRun.value) return
+    const run = currentRun.value
+    if (busy.value || !run) return
     if (!canRollback.value) {
       pageError.value = '当前账号没有撤销权限，请联系管理员授权后重试。'
       return
     }
     if (!window.confirm('确认撤销本次内部写入？更新将恢复前镜像，新增记录将被删除。')) return
-    busy.value = true
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
-      currentRun.value = await productChanges.mutate(currentRun.value, () => etlApi.rollback(currentRun.value!.id))
+      const rolledBack = await productChanges.mutate(run, () => etlApi.rollback(run.id))
+      if (!isCurrent()) return
+      currentRun.value = rolledBack
+      isCurrent = state.captureReadContext()
       await refreshRuns()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '撤销失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '撤销失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 

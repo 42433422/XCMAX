@@ -45,6 +45,7 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
   })
   const canExecute = computed(() => {
     if (!currentRun.value || currentRun.value.status !== 'preview_ready') return false
+    if (!runRows.value.length || state.rowPage.value < 1 || (state.rowPage.value - 1) * 50 >= state.rowTotal.value) return false
     if (draftChanged.value) return false
     if (!currentRun.value.preview_revision || currentRun.value.preview_revision !== state.reviewedPreviewRevision.value) return false
     if (currentRun.value.summary.error && !validRowsOnly.value) return false

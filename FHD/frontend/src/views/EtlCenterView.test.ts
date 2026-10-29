@@ -1358,4 +1358,74 @@ describe('EtlCenterView folder workflow', () => {
     wrapper.unmount()
   })
 
+  it('shares task selection ownership with the folder-file entry point', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.openBatchRun({ runId: 'batch-old' })
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('batch-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it('does not replace the selected task with an obsolete linked-preview response', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = { ...previewRun('shipment'), target_type: 'shipment_records', details: { linked_customer_products_preview: { run_id: 'linked-old' } } }
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.previewCustomerProductsFromShipment()
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('linked-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it('ignores a saved-layout readback after a different task is selected', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = { ...previewRun('shipment-old'), target_type: 'shipment_records' }
+    vi.spyOn(window, 'prompt').mockReturnValue('')
+    etlApiMock.saveShipmentTemplate.mockResolvedValue({ name: 'Synthetic layout', message: 'saved' })
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.saveCurrentAsShipmentTemplate()
+    await flushPromises()
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('shipment-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it.each(['resolve', 'reject'] as const)('ignores an obsolete folder poll %s after selecting a fresh task revision', async completion => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    etlApiMock.upload.mockResolvedValue({ upload_id: 'synthetic-upload' })
+    let created = 0
+    etlApiMock.preview.mockImplementation(async () => queuedRun(`batch-${++created}`, 'synthetic.csv'))
+    vm.onFileChange({ target: { files: [new File(['a'], 'a.csv'), new File(['b'], 'b.csv')] } })
+    await vm.startPreview()
+    let resolveOld!: (runs: EtlRun[]) => void, rejectOld!: (error: Error) => void
+    etlApiMock.runs.mockReturnValueOnce(new Promise<EtlRun[]>((resolve, reject) => { resolveOld = resolve; rejectOld = reject }))
+    vi.advanceTimersByTime(1500)
+    etlApiMock.run.mockResolvedValueOnce(previewRun('batch-2'))
+    await vm.selectRun(previewRun('batch-2'))
+    vm.pageError = 'Current task status'
+    if (completion === 'resolve') resolveOld([{ ...previewRun('batch-2'), preview_revision: 'obsolete' }])
+    else rejectOld(new Error('Old batch failure'))
+    await flushPromises()
+    expect(vm.currentRun.preview_revision).toBe('a'.repeat(64))
+    expect(vm.pageError).toBe('Current task status')
+    wrapper.unmount()
+  })
+
 })

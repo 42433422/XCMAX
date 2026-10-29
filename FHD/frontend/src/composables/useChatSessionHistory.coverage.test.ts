@@ -321,7 +321,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { loadSession, refreshHistorySessions, historySessions } = makeHistory(deps)
       await loadSession('sale')
       expect(mocks.loadMessages.mock.calls[0][0]).toEqual([
-        local[0], expect.objectContaining({ role: 'ai', time: '20:35', approvalCard: local[1].approvalCard }),
+        local[0], expect.objectContaining({ role: 'ai', time: '20:35', approvalCard: expect.objectContaining(local[1].approvalCard) }),
         local[2], expect.objectContaining({ content: expect.stringContaining('订单SO1') }),
       ])
       await refreshHistorySessions()
@@ -569,7 +569,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { deps } = makeDeps()
       const { clearHistorySessions, historyError } = makeHistory(deps)
       await clearHistorySessions()
-      expect(historyError.value).toBe('清空历史失败，请稍后重试')
+      expect(historyError.value).toBe('清空历史失败，本机记录已保留，请稍后重试')
     })
 
     it('sets historyLoading to false in finally block', async () => {
@@ -586,6 +586,34 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { clearHistorySessions } = makeHistory(deps)
       await clearHistorySessions()
       expect(chatApiMock.clearConversations).toHaveBeenCalledWith({ user_id: 'default' })
+    })
+
+    it('preserves both local cache and visible sessions until a successful remote receipt', async () => {
+      let resolve!: (value: unknown) => void
+      chatApiMock.clearConversations.mockReturnValue(new Promise(r => { resolve = r }))
+      const { deps } = makeDeps()
+      const history = makeHistory(deps)
+      const original = [{ session_id: 's1', title: 'preserved' }]
+      history.historySessions.value = original
+      localStorage.setItem('xcagi_chat_messages_s1', 'original')
+      const clearing = history.clearHistorySessions()
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toBe('original')
+      resolve({ success: false, message: 'remote refused' })
+      await clearing
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toBe('original')
+      expect(history.historySessions.value).toEqual(original)
+      expect(history.historyError.value).toBe('remote refused')
+    })
+
+    it('reports remote success and local failure as a partial clear', async () => {
+      chatApiMock.clearConversations.mockResolvedValue({ success: true })
+      localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'retained' }]))
+      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('storage denied') })
+      const history = makeHistory(makeDeps().deps)
+      await history.clearHistorySessions()
+      expect(history.historyError.value).toContain('服务端历史已清空，本机缓存清理未完成')
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toContain('retained')
+      expect(history.historySessions.value.some(item => item.session_id === 's1')).toBe(true)
     })
   })
 

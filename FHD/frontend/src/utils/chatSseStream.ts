@@ -5,7 +5,14 @@ export type PlannerSseEvent =
   | { type: 'tool_progress'; label?: string; text?: string; phase?: string; run_id?: string }
   | { type: 'done'; result?: unknown }
   | { type: 'error'; message?: string; status_code?: number; run_id?: string }
-  | { type: 'requires_token'; token_name?: string; token_description?: string }
+  | { type: 'requires_token'; token_name?: string; token_description?: string; run_id?: string }
+
+export class IncompletePlannerSseError extends Error {
+  constructor() {
+    super('连接提前结束，尚未收到完成回执。请核对原任务状态，勿重复提交可能已执行的操作。')
+    this.name = 'IncompletePlannerSseError'
+  }
+}
 
 function parseSseDataLine(line: string): PlannerSseEvent | null {
   const s = line.trim()
@@ -31,10 +38,14 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
   const decoder = new TextDecoder()
   let buffer = ''
   let terminalError = false
+  let completed = false
   const emitLine = (line: string) => {
     const ev = parseSseDataLine(line)
     if (ev) {
       terminalError = ev.type === 'error'
+      // The backend may end with an explicit authorization pause. Progress
+      // after either receipt still requires a new terminal event before EOF.
+      completed = ev.type === 'done' || ev.type === 'requires_token'
       onEvent(ev)
     }
     return terminalError
@@ -53,11 +64,13 @@ export async function readPlannerSseResponse(response: Response, onEvent: (ev: P
         }
       }
     }
+    buffer += decoder.decode()
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
         if (emitLine(line)) return
       }
     }
+    if (!completed) throw new IncompletePlannerSseError()
   } finally {
     signal?.removeEventListener('abort', abort)
     if (terminalError) void reader.cancel().catch(() => undefined)

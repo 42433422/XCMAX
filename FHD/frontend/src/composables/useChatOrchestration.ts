@@ -40,6 +40,10 @@ import { useChatOrchestrationPrintFlow } from './chat-orchestration/useChatOrche
 import { useChatOrchestrationExcelTasks } from './chat-orchestration/useChatOrchestrationExcelTasks'
 import { useChatOrchestrationRemoteRound } from './chat-orchestration/useChatOrchestrationRemoteRound'
 import { useOnboardingFirstOrderRun } from './useOnboardingFirstOrderRun'
+import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
+import agentRunsApi from '@/api/agentRuns'
+import { approvalCardId, parseApprovalCardFromPayload } from '@/utils/chatApprovalCard'
+import { asRecord } from '@/utils/typeGuards'
 
 export function useChatOrchestration(options: UseChatViewOptions) {
   const tutorialStore = useTutorialStore()
@@ -148,7 +152,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     executeRemoteChatRound: (msgs, opts) => executeRemoteChatRoundRef.fn(msgs, opts),
   })
   const { handleChatRequiresToken } = dbGate
-  const excelCtx = useChatExcelContext({ sessionId, addAndSaveMessage })
+  const excelCtx = useChatExcelContext({
+    sessionId, addAndSaveMessage,
+    getIdentity: () => resolveChatIdentity(String(modsStore.activeModId || '')),
+    captureIsCurrent: () => captureLocalScope().isCurrent,
+  })
   const {
     lastExcelAnalysisContext,
     linkedExcelSheet,
@@ -369,6 +377,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // Excel 分析任务回调
   const excelTasks = useChatOrchestrationExcelTasks({
     sessionId,
+    captureLocalScope,
     addMessage,
     saveMessage,
     lastExcelAnalysisContext,
@@ -431,11 +440,13 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   // 审批模式：自动档时，出现待审批卡片即自动确认（审批工作台仍由后端留记录）。
   const { state: approvalModeState } = useApprovalMode()
   watch(
-    messages,
-    (list) => {
-      if (!approvalModeState.enabled || approvalModeState.mode !== 'auto') return
-      const hasPendingApproval = list.some((msg) => msg?.role === 'ai' && msg.approvalCard?.status === 'pending')
-      if (hasPendingApproval) void confirmWorkflowFromCard()
+    [messages, isLoading],
+    ([list, loading]) => {
+      if (loading || !approvalModeState.enabled || approvalModeState.mode !== 'auto') return
+      const card = list.find(msg => msg.role === 'ai' && msg.approvalCard?.status === 'pending'
+        && !msg.approvalCard.submitting && !msg.approvalCard.error
+        && !msg.approvalCard.approval_path && !msg.approvalCard.approval_request_ids?.length)?.approvalCard
+      if (card) void confirmWorkflowFromCard(approvalCardId(card))
     },
     { deep: true },
   )
@@ -512,27 +523,66 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
-  async function confirmWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
-        break
+  async function controlWorkflowFromCard(cardId: string, action: 'confirm' | 'cancel') {
+    if (!cardId || isLoading.value) return
+    const card = messages.value.find(msg => msg.role === 'ai' && msg.approvalCard
+      && approvalCardId(msg.approvalCard) === cardId)?.approvalCard
+    if (!card || card.status !== 'pending' || card.submitting || card.approval_path || card.approval_request_ids?.length) return
+    const round = chatSessionActivity.beginRound()
+    const scope = captureLocalScope()
+    const isCurrent = () => scope.isCurrent() && messages.value.some(msg => msg.approvalCard === card)
+    round.setLoading(true)
+    card.submitting = true
+    delete card.error
+    const control = action === 'confirm' ? '确认' : '取消'
+    try {
+      const runId = String(card.run_id || card.agent_run_id || '').trim()
+      if (runId) {
+        const receipt = action === 'confirm'
+          ? await approveRunWithFreshGrant(runId, { isCurrent, runtimeContext: { source: 'chat_approval_card', ...dbGate.resolveChatDbTokensForPayload() } })
+          : await agentRunsApi.cancelRun(runId)
+        if (!isCurrent() || !receipt) return
+        if (!receipt.success || receipt.data?.run_id !== runId) throw new Error(receipt.message || '未收到原任务的操作回执，请核对后重试')
+        if (action === 'cancel' && receipt.data.status !== 'cancelled') throw new Error('取消请求已提交，任务尚未确认取消。请在原任务中核对状态。')
+        card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
+        await addAndSaveMessage(action === 'confirm' ? '已收到确认回执，任务已提交执行，请在任务中查看实际结果。' : '已收到取消回执，任务已取消。', 'ai', undefined, scope.sessionId)
+        if (isCurrent()) await syncAgentRunFromPayload({ run_id: runId }, control, isCurrent).catch(() => undefined)
+      } else {
+        const planId = String(card.plan_id || '').trim()
+        if (!planId) throw new Error('确认卡缺少任务标识，请返回原任务核对后重试')
+        const payload = await chatRequest.requestChatByModeWithTimeout(control, 90_000, { expectedWorkflowPlanId: planId }, {
+          sessionId: scope.sessionId, messages: [...messages.value], signal: round.signal, isCurrent,
+        })
+        if (!isCurrent()) return
+        const envelope = asRecord(payload.data), inner = asRecord(envelope.data)
+        const allowed = action === 'confirm' ? ['workflow_done', 'approval_pending'] : ['workflow_cancelled']
+        if (!payload.success || inner.plan_id !== planId || !allowed.includes(String(envelope.action || ''))) {
+          throw new Error(String(payload.response || payload.message || '未收到原计划的操作回执，请核对后重试'))
+        }
+        card.status = action === 'confirm' ? 'confirmed' : 'cancelled'
+        const nextCard = parseApprovalCardFromPayload(payload)
+        await addAndSaveMessage(payload.response || `原计划已${action === 'confirm' ? '确认' : '取消'}。`, 'ai', nextCard ? { approvalCard: nextCard } : undefined, scope.sessionId)
+        if (!isCurrent()) return
+        syncTaskFromChatResponse(payload, control)
+        remoteRound.consumeStateUpdates(payload)
+        attachThinkingStepsToLastAiMessage(payload)
+        attachTodoStepsToLastAiMessage(payload)
+        attachWorkflowTraceToLastAiMessage(payload)
+        if (payload.task) showTaskConfirm(payload.task)
+        if (payload.autoAction) handleAutoAction(payload.autoAction, control)
+        await syncAgentRunFromPayload(payload, control, isCurrent).catch(() => undefined)
       }
+      if (isCurrent()) await agentTaskRuntime.refreshTasks().catch(() => undefined)
+    } catch (error) {
+      if (isCurrent()) card.error = error instanceof Error ? error.message : '操作未确认，请核对原任务后重试'
+    } finally {
+      card.submitting = false
+      round.setLoading(false)
     }
-    await sendMessage('确认')
   }
 
-  async function cancelWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
-        break
-      }
-    }
-    await sendMessage('取消')
-  }
+  const confirmWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'confirm')
+  const cancelWorkflowFromCard = (cardId: string) => controlWorkflowFromCard(cardId, 'cancel')
 
   async function syncSessionMessages(): Promise<void> {
     if (isLoading.value || isExecuting.value) return

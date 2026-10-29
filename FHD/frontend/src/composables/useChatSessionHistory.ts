@@ -2,7 +2,6 @@ import { getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { useModsStore } from '@/stores/mods'
 import chatApi from '../api/chat'
 import {
-  persistExcelAnalysisContext,
   useChatHistoryPersistence,
   type LinkedExcelSheet,
   type TaskItem,
@@ -219,16 +218,20 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
 
     historyLoading.value = true
     historyError.value = ''
+    let remoteCleared = false
     try {
-      clearLocalHistoryCache()
       const data = await chatApi.clearConversations({ user_id: 'default' })
       if (!request.isCurrent()) return
       if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '清空历史失败'))
+      remoteCleared = true
+      clearLocalHistoryCache()
       historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
     } catch (e) {
       if (!request.isCurrent()) return
-      historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
-      historyError.value = e instanceof Error ? e.message : '清空历史失败，请稍后重试'
+      if (remoteCleared) historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
+      historyError.value = remoteCleared
+        ? '服务端历史已清空，本机缓存清理未完成，请重试。'
+        : e instanceof Error ? e.message : '清空历史失败，本机记录已保留，请稍后重试'
       console.error('清空历史失败:', e)
     } finally {
       finishRequest(request.epoch)
@@ -299,7 +302,6 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyLoading.value = false
     const prev = String(sessionId.value || '').trim() || 'default'
     persistTaskPanelStateForSession(prev)
-    persistExcelAnalysisContext(prev, null)
     resetConversationView()
     clearPersistedTaskPanelState(sessionId.value)
     persistTaskPanelStateForSession(sessionId.value)

@@ -10,6 +10,7 @@ import { buildChatMessagesKey, buildChatSessionMetaKey } from '@/utils/chatStora
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 import { stripModelToolProtocol } from '@/utils/chatModelProtocol'
+import { restoreApprovalCard } from '@/utils/chatApprovalCard'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -123,7 +124,7 @@ export function chatMessageExtrasFromServerRow(raw: unknown): ChatMessageExtras 
   const attachments = objectArray(ui.attachments)
   if (attachments.length) extras.attachments = attachments
   const approvalCard = asRecord(ui.approvalCard)
-  if (Object.keys(approvalCard).length) extras.approvalCard = approvalCard
+  if (Object.keys(approvalCard).length) extras.approvalCard = restoreApprovalCard(approvalCard)
   const agentRunTrace = asRecord(ui.agentRunTrace)
   if (Object.keys(agentRunTrace).length) extras.agentRunTrace = agentRunTrace as unknown as NonNullable<ChatMessageExtras['agentRunTrace']>
   const businessResult = asRecord(ui.businessResult)

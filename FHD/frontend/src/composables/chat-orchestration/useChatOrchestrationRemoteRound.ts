@@ -13,7 +13,7 @@ import productsApi from '@/api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { useModsStore } from '@/stores/mods'
 import { resolveChatIdentity } from '@/utils/chatStorageKeys'
-import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { readPlannerSseResponse, isChatStreamEnabled, IncompletePlannerSseError, type PlannerSseEvent } from '@/utils/chatSseStream'
 import { collapseExactDuplicateReply } from '@/utils/chatReplyNormalization'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 import { extractLikelyProductQueryKeyword } from '../useChatPersistence'
@@ -319,6 +319,7 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
       }
       let streamPlain = ''
       let doneResult: unknown = null
+      let awaitingAuthorization = false
       let sseError: string | null = null
       let streamRunId = ''
       let ttsSpokenOffset = 0
@@ -378,10 +379,13 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
             setLoadingProgress('正在生成回复…', requestScope.sessionId)
           } else if (ev.type === 'done') {
             doneResult = ev.result
+            awaitingAuthorization = false
           } else if (ev.type === 'error') {
             streamRunId = ev.run_id || streamRunId
             sseError = String(ev.message || '流式接口错误')
           } else if (ev.type === 'requires_token') {
+            awaitingAuthorization = true
+            streamRunId = ev.run_id || streamRunId
             if (!round.isActive()) return
             const tokenName = ev.token_name || ''
             const tokenDesc = ev.token_description || ''
@@ -398,6 +402,10 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
         if (!isOwnerCurrent()) return
         if (sseError) {
           throw new Error(sseError)
+        }
+        if (awaitingAuthorization) {
+          if (streamRunId) syncStreamRun({ run_id: streamRunId })
+          return
         }
         const donePayload = asPlannerPayload(doneResult)
         const finalText = collapseExactDuplicateReply(String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）')
@@ -451,7 +459,12 @@ export function useChatOrchestrationRemoteRound(deps: ChatOrchestrationRemoteRou
               ? '对话连接已超时，任务可能仍在执行。请到任务工作区核对结果，勿重复提交。'
               : `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
             : errorMessage(err, '流式对话失败')
-        if (round.isActive()) applyPlainTextToMessageIndex(msgIndex, timedOut && streamRunId ? errText : `处理失败：${errText}`)
+        if (round.isActive()) {
+          const visibleError = err instanceof IncompletePlannerSseError
+            ? `${streamPlain.trim()}${streamPlain.trim() ? '\n\n' : ''}[回复未完成] ${errText}`
+            : timedOut && streamRunId ? errText : `处理失败：${errText}`
+          applyPlainTextToMessageIndex(msgIndex, visibleError)
+        }
         if (streamRunId) syncStreamRun({ run_id: streamRunId })
       } finally {
         if (round.isActive()) deps.flushMessagesCache?.()

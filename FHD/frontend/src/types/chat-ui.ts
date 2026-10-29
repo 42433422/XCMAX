@@ -9,6 +9,7 @@ export interface ChatExecutionProgressItem {
 }
 
 export interface ChatApprovalCard {
+  id?: string
   version?: number
   kind?: string
   plan_id?: string
@@ -24,6 +25,8 @@ export interface ChatApprovalCard {
   reason?: string
   confirm_mode?: 'interactive' | 'approval' | string
   status?: 'pending' | 'confirmed' | 'cancelled'
+  submitting?: boolean
+  error?: string
 }
 
 export interface UiChatMessage {

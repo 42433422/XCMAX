@@ -48,7 +48,8 @@ beforeEach(() => {
   vi.clearAllMocks(); updateProductReadAccountScope({ tenantId: 1, marketUserId: 11 }); price = 99; run = fixture()
   api.getCustomers.mockResolvedValue({ success: true, data: [{ unit_name: '客户甲' }] })
   api.getProducts.mockImplementation(async () => ({ success: true, data: [{ id: 1, name: 'PM90', model_number: 'PM90-001', specification: '人工规格', price }], total: 1 }))
-  api.rows.mockResolvedValue({ items: [], total: 1, preview_revision: 'a'.repeat(64) })
+  api.rows.mockResolvedValue({ items: [{ id: 1, provenance: {}, normalized: { name: 'PM90', price: 109 }, validation_issues: [],
+    suggested_action: 'update', final_action: 'update', before: { price: 99 }, after: { price: 109 } }], total: 1, preview_revision: 'a'.repeat(64) })
   api.run.mockImplementation(async () => run); api.runs.mockImplementation(async () => [run])
   api.execute.mockImplementation(async () => { price = 109; run = fixture('completed'); return run })
   api.rollback.mockImplementation(async () => { price = 99; run = { ...run, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 1 } } }; return run })
@@ -93,7 +94,8 @@ describe('kept-alive product freshness', () => {
         templateId: ref(''), compatibilityPresetId: ref(''), targetConfigId: ref(''), runs: state.runs,
         currentRun: state.currentRun, activeTab: state.activeTab, busy: state.busy, pageError: state.pageError,
         router,
-        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows })
+        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows,
+        captureReadContext: state.captureReadContext, beginBusy: state.beginBusy, selectRun: etl.selectRun })
       return () => h('div')
     } })
     const harness = mount(BatchHarness, { global: { stubs: { DataTable: Table, ConfirmDialog: true } } })

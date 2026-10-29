@@ -18,7 +18,7 @@
           <AgentRunTrace
             v-if="msg.role === 'ai' && hasOrchestrationTrace(msg)"
             :trace="orchestrationTraceFor(msg)"
-            @auto-approve-tool="$emit('approval-confirm')"
+            @auto-approve-tool="approveMessage(msg)"
           />
           <div v-if="waitingRunId(msg)" class="run-approve-row">
             <button type="button" class="run-approve-btn" data-testid="chat-run-approve" @click="$emit('approve-run', waitingRunId(msg))">
@@ -74,8 +74,9 @@
           <ChatApprovalInlineCard
             v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
             :card="msg.approvalCard"
-            @confirm="$emit('approval-confirm')"
-            @cancel="$emit('approval-cancel')"
+            :busy="isLoading || msg.approvalCard.submitting"
+            @confirm="$emit('approval-confirm', approvalCardId(msg.approvalCard))"
+            @cancel="$emit('approval-cancel', approvalCardId(msg.approvalCard))"
           />
           <div
             v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
@@ -153,6 +154,7 @@ import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
+import { approvalCardId } from '@/utils/chatApprovalCard'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 
 useI18n()
@@ -173,13 +175,13 @@ const props = defineProps<{
   showDiagnosticMetadata?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'expand-message': [idx: number]
   'collapse-message': [idx: number]
   'toggle-message-tts': [idx: number, content: string]
   'shipment-download-click': []
-  'approval-confirm': []
-  'approval-cancel': []
+  'approval-confirm': [cardId: string]
+  'approval-cancel': [cardId: string]
   'approve-run': [runId: string]
 }>()
 
@@ -188,6 +190,15 @@ function waitingRunId(message: ChatMessage): string {
   const trace = message.role === 'ai' ? message.agentRunTrace : undefined
   if (!trace || trace.terminal || trace.status !== 'waiting' || message.approvalCard?.status === 'pending') return ''
   return String(trace.run_id || '')
+}
+
+function approveMessage(message: ChatMessage) {
+  if (message.approvalCard?.status === 'pending') {
+    emit('approval-confirm', approvalCardId(message.approvalCard))
+  } else {
+    const runId = waitingRunId(message)
+    if (runId) emit('approve-run', runId)
+  }
 }
 
 const messagesHostRef = ref<HTMLElement | null>(null)

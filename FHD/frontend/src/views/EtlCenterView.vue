@@ -182,6 +182,9 @@ const {
   syncDraft: runsApi.syncDraft,
   schedulePoll: runsApi.schedulePoll,
   loadRows: runsApi.loadRows,
+  captureReadContext: state.captureReadContext,
+  beginBusy: state.beginBusy,
+  selectRun: runsApi.selectRun,
 })
 
 onMounted(bootstrap)
