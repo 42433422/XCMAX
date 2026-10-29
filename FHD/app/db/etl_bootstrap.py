@@ -9,6 +9,8 @@ from sqlalchemy import Table, inspect, text
 
 from app.db.db_base import Base
 from app.db.models.etl import (
+    EltSourceAsset,
+    EltSourceRevision,
     EtlRun,
     EtlRunRow,
     EtlTargetConfig,
@@ -40,6 +42,8 @@ def ensure_sqlite_etl_bootstrap(
         existing = set(inspect(real_engine).get_table_names() or [])
         model_tables: list[Table] = [
             cast("Table", EtlUpload.__table__),
+            cast("Table", EltSourceAsset.__table__),
+            cast("Table", EltSourceRevision.__table__),
             cast("Table", EtlTemplate.__table__),
             cast("Table", EtlTemplateVersion.__table__),
             cast("Table", EtlRun.__table__),

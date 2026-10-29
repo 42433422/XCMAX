@@ -22,7 +22,7 @@ from app.application.etl.service_support import (
 )
 from app.db.models.etl import EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from app.utils.path_io.path_utils import get_app_data_dir
 
 
@@ -72,7 +72,7 @@ class UploadServiceMixin:
                         )
                     digest.update(chunk)
                     handle.write(chunk)
-        except RECOVERABLE_ERRORS:
+        except BOUNDARY_ERRORS:
             destination.unlink(missing_ok=True)
             raise
         if total == 0:
@@ -93,8 +93,14 @@ class UploadServiceMixin:
             storage_path=str(destination),
             expires_at=utcnow() + timedelta(days=7),
         )
-        db.add(upload)
-        db.flush()
+        try:
+            db.add(upload)
+            db.flush()
+        except BOUNDARY_ERRORS:
+            # File and metadata publication share one failure boundary. A failed
+            # flush must not leave an unreferenced original on disk.
+            destination.unlink(missing_ok=True)
+            raise
         return self.upload_dict(upload)
 
     def upload_dict(self, upload: EtlUpload) -> dict[str, Any]:

@@ -18,6 +18,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,6 +45,44 @@ class EtlUpload(TimestampMixin, TenantScopedMixin, Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_path: Mapped[str] = mapped_column(Text, nullable=False)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class EltSourceAsset(TimestampMixin, TenantScopedMixin, Base):
+    """Owner-scoped source whose revisions retain uploaded originals."""
+
+    __tablename__ = "elt_source_assets"
+    __table_args__ = (Index("ix_elt_source_asset_owner", "tenant_id", "owner_user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    current_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class EltSourceRevision(TenantScopedMixin, Base):
+    """An immutable source version backed by its own retained upload."""
+
+    __tablename__ = "elt_source_revisions"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "version", name="uq_elt_source_revision_version"),
+        UniqueConstraint("upload_id", name="uq_elt_source_revision_upload"),
+        Index("ix_elt_source_revision_owner", "tenant_id", "owner_user_id", "asset_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    asset_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("elt_source_assets.id"), nullable=False, index=True
+    )
+    owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    upload_id: Mapped[str] = mapped_column(String(36), ForeignKey("etl_uploads.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now_naive, server_default=func.now()
+    )
 
 
 class EtlTemplate(TimestampMixin, TenantScopedMixin, Base):

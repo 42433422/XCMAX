@@ -49,6 +49,8 @@ from app.db.models.mrp import (
     ManufacturingOrderLine,
 )
 from app.db.models.etl import (
+    EltSourceAsset,
+    EltSourceRevision,
     EtlRun,
     EtlRunRow,
     EtlTargetConfig,
@@ -132,6 +134,8 @@ __all__ = [
     "BomLine",
     "ManufacturingOrder",
     "ManufacturingOrderLine",
+    "EltSourceAsset",
+    "EltSourceRevision",
     "EtlUpload",
     "EtlTemplate",
     "EtlTemplateVersion",
