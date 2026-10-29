@@ -1,5 +1,5 @@
 {
-  "lines": 2354348,
+  "lines": 2354350,
   "updated": "2026-10-29",
-  "note": "security re-vendor langgraph-sdk 0.4.4->0.4.6 (CVE-2026-118667): +4 lines for CVE fix imports/call-sites and provenance notes"
+  "note": "2026-10-29 #2732 补充 Unreleased 变更说明（依赖安全升级），门禁口径随 CHANGELOG 一行抬升；不包含客户资料或密钥。"
 }
