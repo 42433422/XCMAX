@@ -34,7 +34,7 @@ def enrich_ocr_provenance(
         }
     )
     page_by_sheet = {str(page.get("sheet_name") or ""): page for page in result.get("pages") or []}
-    for item in dataset.rows:
+    for index, item in enumerate(dataset.rows):
         page = page_by_sheet.get(item.sheet, {})
         evidence_by_cell = {
             (
@@ -102,6 +102,7 @@ def enrich_ocr_provenance(
                 "requires_confirmation": True,
             }
         )
+        dataset.rows[index] = item
     dataset.warnings.append(
         {
             "code": "ETL_OCR_REVIEW_REQUIRED",

@@ -75,6 +75,7 @@ class PreviewWorkerMixin:
         db = _facade().new_session()
         started_at = time.monotonic()
         operation = None
+        dataset = None
         try:
             run = self._owned_run(db, run_id, owner_user_id)
             operation = (
@@ -109,6 +110,7 @@ class PreviewWorkerMixin:
                 )
                 run.stage = "loading"
                 self._persist_source_snapshot(db, run, dataset)
+                dataset.close()
                 dataset = self._load_source_snapshot(db, run)
                 assert dataset is not None
             run = self._owned_run(db, run_id, owner_user_id)
@@ -182,6 +184,10 @@ class PreviewWorkerMixin:
                 db.rollback()
                 logger.exception("Unable to persist ETL preview failure for run %s", run_id)
         finally:
-            unbind_owner(db)
-            db.close()
-            reset_etl_llm_owner(llm_owner_token)
+            try:
+                if dataset is not None:
+                    dataset.close()
+            finally:
+                unbind_owner(db)
+                db.close()
+                reset_etl_llm_owner(llm_owner_token)

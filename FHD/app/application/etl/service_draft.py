@@ -285,7 +285,9 @@ class DraftServiceMixin:
         self, db: Session, run_id: str, owner_user_id: int, *, publish: bool = True
     ) -> None:
         run = self._owned_run(db, run_id, owner_user_id)
-        self._load_source_snapshot(db, run)
+        snapshot = self._load_source_snapshot(db, run)
+        if snapshot is not None:
+            snapshot.close()
         upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
         adapter = get_adapter(run.target_type)
         draft = load_json(run.draft_json, {})

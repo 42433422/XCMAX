@@ -20,7 +20,7 @@ from app.application.etl.parser_target_match import (
     covers_required_target_fields,
     target_header_hints,
 )
-from app.application.etl.parser_types import ParsedDataset, ParsedRow
+from app.application.etl.parser_types import ParsedDataset, ParsedRow, ParsedRows
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 MAX_ROWS = 100_000
@@ -90,7 +90,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
         data_only=True,
         keep_links=False,
     )
-    result: list[ParsedRow] = []
+    result = ParsedRows()
     all_headers: list[str] = []
     sheets: list[dict[str, Any]] = []
     skipped_sheets: list[dict[str, Any]] = []
@@ -98,6 +98,7 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
     repeated_header_count = 0
     footer_count = 0
     header_hints = target_header_hints(target_type)
+    complete = False
     try:
         candidates: list[tuple[Any, Any]] = []
         for worksheet in workbook.worksheets:
@@ -193,7 +194,10 @@ def _parse_workbook(path: Path, max_rows: int, target_type: str) -> ParsedDatase
                     "row_count": sheet_count,
                 }
             )
+        complete = True
     finally:
+        if not complete:
+            result.close()
         workbook.close()
     if skipped_sheets:
         warnings.append(
@@ -254,6 +258,8 @@ def _csv_reader(path: Path):
 
 def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
     handle, reader = _csv_reader(path)
+    rows = ParsedRows()
+    dataset = None
     try:
         probe = list(itertools.islice(reader, 60))
         layout = detect_table_layout(
@@ -261,9 +267,9 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
             header_hints=target_header_hints(target_type),
         )
         if layout is None:
-            return ParsedDataset(headers=[], rows=[], source_features={"kind": "csv"})
+            dataset = ParsedDataset(headers=[], rows=rows, source_features={"kind": "csv"})
+            return dataset
         headers = layout.headers
-        rows: list[ParsedRow] = []
         repeated_header_count = 0
         footer_count = 0
         remaining_probe = probe[layout.header_end + 1 :]
@@ -322,7 +328,7 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
                     "count": footer_count,
                 }
             )
-        return ParsedDataset(
+        dataset = ParsedDataset(
             headers=headers,
             rows=rows,
             source_features={
@@ -338,7 +344,10 @@ def _parse_csv(path: Path, max_rows: int, target_type: str) -> ParsedDataset:
             },
             warnings=warnings,
         )
+        return dataset
     finally:
+        if dataset is None:
+            rows.close()
         handle.close()
 
 
@@ -406,8 +415,10 @@ def parse_file(
                 raise
             except RECOVERABLE_ERRORS:  # noqa: BLE001 - legacy presets remain a safe fallback
                 regional = None
-            if regional is not None and covers_required_target_fields(regional, target_type):
-                return regional
+            if regional is not None:
+                if covers_required_target_fields(regional, target_type):
+                    return regional
+                regional.close()
         from app.application.etl.shipment_compat_parser import (
             parse_delivery_note_with_compat_profile,
         )
@@ -442,7 +453,9 @@ def parse_file(
                         "message": "文件已包含完整业务字段，已优先使用通用表格结构解析。",
                     },
                 )
+                compatibility.close()
                 return generic
+            generic.close()
             return compatibility
         return _parse_workbook(source, max_rows, target_type)
 
@@ -461,4 +474,10 @@ def parse_file(
             "OCR 无法可靠还原表格，请更换清晰文件后重试",
         )
     dataset = _parse_workbook(Path(str(result["file_path"])), max_rows, target_type)
-    return enrich_ocr_provenance(dataset, result, source_suffix=suffix)
+    enriched = None
+    try:
+        enriched = enrich_ocr_provenance(dataset, result, source_suffix=suffix)
+        return enriched
+    finally:
+        if enriched is None:
+            dataset.close()

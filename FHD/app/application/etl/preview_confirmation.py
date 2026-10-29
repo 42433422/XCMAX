@@ -67,6 +67,8 @@ def _snapshot(db: Session, run: EtlRun, nonce: str) -> tuple[str, dict[str, Any]
     # structured snapshot is allowed to substitute for a missing original.
     try:
         dataset = SourceServiceMixin()._load_source_snapshot(db, run)
+        if dataset is not None:
+            dataset.close()
     except EtlConflict as exc:
         raise _changed() from exc
     source_snapshot = (

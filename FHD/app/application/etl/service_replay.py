@@ -34,57 +34,60 @@ class ReplayServiceMixin:
         dataset = self._load_source_snapshot(db, source)
         if dataset is None:
             raise EtlConflict("ETL_SOURCE_SNAPSHOT_REQUIRED", "本次运行没有可重放的原始数据快照")
-        if source.target_type in {"knowledge", "attendance"}:
-            self._owned_upload(db, source.upload_id, owner_user_id)
+        try:
+            if source.target_type in {"knowledge", "attendance"}:
+                self._owned_upload(db, source.upload_id, owner_user_id)
 
-        # Copy transformation inputs only. Actions, receipts and confirmations
-        # belong to their original run; a replay always requires a new preview.
-        replay_draft = {
-            key: value
-            for key, value in draft.items()
-            if key
-            in {
-                "field_mappings",
-                "validation_rules",
-                "match_keys",
-                "allowed_update_fields",
-                "action_rules",
-                "target_config_id",
-                "compatibility_preset_id",
-            }
-        }
-        replay_draft["ocr_confirmed"] = False
-        run = EtlRun(
-            id=new_id(),
-            tenant_id=tenant_id_for_write(),
-            owner_user_id=owner_user_id,
-            upload_id=source.upload_id,
-            file_sha256=source.file_sha256,
-            template_id=source.template_id,
-            template_version_id=source.template_version_id,
-            target_type=source.target_type,
-            status="queued",
-            stage="queued",
-            progress=0,
-            draft_json=dump_json(replay_draft),
-            reversible=get_adapter(source.target_type).reversible,
-            source_features_json=dump_json(dataset.source_features),
-            summary_json=dump_json(
-                {
-                    "replay_of": source.id,
-                    "source_run_id": details.get("source_run_id") or source.id,
-                    **{
-                        key: details[key]
-                        for key in ("file_name", "batch_id", "relative_path")
-                        if key in details
-                    },
+            # Copy transformation inputs only. Actions, receipts and confirmations
+            # belong to their original run; a replay always requires a new preview.
+            replay_draft = {
+                key: value
+                for key, value in draft.items()
+                if key
+                in {
+                    "field_mappings",
+                    "validation_rules",
+                    "match_keys",
+                    "allowed_update_fields",
+                    "action_rules",
+                    "target_config_id",
+                    "compatibility_preset_id",
                 }
-            ),
-        )
-        db.add(run)
-        self._persist_source_snapshot(
-            db, run, dataset, source_expires_at=details["source_snapshot"]["expires_at"]
-        )
+            }
+            replay_draft["ocr_confirmed"] = False
+            run = EtlRun(
+                id=new_id(),
+                tenant_id=tenant_id_for_write(),
+                owner_user_id=owner_user_id,
+                upload_id=source.upload_id,
+                file_sha256=source.file_sha256,
+                template_id=source.template_id,
+                template_version_id=source.template_version_id,
+                target_type=source.target_type,
+                status="queued",
+                stage="queued",
+                progress=0,
+                draft_json=dump_json(replay_draft),
+                reversible=get_adapter(source.target_type).reversible,
+                source_features_json=dump_json(dataset.source_features),
+                summary_json=dump_json(
+                    {
+                        "replay_of": source.id,
+                        "source_run_id": details.get("source_run_id") or source.id,
+                        **{
+                            key: details[key]
+                            for key in ("file_name", "batch_id", "relative_path")
+                            if key in details
+                        },
+                    }
+                ),
+            )
+            db.add(run)
+            self._persist_source_snapshot(
+                db, run, dataset, source_expires_at=details["source_snapshot"]["expires_at"]
+            )
+        finally:
+            dataset.close()
         try:
             self._submit_preview(run.id, tenant_id_for_write(), owner_user_id)
         except RECOVERABLE_ERRORS as exc:
