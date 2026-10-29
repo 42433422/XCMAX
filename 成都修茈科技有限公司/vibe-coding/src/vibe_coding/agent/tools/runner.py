@@ -92,9 +92,7 @@ class ToolRunner:
         policy: SandboxPolicy | None = None,
         fail_fast: bool = False,
     ) -> None:
-        self.adapters: list[ToolAdapter] = list(
-            _default_adapters() if adapters is None else adapters
-        )
+        self.adapters: list[ToolAdapter] = list(_default_adapters() if adapters is None else adapters)
         if sandbox is None:
             from ..sandbox import SubprocessSandboxDriver
 
@@ -107,10 +105,15 @@ class ToolRunner:
         root = Path(root)
         reports: list[ToolReport] = []
         if not self.adapters:
-            return [ToolReport(
-                tool="verification", passed=False, executed=False, exit_code=-1,
-                error="no verification adapters configured",
-            )]
+            return [
+                ToolReport(
+                    tool="verification",
+                    passed=False,
+                    executed=False,
+                    exit_code=-1,
+                    error="no verification adapters configured",
+                )
+            ]
         for adapter in self.adapters:
             t0 = time.perf_counter()
             executed = False

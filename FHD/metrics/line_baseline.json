@@ -1,5 +1,5 @@
 {
-  "lines": 2370650,
+  "lines": 2373287,
   "updated": "2026-10-29",
-  "note": "合并冲突解决后按单一索引重算：最新main2370555，加本PR登录状态及主题修复95行，最终2370650。保留平台模型PR2746全部实现；合并后351项相关测试通过。用户授权修复到合入，执行人dot。"
+  "note": "User-authorized partial audit PR2761 repairs with regression tests and CI formatting, preserving mainline2750 and active author tooling commits. No claim A01-A14 fully complete; branch-scoped tooling helpers remain for owner work until final cleanup."
 }

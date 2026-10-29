@@ -69,18 +69,22 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
     String relayId, {
     String pairingCode = '',
   }) async {
-    final json = await postJson(XcagiMobileEndpoints.relayMobileBindAccount, {
-      'relay_id': relayId.trim(),
-      if (pairingCode.trim().isNotEmpty) 'pairing_code': pairingCode.trim(),
-    }, baseUrl: _config.baseUrl);
+    final generation = _authGeneration;
+    final json = await postJson(
+        XcagiMobileEndpoints.relayMobileBindAccount,
+        {
+          'relay_id': relayId.trim(),
+          if (pairingCode.trim().isNotEmpty) 'pairing_code': pairingCode.trim(),
+        },
+        baseUrl: _config.baseUrl);
     final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
     if (envelope.success) {
-      await persistRelayBindingMeta(relayId.trim(), envelope.data);
+      await persistRelayBindingMeta(relayId.trim(), envelope.data,
+          authGeneration: generation);
     }
     return envelope;
   }
@@ -186,5 +190,4 @@ abstract class _ApiPairingBase extends _ApiCsAuthBase {
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
-
 }

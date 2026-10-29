@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useStartupAuth } from '@/composables/useStartupAuth'
+import { flushPromises } from '@vue/test-utils'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { fetchSessionMarketHandoff } from '@/api/marketAccount'
 
 vi.mock('@/api/auth', () => ({
   authApi: {
@@ -44,6 +49,7 @@ describe('useStartupAuth', () => {
     mockModsStore = { initialize: vi.fn().mockResolvedValue(undefined) }
     mockDismiss = vi.fn()
     vi.clearAllMocks()
+    vi.mocked(fetchSessionMarketHandoff).mockResolvedValue(null)
   })
 
   function getComposable() {
@@ -102,6 +108,13 @@ describe('useStartupAuth', () => {
     expect(result.ok).toBe(true)
   })
 
+  it('honors explicit invalid session even when the envelope says success', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValue({ success: true, data: { valid: false } })
+    await expect(getComposable().ensureStartupAuthenticated()).resolves.toMatchObject({ ok: false })
+    expect(mockRouter.replace).toHaveBeenCalledOnce()
+    expect(fetchSessionMarketHandoff).not.toHaveBeenCalled()
+  })
+
   it('runEnterpriseStartupAuth returns true for public routes', async () => {
     const { runEnterpriseStartupAuth } = getComposable()
     const result = await runEnterpriseStartupAuth(() => true)
@@ -131,5 +144,33 @@ describe('useStartupAuth', () => {
     const { syncMarketTokensFromSession } = getComposable()
     // Should not throw
     await syncMarketTokensFromSession()
+  })
+
+  it('starts handoff after the profile owner is established without blocking startup on it', async () => {
+    vi.mocked(authApi.validateSession).mockResolvedValue({ success: true, data: { valid: true } })
+    let finishProfile!: () => void
+    vi.spyOn(useAccountProfileStore(), 'refreshFromServer').mockReturnValue(new Promise(resolve => { finishProfile = resolve }))
+    vi.mocked(fetchSessionMarketHandoff).mockImplementation(() => {
+      expect(productReadAccountEpoch.value).toBe(ownerEpoch)
+      return new Promise(() => {})
+    })
+    const startup = getComposable().ensureStartupAuthenticated()
+    await flushPromises()
+    expect(fetchSessionMarketHandoff).not.toHaveBeenCalled()
+    const ownerEpoch = ++productReadAccountEpoch.value
+    finishProfile()
+    await expect(startup).resolves.toMatchObject({ ok: true })
+    expect(fetchSessionMarketHandoff).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['success', 'unauthorized'])('does not redirect or start handoff from an old startup %s', async outcome => {
+    let settle!: (value: unknown) => void
+    vi.mocked(authApi.validateSession).mockReturnValue(new Promise((resolve, reject) => { settle = outcome === 'success' ? resolve : reject }))
+    const startup = getComposable().ensureStartupAuthenticated()
+    invalidateEnterpriseSessionCache()
+    settle(outcome === 'success' ? { success: true } : { status: 401 })
+    await expect(startup).resolves.toMatchObject({ ok: false })
+    expect(mockRouter.replace).not.toHaveBeenCalled()
+    expect(fetchSessionMarketHandoff).not.toHaveBeenCalled()
   })
 })

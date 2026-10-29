@@ -1,5 +1,5 @@
 import { api, buildFullApiUrl } from './core'
-import { LS_MARKET_ACCESS_TOKEN } from './marketAccount'
+import { readCurrentMarketAccessToken } from './marketAccount'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 import type { RequestOptions } from './core'
 import type { ApiResponse } from '@/types/api'
@@ -29,8 +29,7 @@ export type ChatStreamRequestInit = RequestInit & {
 }
 
 function readMarketBearerHeader(): Record<string, string> {
-  if (typeof window === 'undefined') return {}
-  const token = String(window.localStorage.getItem(LS_MARKET_ACCESS_TOKEN) || '').trim()
+  const token = readCurrentMarketAccessToken()
   if (!token) return {}
   return { Authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}` }
 }

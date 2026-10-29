@@ -18,6 +18,7 @@ from vibe_coding.agent.sandbox import SandboxJob, SandboxPolicy, SandboxResult
 from vibe_coding.agent.tools import (
     ESLintAdapter,
     PrettierAdapter,
+    ToolRunner,
     TSCAdapter,
     VitestAdapter,
     default_javascript_adapters,
@@ -80,14 +81,39 @@ def test_eslint_passes_on_empty_output(tmp_path: Path) -> None:
     assert report.issues == []
 
 
-def test_eslint_skips_when_not_installed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Adapter should self-skip with a `skipped` error when no binary exists."""
+@pytest.mark.parametrize("adapter_type", [ESLintAdapter, TSCAdapter, PrettierAdapter, VitestAdapter])
+@pytest.mark.parametrize("availability_race", [False, True])
+def test_missing_command_is_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, adapter_type: Any, availability_race: bool
+) -> None:
+    """Exercise real command resolution, including disappearance after the runner's probe."""
     monkeypatch.setattr("shutil.which", lambda _name: None)
-    adapter = ESLintAdapter(npx_fallback=False)
+    adapter = adapter_type(npx_fallback=False)
     drv = _StubDriver()
-    report = adapter.run(tmp_path, sandbox=drv, policy=None)
-    assert report.passed is True
-    assert "skipped" in report.error.lower()
+    if availability_race:
+        monkeypatch.setattr(adapter, "is_available", lambda: True)
+        runner = ToolRunner(adapters=[adapter], sandbox=drv)
+        report = runner.run_all(tmp_path)[0]
+        assert not runner.all_passed(tmp_path)
+    else:
+        report = adapter.run(tmp_path, sandbox=drv, policy=None)
+    assert report.passed is False
+    assert report.executed is False
+    assert report.exit_code == -1
+    assert report.status == report.to_dict()["status"] == "UNAVAILABLE"
+    assert "not executed" in report.error.lower()
+    assert drv.last_job is None
+
+
+@pytest.mark.parametrize("adapter_type", [ESLintAdapter, TSCAdapter, PrettierAdapter, VitestAdapter])
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_executed_command_retains_pass_fail(tmp_path: Path, adapter_type: Any, exit_code: int) -> None:
+    drv = _StubDriver(exit_code=exit_code)
+    report = _run_with_force_available(adapter_type(), tmp_path, drv)
+    assert drv.last_job is not None
+    assert report.executed is True
+    assert report.passed is (exit_code == 0)
+    assert report.status == ("PASS" if exit_code == 0 else "FAIL")
 
 
 # ----------------------------------------------------- tsc

@@ -285,8 +285,11 @@ def _deliver_row(row: sqlite3.Row) -> tuple[bool, str]:
         payload = json.loads(row["payload_json"] or "{}")
         headers = json.loads(row["headers_json"] or "{}")
         resp = httpx.post(
-            str(row["target_url"]), json=payload, headers=headers,
-            timeout=12.0, follow_redirects=False,
+            str(row["target_url"]),
+            json=payload,
+            headers=headers,
+            timeout=12.0,
+            follow_redirects=False,
         )
         if not 200 <= resp.status_code < 300:
             prefix = "delivery_outcome_unknown: " if resp.status_code >= 500 else ""
@@ -376,8 +379,12 @@ def _attempt_delivery(
 ) -> dict[str, Any]:
     row, status = _claim_outbox_item(outbox_id, manual=manual, ignore_due=ignore_due)
     if row is None:
-        return {"ok": status == "delivered", "error": "" if status == "delivered" else status,
-                "status": status, "attempted": False}
+        return {
+            "ok": status == "delivered",
+            "error": "" if status == "delivered" else status,
+            "status": status,
+            "attempted": False,
+        }
     ok, error = _deliver_row(row)
     attempts = int(row["attempts"])
     if ok:
@@ -389,7 +396,9 @@ def _attempt_delivery(
     else:
         status = "pending"
     delay = min(3600, 30 * (2 ** min(attempts - 1, 7)))
-    retry_at = (datetime.now(UTC) + timedelta(seconds=delay)).isoformat() if status == "pending" else None
+    retry_at = (
+        (datetime.now(UTC) + timedelta(seconds=delay)).isoformat() if status == "pending" else None
+    )
     with _connect() as conn:
         changed = conn.execute(
             """UPDATE cs_webhook_outbox SET status=?, last_error=?, updated_at=?, next_retry_at=?
@@ -397,7 +406,12 @@ def _attempt_delivery(
             (status, error, _now_iso(), retry_at, int(outbox_id), attempts, row["updated_at"]),
         ).rowcount
     if changed != 1:
-        return {"ok": False, "error": "delivery_outcome_unknown: claim lost", "status": "delivery_unknown", "attempted": True}
+        return {
+            "ok": False,
+            "error": "delivery_outcome_unknown: claim lost",
+            "status": "delivery_unknown",
+            "attempted": True,
+        }
     return {"ok": ok, "error": error, "status": status, "attempted": True}
 
 
@@ -438,8 +452,10 @@ def process_pending_outbox(*, limit: int = 20) -> dict[str, int]:
         if not result["attempted"]:
             stats["skipped"] += 1
             continue
-        bucket = "delivered" if result["ok"] else (
-            "failed" if result["status"] in {"failed", "delivery_unknown"} else "skipped"
+        bucket = (
+            "delivered"
+            if result["ok"]
+            else ("failed" if result["status"] in {"failed", "delivery_unknown"} else "skipped")
         )
         stats[bucket] += 1
     return stats

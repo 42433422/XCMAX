@@ -69,9 +69,12 @@ def test_runner_skips_unavailable_adapter(tmp_path: Path) -> None:
     )
     reports = runner.run_all(tmp_path)
     assert len(reports) == 1
-    # Unavailable adapters are skipped with a pass to avoid blocking the loop
-    assert reports[0].passed is True
-    assert "skipped" in reports[0].error.lower()
+    # Unavailable adapters cannot provide verification credit.
+    assert reports[0].passed is False
+    assert reports[0].executed is False
+    assert reports[0].status == "UNAVAILABLE"
+    assert not runner.all_passed(tmp_path)
+    assert "not executed" in reports[0].error.lower()
 
 
 def test_runner_fail_fast_stops_early(tmp_path: Path) -> None:

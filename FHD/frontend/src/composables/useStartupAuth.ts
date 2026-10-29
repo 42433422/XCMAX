@@ -7,6 +7,7 @@ import type { useModsStore } from '@/stores/mods'
 import { buildLoginLocation } from '@/utils/startupRedirect'
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate'
 import { asRecord, asString } from '@/utils/typeGuards'
+import { getAuthSessionEpoch, readValid } from '@/utils/authSessionCache'
 
 export type StartupAuthResult = {
   ok: boolean
@@ -31,20 +32,23 @@ export function useStartupAuth(options: {
   }
 
   async function ensureStartupAuthenticated(): Promise<StartupAuthResult> {
+    const epoch = getAuthSessionEpoch()
+    const current = () => epoch === getAuthSessionEpoch()
     try {
       const res = await authApi.validateSession()
+      if (!current()) return { ok: false, entitledModIds: [] }
       const resRow = asRecord(res)
-      const dataRow = asRecord(res?.data)
-      if (res?.success === true || resRow.valid === true || dataRow.valid === true) {
+      if (readValid(res)) {
         clearHostPackSkippedSession()
-        // P0 优化3：Market token 同步与账户资料刷新彼此无依赖，并行执行节省 ~1RT
-        const marketPromise = syncMarketTokensFromSession()
-        const profilePromise = import('@/stores/accountProfile')
+        // Establish the trusted owner before taking a market credential snapshot.
+        await import('@/stores/accountProfile')
           .then((m) => m.useAccountProfileStore().refreshFromServer())
           .catch(() => {
             /* ignore */
           })
-        await Promise.all([marketPromise, profilePromise])
+        if (!current()) return { ok: false, entitledModIds: [] }
+        // Optional token synchronization must not block the authenticated workspace.
+        void syncMarketTokensFromSession()
         let entitledModIds: string[] = []
         let accountUsername = ''
         try {
@@ -60,6 +64,7 @@ export function useStartupAuth(options: {
     } catch {
       // Fall through to the local login page.
     }
+    if (!current()) return { ok: false, entitledModIds: [] }
     dismissStartupSplashImmediate()
     const loc =
       typeof window !== 'undefined'
@@ -75,11 +80,12 @@ export function useStartupAuth(options: {
 
   async function runEnterpriseStartupAuth(isPublicEntryRoute: () => boolean): Promise<boolean> {
     if (isPublicEntryRoute()) return true
+    const epoch = getAuthSessionEpoch()
     // P0 优化3：fetchProductSku 与 auth 校验互相无依赖，并行执行节省 ~1RT
     const skuPromise = fetchProductSku().catch(() => 'generic' as string)
     const authPromise = ensureStartupAuthenticated()
     const [sku, authResult] = await Promise.all([skuPromise, authPromise])
-    if (!authResult.ok) return false
+    if (!authResult.ok || epoch !== getAuthSessionEpoch()) return false
     if (!isEnterpriseEdition(sku)) return true
     try {
       await modsStore.initialize(true, {

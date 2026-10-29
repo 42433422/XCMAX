@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 import tempfile
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from retort_engine.models import EmployeeTaskRecord, EmployeeTaskResult, ImprovementTask
 
@@ -27,7 +29,7 @@ class RetortEmployeeQueue:
     def _locked(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.with_name(self.path.name + ".lock").open("a+b") as handle:
-            if os.name == "nt":
+            if sys.platform == "win32":
                 import msvcrt
 
                 if handle.seek(0, os.SEEK_END) == 0:
@@ -54,14 +56,20 @@ class RetortEmployeeQueue:
         temporary: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="w", encoding="utf-8", dir=self.path.parent,
-                prefix=self.path.name + ".", suffix=".tmp", delete=False,
+                mode="w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                prefix=self.path.name + ".",
+                suffix=".tmp",
+                delete=False,
             ) as handle:
                 temporary = handle.name
                 if self.path.exists():
                     os.chmod(temporary, stat.S_IMODE(self.path.stat().st_mode))
                 for row in rows:
-                    handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+                    handle.write(
+                        json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"
+                    )
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.path)
@@ -79,8 +87,10 @@ class RetortEmployeeQueue:
     @staticmethod
     def _record(row: dict[str, Any]) -> EmployeeTaskRecord:
         return EmployeeTaskRecord(
-            str(row["queue_id"]), ImprovementTask(**row["task"]),
-            str(row["source"]), str(row.get("status", "queued")),
+            str(row["queue_id"]),
+            ImprovementTask(**row["task"]),
+            str(row["source"]),
+            str(row.get("status", "queued")),
             str(row.get("created_at", "")),
         )
 
@@ -88,24 +98,37 @@ class RetortEmployeeQueue:
         self, task: ImprovementTask, *, source: str, status: str = "queued"
     ) -> EmployeeTaskRecord:
         if not source.strip() or not task.task_id.strip():
-            raise ValueError("source and task_id are required for idempotent submission")
+            raise ValueError(
+                "source and task_id are required for idempotent submission"
+            )
         with self._locked():
             rows = list(self.load())
-            matches = [row for row in rows if row.get("source") == source
-                       and row.get("task", {}).get("task_id") == task.task_id]
+            matches = [
+                row
+                for row in rows
+                if row.get("source") == source
+                and row.get("task", {}).get("task_id") == task.task_id
+            ]
             if len(matches) > 1:
-                raise ValueError("duplicate legacy logical task; reconciliation required")
+                raise ValueError(
+                    "duplicate legacy logical task; reconciliation required"
+                )
             if matches:
                 existing = self._record(matches[0])
                 if existing.task != task:
-                    raise ValueError("logical task identity reused with a different payload")
+                    raise ValueError(
+                        "logical task identity reused with a different payload"
+                    )
                 return existing
             identity = json.dumps([source, task.task_id], ensure_ascii=False)
             record = EmployeeTaskRecord(
-                str(uuid.uuid5(uuid.NAMESPACE_URL, identity)), task, source, status,
+                str(uuid.uuid5(uuid.NAMESPACE_URL, identity)),
+                task,
+                source,
+                status,
                 datetime.now(timezone.utc).isoformat(),
             )
-            rows.append(record.to_dict())
+            rows.append({**record.to_dict(), "dispatch_protocol": 1})
             self._write(rows)
             return record
 
@@ -126,6 +149,12 @@ class RetortEmployeeQueue:
                 raise ValueError("dispatch payload does not match persisted task")
             if stored.status != "queued":
                 return None
+            if row.get("dispatch_protocol") != 1:
+                # Old adapters left even successfully dispatched tasks queued.
+                # Preserve their identity, but require reconciliation before replay.
+                row["status"] = "dispatch_unknown"
+                self._write(rows)
+                return None
             row["status"] = "dispatching"
             self._write(rows)
             return self._record(row)
@@ -144,7 +173,11 @@ class RetortEmployeeQueue:
     def load(self) -> tuple[dict[str, Any], ...]:
         if not self.path.is_file():
             return ()
-        rows = tuple(json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines() if line)
+        rows = tuple(
+            json.loads(line)
+            for line in self.path.read_text(encoding="utf-8").splitlines()
+            if line
+        )
         if any(not isinstance(row, dict) for row in rows):
             raise ValueError("invalid queue record; refusing to overwrite durable data")
         return rows

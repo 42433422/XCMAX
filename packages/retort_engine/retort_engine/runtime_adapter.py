@@ -42,14 +42,16 @@ class RetortEmployeeRuntimeAdapter:
         return records
 
     def dispatch_to_employee_runtime(self, record: EmployeeTaskRecord) -> bool:
+        # A history failure here is known to precede any dispatch claim/hook.
+        # Retry remains safe, including queue-only submissions and concurrent callers.
+        if self.history_store:
+            self.history_store.record_employee_task(record, idempotent=True)
         if self.dispatch_hook is None:
             return False
         claimed = self.queue.claim_dispatch(record)
         if claimed is None:
             return False
         try:
-            if self.history_store:
-                self.history_store.record_employee_task(claimed)
             self.dispatch_hook(claimed)
         except BaseException:
             # A hook may have acted before raising. Do not automatically repeat

@@ -7,17 +7,18 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
   });
 
   Future<void> exchangePairingCode(String raw) async {
+    final generation = _client.authGeneration;
     final text = raw.trim();
     if (text.isEmpty) {
       throw const MobileRepositoryException('无法识别配对码');
     }
     if (RegExp(r'^\d{6}$').hasMatch(text)) {
-      await _bindRelay('', text);
+      await _bindRelay('', text, authGeneration: generation);
       return;
     }
     final parsed = parsePairingPayload(text);
     if (parsed != null && parsed.version >= 3 && parsed.relayId.isNotEmpty) {
-      await _bindRelay(parsed.relayId, parsed.code);
+      await _bindRelay(parsed.relayId, parsed.code, authGeneration: generation);
       return;
     }
 
@@ -34,6 +35,7 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
       );
     }
 
+    _requireAuthGeneration(generation);
     final response = await _client.exchangePairing(
       nonce: nonce,
       code: code,
@@ -47,6 +49,7 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     ).ifEmpty(parsed?.hostWithPort ?? '');
     final relayId = _relayIdFromBindingData(response.data);
     final previous = await _client.loadSession();
+    _requireAuthGeneration(generation);
     try {
       await _client.persistPairingSession(
         response.data,
@@ -54,19 +57,29 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
         clearRelayDesktop: true,
         setupComplete: true,
         preserveActiveAuth: true,
+        authGeneration: generation,
       );
       if (relayId.isNotEmpty) {
         final relay = _objectMap(response.data?['relay']);
-        await _bindRelay(relayId, _stringField(relay, 'pairing_code'));
+        await _bindRelay(relayId, _stringField(relay, 'pairing_code'),
+            authGeneration: generation);
       }
     } catch (_) {
-      await _client.saveSession(previous);
+      await _client.saveSession(previous, authGeneration: generation);
       rethrow;
     }
   }
 
-  Future<void> _bindRelay(String relayId, String code) async {
+  void _requireAuthGeneration(int generation) {
+    if (generation != _client.authGeneration) {
+      throw const MobileRepositoryException('登录状态已变更，请重试');
+    }
+  }
+
+  Future<void> _bindRelay(String relayId, String code,
+      {required int authGeneration}) async {
     final session = await _client.loadSession();
+    _requireAuthGeneration(authGeneration);
     if (session.accessToken.trim().isEmpty) {
       throw const MobileRepositoryException('请先登录账号，再绑定电脑端设备');
     }
@@ -146,6 +159,7 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     if (username.trim().isEmpty || password.isEmpty) {
       throw const MobileRepositoryException('用户名和密码不能为空');
     }
+    final generation = _client.beginLoginAttempt();
     final response = await _client.login(
       username: username,
       password: password,
@@ -156,17 +170,24 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
         response.message.ifEmpty(adminMode ? '账号或密码错误' : '用户名或密码错误'),
       );
     }
-    await _client.persistLoginSession(
+    final committedGeneration = await _client.persistLoginSession(
       response.data,
       fallbackUsername: username,
       fallbackAccountKind: adminMode ? 'admin' : 'enterprise',
+      authGeneration: generation,
     );
+    if (committedGeneration == null) {
+      throw const MobileRepositoryException('登录状态已变更，请重试');
+    }
+    _requireAuthGeneration(committedGeneration);
     await _client.saveLoginPreferences(
       username: username,
       password: password,
       rememberPassword: rememberPass,
       autoLogin: autoLogin,
+      authGeneration: committedGeneration,
     );
+    _requireAuthGeneration(committedGeneration);
   }
 
   Future<void> register({
@@ -206,6 +227,7 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     required String phone,
     required String code,
   }) async {
+    final generation = _client.beginLoginAttempt();
     final response = await _client.loginWithPhoneCode(
       phone: phone,
       code: code,
@@ -214,10 +236,15 @@ abstract class _RepoPairingAuthBase extends _RepoGroupsBase {
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('验证码错误或已过期'));
     }
-    await _client.persistLoginSession(
+    final committedGeneration = await _client.persistLoginSession(
       response.data,
       fallbackUsername: phone,
       fallbackAccountKind: 'enterprise',
+      authGeneration: generation,
     );
+    if (committedGeneration == null) {
+      throw const MobileRepositoryException('登录状态已变更，请重试');
+    }
+    _requireAuthGeneration(committedGeneration);
   }
 }

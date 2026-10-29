@@ -26,15 +26,18 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
   /// when enterprise LAN host is blank/unreachable, flip session to cloud so
   /// subsequent API calls stop hammering a dead `192.168.x.x`.
   Future<bool> preferCloudIfLanUnreachable() async {
+    final generation = _authGeneration;
     final isEnterprise = MobileProductSkuConfig.isEnterprise(
       buildSku: MobileBuildConfig.productSku,
     );
     if (!isEnterprise) return false;
     final session = await loadSession();
+    if (generation != _authGeneration) return false;
     if (session.serverMode.trim().toLowerCase() == 'cloud') return false;
     final host = session.fhdHost.trim();
     if (host.isEmpty) {
-      await _saveSession(session.copyWith(serverMode: 'cloud'));
+      await _updateSession((current) => current.copyWith(serverMode: 'cloud'),
+          authGeneration: generation);
       _lastLanProbeAt = null;
       _lastLanProbeOk = null;
       return true;
@@ -46,10 +49,12 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
       return false;
     }
     final reachable = await probeLanHealth(host);
+    if (generation != _authGeneration) return false;
     _lastLanProbeAt = now;
     _lastLanProbeOk = reachable;
     if (reachable) return false;
-    await _saveSession(session.copyWith(serverMode: 'cloud'));
+    await _updateSession((current) => current.copyWith(serverMode: 'cloud'),
+        authGeneration: generation);
     _lastLanProbeAt = null;
     _lastLanProbeOk = null;
     return true;
@@ -65,18 +70,45 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
       isEnterprise: true,
     );
     final base = router.lanReachableBaseUrl();
+    HttpClientRequest? request;
+    StreamSubscription<List<int>>? body;
+    final drained = Completer<void>();
+    var expired = false;
+    Future<bool> probe() async {
+      final opened =
+          await _httpClient.openUrl('GET', Uri.parse('${base}api/health'));
+      request = opened;
+      if (expired) {
+        opened.abort();
+        await opened.close();
+        return false;
+      }
+      opened.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      opened.headers.set('X-XCAGI-Client', 'android');
+      final response = await opened.close();
+      body = response.listen((_) {}, onDone: () {
+        if (!drained.isCompleted) drained.complete();
+      }, onError: (Object error, StackTrace stack) {
+        if (!drained.isCompleted) drained.completeError(error, stack);
+      }, cancelOnError: true);
+      if (expired) await body?.cancel();
+      await drained.future;
+      return !expired &&
+          response.statusCode >= 200 &&
+          response.statusCode < 300;
+    }
+
     try {
-      final request = await _httpClient
-          .openUrl('GET', Uri.parse('${base}api/health'))
-          .timeout(const Duration(milliseconds: 900));
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      request.headers.set('X-XCAGI-Client', 'android');
-      final response = await request.close().timeout(
-            const Duration(milliseconds: 900),
-          );
-      await response.drain<void>();
-      return response.statusCode >= 200 && response.statusCode < 300;
+      return await probe().timeout(const Duration(milliseconds: 900),
+          onTimeout: () {
+        expired = true;
+        request?.abort();
+        if (!drained.isCompleted) drained.complete();
+        unawaited(body?.cancel().catchError((Object _) {}));
+        return false;
+      });
     } catch (_) {
+      request?.abort();
       return false;
     }
   }
@@ -122,7 +154,6 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     return normalizedConfig;
   }
 
-
   /// Keep the saved login when the access JWT expires but refresh_token is
   /// still valid.
   Future<bool> _refreshFhdAccessToken() async {
@@ -141,9 +172,15 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
   }
 
   Future<bool> _refreshFhdAccessTokenImpl() async {
+    final generation = _authGeneration;
     final session = await loadSession();
     final refresh = session.refreshToken.trim();
-    if (refresh.isEmpty) return false;
+    if (refresh.isEmpty || generation != _authGeneration) return false;
+    bool ownsSession(MobileSessionData current) =>
+        generation == _authGeneration &&
+        current.refreshToken.trim() == refresh &&
+        current.userId == session.userId &&
+        current.username == session.username;
     try {
       final json = await _sendJsonRequest(
         method: 'POST',
@@ -157,11 +194,11 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
       if (data == null || data.isEmpty) return false;
       final access = _readString(data, const ['access_token']);
       if (access.isEmpty) return false;
-      final current = await _sessionStore.load().catchError(
-            (_) => MobileSessionData.empty,
-          );
-      await _saveSession(
-        current.copyWith(
+      var accepted = false;
+      await _updateSession((current) {
+        if (!ownsSession(current)) return null;
+        accepted = true;
+        return current.copyWith(
           accessToken: access,
           refreshToken: _firstNonBlank([
             _readString(data, const ['refresh_token']),
@@ -171,12 +208,15 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
             _readString(data, const ['session_id']),
             current.sessionId,
           ]),
-        ),
-      );
-      return true;
+        );
+      }, authGeneration: generation);
+      return accepted && generation == _authGeneration;
     } on MobileApiException catch (error) {
-      if (error.statusCode == 401) {
-        await clearActiveAuth();
+      if (error.statusCode == 401 && generation == _authGeneration) {
+        final current = await _sessionStore.load().catchError(
+              (_) => MobileSessionData.empty,
+            );
+        if (ownsSession(current)) await clearActiveAuth();
       }
       return false;
     } catch (_) {
@@ -193,6 +233,7 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
     String? authToken,
     bool allowAuthRefresh = true,
   }) async {
+    final generation = _authGeneration;
     Future<Map<String, Object?>> perform() async {
       var effectiveBase = baseUrl;
       if (effectiveBase == null || effectiveBase.trim().isEmpty) {
@@ -211,24 +252,42 @@ abstract class _ApiTransportBase extends _ApiSessionCoreBase {
         baseUrl: effectiveBase,
         authToken: authToken,
       );
+      if (generation != _authGeneration) {
+        unawaited(request.done.then<void>((_) {}, onError: (Object _) {}));
+        request.abort();
+        throw const MobileApiException(
+          statusCode: 409,
+          message: '登录状态已变更，请重试',
+          body: {},
+        );
+      }
       if (body != null) {
         final bytes = utf8.encode(jsonEncode(body));
         request.contentLength = bytes.length;
         request.add(bytes);
       }
-      return _readJsonResponse(request);
+      final response = await _readJsonResponse(request);
+      if (generation != _authGeneration) {
+        throw const MobileApiException(
+          statusCode: 409,
+          message: '登录状态已变更，请重试',
+          body: {},
+        );
+      }
+      return response;
     }
 
     try {
       return await perform();
     } on MobileApiException catch (error) {
-      if (!allowAuthRefresh ||
+      if (generation != _authGeneration ||
+          !allowAuthRefresh ||
           error.statusCode != 401 ||
           MobileAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
         rethrow;
       }
       final refreshed = await _refreshFhdAccessToken();
-      if (!refreshed) rethrow;
+      if (!refreshed || generation != _authGeneration) rethrow;
       return perform();
     }
   }
