@@ -6,8 +6,10 @@ This module does not persist files or change retention of existing uploads.
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from app.application.etl.errors import ReviewedExcelError
 
-class ArchivePolicyError(ValueError):
+
+class ArchivePolicyError(ReviewedExcelError):
     """The archive policy or requested admission is incomplete or invalid."""
 
 

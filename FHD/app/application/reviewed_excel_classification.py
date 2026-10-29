@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from openpyxl.utils import get_column_letter
 
+from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 
@@ -133,7 +134,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     )
 
     if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
-        raise ValueError("模板模型供应商未配置，未进行模型分类，未调用模型")
+        raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
     allowed_labels = {"quotation", "delivery", "purchase", "attendance", "template", "unknown"}
     rules = classify_review_workbook(review)
@@ -153,7 +154,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         or any(len(cell["value"]) > MAX_VALUE_CHARS for cell in chosen)
         or sum(map(_model_cell_cost, chosen)) > MAX_MODEL_TEXT_BYTES
     ):
-        raise ValueError("本批模型证据超过安全预算，未调用模型")
+        raise ReviewedExcelError("本批模型证据超过安全预算，未调用模型")
     sent = {(c["sheet"], c["cell"]): c for c in chosen}
     overview = []
     merge_budget = 100
@@ -355,7 +356,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     from app.application.reviewed_excel_template import _template_mimo_complete
 
     if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
-        raise ValueError("本批结构与证据超过模型输入安全预算，未调用模型")
+        raise ReviewedExcelError("本批结构与证据超过模型输入安全预算，未调用模型")
     if prepare_only:
         return {"preflight_ok": True}
     expected_regions = sum(len(sheet["regions"]) for sheet in structure_regions)
@@ -363,15 +364,15 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     response = _template_mimo_complete(messages, schema, max_output_tokens)
     data = response.data
     if not isinstance(data, dict):
-        raise ValueError("模型区域结构无效，原分类未改变")
+        raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     # Legacy in-process replays contain only regions; the live provider receives
     # and validates the new schema above and cannot return that shape.
     legacy = set(data) == {"regions"}
     if not legacy and set(data) != {"physical_regions", "logical_documents", "layout_references"}:
-        raise ValueError("模型区域结构无效，原分类未改变")
+        raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     physical = data.get("regions" if legacy else "physical_regions")
     if not isinstance(physical, list) or not 1 <= len(physical) <= 100:
-        raise ValueError("模型区域结构无效，原分类未改变")
+        raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     by_dimensions = {s["sheet"]: s for s in review["sheet_overview"]}
     rects: dict[str, list[tuple[int, int, int, int]]] = {}
     accepted = []
@@ -384,7 +385,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             "dependencies",
             "reason",
         }:
-            raise ValueError("模型区域格式无效，原分类未改变")
+            raise ReviewedExcelError("模型区域格式无效，原分类未改变")
         sheet, area, labels = region["sheet"], region["range"], region["labels"]
         if (
             not isinstance(sheet, str)
@@ -392,7 +393,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             or not isinstance(area, str)
             or not isinstance(region["reason"], str)
         ):
-            raise ValueError("模型区域来源无效，原分类未改变")
+            raise ReviewedExcelError("模型区域来源无效，原分类未改变")
         if (
             not isinstance(labels, list)
             or not labels
@@ -400,25 +401,25 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             or len(set(labels)) != len(labels)
             or ("unknown" in labels and len(labels) > 1)
         ):
-            raise ValueError("模型分类无效，原分类未改变")
+            raise ReviewedExcelError("模型分类无效，原分类未改变")
         try:
             c1, r1, c2, r2 = bounded_range(area)
             dimensions = by_dimensions[sheet]
             if not all(isinstance(x, int) for x in (c1, r1, c2, r2)) or not (
                 1 <= r1 <= r2 <= dimensions["rows"] and 1 <= c1 <= c2 <= dimensions["columns"]
             ):
-                raise ValueError("bounds")
+                raise ReviewedExcelError("bounds")
         except (ValueError, TypeError):
-            raise ValueError("模型区域坐标越界，原分类未改变") from None
+            raise ReviewedExcelError("模型区域坐标越界，原分类未改变") from None
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
-                raise ValueError("模型区域重叠，原分类未改变")
+                raise ReviewedExcelError("模型区域重叠，原分类未改变")
         rects[sheet].append((c1, r1, c2, r2))
         for merge in dimensions.get("merged_regions", []):
             mc1, mr1, mc2, mr2 = bounded_range(merge)
             intersects = c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2
             if intersects and not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
-                raise ValueError("模型区域切断合并单元格，原分类未改变")
+                raise ReviewedExcelError("模型区域切断合并单元格，原分类未改变")
         for field in ("evidence", "dependencies"):
             refs = region[field]
             if (
@@ -433,16 +434,16 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     for x in refs
                 )
             ):
-                raise ValueError("模型证据不在已发送范围，原分类未改变")
+                raise ReviewedExcelError("模型证据不在已发送范围，原分类未改变")
             if field == "evidence":
                 if labels != ["unknown"] and not refs:
-                    raise ValueError("模型分类缺少依据，原分类未改变")
+                    raise ReviewedExcelError("模型分类缺少依据，原分类未改变")
                 for ref in refs:
                     col, row = coordinate_from_string(ref["cell"])
                     if ref["sheet"] != sheet or not (
                         c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
                     ):
-                        raise ValueError("模型证据不在区域内，原分类未改变")
+                        raise ReviewedExcelError("模型证据不在区域内，原分类未改变")
         accepted.append({**region, "needs_confirmation": True})
     suggested_documents, layout_references = [], []
     if not legacy:
@@ -453,7 +454,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             or not isinstance(layout, list)
             or len(layout) > 100
         ):
-            raise ValueError("模型逻辑文档或布局引用格式无效，原分类未改变")
+            raise ReviewedExcelError("模型逻辑文档或布局引用格式无效，原分类未改变")
         known = {(region["sheet"], region["range"]) for region in accepted}
         assigned, document_ids = set(), set()
         for document in documents:
@@ -467,7 +468,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 or not isinstance(document["fragments"], list)
                 or not 1 <= len(document["fragments"]) <= 100
             ):
-                raise ValueError("模型逻辑文档格式或编号无效，原分类未改变")
+                raise ReviewedExcelError("模型逻辑文档格式或编号无效，原分类未改变")
             document_ids.add(document["document_id"])
             refs = []
             for ref in document["fragments"]:
@@ -477,10 +478,10 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     or not isinstance(ref["sheet"], str)
                     or not isinstance(ref["range"], str)
                 ):
-                    raise ValueError("模型文档片段格式无效，原分类未改变")
+                    raise ReviewedExcelError("模型文档片段格式无效，原分类未改变")
                 key = (ref["sheet"], ref["range"])
                 if key not in known or key in assigned:
-                    raise ValueError("模型文档片段来源无效或重复，原分类未改变")
+                    raise ReviewedExcelError("模型文档片段来源无效或重复，原分类未改变")
                 assigned.add(key)
                 refs.append(ref)
             suggested_documents.append(
@@ -497,7 +498,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 or not isinstance(ref["range"], str)
                 or (ref["sheet"], ref["range"]) not in allowed_merges
             ):
-                raise ValueError("模型布局引用不在已发送的合并区域，原分类未改变")
+                raise ReviewedExcelError("模型布局引用不在已发送的合并区域，原分类未改变")
             layout_references.append(ref)
     from app.application.reviewed_excel_evidence import summarize_model_input
 
@@ -537,9 +538,9 @@ def plan_semantic_batches(
             else max_calls
         )
     except ValueError:
-        raise ValueError("分类模型调用预算无效") from None
+        raise ReviewedExcelError("分类模型调用预算无效") from None
     if not 1 <= max_calls <= 4:
-        raise ValueError("分类模型调用预算必须为 1 至 4")
+        raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
     batches = plan_complete_batches(review, classify_review_workbook(review))
     return batches, max_calls
 
@@ -574,7 +575,7 @@ def combine_semantic_batches(
             if overlaps:
                 if any(old[4] == region for old in overlaps):
                     continue
-                raise ValueError("分批模型区域冲突，原分类未改变")
+                raise ReviewedExcelError("分批模型区域冲突，原分类未改变")
             prior.append((c1, r1, c2, r2, region))
             accepted.append(region)
     from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
@@ -774,22 +775,22 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
             or len(set(item["labels"])) != len(item["labels"])
             or ("unknown" in item["labels"] and len(item["labels"]) > 1)
         ):
-            raise ValueError("分类修正无效")
+            raise ReviewedExcelError("分类修正无效")
         key = (item["sheet"], item.get("original_range", item["range"]))
         if key in supplied or key not in expected:
-            raise ValueError("分类区域不属于该版本")
+            raise ReviewedExcelError("分类区域不属于该版本")
         try:
             c1, r1, c2, r2 = bounded_range(item["range"])
             size = dimensions[item["sheet"]]
             if not all(isinstance(x, int) for x in (c1, r1, c2, r2)) or not (
                 1 <= c1 <= c2 <= size["columns"] and 1 <= r1 <= r2 <= size["rows"]
             ):
-                raise ValueError("bounds")
+                raise ReviewedExcelError("bounds")
         except (ValueError, TypeError, KeyError):
-            raise ValueError("分类区域越界") from None
+            raise ReviewedExcelError("分类区域越界") from None
         for oc1, or1, oc2, or2 in rectangles.setdefault(item["sheet"], []):
             if c1 <= oc2 and oc1 <= c2 and r1 <= or2 and or1 <= r2:
-                raise ValueError("分类区域重叠")
+                raise ReviewedExcelError("分类区域重叠")
         rectangles[item["sheet"]].append((c1, r1, c2, r2))
         for merged in size.get("merged_regions", []):
             mc1, mr1, mc2, mr2 = bounded_range(merged)
@@ -800,10 +801,10 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
                 and mr1 <= r2
                 and not (c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2)
             ):
-                raise ValueError("分类区域切断合并单元格")
+                raise ReviewedExcelError("分类区域切断合并单元格")
         supplied[key] = item
     if set(supplied) != set(expected):
-        raise ValueError("分类区域不完整")
+        raise ReviewedExcelError("分类区域不完整")
     for key, region in expected.items():
         item = supplied[key]
         old_range = region["range"]

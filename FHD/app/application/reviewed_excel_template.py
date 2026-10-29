@@ -16,6 +16,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.worksheet.print_settings import PrintArea
 from openpyxl.worksheet.worksheet import Worksheet
 
+from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 from app.utils.operational_errors import BOUNDARY_ERRORS
 
@@ -130,10 +131,10 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         or base != "https://token-plan-cn.xiaomimimo.com/v1"
         or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
     ):
-        raise ValueError("模板 MiMo 配置未完成或不受支持；未调用模型")
+        raise ReviewedExcelError("模板 MiMo 配置未完成或不受支持；未调用模型")
     adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
     if not adapter.is_configured:
-        raise ValueError("模板 MiMo 凭据未配置；未调用模型")
+        raise ReviewedExcelError("模板 MiMo 凭据未配置；未调用模型")
     provider = XiaomiMimoProvider(adapter)
 
     async def call():
@@ -151,14 +152,14 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         response = asyncio.run(call())
         choice = (response or {}).get("choices", [])[0]
         if choice.get("finish_reason") != "stop":
-            raise ValueError("incomplete")
+            raise ReviewedExcelError("incomplete")
         data = extract_json(str((choice.get("message") or {}).get("content") or ""))
         if data is None or not _validate_template_schema(schema, data):
-            raise ValueError("invalid")
+            raise ReviewedExcelError("invalid")
     except BOUNDARY_ERRORS as exc:
         # Never log the provider exception, request, response or credential.
         logging.getLogger(__name__).info("template MiMo call failed: %s", type(exc).__name__)
-        raise ValueError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
+        raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
     return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data)
 
 
@@ -176,7 +177,7 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
         or not message.endswith(".")
         for item, message in zip(found, messages, strict=True)
     ):
-        raise ValueError("工作簿含无法保证保真的扩展，暂不支持清理")
+        raise ReviewedExcelError("工作簿含无法保证保真的扩展，暂不支持清理")
     ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(BytesIO(body)) as archive:
         root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
@@ -192,10 +193,10 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
             node for node in names if node.get("name") == "_xlnm.Print_Area" and node.text == value
         ]
         if len(matching) != 1:
-            raise ValueError("打印区域定义无法核验，暂不支持")
+            raise ReviewedExcelError("打印区域定义无法核验，暂不支持")
         raw_index = matching[0].get("localSheetId", "")
         if not raw_index.isdigit() or int(raw_index) >= len(sheets):
-            raise ValueError("打印区域来源工作表无效")
+            raise ReviewedExcelError("打印区域来源工作表无效")
         sheet = sheets[int(raw_index)]
         offset = 0
         for match in pattern.finditer(value):
@@ -203,7 +204,7 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
                 match.start() != offset
                 or (match.group(1) or match.group(2)).replace("''", "'") != sheet
             ):
-                raise ValueError("打印区域定义无法核验，暂不支持")
+                raise ReviewedExcelError("打印区域定义无法核验，暂不支持")
             parts = match.group(3).replace("$", "").split(":")
             bounds = []
             for part in parts:
@@ -213,7 +214,7 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
                     or (cell.group(1) and column_index_from_string(cell.group(1).upper()) > 16384)
                     or (cell.group(2) and not 1 <= int(cell.group(2)) <= 1048576)
                 ):
-                    raise ValueError("打印区域坐标无效")
+                    raise ReviewedExcelError("打印区域坐标无效")
                 bounds.append(
                     (
                         column_index_from_string(cell.group(1).upper()) if cell.group(1) else None,
@@ -224,30 +225,30 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
                 a is not None and b is not None and a > b
                 for a, b in zip(bounds[0], bounds[1], strict=True)
             ):
-                raise ValueError("打印区域坐标无效")
+                raise ReviewedExcelError("打印区域坐标无效")
             offset = match.end()
             if offset < len(value) and value[offset] == ",":
                 offset += 1
             elif offset < len(value):
-                raise ValueError("打印区域定义无法核验，暂不支持")
+                raise ReviewedExcelError("打印区域定义无法核验，暂不支持")
         if not value or offset != len(value) or value.endswith(","):
-            raise ValueError("打印区域定义无法核验，暂不支持")
+            raise ReviewedExcelError("打印区域定义无法核验，暂不支持")
         entries.append({"sheet": sheet, "value": value})
     return entries
 
 
 def inspect_workbook(body: bytes) -> dict:
     if not body or len(body) > MAX_BYTES:
-        raise ValueError("文件为空或超过 20 MB")
+        raise ReviewedExcelError("文件为空或超过 20 MB")
     try:
         with ZipFile(BytesIO(body)) as archive:
             entries = archive.infolist()
             if len(entries) > 5000 or sum(item.file_size for item in entries) > MAX_UNPACKED:
-                raise ValueError("工作簿解压后过大")
+                raise ReviewedExcelError("工作簿解压后过大")
             if any(
                 item.filename.startswith(("xl/embeddings/", "xl/vbaProject")) for item in entries
             ):
-                raise ValueError("含嵌入附件或宏，未读取或执行")
+                raise ReviewedExcelError("含嵌入附件或宏，未读取或执行")
             unsupported = (
                 "xl/drawings/",
                 "xl/charts/",
@@ -262,7 +263,7 @@ def inspect_workbook(body: bytes) -> dict:
                 "customXml/",
             )
             if any(item.filename.startswith(unsupported) for item in entries):
-                raise ValueError("工作簿含暂不支持保真的对象或扩展")
+                raise ReviewedExcelError("工作簿含暂不支持保真的对象或扩展")
         with warnings.catch_warnings(record=True) as found:
             warnings.simplefilter("always")
             wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
@@ -274,27 +275,27 @@ def inspect_workbook(body: bytes) -> dict:
                 wb.close()
                 raise
     except (BadZipFile, KeyError, OSError, ParseError, InvalidFileException) as exc:
-        raise ValueError("无法读取 XLSX 工作簿") from exc
+        raise ReviewedExcelError("无法读取 XLSX 工作簿") from exc
     cells: list[dict[str, Any]] = []
     layout: list[dict[str, Any]] = []
     try:
         if len(wb.worksheets) > 100:
-            raise ValueError("工作表超过 100 张，暂不能安全预览")
+            raise ReviewedExcelError("工作表超过 100 张，暂不能安全预览")
         grid_budget = 0
         for sheet in wb.worksheets:
             if len(sheet.merged_cells.ranges) > 5000:
-                raise ValueError("合并区域超过 5000 个，暂不能安全预览")
+                raise ReviewedExcelError("合并区域超过 5000 个，暂不能安全预览")
             if sheet.max_row * sheet.max_column > 100_000:
-                raise ValueError("工作表范围过大，暂不能安全预览")
+                raise ReviewedExcelError("工作表范围过大，暂不能安全预览")
             grid_budget += sheet.max_row * sheet.max_column
             if grid_budget > 250_000:
-                raise ValueError("工作簿总单元格范围过大，暂不能安全预览")
+                raise ReviewedExcelError("工作簿总单元格范围过大，暂不能安全预览")
             for row in sheet.iter_rows():
                 for cell in row:
                     if isinstance(cell, MergedCell) or cell.value is None:
                         continue
                     if len(cells) >= MAX_CELLS:
-                        raise ValueError("非空单元格超过 5000 个，暂不能完整预览")
+                        raise ReviewedExcelError("非空单元格超过 5000 个，暂不能完整预览")
                     formula = cell.data_type == "f"
                     cells.append(
                         {
@@ -445,7 +446,7 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
                     root.insert(list(root).index(calc) if calc is not None else len(root), names)
                 for area in areas:
                     if area["sheet"] not in sheets:
-                        raise ValueError("打印区域的工作表不存在")
+                        raise ReviewedExcelError("打印区域的工作表不存在")
                     index = str(sheets.index(area["sheet"]))
                     for node in list(names):
                         if (
@@ -466,7 +467,7 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
     if sorted((x["sheet"], x["value"]) for x in restored) != sorted(
         (x["sheet"], x["value"]) for x in areas
     ):
-        raise ValueError("打印区域写回后核验失败，已停止")
+        raise ReviewedExcelError("打印区域写回后核验失败，已停止")
     return result
 
 
@@ -480,20 +481,20 @@ def derive_document_workbook(
 
     info = inspect_workbook(body)
     if print_area_mode not in {"source", "selected"}:
-        raise ValueError("打印区域选择无效")
+        raise ReviewedExcelError("打印区域选择无效")
     if (
         not fragments
         or len(fragments) > 20
         or any(not isinstance(item, dict) or set(item) != {"sheet", "range"} for item in fragments)
     ):
-        raise ValueError("文档片段范围无效")
+        raise ReviewedExcelError("文档片段范围无效")
     sheets = {item["sheet"] for item in fragments}
     if len(sheets) != 1 or next(iter(sheets)) not in info["sheets"]:
-        raise ValueError("跨工作表文档暂不能保证保真")
+        raise ReviewedExcelError("跨工作表文档暂不能保证保真")
     sheet_name = next(iter(sheets))
     special_areas = [area for area in info["read_only_print_areas"] if area["sheet"] == sheet_name]
     if special_areas and print_area_mode != "selected":
-        raise ValueError("原打印区域跨越文档边界，请明确选择所选片段作为派生打印区域")
+        raise ReviewedExcelError("原打印区域跨越文档边界，请明确选择所选片段作为派生打印区域")
     dimensions = next(sheet for sheet in info["sheet_overview"] if sheet["sheet"] == sheet_name)
     rectangles = []
     for item in fragments:
@@ -503,9 +504,9 @@ def derive_document_workbook(
             if not all(isinstance(x, int) for x in bounds) or not (
                 1 <= c1 <= c2 <= dimensions["columns"] and 1 <= r1 <= r2 <= dimensions["rows"]
             ):
-                raise ValueError("bounds")
+                raise ReviewedExcelError("bounds")
         except (TypeError, ValueError):
-            raise ValueError("文档片段坐标无效") from None
+            raise ReviewedExcelError("文档片段坐标无效") from None
         rectangles.append(bounds)
 
     def contained(bounds):
@@ -521,14 +522,14 @@ def derive_document_workbook(
         wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
     if found and _read_only_print_area_warnings(body, found) != info["read_only_print_areas"]:
         wb.close()
-        raise ValueError("打印区域来源校验失败")
+        raise ReviewedExcelError("打印区域来源校验失败")
     try:
         original_modified = wb.properties.modified
         ws = wb[sheet_name]
         if not isinstance(ws, Worksheet):
-            raise ValueError("所选对象不是工作表")
+            raise ReviewedExcelError("所选对象不是工作表")
         if ws.sheet_state != "visible":
-            raise ValueError("隐藏工作表暂不能作为独立模板提取")
+            raise ReviewedExcelError("隐藏工作表暂不能作为独立模板提取")
         if (
             wb.defined_names
             or ws.defined_names
@@ -539,7 +540,7 @@ def derive_document_workbook(
             or ws.tables
             or ws.auto_filter.ref
         ):
-            raise ValueError("工作簿存在未验证的名称或区域依赖，暂不能提取")
+            raise ReviewedExcelError("工作簿存在未验证的名称或区域依赖，暂不能提取")
         header_names = (
             "oddHeader",
             "oddFooter",
@@ -560,14 +561,14 @@ def derive_document_workbook(
             and any(not contained(bounds) for bounds in source_print)
             and print_area_mode != "selected"
         ):
-            raise ValueError("打印区域跨越所选文档，请明确选择所选片段作为派生打印区域")
+            raise ReviewedExcelError("打印区域跨越所选文档，请明确选择所选片段作为派生打印区域")
         mapped_print = print_area_mode == "selected"
         if mapped_print:
             ws.print_area = [item["range"] for item in fragments]
         for merge in list(ws.merged_cells.ranges):
             bounds = bounded_range(str(merge))
             if intersects(bounds) and not contained(bounds):
-                raise ValueError("所选范围切断合并单元格")
+                raise ReviewedExcelError("所选范围切断合并单元格")
             if not intersects(bounds):
                 ws.unmerge_cells(str(merge))
         for row in ws.iter_rows():
@@ -580,15 +581,15 @@ def derive_document_workbook(
                     cell.hyperlink = None
                     continue
                 if cell.hyperlink:
-                    raise ValueError("文档包含未核验的链接，暂不能提取")
+                    raise ReviewedExcelError("文档包含未核验的链接，暂不能提取")
                 if cell.data_type == "f":
                     try:
                         tokens = Tokenizer(cell.value).items
                     except (TokenizerError, TypeError):
-                        raise ValueError("公式引用无法核验") from None
+                        raise ReviewedExcelError("公式引用无法核验") from None
                     for token in tokens:
                         if token.type == "OPERAND" and token.subtype == "ERROR":
-                            raise ValueError("公式含错误引用，暂不能提取")
+                            raise ReviewedExcelError("公式含错误引用，暂不能提取")
                         if (
                             token.type == "FUNC"
                             and token.subtype == "OPEN"
@@ -605,14 +606,14 @@ def derive_document_workbook(
                                 "COUNTA",
                             }
                         ):
-                            raise ValueError("公式函数依赖无法核验")
+                            raise ReviewedExcelError("公式函数依赖无法核验")
                         if token.type == "OPERAND" and token.subtype == "RANGE":
                             if not re.fullmatch(
                                 r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
                             ):
-                                raise ValueError("公式含外部或名称引用，暂不能提取")
+                                raise ReviewedExcelError("公式含外部或名称引用，暂不能提取")
                             if not contained(bounded_range(token.value.replace("$", ""))):
-                                raise ValueError("公式引用跨越所选文档，暂不能提取")
+                                raise ReviewedExcelError("公式引用跨越所选文档，暂不能提取")
         for name in list(wb.sheetnames):
             if name != sheet_name:
                 del wb[name]
@@ -622,13 +623,13 @@ def derive_document_workbook(
             warnings.simplefilter("always")
             wb.save(output)
         if found:
-            raise ValueError("文档保存存在未验证的内容，已停止")
+            raise ReviewedExcelError("文档保存存在未验证的内容，已停止")
         result = output.getvalue()
         checked = load_workbook(BytesIO(result), data_only=False, keep_links=True, rich_text=True)
         try:
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
-                raise ValueError("派生对象不是工作表")
+                raise ReviewedExcelError("派生对象不是工作表")
             if headers != {
                 name: str(getattr(saved_sheet, name)) for name in header_names
             } or print_settings != (
@@ -636,14 +637,14 @@ def derive_document_workbook(
                 str(saved_sheet.page_margins),
                 str(saved_sheet.print_options),
             ):
-                raise ValueError("派生页眉或打印设置写出后核验失败")
+                raise ReviewedExcelError("派生页眉或打印设置写出后核验失败")
             if mapped_print:
                 actual = sorted(
                     bounded_range(str(item))
                     for item in PrintArea.from_string(saved_sheet.print_area).ranges
                 )
                 if actual != sorted(rectangles):
-                    raise ValueError("派生打印区域写出后核验失败")
+                    raise ReviewedExcelError("派生打印区域写出后核验失败")
         finally:
             checked.close()
         # ZIP member timestamps otherwise vary between saves, preventing a
@@ -665,7 +666,7 @@ def derive_document_workbook(
                         contents,
                     )
                     if count != 1:
-                        raise ValueError("派生文件元数据无法稳定重建")
+                        raise ReviewedExcelError("派生文件元数据无法稳定重建")
                 target.writestr(entry, contents)
         return normalized.getvalue()
     finally:
@@ -675,26 +676,26 @@ def derive_document_workbook(
 def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) -> bytes:
     inspection = inspect_workbook(body)
     if inspection["sha256"] != expected_sha256:
-        raise ValueError("文件与预览不一致，请重新预览")
+        raise ReviewedExcelError("文件与预览不一致，请重新预览")
     allowed = {
         (item["sheet"], item["cell"]) for item in inspection["cells"] if item["kind"] == "review"
     }
     if len(selections) > MAX_CELLS:
-        raise ValueError("选择的单元格过多")
+        raise ReviewedExcelError("选择的单元格过多")
     selected = set()
     for item in selections:
         if not isinstance(item, dict) or set(item) != {"sheet", "cell"}:
-            raise ValueError("清理范围无效")
+            raise ReviewedExcelError("清理范围无效")
         key = (item["sheet"], item["cell"])
         if key not in allowed or key in selected:
-            raise ValueError("清理范围包含无效、重复或受保护的单元格")
+            raise ReviewedExcelError("清理范围包含无效、重复或受保护的单元格")
         selected.add(key)
     with warnings.catch_warnings(record=True) as found:
         warnings.simplefilter("always")
         wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
     if found and _read_only_print_area_warnings(body, found) != inspection["read_only_print_areas"]:
         wb.close()
-        raise ValueError("打印区域来源校验失败")
+        raise ReviewedExcelError("打印区域来源校验失败")
     try:
         for sheet, address in selected:
             wb[sheet][address].value = None
@@ -712,7 +713,7 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
             warnings.simplefilter("always")
             wb.save(output)
         if found:
-            raise ValueError("保存时发现无法保证保真的内容，已停止")
+            raise ReviewedExcelError("保存时发现无法保证保真的内容，已停止")
         result = output.getvalue()
         if inspection["read_only_print_areas"]:
             result = _restore_print_areas(result, inspection["read_only_print_areas"])
@@ -867,7 +868,7 @@ def refine_proposal(
 
     base = make_proposals(review)
     if len(parent_version) != 64 or not feedback.strip() or len(feedback) > 1000:
-        raise ValueError("版本或反馈无效")
+        raise ReviewedExcelError("版本或反馈无效")
     protected_keys = {(c["sheet"], c["cell"]) for c in base["protected"]}
     by_sheet = {
         name: [c for c in review["cells"] if c["sheet"] == name] for name in review["sheets"]
@@ -916,10 +917,10 @@ def refine_proposal(
     if len(current) > 100 or any(
         not isinstance(item, dict) or set(item) != {"sheet", "cell"} for item in current
     ):
-        raise ValueError("当前候选超出模型输入范围，原候选未改变")
+        raise ReviewedExcelError("当前候选超出模型输入范围，原候选未改变")
     bounded_coordinates = {(item["sheet"], item["cell"]) for item in bounded}
     if any((item["sheet"], item["cell"]) not in bounded_coordinates for item in current):
-        raise ValueError("当前候选包含样本范围外的单元格，不能交给模型修改")
+        raise ReviewedExcelError("当前候选包含样本范围外的单元格，不能交给模型修改")
     sent_protected = [
         item for item in base["protected"] if (item["sheet"], item["cell"]) in bounded_coordinates
     ]
@@ -975,7 +976,7 @@ def refine_proposal(
         if configured_provider == "mimo":
             result = _template_mimo_complete(messages, schema, 1400)
         elif configured_provider:
-            raise ValueError("模板模型供应商配置不受支持；未调用模型")
+            raise ReviewedExcelError("模板模型供应商配置不受支持；未调用模型")
         else:
             result = llm_assist._complete(messages, schema=schema, max_tokens=1400)
     finally:
@@ -984,14 +985,14 @@ def refine_proposal(
         state = (
             "模型调用失败" if result.used_llm or result.degraded else "模型未调用（未配置或已关闭）"
         )
-        raise ValueError(f"{state}，自然语言修改不可用；原候选未改变")
+        raise ReviewedExcelError(f"{state}，自然语言修改不可用；原候选未改变")
     allowed = {(c["sheet"], c["cell"]) for c in bounded if c["kind"] != "formula"}
     protected = {(c["sheet"], c["cell"]) for c in base["protected"]}
     if initial and (not isinstance(result.data, dict) or set(result.data) != {"candidates"}):
-        raise ValueError("模型返回格式无效，原候选未改变")
+        raise ReviewedExcelError("模型返回格式无效，原候选未改变")
     answers = result.data.get("candidates") if initial else [result.data]
     if not isinstance(answers, list) or len(answers) != (3 if initial else 1):
-        raise ValueError("模型未返回所需候选，原候选未改变")
+        raise ReviewedExcelError("模型未返回所需候选，原候选未改变")
     validated: list[dict[str, Any]] = []
     for answer in answers:
         if (
@@ -1000,7 +1001,7 @@ def refine_proposal(
             or not isinstance(answer.get("clear"), list)
             or not isinstance(answer.get("reason"), str)
         ):
-            raise ValueError("模型返回格式无效，原候选未改变")
+            raise ReviewedExcelError("模型返回格式无效，原候选未改变")
         pairs = []
         for item in answer["clear"]:
             if (
@@ -1009,10 +1010,10 @@ def refine_proposal(
                 or not isinstance(item["sheet"], str)
                 or not isinstance(item["cell"], str)
             ):
-                raise ValueError("模型返回坐标无效，原候选未改变")
+                raise ReviewedExcelError("模型返回坐标无效，原候选未改变")
             pair = (item["sheet"], item["cell"])
             if pair not in allowed or pair in protected or pair in pairs:
-                raise ValueError("模型建议包含未提供或受保护单元格，原候选未改变")
+                raise ReviewedExcelError("模型建议包含未提供或受保护单元格，原候选未改变")
             pairs.append(pair)
         index = len(validated) + 1
         validated.append(

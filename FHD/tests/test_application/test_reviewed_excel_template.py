@@ -4462,3 +4462,39 @@ def test_archive_classification_cleans_only_uncommitted_upload_copy(
         replay = client.post(url, data=data, files={"file": ("sample.xlsx", body)})
         assert replay.status_code == 200
         assert replay.json()["classification_id"] == classification_id
+
+
+@pytest.mark.parametrize("entry", ["classify", "preview", "model"])
+def test_reviewed_excel_never_returns_underlying_exception_payload(
+    entry, review_store, monkeypatch
+):
+    sensitive = "synthetic-secret-at-/private/customer-workbook.xlsx"
+
+    def fail(*args, **kwargs):
+        raise ValueError(sensitive)
+
+    files = {"file": ("sample.xlsx", sample())}
+    data = {"expected_actor": "1:7"}
+    if entry == "model":
+        monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+        monkeypatch.setattr(routes, "refine_proposal", fail)
+        data.update({"model_opt_in": "true", "sample_authorized": "true"})
+    else:
+        monkeypatch.setattr(routes, "inspect_workbook", fail)
+    if entry == "classify":
+        response = review_store.client.post(
+            "/api/templates/reviewed-excel/classify",
+            data=data,
+            files={"files": files["file"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["files"][0]["status"] == "unsupported"
+    else:
+        response = review_store.client.post(
+            "/api/templates/reviewed-excel/preview", data=data, files=files
+        )
+        assert response.status_code == (200 if entry == "model" else 400)
+        if entry == "model":
+            assert response.json()["proposal"]["model"]["status"] == "unavailable"
+    assert sensitive not in response.text
+    assert "文件或请求无法处理" in response.text

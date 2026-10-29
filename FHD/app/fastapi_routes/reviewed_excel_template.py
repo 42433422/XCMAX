@@ -19,7 +19,7 @@ from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.archive_store import (
     read_original,
 )
-from app.application.etl.errors import EtlError
+from app.application.etl.errors import EtlError, ReviewedExcelError, public_excel_error
 from app.application.etl.service_support import dump_json, load_json, new_id, utcnow
 from app.application.etl.service_uploads import UploadServiceMixin
 from app.application.reviewed_excel_classification import (
@@ -132,7 +132,7 @@ def _source(db, run, tenant, owner):
                 root=Path(get_app_data_dir()) / "etl" / "archive",
             )
         except ArchivePolicyError as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
         if hashlib.sha256(content).hexdigest() != run.file_sha256:
             raise HTTPException(status_code=409, detail="归档来源版本已改变")
         return content
@@ -188,8 +188,10 @@ def _rebuild_archived_document(db, run, tenant, owner):
         derived = derive_document_workbook(
             original, scope["fragments"], print_area_mode=scope["print_area_mode"]
         )
-    except (ArchivePolicyError, ValueError, KeyError) as exc:
-        raise HTTPException(status_code=409, detail="归档派生副本无法保真重建，请重新预览") from exc
+    except (ArchivePolicyError, ValueError, KeyError):
+        raise HTTPException(
+            status_code=409, detail="归档派生副本无法保真重建，请重新预览"
+        ) from None
     if hashlib.sha256(derived).hexdigest() != run.file_sha256:
         raise HTTPException(status_code=409, detail="重建结果与原预览不一致，请重新预览")
     return derived
@@ -357,7 +359,12 @@ async def reviewed_excel_classify(
             )
         except (ValueError, TypeError) as exc:
             results.append(
-                {"name": file.filename, "status": "unsupported", "message": str(exc), "sheets": []}
+                {
+                    "name": file.filename,
+                    "status": "unsupported",
+                    "message": public_excel_error(exc),
+                    "sheets": [],
+                }
             )
     _recheck(request, identity)
     tenant, owner = identity
@@ -520,7 +527,7 @@ def reviewed_excel_classification_confirm(
         labels = json.loads(labels_json)
         selected_links = json.loads(links_json)
         if not isinstance(labels, list):
-            raise ValueError("分类修正无效")
+            raise ReviewedExcelError("分类修正无效")
         with tenant_scope(tenant), get_db() as db:
             run = _classification_run(db, classification_id, tenant, owner)
             review = inspect_workbook(_source(db, run, tenant, owner))
@@ -583,7 +590,7 @@ def reviewed_excel_classification_confirm(
             )
             versions.append(latest)
             if len(versions) > 50:
-                raise ValueError("分类版本已达上限")
+                raise ReviewedExcelError("分类版本已达上限")
             _recheck(request, (tenant, owner))
             _classification_cas(db, run, old, state)
         return {
@@ -598,7 +605,7 @@ def reviewed_excel_classification_confirm(
             "document_count_status": latest["document_count_status"],
         }
     except (ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze")
@@ -825,12 +832,12 @@ async def reviewed_excel_classification_analyze(
             latest["version"] = _classification_version(run.file_sha256, version, latest)
             versions.append(latest)
             if len(versions) > 50:
-                raise ValueError("分类版本已达上限")
+                raise ReviewedExcelError("分类版本已达上限")
             _recheck(request, (tenant, owner))
             _classification_cas(db, run, old, state)
         return {"classification_id": classification_id, **latest}
     except (ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/preview")
@@ -914,7 +921,9 @@ async def reviewed_excel_preview(
                             if any(
                                 not inside_fragment(ref) for ref in region.get("dependencies", [])
                             ):
-                                raise ValueError("所选文档依赖外部说明或标题，暂不能保证保真提取")
+                                raise ReviewedExcelError(
+                                    "所选文档依赖外部说明或标题，暂不能保证保真提取"
+                                )
                 selected_region["source_sha256"] = review["sha256"]
                 selected_region["fragments"] = fragments
                 selected_region["source_print_areas"] = [
@@ -945,12 +954,12 @@ async def reviewed_excel_preview(
         versions = [proposal]
         if model_opt_in:
             if sample_authorized == own_file_authorized:
-                raise ValueError("请明确选择获授权样本或授权本人文件发送模型")
+                raise ReviewedExcelError("请明确选择获授权样本或授权本人文件发送模型")
             if (
                 own_file_authorized
                 and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
             ):
-                raise ValueError("本人文件仅授权 MiMo；当前供应商不匹配，未调用模型")
+                raise ReviewedExcelError("本人文件仅授权 MiMo；当前供应商不匹配，未调用模型")
             try:
                 with tenant_scope(tenant):
                     proposal = await run_in_threadpool(
@@ -963,7 +972,7 @@ async def reviewed_excel_preview(
                     )
                 versions.append(proposal)
             except ValueError as exc:
-                proposal["model"] = {"status": "unavailable", "message": str(exc)}
+                proposal["model"] = {"status": "unavailable", "message": public_excel_error(exc)}
             proposal["model"]["authorization"] = {
                 "kind": "owner_file" if own_file_authorized else "authorized_sample",
                 "provider": "mimo"
@@ -1027,7 +1036,7 @@ async def reviewed_excel_preview(
             "selected_region": selected_region,
         }
     except (ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.get("/api/templates/reviewed-excel/reviews/{review_id}")
@@ -1103,7 +1112,7 @@ async def reviewed_excel_refine(
     try:
         current_cells = json.loads(current)
         if not isinstance(current_cells, list):
-            raise ValueError("当前候选无效")
+            raise ReviewedExcelError("当前候选无效")
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
@@ -1139,13 +1148,13 @@ async def reviewed_excel_refine(
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
             if len(versions) >= 50:
-                raise ValueError("提案版本已达上限")
+                raise ReviewedExcelError("提案版本已达上限")
             versions.append(proposal)
             state["versions"] = versions
             _cas(db, run, old_draft, draft_json=dump_json(state))
         return {"success": True, "proposal": proposal}
     except (ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/save")
@@ -1167,7 +1176,7 @@ async def reviewed_excel_save(
     try:
         selected = json.loads(selections)
         if not isinstance(selected, list):
-            raise ValueError("清理范围无效")
+            raise ReviewedExcelError("清理范围无效")
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
@@ -1234,7 +1243,7 @@ async def reviewed_excel_save(
                 fd = None
                 with stream:
                     stream.write(cleaned)
-            except OSError as exc:
+            except OSError:
                 if fd is not None:
                     try:
                         os.close(fd)
@@ -1252,7 +1261,7 @@ async def reviewed_excel_save(
                 detail = "临时文件写入失败，模板未提交，可以重试"
                 if cleanup_failed:
                     detail = "临时文件写入失败，模板未提交；临时副本需管理员清理"
-                raise HTTPException(status_code=503, detail=detail) from exc
+                raise HTTPException(status_code=503, detail=detail) from None
             try:
                 from app.legacy.routes.document_templates_compat import run_archive_template_create
 
@@ -1313,7 +1322,7 @@ async def reviewed_excel_save(
                 raise
         return {"success": True, "template_id": template_id, "replayed": False}
     except (ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.get("/api/templates/reviewed-excel/{template_id}/download")
@@ -1344,10 +1353,10 @@ def reviewed_excel_download(template_id: int, user=Depends(_read)):
                 .first()
             )
             if run is None:
-                raise ValueError("unavailable")
+                raise ReviewedExcelError("unavailable")
             receipt = load_json(run.receipt_json, {})
             if run.status != _SAVED or str(receipt.get("template_id")) != f"db:{template_id}":
-                raise ValueError("unavailable")
+                raise ReviewedExcelError("unavailable")
         root = (Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)).resolve()
         raw = Path(row.original_file_path or "")
         path = raw.resolve()
@@ -1357,7 +1366,7 @@ def reviewed_excel_download(template_id: int, user=Depends(_read)):
             or root not in path.parents
             or not path.is_file()
         ):
-            raise ValueError("unavailable")
+            raise ReviewedExcelError("unavailable")
     except (ValueError, TypeError):
         raise HTTPException(status_code=404, detail="模板文件不可用") from None
     return FileResponse(

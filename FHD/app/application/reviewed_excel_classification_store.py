@@ -5,6 +5,7 @@ import hashlib
 from fastapi import HTTPException
 from sqlalchemy import update
 
+from app.application.etl.errors import ReviewedExcelError
 from app.application.etl.service_support import dump_json
 from app.db.models.etl import EtlRun
 
@@ -36,7 +37,7 @@ def _classification_version(source_sha, parent, payload):
 def _confirmed_documents(source_sha, version, sheets, links, selected, source_cells):
     """Bind user-selected candidate edges to immutable source and classification versions."""
     if not isinstance(selected, list) or len(selected) > 200:
-        raise ValueError("片段关联选择无效")
+        raise ReviewedExcelError("片段关联选择无效")
     candidates = {
         (link["sheet"], link["first"], link["second"]): link for link in links.get("items", [])
     }
@@ -46,14 +47,14 @@ def _confirmed_documents(source_sha, version, sheets, links, selected, source_ce
     edges = set()
     for entry in selected:
         if not isinstance(entry, dict) or set(entry) != {"sheet", "first", "second"}:
-            raise ValueError("片段关联格式无效")
+            raise ReviewedExcelError("片段关联格式无效")
         key = (entry["sheet"], entry["first"], entry["second"])
         link = candidates.get(key)
         if not link or link.get("status") != "candidate" or key in edges:
-            raise ValueError("片段关联已失效或身份冲突")
+            raise ReviewedExcelError("片段关联已失效或身份冲突")
         nodes = [(key[0], key[1]), (key[0], key[2])]
         if any(node not in regions or "unknown" in regions[node]["labels"] for node in nodes):
-            raise ValueError("未知或不存在的片段不能合并")
+            raise ReviewedExcelError("未知或不存在的片段不能合并")
         edges.add(key)
     groups = []
     while edges:
@@ -73,9 +74,9 @@ def _confirmed_documents(source_sha, version, sheets, links, selected, source_ce
                 link.get("status") == "identity_conflict"
                 and {(link["sheet"], link["first"]), (link["sheet"], link["second"])} <= nodes
             ):
-                raise ValueError("关联片段包含身份冲突，不能合并")
+                raise ReviewedExcelError("关联片段包含身份冲突，不能合并")
         if len(nodes) > 20:
-            raise ValueError("单个逻辑文档最多关联20个片段")
+            raise ReviewedExcelError("单个逻辑文档最多关联20个片段")
         from app.application.reviewed_excel_evidence import candidate_fragment_links
 
         comparable = [
@@ -86,7 +87,7 @@ def _confirmed_documents(source_sha, version, sheets, links, selected, source_ce
             link["status"] == "identity_conflict"
             for link in candidate_fragment_links(comparable, source_cells)["items"]
         ):
-            raise ValueError("关联片段包含身份冲突，不能合并")
+            raise ReviewedExcelError("关联片段包含身份冲突，不能合并")
         fragments = [{"sheet": sheet, "range": area} for sheet, area in sorted(nodes)]
         group_id = _classification_version(source_sha, version, fragments)
         groups.append(

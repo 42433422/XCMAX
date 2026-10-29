@@ -18,7 +18,7 @@ from app.application.etl.archive_store import (
     read_original,
     recover_complete_pending,
 )
-from app.application.etl.errors import EtlError
+from app.application.etl.errors import EtlError, public_excel_error
 from app.application.etl.service_support import dump_json, load_json, new_id
 from app.application.etl.service_uploads import UploadServiceMixin
 from app.application.reviewed_excel_classification_store import (
@@ -146,7 +146,7 @@ def archive_version_download(version_id: str, user=Depends(_read)):
                 },
             )
     except ArchivePolicyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=404, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/archive-assets/{asset_id}/versions")
@@ -181,7 +181,7 @@ async def archive_new_version(
                 "status": item.status,
             }
     except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/archive-assets/{asset_id}/state")
@@ -253,7 +253,7 @@ def recover_archive_version(
             )
             return {"version_id": version_id, "status": "ready"}
     except ArchivePolicyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
 
 
 @router.post("/api/templates/reviewed-excel/archive-classify")
@@ -294,7 +294,7 @@ async def archive_classify(
                 owner,
             )
     except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
 def _create_archive_classification(
@@ -446,4 +446,4 @@ def classify_archive_version(
                 owner,
             )
     except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None

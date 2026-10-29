@@ -2,6 +2,8 @@
 
 from collections import deque
 
+from app.application.etl.errors import ReviewedExcelError
+
 
 def bounded_range(value: str) -> tuple[int, int, int, int]:
     from openpyxl.utils.cell import range_boundaries
@@ -13,7 +15,7 @@ def bounded_range(value: str) -> tuple[int, int, int, int]:
         or not isinstance(c2, int)
         or not isinstance(r2, int)
     ):
-        raise ValueError("Evidence ranges must include both row and column coordinates")
+        raise ReviewedExcelError("Evidence ranges must include both row and column coordinates")
     return c1, r1, c2, r2
 
 
@@ -591,7 +593,7 @@ def plan_complete_batches(review: dict, rules: list[dict]) -> list[list[dict]]:
                         batch.append({**context, "context_only": True})
                         batch_keys.add(key)
     if not batches:
-        raise ValueError("单行超出模型安全预算，未调用模型；请人工检查并分开文件")
+        raise ReviewedExcelError("单行超出模型安全预算，未调用模型；请人工检查并分开文件")
     # Fair across sheets without disturbing contiguous order within any sheet.
     queues: dict[str, deque[list[dict]]] = {}
     for batch in batches:
