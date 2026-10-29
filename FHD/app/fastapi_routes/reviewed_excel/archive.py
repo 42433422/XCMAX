@@ -7,8 +7,9 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 from sqlalchemy import update
+from starlette.concurrency import run_in_threadpool
 
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.archive_store import (
@@ -28,20 +29,18 @@ from app.application.reviewed_excel_template import classify_review_workbook, in
 from app.db.models.etl import EtlRun, EtlUpload
 from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.session import get_db
-from app.infrastructure.auth.dependencies import require_permission
-from app.infrastructure.tenant_scope import tenant_scope
-from app.utils.path_io.path_utils import get_app_data_dir
-
 from app.fastapi_routes.reviewed_excel_template import (
     _CLASS_READY,
     _archive_admin,
     _body,
     _expected_actor,
     _identity,
+    _manage,
     _read,
     _recheck,
-    _manage,
 )
+from app.infrastructure.tenant_scope import tenant_scope
+from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter()
 

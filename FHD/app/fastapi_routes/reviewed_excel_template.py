@@ -16,10 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.archive_store import (
-    append_original_version,
-    create_original,
     read_original,
-    recover_complete_pending,
 )
 from app.application.etl.errors import EtlError
 from app.application.etl.service_support import dump_json, load_json, new_id, utcnow
@@ -47,12 +44,11 @@ from app.application.reviewed_excel_template import (
     refine_proposal,
 )
 from app.db.models.etl import EtlRun, EtlUpload
-from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.session import get_db
 from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
-from app.utils.path_io.path_utils import get_app_data_dir
 from app.utils.operational_errors import BOUNDARY_ERRORS
+from app.utils.path_io.path_utils import get_app_data_dir
 
 router = APIRouter()
 _manage = require_permission("etl.template.manage")
