@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 
 def _create_legacy_outbox(path: Path) -> None:
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.executescript("""
             CREATE TABLE cs_webhook_outbox (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +66,7 @@ def test_legacy_pending_rows_are_migrated_once_and_held(monkeypatch, tmp_path):
     assert summary["storage"] == "configured"
     assert summary["pending_count"] == 0
     assert summary["recovery_pending_count"] == 1
-    with sqlite3.connect(outbox._db_path()) as conn:
+    with closing(sqlite3.connect(outbox._db_path())) as conn:
         assert conn.execute("SELECT COUNT(*) FROM cs_webhook_outbox").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM cs_webhook_outbox_migrations").fetchone()[0] == 1
 

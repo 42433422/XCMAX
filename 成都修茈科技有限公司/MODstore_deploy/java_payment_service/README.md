@@ -53,3 +53,11 @@ set DATABASE_URL=postgresql://modstore:password@127.0.0.1:5432/modstore
 set MODSTORE_PAYMENT_ORDERS_DIR=path\to\payment_orders
 python -m modstore_server.scripts.migrate_sqlite_to_pg
 ```
+
+## 微信通知验签（审计 A03 候选）
+
+通知入口保留原始请求体，使用微信支付官方 Java SDK 0.2.17 校验签名后解密，再核对 appid、mchid 和五分钟时间窗。重复或缺失签名请求头、过期通知、错误签名和商户不匹配均拒绝；业务处理异常返回失败，不伪报成功。
+
+平台公钥模式需成对配置 `WECHAT_PLATFORM_PUBLIC_KEY_PATH`（服务端 PEM 公钥文件）与 `WECHAT_PLATFORM_PUBLIC_KEY_ID`（微信提供的公钥 ID），同时保留 APIv3 密钥。未配置公钥模式时沿用商户私钥、商户证书序列号和 APIv3 密钥，由官方 SDK 获取并维护平台证书。配置缺失、证书不可获取或验签失败不会回退到仅解密。上线前须在支付沙箱校验当前公钥/平台证书与轮换过程；不得将私钥或 APIv3 密钥提交仓库。
+
+`WechatNotificationVerificationTest` 使用临时 RSA/AES 合成密钥验证真实通知入口；它不替代支付提供方沙箱、数据库故障与生产配置验收。

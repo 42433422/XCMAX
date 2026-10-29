@@ -13,6 +13,10 @@ import json
 import logging
 import os
 import re
+import sys
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -97,6 +101,62 @@ def _existing_path(out_trade_no: str) -> Path | None:
     return None
 
 
+@contextmanager
+def _order_lock(out_trade_no: str) -> Iterator[None]:
+    """Serialize mutations across threads and processes on local storage."""
+    lock_path = _path(out_trade_no).with_suffix(".lock")
+    with lock_path.open("a+b") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            if handle.seek(0, os.SEEK_END) == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _write_order(path: Path, doc: dict[str, Any]) -> None:
+    temporary: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=".payment-",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = handle.name
+            handle.write(json.dumps(doc, ensure_ascii=False, indent=2))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        temporary = None
+        if os.name == "posix":
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    finally:
+        if temporary is not None:
+            Path(temporary).unlink(missing_ok=True)
+
+
 def _now_iso() -> str:
     from datetime import datetime
 
@@ -116,54 +176,60 @@ def create(
     pay_type: str | None = None,
 ) -> dict[str, Any]:
     """创建订单记录。``order_kind``: ``plan`` | ``item`` | ``wallet``。"""
-    if _reject_local_write("create", out_trade_no):
-        return {"ok": False, "message": _JAVA_READONLY_MSG, "code": "java_sot_readonly"}
-    p = _path(out_trade_no)
-    if _existing_path(out_trade_no) is not None:
-        return {"ok": False, "message": f"订单 {out_trade_no} 已存在"}
-    kind = order_kind or ("item" if item_id else "plan" if plan_id else "wallet")
-    doc: dict[str, Any] = {
-        "out_trade_no": out_trade_no,
-        "subject": subject,
-        "total_amount": total_amount,
-        "user_id": user_id,
-        "item_id": item_id,
-        "plan_id": plan_id or "",
-        "order_kind": kind,
-        "status": "pending",
-        "trade_no": None,
-        "buyer_id": None,
-        "paid_at": None,
-        "created_at": _now_iso(),
-        "updated_at": _now_iso(),
-        "notify_count": 0,
-        "fulfilled": False,
-        "qr_code": qr_code,
-        "pay_type": pay_type,
-    }
-    p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "order": doc}
+    with _order_lock(out_trade_no):
+        if _reject_local_write("create", out_trade_no):
+            return {
+                "ok": False,
+                "message": _JAVA_READONLY_MSG,
+                "code": "java_sot_readonly",
+            }
+        p = _path(out_trade_no)
+        if _existing_path(out_trade_no) is not None:
+            return {"ok": False, "message": f"订单 {out_trade_no} 已存在"}
+        kind = order_kind or ("item" if item_id else "plan" if plan_id else "wallet")
+        doc: dict[str, Any] = {
+            "out_trade_no": out_trade_no,
+            "subject": subject,
+            "total_amount": total_amount,
+            "user_id": user_id,
+            "item_id": item_id,
+            "plan_id": plan_id or "",
+            "order_kind": kind,
+            "status": "pending",
+            "trade_no": None,
+            "buyer_id": None,
+            "paid_at": None,
+            "created_at": _now_iso(),
+            "updated_at": _now_iso(),
+            "notify_count": 0,
+            "fulfilled": False,
+            "qr_code": qr_code,
+            "pay_type": pay_type,
+        }
+        _write_order(p, doc)
+        return {"ok": True, "order": doc}
 
 
 def merge_fields(out_trade_no: str, **kwargs: Any) -> bool:
     """合并更新订单 JSON（用于写入二维码、支付类型、fulfilled 等）。"""
-    if _reject_local_write("merge_fields", out_trade_no):
-        return False
-    doc = find(out_trade_no)
-    if not doc:
-        return False
-    for k, v in kwargs.items():
-        if v is not None:
-            doc[k] = v
-    doc["updated_at"] = _now_iso()
-    p = _existing_path(out_trade_no)
-    if p is None:
-        return False
-    try:
-        p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-        return True
-    except OSError:
-        return False
+    with _order_lock(out_trade_no):
+        if _reject_local_write("merge_fields", out_trade_no):
+            return False
+        doc = find(out_trade_no)
+        if not doc:
+            return False
+        for k, v in kwargs.items():
+            if v is not None:
+                doc[k] = v
+        doc["updated_at"] = _now_iso()
+        p = _existing_path(out_trade_no)
+        if p is None:
+            return False
+        try:
+            _write_order(p, doc)
+            return True
+        except OSError:
+            return False
 
 
 def find(out_trade_no: str) -> Optional[dict[str, Any]]:
@@ -184,28 +250,29 @@ def update_status(
     buyer_id: Optional[str] = None,
     paid_at: Optional[str] = None,
 ) -> bool:
-    if _reject_local_write("update_status", out_trade_no):
-        return False
-    doc = find(out_trade_no)
-    if not doc:
-        return False
-    doc["status"] = status
-    doc["updated_at"] = _now_iso()
-    if trade_no:
-        doc["trade_no"] = trade_no
-    if buyer_id:
-        doc["buyer_id"] = buyer_id
-    if paid_at:
-        doc["paid_at"] = paid_at
-    doc["notify_count"] = doc.get("notify_count", 0) + 1
-    p = _existing_path(out_trade_no)
-    if p is None:
-        return False
-    try:
-        p.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-        return True
-    except RECOVERABLE_ERRORS:
-        return False
+    with _order_lock(out_trade_no):
+        if _reject_local_write("update_status", out_trade_no):
+            return False
+        doc = find(out_trade_no)
+        if not doc:
+            return False
+        doc["status"] = status
+        doc["updated_at"] = _now_iso()
+        if trade_no:
+            doc["trade_no"] = trade_no
+        if buyer_id:
+            doc["buyer_id"] = buyer_id
+        if paid_at:
+            doc["paid_at"] = paid_at
+        doc["notify_count"] = doc.get("notify_count", 0) + 1
+        p = _existing_path(out_trade_no)
+        if p is None:
+            return False
+        try:
+            _write_order(p, doc)
+            return True
+        except RECOVERABLE_ERRORS:
+            return False
 
 
 def list_orders(
@@ -256,21 +323,24 @@ def close_pending_older_than(*, minutes: int = 30) -> int:
     closed = 0
     for path in _orders_dir().glob("order_*.json"):
         try:
-            doc = json.loads(path.read_text(encoding="utf-8"))
+            scanned = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(scanned, dict):
+                continue
+            order_no = str(scanned.get("out_trade_no") or "")
+            with _order_lock(order_no):
+                doc = find(order_no)
+                if not doc or doc.get("status") != "pending":
+                    continue
+                ts = _parse_iso(doc.get("created_at"))
+                if ts is None or ts.timestamp() > cutoff:
+                    continue
+                target = _existing_path(order_no)
+                if target is None:
+                    continue
+                doc["status"] = "closed"
+                doc["updated_at"] = _now_iso()
+                _write_order(target, doc)
+                closed += 1
         except (OSError, ValueError):
-            continue
-        if doc.get("status") != "pending":
-            continue
-        ts = _parse_iso(doc.get("created_at"))
-        if ts is None:
-            continue
-        if ts.timestamp() > cutoff:
-            continue
-        doc["status"] = "closed"
-        doc["updated_at"] = _now_iso()
-        try:
-            path.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
-            closed += 1
-        except OSError:
             continue
     return closed

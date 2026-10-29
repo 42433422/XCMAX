@@ -187,14 +187,16 @@ def apply_transform(value: Any, rule: dict[str, Any], row: dict[str, Any]) -> An
     if op == "split":
         delimiter = str(rule.get("delimiter") or ",")
         index = int(rule.get("index") or 0)
-        parts = str(value or "").split(delimiter)
+        parts = ("" if value is None else str(value)).split(delimiter)
         return parts[index].strip() if -len(parts) <= index < len(parts) else ""
     if op == "concat":
         fields = rule.get("fields")
         if not isinstance(fields, list):
             raise EtlError("ETL_TRANSFORM_CONCAT_INVALID", "合并操作必须提供 fields")
         separator = str(rule.get("separator") or "")
-        return separator.join(str(row.get(str(field)) or "") for field in fields)
+        return separator.join(
+            "" if row.get(str(field)) is None else str(row[str(field)]) for field in fields
+        )
     return _formula(rule, row)
 
 

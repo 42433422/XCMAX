@@ -19,7 +19,6 @@ from modstore_server.operational_errors import RECOVERABLE_ERRORS
 
 import logging
 from datetime import datetime, UTC
-from typing import Optional
 
 from fastapi import Depends, HTTPException, Query, Request
 
@@ -73,47 +72,15 @@ def _fulfill_paid_order(out_trade_no: str) -> None:
         return
     order = payment_orders.find(out_trade_no)
     if not order:
-        logger.warning("_fulfill_paid_order: order not found %s", out_trade_no)
-        return
-    if order.get("fulfilled"):
-        return
-
-    from datetime import datetime
-
+        raise ValueError("payment order not found")
     from modstore_server.models import get_session_factory
-    from modstore_server.payment_fulfilment import FulfilContext, select_strategy
+    from modstore_server.payment_fulfilment import fulfill_order_atomic
 
-    try:
-        user_id = int(order.get("user_id") or 0)
-        total_amount = float(order.get("total_amount") or 0)
-        item_id = int(order.get("item_id") or 0)
-        plan_id = str(order.get("plan_id") or "").strip()
-        order_kind = str(order.get("order_kind") or "").strip()
-    except (TypeError, ValueError):
-        logger.warning("_fulfill_paid_order: malformed order %s", out_trade_no)
-        return
-
-    ctx = FulfilContext(
-        out_trade_no=out_trade_no,
-        user_id=user_id,
-        total_amount=total_amount,
-        item_id=item_id,
-        plan_id=plan_id,
-        kind=order_kind,
-        order=dict(order),
-    )
-    strategy = select_strategy(ctx)
-    sf = get_session_factory()
-    now = datetime.now(UTC)
-    with sf() as session:
-        if strategy.is_already_fulfilled(session, ctx):
-            payment_orders.merge_fields(out_trade_no, fulfilled=True)
-            session.commit()
-            return
-        description, txn_type = strategy.description_and_txn_type(ctx)
-        strategy.fulfill(session, ctx, now=now, description=description, txn_type=txn_type)
-        payment_orders.merge_fields(out_trade_no, fulfilled=True)
-        session.commit()
+    fulfill_order_atomic(out_trade_no, order, get_session_factory())
+    # A projection failure cannot undo the SQL transaction or cause a second
+    # credit. A later callback/query repairs it from the committed receipt.
+    if not payment_orders.merge_fields(out_trade_no, fulfilled=True):
+        logger.warning("payment JSON projection pending repair: %s", out_trade_no)
     logger.info("_fulfill_paid_order completed for %s", out_trade_no)
 
 
@@ -177,13 +144,13 @@ def api_my_plan(user: User = Depends(_get_current_user)):
 # ── 下单（Checkout） ─────────────────────────────────────────
 
 
-from modstore_server.api.payment_checkout_routes import (  # noqa: E402
+from modstore_server.api.payment_checkout_routes import (
     _forward_checkout_to_java as _forward_checkout_to_java,
 )
-from modstore_server.api.payment_checkout_routes import (  # noqa: E402
+from modstore_server.api.payment_checkout_routes import (
     api_payment_checkout as api_payment_checkout,
 )
-from modstore_server.api.payment_checkout_routes import (  # noqa: E402
+from modstore_server.api.payment_checkout_routes import (
     api_sign_checkout as api_sign_checkout,
 )
 
@@ -230,10 +197,6 @@ async def api_payment_notify_alipay(request: Request):
             logger.warning("本地订单不存在: %s", out_trade_no)
             return "fail"
 
-        if order.get("status") == "paid":
-            logger.info("订单已处理，跳过: %s", out_trade_no)
-            return "success"
-
         # 金额校验（规范化 + 容差，避免 str/float 与格式差异）
         if not _amounts_match(order.get("total_amount"), total_amount):
             logger.warning(
@@ -245,13 +208,14 @@ async def api_payment_notify_alipay(request: Request):
 
         # 更新订单状态
         paid_at = datetime.now(UTC).isoformat()
-        payment_orders.update_status(
+        if not payment_orders.update_status(
             out_trade_no=out_trade_no,
             status="paid",
             trade_no=trade_no,
             buyer_id=buyer_id,
             paid_at=paid_at,
-        )
+        ):
+            return "fail"
 
         _fulfill_paid_order(out_trade_no)
         logger.info("订单支付成功并已发放权益: %s, 金额 %s", out_trade_no, total_amount)
@@ -322,7 +286,7 @@ def api_payment_query(out_trade_no: str, user: User = Depends(_get_current_user)
 
 @router.get("/orders")
 def api_payment_list_orders(
-    status: Optional[str] = Query(None),
+    status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: User = Depends(_get_current_user),
@@ -393,12 +357,12 @@ def api_payment_diagnostics(user: User = Depends(_get_current_user)):
 # ── 已购权益 ─────────────────────────────────────────────────
 
 
-from modstore_server.api.payment_account_routes import (  # noqa: E402
+from modstore_server.api.payment_account_routes import (
     api_payment_entitlements as api_payment_entitlements,
 )
-from modstore_server.api.payment_account_routes import (  # noqa: E402
+from modstore_server.api.payment_account_routes import (
     api_payment_refund as api_payment_refund,
 )
-from modstore_server.api.payment_account_routes import (  # noqa: E402
+from modstore_server.api.payment_account_routes import (
     api_usage_metrics as api_usage_metrics,
 )

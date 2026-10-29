@@ -1,7 +1,11 @@
 package com.modstore.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wechat.pay.java.core.RSAAutoCertificateConfig;
+import com.wechat.pay.java.core.notification.NotificationConfig;
+import com.wechat.pay.java.core.notification.NotificationParser;
+import com.wechat.pay.java.core.notification.RequestParam;
+import com.wechat.pay.java.core.notification.RSAPublicKeyNotificationConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -10,9 +14,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.util.UriUtils;
 
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
@@ -54,6 +55,14 @@ public class WechatPayService {
 
     @Value("${wechatpay.notify-url:}")
     private String notifyUrl;
+
+    @Value("${wechatpay.platform-public-key-path:}")
+    private String platformPublicKeyPath;
+
+    @Value("${wechatpay.platform-public-key-id:}")
+    private String platformPublicKeyId;
+
+    private volatile NotificationParser notificationParser;
 
     public boolean configured() {
         return !blank(appId) && !blank(mchId) && !blank(privateKeyPath)
@@ -152,23 +161,52 @@ public class WechatPayService {
         }
     }
 
-    public Map<String, Object> decryptNotify(Map<String, Object> body) {
-        try {
-            Map<String, Object> resource = castMap(body.get("resource"));
-            String nonce = String.valueOf(resource.getOrDefault("nonce", ""));
-            String associatedData = String.valueOf(resource.getOrDefault("associated_data", ""));
-            String ciphertext = String.valueOf(resource.getOrDefault("ciphertext", ""));
-            Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-            SecretKeySpec key = new SecretKeySpec(apiV3Key.getBytes(StandardCharsets.UTF_8), "AES");
-            cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, nonce.getBytes(StandardCharsets.UTF_8)));
-            if (!associatedData.isBlank()) {
-                cipher.updateAAD(associatedData.getBytes(StandardCharsets.UTF_8));
-            }
-            byte[] plain = cipher.doFinal(Base64.getDecoder().decode(ciphertext));
-            return objectMapper.readValue(plain, new TypeReference<Map<String, Object>>() {});
-        } catch (Exception e) {
-            throw new IllegalArgumentException("微信支付通知解密失败: " + e.getMessage(), e);
+    /** Verify the original bytes before parsing or applying any business effect. */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> verifyNotification(
+            String body, String serial, String nonce, String signature, String timestamp,
+            String signatureType) {
+        if (blank(body) || body.length() > 1_048_576 || blank(serial) || serial.length() > 128
+                || blank(nonce) || nonce.length() > 128 || blank(signature) || signature.length() > 1024
+                || timestamp == null || !timestamp.matches("[0-9]{1,19}")
+                || (!blank(signatureType) && !"WECHATPAY2-SHA256-RSA2048".equals(signatureType))) {
+            throw new IllegalArgumentException("invalid payment notification headers");
         }
+        long receivedAt = Long.parseLong(timestamp);
+        long now = Instant.now().getEpochSecond();
+        if (receivedAt < now - 300 || receivedAt > now + 300) {
+            throw new IllegalArgumentException("payment notification outside allowed clock window");
+        }
+        RequestParam request = new RequestParam.Builder()
+                .serialNumber(serial).nonce(nonce).signature(signature)
+                .timestamp(timestamp).body(body).build();
+        Map<String, Object> plain = notificationParser().parse(request, Map.class);
+        if (blank(appId) || blank(mchId) || !appId.equals(plain.get("appid"))
+                || !mchId.equals(plain.get("mchid"))) {
+            throw new IllegalArgumentException("payment notification merchant mismatch");
+        }
+        return plain;
+    }
+
+    private synchronized NotificationParser notificationParser() {
+        if (notificationParser != null) return notificationParser;
+        NotificationConfig config;
+        if (!blank(platformPublicKeyPath) || !blank(platformPublicKeyId)) {
+            if (blank(platformPublicKeyPath) || blank(platformPublicKeyId)) {
+                throw new IllegalStateException("both platform public key and id are required");
+            }
+            config = new RSAPublicKeyNotificationConfig.Builder()
+                    .publicKeyFromPath(platformPublicKeyPath).publicKeyId(platformPublicKeyId)
+                    .apiV3Key(apiV3Key).build();
+        } else {
+            // Existing certificate-mode deployments retain official rotation.
+            // Cache this parser; do not download certificates for every callback.
+            config = new RSAAutoCertificateConfig.Builder().merchantId(mchId)
+                    .privateKeyFromPath(privateKeyPath).merchantSerialNumber(merchantSerialNo)
+                    .apiV3Key(apiV3Key).build();
+        }
+        notificationParser = new NotificationParser(config);
+        return notificationParser;
     }
 
     private String authorization(String method, String path, String timestamp, String nonce, String body) throws Exception {

@@ -9,6 +9,8 @@ import os
 import sqlite3
 import time
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -59,10 +61,15 @@ def _legacy_migration_enabled() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _connect() -> sqlite3.Connection:
+@contextmanager
+def _connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(str(_db_path()), timeout=10.0)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def ensure_outbox_schema() -> None:
@@ -403,7 +410,15 @@ def _attempt_delivery(
         changed = conn.execute(
             """UPDATE cs_webhook_outbox SET status=?, last_error=?, updated_at=?, next_retry_at=?
                WHERE id=? AND status='sending' AND attempts=? AND updated_at=?""",
-            (status, error, _now_iso(), retry_at, int(outbox_id), attempts, row["updated_at"]),
+            (
+                status,
+                error,
+                _now_iso(),
+                retry_at,
+                int(outbox_id),
+                attempts,
+                row["updated_at"],
+            ),
         ).rowcount
     if changed != 1:
         return {

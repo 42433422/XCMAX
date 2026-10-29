@@ -65,6 +65,8 @@ alipay:
   sandbox-gateway-url: ${ALIPAY_SANDBOX_GATEWAY_URL:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
 
 wechatpay:
+  platform-public-key-path: ${WECHAT_PLATFORM_PUBLIC_KEY_PATH:}
+  platform-public-key-id: ${WECHAT_PLATFORM_PUBLIC_KEY_ID:}
   app-id: ${WECHATPAY_APP_ID:}
   mch-id: ${WECHATPAY_MCH_ID:}
   private-key-path: ${WECHATPAY_PRIVATE_KEY_PATH:}
