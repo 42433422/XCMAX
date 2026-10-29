@@ -85,8 +85,9 @@ def main() -> None:
     log = ROOT / 'FHD/CHANGELOG.md'
     text = log.read_text(encoding='utf-8')
     marker = '## Unreleased\n'
-    if text.count(marker) != 1:
-        raise SystemExit('Expected a single Unreleased section')
+    lines = text.splitlines()
+    if len(lines) < 3 or not lines[0].startswith('# ') or lines[1] or lines[2] != '## Unreleased':
+        raise SystemExit('Expected current Unreleased section at changelog start')
     entry = (
         '\n- 审计整改候选（PR #2761）：充值履约改为与余额同一事务的唯一凭证，订单文件原子写入；'
         '客服发送先领取、核对有效回执，结果未知时停止自动重发；ETL保留0和False；'
@@ -98,7 +99,11 @@ def main() -> None:
     )
     log.write_text(text.replace(marker, marker + entry, 1), encoding='utf-8')
     # Remove exactly the transient transport/helper files created by this task.
-    run('git', 'rm', '-r', '--', '.github/audit-remediation-2761')
+    # The one-use snapshot workflow must also leave the reviewed branch;
+    # otherwise its next synchronization would invoke the deleted helper.
+    run('git', 'rm', '-r', '--', '.github/audit-remediation-2761',
+        '.github/workflows/fhd-audit-remediation-snapshot.yml',
+        'FHD/.github/workflows/audit-remediation-snapshot.yml')
     run(sys.executable, '成都修茈科技有限公司/scripts/build_capability_center.py')
     run('git', 'add', '--', 'FHD/CHANGELOG.md',
         '成都修茈科技有限公司/capabilities', '成都修茈科技有限公司/data/capabilities.json')
