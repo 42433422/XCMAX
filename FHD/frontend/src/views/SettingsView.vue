@@ -126,6 +126,7 @@
                 <span class="settings-row__arrow" aria-hidden="true"></span>
               </summary>
               <div class="settings-card__body settings-card__body--flush">
+                <SettingsPlatformModelCard :can-manage="accountProfile.isAdminAccount && !accountProfile.isImpersonating" />
                 <HostModBridgeView
                   v-if="showModelPaymentBridge"
                   embedded
@@ -252,6 +253,7 @@ import SettingsMemoryV2Card from './settings-view/SettingsMemoryV2Card.vue'
 import SettingsBasicCard from './settings-view/SettingsBasicCard.vue'
 import SettingsVersionsCard from './settings-view/SettingsVersionsCard.vue'
 import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
+import SettingsPlatformModelCard from './settings-view/SettingsPlatformModelCard.vue'
 
 const route = useRoute()
 const modsStore = useModsStore()

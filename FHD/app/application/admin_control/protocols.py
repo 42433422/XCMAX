@@ -52,6 +52,8 @@ class UpstreamRequest(Protocol):
         json_body: JsonObject | None,
         authorization: str,
         return_error_payload: bool,
+        sensitive: bool = False,
+        retries: int | None = None,
     ) -> Awaitable[AdminResult]: ...
 
 

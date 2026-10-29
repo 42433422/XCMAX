@@ -1,5 +1,7 @@
 """Late-bound adapters to canonical services; no import of the public admin facade."""
 
+from fastapi import Request
+
 from app.application.admin_control.protocols import MarketTransport, SyncStore
 
 
@@ -14,6 +16,17 @@ def load_market_transport() -> MarketTransport:
     return MarketTransport(
         _auth_header, _authorization_from_request_resolved, _proxy_json, _error_message
     )
+
+
+async def bound_market_authorization(request: Request) -> str:
+    """Use only the verified session's token for platform secret administration."""
+    from app.fastapi_routes.market_account import _auth_header, resolve_valid_market_access_token
+    from app.infrastructure.auth.dependencies import session_id_from_request
+
+    token = await resolve_valid_market_access_token(
+        session_id_from_request(request), allow_latest=False
+    )
+    return _auth_header(token or "")
 
 
 def open_sync_store() -> SyncStore:
