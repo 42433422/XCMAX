@@ -12,33 +12,65 @@ permissions:
 
 concurrency:
   group: audit-remediation-snapshot-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 defaults:
   run:
     working-directory: .
 
 jobs:
-  snapshot:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/audit-a01-a14-20261029'
+  apply-reviewed-patch:
+    if: github.event.pull_request.number == 2761 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/audit-a01-a14-20261029'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 64
+          submodules: false
       - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      - name: Download verification dependencies without executing repository code
+      - name: Fetch main without persisting credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          destination="$RUNNER_TEMP/xcmax-audit-tools"
-          mkdir -p "$destination"
-          python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest "$destination" black==26.10.1 isort==6.1.0 mypy==2.4.0 'bcrypt>=4' 'apscheduler<4' 'redis>=5' 'paramiko>=3.4' 'PyJWT>=2.8' 'langchain-core>=0.3' types-requests types-redis types-PyYAML
-          sha256sum "$destination"/*.whl > "$destination/SHA256SUMS.txt"
-      - name: Retain public verification tooling for this audit only
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" fetch --no-tags --depth=64 origin main:refs/remotes/origin/main
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Apply exact reviewed repair bytes and run repository preflight
+        env:
+          AUDIT_EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python .github/audit-remediation-2761/apply.py
+      - name: Fast-forward only the authorized draft branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_EVENT_HEAD: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_HEAD_REF" = 'fix/audit-a01-a14-20261029'
+          test -f .git/audit-remediation-receipt.json
+          test ! -d .github/audit-remediation-2761
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          actual=$(git -c "http.extraheader=AUTHORIZATION: basic $auth" ls-remote origin "refs/heads/$GITHUB_HEAD_REF" | cut -f1)
+          test "$actual" = "$AUDIT_EVENT_HEAD"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" push origin HEAD:refs/heads/fix/audit-a01-a14-20261029
+      - name: Preserve exact commit and preflight receipt
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: audit-remediation-tools-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/xcmax-audit-tools/
+          name: audit-remediation-receipt-${{ github.event.pull_request.head.sha }}
+          path: .git/audit-remediation-receipt.json
+          include-hidden-files: true
           retention-days: 1
-          if-no-files-found: error
+          if-no-files-found: warn
