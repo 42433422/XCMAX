@@ -267,6 +267,8 @@
     "aboutIndustryLine": "{industry} baseline",
     "aboutCustomLine": "Account-custom baseline",
     "aboutModCapability": "XCAGI generic host · capabilities provided by mods",
-    "genericIndustry": "General"
+    "genericIndustry": "General",
+    "accountChecking": "Checking sign-in status",
+    "accountUnavailable": "Sign-in status unavailable. Please try again."
   }
 }
