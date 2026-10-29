@@ -35,7 +35,7 @@ class ConversationLlmMixin:
     ) -> dict[str, Any] | None:
         """Call the active platform, direct, or legacy LLM provider."""
         from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
-        from app.infrastructure.llm.token_estimator import estimate_tokens
+        from app.domain.neuro.cognition.token_estimator import estimate_tokens
 
         started = time.perf_counter()
         context = kwargs.pop("conversation_context", None)
