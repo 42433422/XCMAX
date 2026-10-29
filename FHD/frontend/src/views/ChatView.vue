@@ -9,6 +9,7 @@
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
+        :session-key="messageSessionKey"
         :messages="messages"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
@@ -222,6 +223,7 @@ import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
@@ -256,6 +258,7 @@ function generateSessionId(): string {
 const _storedSessionId = readAiSessionIdFromStorage()
 const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
 const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
+const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
@@ -378,7 +381,7 @@ const {
   toggleMessageTts,
   batchCalculateHeights,
   stopMessageTts,
-} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef })
+} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef, sessionKey: messageSessionKey })
 
 const {
   paneStyle: chatPaneStyle,
