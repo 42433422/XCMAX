@@ -149,3 +149,7 @@ _BYOK_PLAN_IDS = {"plan_pro", "plan_enterprise"}
 
 
 _CATALOG_PROVIDER_TIMEOUT_SEC = 12.0
+
+from modstore_server.platform_model_config_api import router as platform_model_config_router
+
+router.include_router(platform_model_config_router)

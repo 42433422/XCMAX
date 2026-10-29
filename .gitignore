@@ -297,3 +297,7 @@ FHD/admin-console/.vite-bak/
 !成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D3-mac-control-detail.png
 !成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-D4-mac-control-cancel.png
 !成都修茈科技有限公司/capabilities/assets/evidence/dt-mac-control-dt-mac-control-macos-20260929-094829.webm
+# Platform model credentials are encrypted server runtime state, never source assets.
+**/llm/platform-model-config.json
+**/llm/platform-model-config.lock
+**/llm/.platform-model-config.json.*.tmp

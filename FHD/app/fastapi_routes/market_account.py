@@ -370,8 +370,8 @@ async def refresh_session_market_token(session_id: str, *, distinguish_errors: b
     return await _token_lifecycle().refresh(session_id, distinguish_errors=distinguish_errors)
 
 
-async def resolve_valid_market_access_token(session_id: str) -> str:
-    return await _token_lifecycle().resolve(session_id)
+async def resolve_valid_market_access_token(session_id: str, *, allow_latest: bool = True) -> str:
+    return await _token_lifecycle().resolve(session_id, allow_latest=allow_latest)
 
 
 async def resolve_valid_market_access_token_fast(session_id: str) -> str:

@@ -1,5 +1,5 @@
 # mypy: disable-error-code="arg-type, union-attr"
-"""解析平台环境变量密钥与用户 BYOK（用户优先）。"""
+"""Resolve user BYOK or server-managed platform credentials without mixing origins."""
 
 from __future__ import annotations
 
@@ -108,17 +108,22 @@ def is_minimax_token_plan_key(api_key: Optional[str]) -> bool:
 def normalize_minimax_api_key(api_key: Optional[str]) -> str:
     """容错处理聊天中常见的 ``minimax`` 标签与密钥粘连。"""
 
+    from modstore_server.platform_model_config import PlatformApiKey
+
     value = (api_key or "").strip()
     if value.lower().startswith("minimaxsk-cp-"):
-        return value[len("minimax") :]
+        value = value[len("minimax") :]
+    if isinstance(api_key, PlatformApiKey):
+        return PlatformApiKey(value, dict(api_key.configuration))
     return value
 
 
-def minimax_anthropic_base_url(base_url: Optional[str] = None) -> str:
+def minimax_anthropic_base_url(base_url: Optional[str] = None, *, prefer_base: bool = False) -> str:
     """返回 MiniMax Anthropic 兼容根地址（不含末尾 ``/v1``）。"""
 
     raw = (
-        _env("MINIMAX_ANTHROPIC_BASE_URL")
+        ((base_url or "").strip() if prefer_base else "")
+        or _env("MINIMAX_ANTHROPIC_BASE_URL")
         or (base_url or "").strip()
         or platform_base_url("minimax")
         or openai_compat_default_root("minimax")
@@ -136,7 +141,7 @@ def _env(name: str) -> str:
     return (os.environ.get(name) or "").strip()
 
 
-def platform_api_key(provider: str) -> Optional[str]:
+def _environment_api_key(provider: str) -> Optional[str]:
     if provider == "openai":
         k = _env("OPENAI_API_KEY")
         return k or None
@@ -207,7 +212,7 @@ def platform_api_key(provider: str) -> Optional[str]:
     return None
 
 
-def platform_base_url(provider: str) -> Optional[str]:
+def _environment_base_url(provider: str) -> Optional[str]:
     if provider == "openai":
         u = _env("OPENAI_BASE_URL")
         return (u or openai_compat_default_root("openai")).rstrip("/")
@@ -276,8 +281,44 @@ def _load_user_row(session: Session, user_id: int, provider: str) -> Optional[Us
     )
 
 
-def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:
-    """返回 (api_key, source) source 为 user_override | platform | none"""
+def platform_credentials(provider: str) -> tuple[Optional[str], Optional[str]]:
+    from modstore_server.platform_model_config import (
+        PlatformApiKey,
+        stored_config,
+        stored_key,
+    )
+
+    row = stored_config(provider)
+    if row is not None:
+        return PlatformApiKey(stored_key(row), row), row["base_url"]
+    key, base = _environment_api_key(provider), _environment_base_url(provider)
+    if key:
+        key = PlatformApiKey(
+            key,
+            {
+                "provider": provider,
+                "base_url": base,
+                "model": "",
+                "display_name": "",
+                "revision": "",
+                "source": "environment",
+            },
+        )
+    return key, base
+
+
+def platform_api_key(provider: str) -> Optional[str]:
+    return platform_credentials(provider)[0]
+
+
+def platform_base_url(provider: str) -> Optional[str]:
+    return platform_credentials(provider)[1]
+
+
+def resolve_credentials(
+    session: Session, user_id: int, provider: str
+) -> tuple[Optional[str], Optional[str], str]:
+    """Read key and endpoint from one snapshot; a platform key never uses a BYOK URL."""
     row = _load_user_row(session, user_id, provider)
     if row and row.api_key_encrypted and fernet_configured():
         try:
@@ -285,26 +326,27 @@ def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Opti
             if k:
                 if provider == "minimax":
                     k = normalize_minimax_api_key(k)
-                return k, "user_override"
+                base = _environment_base_url(provider)
+                if row.base_url_encrypted:
+                    # A broken BYOK endpoint must not route its key to another account's endpoint.
+                    base = decrypt_secret(row.base_url_encrypted).strip().rstrip("/") or base
+                return k, base, "user_override"
         except ValueError:
-            pass
-    pk = platform_api_key(provider)
+            if row.base_url_encrypted:
+                return None, None, "none"
+    pk, base = platform_credentials(provider)
     if pk:
-        return pk, "platform"
-    return None, "none"
+        return pk, base, "platform"
+    return None, base, "none"
+
+
+def resolve_api_key(session: Session, user_id: int, provider: str) -> Tuple[Optional[str], str]:
+    key, _base, source = resolve_credentials(session, user_id, provider)
+    return key, source
 
 
 def resolve_base_url(session: Session, user_id: int, provider: str) -> Optional[str]:
-    """OpenAI 兼容系：用户 base_url 优先，否则平台。anthropic/google 返回 None。"""
-    row = _load_user_row(session, user_id, provider)
-    if row and row.base_url_encrypted and fernet_configured():
-        try:
-            u = decrypt_secret(row.base_url_encrypted).strip().rstrip("/")
-            if u:
-                return u
-        except ValueError:
-            pass
-    return platform_base_url(provider)
+    return resolve_credentials(session, user_id, provider)[1]
 
 
 def credential_status(session: Session, user_id: int, provider: str) -> dict:

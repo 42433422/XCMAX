@@ -31,6 +31,7 @@ from modstore_server.llm_media_proxy import video_dispatch as video_dispatch
 from modstore_server.llm_media_proxy import video_openai_compatible as video_openai_compatible
 from modstore_server.multimodal_llm import messages_use_openai_multipart_content
 from modstore_server.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+from modstore_server.platform_model_config import PlatformApiKey
 
 _MODEL_ALIASES: dict[tuple[str, str], str] = {
     # 官方 V2.5 于 2026-10-21 下线；保留原账号凭证和私有兼容端点。
@@ -52,7 +53,15 @@ _LLM_TIMEOUT = httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0)
 _STREAM_LIMITS = httpx.Limits(max_connections=1000, max_keepalive_connections=200)
 
 
-def _normalize_openai_base(provider: str, base_url: Optional[str]) -> str:
+def _normalize_openai_base(
+    provider: str, base_url: Optional[str], api_key: Optional[str] = None
+) -> str:
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
+        raise ValueError("平台密钥不允许跨供应商使用")
+    if isinstance(api_key, PlatformApiKey) and api_key.managed:
+        return str(api_key.configuration["base_url"])
+    if isinstance(api_key, PlatformApiKey):
+        base_url = api_key.configuration["base_url"]
     b = (base_url or openai_compat_default_root(provider)).rstrip("/")
     if not (b.endswith("/v1") or b.endswith("/v2") or b.endswith("/v3") or b.endswith("/v4")):
         b = b + "/v1"
@@ -139,6 +148,10 @@ async def chat_dispatch(
     fallback_api_key: Optional[str] = None,
     fallback_base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
+        return {"ok": False, "error": "平台密钥不允许跨供应商使用"}
+    if isinstance(api_key, PlatformApiKey):
+        base_url = api_key.configuration["base_url"]
     model = normalize_model(provider, model, base_url)
     has_fallback = bool(timeout_fallback_s and fallback_provider and fallback_model)
 
@@ -157,14 +170,17 @@ async def chat_dispatch(
                 }
         if provider == "minimax" and is_minimax_token_plan_key(api_key):
             return await chat_anthropic_compatible(
-                minimax_anthropic_base_url(base_url),
+                minimax_anthropic_base_url(
+                    base_url,
+                    prefer_base=isinstance(api_key, PlatformApiKey) and api_key.managed,
+                ),
                 normalize_minimax_api_key(api_key),
                 model,
                 messages,
                 max_tokens=max_tokens or 1024,
             )
         if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-            b = _normalize_openai_base(provider, base_url)
+            b = _normalize_openai_base(provider, base_url, api_key)
             return await chat_openai_compatible(
                 b,
                 api_key,
@@ -192,7 +208,10 @@ async def chat_dispatch(
             except httpx.TransportError as exc:
                 # 对端中断连接 / 读写超时 / 协议错误（RemoteProtocolError 等）等瞬时网络故障：
                 # 当作可重试，转成错误 dict 而非向上抛，避免无 fallback 的调用方（如员工大会）直接判为异常。
-                last = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                last = {
+                    "ok": False,
+                    "error": f"模型网络连接失败（{type(exc).__name__}）",
+                }
                 transient_exc = True
             if last.get("ok"):
                 return last
@@ -231,24 +250,33 @@ async def chat_dispatch(
         # provider returned error — fall through to fallback
         primary_error = result.get("error") or "primary returned error"
     except RECOVERABLE_ERRORS as exc:
-        primary_error = f"{type(exc).__name__}: {exc}"
+        primary_error = f"模型请求失败（{type(exc).__name__}）"
 
     # ---- fallback
     fb_provider = str(fallback_provider)
-    fb_model = normalize_model(fb_provider, str(fallback_model), fallback_base_url or base_url)
-    fb_key = str(fallback_api_key or api_key)
-    fb_base = fallback_base_url or base_url
+    fb_key = fallback_api_key or api_key
+    if isinstance(fb_key, PlatformApiKey) and fb_key.configuration["provider"] != fb_provider:
+        return {"ok": False, "error": "备用供应商必须配置其独立的平台密钥"}
+    fb_base = (
+        fb_key.configuration["base_url"]
+        if isinstance(fb_key, PlatformApiKey)
+        else fallback_base_url or base_url
+    )
+    fb_model = normalize_model(fb_provider, str(fallback_model), fb_base)
     try:
         if fb_provider == "minimax" and is_minimax_token_plan_key(fb_key):
             fb_result = await chat_anthropic_compatible(
-                minimax_anthropic_base_url(fallback_base_url),
+                minimax_anthropic_base_url(
+                    fb_base,
+                    prefer_base=isinstance(fb_key, PlatformApiKey) and fb_key.managed,
+                ),
                 normalize_minimax_api_key(fb_key),
                 fb_model,
                 messages,
                 max_tokens=max_tokens or 1024,
             )
         elif fb_provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-            fb_b = _normalize_openai_base(fb_provider, fb_base)
+            fb_b = _normalize_openai_base(fb_provider, fb_base, fb_key)
             fb_result = await chat_openai_compatible(
                 fb_b,
                 fb_key,
@@ -271,7 +299,7 @@ async def chat_dispatch(
                 "error": f"unsupported fallback provider: {fb_provider}",
             }
     except BOUNDARY_ERRORS as exc2:  # noqa: BLE001
-        fb_result = {"ok": False, "error": f"fallback failed: {exc2}"}
+        fb_result = {"ok": False, "error": f"备用模型请求失败（{type(exc2).__name__}）"}
 
     if fb_result.get("ok"):
         fb_result["_fallback_used"] = True
@@ -290,6 +318,11 @@ async def chat_dispatch_stream(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Any = None,
 ) -> AsyncIterator[Dict[str, Any]]:
+    if isinstance(api_key, PlatformApiKey) and api_key.configuration["provider"] != provider:
+        yield {"type": "error", "error": "平台密钥不允许跨供应商使用"}
+        return
+    if isinstance(api_key, PlatformApiKey):
+        base_url = api_key.configuration["base_url"]
     model = normalize_model(provider, model, base_url)
     if messages_use_openai_multipart_content(messages) and (
         provider not in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
@@ -319,7 +352,7 @@ async def chat_dispatch_stream(
             yield {"type": "usage", "usage": result.get("usage") or {}}
         return
     if provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS:
-        b = _normalize_openai_base(provider, base_url)
+        b = _normalize_openai_base(provider, base_url, api_key)
         async for ev in stream_openai_compatible(
             b,
             api_key,
