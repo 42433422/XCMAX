@@ -1966,7 +1966,9 @@ class TestExecuteExcelImportRecords:
             result = _execute_excel_import_records(
                 [{"unit_name": "Co", "product_name": "P1", "model_number": "M1", "unit_price": 1.0}]
             )
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["imported_count"] == 0
+        mock_products.return_value.create_product.assert_not_called()
 
     def test_import_exception(self):
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("boom")):

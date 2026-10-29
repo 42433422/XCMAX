@@ -2,24 +2,81 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
 from app.application.tools.workflow_tools.contracts import ImportServices, Payload
 from app.application.tools.workflow_tools.excel_analysis import frame_records
 from app.application.tools.workflow_tools.import_mapping import ProductRows
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
-def import_receipt(imported: int, failed: int, entity: str) -> Payload:
+def write_succeeded(result: Any) -> bool:
+    return (
+        isinstance(result, dict)
+        and result.get("success") is True
+        and not (
+            result.get("outcome") == "unknown"
+            or result.get("reconciliation_required")
+            or result.get("outcome_unknown")
+            or result.get("requires_reconciliation")
+        )
+    )
+
+
+def batch_counts(result: Any, total: int) -> tuple[int, int]:
+    if not isinstance(result, dict):
+        raise ValueError("missing batch receipt")
+    sources = [result]
+    if isinstance(result.get("data"), dict):
+        sources.append(result["data"])
+
+    def count(*names: str) -> int:
+        values = [source[name] for source in sources for name in names if name in source]
+        if not values:
+            return 0
+        if any(type(value) is not int or value < 0 or value != values[0] for value in values):
+            raise ValueError("ambiguous batch count")
+        return cast(int, values[0])
+
+    imported, failed = count("success_count", "imported"), count("failed_count", "failed")
+    if imported + failed > total:
+        raise ValueError("batch counts exceed input")
+    return imported, failed
+
+
+def import_receipt(
+    imported: int,
+    failed: int,
+    entity: str,
+    *,
+    total: int,
+    success: bool,
+    unknown: bool = False,
+    other_writes: bool = False,
+) -> Payload:
+    success = success and not failed and not unknown
+    reconcile = not success and bool(unknown or imported or other_writes)
     return {
-        "success": True,
+        "success": bool(success),
         "preview": False,
         "imported": imported,
         "failed": failed,
-        "message": f"成功导入 {imported} 条{entity}，失败 {failed} 条",
+        "pending": max(0, total - imported - failed),
+        "outcome": "unknown" if unknown else "success" if success else "failed",
+        "outcome_unknown": unknown,
+        "reconciliation_required": reconcile,
+        "requires_reconciliation": reconcile,
+        "retryable": not reconcile,
+        "safe_to_retry": not reconcile,
+        "message": ("导入完成。" if success else "导入已停止。")
+        + f"已确认导入 {imported} 条{entity}，失败 {failed} 条。"
+        + ("部分写入结果待核对，请勿直接重试。" if reconcile else ""),
     }
 
 
@@ -43,15 +100,20 @@ class ImportExecutor:
                 "sample_data": records[:5],
                 "message": f"检测到 {len(records)} 条产品记录，绑定客户: {detected_unit or unit_name or '未指定'}。"
                 + (f" 已跳过疑似表尾条款行 {skipped} 条。" if skipped else "")
-                + "当前为预览模式，传 confirm=true 或去掉 preview_only 可直接导入。",
+                + "当前为预览模式，审核并明确确认后传 confirm=true 执行导入。",
             }
             if read_meta:
                 preview["read_options"] = read_meta
             return preview
+        imported = failed = 0
+        write_in_flight = created_customer = False
+        success = False
         try:
             target_unit = detected_unit or unit_name
             if target_unit and not self.services.find_customer(target_unit):
-                self.services.customer().create(
+                customer = self.services.customer()
+                write_in_flight = True
+                result = customer.create(
                     {
                         "customer_name": target_unit,
                         "contact_person": None,
@@ -59,32 +121,34 @@ class ImportExecutor:
                         "contact_address": None,
                     }
                 )
+                if not write_succeeded(result):
+                    return import_receipt(
+                        0, 0, "产品", total=len(records), success=False, unknown=True
+                    )
+                write_in_flight = False
+                created_customer = True
             products = self.services.products()
             for record in records:
                 record["unit"] = target_unit or "件"
+            write_in_flight = True
             result = products.batch_add_products(records)
-            imported, failed = 0, 0
-            if isinstance(result, dict):
-                imported = int(result.get("success_count") or result.get("imported") or 0)
-                failed = int(result.get("failed_count") or result.get("failed") or 0)
-                if imported == 0 and failed == 0 and isinstance(result.get("data"), dict):
-                    imported = int(result["data"].get("success_count") or 0)
-                    failed = int(result["data"].get("failed_count") or 0)
-            message = str(
-                result.get("message")
-                if isinstance(result, dict) and result.get("message")
-                else f"成功导入 {imported} 条产品"
-            )
-            return {
-                "success": True,
-                "preview": False,
-                "imported": imported,
-                "failed": failed,
-                "skipped_clause_like_rows": skipped,
-                "message": message + (f"（另跳过疑似条款/表尾行 {skipped} 条）" if skipped else ""),
-            }
-        except RECOVERABLE_ERRORS:
-            return {"success": False, "error": "产品导入失败，请检查文件后重试"}
+            imported, failed = batch_counts(result, len(records))
+            success = write_succeeded(result) and failed == 0 and imported == len(records)
+            write_in_flight = not success
+        except BOUNDARY_ERRORS:
+            logger.exception("产品导入执行失败")
+            success = False
+        receipt = import_receipt(
+            imported,
+            failed,
+            "产品",
+            total=len(records),
+            success=success,
+            unknown=write_in_flight,
+            other_writes=created_customer,
+        )
+        receipt["skipped_clause_like_rows"] = skipped
+        return receipt
 
     def customers(self, records: list[Payload], confirm: bool) -> Payload:
         if not confirm:
@@ -94,19 +158,27 @@ class ImportExecutor:
                 "import_type": "customers",
                 "row_count": len(records),
                 "sample_data": records[:5],
-                "message": f"检测到 {len(records)} 条客户记录。当前为预览模式，传 confirm=true 或去掉 preview_only 可直接导入。",
+                "message": f"检测到 {len(records)} 条客户记录。当前为预览模式，审核并明确确认后传 confirm=true 执行导入。",
             }
+        imported = failed = 0
+        write_in_flight = False
+        success = False
         try:
             customer = self.services.customer()
-            imported, failed = 0, 0
             for record in records:
-                if customer.create(record).get("success"):
-                    imported += 1
-                else:
+                write_in_flight = True
+                if not write_succeeded(customer.create(record)):
                     failed += 1
-            return import_receipt(imported, failed, "客户")
-        except RECOVERABLE_ERRORS:
-            return {"success": False, "error": "客户导入失败，请检查文件后重试"}
+                    break
+                write_in_flight = False
+                imported += 1
+            success = imported == len(records)
+        except BOUNDARY_ERRORS:
+            logger.exception("客户导入执行失败")
+            failed += int(write_in_flight)
+        return import_receipt(
+            imported, failed, "客户", total=len(records), success=success, unknown=write_in_flight
+        )
 
     def orders(
         self,
@@ -129,9 +201,11 @@ class ImportExecutor:
                 "sample_data": sample,
                 "message": f"检测到 {row_count} 条出货记录，确认导入请设置 confirm=true。",
             }
+        imported = failed = 0
+        write_in_flight = False
+        success = False
         try:
             shipment = self.services.shipment()
-            imported, failed = 0, 0
             for _, row in df.iterrows():
                 try:
 
@@ -149,6 +223,7 @@ class ImportExecutor:
                     model = str(value("model_number") or "").strip()
                     raw_quantity = value("quantity", 1)
                     quantity = max(1, int(float(raw_quantity))) if raw_quantity else 1
+                    write_in_flight = True
                     result = shipment.create_shipment(
                         unit_name=effective_unit,
                         items_data=[
@@ -159,12 +234,20 @@ class ImportExecutor:
                             }
                         ],
                     )
-                    if result.get("success"):
-                        imported += 1
-                    else:
+                    if not write_succeeded(result):
                         failed += 1
+                        break
+                    write_in_flight = False
+                    imported += 1
                 except RECOVERABLE_ERRORS:
                     failed += 1
-            return import_receipt(imported, failed, "出货记录")
-        except RECOVERABLE_ERRORS:
-            return {"success": False, "error": "订单导入失败，请检查文件后重试"}
+                    if write_in_flight:
+                        break
+            success = imported == len(df)
+        except BOUNDARY_ERRORS:
+            logger.exception("出货记录导入执行失败")
+            failed += int(write_in_flight)
+            success = False
+        return import_receipt(
+            imported, failed, "出货记录", total=len(df), success=success, unknown=write_in_flight
+        )

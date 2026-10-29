@@ -28,6 +28,8 @@ def update_linked_companion_summary(db: Session, run: EtlRun, *, status: str) ->
             EtlRun.owner_user_id == run.owner_user_id,
             EtlRun.target_type == "shipment_records",
         )
+        .populate_existing()
+        .with_for_update()
         .first()
     )
     if parent is None:

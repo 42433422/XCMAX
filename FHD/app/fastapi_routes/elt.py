@@ -25,6 +25,7 @@ router = APIRouter(
 @router.post("", status_code=201)
 def create_source(
     file: UploadFile = File(...),
+    request_key: str = Form(..., min_length=1, max_length=80),
     db: Session = Depends(get_db_dependency, scope="function"),
     user: Any = Depends(_execute),
 ):
@@ -34,6 +35,7 @@ def create_source(
         file_name=file.filename or "upload",
         content_type=file.content_type,
         stream=file.file,
+        request_key=request_key,
     )
     return {"success": True, "data": data}
 
@@ -53,6 +55,7 @@ def append_source_revision(
     asset_id: str,
     expected_version: int = Form(..., ge=1),
     file: UploadFile = File(...),
+    request_key: str = Form(..., min_length=1, max_length=80),
     db: Session = Depends(get_db_dependency, scope="function"),
     user: Any = Depends(_execute),
 ):
@@ -64,6 +67,7 @@ def append_source_revision(
         file_name=file.filename or "upload",
         content_type=file.content_type,
         stream=file.file,
+        request_key=request_key,
     )
     return {"success": True, "data": data}
 

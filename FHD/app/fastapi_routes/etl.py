@@ -211,6 +211,7 @@ def execute_run(
             owner_user_id=_user_id(user),
             confirmed=body.confirmed,
             valid_rows_only=body.valid_rows_only,
+            preview_revision=body.preview_revision,
         ),
     }
 
@@ -243,6 +244,18 @@ def retry_run(
     return {
         "success": True,
         "data": get_etl_service().retry(db, run_id=run_id, owner_user_id=_user_id(user)),
+    }
+
+
+@router.post("/runs/{run_id}/replay", status_code=202)
+def replay_run(
+    run_id: str,
+    db: Session = Depends(get_db_dependency),
+    user: Any = Depends(_execute),
+):
+    return {
+        "success": True,
+        "data": get_etl_service().replay(db, run_id=run_id, owner_user_id=_user_id(user)),
     }
 
 

@@ -1,6 +1,6 @@
 /**
  * 数据对接中心运行生命周期（拆分自 views/EtlCenterView.vue，行为保持一致）：
- * 引导加载、轮询、自动写入、逐行/批量动作、历史选择、重试与撤销。
+ * 引导加载、轮询、审核确认、逐行/批量动作、历史选择、重试与撤销。
  */
 import type { ComputedRef } from 'vue'
 import type { Router } from 'vue-router'
@@ -34,8 +34,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     rowPage,
     rowTotal,
     rowActionFilter,
-    autoWriteEnabled,
-    pendingAutoWriteIds,
+    reviewedPreviewRevision,
     validRowsOnly,
     editableMappings,
     mappingUiTransform,
@@ -46,52 +45,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     selectedShipmentTemplateRegionId,
     customerProductPreviewMessage,
     pollTimer,
-    autoWriteInFlight,
   } = state
-
-  function markAutoWrite(runId: string) {
-    pendingAutoWriteIds.value = new Set([...pendingAutoWriteIds.value, runId])
-  }
-
-  async function tryAutoWrite(run: EtlRun) {
-    if (!autoWriteEnabled.value) return
-    if (!pendingAutoWriteIds.value.has(run.id)) return
-    if (run.status !== 'preview_ready') return
-    if (autoWriteInFlight.has(run.id)) return
-    autoWriteInFlight.add(run.id)
-    const nextPending = new Set(pendingAutoWriteIds.value)
-    nextPending.delete(run.id)
-    pendingAutoWriteIds.value = nextPending
-    const writable = (run.summary.new || 0) + (run.summary.update || 0)
-    if (writable <= 0) {
-      autoWriteInFlight.delete(run.id)
-      currentRun.value = run
-      syncDraft()
-      activeTab.value = 'preview'
-      await loadRows()
-      pageError.value = '解析完成，但没有可写入行（全部跳过或错误）。请核对后手动写入。'
-      return
-    }
-    busy.value = true
-    pageError.value = ''
-    try {
-      const onlyValid = (run.summary.error || 0) > 0
-      validRowsOnly.value = onlyValid
-      currentRun.value = await productChanges.mutate(run, () => etlApi.execute(run.id, onlyValid))
-      activeTab.value = 'history'
-      await refreshRuns()
-      schedulePoll()
-    } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '自动写入失败'
-      currentRun.value = await readRun(run.id).catch(() => run)
-      syncDraft()
-      activeTab.value = 'preview'
-      if (currentRun.value?.status === 'preview_ready') await loadRows()
-    } finally {
-      autoWriteInFlight.delete(run.id)
-      busy.value = false
-    }
-  }
 
   async function bootstrap() {
     busy.value = true
@@ -134,13 +88,9 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
         currentRun.value = await readRun(currentRun.value.id)
         syncDraft()
         if (currentRun.value.status === 'preview_ready') {
-          if (autoWriteEnabled.value && pendingAutoWriteIds.value.has(currentRun.value.id)) {
-            await tryAutoWrite(currentRun.value)
-          } else {
-            activeTab.value = 'preview'
-            await loadRows()
-            await refreshRuns()
-          }
+          activeTab.value = 'preview'
+          await loadRows()
+          await refreshRuns()
         } else if (currentRun.value.status === 'completed') {
           activeTab.value = 'history'
           await refreshRuns()
@@ -172,15 +122,22 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function loadRows() {
+    reviewedPreviewRevision.value = null
     if (!currentRun.value || currentRun.value.total_rows === 0) {
       runRows.value = []
       rowTotal.value = 0
       return
     }
-    const result = await etlApi.rows(currentRun.value.id, rowPage.value, 50, rowActionFilter.value)
+    const run = currentRun.value
+    const revision = run.preview_revision
+    const result = await etlApi.rows(run.id, rowPage.value, 50, rowActionFilter.value)
+    if (currentRun.value?.id !== run.id || currentRun.value.preview_revision !== revision) return
     runRows.value = result.items
     rowTotal.value = result.total
     hasOcrRows.value = result.items.some((row) => row.provenance.ocr === true)
+    if (run.status === 'preview_ready' && revision && result.preview_revision === revision) {
+      reviewedPreviewRevision.value = revision
+    }
   }
 
   async function setRowActionFilter(action: string) {
@@ -230,17 +187,28 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function executeCurrentRun() {
-    if (!currentRun.value || !canExecute.value) return
+    const run = currentRun.value
+    const revision = run?.preview_revision
+    if (busy.value || !run || !canExecute.value || !revision || reviewedPreviewRevision.value !== revision) return
+    const onlyValid = validRowsOnly.value
+    const scope = onlyValid ? `仅写入正确行，排除 ${run.summary.error} 行错误。` : '发现错误时停止写入。'
+    if (!window.confirm(`确认写入“${run.file_name}”？新增 ${run.summary.new} 行、更新 ${run.summary.update} 行、跳过 ${run.summary.skip} 行。\n${scope}`)) return
     busy.value = true
     pageError.value = ''
     try {
-      currentRun.value = await productChanges.mutate(currentRun.value, () => etlApi.execute(currentRun.value!.id, validRowsOnly.value))
+      currentRun.value = await productChanges.mutate(run, () => etlApi.execute(run.id, revision, onlyValid))
       activeTab.value = 'history'
       await refreshRuns()
       schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '执行失败'
-      if (currentRun.value) currentRun.value = await readRun(currentRun.value.id).catch(() => currentRun.value)
+      reviewedPreviewRevision.value = null
+      currentRun.value = await readRun(run.id).catch(() => run)
+      syncDraft()
+      if (currentRun.value.status === 'preview_ready') {
+        activeTab.value = 'preview'
+        await loadRows().catch(() => undefined)
+      }
     } finally {
       busy.value = false
     }
@@ -259,7 +227,8 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     customerProductPreviewMessage.value = ''
     currentRun.value = await readRun(run.id)
     syncDraft()
-    activeTab.value = 'history'
+    activeTab.value = tabForRunStatus(currentRun.value.status)
+    if (currentRun.value.status === 'preview_ready') await loadRows()
     await router.replace({ path: '/business-docking', query: { run_id: run.id } })
     schedulePoll()
   }
@@ -274,6 +243,30 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
       schedulePoll()
     } catch (error) {
       pageError.value = error instanceof Error ? error.message : '重试失败'
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function replayRun() {
+    if (!currentRun.value || busy.value) return
+    busy.value = true
+    pageError.value = ''
+    try {
+      const replayed = await etlApi.replay(currentRun.value.id)
+      currentRun.value = replayed
+      validRowsOnly.value = false
+      rowPage.value = 1
+      rowActionFilter.value = ''
+      customerProductPreviewMessage.value = ''
+      syncDraft()
+      activeTab.value = 'preview'
+      await loadRows()
+      await refreshRuns()
+      await router.replace({ path: '/business-docking', query: { run_id: replayed.id } })
+      schedulePoll()
+    } catch (error) {
+      pageError.value = error instanceof Error ? error.message : '重新处理失败'
     } finally {
       busy.value = false
     }
@@ -299,8 +292,6 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   return {
-    markAutoWrite,
-    tryAutoWrite,
     bootstrap,
     schedulePoll,
     syncDraft,
@@ -313,6 +304,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     refreshRuns,
     selectRun,
     retryRun,
+    replayRun,
     rollbackRun,
   }
 }

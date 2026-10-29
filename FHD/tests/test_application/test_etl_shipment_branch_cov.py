@@ -1174,8 +1174,8 @@ class TestShipmentPreviewFallback:
             mod._safe_owned_upload_path(str(f), ".xlsx", expired, tenant_id=1, owner_user_id=7)
             is None
         )
-        # naive expiry in future ok
-        future_naive = datetime.now() + timedelta(hours=1)
+        # SQLite's naive expiry is UTC, independent of the test host's timezone.
+        future_naive = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
         assert (
             mod._safe_owned_upload_path(str(f), ".xlsx", future_naive, tenant_id=1, owner_user_id=7)
             == f.resolve()

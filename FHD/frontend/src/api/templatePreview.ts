@@ -1,5 +1,27 @@
-import api, { ApiError } from './core'
+import api, { ApiError, primeCsrfCookie } from './core'
 import type { RequestOptions } from './core'
+import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
+
+// A rejected CSRF request never reaches the handler. Concurrent initial GETs can
+// replace the cookie after a POST reads it, so retry only that explicit rejection.
+async function reviewedExcelPost(path: string, form: FormData) {
+  if (path.endsWith('/preview') || path.endsWith('/classify') || path.endsWith('/archive-classify') || path.endsWith('/archive-quota') || path.includes('/archive-assets/') || path.includes('/archive-versions/')) {
+    const identity = await api.get<{ actor: string }>('/api/templates/reviewed-excel/identity')
+    if (!identity.actor) throw new Error('无法确认当前登录身份')
+    form.set('expected_actor', identity.actor)
+  }
+  if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await api.post(path, form)
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 403 ||
+          !['CSRF token missing', 'CSRF token mismatch'].includes(error.message) || attempt >= 2) throw error
+      if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+  }
+}
 /**
  * 开发环境下若把 VITE_TEMPLATE_* 配成 http://127.0.0.1:5000/api/... 绝对地址，
  * 用户从局域网 IP 打开前端时，api 封装会跨域直连 5000，预检 Origin（192.168.*）不在白名单则整页 API 全挂。
@@ -49,6 +71,65 @@ function wrapServiceAvailabilityError(error: unknown, actionName: string, endpoi
 
 export const templatePreviewApi = {
   endpoints: TEMPLATE_ENDPOINTS,
+
+  classifyExcel(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/classify', formData)
+  },
+
+  archiveClassifyExcel(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/archive-classify', formData)
+  },
+
+  archiveQuota() { return api.get('/api/templates/reviewed-excel/archive-quota') },
+  setArchiveQuota(formData: FormData) { return reviewedExcelPost('/api/templates/reviewed-excel/archive-quota', formData) },
+  archiveAssets() { return api.get('/api/templates/reviewed-excel/archive-assets') },
+  appendArchiveVersion(id: string, formData: FormData) { return reviewedExcelPost(`/api/templates/reviewed-excel/archive-assets/${encodeURIComponent(id)}/versions`, formData) },
+  downloadArchiveVersion(id: string) { return api.download(`/api/templates/reviewed-excel/archive-versions/${encodeURIComponent(id)}/download`) },
+  setArchiveAssetState(id: string, formData: FormData) { return reviewedExcelPost(`/api/templates/reviewed-excel/archive-assets/${encodeURIComponent(id)}/state`, formData) },
+  recoverArchiveVersion(id: string, formData: FormData) { return reviewedExcelPost(`/api/templates/reviewed-excel/archive-versions/${encodeURIComponent(id)}/recover`, formData) },
+  classifyArchiveVersion(id: string, formData: FormData) { return reviewedExcelPost(`/api/templates/reviewed-excel/archive-versions/${encodeURIComponent(id)}/classify`, formData) },
+
+  analyzeClassification(id: string, formData: FormData) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/analyze`, formData)
+  },
+
+  confirmClassification(id: string, formData: FormData) {
+    return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/confirm`, formData)
+  },
+
+  recentClassifications() {
+    return api.get('/api/templates/reviewed-excel/classifications')
+  },
+
+  downloadClassificationSource(id: string) {
+    return api.download(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/source`)
+  },
+
+  reviewExcel(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/preview', formData)
+  },
+
+  refineReviewedExcel(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/refine', formData)
+  },
+
+  reviewedExcelHistory(id: string) {
+    return api.get(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}`)
+  },
+
+  downloadReviewedCandidate(id: string, version: string, candidate: string) {
+    return api.download(`/api/templates/reviewed-excel/reviews/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/candidates/${encodeURIComponent(candidate)}/download`)
+  },
+
+  saveReviewedExcel(formData: FormData) {
+    return reviewedExcelPost('/api/templates/reviewed-excel/save', formData)
+  },
+
+  downloadReviewedExcel(id: string) {
+    const numeric = String(id).replace(/^db:/, '')
+    if (!/^\d+$/.test(numeric)) throw new Error('模板编号无效')
+    return api.download(`/api/templates/reviewed-excel/${numeric}/download`)
+  },
 
   listTemplates(options?: RequestOptions) {
     return api.get(TEMPLATE_ENDPOINTS.list, {}, options || {})

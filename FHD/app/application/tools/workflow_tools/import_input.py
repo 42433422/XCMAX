@@ -146,7 +146,7 @@ class ExcelImport:
         if not path.exists():
             return {"success": False, "error": "file not found"}
         unit = self.unit_name(args, context, analysis, path, sheet)
-        confirm = bool(args.get("confirm", True)) and not bool(args.get("preview_only", False))
+        confirm = args.get("confirm") is True and not bool(args.get("preview_only", False))
         header = self.io.header(args)
         if header is None and analysis:
             try:

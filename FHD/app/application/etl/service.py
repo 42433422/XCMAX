@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 
-from app.application.elt.sources import SourceServiceMixin
+from app.application.elt.sources import SourceAssetServiceMixin
 from app.application.etl.adviser import EtlRowAdviser, get_etl_row_adviser
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
@@ -21,6 +21,7 @@ from app.application.etl.service_draft import DraftServiceMixin
 from app.application.etl.service_execution import ExecutionServiceMixin
 from app.application.etl.service_history import HistoryServiceMixin
 from app.application.etl.service_preview import PreviewServiceMixin
+from app.application.etl.service_replay import ReplayServiceMixin
 from app.application.etl.service_shipment_templates import ShipmentTemplateServiceMixin
 from app.application.etl.service_support import MAX_FILE_BYTES
 from app.application.etl.service_targets import TargetConfigServiceMixin
@@ -35,9 +36,10 @@ logger = logging.getLogger(__name__)
 
 
 class EtlService(
-    SourceServiceMixin,
+    SourceAssetServiceMixin,
     UploadServiceMixin,
     PreviewServiceMixin,
+    ReplayServiceMixin,
     HistoryServiceMixin,
     DraftServiceMixin,
     ExecutionServiceMixin,
@@ -68,6 +70,10 @@ class EtlService(
             "targets": target_capabilities(),
             "compatibility_presets": compatibility_presets,
             "execution_policy": {
+                "pipeline": "extract_load_transform",
+                "source_snapshot_retention_days": 90,
+                "source_snapshot_replay": True,
+                "original_required_targets": ["knowledge", "attendance"],
                 "preview_required": True,
                 "confirmation_required": True,
                 "default_duplicate_action": "skip",

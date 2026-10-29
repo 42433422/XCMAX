@@ -1703,8 +1703,10 @@ class TestExecuteExcelImportRecords:
             result = _execute_excel_import_records(
                 [{"unit_name": "u", "product_name": "p", "model_number": "M01"}]
             )
-            assert result["success"] is True
+            assert result["success"] is False
             assert result["data"]["result"]["unit_service_available"] is False
+            assert result["imported_count"] == 0
+            mock_products.return_value.create_product.assert_not_called()
 
     def test_product_already_exists(self) -> None:
         mock_products = MagicMock()
@@ -1741,6 +1743,121 @@ class TestExecuteExcelImportRecords:
             assert result["success"] is True
             assert result["data"]["result"]["created_units"] == 1
             assert result["data"]["result"]["created_products"] == 1
+
+    @pytest.mark.parametrize("failure", ["customer", "lookup", "product", "unknown"])
+    def test_failed_effects_stop_and_never_report_import_success(self, failure):
+        products, customers = MagicMock(), MagicMock()
+        customers.match_purchase_unit.return_value = None
+        customers.create.return_value = {"success": failure != "customer"}
+        products.get_products.return_value = {"success": failure != "lookup", "data": []}
+        products.create_product.return_value = {"success": False}
+        if failure == "unknown":
+            products.create_product.side_effect = TimeoutError("response lost after possible write")
+        with (
+            patch("app.bootstrap.get_products_service", return_value=products),
+            patch("app.bootstrap.get_customer_app_service", return_value=customers),
+        ):
+            result = _execute_excel_import_records(
+                [
+                    {"unit_name": "u", "product_name": "p", "model_number": "M01"},
+                    {"unit_name": "u", "product_name": "later", "model_number": "M02"},
+                ]
+            )
+        assert result["success"] is False
+        assert result["imported_count"] == 0
+        assert result["outcome_unknown"] is (failure != "lookup")
+        assert result["outcome"] == ("failed" if failure == "lookup" else "unknown")
+        assert products.create_product.call_count == (1 if failure in {"product", "unknown"} else 0)
+        assert result["requires_reconciliation"] is True
+        assert result["reconciliation_required"] is True
+        assert result["safe_to_retry"] is False
+        assert result["retryable"] is False
+        assert result["data"]["result"]["created_units"] == (0 if failure == "customer" else 1)
+
+    def test_partial_failure_receipt_retains_only_verified_created_products(self):
+        products, customers = MagicMock(), MagicMock()
+        customers.match_purchase_unit.return_value = {"id": 1}
+        products.get_products.return_value = {"success": True, "data": []}
+        products.create_product.side_effect = [{"success": True}, {"success": False}]
+        with (
+            patch("app.bootstrap.get_products_service", return_value=products),
+            patch("app.bootstrap.get_customer_app_service", return_value=customers),
+        ):
+            result = _execute_excel_import_records(
+                [
+                    {"unit_name": "u", "product_name": name}
+                    for name in ("first", "failed", "unattempted")
+                ]
+            )
+        assert result["success"] is False
+        assert result["imported_count"] == 1
+        assert result["failed_count"] == 1
+        assert result["pending_count"] == 1
+        assert result["data"]["result"]["created_products"] == 1
+        assert products.create_product.call_count == 2
+        assert result["requires_reconciliation"] is True
+        assert result["safe_to_retry"] is False
+
+    @pytest.mark.parametrize("entrypoint", ["registered", "generic"])
+    @pytest.mark.parametrize("error_type", [RuntimeError, TypeError])
+    def test_committed_customer_with_failed_receipt_requires_reconciliation(
+        self, tmp_path, entrypoint, error_type
+    ):
+        from sqlalchemy import create_engine, select
+        from sqlalchemy.orm import Session, sessionmaker
+
+        from app.application.customer_crud_mixin import CustomerCrudMixin
+        from app.application.tools.workflow_tools.contracts import ImportServices
+        from app.application.tools.workflow_tools.import_execution import ImportExecutor
+        from app.db.models.purchase_unit import PurchaseUnit
+
+        engine = create_engine(f"sqlite:///{tmp_path / 'committed-customer.db'}")
+        PurchaseUnit.__table__.create(engine)
+
+        class LostReceiptSession(Session):
+            def refresh(self, *args, **kwargs):
+                raise error_type("response lost after commit")
+
+        sessions = sessionmaker(bind=engine, class_=LostReceiptSession)
+
+        class CustomerWriter(CustomerCrudMixin):
+            def _get_session(self):
+                return sessions()
+
+            def match_purchase_unit(self, name):
+                return None
+
+        customers, products = CustomerWriter(), MagicMock()
+        try:
+            if entrypoint == "registered":
+                with (
+                    patch("app.bootstrap.get_customer_app_service", return_value=customers),
+                    patch("app.bootstrap.get_products_service", return_value=products),
+                ):
+                    result = _execute_excel_import_records(
+                        [{"unit_name": "committed", "product_name": "must-not-write"}]
+                    )
+                products.create_product.assert_not_called()
+            else:
+                executor = ImportExecutor(
+                    ImportServices(
+                        customer=lambda: customers,
+                        products=lambda: products,
+                        shipment=MagicMock(),
+                        find_customer=lambda name: None,
+                    )
+                )
+                result = executor.customers([{"customer_name": "committed"}], True)
+            with engine.connect() as db:
+                assert db.execute(select(PurchaseUnit.unit_name)).scalars().all() == ["committed"]
+            assert result["success"] is False
+            assert result["outcome"] == "unknown"
+            assert result["outcome_unknown"] is True
+            assert result["reconciliation_required"] is True
+            assert result["retryable"] is False
+            assert result["safe_to_retry"] is False
+        finally:
+            engine.dispose()
 
     def test_recoverable_error(self) -> None:
         with patch("app.bootstrap.get_products_service", side_effect=RuntimeError("db down")):

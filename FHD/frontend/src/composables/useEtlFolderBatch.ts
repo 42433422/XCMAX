@@ -44,18 +44,12 @@ type EtlFolderBatchOptions = {
   busy: Ref<boolean>
   pageError: Ref<string>
   router: Router
-  /** 默认 true：解析就绪后自动写入业务库，而非停在预演确认。 */
-  autoWriteEnabled: Ref<boolean>
-  markAutoWrite: (runId: string) => void
-  tryAutoWrite: (run: EtlRun) => Promise<void>
   syncDraft: () => void
   schedulePoll: () => void
   loadRows: () => Promise<void>
 }
 
 const PARSE_DONE_STATUSES = new Set<BatchFileStatus>(['preview_ready', 'completed', 'failed', 'interrupted'])
-
-const WRITE_TERMINAL_STATUSES = new Set<BatchFileStatus>(['completed', 'failed', 'interrupted'])
 
 function newBatchId(): string {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID()
@@ -75,7 +69,7 @@ export function batchFileStatusLabel(status: BatchFileStatus, rollbackStatus?: s
       creating: '创建任务',
       queued: '已排队',
       previewing: '解析中',
-      preview_ready: '待写入',
+      preview_ready: '待审核',
       executing: '写入中',
       completed: '已写入',
       failed: '失败',
@@ -108,11 +102,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   const selectedTotalBytes = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.file.size, 0))
   const knowledgeOnlyFiles = computed(() => selectedFiles.value.filter((item) => ['.doc', '.docx', '.ppt', '.pptx'].includes(item.suffix)))
   const incompatibleFiles = computed(() => (['auto', 'knowledge'].includes(options.targetType.value) ? [] : knowledgeOnlyFiles.value))
-  function terminalStatuses() {
-    return options.autoWriteEnabled.value ? WRITE_TERMINAL_STATUSES : PARSE_DONE_STATUSES
-  }
-
-  const batchFinishedCount = computed(() => selectedFiles.value.filter((item) => terminalStatuses().has(item.status)).length)
+  const batchFinishedCount = computed(() => selectedFiles.value.filter((item) => PARSE_DONE_STATUSES.has(item.status)).length)
   const batchFailedCount = computed(() => selectedFiles.value.filter((item) => item.status === 'failed').length)
   const batchSubmittedCount = computed(
     () => selectedFiles.value.filter((item) => !['waiting', 'uploading', 'creating'].includes(item.status)).length,
@@ -132,12 +122,6 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   const startButtonText = computed(() => {
     if (options.busy.value) {
       return `正在提交 ${batchSubmittedCount.value}/${selectedFiles.value.length}…`
-    }
-    if (options.autoWriteEnabled.value) {
-      if (selectedFiles.value.length > 1) {
-        return `批量上传并写入 ${selectedFiles.value.length} 个文件`
-      }
-      return '上传并写入数据库'
     }
     if (selectedFiles.value.length > 1) {
       return `批量上传并解析 ${selectedFiles.value.length} 个文件`
@@ -196,7 +180,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
       if (!run) continue
       item.status = run.status as BatchFileStatus
       item.rollbackStatus = run.rollback_status
-      item.progress = terminalStatuses().has(item.status) ? 100 : Math.max(item.progress, run.progress)
+      item.progress = PARSE_DONE_STATUSES.has(item.status) ? 100 : Math.max(item.progress, run.progress)
       item.message = run.error?.message || ''
     }
   }
@@ -217,20 +201,15 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
 
   function scheduleBatchPoll() {
     if (batchPollTimer) clearTimeout(batchPollTimer)
-    const pending = selectedFiles.value.some((item) => item.runId && !terminalStatuses().has(item.status))
+    const pending = selectedFiles.value.some((item) => item.runId && !PARSE_DONE_STATUSES.has(item.status))
     if (!pending || !batchId.value) return
     batchPollTimer = setTimeout(async () => {
       try {
         const limit = Math.min(500, Math.max(50, selectedFiles.value.length))
         const latest = await productChanges.readMany(() => etlApi.runs(limit, batchId.value))
         mergeBatchRuns(latest)
-        if (options.autoWriteEnabled.value) {
-          for (const run of latest) {
-            if (run.status === 'preview_ready') await options.tryAutoWrite(run)
-          }
-        }
       } catch (error) {
-        options.pageError.value = error instanceof Error ? error.message : '读取文件夹写入进度失败'
+        options.pageError.value = error instanceof Error ? error.message : '读取文件夹解析进度失败'
       }
       scheduleBatchPoll()
     }, 1500)
@@ -267,7 +246,6 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
             item.runId = run.id
             item.status = run.status as BatchFileStatus
             item.progress = Math.max(40, run.progress)
-            if (options.autoWriteEnabled.value) options.markAutoWrite(run.id)
             createdRuns.push(run)
           } catch (error) {
             item.status = 'failed'
@@ -293,15 +271,9 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           query: { run_id: createdRuns[0].id },
         })
         if (selectedFiles.value.length === 1) {
-          // Small workbooks may finish parse before the create response returns.
-          // Auto-write continues into execute; otherwise surface the review tab.
-          if (createdRuns[0].status === 'preview_ready' && options.autoWriteEnabled.value) {
-            await options.tryAutoWrite(createdRuns[0])
-          } else {
-            options.activeTab.value = tabForRunStatus(createdRuns[0].status)
-            if (createdRuns[0].status === 'preview_ready') await options.loadRows()
-            options.schedulePoll()
-          }
+          options.activeTab.value = tabForRunStatus(createdRuns[0].status)
+          if (createdRuns[0].status === 'preview_ready') await options.loadRows()
+          options.schedulePoll()
         } else {
           scheduleBatchPoll()
         }

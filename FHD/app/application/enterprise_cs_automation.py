@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 import httpx
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, true
 from sqlalchemy.orm import Session
 
 from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
@@ -69,6 +69,33 @@ _HIGH_RISK_PHRASES = (
     "定制承诺",
 )
 _ALLOWED_MODES = {"ai", "human"}
+_ISSUE_DESCRIPTION_PROMPT = "请说明要登记的故障现象；暂未建立工单。"
+
+
+def _intake_excluded(text: str) -> bool:
+    # Reject intake withdrawal commands, not defect descriptions such as
+    # "cannot cancel an order" or error messages containing "not found".
+    text = text.strip()
+    query = re.match(r"^(?:请|帮我|给我|麻烦|\s)*(?:查询|查一下|查查|查看|统计)", text)
+    if query:
+        ui_failure = re.match(
+            r"[^，。！？；,\n]{0,12}(?:按钮|功能|页面|界面|模块|组件)"
+            r"[^，。！？；,\n]{0,20}(?:报错|失败|异常|失效|没反应|无法|不能|卡死|闪退)",
+            text[query.end() :],
+        )
+        if not ui_failure:
+            return True
+    return bool(
+        re.search(
+            r"已(?:经)?(?:解决|修复)(?:了|完成)?(?:[，,\s]*(?:谢谢|感谢)(?:你|您)?)?[。！!?\s]*$"
+            r"|(?:^|[，。！？；,!?;\n])\s*(?:我|请|帮我|给我|麻烦)*"
+            r"(?:(?:取消|撤回|停止|不要|不用|别|无需|不必|不想|暂不|不需要)"
+            r"(?:再|继续|帮我|给我|替我|这个|这次|该|本次|\s)*"
+            r"(?:工单|建单|处理|(?:登记|提交|上报|反馈|创建|建立)(?!按钮|功能|页面|界面|模块|组件))"
+            r"|(?:取消|算了|不用了)(?:[，。！？；,!?;\s]|$))",
+            text,
+        )
+    )
 
 
 def _enabled() -> bool:
@@ -264,8 +291,25 @@ class EnterpriseCsAutomationService:
         )
         from app.application.im_app_service import ImApplicationService
 
-        if not _plain_intake_match(text):
+        if _intake_excluded(text):
             return None
+        if not _plain_intake_match(text):
+            if not (looks_like_issue_report(text) or re.search(r"卡死|闪退|按钮失效", text)):
+                return None
+            previous = self._db.scalar(
+                select(ImMessage)
+                .where(ImMessage.conversation_id == conversation_id, ImMessage.id < message_id)
+                .order_by(ImMessage.id.desc())
+                .limit(1)
+            )
+            if not (
+                previous is not None
+                and previous.origin == "system"
+                and previous.sender_user_id
+                == ImApplicationService(self._db).enterprise_cs_user_id()
+                and previous.body == _ISSUE_DESCRIPTION_PROMPT
+            ):
+                return None
 
         def normalized(value: str) -> str:
             return re.sub(
@@ -288,8 +332,9 @@ class EnterpriseCsAutomationService:
             for item in prior:
                 if _bare_intake(item.body):
                     continue
-                if looks_like_issue_report(item.body) or re.search(
-                    r"软件|页面|界面|客户端|卡死|断连", item.body
+                if not _intake_excluded(item.body) and (
+                    looks_like_issue_report(item.body)
+                    or re.search(r"软件|页面|界面|客户端|卡死|断连", item.body)
                 ):
                     report, source_id = item.body, item.id
                 break
@@ -307,7 +352,7 @@ class EnterpriseCsAutomationService:
         market_owner_id = int(getattr(owner, "market_user_id", 0) or 0)
         result: dict[str, Any] = {}
         if not report:
-            reply = "请说明要登记的故障现象；暂未建立工单。"
+            reply = _ISSUE_DESCRIPTION_PROMPT
         else:
             if market_owner_id and market_token:
                 digest = hashlib.sha256(report.encode()).hexdigest()
@@ -329,6 +374,7 @@ class EnterpriseCsAutomationService:
                 ImMessage.conversation_id == conversation_id,
                 ImMessage.origin == "system",
                 ImMessage.body == reply,
+                ImMessage.id > message_id if not report else true(),
             )
             .order_by(ImMessage.id.desc())
             .limit(1)

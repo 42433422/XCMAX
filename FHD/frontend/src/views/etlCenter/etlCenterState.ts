@@ -1,9 +1,8 @@
 /**
  * 数据对接中心共享状态（拆分自 views/EtlCenterView.vue，行为保持一致）。
  */
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import type { EtlCapabilities, EtlFieldMapping, EtlRun, EtlRunRow, EtlTargetConfig, EtlTemplate } from '@/api/etl'
-import { useTutorialImportAutoWrite } from '@/composables/useTutorialImportAutoWrite'
 import type { EtlRunTab } from '@/utils/etlRunView'
 
 export type TabId = EtlRunTab
@@ -30,10 +29,12 @@ export function createEtlCenterState() {
   const rowActionFilter = ref('')
   const busy = ref(false)
   const pageError = ref('')
-  /** 正常工作流保持自动写入；教学课程强制停在预览，等待学习者亲自确认。 */
-  const autoWriteEnabled = useTutorialImportAutoWrite()
-  const pendingAutoWriteIds = ref(new Set<string>())
+  const reviewedPreviewRevision = ref<string | null>(null)
   const validRowsOnly = ref(false)
+  watch([() => currentRun.value?.id, () => currentRun.value?.preview_revision], () => {
+    reviewedPreviewRevision.value = null
+    validRowsOnly.value = false
+  }, { flush: 'sync' })
   const editableMappings = ref<EtlFieldMapping[]>([])
   const mappingUiTransform = reactive<Record<string, string>>({})
   const mappingUiTransformJson = reactive<Record<string, string>>({})
@@ -47,7 +48,6 @@ export function createEtlCenterState() {
   const customerProductPreviewMessage = ref('')
   const selectedShipmentTemplateRegionId = ref('')
   const pollTimer: { value: ReturnType<typeof setTimeout> | null } = { value: null }
-  const autoWriteInFlight = new Set<string>()
 
   return {
     activeTab,
@@ -64,8 +64,7 @@ export function createEtlCenterState() {
     rowActionFilter,
     busy,
     pageError,
-    autoWriteEnabled,
-    pendingAutoWriteIds,
+    reviewedPreviewRevision,
     validRowsOnly,
     editableMappings,
     mappingUiTransform,
@@ -80,7 +79,6 @@ export function createEtlCenterState() {
     customerProductPreviewMessage,
     selectedShipmentTemplateRegionId,
     pollTimer,
-    autoWriteInFlight,
   }
 }
 

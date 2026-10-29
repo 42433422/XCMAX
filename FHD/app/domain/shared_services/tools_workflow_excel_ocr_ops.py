@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -140,35 +140,72 @@ def _registered_router_ocr(
 def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
     if not records:
         return {"success": False, "message": "没有可导入的记录"}
+    created_units = created_products = skipped_products = failed_rows = 0
+    touched_units: set[str] = set()
+    customer_service = None
+    write_in_flight = False
+
+    def receipt(success: bool, message: str, code: str = "") -> dict:
+        processed = created_products + skipped_products
+        reconciliation = not success and bool(write_in_flight or created_units or created_products)
+        return {
+            "success": success,
+            "message": message,
+            "error_code": code or None,
+            "imported_count": created_products,
+            "skipped_count": skipped_products,
+            "failed_count": failed_rows,
+            "pending_count": max(0, len(records) - processed - failed_rows),
+            "outcome_unknown": write_in_flight,
+            "outcome": "unknown" if write_in_flight else "success" if success else "failed",
+            "requires_reconciliation": reconciliation,
+            "reconciliation_required": reconciliation,
+            "safe_to_retry": not reconciliation,
+            "retryable": not reconciliation,
+            "data": {
+                "result": {
+                    "records": len(records),
+                    "touched_units": len(touched_units),
+                    "created_units": created_units,
+                    "created_products": created_products,
+                    "skipped_products": skipped_products,
+                    "unit_service_available": customer_service is not None,
+                }
+            },
+        }
+
     try:
-        from app.bootstrap import get_products_service
+        from app.bootstrap import get_customer_app_service, get_products_service
 
         products_service = get_products_service()
-        customer_service = None
-        customer_service_error = ""
-        try:
-            from app.bootstrap import get_customer_app_service
-
-            customer_service = get_customer_app_service()
-        except RECOVERABLE_ERRORS as customer_err:
-            customer_service_error = str(customer_err)
-            logger.warning("客户服务不可用，降级为仅产品入库: %s", customer_err)
-        created_units = 0
-        created_products = 0
-        skipped_products = 0
-        touched_units: set[str] = set()
+        customer_service = get_customer_app_service()
+        if customer_service is None:
+            return receipt(
+                False, "客户服务不可用，导入尚未开始", "excel_import_customer_unavailable"
+            )
         for row in records:
             unit_name = str(row.get("unit_name") or "").strip()
             product_name = str(row.get("product_name") or "").strip()
             model_number = str(row.get("model_number") or "").strip().upper()
             unit_price = float(row.get("unit_price") or 0.0)
             touched_units.add(unit_name)
-            if customer_service is not None:
-                matched = customer_service.match_purchase_unit(unit_name)
-                if not matched:
-                    create_unit = customer_service.create({"customer_name": unit_name})
-                    if create_unit.get("success"):
-                        created_units += 1
+            matched = customer_service.match_purchase_unit(unit_name)
+            if not matched:
+                write_in_flight = True
+                create_unit = customer_service.create({"customer_name": unit_name})
+                write_in_flight = not isinstance(create_unit, dict) or bool(
+                    create_unit.get("success") is not True
+                    or create_unit.get("outcome_unknown")
+                    or create_unit.get("requires_reconciliation")
+                    or create_unit.get("reconciliation_required")
+                    or create_unit.get("outcome") == "unknown"
+                )
+                if write_in_flight or create_unit.get("success") is not True:
+                    failed_rows = 1
+                    return receipt(
+                        False, "客户创建失败，已停止产品写入", "excel_import_customer_failed"
+                    )
+                created_units += 1
             exists_result = products_service.get_products(
                 unit_name=unit_name,
                 model_number=model_number or None,
@@ -176,21 +213,25 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
                 page=1,
                 per_page=5,
             )
-            existed = False
-            if exists_result.get("success"):
-                rows_data = exists_result.get("data") or []
-                for item in rows_data:
-                    item_name = str(item.get("name") or item.get("product_name") or "").strip()
-                    item_model = str(item.get("model_number") or "").strip().upper()
-                    if model_number and item_model == model_number:
-                        existed = True
-                        break
-                    if product_name and item_name == product_name:
-                        existed = True
-                        break
+            if not isinstance(exists_result, dict) or exists_result.get("success") is not True:
+                failed_rows = 1
+                return receipt(False, "产品查重失败，已停止写入", "excel_import_lookup_failed")
+            existed = any(
+                (
+                    model_number
+                    and str(item.get("model_number") or "").strip().upper() == model_number
+                )
+                or (
+                    product_name
+                    and str(item.get("name") or item.get("product_name") or "").strip()
+                    == product_name
+                )
+                for item in exists_result.get("data") or []
+            )
             if existed:
                 skipped_products += 1
                 continue
+            write_in_flight = True
             create_product = products_service.create_product(
                 {
                     "name": product_name or model_number,
@@ -202,27 +243,21 @@ def _execute_excel_import_records(records: list[dict[str, Any]]) -> dict:
                     "unit": unit_name,
                 }
             )
-            if create_product.get("success"):
-                created_products += 1
-        return {
-            "success": True,
-            "message": "Excel 导入完成",
-            "imported_count": len(records),
-            "data": {
-                "result": {
-                    "records": len(records),
-                    "touched_units": len(touched_units),
-                    "created_units": created_units,
-                    "created_products": created_products,
-                    "skipped_products": skipped_products,
-                    "unit_service_available": customer_service is not None,
-                    "unit_service_error": customer_service_error,
-                }
-            },
-        }
-    except RECOVERABLE_ERRORS as err:
-        logger.error("Excel 导入执行失败: %s", err, exc_info=True)
-        return {"success": False, "message": f"导入执行失败：{str(err)}"}
+            write_in_flight = not isinstance(create_product, dict) or bool(
+                create_product.get("success") is not True
+                or create_product.get("outcome_unknown")
+                or create_product.get("requires_reconciliation")
+                or create_product.get("reconciliation_required")
+                or create_product.get("outcome") == "unknown"
+            )
+            if write_in_flight or create_product.get("success") is not True:
+                failed_rows = 1
+                return receipt(False, "产品写入失败，已停止后续导入", "excel_import_product_failed")
+            created_products += 1
+        return receipt(True, "Excel 导入完成")
+    except BOUNDARY_ERRORS:
+        logger.exception("Excel 导入执行失败")
+        return receipt(False, "导入执行失败，请核对已处理结果后再继续", "excel_import_failed")
 
 
 def _registered_router_excel_import(

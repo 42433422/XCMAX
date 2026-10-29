@@ -1,5 +1,6 @@
 """Composition boundaries that must survive workflow engine extraction."""
 
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from types import SimpleNamespace
@@ -131,6 +132,58 @@ def test_retry_parameter_preparation_preserves_execution_mode(agentic):
     assert all(attempt["_runtime_context"] is context for attempt in observed)
     assert ("dispatch_marker" in observed[1]) is agentic
     assert ("keyword" in observed[0]) is (not agentic)
+
+
+@pytest.mark.parametrize("mode", ["planned", "agentic", "langgraph"])
+@pytest.mark.parametrize(
+    "receipt",
+    [
+        {"retryable": False},
+        {"outcome": "unknown"},
+        {"outcome_unknown": True},
+        {"reconciliation_required": True},
+        {"requires_reconciliation": True},
+    ],
+)
+def test_failed_write_receipt_stops_retry_even_for_low_risk_node(tmp_path, mode, receipt):
+    database = tmp_path / "committed-writes.sqlite3"
+    with sqlite3.connect(database) as db:
+        db.execute("CREATE TABLE effects (id INTEGER PRIMARY KEY)")
+    output = {"success": False, "message": "write committed; receipt unavailable", **receipt}
+    calls = []
+
+    def writer(tool_id, action, params):
+        calls.append((tool_id, action))
+        with sqlite3.connect(database) as db:
+            db.execute("INSERT INTO effects DEFAULT VALUES")
+        return output
+
+    node = WorkflowNode("import", "excel_import", "import_records", risk="low")
+    plan = PlanGraph(plan_id="unknown-write", intent="import", nodes=[node])
+    if mode == "agentic":
+        result = WorkflowEngine(writer)._run_single_tool(
+            node.tool_id, node.action, {}, {}, max_retries=3, retryable=True
+        )
+    else:
+        if mode == "langgraph":
+            from app.infrastructure.workflow.langgraph_runtime import XCAGILangGraphRuntime
+
+            engine = XCAGILangGraphRuntime(writer)
+        else:
+            engine = WorkflowEngine(writer)
+        run = engine.run(plan, max_retries=3, parallel=False)
+        assert run.success is False
+        result = run.node_results[0]
+
+    assert calls == [(node.tool_id, node.action)]
+    with sqlite3.connect(database) as db:
+        assert db.execute("SELECT COUNT(*) FROM effects").fetchone()[0] == 1
+    assert result.success is False
+    assert result.retryable is False
+    assert result.retries == 0
+    assert len(result.attempts) == 1
+    assert result.output == output
+    assert "未自动重试" in result.recovery_hint
 
 
 @pytest.mark.parametrize("agentic", [False, True])

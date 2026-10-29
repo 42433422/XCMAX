@@ -79,6 +79,7 @@ domains:
     ssot: FHD/docs/SSOT_INDEX.md
     derived:
       - FHD/CHANGELOG.md
+      - FHD/docs/security/CREDENTIAL_INCIDENT_CLOSEOUT.md
     mode: lint
     check: python scripts/dev/docs_ssot_lint.py
     sync: null

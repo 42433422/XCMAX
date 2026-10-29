@@ -6,6 +6,7 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { etlApi } from '@/api/etl'
+import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import { batchFileStatusLabel, ignoredReasonLabel, useEtlFolderBatch } from '@/composables/useEtlFolderBatch'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'
@@ -61,8 +62,6 @@ const extras = createEtlCenterExtras({
   shipmentTemplateCandidate: derived.shipmentTemplateCandidate,
   linkedCustomerProductPreview: derived.linkedCustomerProductPreview,
   schedulePoll: runsApi.schedulePoll,
-  tryAutoWrite: runsApi.tryAutoWrite,
-  markAutoWrite: runsApi.markAutoWrite,
   syncDraft: runsApi.syncDraft,
   loadRows: runsApi.loadRows,
 })
@@ -107,6 +106,8 @@ const {
   allowedActionsForRow,
   bulkNewRows,
   canExecute,
+  draftChanged,
+  canReplay,
   summaryCards,
   savedShipmentTemplate,
   savedShipmentTemplateName,
@@ -135,6 +136,7 @@ const {
   refreshRuns,
   selectRun,
   retryRun,
+  replayRun,
   rollbackRun,
 } = runsApi
 
@@ -177,9 +179,6 @@ const {
   busy,
   pageError,
   router,
-  autoWriteEnabled: state.autoWriteEnabled,
-  markAutoWrite: runsApi.markAutoWrite,
-  tryAutoWrite: runsApi.tryAutoWrite,
   syncDraft: runsApi.syncDraft,
   schedulePoll: runsApi.schedulePoll,
   loadRows: runsApi.loadRows,

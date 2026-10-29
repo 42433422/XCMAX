@@ -49,8 +49,6 @@ from app.db.models.mrp import (
     ManufacturingOrderLine,
 )
 from app.db.models.etl import (
-    EltSourceAsset,
-    EltSourceRevision,
     EtlRun,
     EtlRunRow,
     EtlTargetConfig,
@@ -58,6 +56,7 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.models.finance import FinancialTransaction
 from app.db.models.inventory import (
     InventoryLedger,
@@ -134,8 +133,6 @@ __all__ = [
     "BomLine",
     "ManufacturingOrder",
     "ManufacturingOrderLine",
-    "EltSourceAsset",
-    "EltSourceRevision",
     "EtlUpload",
     "EtlTemplate",
     "EtlTemplateVersion",

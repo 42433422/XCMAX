@@ -17,3 +17,17 @@ class EtlNotFound(EtlError):
 class EtlConflict(EtlError):
     def __init__(self, code: str, message: str):
         super().__init__(code, message, status_code=409)
+
+
+class ReviewedExcelError(ValueError):
+    """A validation message authored by the reviewed Excel boundary, safe for users."""
+
+    def __init__(self, public_message: str):
+        super().__init__(public_message)
+        self.public_message = public_message
+
+
+def public_excel_error(exc: Exception) -> str:
+    if isinstance(exc, ReviewedExcelError):
+        return exc.public_message
+    return "文件或请求无法处理，请核对文件、范围和模型配置；结果未知时请勿重复执行"

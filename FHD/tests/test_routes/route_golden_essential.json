@@ -105,6 +105,7 @@
   "/api/etl/runs/{run_id}/draft",
   "/api/etl/runs/{run_id}/errors/export",
   "/api/etl/runs/{run_id}/execute",
+  "/api/etl/runs/{run_id}/replay",
   "/api/etl/runs/{run_id}/retry",
   "/api/etl/runs/{run_id}/rollback",
   "/api/etl/runs/{run_id}/rows",

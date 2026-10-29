@@ -20,16 +20,15 @@ from app.application.etl.parsers import (
 from app.application.etl.parsers import (
     parse_file as parse_file,
 )
-from app.application.etl.product_identity import provenance_validation_issues
 from app.application.etl.service_preview_helpers import (
     row_context,
     suggest_mappings,
     update_linked_companion_summary,
 )
 from app.application.etl.service_preview_worker import PreviewWorkerMixin
+from app.application.etl.service_source import SourceServiceMixin
 from app.application.etl.service_support import (
     ETL_SHIPMENT_DOCUMENT_TEMPLATE_DESCRIPTION,
-    apply_validation_rules,
     dump_json,
     load_json,
     new_id,
@@ -47,15 +46,14 @@ from app.application.etl.service_support import (
     new_session as new_session,
 )
 from app.application.etl.targets import TargetAdapter, get_adapter
-from app.application.etl.transforms import apply_mapping
-from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
+from app.db.models.etl import EtlRun, EtlUpload
 from app.infrastructure.tenant_scope import tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
 
-class PreviewServiceMixin(PreviewWorkerMixin):
+class PreviewServiceMixin(SourceServiceMixin, PreviewWorkerMixin):
     if TYPE_CHECKING:
         _adviser: Any
         _current_version: Any
@@ -278,109 +276,6 @@ class PreviewServiceMixin(PreviewWorkerMixin):
                     etl_llm_degradations_total.labels(run.target_type).inc()
         except RECOVERABLE_ERRORS:  # noqa: BLE001
             logger.debug("ETL preview metrics unavailable", exc_info=True)
-
-    def _materialize_preview_rows(
-        self, db: Session, run: EtlRun, upload: EtlUpload, dataset: ParsedDataset
-    ) -> None:
-        adapter = get_adapter(run.target_type)
-        draft = load_json(run.draft_json, {})
-        mappings = draft.get("field_mappings") or []
-        allowed_updates = set(draft.get("allowed_update_fields") or [])
-        validation_rules = draft.get("validation_rules") or []
-        counts = {"new": 0, "update": 0, "skip": 0, "error": 0}
-        llm_degraded = False
-        preview_cache: dict[str, Any] = {}
-        advisory_jobs: list[tuple[EtlRunRow, dict[str, Any]]] = []
-        from app.application.etl.llm_assist import etl_row_advice_limit
-
-        advisory_limit = etl_row_advice_limit()
-        for index, source in enumerate(dataset.rows, start=1):
-            issues: list[dict[str, Any]] = []
-            try:
-                normalized = apply_mapping(source.values, mappings)
-            except EtlError as exc:
-                normalized = {}
-                issues.append(
-                    {
-                        "code": exc.code,
-                        "severity": "error",
-                        "field": "",
-                        "message": exc.message,
-                    }
-                )
-            issues.extend(apply_validation_rules(normalized, validation_rules))
-            issues.extend(provenance_validation_issues(source.provenance))
-            if source.provenance.get("ocr") and not draft.get("ocr_confirmed"):
-                issues.append(
-                    {
-                        "code": "ETL_OCR_CONFIRMATION_REQUIRED",
-                        "severity": "error",
-                        "field": "",
-                        "message": "OCR 单元格尚未人工确认",
-                    }
-                )
-            context = self._row_context(run, upload, source.row_number)
-            context["_preview_cache"] = preview_cache
-            decision = adapter.preview(
-                db,
-                normalized,
-                allowed_update_fields=allowed_updates,
-                context=context,
-            )
-            issues.extend(decision.issues or [])
-            action = "error" if issues else decision.action
-            counts[action] = counts.get(action, 0) + 1
-            advisory_input = {
-                "deterministic_action": decision.action,
-                "deterministic_reason": decision.reason,
-                "normalized": normalized,
-                "before": decision.before or {},
-                "after": decision.after or {},
-            }
-            advisory = self._adviser.fallback(**advisory_input)
-            row_record = EtlRunRow(
-                tenant_id=tenant_id_for_write(),
-                owner_user_id=run.owner_user_id,
-                run_id=run.id,
-                source_sheet=source.sheet,
-                source_row=source.row_number,
-                source_json=dump_json(source.values),
-                normalized_json=dump_json(normalized),
-                provenance_json=dump_json(source.provenance),
-                validation_json=dump_json(issues),
-                llm_suggestion_json=dump_json(advisory),
-                suggested_action=decision.action,
-                final_action=action,
-                match_ref=decision.match_ref or None,
-                before_json=dump_json(decision.before or {}),
-                after_json=dump_json(decision.after or {}),
-            )
-            db.add(row_record)
-            if len(advisory_jobs) < advisory_limit:
-                advisory_jobs.append((row_record, advisory_input))
-            if index % 500 == 0:
-                run.progress = min(95, 20 + int(index / max(1, len(dataset.rows)) * 75))
-                run.processed_rows = index
-                db.commit()
-        if advisory_jobs:
-            suggestions = self._adviser.suggest_many([payload for _row, payload in advisory_jobs])
-            for (row_record, _payload), advisory in zip(advisory_jobs, suggestions, strict=False):
-                row_record.llm_suggestion_json = dump_json(advisory)
-                llm_degraded = llm_degraded or bool(advisory.get("degraded"))
-        run.new_rows = counts["new"]
-        run.update_rows = counts["update"]
-        run.skip_rows = counts["skip"]
-        run.error_rows = counts["error"]
-        summary = load_json(run.summary_json, {})
-        summary.update(
-            {
-                "counts": counts,
-                "llm_degraded": llm_degraded,
-                "llm_advisory_only": True,
-            }
-        )
-        run.summary_json = dump_json(summary)
-        db.commit()
 
     def _suggest_mappings(
         self, dataset: ParsedDataset, adapter: TargetAdapter

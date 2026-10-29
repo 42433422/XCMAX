@@ -9,8 +9,6 @@ from sqlalchemy import Table, inspect, text
 
 from app.db.db_base import Base
 from app.db.models.etl import (
-    EltSourceAsset,
-    EltSourceRevision,
     EtlRun,
     EtlRunRow,
     EtlTargetConfig,
@@ -18,6 +16,7 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -42,13 +41,14 @@ def ensure_sqlite_etl_bootstrap(
         existing = set(inspect(real_engine).get_table_names() or [])
         model_tables: list[Table] = [
             cast("Table", EtlUpload.__table__),
-            cast("Table", EltSourceAsset.__table__),
-            cast("Table", EltSourceRevision.__table__),
             cast("Table", EtlTemplate.__table__),
             cast("Table", EtlTemplateVersion.__table__),
             cast("Table", EtlRun.__table__),
             cast("Table", EtlRunRow.__table__),
             cast("Table", EtlTargetConfig.__table__),
+            cast("Table", EtlArchiveQuota.__table__),
+            cast("Table", EtlArchiveAsset.__table__),
+            cast("Table", EtlArchiveVersion.__table__),
         ]
         missing = [table for table in model_tables if table.name not in existing]
         if missing:

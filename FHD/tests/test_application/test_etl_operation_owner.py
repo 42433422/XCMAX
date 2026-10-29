@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -23,11 +24,16 @@ from app.application.etl.operation_owner import (
     finish_operation,
     unbind_owner,
 )
+from app.application.etl.preview_confirmation import (
+    preview_revision,
+    publish_preview,
+    record_confirmation,
+)
 from app.application.etl.service import EtlService, mark_interrupted_runs_on_startup
 from app.application.etl.targets import get_adapter
 from app.db.etl_bootstrap import ensure_sqlite_etl_bootstrap
 from app.db.models import Product
-from app.db.models.etl import EtlRun, EtlRunRow
+from app.db.models.etl import EtlRun, EtlRunRow, EtlUpload
 from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_rollback_compare_swap import import_update
 from tests.test_application.test_etl_rollback_compare_swap import store as store
@@ -267,12 +273,21 @@ def test_active_rollback_owner_blocks_forward_entry_points(store, action, status
 
 
 @pytest.mark.parametrize("store", ["sqlite", "postgres"], indirect=True)
-def test_duplicate_batch_dispatch_token_activates_only_one_worker(store, monkeypatch):
+def test_duplicate_batch_dispatch_token_activates_only_one_worker(store, monkeypatch, tmp_path):
     _engine, factory, _ids = store
     run_id = make_run(store)
     with factory() as db:
         run = db.get(EtlRun, run_id)
-        owner = claim_operation(db, run, "execute_queue", allowed_statuses={"completed"})
+        source = tmp_path / "reviewed.csv"
+        source.write_bytes(b"reviewed")
+        upload = db.get(EtlUpload, run.upload_id)
+        upload.storage_path = str(source)
+        upload.size_bytes = len(b"reviewed")
+        upload.sha256 = run.file_sha256 = hashlib.sha256(b"reviewed").hexdigest()
+        run.status = "preview_ready"
+        publish_preview(db, run)
+        record_confirmation(run, preview_revision(run), valid_rows_only=False)
+        owner = claim_operation(db, run, "execute_queue", allowed_statuses={"preview_ready"})
         run.status = "executing"
         db.commit()
     entered, release = threading.Event(), threading.Event()

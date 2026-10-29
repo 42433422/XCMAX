@@ -6,6 +6,7 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -14,8 +15,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.application.etl import service_history, service_uploads
+from app.application.etl.archive_store import create_original
 from app.db.db_base import Base
-from app.db.models.etl import EltSourceRevision, EtlRun, EtlUpload
+from app.db.models.etl import EtlRun, EtlUpload
+from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.session import get_db_dependency
 from app.fastapi_routes import elt, etl
 from app.infrastructure.auth import dependencies
@@ -32,6 +35,10 @@ def source_client(tmp_path, monkeypatch):
     )
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
+    for tenant in (1, 2):
+        with tenant_scope(tenant), factory() as db:
+            db.add(EtlArchiveQuota(tenant_id=tenant, limit_bytes=1024 * 1024, reserved_bytes=0))
+            db.commit()
     actor = SimpleNamespace(
         user=SimpleNamespace(id=7, tenant_id=1, is_active=True),
         permissions={"etl.read", "etl.execute"},
@@ -76,9 +83,11 @@ def source_client(tmp_path, monkeypatch):
         engine.dispose()
 
 
-def create_source(store, content=ORIGINAL):
+def create_source(store, content=ORIGINAL, request_key=None):
     response = store.client.post(
-        "/api/elt/sources", files={"file": ("未分类资料.csv", content, "text/csv")}
+        "/api/elt/sources",
+        data={"request_key": request_key or str(uuid4())},
+        files={"file": ("未分类资料.csv", content, "text/csv")},
     )
     assert response.status_code == 201, response.text
     return response.json()["data"]
@@ -93,7 +102,7 @@ def test_sources_preserve_versions_originals_and_never_create_business_runs(sour
     first = create_source(store)
     response = store.client.post(
         f"/api/elt/sources/{first['id']}/revisions",
-        data={"expected_version": 1},
+        data={"expected_version": 1, "request_key": str(uuid4())},
         files={"file": ("修正资料.csv", CORRECTION, "text/html")},
     )
     assert response.status_code == 201, response.text
@@ -108,6 +117,7 @@ def test_sources_preserve_versions_originals_and_never_create_business_runs(sour
         assert revision.status_code == 200
         assert revision.json()["data"] == source["revision"]
         assert source["revision"]["sha256"] == hashlib.sha256(content).hexdigest()
+        assert source["revision"]["status"] == "ready"
         original = store.client.get(f"{revision_path(source)}/content")
         assert original.status_code == 200
         assert original.content == content
@@ -117,8 +127,8 @@ def test_sources_preserve_versions_originals_and_never_create_business_runs(sour
         assert original.headers["cache-control"] == "private, no-store"
         assert "storage_path" not in revision.text
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EtlRun).count() == 0
-        assert all(upload.expires_at is None for upload in db.query(EtlUpload).all())
+        assert db.query(EtlRun).count() == db.query(EtlUpload).count() == 0
+        assert db.query(EtlArchiveVersion).count() == 2
 
 
 def test_download_streams_verified_snapshot_when_original_changes(source_client, monkeypatch):
@@ -131,8 +141,8 @@ def test_download_streams_verified_snapshot_when_original_changes(source_client,
     def change_original_after_verification(db, **kwargs):
         snapshot, file_name = get_verified_content(db, **kwargs)
         snapshots.append(snapshot)
-        upload = db.get(EtlUpload, source["revision"]["upload_id"])
-        Path(upload.storage_path).write_bytes(CORRECTION)
+        version = db.get(EtlArchiveVersion, source["revision"]["id"])
+        Path(version.storage_path).write_bytes(CORRECTION)
         return snapshot, file_name
 
     monkeypatch.setattr(service, "get_source_content", change_original_after_verification)
@@ -142,8 +152,8 @@ def test_download_streams_verified_snapshot_when_original_changes(source_client,
     assert hashlib.sha256(response.content).hexdigest() == source["revision"]["sha256"]
     assert len(snapshots) == 1 and snapshots[0].closed
     with tenant_scope(1), store.factory() as db:
-        upload = db.get(EtlUpload, source["revision"]["upload_id"])
-        assert Path(upload.storage_path).read_bytes() == CORRECTION
+        version = db.get(EtlArchiveVersion, source["revision"]["id"])
+        assert Path(version.storage_path).read_bytes() == CORRECTION
 
 
 @pytest.mark.parametrize("tenant,owner", [(2, 7), (1, 8)])
@@ -161,13 +171,13 @@ def test_source_routes_hide_other_tenants_and_owners(source_client, tenant, owne
         assert store.client.get(path).status_code == 404
     denied = store.client.post(
         f"/api/elt/sources/{source['id']}/revisions",
-        data={"expected_version": 1},
+        data={"expected_version": 1, "request_key": str(uuid4())},
         files={"file": ("other.csv", CORRECTION, "text/csv")},
     )
     assert denied.status_code == 404
     own_source = create_source(store)
     assert own_source["id"] != source["id"]
-    assert own_source["revision"]["upload_id"] != source["revision"]["upload_id"]
+    assert own_source["revision"]["id"] != source["revision"]["id"]
     assert own_source["revision"]["sha256"] == source["revision"]["sha256"]
 
 
@@ -185,8 +195,11 @@ def test_read_permission_allows_originals_but_never_creating_or_appending(source
     store.actor.permissions = {"etl.read"}
     assert store.client.get(f"{revision_path(source)}/content").status_code == 200
     for path, data in (
-        ("/api/elt/sources", {}),
-        (f"/api/elt/sources/{source['id']}/revisions", {"expected_version": 1}),
+        ("/api/elt/sources", {"request_key": str(uuid4())}),
+        (
+            f"/api/elt/sources/{source['id']}/revisions",
+            {"expected_version": 1, "request_key": str(uuid4())},
+        ),
     ):
         denied = store.client.post(path, data=data, files={"file": ("new.csv", ORIGINAL)})
         assert denied.status_code == 403
@@ -196,7 +209,11 @@ def test_read_permission_allows_originals_but_never_creating_or_appending(source
     store.actor.user = None
     assert store.client.get(revision_path(source)).status_code == 401
     assert (
-        store.client.post("/api/elt/sources", files={"file": ("new.csv", ORIGINAL)}).status_code
+        store.client.post(
+            "/api/elt/sources",
+            data={"request_key": str(uuid4())},
+            files={"file": ("new.csv", ORIGINAL)},
+        ).status_code
         == 401
     )
 
@@ -208,7 +225,9 @@ def test_sources_reuse_enterprise_feature_gate(source_client, monkeypatch, disab
     else:
         monkeypatch.setattr(etl, "resolve_product_sku", lambda: "personal")
     response = source_client.client.post(
-        "/api/elt/sources", files={"file": ("data.csv", ORIGINAL, "text/csv")}
+        "/api/elt/sources",
+        data={"request_key": str(uuid4())},
+        files={"file": ("data.csv", ORIGINAL, "text/csv")},
     )
     assert response.status_code == 403
     assert response.json()["detail"]["code"] == (
@@ -222,18 +241,94 @@ def test_append_requires_positive_current_version_and_preserves_original_on_conf
     path = f"/api/elt/sources/{first['id']}/revisions"
     for expected in (0, -1, "invalid"):
         response = store.client.post(
-            path, data={"expected_version": expected}, files={"file": ("new.csv", CORRECTION)}
+            path,
+            data={"expected_version": expected, "request_key": str(uuid4())},
+            files={"file": ("new.csv", CORRECTION)},
         )
         assert response.status_code == 422
     assert (
         store.client.post(
-            path, data={"expected_version": 2}, files={"file": ("new.csv", CORRECTION)}
+            path,
+            data={"expected_version": 2, "request_key": str(uuid4())},
+            files={"file": ("new.csv", CORRECTION)},
         ).status_code
         == 409
     )
     assert store.client.get(f"{revision_path(first)}/content").content == ORIGINAL
     with tenant_scope(1), store.factory() as db:
-        assert db.query(EltSourceRevision).count() == db.query(EtlUpload).count() == 1
+        assert db.query(EtlArchiveVersion).count() == 1
+        assert db.query(EtlUpload).count() == 0
+
+
+def test_sources_require_configured_archive_quota(source_client):
+    store = source_client
+    store.actor.user = SimpleNamespace(id=7, tenant_id=3, is_active=True)
+    response = store.client.post(
+        "/api/elt/sources",
+        data={"request_key": str(uuid4())},
+        files={"file": ("unfunded.csv", ORIGINAL)},
+    )
+    assert response.status_code == 409, response.text
+    with tenant_scope(3), store.factory() as db:
+        assert db.query(EtlArchiveAsset).count() == db.query(EtlArchiveVersion).count() == 0
+    assert not (store.root / "etl" / "archive" / "3").exists()
+
+
+def test_request_key_replay_reuses_archive_identity_and_quota(source_client):
+    store = source_client
+    request_key = str(uuid4())
+    first = create_source(store, request_key=request_key)
+    assert create_source(store, request_key=request_key) == first
+    append_request = str(uuid4())
+    revisions = []
+    for _ in range(2):
+        response = store.client.post(
+            f"/api/elt/sources/{first['id']}/revisions",
+            data={"expected_version": 1, "request_key": append_request},
+            files={"file": ("revision.csv", CORRECTION)},
+        )
+        assert response.status_code == 201, response.text
+        revisions.append(response.json()["data"])
+    assert revisions[0] == revisions[1]
+    with tenant_scope(1), store.factory() as db:
+        assert db.query(EtlArchiveAsset).count() == 1
+        assert db.query(EtlArchiveVersion).count() == 2
+        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(ORIGINAL) + len(CORRECTION)
+        assert db.query(EtlUpload).count() == db.query(EtlRun).count() == 0
+
+
+def test_existing_archive_original_is_readable_without_reupload(source_client):
+    store = source_client
+    with tenant_scope(1), store.factory() as db:
+        archived = create_original(
+            db,
+            owner=7,
+            name="existing.csv",
+            body=ORIGINAL,
+            root=store.root / "etl" / "archive",
+            request_key=str(uuid4()),
+        )
+        asset_id, version_id = archived.asset_id, archived.id
+    response = store.client.get(f"/api/elt/sources/{asset_id}")
+    assert response.status_code == 200, response.text
+    source = response.json()["data"]
+    assert source["name"] == source["revision"]["file_name"] == "existing.csv"
+    assert source["revision"]["id"] == version_id
+    assert store.client.get(f"{revision_path(source)}/content").content == ORIGINAL
+    with tenant_scope(1), store.factory() as db:
+        assert db.query(EtlArchiveVersion).count() == 1
+        assert db.get(EtlArchiveQuota, 1).reserved_bytes == len(ORIGINAL)
+        assert db.query(EtlUpload).count() == db.query(EtlRun).count() == 0
+
+
+@pytest.mark.parametrize("request_key", [None, "", "x" * 81])
+def test_source_request_key_is_required_and_bounded(source_client, request_key):
+    response = source_client.client.post(
+        "/api/elt/sources",
+        data={} if request_key is None else {"request_key": request_key},
+        files={"file": ("source.csv", ORIGINAL)},
+    )
+    assert response.status_code == 422
 
 
 def test_legacy_upload_keeps_seven_day_retention_and_response_contract(source_client):
@@ -255,4 +350,4 @@ def test_legacy_upload_keeps_seven_day_retention_and_response_contract(source_cl
         assert upload is not None and upload.expires_at is not None
         expires = upload.expires_at.replace(tzinfo=UTC)
         assert before + timedelta(days=7) <= expires <= datetime.now(UTC) + timedelta(days=7)
-        assert db.query(EltSourceRevision).count() == db.query(EtlRun).count() == 0
+        assert db.query(EtlArchiveVersion).count() == db.query(EtlRun).count() == 0
