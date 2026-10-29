@@ -123,8 +123,8 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 </script>
 
 <template>
-  <section v-if="repairs.length || error || failed || opened" class="repair-acceptance">
-    <button ref="trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults">问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败</span></button>
+  <section class="repair-acceptance">
+    <button ref="trigger" class="repair-trigger" type="button" :aria-expanded="opened" aria-haspopup="dialog" @click="openResults">问题工单处理结果（{{ repairs.length }}）<span v-if="error || failed"> · 同步或保存失败</span></button>
     <Teleport to="body">
     <dialog v-if="opened" ref="dialog" aria-label="问题工单处理结果" class="repair-dialog" @cancel.prevent="closeResults" @click="($event.target === dialog) && closeResults()">
     <header><strong>问题工单处理结果（{{ repairs.length }}）</strong><button type="button" :disabled="loading || busy !== null" @click="refresh">刷新</button><button type="button" autofocus @click="closeResults">关闭</button></header>
@@ -160,9 +160,13 @@ onBeforeUnmount(() => { generation++; pending?.abort() })
 
 <style scoped>
 .repair-acceptance { flex: none; min-width: 0; }
+.repair-trigger { border: 1px solid var(--xc-color-border, #dbe3f0); border-radius: 8px; background: var(--xc-color-surface, #fff); color: var(--xc-color-text, #1f2329); }
+.repair-trigger:hover, .repair-trigger:focus-visible { border-color: var(--xc-color-primary, #2d7bd6); }
+.repair-dialog button { border: 1px solid var(--xc-color-border, #dbe3f0); border-radius: 8px; background: var(--xc-color-surface, #fff); color: var(--xc-color-text, #1f2329); }
+.repair-dialog input { border: 1px solid var(--xc-color-border, #dbe3f0); border-radius: 8px; background: var(--xc-color-surface, #fff); color: var(--xc-color-text, #1f2329); }
 .repair-dialog { box-sizing: border-box; width: min(720px, calc(100vw - 32px)); max-height: 80dvh; padding: 0; border: 1px solid var(--xc-color-border, #ddd); border-radius: 12px; color: var(--xc-color-text, #1f2329); background: var(--xc-color-surface, #fff); }
 .repair-dialog::backdrop { background: #0006; }
-.repair-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
+.repair-dialog header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; }
 .repair-list { max-height: 65dvh; overflow: auto; padding: 0 16px 16px; overflow-wrap: anywhere; }
 .repair-description summary { font-weight: normal; line-height: 1.5; }
 article { padding: 8px 0; border-top: 1px solid var(--border-color, #ddd); }
