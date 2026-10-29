@@ -15,8 +15,17 @@ from app.domain.approval.safe_dsl import (
 
 @pytest.mark.parametrize(
     "value,expected",
-    [(0, "0"), (False, "False"), (True, "True"), (None, ""), ("", ""),
-     (0.0, "0.0"), (Decimal("0.00"), "0.00"), ("0", "0"), ("中文", "中文")],
+    [
+        (0, "0"),
+        (False, "False"),
+        (True, "True"),
+        (None, ""),
+        ("", ""),
+        (0.0, "0.0"),
+        (Decimal("0.00"), "0.00"),
+        ("0", "0"),
+        ("中文", "中文"),
+    ],
 )
 def test_text_transforms_preserve_falsy_values(value, expected):
     row = {"prefix": "SKU", "value": value}
@@ -40,9 +49,10 @@ def test_mapping_chain_preserves_zero_and_false():
     source = {"raw_zero": 0, "flag": False}
     mappings = [
         {"source": "raw_zero", "target": "code", "transforms": [{"op": "split"}]},
-        {"target": "label", "transforms": [
-            {"op": "concat", "fields": ["code", "flag"], "separator": "/"}
-        ]},
+        {
+            "target": "label",
+            "transforms": [{"op": "concat", "fields": ["code", "flag"], "separator": "/"}],
+        },
     ]
     assert apply_mapping(source, mappings) == {"code": "0", "label": "0/False"}
     assert source == {"raw_zero": 0, "flag": False}
@@ -50,10 +60,16 @@ def test_mapping_chain_preserves_zero_and_false():
 
 @pytest.mark.parametrize(
     "expression,expected",
-    [("True or 1 / 0", True), ("False and 1 / 0", False),
-     ("False or True or 1 / 0", True), ("True and False and 1 / 0", False),
-     ("True OR 1 / 0", True), ("False AND 1 / 0", False),
-     ("False AND amount > 1", False), ("True OR amount > 1", True)],
+    [
+        ("True or 1 / 0", True),
+        ("False and 1 / 0", False),
+        ("False or True or 1 / 0", True),
+        ("True and False and 1 / 0", False),
+        ("True OR 1 / 0", True),
+        ("False AND 1 / 0", False),
+        ("False AND amount > 1", False),
+        ("True OR amount > 1", True),
+    ],
 )
 def test_boolean_short_circuit(expression, expected):
     assert evaluate_condition(expression, {}) is expected
@@ -65,25 +81,36 @@ def test_required_boolean_operand_still_executes(expression):
         evaluate_condition(expression, {})
 
 
-@pytest.mark.parametrize("expression", [
-    'True or __import__("os")', "False and amount.__class__", "True OR [1, 2]",
-    "False AND (amount := 1)", "True or untrusted_name", "False and open('file')",
-])
+@pytest.mark.parametrize(
+    "expression",
+    [
+        'True or __import__("os")',
+        "False and amount.__class__",
+        "True OR [1, 2]",
+        "False AND (amount := 1)",
+        "True or untrusted_name",
+        "False and open('file')",
+    ],
+)
 def test_short_circuit_does_not_bypass_ast_validation(expression):
     with pytest.raises(SafeEvaluationError):
         evaluate_condition(expression, {"amount": 0})
 
 
-@pytest.mark.parametrize("expression,context", [
-    ("amount > 50000", {"amount": 60000}),
-    ("quantity > 100 AND unit_price > 10.0", {"quantity": 101, "unit_price": 11}),
-    ("priority = 'high' OR amount > 10000", {"priority": "high", "amount": 0}),
-    ("(amount > 5000 AND department = 'sales')", {"amount": 5001, "department": "sales"}),
-    ("amount > 50000 AND priority = 'high'", {"amount": 60000, "priority": "high"}),
-    ("NOT (amount < 0) AND amount >= +0", {"amount": 0}),
-    ("amount > -1", {"amount": 0}), ("amount = -1.5", {"amount": -1.5}),
-    ("amount - -1 = +1", {"amount": 0}),
-])
+@pytest.mark.parametrize(
+    "expression,context",
+    [
+        ("amount > 50000", {"amount": 60000}),
+        ("quantity > 100 AND unit_price > 10.0", {"quantity": 101, "unit_price": 11}),
+        ("priority = 'high' OR amount > 10000", {"priority": "high", "amount": 0}),
+        ("(amount > 5000 AND department = 'sales')", {"amount": 5001, "department": "sales"}),
+        ("amount > 50000 AND priority = 'high'", {"amount": 60000, "priority": "high"}),
+        ("NOT (amount < 0) AND amount >= +0", {"amount": 0}),
+        ("amount > -1", {"amount": 0}),
+        ("amount = -1.5", {"amount": -1.5}),
+        ("amount - -1 = +1", {"amount": 0}),
+    ],
+)
 def test_documented_syntax_and_signed_numbers(expression, context):
     assert evaluate_condition(expression, context) is True
 
