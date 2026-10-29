@@ -1,5 +1,7 @@
 """The neutral source API uses the shared archive, quota and recovery protocol."""
 
+import subprocess
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -12,7 +14,6 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from app.application.elt import sources
 from app.application.etl import archive_store, service_history, service_uploads
 from app.application.etl.archive_policy import ArchivePolicyError
 from app.application.etl.errors import EtlError
@@ -25,6 +26,27 @@ from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchi
 from app.infrastructure.tenant_scope import TenantScopeError, tenant_scope
 
 RAW = "部门,姓名,未知符号\n甲,同名员工,√ 2\n".encode()
+
+
+@pytest.mark.parametrize("source_first", [True, False])
+def test_source_and_legacy_service_imports_work_in_a_fresh_process(source_first):
+    imports = [
+        "from app.application.elt.sources import SourceAssetServiceMixin",
+        "from app.application.etl import EtlService, get_etl_service",
+    ]
+    if not source_first:
+        imports.reverse()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "\n".join([*imports, "assert isinstance(get_etl_service(), EtlService)"]),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture
@@ -291,6 +313,8 @@ def test_missing_tenant_cannot_create_an_archive_source(store):
 def test_short_reads_are_complete_and_oversize_admission_does_not_reserve_quota(
     store, monkeypatch, body
 ):
+    from app.application.elt import sources
+
     class ShortRead(BytesIO):
         def read(self, size=-1):
             return super().read(min(size, 3))
