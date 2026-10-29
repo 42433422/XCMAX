@@ -8,6 +8,7 @@ from io import BytesIO
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
 
+from app.utils.operational_errors import BOUNDARY_ERRORS
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import column_index_from_string, get_column_letter

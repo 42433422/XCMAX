@@ -52,6 +52,7 @@ from app.db.session import get_db
 from app.infrastructure.auth.dependencies import require_permission
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.path_io.path_utils import get_app_data_dir
+from app.utils.operational_errors import BOUNDARY_ERRORS
 
 router = APIRouter()
 _manage = require_permission("etl.template.manage")
