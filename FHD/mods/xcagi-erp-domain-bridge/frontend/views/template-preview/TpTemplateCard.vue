@@ -3,9 +3,35 @@ import ExcelPreview from '@/components/template/ExcelPreview.vue'
 import LabelPreview from '@/components/template/LabelPreview.vue'
 import type { TemplatePreviewCtx } from './assemble'
 import type { TplRecord } from './tpTemplateMeta'
+import templatePreviewApi from '@/api/templatePreview'
+import { appAlert } from '@/utils/appDialog'
+import { ref } from 'vue'
 
 // 拆分自 TemplatePreviewView.vue 模板（原第 50–185 行）；模板逐字迁移，行为不变。
 const props = defineProps<{ tp: TemplatePreviewCtx; tpl: TplRecord }>()
+const reviewHistory = ref<unknown>(null)
+
+async function loadReviewHistory() {
+  try {
+    reviewHistory.value = await templatePreviewApi.reviewedExcelHistory(String(props.tpl.preview_data?.review_id || ''))
+  } catch (error) {
+    await appAlert(error instanceof Error ? error.message : '读取审阅记录失败')
+  }
+}
+
+async function downloadReviewedTemplate() {
+  try {
+    const response = await templatePreviewApi.downloadReviewedExcel(props.tpl.id)
+    const url = URL.createObjectURL(await response.blob())
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${props.tpl.name || '模板'}.xlsx`
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    await appAlert(error instanceof Error ? error.message : '下载失败')
+  }
+}
 
 const {
   getScopeIconClass, getTemplateScopeKey, getTemplateScopeLabel,
@@ -94,7 +120,9 @@ const {
                 </template>
               </template>
             </div>
+            <details v-if="tpl.preview_data?.review_id" @toggle="($event.target as HTMLDetailsElement).open && loadReviewHistory()"><summary>查看服务端审阅记录</summary><pre>{{ JSON.stringify(reviewHistory, null, 2) }}</pre></details>
             <div class="template-preview-actions">
+              <button v-if="tpl.preview_data?.reviewed_excel" type="button" class="btn btn-secondary btn-sm template-preview-action" @click="downloadReviewedTemplate">下载清理后的模板</button>
               <button
                 v-if="tpl.virtual"
                 type="button"

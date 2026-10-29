@@ -52,7 +52,12 @@ class HistoryServiceMixin:
         batch_id: str | None = None,
     ) -> list[dict[str, Any]]:
         self.cleanup_retention(db, owner_user_id=owner_user_id)
-        query = db.query(EtlRun).filter(EtlRun.owner_user_id == owner_user_id)
+        # Template classification records have their own versioned history;
+        # they are not executable ETL runs and must not appear in this list.
+        query = db.query(EtlRun).filter(
+            EtlRun.owner_user_id == owner_user_id,
+            EtlRun.target_type != "template_classification",
+        )
         if batch_id:
             query = query.join(EtlUpload, EtlUpload.id == EtlRun.upload_id).filter(
                 EtlUpload.owner_user_id == owner_user_id,

@@ -14,6 +14,7 @@ types-psutil
 types-aiofiles
 types-pillow
 types-openpyxl
+types-defusedxml
 celery-types
 pip-audit>=2.9
 bandit>=1.7

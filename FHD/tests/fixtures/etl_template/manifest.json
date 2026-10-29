@@ -1,0 +1,12 @@
+{
+  "fixtures": [
+    {
+      "path": "sources/synthetic_quotation.xlsx",
+      "origin": "项目自造合成数据，非客户或公开下载文件",
+      "license": "Apache-2.0，见仓库 LICENSE",
+      "generator": "sources/generate.py",
+      "expected": "expected/quotation.json",
+      "sha256": "82b98ad10378bffc2641ce634392a55ac61a4c2aa82738fed265d4520cf69486"
+    }
+  ]
+}
