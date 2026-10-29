@@ -147,7 +147,9 @@ def test_card_control_rejects_expired_target_instead_of_acknowledging_it(control
     callbacks = MagicMock()
     callbacks._hydrate_pending_workflow.return_value = False
     handled, response = WorkflowSession({}, callbacks).resume_pending_dynamic_workflow(
-        "user", control, control,
+        "user",
+        control,
+        control,
         {"session_id": "original", "expected_workflow_plan_id": "expired-plan"},
     )
     assert handled and response["success"] is False
@@ -161,10 +163,17 @@ def test_matching_plan_only_card_preserves_confirmation_and_cancellation(control
     callbacks._run_workflow_with_state_updates.return_value = (object(), {})
     callbacks._format_workflow_run_response.return_value = {"success": True, "response": "done"}
     callbacks._persist_plan_state.return_value = True
-    pending = {"user": {"plan": PlanGraph(
-        plan_id="clicked-plan", intent="write",
-        nodes=[WorkflowNode("n1", "customers", "create", params={"unit_name": "synthetic"})],
-    )}}
+    pending = {
+        "user": {
+            "plan": PlanGraph(
+                plan_id="clicked-plan",
+                intent="write",
+                nodes=[
+                    WorkflowNode("n1", "customers", "create", params={"unit_name": "synthetic"})
+                ],
+            )
+        }
+    }
     handled, response = WorkflowSession(pending, callbacks).resume_pending_dynamic_workflow(
         "user", control, control, {"expected_workflow_plan_id": "clicked-plan"}
     )
