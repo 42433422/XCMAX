@@ -238,6 +238,7 @@ export const etlApi = {
       }),
     }),
   retry: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  replay: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/replay`, { method: 'POST' }),
   rollback: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
   templates: () => request<EtlTemplate[]>('/api/etl/templates'),
   createTemplate: (body: {

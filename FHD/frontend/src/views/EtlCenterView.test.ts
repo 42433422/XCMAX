@@ -17,6 +17,7 @@ const { etlApiMock, currentUserMock } = vi.hoisted(() => ({
     patchDraft: vi.fn(),
     execute: vi.fn(),
     retry: vi.fn(),
+    replay: vi.fn(),
     rollback: vi.fn(),
     saveShipmentTemplate: vi.fn(),
     createTemplate: vi.fn(),
@@ -290,6 +291,52 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
     expect(wrapper.find('.etl-dropzone input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
+  })
+
+  it('reprocesses saved source into a new preview and waits for explicit write confirmation', async () => {
+    vi.useFakeTimers()
+    const source = { ...completedRun(), details: { source_snapshot: { version: 1 } } }
+    const details = { source_snapshot: { version: 1 }, replay_of: source.id }
+    let replayed = { ...queuedRun('replayed-run', source.file_name), details }
+    etlApiMock.run.mockImplementation(async (id: string) => id === source.id ? source : replayed)
+    etlApiMock.runs.mockImplementation(async () => [source, replayed])
+    etlApiMock.replay.mockImplementation(async () => replayed)
+    etlApiMock.execute.mockResolvedValue(completedRun(replayed.id))
+    const wrapper = await mountView(source.id)
+    try {
+      expect(buttonByText(wrapper, '重新处理')?.attributes('title')).toContain('确认后才会写入')
+      await buttonByText(wrapper, '重新处理')!.trigger('click')
+      await flushPromises()
+      expect(etlApiMock.replay).toHaveBeenCalledWith(source.id)
+      expect(wrapper.vm.$route.query.run_id).toBe(replayed.id)
+      expect(wrapper.text()).toContain('从已保存的原始数据生成新预演，确认后才会写入')
+      expect(wrapper.text()).not.toContain('解析通过后将自动写入业务库')
+
+      replayed = { ...previewRun(replayed.id), details }
+      await vi.advanceTimersByTimeAsync(1200)
+      await flushPromises()
+      expect(etlApiMock.rows).toHaveBeenCalledWith(replayed.id, 1, 50, '')
+      expect(etlApiMock.execute).not.toHaveBeenCalled()
+      expect(buttonByText(wrapper, '写入数据库')!.attributes('disabled')).toBeDefined()
+      await wrapper.find('.etl-alert--warning input[type="checkbox"]').setValue(true)
+      await buttonByText(wrapper, '写入数据库')!.trigger('click')
+      await flushPromises()
+      expect(etlApiMock.execute).toHaveBeenCalledExactlyOnceWith(replayed.id, 'a'.repeat(64), true)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
+  it.each([
+    { ...completedRun(), details: {} },
+    { ...completedRun(), details: { source_snapshot: { version: 2 } } },
+    { ...queuedRun('loading-run', 'input.csv'), details: { source_snapshot: { version: 1 } } },
+  ])('does not offer reprocessing without an available, idle source snapshot', async (run) => {
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '运行历史')!.trigger('click')
+    expect(buttonByText(wrapper, '重新处理')).toBeUndefined()
+    wrapper.unmount()
   })
 
   it('keeps upload and polling read-only until the reviewed preview is explicitly confirmed', async () => {

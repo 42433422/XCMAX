@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.application.etl.errors import EtlConflict
+from app.application.etl.service_source import SourceServiceMixin
 from app.application.etl.service_support import MAX_FILE_BYTES, dump_json, load_json, new_id
 from app.db.models.etl import EtlRun, EtlRunRow, EtlTargetConfig, EtlUpload
 
@@ -62,18 +63,39 @@ def _snapshot(db: Session, run: EtlRun, nonce: str) -> tuple[str, dict[str, Any]
     )
     if upload is None or upload.sha256 != run.file_sha256:
         raise _changed()
+    # The parsed rows can outlive the temporary upload. Only a fully validated
+    # structured snapshot is allowed to substitute for a missing original.
+    try:
+        dataset = SourceServiceMixin()._load_source_snapshot(db, run)
+    except EtlConflict as exc:
+        raise _changed() from exc
+    source_snapshot = (
+        load_json(run.summary_json, {})["source_snapshot"] if dataset is not None else None
+    )
+    snapshot_only = source_snapshot is not None and run.target_type not in {
+        "knowledge",
+        "attendance",
+    }
     source = hashlib.sha256()
     size = 0
-    try:
-        with Path(upload.storage_path).open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                size += len(chunk)
-                if size > MAX_FILE_BYTES:
-                    raise _changed()
-                source.update(chunk)
-    except OSError as exc:
-        raise _changed() from exc
-    if size != upload.size_bytes or source.hexdigest() != upload.sha256:
+    original_read = False
+    if upload.storage_path:
+        try:
+            with Path(upload.storage_path).open("rb") as stream:
+                original_read = True
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    size += len(chunk)
+                    if size > MAX_FILE_BYTES:
+                        raise _changed()
+                    source.update(chunk)
+        except FileNotFoundError as exc:
+            if not snapshot_only:
+                raise _changed() from exc
+        except OSError as exc:
+            raise _changed() from exc
+    elif not snapshot_only:
+        raise _changed()
+    if original_read and (size != upload.size_bytes or source.hexdigest() != upload.sha256):
         raise _changed()
     target = None
     draft = load_json(run.draft_json, {})
@@ -109,6 +131,7 @@ def _snapshot(db: Session, run: EtlRun, nonce: str) -> tuple[str, dict[str, Any]
                 "owner_user_id": run.owner_user_id,
                 "upload_id": upload.id,
                 "file_sha256": upload.sha256,
+                **({"source_snapshot": source_snapshot} if source_snapshot is not None else {}),
                 "file_name": upload.file_name,
                 "relative_path": upload.relative_path,
                 "batch_id": upload.batch_id,

@@ -248,6 +248,30 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     }
   }
 
+  async function replayRun() {
+    if (!currentRun.value || busy.value) return
+    busy.value = true
+    pageError.value = ''
+    try {
+      const replayed = await etlApi.replay(currentRun.value.id)
+      currentRun.value = replayed
+      validRowsOnly.value = false
+      rowPage.value = 1
+      rowActionFilter.value = ''
+      customerProductPreviewMessage.value = ''
+      syncDraft()
+      activeTab.value = 'preview'
+      await loadRows()
+      await refreshRuns()
+      await router.replace({ path: '/business-docking', query: { run_id: replayed.id } })
+      schedulePoll()
+    } catch (error) {
+      pageError.value = error instanceof Error ? error.message : '重新处理失败'
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function rollbackRun() {
     if (!currentRun.value) return
     if (!canRollback.value) {
@@ -280,6 +304,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     refreshRuns,
     selectRun,
     retryRun,
+    replayRun,
     rollbackRun,
   }
 }

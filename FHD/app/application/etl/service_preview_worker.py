@@ -17,7 +17,6 @@ from app.application.etl.operation_owner import (
 )
 from app.application.etl.preview_confirmation import publish_preview
 from app.application.etl.service_support import dump_json, load_json, safe_error
-from app.db.models.etl import EtlRunRow
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
@@ -33,27 +32,36 @@ class PreviewWorkerMixin:
         _owned_run: Any
         _owned_upload: Any
         _suggest_mappings: Any
-        _materialize_preview_rows: Any
+        _persist_source_snapshot: Any
+        _load_source_snapshot: Any
+        _owned_upload_record: Any
+        _revalidate_existing_rows: Any
         _update_linked_companion_summary: Any
         _record_preview_metrics: Any
 
     def _submit_preview(
         self, run_id: str, tenant_id: int, owner_user_id: int, *, operation_token: str | None = None
     ) -> None:
-        with _facade().SUBMITTED_LOCK:
-            if run_id in _facade().SUBMITTED and operation_token is None:
+        facade = _facade()
+        with facade.SUBMITTED_LOCK:
+            if run_id in facade.SUBMITTED and operation_token is None:
                 return
-            _facade().SUBMITTED.add(run_id)
+            facade.SUBMITTED.add(run_id)
 
         def work() -> None:
             try:
                 with tenant_scope(tenant_id):
                     self._preview_worker(run_id, owner_user_id, operation_token=operation_token)
             finally:
-                with _facade().SUBMITTED_LOCK:
-                    _facade().SUBMITTED.discard(run_id)
+                with facade.SUBMITTED_LOCK:
+                    facade.SUBMITTED.discard(run_id)
 
-        _facade().EXECUTOR.submit(work)
+        try:
+            facade.EXECUTOR.submit(work)
+        except RECOVERABLE_ERRORS:
+            with facade.SUBMITTED_LOCK:
+                facade.SUBMITTED.discard(run_id)
+            raise
 
     def _preview_worker(
         self, run_id: str, owner_user_id: int, *, operation_token: str | None = None
@@ -81,7 +89,7 @@ class PreviewWorkerMixin:
                 )
             )
             bind_owner(db, operation)
-            upload = self._owned_upload(db, run.upload_id, owner_user_id)
+            upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
             run.status = "previewing"
             run.stage = "parsing"
             run.progress = 5
@@ -91,11 +99,18 @@ class PreviewWorkerMixin:
 
             draft = load_json(run.draft_json, {})
             compatibility_preset_id = str(draft.get("compatibility_preset_id") or "").strip()
-            dataset = _facade().parse_file(
-                upload.storage_path,
-                target_type=run.target_type,
-                compatibility_preset_id=compatibility_preset_id or None,
-            )
+            dataset = self._load_source_snapshot(db, run)
+            if dataset is None:
+                upload = self._owned_upload(db, run.upload_id, owner_user_id)
+                dataset = _facade().parse_file(
+                    upload.storage_path,
+                    target_type=run.target_type,
+                    compatibility_preset_id=compatibility_preset_id or None,
+                )
+                run.stage = "loading"
+                self._persist_source_snapshot(db, run, dataset)
+                dataset = self._load_source_snapshot(db, run)
+                assert dataset is not None
             run = self._owned_run(db, run_id, owner_user_id)
             draft = load_json(run.draft_json, {})
             source_features = dict(dataset.source_features or {})
@@ -138,14 +153,10 @@ class PreviewWorkerMixin:
                     "warnings": dataset.warnings,
                 }
             )
-            run.stage = "validating"
+            run.stage = "transforming"
             run.progress = 20
-            db.query(EtlRunRow).filter(
-                EtlRunRow.run_id == run.id, EtlRunRow.owner_user_id == owner_user_id
-            ).delete(synchronize_session=False)
             db.commit()
-
-            self._materialize_preview_rows(db, run, upload, dataset)
+            self._revalidate_existing_rows(db, run.id, owner_user_id, publish=False)
             run = self._owned_run(db, run_id, owner_user_id)
             run.status = "preview_ready"
             run.stage = "preview_ready"

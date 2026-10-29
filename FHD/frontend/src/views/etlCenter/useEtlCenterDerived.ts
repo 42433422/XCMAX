@@ -50,6 +50,12 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
     if (currentRun.value.summary.error && !validRowsOnly.value) return false
     return currentRun.value.summary.new + currentRun.value.summary.update > 0
   })
+  const canReplay = computed(() => {
+    const run = currentRun.value
+    const snapshot = run?.details.source_snapshot
+    return Boolean(run && ['preview_ready', 'completed', 'failed', 'interrupted'].includes(run.status) &&
+      snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && (snapshot as Record<string, unknown>).version === 1)
+  })
   const summaryCards = computed(() => [
     { action: 'new', label: '新增', count: currentRun.value?.summary.new || 0 },
     { action: 'update', label: '更新', count: currentRun.value?.summary.update || 0 },
@@ -132,6 +138,7 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
     bulkNewRows,
     draftChanged,
     canExecute,
+    canReplay,
     summaryCards,
     savedShipmentTemplate,
     savedShipmentTemplateName,
