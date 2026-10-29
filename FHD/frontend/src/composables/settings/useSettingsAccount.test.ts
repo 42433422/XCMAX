@@ -59,3 +59,11 @@ it('retires a disposed settings request', async () => {
  const scope = effectScope(); const s = scope.run(() => useSettingsAccount())!; const loading = s.loadLocalUser()
  scope.stop(); p.resolve(me); await loading; expect(s.isLoggedIn.value).toBe(false)
 })
+
+it('provides both translated state labels', async () => {
+ for (const lang of ['zh-CN', 'en-US']) {
+  const messages = await import(`../../i18n/locales/${lang}/settings.json`)
+  expect(messages.default.settings.accountChecking).toBeTruthy()
+  expect(messages.default.settings.accountUnavailable).toBeTruthy()
+ }
+})

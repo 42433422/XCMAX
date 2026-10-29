@@ -267,8 +267,8 @@
     "aboutIndustryLine": "{industry}基础线",
     "aboutCustomLine": "账号定制基础线",
     "aboutModCapability": "XCAGI 通用宿主 · 能力由 Mod 提供",
-    "genericIndustry": "通用"
-  },
-  "accountChecking": "正在确认登录状态",
-  "accountUnavailable": "登录状态暂时无法确认，请稍后重试"
+    "genericIndustry": "通用",
+    "accountChecking": "正在确认登录状态",
+    "accountUnavailable": "登录状态暂时无法确认，请稍后重试"
+  }
 }
