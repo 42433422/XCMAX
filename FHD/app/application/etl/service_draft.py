@@ -44,6 +44,7 @@ class DraftServiceMixin:
         _owned_run: Any
         _owned_upload_record: Any
         _row_context: Any
+        _load_source_snapshot: Any
         get_run: Any
 
     def update_draft(
@@ -156,6 +157,12 @@ class DraftServiceMixin:
             SUBMITTED.add(run_id)
 
         def work() -> None:
+            from app.application.etl.llm_session_provider import (
+                bind_etl_llm_owner,
+                reset_etl_llm_owner,
+            )
+
+            llm_owner_token = bind_etl_llm_owner(owner_user_id)
             db = new_session()
             operation = None
             try:
@@ -174,9 +181,11 @@ class DraftServiceMixin:
                     )
                     bind_owner(db, operation)
                     db.commit()
-                    self._revalidate_existing_rows(db, run_id, owner_user_id)
+                    self._revalidate_existing_rows(db, run_id, owner_user_id, publish=False)
                     if overrides:
                         self._apply_row_overrides(db, run_id, owner_user_id, overrides)
+                    run.status = run.stage = "preview_ready"
+                    run.progress = 100
                     finish_operation(db, operation)
                     db.commit()
             except BOUNDARY_ERRORS as exc:  # Background revalidation task boundary.
@@ -192,6 +201,7 @@ class DraftServiceMixin:
             finally:
                 unbind_owner(db)
                 db.close()
+                reset_etl_llm_owner(llm_owner_token)
                 with SUBMITTED_LOCK:
                     SUBMITTED.discard(run_id)
 
@@ -257,8 +267,11 @@ class DraftServiceMixin:
                 if not isinstance(values, list) or len(values) > 1000:
                     raise EtlError("ETL_VALIDATION_RULE_INVALID", "枚举校验值必须是有限数组")
 
-    def _revalidate_existing_rows(self, db: Session, run_id: str, owner_user_id: int) -> None:
+    def _revalidate_existing_rows(
+        self, db: Session, run_id: str, owner_user_id: int, *, publish: bool = True
+    ) -> None:
         run = self._owned_run(db, run_id, owner_user_id)
+        self._load_source_snapshot(db, run)
         upload = self._owned_upload_record(db, run.upload_id, owner_user_id)
         adapter = get_adapter(run.target_type)
         draft = load_json(run.draft_json, {})
@@ -268,6 +281,10 @@ class DraftServiceMixin:
         counts = {"new": 0, "update": 0, "skip": 0, "error": 0}
         llm_degraded = False
         preview_cache: dict[str, Any] = {}
+        advisory_jobs: list[tuple[EtlRunRow, dict[str, Any]]] = []
+        from app.application.etl.llm_assist import etl_row_advice_limit
+
+        advisory_limit = etl_row_advice_limit()
         last_id = 0
         processed = 0
         page_size = 500
@@ -334,27 +351,33 @@ class DraftServiceMixin:
                 row.match_ref = decision.match_ref or None
                 row.before_json = dump_json(decision.before or {})
                 row.after_json = dump_json(decision.after or {})
-                advisory = self._adviser.suggest(
-                    deterministic_action=decision.action,
-                    deterministic_reason=decision.reason,
-                    normalized=normalized,
-                    before=decision.before or {},
-                    after=decision.after or {},
-                )
-                llm_degraded = llm_degraded or bool(advisory.get("degraded"))
-                row.llm_suggestion_json = dump_json(advisory)
+                advisory_input = {
+                    "deterministic_action": decision.action,
+                    "deterministic_reason": decision.reason,
+                    "normalized": normalized,
+                    "before": decision.before or {},
+                    "after": decision.after or {},
+                }
+                row.llm_suggestion_json = dump_json(self._adviser.fallback(**advisory_input))
+                if len(advisory_jobs) < advisory_limit:
+                    advisory_jobs.append((row, advisory_input))
                 counts[action] += 1
             run.progress = min(95, 20 + int(processed / max(1, run.total_rows) * 75))
             run.processed_rows = processed
             db.commit()
+        if advisory_jobs:
+            suggestions = self._adviser.suggest_many([payload for _row, payload in advisory_jobs])
+            for (row, _payload), advisory in zip(advisory_jobs, suggestions, strict=False):
+                row.llm_suggestion_json = dump_json(advisory)
+                llm_degraded = llm_degraded or bool(advisory.get("degraded"))
         self._set_run_counts(run, counts)
         summary = load_json(run.summary_json, {})
         summary["llm_degraded"] = llm_degraded
         summary["llm_advisory_only"] = True
         run.summary_json = dump_json(summary)
-        run.status = "preview_ready"
-        run.stage = "preview_ready"
-        run.progress = 100
+        if publish:
+            run.status = run.stage = "preview_ready"
+            run.progress = 100
         run.error_code = None
         run.error_message = None
         db.commit()

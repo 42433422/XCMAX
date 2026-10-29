@@ -25,6 +25,9 @@ export function stageLabel(stage: string) {
       {
         queued: '等待后台任务',
         parsing: '解析文件',
+        loading: '保存原始数据',
+        source_loaded: '原始数据已保存',
+        transforming: '转换与校验',
         validating: '转换与校验',
         preview_ready: '解析完成',
         executing: '执行写入',

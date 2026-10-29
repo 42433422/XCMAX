@@ -319,6 +319,7 @@
     </div>
     <div v-if="!currentRun" class="etl-empty">暂无导入任务。</div>
     <template v-else>
+      <p v-if="currentRun.details.replay_of" class="etl-target-scope-note">从已保存的原始数据生成新预演，确认后才会写入。</p>
       <div v-if="customerProductPreviewMessage" class="etl-target-scope-note">
         <strong>客户及产品导入任务已创建</strong>
         <span>{{ customerProductPreviewMessage }}</span>
@@ -329,7 +330,7 @@
           <span>{{ currentRun.progress }}%</span>
         </div>
         <progress :value="currentRun.progress" max="100"></progress>
-        <p>正在解析文件；解析通过后将自动写入业务库。</p>
+        <p>{{ currentRun.details.replay_of ? '正在从已保存的原始数据重新处理，完成后请核对并确认写入。' : '正在解析文件；解析通过后将自动写入业务库。' }}</p>
       </div>
       <div class="etl-business-context">
         <div>
@@ -561,6 +562,14 @@
           <p>{{ currentRun.id }}</p>
         </div>
         <div class="etl-actions">
+          <button
+            v-if="canExecutePermission && canReplay"
+            type="button"
+            class="etl-secondary"
+            :disabled="busy"
+            title="从已保存的原始数据生成新预演，确认后才会写入。"
+            @click="replayRun"
+          >重新处理</button>
           <a
             v-if="['export_xlsx', 'export_csv'].includes(currentRun.target_type) && currentRun.status === 'completed'"
             :href="etlApi.exportUrl(currentRun.id)"

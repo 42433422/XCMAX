@@ -107,6 +107,7 @@ const {
   allowedActionsForRow,
   bulkNewRows,
   canExecute,
+  canReplay,
   summaryCards,
   savedShipmentTemplate,
   savedShipmentTemplateName,
@@ -135,6 +136,7 @@ const {
   refreshRuns,
   selectRun,
   retryRun,
+  replayRun,
   rollbackRun,
 } = runsApi
 

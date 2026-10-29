@@ -1538,7 +1538,7 @@ class TestServicePreview:
             lambda *a, **k: [{"region_id": "r1"}],
         )
         monkeypatch.setattr(
-            "app.application.etl.service_preview.apply_mapping",
+            "app.application.etl.service_draft.apply_mapping",
             lambda source, mappings: (
                 {"order_number": source["order_number"]}
                 if source["order_number"] != "O2"

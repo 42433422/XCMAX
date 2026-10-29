@@ -43,7 +43,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
     if TYPE_CHECKING:
         _owned_run: Any
         _owned_target_config: Any
-        _owned_upload: Any
+        _execution_upload: Any
+        _load_source_snapshot: Any
         _owned_upload_record: Any
         _row_context: Any
         _submit_preview: Any
@@ -71,7 +72,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
                 "预演存在错误行；默认阻断整批。仅在明确选择“仅写入正确行”后才能继续",
             )
         get_adapter(run.target_type)
-        self._owned_upload(db, run.upload_id, owner_user_id)
+        self._execution_upload(db, run, owner_user_id)
         draft = load_json(run.draft_json, {})
         if run.target_type == "webhook":
             config_id = str(draft.get("target_config_id") or "")
@@ -163,7 +164,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             )
             bind_owner(db, operation)
             db.commit()
-            upload = self._owned_upload(db, run.upload_id, owner_user_id)
+            upload = self._execution_upload(db, run, owner_user_id)
             draft = load_json(run.draft_json, {})
             target_config = None
             if run.target_type == "webhook":
@@ -402,6 +403,7 @@ class ExecutionServiceMixin(RollbackServiceMixin):
             raise EtlConflict("ETL_RETRY_NOT_ALLOWED", "当前运行无需重试")
         if run.rollback_status == "completed":
             raise EtlConflict("ETL_ALREADY_ROLLED_BACK", "本次运行已经撤销，不能重试")
+        source_snapshot = self._load_source_snapshot(db, run)
         operation = claim_operation(
             db,
             run,
@@ -411,18 +413,15 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         )
         bind_owner(db, operation)
         run.status = "previewing"
-        rerun_parse = run.executed_rows == 0 and (
-            run.total_rows == 0
-            or db.query(EtlRunRow)
-            .filter(
-                EtlRunRow.run_id == run.id,
-                EtlRunRow.owner_user_id == owner_user_id,
-            )
-            .count()
-            != run.total_rows
+        # A committed snapshot resumes at transformation; incomplete historical
+        # imports must be extracted again, never certified just by their row count.
+        rerun_parse = run.executed_rows == 0
+        run.stage = (
+            "transforming"
+            if source_snapshot is not None
+            else ("parsing" if rerun_parse else "validating")
         )
-        run.stage = "parsing" if rerun_parse else "validating"
-        run.progress = 5 if rerun_parse else 20
+        run.progress = 20 if source_snapshot is not None or not rerun_parse else 5
         run.error_code = None
         run.error_message = None
         tenant_id = tenant_id_for_write()

@@ -54,6 +54,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
   }
 
   async function tryAutoWrite(run: EtlRun) {
+    if (run.details.replay_of) return
     if (!autoWriteEnabled.value) return
     if (!pendingAutoWriteIds.value.has(run.id)) return
     if (run.status !== 'preview_ready') return
@@ -134,7 +135,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
         currentRun.value = await readRun(currentRun.value.id)
         syncDraft()
         if (currentRun.value.status === 'preview_ready') {
-          if (autoWriteEnabled.value && pendingAutoWriteIds.value.has(currentRun.value.id)) {
+          if (autoWriteEnabled.value && pendingAutoWriteIds.value.has(currentRun.value.id) && !currentRun.value.details.replay_of) {
             await tryAutoWrite(currentRun.value)
           } else {
             activeTab.value = 'preview'
@@ -279,6 +280,31 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     }
   }
 
+  async function replayRun() {
+    if (!currentRun.value || busy.value) return
+    busy.value = true
+    pageError.value = ''
+    try {
+      const replayed = await etlApi.replay(currentRun.value.id)
+      pendingAutoWriteIds.value = new Set([...pendingAutoWriteIds.value].filter((id) => id !== replayed.id))
+      currentRun.value = replayed
+      validRowsOnly.value = false
+      rowPage.value = 1
+      rowActionFilter.value = ''
+      customerProductPreviewMessage.value = ''
+      syncDraft()
+      activeTab.value = 'preview'
+      await loadRows()
+      await refreshRuns()
+      await router.replace({ path: '/business-docking', query: { run_id: replayed.id } })
+      schedulePoll()
+    } catch (error) {
+      pageError.value = error instanceof Error ? error.message : '重新处理失败'
+    } finally {
+      busy.value = false
+    }
+  }
+
   async function rollbackRun() {
     if (!currentRun.value) return
     if (!canRollback.value) {
@@ -313,6 +339,7 @@ export function createEtlCenterRuns({ state, route, router, canExecute, canRollb
     refreshRuns,
     selectRun,
     retryRun,
+    replayRun,
     rollbackRun,
   }
 }
