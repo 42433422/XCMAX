@@ -56,7 +56,15 @@ def _mutate_worker(root, barrier, operation):
             assert orders.merge_fields("AUDIT-LOCAL", fulfilled=True)
 
 
-def test_concurrent_projection_writes_preserve_payment_status_and_receipt():
+@pytest.mark.parametrize("preceding_test_root", [None, "FHD"])
+def test_concurrent_projection_writes_preserve_payment_status_and_receipt(
+    monkeypatch, preceding_test_root
+):
+    modstore_root = Path(__file__).resolve().parents[1]
+    if preceding_test_root:
+        monkeypatch.syspath_prepend(str(modstore_root.parents[1] / preceding_test_root))
+    # spawn reimports the worker by module name; use this project's tests package.
+    monkeypatch.syspath_prepend(str(modstore_root))
     create()
     context = mp.get_context("spawn")
     barrier = context.Barrier(2)

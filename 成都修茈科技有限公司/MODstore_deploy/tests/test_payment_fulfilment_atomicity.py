@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 from decimal import Decimal
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -142,7 +143,15 @@ def _repeat_worker(url, barrier, results):
     engine.dispose()
 
 
-def test_two_independent_workers_forty_replays_credit_once(database):
+@pytest.mark.parametrize("preceding_test_root", [None, "FHD"])
+def test_two_independent_workers_forty_replays_credit_once(
+    database, monkeypatch, preceding_test_root
+):
+    modstore_root = Path(__file__).resolve().parents[1]
+    if preceding_test_root:
+        monkeypatch.syspath_prepend(str(modstore_root.parents[1] / preceding_test_root))
+    # spawn reimports the worker by module name; use this project's tests package.
+    monkeypatch.syspath_prepend(str(modstore_root))
     context = mp.get_context("spawn")
     barrier, results = context.Barrier(2), context.Queue()
     workers = [
