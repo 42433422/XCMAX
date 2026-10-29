@@ -51,7 +51,7 @@ async function refresh() {
   if (account.marketUserId === null) return
   try {
     const response = await apiFetch('/api/mod-store/issue-runtime', { signal: controller.signal })
-    if (response.status === 401) return
+    if (response.status === 401) throw new Error('登录已失效，请重新登录后重试同步工单')
     const body = await response.json()
     if (!response.ok || body.success !== true) throw new Error('工单处理结果暂时无法同步，请重试')
     if (current === generation) repairs.value = Array.isArray(body.data?.items) ? body.data.items : []

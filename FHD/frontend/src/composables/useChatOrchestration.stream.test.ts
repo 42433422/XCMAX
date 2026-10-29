@@ -313,11 +313,19 @@ describe('useChatOrchestration stream', () => {
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
   })
 
-  it.each(['http', 'sse'])('surfaces %s errors as failures', async (kind) => {
+  it.each(['http', 'sse'])('surfaces %s errors, unlocks sending and permits retry', async (kind) => {
     sendChatStream.mockResolvedValue({ ok: kind !== 'http', status: 502, body: {} })
     readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'error', message: '模型不可用' }))
-    await useChatOrchestration({ sessionId: ref('s') }).sendMessage('hello')
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage('hello')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('处理失败'))
+    expect(api.isLoading.value).toBe(false)
+    expect(api.isStreamingReply.value).toBe(false)
+    sendChatStream.mockResolvedValue({ ok: true, body: {} })
+    readPlannerSseResponse.mockImplementation(async (_res, onEvent) => onEvent({ type: 'done', result: { success: true, response: '恢复成功' } }))
+    await api.sendMessage('hello')
+    expect(sendChatStream).toHaveBeenCalledTimes(2)
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '恢复成功')
   })
 
   it.each(['pending', 'rejected'])('unlocks a real SSE iteration failure while run tracking is %s', async state => {
