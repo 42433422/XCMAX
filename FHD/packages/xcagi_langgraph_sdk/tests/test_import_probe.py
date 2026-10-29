@@ -1,7 +1,7 @@
 """XCAGI vendored langgraph-sdk 导入探针测试 (LG-W0-11).
 
 核对任务要求的可导入符号:
-  - 版本号 __version__ == "0.4.4"
+  - 版本号 __version__ == "0.4.6"
   - 关键公共符号: get_client / get_sync_client / Auth / Encryption / EncryptionContext
 
 本测试在包本地 locked uv 环境运行（`uv run --locked pytest`）。为防「空载通过」，本测试:
@@ -35,10 +35,10 @@ def _assert_vendored(module: object) -> None:
     )
 
 
-def test_version_is_0_4_4() -> None:
+def test_version_is_0_4_6() -> None:
     import langgraph_sdk
 
-    assert langgraph_sdk.__version__ == "0.4.4"
+    assert langgraph_sdk.__version__ == "0.4.6"
 
 
 def test_key_public_symbols_importable() -> None:

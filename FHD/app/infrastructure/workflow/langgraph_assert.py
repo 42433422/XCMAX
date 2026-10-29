@@ -34,9 +34,9 @@ EXPECTED_PROVENANCE: Final[dict[str, tuple[str | None, str, str | None]]] = {
         "3.1.2",
     ),
     "xcagi_langgraph_sdk": (
-        "sdk==0.4.4",
-        "d5f4b2aa960940effc8430165ab3604038e817af",
-        "0.4.4",
+        "sdk==0.4.6",
+        "55b0e36c51d2922b11640b980fcfca1064243a96",
+        "0.4.6",
     ),
 }
 
