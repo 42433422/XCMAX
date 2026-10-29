@@ -446,7 +446,11 @@ class TestAttachDeterministicWorkflowTrace:
         payload = {"success": True, "message": "ok"}
         import sys
 
-        saved = sys.modules.pop("app.application.agent_orchestrator.chat_trace", None)
+        module_name = "app.application.agent_orchestrator.chat_trace"
+        parent = sys.modules["app.application.agent_orchestrator"]
+        missing = object()
+        saved = sys.modules.pop(module_name, missing)
+        saved_attribute = getattr(parent, "chat_trace", missing)
         try:
             result = AIChatApplicationService._attach_deterministic_workflow_trace(
                 payload,
@@ -457,9 +461,33 @@ class TestAttachDeterministicWorkflowTrace:
                 intent="test",
             )
         finally:
-            if saved is not None:
-                sys.modules["app.application.agent_orchestrator.chat_trace"] = saved
+            if saved is missing:
+                sys.modules.pop(module_name, None)
+            else:
+                sys.modules[module_name] = saved
+            # Re-import also writes the parent package attribute. Restore both
+            # identities so later patches target the module used by imports.
+            if saved_attribute is missing:
+                parent.__dict__.pop("chat_trace", None)
+            else:
+                parent.chat_trace = saved_attribute
         assert result is payload
+
+    @pytest.mark.parametrize("preloaded", [False, True])
+    def test_import_error_restores_module_and_parent_identity(self, monkeypatch, preloaded):
+        import importlib
+        import sys
+
+        name = "app.application.agent_orchestrator.chat_trace"
+        original = importlib.import_module(name)
+        parent = sys.modules["app.application.agent_orchestrator"]
+        monkeypatch.setattr(parent, "chat_trace", original)
+        if not preloaded:
+            monkeypatch.delitem(sys.modules, name)
+            monkeypatch.delattr(parent, "chat_trace")
+        self.test_import_error_returns_payload_unchanged()
+        assert sys.modules.get(name) is (original if preloaded else None)
+        assert getattr(parent, "chat_trace", None) is (original if preloaded else None)
 
     def test_with_file_context_attaches_trace(self):
         payload = {"success": True, "message": "ok"}

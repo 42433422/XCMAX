@@ -9,6 +9,7 @@ export interface ChatExecutionProgressItem {
 }
 
 export interface ChatApprovalCard {
+  id?: string
   version?: number
   kind?: string
   plan_id?: string
@@ -24,12 +25,21 @@ export interface ChatApprovalCard {
   reason?: string
   confirm_mode?: 'interactive' | 'approval' | string
   status?: 'pending' | 'confirmed' | 'cancelled'
+  submitting?: boolean
+  error?: string
 }
 
 export interface UiChatMessage {
   role: 'user' | 'ai' | 'task'
   content: string
   time: string
+  persistence?: {
+    id: string
+    status: 'local' | 'saving' | 'saved' | 'failed'
+    localSaved?: boolean
+    error?: string
+    request?: { role: 'user' | 'ai' | 'task'; content: string; metadata?: string }
+  }
   thinkingSteps?: string
   todoSteps?: string[]
   workflowAction?: string

@@ -13,6 +13,7 @@ export type ChatRequestScope = {
   turnId?: string
   taskId?: string
 }
+export type PlannerChatOptions = { fromWriteUnlock?: boolean; expectedWorkflowPlanId?: string }
 
 export interface UseChatRequestDeps {
   messages: Ref<ChatMessage[]>
@@ -44,7 +45,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
 
   function buildPlannerChatRequestPayload(
     message: string,
-    plannerOpts?: { fromWriteUnlock?: boolean },
+    plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): {
     body: Record<string, unknown>
@@ -66,12 +67,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       task_title: String(message || '')
         .trim()
         .slice(0, 80),
+      ...(plannerOpts?.expectedWorkflowPlanId ? { expected_workflow_plan_id: plannerOpts.expectedWorkflowPlanId } : {}),
     }
     // industry 由后端根据 session account_kind 自动派生（单一真相源），前端不传
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
-    const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
-    consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const hasExcelContext = !plannerOpts?.expectedWorkflowPlanId && injectExcelContextPayload(contextPayload, contextParts)
+    if (!plannerOpts?.expectedWorkflowPlanId) consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     if (plannerOpts?.fromWriteUnlock) {
@@ -104,7 +106,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   async function requestChatByMode(
     message: string,
     fetchOptions: RequestInit = {},
-    plannerOpts?: { fromWriteUnlock?: boolean },
+    plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
     const { body } = buildPlannerChatRequestPayload(message, plannerOpts, scope)
@@ -179,7 +181,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       key,
       window.setInterval(() => {
         const elapsedSec = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
-        const hint = elapsedSec >= 8 ? ' 若持续无响应，请确认后端已启动，且 VITE_API_BASE_URL（如有）与浏览器能访问的地址一致。' : ''
+        const hint = elapsedSec >= 8 ? ' 等待较久，可点击“停止回复”；操作可能仍在执行，请先到任务面板核对，勿重复提交。网络异常时请恢复连接后重试（故障编号：CHAT_WAIT）。' : ''
         setLoadingProgress(`已发送请求，正在等待服务端响应（${elapsedSec}s）...${hint}`, key)
       }, 1000),
     )
@@ -220,7 +222,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   function requestChatByModeWithTimeout(
     message: string,
     timeoutMs = 90_000,
-    plannerOpts?: { fromWriteUnlock?: boolean },
+    plannerOpts?: PlannerChatOptions,
     scope?: ChatRequestScope,
   ): Promise<ChatPlannerPayload> {
     return withRequestTimeout(signal => requestChatByMode(message, { signal }, plannerOpts, scope), timeoutMs, scope?.signal)

@@ -30,7 +30,9 @@ class RetortHistoryStore:
             },
         )
 
-    def record_employee_task(self, record: EmployeeTaskRecord) -> int:
+    def record_employee_task(
+        self, record: EmployeeTaskRecord, *, idempotent: bool = False
+    ) -> int:
         return self._insert(
             "employee_tasks",
             {
@@ -41,6 +43,7 @@ class RetortHistoryStore:
                 "status": record.status,
                 "payload_json": record.to_dict(),
             },
+            unique_column="queue_id" if idempotent else None,
         )
 
     def record_task_result(self, task_result: EmployeeTaskResult) -> int:
@@ -62,7 +65,9 @@ class RetortHistoryStore:
             ).fetchall()
         return tuple(json.loads(row[0]) for row in rows)
 
-    def _insert(self, table: str, values: dict[str, Any]) -> int:
+    def _insert(
+        self, table: str, values: dict[str, Any], *, unique_column: str | None = None
+    ) -> int:
         with sqlite3.connect(self.path) as conn:
             table_columns = {
                 str(row[1])
@@ -79,6 +84,14 @@ class RetortHistoryStore:
             for value in values.values()
         ]
         with sqlite3.connect(self.path) as conn:
+            if unique_column is not None:
+                conn.execute("BEGIN IMMEDIATE")
+                existing = conn.execute(
+                    f"SELECT id FROM {table} WHERE {unique_column}=? ORDER BY id LIMIT 1",
+                    (values[unique_column],),
+                ).fetchone()
+                if existing is not None:
+                    return int(existing[0])
             cursor = conn.execute(
                 f"INSERT INTO {table} ({','.join(columns)}) VALUES ({placeholders})",
                 payload,

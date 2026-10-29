@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
+import { mount } from '@vue/test-utils'
+import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 
 const {
   handleChatRequiresToken,
@@ -14,7 +16,7 @@ const {
   syncAgentRunFromPayload,
   attachApprovalCardToLastAiMessage,
   attachAgentRunTraceToLastAiMessage,
-  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, streamMode, modState,
+  queueVoice, addMessage, addAndSaveMessage, previewMeta, searchProducts, observeTool, getRun, continueRun, cancelRun, streamMode, modState,
 } = vi.hoisted(() => ({
   handleChatRequiresToken: vi.fn(),
   applyPlainTextToMessageIndex: vi.fn(),
@@ -29,6 +31,7 @@ const {
   attachAgentRunTraceToLastAiMessage: vi.fn(),
   queueVoice: vi.fn(), addMessage: vi.fn(), addAndSaveMessage: vi.fn().mockResolvedValue(undefined), previewMeta: vi.fn(), searchProducts: vi.fn(), observeTool: vi.fn(),
   streamMode: { enabled: true, realShipment: false }, modState: { activeModId: '', mods: [], modsForUi: [], setActiveModId: vi.fn() },
+  getRun: vi.fn(), continueRun: vi.fn(), cancelRun: vi.fn(),
 }))
 
 vi.mock('./useChatMessages', async () => {
@@ -224,7 +227,7 @@ vi.mock('@/api/chat', () => ({
 }))
 vi.mock('@/api/shipment', () => ({ shipmentApi: { getProductMetaForPreview: previewMeta, fetchNextOrderNumber: vi.fn() } }))
 vi.mock('@/api/products', () => ({ default: { searchProducts } }))
-vi.mock('@/api/agentRuns', () => ({ default: { observeTool } }))
+vi.mock('@/api/agentRuns', () => ({ default: { observeTool, getRun, continueRun, cancelRun } }))
 vi.mock('@/utils/chatSseStream', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/chatSseStream')>()
   return {
@@ -311,6 +314,142 @@ describe('useChatOrchestration stream', () => {
     await useChatOrchestration({ sessionId: ref('s') }).sendMessage('EXPORT INVENTORY')
     expect(applyPlainTextToMessageIndex).toHaveBeenCalledWith(0, expect.stringContaining('请到任务工作区核对结果'))
     expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+  })
+
+  it('keeps partial text and marks an abnormal real SSE EOF as incomplete', async () => {
+    const actual = await vi.importActual<typeof import('@/utils/chatSseStream')>('@/utils/chatSseStream')
+    readPlannerSseResponse.mockImplementation(actual.readPlannerSseResponse)
+    sendChatStream.mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"tool_progress","run_id":"unfinished-run"}\n\ndata: {"type":"token","text":"已收到部分内容"}\n\n'))
+      controller.close()
+    } })))
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage('查看任务进度')
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, expect.stringContaining('已收到部分内容\n\n[回复未完成]'))
+    expect(attachApprovalCardToLastAiMessage).not.toHaveBeenCalled()
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'unfinished-run' }, '查看任务进度', expect.any(Function))
+    expect(api.isLoading.value).toBe(false)
+    expect(api.isStreamingReply.value).toBe(false)
+  })
+
+  it('retains a real authorization pause without reporting success or truncated transport', async () => {
+    const actual = await vi.importActual<typeof import('@/utils/chatSseStream')>('@/utils/chatSseStream')
+    readPlannerSseResponse.mockImplementation(actual.readPlannerSseResponse)
+    sendChatStream.mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"requires_token","token_name":"DB_WRITE","token_description":"写入授权","run_id":"waiting-run"}\n\n'))
+      controller.close()
+    } })))
+    const api = useChatOrchestration({ sessionId: ref('s') })
+    await api.sendMessage('等待写入授权')
+    expect(handleChatRequiresToken).toHaveBeenCalledWith('DB_WRITE', '写入授权', ['等待写入授权'])
+    expect(applyPlainTextToMessageIndex).toHaveBeenLastCalledWith(0, '\n[需要授权：写入授权]\n')
+    expect(attachApprovalCardToLastAiMessage).not.toHaveBeenCalled()
+    expect(syncAgentRunFromPayload).toHaveBeenCalledWith({ run_id: 'waiting-run' }, '等待写入授权', expect.any(Function))
+    expect(api.isLoading.value).toBe(false)
+  })
+
+  function approvalHost(run = true) {
+    const sessionId = ref('s')
+    const api = useChatOrchestration({ sessionId })
+    api.messages.value = ['A', 'B'].map(id => ({ role: 'ai', content: `计划 ${id}`, time: '12:00',
+      approvalCard: { id: `card-${id}`, plan_id: `plan-${id}`, ...(run ? { run_id: `run-${id}` } : {}), status: 'pending' },
+    }))
+    const wrapper = mount(ChatMessageList, { props: {
+      messages: api.messages.value, isLoading: false, isStreamingReply: false, loadingProgressText: '',
+      messageHeights: new Map(), latestAiMessageIndex: 1, playingMsgIdx: -1,
+      isMessageCollapsed: () => false, getCollapsedPreview: () => '', canSpeakMessage: () => false,
+    } })
+    return { api, sessionId, wrapper, first: api.messages.value[0].approvalCard!, second: api.messages.value[1].approvalCard! }
+  }
+
+  it('a real earlier approval button targets its own run and waits for the receipt', async () => {
+    let resolve!: (value: unknown) => void
+    getRun.mockResolvedValue({ success: true, approval: { grant: 'grant-A' } })
+    continueRun.mockReturnValue(new Promise(r => { resolve = r }))
+    const test = approvalHost()
+    try {
+      await test.wrapper.findAll('.approval-btn--primary')[0].trigger('click')
+      expect(test.wrapper.emitted('approval-confirm')).toEqual([['card-A']])
+      const operation = test.api.confirmWorkflowFromCard('card-A')
+      await vi.waitFor(() => expect(continueRun).toHaveBeenCalledOnce())
+      expect(getRun).toHaveBeenCalledWith('run-A')
+      expect(continueRun).toHaveBeenCalledWith('run-A', expect.objectContaining({ approval_grant: 'grant-A' }))
+      expect(test.first.status).toBe('pending')
+      expect(test.first.submitting).toBe(true)
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(continueRun).toHaveBeenCalledOnce()
+      resolve({ success: true, data: { run_id: 'run-A', status: 'queued' } })
+      await operation
+      expect(test.first.status).toBe('confirmed')
+      expect(test.second.status).toBe('pending')
+      expect(requestChatByModeWithTimeout).not.toHaveBeenCalled()
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('failed approval remains visible and can be retried with a fresh grant', async () => {
+    getRun.mockResolvedValue({ success: true, approval: { grant: 'fresh' } })
+    continueRun.mockRejectedValueOnce(new Error('网络失败')).mockResolvedValue({ success: true, data: { run_id: 'run-A', status: 'queued' } })
+    const test = approvalHost()
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(test.first.status).toBe('pending')
+      expect(test.first.submitting).toBe(false)
+      expect(test.wrapper.find('[role="alert"]').text()).toContain('网络失败')
+      expect(test.wrapper.findAll('.approval-btn--primary')[0].attributes('disabled')).toBeUndefined()
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(getRun).toHaveBeenCalledTimes(2)
+      expect(test.first.status).toBe('confirmed')
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('plan-only approval includes its selected plan and rejects a stale or wrong receipt', async () => {
+    requestChatByModeWithTimeout.mockResolvedValueOnce({ success: false, response: '此确认卡对应的计划已失效', data: { action: 'workflow_confirmation_stale', data: { plan_id: 'plan-A' } } })
+      .mockResolvedValueOnce({ success: true, response: 'wrong plan', data: { action: 'workflow_done', data: { plan_id: 'plan-B' } } })
+      .mockResolvedValue({ success: true, response: '完成', data: { action: 'workflow_done', data: { plan_id: 'plan-A' } } })
+    const test = approvalHost(false)
+    try {
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(requestChatByModeWithTimeout).toHaveBeenCalledWith('确认', 90_000, { expectedWorkflowPlanId: 'plan-A' }, expect.objectContaining({ sessionId: 's' }))
+      expect(test.first.status).toBe('pending')
+      expect(test.first.error).toContain('失效')
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(test.first.status).toBe('pending')
+      await test.api.confirmWorkflowFromCard('card-A')
+      expect(test.first.status).toBe('confirmed')
+      expect(test.second.status).toBe('pending')
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('cancellation is bound to the clicked card and waits for cancelled status', async () => {
+    cancelRun.mockResolvedValueOnce({ success: true, data: { run_id: 'run-A', status: 'running' } })
+      .mockResolvedValue({ success: true, data: { run_id: 'run-A', status: 'cancelled' } })
+    const test = approvalHost()
+    try {
+      await test.wrapper.findAll('.approval-btn--ghost')[0].trigger('click')
+      expect(test.wrapper.emitted('approval-cancel')).toEqual([['card-A']])
+      await test.api.cancelWorkflowFromCard('card-A')
+      expect(test.first.status).toBe('pending')
+      expect(test.first.error).toContain('尚未确认取消')
+      await test.api.cancelWorkflowFromCard('card-A')
+      expect(cancelRun).toHaveBeenLastCalledWith('run-A')
+      expect(test.first.status).toBe('cancelled')
+      expect(test.second.status).toBe('pending')
+    } finally { test.wrapper.unmount() }
+  })
+
+  it('does not continue after switching conversation while fetching an approval grant', async () => {
+    let resolve!: (value: unknown) => void
+    getRun.mockReturnValue(new Promise(r => { resolve = r }))
+    const test = approvalHost()
+    try {
+      const operation = test.api.confirmWorkflowFromCard('card-A')
+      test.sessionId.value = 'other'
+      resolve({ success: true, approval: { grant: 'old-grant' } })
+      await operation
+      expect(continueRun).not.toHaveBeenCalled()
+      expect(test.first.status).toBe('pending')
+      expect(test.first.submitting).toBe(false)
+    } finally { test.wrapper.unmount() }
   })
 
   it.each(['http', 'sse'])('surfaces %s errors, unlocks sending and permits retry', async (kind) => {

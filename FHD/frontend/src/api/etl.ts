@@ -206,9 +206,10 @@ export const etlApi = {
   runs: (limit = 50, batchId = '') =>
     request<EtlRun[]>(`/api/etl/runs?limit=${limit}${batchId ? `&batch_id=${encodeURIComponent(batchId)}` : ''}`),
   run: (id: string) => request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}`),
-  rows: (id: string, page = 1, pageSize = 50, action = '') =>
+  rows: (id: string, page = 1, pageSize = 50, action = '', source?: { sheet?: string; row?: number }) =>
     request<{ page: number; page_size: number; total: number; items: EtlRunRow[]; preview_revision: string | null }>(
-      `/api/etl/runs/${encodeURIComponent(id)}/rows?page=${page}&page_size=${pageSize}${action ? `&action=${encodeURIComponent(action)}` : ''}`,
+      `/api/etl/runs/${encodeURIComponent(id)}/rows?page=${page}&page_size=${pageSize}${action ? `&action=${encodeURIComponent(action)}` : ''}` +
+      `${source?.sheet ? `&source_sheet=${encodeURIComponent(source.sheet)}` : ''}${source?.row ? `&source_row=${source.row}` : ''}`,
     ),
   patchDraft: (id: string, body: Record<string, unknown>) =>
     request<EtlRun>(`/api/etl/runs/${encodeURIComponent(id)}/draft`, {

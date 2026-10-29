@@ -26,6 +26,11 @@ describe('etlApi', () => {
     apiFetchMock.mockImplementation(async () => response({ success: true, data: {} }))
   })
 
+  it('sends exact source coordinates through the existing paged rows endpoint', async () => {
+    await etlApi.rows('run/1', 1, 50, 'new', { sheet: '报价 & 单价', row: 99998 })
+    expect(apiFetchMock).toHaveBeenCalledWith('/api/etl/runs/run%2F1/rows?page=1&page_size=50&action=new&source_sheet=%E6%8A%A5%E4%BB%B7%20%26%20%E5%8D%95%E4%BB%B7&source_row=99998', {})
+  })
+
   it('maps every ETL center operation to its stable API route', async () => {
     const file = new File(['unit,name\n1,test'], 'test.csv', { type: 'text/csv' })
 

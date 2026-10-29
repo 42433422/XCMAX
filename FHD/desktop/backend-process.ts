@@ -18,6 +18,7 @@ import { desktopRuntime } from './runtime-state'
 import {
   attachDatabaseBackupToRollback,
   cancelPreparedRollback,
+  checkPendingRollback,
   clearPreparedRollbackRecoveryRequired,
   markPreparedRollbackRecoveryRequired,
   prepareRollback,
@@ -30,10 +31,13 @@ import { sanitizeBackendProxyEnv } from './backend-env-utils'
 import { createForceUpgradeHandler } from './desktop-resilience'
 import { loopbackHttpGet } from './backend-loopback-http'
 import { clearBackendStopRequest, markBackendStopRequested, shouldRestartBackendAfterExit } from './backend-process-stop-guard'
+import { handoffModelUsageLedger } from './model-usage-rollback'
 
 export const POST_UPDATE_STABILITY_MS = 5_000
 let backendRestartTimer: NodeJS.Timeout | null = null
 let migrationStopInProgress = false
+let rollbackAttempt: Promise<RollbackTriggerResult | null> | null = null
+let backendStopAttempt: Promise<void> | null = null
 
 function rotateBackendLogIfNeeded(logPath: string): void {
   const maxBytes = 8 * 1024 * 1024
@@ -279,7 +283,7 @@ export async function showDbRecoveryDialogIfNeeded(status: Record<string, unknow
 export const BACKEND_STABLE_WINDOW_MS = 60_000
 
 export async function startBackend(): Promise<void> {
-  if (migrationStopInProgress) return
+  if (migrationStopInProgress || backendStopAttempt || app.isQuitting) return
   if (desktopRuntime.backendProcess) {
     return
   }
@@ -299,6 +303,8 @@ export async function startBackend(): Promise<void> {
   // 桌面模式不做端口避让：启动前预检 DEFAULT_PORT，被占则直接引导用户，避免后端
   // 启动后立即退出再触发无意义的自动重启。
   const portFree = await isPortAvailable(DEFAULT_PORT)
+  // The port probe yields; rollback/quit or another start may have won meanwhile.
+  if (migrationStopInProgress || backendStopAttempt || app.isQuitting || desktopRuntime.backendProcess) return
   if (!portFree) {
     const hint = portOccupiedHint(DEFAULT_PORT)
     writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
@@ -422,14 +428,33 @@ export async function runBackendMigrationWithRollback(toVersion: string): Promis
 }
 
 /** 触发回滚但吞掉自身错误，避免回滚失败导致二次崩溃 */
-export async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResult | null> {
+export function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResult | null> {
+  if (rollbackAttempt) return rollbackAttempt
+  rollbackAttempt = rollbackStoppedBackend(reason).finally(() => { rollbackAttempt = null })
+  return rollbackAttempt
+}
+
+async function rollbackStoppedBackend(reason: string): Promise<RollbackTriggerResult | null> {
+  let scheduled = false
   try {
-    const result = await triggerRollback(reason)
+    if (!checkPendingRollback()) return { mode: 'none', scheduled: false }
+    migrationStopInProgress = true
+    await stopBackend()
+    const result = await triggerRollback(reason, () => handoffModelUsageLedger(
+      backendExecutable(), app.getPath('userData'), desktopBackendEnv({
+        ...sanitizeBackendProxyEnv(process.env),
+        XCAGI_DESKTOP_MODE: '1', XCAGI_DATA_DIR: app.getPath('userData'), PYTHONUTF8: '1',
+      }, app.isPackaged ? undefined : repoRoot(), app.isPackaged ? process.resourcesPath : undefined),
+    ))
+    scheduled = result.scheduled
     writeBackendLog(`[rollback] 已触发回滚 mode=${result.mode} scheduled=${result.scheduled}：${reason}\n`)
     return result
   } catch (e) {
     writeBackendLog(`[rollback] 回滚失败：${e instanceof Error ? e.message : e}\n`)
     return null
+  } finally {
+    // A full rollback helper waits for Electron to quit. Keep its writer stopped.
+    migrationStopInProgress = scheduled
   }
 }
 
@@ -489,7 +514,13 @@ function runBackendMigration(): Promise<string> {
   })
 }
 
-export async function stopBackend(): Promise<void> {
+export function stopBackend(): Promise<void> {
+  if (backendStopAttempt) return backendStopAttempt
+  backendStopAttempt = stopBackendProcess().finally(() => { backendStopAttempt = null })
+  return backendStopAttempt
+}
+
+async function stopBackendProcess(): Promise<void> {
   const child = desktopRuntime.backendProcess
   desktopRuntime.backendProcess = null
   if (backendRestartTimer) { clearTimeout(backendRestartTimer); backendRestartTimer = null }
@@ -513,6 +544,11 @@ export async function stopBackend(): Promise<void> {
     }
   } else {
     result = await terminateChildProcess(child)
+    if (result === 'kill-timeout') {
+      clearBackendStopRequest(child)
+      if (desktopRuntime.backendProcess === null) desktopRuntime.backendProcess = child
+      throw new Error('后端仍未退出，已中止账本交接和回滚。')
+    }
   }
   desktopRuntime.backendLogStream?.end(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
   desktopRuntime.backendLogStream = null

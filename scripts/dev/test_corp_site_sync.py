@@ -13,32 +13,43 @@ class CorpSiteSyncTest(unittest.TestCase):
     def test_bootstrap_is_bounded_and_fail_closed(self):
         workflow = WORKFLOW.read_text()
         start = workflow.index('            # Bound each bootstrap command')
-        end = workflow.index('            # Always republish', start)
+        end = workflow.index('            # This job publishes static content only;', start)
         block = '\n'.join(line[12:] for line in workflow[start:end].splitlines())
-        self.assertIn('timeout --kill-after=15s 180s env GIT_TERMINAL_PROMPT=0', block)
+        self.assertIn('timeout --kill-after=15s 900s env GIT_TERMINAL_PROMPT=0', block)
         self.assertIn('timeout --kill-after=15s 120s git', block)
         self.assertIn('-c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30', block)
+        self.assertIn('command_timeout: 25m', workflow)
         self.assertNotIn('StrictHostKeyChecking', workflow)
         self.assertNotIn('GIT_SSH_COMMAND', block)
         with tempfile.TemporaryDirectory() as directory:
             temp = Path(directory)
+            readlink = temp / 'readlink'
+            readlink.write_text('#!/bin/bash\nprintf \'%s\\n\' "${@: -1}"\n')
+            readlink.chmod(0o755)
             git = temp / 'git'
             git.write_text('''#!/bin/bash
 printf '%s\\n' "$*" >> "$CALLS"
 case " $* " in
   *" fetch "*)
     test "$GIT_TERMINAL_PROMPT" = 0 || exit 91
-    case "$SCENARIO" in fetch_error) exit 7;; fetch_timeout) exec sleep 3;; esac;;
+    case "$SCENARIO" in
+      fetch_error) exit 7;; fetch_timeout) exec sleep 3;;
+      slow_success) for part in 1 2; do echo "receiving part $part" >&2; sleep 0.2; done;;
+    esac;;
   *" reset "*) case "$SCENARIO" in reset_error) exit 8;; reset_timeout) exec sleep 3;; esac;;
   *" rev-parse "*) echo 0123456789012345678901234567890123456789;;
 esac
 ''')
             git.chmod(0o755)
             # Only the fixture deadlines are shortened; assertions above check production values.
-            script = 'set -euo pipefail\n' + block.replace('15s', '0.1s').replace('180s', '0.1s').replace('120s', '0.1s') + '\necho PUBLISH_ALLOWED\n'
-            for scenario, code, stage in [('success', 0, ''), ('fetch_error', 7, 'fetch'),
-                                           ('fetch_timeout', 124, 'fetch'), ('reset_error', 8, 'reset'), ('reset_timeout', 124, 'reset')]:
-                with self.subTest(scenario=scenario):
+            cases = [('success', 0, '', '0.1s'), ('fetch_error', 7, 'fetch', '0.1s'),
+                     ('fetch_timeout', 124, 'fetch', '0.1s'), ('reset_error', 8, 'reset', '0.1s'),
+                     ('reset_timeout', 124, 'reset', '0.1s'),
+                     # Scale 180s -> 900s to 0.2s -> 1s around the same healthy transfer.
+                     ('slow_success', 124, 'fetch', '0.2s'), ('slow_success', 0, '', '1s')]
+            for scenario, code, stage, fetch_limit in cases:
+                with self.subTest(scenario=scenario, fetch_limit=fetch_limit):
+                    script = 'set -euo pipefail\n' + block.replace('15s', '0.1s').replace('900s', fetch_limit).replace('120s', '0.1s') + '\necho PUBLISH_ALLOWED\n'
                     calls = temp / 'calls'
                     calls.write_text('')
                     env = dict(os.environ, PATH=f'{temp}:{os.environ["PATH"]}',
@@ -46,6 +57,8 @@ esac
                     result = subprocess.run(['bash', '-c', script], env=env, capture_output=True,
                                             text=True, timeout=5)
                     self.assertEqual(result.returncode, code, result.stderr)
+                    self.assertNotIn('--depth', calls.read_text())
+                    self.assertNotIn('--filter', calls.read_text())
                     if code:
                         self.assertIn(f'stage={stage} exit={code}', result.stderr)
                         self.assertNotIn('PUBLISH_ALLOWED', result.stdout)

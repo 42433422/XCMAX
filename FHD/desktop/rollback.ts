@@ -9,6 +9,7 @@ import {
 } from './rollback-windows.js'
 import { launchMacOSFullRollback } from './rollback-macos.js'
 import { promoteLegacyMacRollback } from './legacy-macos-recovery.js'
+import { assertLedgerOutsideRollbackTarget, modelUsageLedgerPath } from './model-usage-rollback.js'
 
 const ROLLBACK_DIR = 'rollback'
 const ROLLBACK_MARKER = 'rollback-marker.json'
@@ -533,10 +534,13 @@ export interface RollbackTriggerResult {
   scheduled: boolean
 }
 
-export async function triggerRollback(reason: string): Promise<RollbackTriggerResult> {
+export async function triggerRollback(reason: string, beforeRestore?: () => Promise<void>): Promise<RollbackTriggerResult> {
   let marker = checkPendingRollback()
   if (!marker) {
     return { mode: 'none', scheduled: false }
+  }
+  if (!beforeRestore && fs.existsSync(`${modelUsageLedgerPath(app.getPath('userData'), process.env, path.dirname(marker.backendPath))}.sqlite3`)) {
+    throw new Error('计量账本需要停写并交接后才能回滚；请通过后端生命周期入口执行。')
   }
 
   const dir = rollbackDir()
@@ -560,6 +564,17 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
 
   const windows = process.platform === 'win32' && marker.mode === 'windows-full' && marker.appPath
   const macos = process.platform === 'darwin' && marker.mode === 'macos-full' && marker.appBundlePath
+  assertLedgerOutsideRollbackTarget(
+    modelUsageLedgerPath(app.getPath('userData'), process.env, path.dirname(marker.backendPath)),
+    windows ? path.dirname(windows) : macos || path.dirname(marker.backendPath),
+  )
+  if (windows && marker.ownedUserDataRoot) {
+    const ledger = modelUsageLedgerPath(app.getPath('userData'), process.env, path.dirname(marker.backendPath))
+    const relative = path.relative(marker.ownedUserDataRoot, ledger)
+    if (isOwnedModPath(relative, false) || isOwnedDatabasePath(relative)) {
+      throw new Error('计量账本位于将被恢复的 Mod/数据库快照内，已中止回滚；请先迁移账本至独立持久目录。')
+    }
+  }
   if ((windows || macos) && marker.appBackupRelPath) {
     const backupRoot = resolveInside(dir, marker.appBackupRelPath)
     if (!fs.existsSync(backupRoot)) throw new Error(`回滚失败：完整应用备份目录不存在 ${backupRoot}`)
@@ -572,9 +587,13 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
     }
     if (windows) {
       validateOwnedRollbackMarker(marker, dir)
+      await beforeRestore?.()
       await launchWindowsFullRollback({ ...options, installDir: path.dirname(windows), expectedAppFiles: marker.expectedAppFiles, expectedDatabaseSha256: marker.expectedDatabaseSha256, databaseOriginallyAbsent: marker.databaseOriginallyAbsent, ownedUserDataRoot: marker.ownedUserDataRoot, ownedBackupRoot: marker.ownedBackupRoot, expectedOwnedFiles: marker.expectedOwnedFiles, expectedOwnedDirectories: marker.expectedOwnedDirectories })
     }
-    else await launchMacOSFullRollback(options)
+    else {
+      await beforeRestore?.()
+      await launchMacOSFullRollback(options)
+    }
     return { mode: windows ? 'windows-full' : 'macos-full', scheduled: true }
   }
 
@@ -587,6 +606,7 @@ export async function triggerRollback(reason: string): Promise<RollbackTriggerRe
   }
 
   const backendDir = path.dirname(marker.backendPath)
+  await beforeRestore?.()
   replaceDirectoryFromStaging(backupRoot, backendDir)
 
   fs.writeFileSync(appliedPath(), JSON.stringify(applied, null, 2), 'utf8')

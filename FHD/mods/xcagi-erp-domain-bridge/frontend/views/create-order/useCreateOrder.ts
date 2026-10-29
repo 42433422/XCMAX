@@ -128,12 +128,8 @@ export function useCreateOrder() {
     showStatus('AI 数据已自动填充', 'success')
   }
 
-  function setupAIEventListener() {
-    window.addEventListener('xcagi:ai-fill-order', (event: Event) => {
-      handleAIFillOrder((event as CustomEvent).detail)
-    })
-
-    window.__VUE_FILL_ORDER__ = handleAIFillOrder
+  function onAIFillOrder(event: Event) {
+    handleAIFillOrder((event as CustomEvent<AIFillOrderPayload>).detail)
   }
 
   function refreshOptions() {
@@ -145,11 +141,12 @@ export function useCreateOrder() {
   onMounted(() => {
     refreshOptions()
     generateOrderNumber()
-    setupAIEventListener()
+    window.addEventListener('xcagi:ai-fill-order', onAIFillOrder)
+    window.__VUE_FILL_ORDER__ = handleAIFillOrder
   })
 
   onUnmounted(() => {
-    window.removeEventListener('xcagi:ai-fill-order', handleAIFillOrder as EventListener)
+    window.removeEventListener('xcagi:ai-fill-order', onAIFillOrder)
     if (window.__VUE_FILL_ORDER__ === handleAIFillOrder) {
       delete window.__VUE_FILL_ORDER__
     }
@@ -176,6 +173,7 @@ export function useCreateOrder() {
   })
 
   const result = ref<ShipmentResult | null>(null)
+  const generatingShipment = ref(false)
   const showProductSelector = ref(false)
   const productSearchQuery = ref('')
   const searchingProducts = ref(false)
@@ -288,20 +286,11 @@ export function useCreateOrder() {
 
   function onProductNameSelect(product: OrderProductRow, index: number) {
     const selected = allProducts.value.find(p => p.id == product.nameId)
-    if (selected) {
-      product.name = selected.name || ''
-      if (selected.model_number) {
-        product.model = selected.model_number
-      }
-      if (selected.specification) {
-        product.specification = Number.parseFloat(String(selected.specification)) || 0
-        calculateKg(index)
-      }
-      if (selected.price) {
-        product.unitPrice = selected.price
-        calculateAmount(index)
-      }
-    }
+    product.name = selected?.name ?? ''
+    product.model = selected?.model_number ?? ''
+    product.specification = Number.parseFloat(String(selected?.specification ?? 0)) || 0
+    product.unitPrice = selected?.price ?? 0
+    calculateKg(index)
   }
 
   function searchProductsForSelection() {
@@ -320,6 +309,7 @@ export function useCreateOrder() {
   }
 
   async function generateShipment() {
+    if (generatingShipment.value) return
     if (!templates.value.length) {
       await appAlert('暂无可用发货单模板：请先点「模板编辑」上传或创建贵司出货单模板，保存后回到本页点「刷新模板列表」再生成。')
       return
@@ -341,9 +331,10 @@ export function useCreateOrder() {
       return
     }
 
-    showStatus('正在生成发货单...', 'processing')
-
+    generatingShipment.value = true
+    result.value = null
     try {
+      showStatus('正在生成发货单...', 'processing')
       const data = await api.post<ShipmentResult>(resolveErpApiPath('/api/shipment/generate'), {
         unit_name: form.purchaseUnit,
         date: form.purchaseDate,
@@ -367,6 +358,8 @@ export function useCreateOrder() {
       }
     } catch (error) {
       showStatus('生成失败: ' + (error as Error).message, 'error')
+    } finally {
+      generatingShipment.value = false
     }
   }
 
@@ -382,6 +375,7 @@ export function useCreateOrder() {
   }
 
   function resetForm() {
+    if (generatingShipment.value) return
     form.templateName = ''
     form.purchaseUnit = ''
     form.contactPerson = ''
@@ -393,13 +387,6 @@ export function useCreateOrder() {
     generateOrderNumber()
   }
 
-  onMounted(() => {
-    loadTemplates()
-    loadPurchaseUnits()
-    loadAllProducts()
-    generateOrderNumber()
-  })
-
   return {
     goOrdersList,
     goTemplatePreview,
@@ -410,6 +397,7 @@ export function useCreateOrder() {
     status,
     form,
     result,
+    generatingShipment,
     showProductSelector,
     productSearchQuery,
     searchingProducts,

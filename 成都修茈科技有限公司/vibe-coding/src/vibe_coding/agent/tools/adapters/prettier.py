@@ -53,8 +53,10 @@ class PrettierAdapter:
         if cmd is None:
             return ToolReport(
                 tool=self.name,
-                passed=True,
-                error="prettier not available; skipped",
+                passed=False,
+                executed=False,
+                exit_code=-1,
+                error="prettier not available; verification not executed",
             )
         res = sandbox.execute(
             SandboxJob(

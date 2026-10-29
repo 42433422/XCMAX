@@ -1,37 +1,15 @@
-"""上下文窗口管理器（ContextWindowManager）——按 token 预算裁剪 + 自动摘要旧轮次。
+"""Token-budgeted conversation history with per-context incremental summaries.
 
-接入点：``app.domain.shared_services.conversation.api.call_llm_api`` 在调用 ``provider.chat_completion``
-之前调用 ``ContextWindowManager.compress``，对 ``messages`` 做"按预算裁剪 + 必要时摘要"。
-
-设计目标
---------
-
-1. **统一裁剪入口**：消除 ``api.py`` 中 ``[-10:]`` 硬编码切片与 ``manager.py`` 中 ``[-20:]``
-   滚动历史的三层不一致（内存 20 / 喂 LLM 10 / persona 看全量 20）。
-2. **预算预检**：调用 LLM 前估算 prompt token，超预算时主动压缩，避免 422/413。
-3. **可观测性零侵入**：压缩元数据通过 ``_xcagi_trace`` dict 注入，``chat_trace.py``
-   的 ``_iter_llm_trace_payloads`` 会自动衔接，不需要改 chat_trace。
-4. **摘要独立记账**：摘要 LLM 调用作为独立 ``LLMCall`` 记录，
-   ``metadata.source="context_window_manager.summarize"``，与主调用分离。
-
-策略
-----
-
-- ``noop``：messages 数 ≤ ``summarize_threshold`` 且估算 token ≤ ``token_budget`` → 原样返回。
-- ``summarize``：超阈值 → 调 LLM 摘要前 N 条，拼接 ``[system..., summary, recent_keep 条]``。
-- ``truncate``：摘要 LLM 失败时退化 → 保留 ``[system..., recent_keep 条]``。
-
-约束
-----
-
-- system 消息（``role=="system"``）永不裁剪。
-- ``recent_keep`` 条最近消息永不裁剪（保近期上下文完整）。
-- 摘要 prompt 限制输出 ≤ 200 字，控制成本。
-- 所有 LLM 异常捕获 ``RECOVERABLE_ERRORS``，失败退化为 ``truncate``，不阻断主对话。
+System instructions and the newest user/tool turn are indivisible. If they
+cannot fit, reject before provider I/O; recent_keep is a preference, not an
+exemption from the budget. Message count alone never triggers a paid summary.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
 import os
 import time
@@ -39,7 +17,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.application.agent_orchestrator.run_models import LLMCall
-from app.infrastructure.llm.token_estimator import estimate_messages_tokens
+from app.infrastructure.llm.token_estimator import (
+    estimate_messages_tokens as _estimate_messages_tokens,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -57,7 +37,7 @@ _DEFAULT_TOKEN_BUDGET = 8000
 _DEFAULT_RECENT_KEEP = 6
 _DEFAULT_SUMMARIZE_THRESHOLD = 12
 _DEFAULT_SUMMARIZE_MAX_TOKENS = 300  # 摘要输出上限（约 200 汉字）
-CONTEXT_WINDOW_MANAGER_VERSION = "1.0.0"
+CONTEXT_WINDOW_MANAGER_VERSION = "1.1.0"
 
 _SUMMARY_SYSTEM_PROMPT = "你是对话历史压缩器。请用 200 字以内总结以下对话历史的关键信息，保留用户意图、关键实体和未完成的事项，不要添加新的信息。"
 _SUMMARY_CONTENT_PREFIX = "对话历史摘要："
@@ -70,22 +50,16 @@ def _coerce_int(value: Any) -> int:
         return 0
 
 
+def estimate_messages_tokens(messages) -> int:
+    """Include message framing and non-content fields in the conservative estimate."""
+    if not messages:
+        return 0
+    encoded = json.dumps(messages, ensure_ascii=False, default=str).encode()
+    return max(_estimate_messages_tokens(messages), (len(encoded) + 3) // 4) + 4 * len(messages) + 3
+
+
 @dataclass
 class ContextCompressionResult:
-    """上下文压缩结果。
-
-    Attributes:
-        messages: 压缩后的 messages 列表（可能等于输入）。
-        strategy: 实际生效的策略：``"noop"`` / ``"summarize"`` / ``"truncate"``。
-        pre_message_count: 压缩前 messages 数。
-        post_message_count: 压缩后 messages 数。
-        pre_estimated_tokens: 压缩前估算 token 数。
-        post_estimated_tokens: 压缩后估算 token 数。
-        tokens_saved: 节省的 token 数（``pre - post``，≥ 0）。
-        summary_llm_call: 若触发摘要，记录独立 ``LLMCall``；未触发或失败时为 ``None``。
-        compression_latency_ms: 压缩耗时（毫秒）。
-    """
-
     messages: list[dict[str, str]] = field(default_factory=list)
     strategy: str = "noop"
     pre_message_count: int = 0
@@ -97,16 +71,27 @@ class ContextCompressionResult:
     compression_latency_ms: float = 0.0
 
 
-class ContextWindowManager:
-    """上下文窗口管理器：按 token 预算裁剪 messages，必要时调 LLM 摘要旧轮次。
+class ContextWindowExceeded(ValueError):
+    """The system instructions/newest turn cannot fit without changing intent."""
 
-    Args:
-        token_budget: 单次 LLM 调用 prompt token 预算（超则触发压缩）。
-        recent_keep: 永不裁剪的最近消息数（保近期上下文完整）。
-        summarize_threshold: 非系统消息数超过此值时触发摘要。
-        summarize_max_tokens: 摘要 LLM 调用的 ``max_tokens`` 上限。
-        enabled: 总开关；``False`` 时 ``compress`` 直接返回 noop。
-    """
+
+def summary_fingerprint(messages: list[dict[str, str]]) -> str:
+    return hashlib.sha256(
+        json.dumps(messages, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+
+
+def _turns(messages):
+    groups = []
+    for message in messages:
+        if not groups or message.get("role") == "user":
+            groups.append([])
+        groups[-1].append(message)
+    return groups
+
+
+class ContextWindowManager:
+    """Bound input plus reserved output/tool tokens; cache only on its owning context."""
 
     def __init__(
         self,
@@ -140,113 +125,115 @@ class ContextWindowManager:
         user_id: str = "",
         trace_id: str | None = None,
         provider: Any | None = None,
+        context: Any | None = None,
+        reserved_tokens: int = 0,
     ) -> ContextCompressionResult:
-        """压缩 ``messages``，返回压缩后的 messages + 元数据。
-
-        Args:
-            messages: OpenAI 格式消息列表。``None`` 或空列表返回 noop 空结果。
-            user_id: 当前用户 ID（用于摘要调用记账）。
-            trace_id: 当前 trace_id（写入 ``LLMCall.metadata``）。
-            provider: 可选的已解析 LLM provider；``None`` 时由 manager 自行调用
-                ``get_active_provider`` 解析。传入已解析的 provider 可避免重复解析。
-
-        Returns:
-            :class:`ContextCompressionResult`。
-        """
-        t0 = time.perf_counter()
-
-        # 边界：None / 空
-        if not messages:
-            return ContextCompressionResult(
-                messages=[],
-                strategy="noop",
-                compression_latency_ms=(time.perf_counter() - t0) * 1000.0,
-            )
-
-        pre_count = len(messages)
-        pre_tokens = estimate_messages_tokens(messages)
-
-        # 总开关关闭 → noop 原样返回
-        if not self._enabled:
-            return ContextCompressionResult(
-                messages=list(messages),
-                strategy="noop",
-                pre_message_count=pre_count,
-                post_message_count=pre_count,
-                pre_estimated_tokens=pre_tokens,
-                post_estimated_tokens=pre_tokens,
-                tokens_saved=0,
-                compression_latency_ms=(time.perf_counter() - t0) * 1000.0,
-            )
-
-        # 分离 system 与非 system 消息（system 永不裁剪）
-        system_msgs = [m for m in messages if isinstance(m, dict) and m.get("role") == "system"]
-        non_system = [
-            m for m in messages if not (isinstance(m, dict) and m.get("role") == "system")
-        ]
-
-        # noop 判定：消息数 ≤ 阈值 且 token ≤ 预算
-        if len(non_system) <= self._summarize_threshold and pre_tokens <= self._token_budget:
-            return ContextCompressionResult(
-                messages=list(messages),
-                strategy="noop",
-                pre_message_count=pre_count,
-                post_message_count=pre_count,
-                pre_estimated_tokens=pre_tokens,
-                post_estimated_tokens=pre_tokens,
-                tokens_saved=0,
-                compression_latency_ms=(time.perf_counter() - t0) * 1000.0,
-            )
-
-        # 非系统消息数 ≤ recent_keep → 无可摘要部分，noop
-        if len(non_system) <= self._recent_keep:
-            return ContextCompressionResult(
-                messages=list(messages),
-                strategy="noop",
-                pre_message_count=pre_count,
-                post_message_count=pre_count,
-                pre_estimated_tokens=pre_tokens,
-                post_estimated_tokens=pre_tokens,
-                tokens_saved=0,
-                compression_latency_ms=(time.perf_counter() - t0) * 1000.0,
-            )
-
-        # 触发压缩：尝试 summarize，失败退化为 truncate
-        recent = non_system[-self._recent_keep :] if self._recent_keep > 0 else []
-        to_summarize = non_system[: len(non_system) - self._recent_keep]
-
-        summary_text, summary_call = await self._summarize_messages(
-            to_summarize=to_summarize,
-            user_id=user_id,
-            trace_id=trace_id,
-            provider=provider,
+        if context is not None:
+            lock = getattr(context, "_compression_lock", None)
+            if lock is None:
+                lock = asyncio.Lock()
+                context._compression_lock = lock
+            async with lock:
+                return await self._compress(
+                    messages or [], user_id, trace_id, provider, context, reserved_tokens
+                )
+        return await self._compress(
+            messages or [], user_id, trace_id, provider, None, reserved_tokens
         )
 
-        if summary_text:
-            summary_msg = {
-                "role": "system",
-                "content": f"{_SUMMARY_CONTENT_PREFIX}{summary_text}",
-            }
-            compressed = [*system_msgs, summary_msg, *recent]
-            strategy = "summarize"
-        else:
-            # 摘要失败 → truncate
-            compressed = [*system_msgs, *recent]
-            strategy = "truncate"
-
+    async def _compress(
+        self, messages, user_id, trace_id, provider, context, reserved_tokens
+    ) -> ContextCompressionResult:
+        started = time.perf_counter()
+        pre_tokens = estimate_messages_tokens(messages)
+        budget = self._token_budget - max(0, int(reserved_tokens))
+        compressed, strategy, summary_call = list(messages), "noop", None
+        if self._enabled and messages:
+            system = [m for m in messages if m.get("role") == "system"]
+            history = [m for m in messages if m.get("role") != "system"]
+            groups = _turns(history)
+            required = [*system, *(groups[-1] if groups else [])]
+            if estimate_messages_tokens(required) > budget:
+                raise ContextWindowExceeded(
+                    "系统指令或最新一轮输入超过上下文预算，请缩短输入或分批提交。"
+                )
+            covered, cached = 0, []
+            cache_valid = (
+                context is not None
+                and history[: len(context.conversation_history)] == context.conversation_history
+            )
+            if cache_valid and context.summary:
+                covered = min(len(context.conversation_history), context.summary_covered_until + 1)
+                if context.summary_fingerprint == summary_fingerprint(history[:covered]):
+                    cached = [
+                        {"role": "system", "content": _SUMMARY_CONTENT_PREFIX + context.summary}
+                    ]
+                else:
+                    covered = 0
+            tail = history[covered:]
+            compressed = [*system, *cached, *tail]
+            strategy = "summarize" if cached else "noop"
+            if estimate_messages_tokens(compressed) > budget:
+                groups = _turns(tail)
+                recent: list[dict[str, str]] = []
+                # Keep complete user/tool turns, aiming for recent_keep messages.
+                while groups and len(recent) < max(1, self._recent_keep):
+                    recent = groups.pop() + recent
+                while (
+                    len(_turns(recent)) > 1
+                    and estimate_messages_tokens([*system, *recent]) > budget
+                ):
+                    recent = [m for group in _turns(recent)[1:] for m in group]
+                old = tail[: len(tail) - len(recent)]
+                summary_text, summary_call = (
+                    await self._summarize_messages(
+                        to_summarize=[*cached, *old],
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        provider=provider,
+                    )
+                    if old
+                    else ("", None)
+                )
+                summary = (
+                    [{"role": "system", "content": _SUMMARY_CONTENT_PREFIX + summary_text}]
+                    if summary_text
+                    else []
+                )
+                compressed, strategy = (
+                    [*system, *summary, *recent],
+                    "summarize" if summary else "truncate",
+                )
+                # The provider may ignore max_tokens. Never forward an oversized
+                # summary; discard it before trimming complete older turns.
+                if estimate_messages_tokens(compressed) > budget:
+                    summary = []
+                    compressed, strategy = [*system, *recent], "truncate"
+                while estimate_messages_tokens(compressed) > budget and len(_turns(recent)) > 1:
+                    recent = [m for group in _turns(recent)[1:] for m in group]
+                    compressed = [*system, *recent]
+                new_covered = covered + len(old)
+                if (
+                    summary
+                    and cache_valid
+                    and history[:new_covered] == context.conversation_history[:new_covered]
+                ):
+                    context.summary = summary_text
+                    context.summary_covered_until = new_covered - 1
+                    context.summary_fingerprint = summary_fingerprint(history[:new_covered])
+            if estimate_messages_tokens(compressed) > budget:
+                raise ContextWindowExceeded("上下文无法在预算内完整保留最新输入，请缩短输入。")
         post_tokens = estimate_messages_tokens(compressed)
-        latency_ms = (time.perf_counter() - t0) * 1000.0
-
         return ContextCompressionResult(
             messages=compressed,
             strategy=strategy,
-            pre_message_count=pre_count,
+            pre_message_count=len(messages),
             post_message_count=len(compressed),
             pre_estimated_tokens=pre_tokens,
             post_estimated_tokens=post_tokens,
             tokens_saved=max(0, pre_tokens - post_tokens),
             summary_llm_call=summary_call,
-            compression_latency_ms=latency_ms,
+            compression_latency_ms=(time.perf_counter() - started) * 1000,
         )
 
     async def _summarize_messages(
@@ -273,6 +260,9 @@ class ContextWindowManager:
             {"role": "user", "content": f"请总结以下对话历史：\n\n{history_text}"},
         ]
 
+        summary_room = self._token_budget - estimate_messages_tokens(summary_messages)
+        if summary_room <= 0:
+            return "", None
         t0 = time.perf_counter()
         call = LLMCall(
             metadata={
@@ -309,7 +299,7 @@ class ContextWindowManager:
             result = await resolved_provider.chat_completion(
                 messages=summary_messages,
                 temperature=0.3,  # 摘要用低温度
-                max_tokens=self._summarize_max_tokens,
+                max_tokens=min(self._summarize_max_tokens, summary_room),
             )
 
             latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -442,15 +432,7 @@ _cwm_singleton: ContextWindowManager | None = None
 
 
 def get_context_window_manager() -> ContextWindowManager:
-    """获取全局 :class:`ContextWindowManager` 单例。
-
-    首次调用时从环境变量读取配置：
-
-    - ``FHD_CONTEXT_WINDOW_TOKEN_BUDGET``：token 预算（默认 8000）
-    - ``FHD_CONTEXT_WINDOW_RECENT_KEEP``：保留最近消息数（默认 6）
-    - ``FHD_CONTEXT_WINDOW_SUMMARIZE_THRESHOLD``：触发摘要阈值（默认 12）
-    - ``FHD_CONTEXT_WINDOW_MANAGER_ENABLED``：总开关（默认 1）
-    """
+    """Return the environment-configured shared stateless manager."""
     global _cwm_singleton
     if _cwm_singleton is None:
         _cwm_singleton = ContextWindowManager(

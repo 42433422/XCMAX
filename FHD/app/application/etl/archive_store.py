@@ -14,6 +14,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.application.etl.archive_policy import ArchivePolicy, ArchivePolicyError
+from app.application.etl.errors import EtlConflict
 from app.application.etl.service_support import MAX_FILE_BYTES, clean_filename, new_id
 from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.infrastructure.tenant_scope import tenant_id_for_write
@@ -112,7 +113,14 @@ def _write_pending(
 
 
 def append_original_version(
-    db: Session, *, owner: int, asset_id: str, body: bytes, root: Path, request_key: str
+    db: Session,
+    *,
+    owner: int,
+    asset_id: str,
+    body: bytes,
+    root: Path,
+    request_key: str,
+    expected_version: int | None = None,
 ) -> EtlArchiveVersion:
     """Create a new version only under an explicitly selected active asset."""
     tenant = tenant_id_for_write()
@@ -144,6 +152,15 @@ def append_original_version(
     if cast(CursorResult, locked).rowcount != 1:
         db.rollback()
         raise ArchivePolicyError("归档不存在或已撤回")
+    current_version = (
+        db.query(func.max(EtlArchiveVersion.version))
+        .filter_by(tenant_id=tenant, owner_user_id=owner, asset_id=asset_id)
+        .scalar()
+        or 0
+    )
+    if expected_version is not None and current_version != expected_version:
+        db.rollback()
+        raise EtlConflict("ETL_SOURCE_VERSION_CONFLICT", "来源已有新版本，请刷新后再追加")
     reserved = db.execute(
         update(EtlArchiveQuota)
         .where(
@@ -161,19 +178,13 @@ def append_original_version(
         db.rollback()
         raise ArchivePolicyError("归档路径无效")
     version_id = new_id()
-    version_number = (
-        db.query(func.max(EtlArchiveVersion.version))
-        .filter_by(tenant_id=tenant, owner_user_id=owner, asset_id=asset_id)
-        .scalar()
-        or 0
-    ) + 1
     path = directory / version_id
     version = EtlArchiveVersion(
         id=version_id,
         asset_id=asset_id,
         tenant_id=tenant,
         owner_user_id=owner,
-        version=version_number,
+        version=current_version + 1,
         size_bytes=len(body),
         sha256=digest,
         storage_path=str(path),

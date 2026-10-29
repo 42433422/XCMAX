@@ -13,6 +13,23 @@ const setup = (props = {}) => mount(ChatConversationPanel, {
 })
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 
+it('loads earlier conversations without hiding a loaded page on failure and prevents duplicate paging', async () => {
+  const wrapper = setup({ hasMore: true, error: '网络暂时不可用' })
+  expect(wrapper.findAll('.conv-item')).toHaveLength(sessions.length)
+  const more = wrapper.findAll('button').find(button => button.text() === '加载更早的会话')!
+  await more.trigger('click')
+  expect(wrapper.emitted('load-more')).toEqual([[]])
+  await wrapper.setProps({ loadingMore: true })
+  expect(more.attributes('disabled')).toBeDefined()
+  await more.trigger('click')
+  expect(wrapper.emitted('load-more')).toHaveLength(1)
+  await wrapper.setProps({ hasMore: false, loadingMore: false })
+  expect(wrapper.text()).not.toContain('已显示全部')
+  await wrapper.setProps({ error: '' })
+  expect(wrapper.text()).toContain('已显示全部可用会话')
+  wrapper.unmount()
+})
+
 it('groups dated and invalid history, marks the current local session and emits toolbar and load actions', async () => {
   vi.useFakeTimers(); vi.setSystemTime(now)
   const wrapper = setup()

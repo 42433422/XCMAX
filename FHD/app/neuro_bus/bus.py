@@ -16,7 +16,8 @@ import logging
 import os
 import threading
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any
 
 from app.neuro_bus.bus_primitives import (
@@ -25,6 +26,7 @@ from app.neuro_bus.bus_primitives import (
     _neuro_env_flag,
     _neuro_reliability_wanted,
     _should_trace_event,
+    event_partition_key,
 )
 from app.neuro_bus.bus_primitives import _deployment_is_production as _deployment_is_production
 from app.neuro_bus.bus_primitives import _deployment_is_staging as _deployment_is_staging
@@ -32,7 +34,7 @@ from app.neuro_bus.bus_primitives import _neuro_trace_sample_rate as _neuro_trac
 from app.neuro_bus.bus_subscriptions import NeuroBusSubscriptionsMixin
 from app.neuro_bus.delivery_metrics import record_delivery_metric
 from app.neuro_bus.events.events_base import NeuroEvent
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.operational_errors import BOUNDARY_ERRORS, RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +60,13 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         max_queue_size: int = 10000,
         worker_threads: int = 4,
         enable_metrics: bool = True,
+        handler_timeout_sec: float = 5.0,
     ):
-        self._event_queue = PriorityEventQueue(max_size=max_queue_size)
+        self._event_queue = PriorityEventQueue(
+            max_size=max_queue_size,
+            partition_key=event_partition_key,
+            on_evict=self._discard_event,
+        )
         self._handlers: dict[str, list[HandlerSubscription]] = defaultdict(list)
         self._domain_handlers: dict[str, dict[str, list[HandlerSubscription]]] = defaultdict(
             lambda: defaultdict(list)
@@ -67,14 +74,21 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         self._global_handlers: list[HandlerSubscription] = []
 
         # 执行器
-        self._worker_threads = worker_threads
+        self._worker_threads = max(1, int(worker_threads))
+        self._handler_timeout_sec = max(0.001, float(handler_timeout_sec))
         self._executor = ThreadPoolExecutor(
-            max_workers=worker_threads, thread_name_prefix="neurobus_"
+            max_workers=self._worker_threads, thread_name_prefix="neurobus_"
         )
+        self._inflight: set[asyncio.Task] = set()
+        self._active_partitions: set = set()
+        self._sync_futures: set[Future] = set()
+        self._handler_timeout_count = 0
         self._loop: asyncio.AbstractEventLoop | None = None
 
         # 运行状态
         self._running = False
+        self._stopping = False
+        self._stop_task: asyncio.Task | None = None
         self._shutdown = False
         self._processing_task: asyncio.Task | None = None
 
@@ -176,18 +190,23 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
 
     async def start(self):
         """启动总线"""
+        if self._stopping:
+            raise RuntimeError("NeuroBus is stopping")
         if self._running:
             return
 
         # 重启安全：一次 stop() 会 shutdown 线程池；若在修复后重新 start()，
         # 需重建执行器，否则事件处理（run_in_executor）会在已关闭的池上抛错。
         # 供健康监控的固定动作 neuro_bus.ensure_running.v1 在重启后真正可运行。
+        if any(not future.done() for future in tuple(self._sync_futures)):
+            raise RuntimeError("NeuroBus still has stopping synchronous handlers")
         if getattr(self._executor, "_shutdown", False):
             self._executor = ThreadPoolExecutor(
                 max_workers=self._worker_threads, thread_name_prefix="neurobus_"
             )
 
         self._running = True
+        self._stop_task = None
         self._shutdown = False
         self._loop = asyncio.get_running_loop()
         # create an Event bound to the running loop to avoid loop-less creation errors
@@ -202,70 +221,91 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         logger.info("NeuroBus started")
 
     async def stop(self):
-        """停止总线"""
-        if not self._running:
-            return
+        """Share one cleanup task; cancellation of a caller cannot interrupt it."""
+        if self._running:
+            self._stopping = True
+            self._shutdown = True
+            self._running = False
+            self._stop_task = asyncio.create_task(self._finish_stop())
+        if self._stop_task is not None:
+            await asyncio.shield(self._stop_task)
 
-        self._shutdown = True
-        self._running = False
+    async def _finish_stop(self):
+        try:
+            if self._redis_bridge is not None:
+                try:
+                    self._redis_bridge.stop()
+                except BOUNDARY_ERRORS:
+                    logger.exception("Error stopping NeuroBus transport")
+            if self._processing_task:
+                self._processing_task.cancel()
+                await asyncio.gather(self._processing_task, return_exceptions=True)
+            for task in tuple(self._inflight):
+                task.cancel()
+            await asyncio.gather(*self._inflight, return_exceptions=True)
+        finally:
+            self._inflight.clear()
+            self._active_partitions.clear()
+            # Threads cannot be killed safely; start() rejects outstanding ones.
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            while (event := self._event_queue.get()) is not None:
+                self._discard_event(event)
+            self._stopping = False
+            logger.info("NeuroBus stopped")
 
-        if self._redis_bridge is not None:
-            self._redis_bridge.stop()
+    def _wake_processor(self) -> None:
+        if self._loop is not None and not self._loop.is_closed() and self._event_available:
+            self._loop.call_soon_threadsafe(self._event_available.set)
 
-        # 取消处理任务
-        if self._processing_task:
-            self._processing_task.cancel()
-            try:
-                await self._processing_task
-            except asyncio.CancelledError:
-                pass
+    def _discard_event(self, event: NeuroEvent) -> None:
+        self._dropped_count += 1
+        record_delivery_metric(self._enable_metrics, "lost")
+        if self._rel_dedup is not None:
+            self._rel_dedup.remove(event)
+        sid = self._trace_by_event_id.pop(event.metadata.event_id, None)
+        if sid and self._rel_tracer is not None:
+            from app.neuro_bus.tracer import SpanStatus
 
-        # 关闭线程池
-        self._executor.shutdown(wait=True)
-        # Wake processing loop if waiting on the event
-        if getattr(self, "_event_available", None):
-            try:
-                self._event_available.set()
-            except RECOVERABLE_ERRORS:
-                pass
+            self._rel_tracer.end_span(sid, SpanStatus.ERROR)
 
-        logger.info("NeuroBus stopped")
+    async def _process_partition_event(self, event: NeuroEvent) -> None:
+        key = event_partition_key(event)
+        try:
+            await self._dispatch_event(event)
+        except BOUNDARY_ERRORS:
+            self._error_count += 1
+            logger.exception("Error dispatching %s", event)
+        finally:
+            self._active_partitions.discard(key)
+            self._wake_processor()
 
     async def _processing_loop(self):
-        """事件处理主循环"""
+        """Admit at most worker_threads events; never queue work in the executor."""
         while not self._shutdown:
             try:
-                # 获取事件
-                event = self._event_queue.get()
-
-                if event is None:
-                    # 队列为空：优先等待由 publish() 设置的 Event，避免忙轮询
-                    ev = getattr(self, "_event_available", None)
-                    if ev is not None:
-                        # clear then wait with a timeout to periodically check _shutdown
-                        ev.clear()
-                        try:
-                            await asyncio.wait_for(ev.wait(), timeout=1.0)
-                        except TimeoutError:
-                            pass
-                    else:
-                        # fallback: tiny sleep if no event available
-                        await asyncio.sleep(0.001)
-                    continue
-
-                # 检查超时
-                if event.is_expired():
-                    logger.warning("Event expired: %s", event)
-                    self._dropped_count += 1
-                    continue
-
-                # 分发事件
-                await self._dispatch_event(event)
-
+                if self._event_available is None:
+                    self._event_available = asyncio.Event()
+                self._event_available.clear()
+                # Completed tasks remain in this bounded set until their result
+                # is observed; exceptions must never become unhandled task noise.
+                for task in tuple(self._inflight):
+                    if task.done():
+                        self._inflight.remove(task)
+                        task.result()
+                while len(self._inflight) < self._worker_threads:
+                    event = self._event_queue.get(self._active_partitions)
+                    if event is None:
+                        break
+                    if event.is_expired():
+                        self._discard_event(event)
+                        continue
+                    self._active_partitions.add(event_partition_key(event))
+                    self._inflight.add(asyncio.create_task(self._process_partition_event(event)))
+                await self._event_available.wait()
             except asyncio.CancelledError:
                 break
-            except RECOVERABLE_ERRORS as e:
-                logger.exception("Error in processing loop: %s", e)
+            except RECOVERABLE_ERRORS:
+                logger.exception("Error in processing loop")
                 self._error_count += 1
 
     async def _dispatch_event(self, event: NeuroEvent):
@@ -275,47 +315,36 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if self._rel_sla_controller is not None:
             self._rel_sla_controller.start_monitoring(event)
 
-        # 1. 特定类型处理器
-        event_type = event.event_type
-        if event_type in self._handlers:
-            for subscription in self._handlers[event_type]:
+        # Keep subscription order within an event. Parallelism is between
+        # independent entities, never between writes to one entity.
+        subscriptions = [
+            *self._handlers.get(event.event_type, ()),
+            *self._domain_handlers.get(event.metadata.domain, {}).get(event.event_type, ()),
+            *self._global_handlers,
+        ]
+        completed = False
+        try:
+            for subscription in subscriptions:
                 if subscription.should_handle(event):
                     ok = await self._call_handler(subscription, event)
                     handlers_called += 1
-                    if not ok:
-                        any_failed = True
-
-        # 2. 领域特定处理器
-        domain = event.metadata.domain
-        if domain and domain in self._domain_handlers:
-            domain_handlers = self._domain_handlers[domain]
-            if event_type in domain_handlers:
-                for subscription in domain_handlers[event_type]:
-                    if subscription.should_handle(event):
-                        ok = await self._call_handler(subscription, event)
-                        handlers_called += 1
-                        if not ok:
-                            any_failed = True
-
-        # 3. 全局处理器（监听所有事件）
-        for subscription in self._global_handlers:
-            if subscription.should_handle(event):
-                ok = await self._call_handler(subscription, event)
-                handlers_called += 1
-                if not ok:
-                    any_failed = True
+                    any_failed |= not ok
+            completed = True
+        finally:
+            # Cancellation also releases dedup/tracing state before propagating.
+            self._finish_event(event, failed=not completed or any_failed)
 
         if handlers_called == 0:
             logger.debug("No handlers for event: %s", event)
 
         self._processed_count += 1
 
+    def _finish_event(self, event: NeuroEvent, *, failed: bool) -> None:
         if self._rel_dedup is not None:
-            if any_failed:
+            if failed:
                 self._rel_dedup.remove(event)
             else:
                 self._rel_dedup.mark_processed(event)
-
         eid = event.metadata.event_id
         if self._rel_sla_controller is not None:
             self._rel_sla_controller.finish_monitoring(eid)
@@ -323,7 +352,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if sid and self._rel_tracer is not None:
             from app.neuro_bus.tracer import SpanStatus
 
-            self._rel_tracer.end_span(sid, SpanStatus.ERROR if any_failed else SpanStatus.OK)
+            self._rel_tracer.end_span(sid, SpanStatus.ERROR if failed else SpanStatus.OK)
 
     async def _call_handler(self, subscription: HandlerSubscription, event: NeuroEvent) -> bool:
         """调用处理器；返回是否成功（无异常）。"""
@@ -331,34 +360,48 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             logger.warning("NeuroBus circuit open; skipping handler for %s", event.event_type)
             return False
 
+        sync_future: Future | None = None
+
         async def _invoke() -> None:
+            nonlocal sync_future
             if subscription.is_async:
                 await subscription.handler(event)
             else:
-                await asyncio.get_running_loop().run_in_executor(
-                    self._executor, subscription.handler, event
-                )
+                sync_future = self._executor.submit(copy_context().run, subscription.handler, event)
+                self._sync_futures.add(sync_future)
+                sync_future.add_done_callback(self._sync_futures.discard)
+                await asyncio.shield(asyncio.wrap_future(sync_future))
 
         retry_count = 0
         try:
-            if self._rel_retry_handler is not None:
-                domain = event.metadata.domain or "default"
-                retry_handler = self._rel_retry_handler.get_handler(domain)
-                try:
-                    await retry_handler.execute(
-                        _invoke,
-                        operation_name=getattr(subscription.handler, "__name__", "handler"),
-                    )
-                except RECOVERABLE_ERRORS:
-                    retry_count = retry_handler._config.max_retries  # noqa: SLF001
-                    raise
-            else:
-                await _invoke()
+            async with asyncio.timeout(self._handler_timeout_sec):
+                if self._rel_retry_handler is not None:
+                    domain = event.metadata.domain or "default"
+                    retry_handler = self._rel_retry_handler.get_handler(domain)
+                    try:
+                        await retry_handler.execute(
+                            _invoke,
+                            operation_name=getattr(subscription.handler, "__name__", "handler"),
+                        )
+                    except RECOVERABLE_ERRORS:
+                        retry_count = retry_handler._config.max_retries  # noqa: SLF001
+                        raise
+                else:
+                    await _invoke()
             subscription.record_call(success=True)
             if self._rel_circuit is not None:
                 self._rel_circuit.record_success()
 
-        except RECOVERABLE_ERRORS as e:
+        except BOUNDARY_ERRORS as e:  # Subscriber/plugin isolation boundary.
+            if isinstance(e, TimeoutError):
+                self._handler_timeout_count += 1
+                # Retain this partition and admission slot until the synchronous
+                # side effect ends. Retrying/releasing on timeout would overlap it.
+                if sync_future is not None and not sync_future.done():
+                    try:
+                        await asyncio.shield(asyncio.wrap_future(sync_future))
+                    except RECOVERABLE_ERRORS:
+                        pass
             logger.exception("Handler error for event %s: %s", event, e)
             subscription.record_call(success=False)
             self._error_count += 1
@@ -434,14 +477,7 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
             record_delivery_metric(self._enable_metrics, "published")
             if self._redis_bridge is not None and not event.payload.get("_neuro_remote_ingest"):
                 self._redis_bridge.publish_remote(event)
-            # wake processing loop if it's waiting
-            ev = getattr(self, "_event_available", None)
-            if ev is not None:
-                try:
-                    ev.set()
-                except RECOVERABLE_ERRORS:
-                    # ignore any loop-related errors
-                    pass
+            self._wake_processor()
         else:
             record_delivery_metric(self._enable_metrics, "lost")
             if self._rel_dedup is not None:
@@ -466,14 +502,9 @@ class NeuroBus(NeuroBusSubscriptionsMixin):
         if success:
             self._published_count += 1
             record_delivery_metric(self._enable_metrics, "published")
-            ev = getattr(self, "_event_available", None)
-            if ev is not None:
-                try:
-                    ev.set()
-                except RECOVERABLE_ERRORS:
-                    pass
+            self._wake_processor()
         else:
-            record_delivery_metric(self._enable_metrics, "lost")
+            self._discard_event(event)
         return success
 
 

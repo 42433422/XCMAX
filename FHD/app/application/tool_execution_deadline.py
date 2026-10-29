@@ -24,6 +24,12 @@ class InvocationBudget:
 _DEADLINE: ContextVar[InvocationBudget | None] = ContextVar("tool_execution_deadline", default=None)
 
 
+def remaining_invocation_seconds(limit: float) -> float:
+    """Clamp an I/O timeout to the inherited trusted invocation budget."""
+    budget = _DEADLINE.get()
+    return max(0.0, min(limit, budget.deadline - time.monotonic())) if budget else max(0.0, limit)
+
+
 def check_invocation_deadline() -> None:
     """Check only the trusted invocation scope, never a caller's context fields."""
     budget = _DEADLINE.get()

@@ -176,7 +176,7 @@ export const chatApi = {
   },
 
   saveMessage(payload: unknown): Promise<ApiResponse<unknown>> {
-    return api.post<ApiResponse<unknown>>('/api/conversations/message', payload)
+    return api.post<ApiResponse<unknown>>('/api/conversations/message', payload, { timeoutMs: 8000 })
   },
 
   newConversation(data: Record<string, unknown> = {}): Promise<ApiResponse<{ session_id: string }>> {

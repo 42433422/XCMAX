@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.application.agent_orchestrator.business_action_ledger import canonical_hash
+from app.application.agent_orchestrator.catalog_product_worker import TOOL
 from app.application.etl.batch_owned_source import OwnedSqlSessions
 from app.application.etl.batch_price_sources import price_value
 from app.application.etl.catalog_price_history import (
@@ -26,7 +27,6 @@ from app.db.models.workflow import WorkflowPlan
 from app.infrastructure.tenant_scope import tenant_scope
 from app.mod_sdk.owned_price_catalog import CatalogPurpose
 
-TOOL = "catalog_products_v1"
 ACTIONS = {"append_price", "correct_price"}
 from app.application.workflow.plan_store import CATALOG_RECEIPT_PREFIX as RECEIPT
 

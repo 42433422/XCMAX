@@ -502,7 +502,7 @@ describe('EtlCenterView folder workflow', () => {
     )
     expect(etlApiMock.execute).not.toHaveBeenCalled()
     expect(buttonByText(wrapper, '写入数据库')?.attributes('disabled')).toBeDefined()
-    const validRows = wrapper.findAll('input[type="checkbox"]').find(input => input.element.parentElement?.textContent?.includes('仅写入正确行'))!
+    const validRows = wrapper.findAll('input[type="checkbox"]').find(input => input.element.parentElement?.textContent?.includes('仅处理正确行'))!
     expect((validRows.element as HTMLInputElement).checked).toBe(false)
     await validRows.setValue(true)
     vi.mocked(window.confirm).mockReturnValueOnce(false)
@@ -662,6 +662,8 @@ describe('EtlCenterView folder workflow', () => {
     await buttonByText(wrapper, '字段映射')?.trigger('click')
     const transformSelect = wrapper.find('tbody select')
     await transformSelect.setValue('trim')
+    expect(wrapper.findAll('tbody tr')[0].find('textarea').exists()).toBe(false)
+    await transformSelect.setValue('custom')
     expect((wrapper.findAll('textarea[aria-label="安全转换 JSON"]')[0].element as HTMLTextAreaElement).value).toBe('[{"op":"trim"}]')
 
     const transformEditors = wrapper.findAll('textarea[aria-label="安全转换 JSON"]')
@@ -702,7 +704,7 @@ describe('EtlCenterView folder workflow', () => {
 
     const validRowsCheckbox = wrapper
       .findAll('input[type="checkbox"]')
-      .find((input) => input.element.parentElement?.textContent?.includes('仅写入正确行'))
+      .find((input) => input.element.parentElement?.textContent?.includes('仅处理正确行'))
     await validRowsCheckbox?.setValue(true)
     await buttonByText(wrapper, '写入数据库')?.trigger('click')
     await flushPromises()
@@ -1075,7 +1077,7 @@ describe('EtlCenterView folder workflow', () => {
 
     await buttonByText(wrapper, '失败.xlsx')?.trigger('click')
     await flushPromises()
-    await buttonByText(wrapper, '重新导入')?.trigger('click')
+    await buttonByText(wrapper, '重新校验')?.trigger('click')
     await flushPromises()
     expect(etlApiMock.retry).toHaveBeenCalledWith(failed.id)
     wrapper.unmount()
@@ -1236,6 +1238,7 @@ describe('EtlCenterView folder workflow', () => {
     const wrapper = await mountView()
     const vm = wrapper.vm as any
     const run = previewRun()
+    if (action === 'retryRun') run.status = 'failed'
     vm.currentRun = run
     vm.runsApi.syncDraft()
     await vm.loadRows()
@@ -1355,6 +1358,250 @@ describe('EtlCenterView folder workflow', () => {
       await vi.advanceTimersByTimeAsync(1200)
       expect(vm.pageError).toBe(error instanceof Error ? error.message : '读取运行进度失败')
     }
+    wrapper.unmount()
+  })
+
+  it('shares task selection ownership with the folder-file entry point', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.openBatchRun({ runId: 'batch-old' })
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('batch-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it('does not replace the selected task with an obsolete linked-preview response', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = { ...previewRun('shipment'), target_type: 'shipment_records', details: { linked_customer_products_preview: { run_id: 'linked-old' } } }
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.previewCustomerProductsFromShipment()
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('linked-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it('ignores a saved-layout readback after a different task is selected', async () => {
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    vm.currentRun = { ...previewRun('shipment-old'), target_type: 'shipment_records' }
+    vi.spyOn(window, 'prompt').mockReturnValue('')
+    etlApiMock.saveShipmentTemplate.mockResolvedValue({ name: 'Synthetic layout', message: 'saved' })
+    let resolveOld!: (run: EtlRun) => void
+    etlApiMock.run.mockReturnValueOnce(new Promise<EtlRun>(resolve => { resolveOld = resolve }))
+    const old = vm.saveCurrentAsShipmentTemplate()
+    await flushPromises()
+    etlApiMock.run.mockResolvedValueOnce(previewRun('history-new'))
+    await vm.selectRun(previewRun('history-new'))
+    resolveOld(previewRun('shipment-old'))
+    await old
+    expect(vm.currentRun.id).toBe('history-new')
+    wrapper.unmount()
+  })
+
+  it.each(['resolve', 'reject'] as const)('ignores an obsolete folder poll %s after selecting a fresh task revision', async completion => {
+    vi.useFakeTimers()
+    const wrapper = await mountView()
+    const vm = wrapper.vm as any
+    etlApiMock.upload.mockResolvedValue({ upload_id: 'synthetic-upload' })
+    let created = 0
+    etlApiMock.preview.mockImplementation(async () => queuedRun(`batch-${++created}`, 'synthetic.csv'))
+    vm.onFileChange({ target: { files: [new File(['a'], 'a.csv'), new File(['b'], 'b.csv')] } })
+    await vm.startPreview()
+    let resolveOld!: (runs: EtlRun[]) => void, rejectOld!: (error: Error) => void
+    etlApiMock.runs.mockReturnValueOnce(new Promise<EtlRun[]>((resolve, reject) => { resolveOld = resolve; rejectOld = reject }))
+    vi.advanceTimersByTime(1500)
+    etlApiMock.run.mockResolvedValueOnce(previewRun('batch-2'))
+    await vm.selectRun(previewRun('batch-2'))
+    vm.pageError = 'Current task status'
+    if (completion === 'resolve') resolveOld([{ ...previewRun('batch-2'), preview_revision: 'obsolete' }])
+    else rejectOld(new Error('Old batch failure'))
+    await flushPromises()
+    expect(vm.currentRun.preview_revision).toBe('a'.repeat(64))
+    expect(vm.pageError).toBe('Current task status')
+    wrapper.unmount()
+  })
+
+  it('expands every field of each new record without losing zero, false or nested values', async () => {
+    const run = previewRun()
+    const records = [0, 210].map((amount, index) => ({
+      ...previewRows()[0], id: index + 1, source_row: index + 2,
+      source: { customer: '测试客户', product: `产品${index}`, model: 'A', quantity: 2, unit: '件', amount, active: false, terms: { tax: 0 } },
+      normalized: { customer: '测试客户', product: `产品${index}`, model: 'A', quantity: 2, unit: '件', amount, active: false, terms: { tax: 0 } },
+    }))
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.rows.mockResolvedValue({ page: 1, page_size: 50, total: 2, items: records, preview_revision: run.preview_revision })
+    const wrapper = await mountView(run.id)
+    const rows = wrapper.findAll('.etl-table-wrap tbody tr')
+    expect(rows).toHaveLength(2)
+    for (const [index, row] of rows.entries()) {
+      const details = row.findAll('.etl-record-fields')
+      expect(details).toHaveLength(2)
+      for (const detail of details) {
+        expect(detail.get('summary').text()).toContain('另有 3 项')
+        expect((detail.element as HTMLDetailsElement).open).toBe(false)
+        ;(detail.get('summary').element as HTMLElement).click()
+        expect((detail.element as HTMLDetailsElement).open).toBe(true)
+        expect(detail.findAll('dd').map(item => item.text())).toEqual(['测试客户', `产品${index}`, 'A', '2', '件', String(index ? 210 : 0), 'false', '{"tax":0}'])
+      }
+    }
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it.each(['failed', 'interrupted', 'outcome_unknown'])('shows confirmed results and safe next steps for %s in history', async status => {
+    const run = {
+      ...previewRun(), status, summary: { new: 100, update: 0, skip: 0, error: 0, executed: 37 },
+      error: { code: status === 'outcome_unknown' ? 'ETL_OUTCOME_UNKNOWN' : 'WRITE_FAILED', message: '第 38 行处理未完成，请核对结果' },
+    }
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    const receipt = wrapper.get('.etl-receipt')
+    expect(receipt.text()).toContain('已确认写入 37 行')
+    expect(receipt.get('[role="alert"]').text()).toContain(run.error.message)
+    expect(receipt.text()).not.toContain('未写入 63')
+    if (status === 'outcome_unknown') {
+      expect(receipt.text()).toContain('结果待核对')
+      expect(buttonByText(wrapper, '重新校验')).toBeUndefined()
+      expect(buttonByText(wrapper, '撤销本次写入')).toBeUndefined()
+      await (wrapper.vm as any).retryRun()
+      await (wrapper.vm as any).rollbackRun()
+      expect(etlApiMock.retry).not.toHaveBeenCalled()
+      expect(etlApiMock.rollback).not.toHaveBeenCalled()
+    } else {
+      expect(receipt.text()).toContain('63 行结果待核对')
+      expect(receipt.text()).toContain('重新校验只生成预演')
+    }
+    wrapper.unmount()
+  })
+
+  it('distinguishes manual skips, matched records and rule exclusions', async () => {
+    const run = previewRun()
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.rows.mockResolvedValue({ page: 1, page_size: 50, total: 3, preview_revision: run.preview_revision, items: [
+      { ...previewRows()[0], final_action: 'skip', action_overridden: true },
+      { ...previewRows()[0], id: 2, final_action: 'skip', match_ref: 'product:42' },
+      { ...previewRows()[0], id: 3, final_action: 'skip', suggested_action: 'skip' },
+    ] })
+    const wrapper = await mountView(run.id)
+    const reasons = wrapper.findAll('.etl-table-wrap tbody tr').map(row => row.findAll('td')[4].text())
+    expect(reasons).toEqual(['用户主动跳过（原建议：新增）', '已匹配现有记录，默认跳过', '按规则跳过；具体原因请查看原建议'])
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['customer_products', '写入数据库', '已写入'], ['export_xlsx', '生成 Excel 文件', '文件已生成'],
+    ['export_csv', '生成 CSV 文件', '文件已生成'], ['webhook', '发送到外部系统', '发送完成'],
+  ])('names the reviewed %s action and result consistently', async (target, action, done) => {
+    const run = { ...previewRun(), target_type: target, reversible: target === 'customer_products',
+      summary: { new: 1, update: 0, skip: 0, error: 0, executed: 0 },
+      draft: { ...previewRun().draft, target_config_id: target === 'webhook' ? 'webhook-1' : undefined } }
+    const completed = { ...run, status: 'completed', summary: { ...run.summary, executed: 1 } }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.execute.mockResolvedValue(completed)
+    etlApiMock.runs.mockResolvedValue([completed])
+    const wrapper = await mountView(run.id)
+    await wrapper.get('[data-tutorial-id="etl-confirm"]').trigger('click')
+    await flushPromises()
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining(`确认${action}`))
+    if (!run.reversible) expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('不支持撤销'))
+    if (target === 'webhook') expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('ERP 回调（https://example.com/hook）'))
+    expect(wrapper.get('.etl-receipt').text()).toContain(done)
+    expect(etlApiMock.execute).toHaveBeenCalledWith(run.id, run.preview_revision, false)
+    wrapper.unmount()
+  })
+
+  it.each(['export_xlsx', 'export_csv', 'webhook'])('describes error-row handling without database-write wording for %s', async (target) => {
+    const run = { ...previewRun(), target_type: target, reversible: false,
+      summary: { new: 1, update: 0, skip: 0, error: 1, executed: 0 } }
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    const review = wrapper.get('[data-tutorial-id="etl-confirm"]').element.closest('section')!
+    expect(review.textContent).toContain('仅处理正确行')
+    expect(review.textContent).not.toContain('仅写入正确行')
+    expect(wrapper.get('[data-tutorial-id="etl-confirm"]').attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('offers source columns with samples and preserves advanced transforms until explicitly edited', async () => {
+    const run = previewRun()
+    etlApiMock.run.mockResolvedValue(run)
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '字段映射')?.trigger('click')
+    const input = wrapper.get('input[list="etl-source-columns"]')
+    expect(wrapper.get('datalist').text()).toContain('国圣化工')
+    expect(wrapper.findAll('datalist option').map(option => option.attributes('value'))).toContain('产品名称')
+    await input.setValue('产品名称')
+    await wrapper.findAll('tbody select')[0].setValue('number')
+    expect(wrapper.findAll('tbody tr')[0].find('textarea').exists()).toBe(false)
+    expect(wrapper.findAll('tbody tr')[1].get('textarea').element).toHaveProperty('value', '[{"op":"custom_lookup","table":"districts"}]')
+    etlApiMock.patchDraft.mockResolvedValue(run)
+    await buttonByText(wrapper, '保存并重新校验')?.trigger('click')
+    await flushPromises()
+    expect(etlApiMock.patchDraft).toHaveBeenCalledWith(run.id, expect.objectContaining({ field_mappings: [
+      expect.objectContaining({ source: '产品名称', transforms: [{ op: 'number' }] }),
+      expect.objectContaining({ transforms: [{ op: 'custom_lookup', table: 'districts' }] }),
+    ] }))
+    wrapper.unmount()
+  })
+
+  it('jumps across 2000 server pages and locates a source row without loading the workbook', async () => {
+    const run = { ...previewRun(), total_rows: 100_000 }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.rows.mockImplementation(async (_id, page, pageSize, _action, source) => ({
+      page, page_size: pageSize, total: source ? 1 : 100_000, preview_revision: run.preview_revision,
+      items: [{ ...previewRows()[0], source_row: source?.row || (page - 1) * 50 + 2 }],
+    }))
+    const wrapper = await mountView(run.id)
+    await buttonByText(wrapper, '末页')?.trigger('click')
+    await flushPromises()
+    expect(etlApiMock.rows).toHaveBeenLastCalledWith(run.id, 2000, 50, '')
+    await wrapper.get('.etl-pagination input').setValue(1200)
+    await wrapper.get('.etl-pagination form').trigger('submit')
+    await flushPromises()
+    expect(etlApiMock.rows).toHaveBeenLastCalledWith(run.id, 1200, 50, '')
+    await wrapper.get('.etl-source-location input[list]').setValue('报价明细')
+    await wrapper.get('.etl-source-location input[type="number"]').setValue(99888)
+    await wrapper.get('.etl-source-location').trigger('submit')
+    await flushPromises()
+    expect(etlApiMock.rows).toHaveBeenLastCalledWith(run.id, 1, 50, '', { sheet: '报价明细', row: 99888 })
+    expect(wrapper.text()).toContain('99888')
+    expect(etlApiMock.rows).toHaveBeenCalledTimes(4)
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('ignores obsolete page responses and never approves an empty or changed source location', async () => {
+    const run = { ...previewRun(), total_rows: 100 }
+    etlApiMock.run.mockResolvedValue(run)
+    etlApiMock.rows.mockResolvedValue({ page: 1, page_size: 50, total: 100, items: previewRows(), preview_revision: run.preview_revision })
+    const wrapper = await mountView(run.id)
+    const vm = wrapper.vm as any
+    let finishOld!: (value: unknown) => void
+    etlApiMock.rows.mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }))
+    const oldRead = vm.goToRowPage(2)
+    vm.sourceRowInput = 99999
+    etlApiMock.rows.mockResolvedValueOnce({ page: 1, page_size: 50, total: 0, items: [], preview_revision: run.preview_revision })
+    await vm.locateSourceRow()
+    finishOld({ page: 2, page_size: 50, total: 100, items: previewRows(), preview_revision: run.preview_revision })
+    await oldRead
+    expect(vm.runRows).toEqual([])
+    expect(vm.state.reviewedPreviewRevision.value).toBeNull()
+    await vm.executeCurrentRun()
+    expect(etlApiMock.execute).not.toHaveBeenCalled()
+    etlApiMock.rows.mockResolvedValueOnce({ page: 1, page_size: 50, total: 1, items: previewRows(), preview_revision: 'b'.repeat(64) })
+    await vm.loadRows()
+    expect(vm.runRows).toEqual([])
+    expect(vm.pageError).toContain('预演内容已变化')
     wrapper.unmount()
   })
 

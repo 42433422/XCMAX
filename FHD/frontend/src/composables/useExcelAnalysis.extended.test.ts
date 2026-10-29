@@ -133,6 +133,24 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
+  it('does not publish an Excel result after its captured conversation is no longer current', async () => {
+    let resolve!: (value: Response) => void
+    vi.mocked(global.fetch).mockReturnValue(new Promise(r => { resolve = r }))
+    let current = true
+    const onAnalyzed = vi.fn(), onAnalyzeDone = vi.fn()
+    const api = useExcelAnalysis(makeMessages(), { captureIsCurrent: () => () => current, onAnalyzed, onAnalyzeDone })
+    const operation = api.onExcelAnalyzeFileChange({ target: { files: [new File(['a'], 'a.xlsx')], value: 'a.xlsx' } } as unknown as Event)
+    await vi.waitFor(() => expect(global.fetch).toHaveBeenCalledOnce())
+    current = false
+    resolve({ ok: true, text: async () => JSON.stringify({ success: true, file_path: '/a.xlsx', fields: [] }) } as Response)
+    await operation
+    expect(onAnalyzed).not.toHaveBeenCalled()
+    expect(onAnalyzeDone).not.toHaveBeenCalled()
+    expect(addMessage).toHaveBeenCalledTimes(1)
+    expect(saveMessage).toHaveBeenCalledTimes(1)
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+  })
+
   it('onExcelAnalyzeFileChange handles server error', async () => {
     const onAnalyzeDone = vi.fn()
 

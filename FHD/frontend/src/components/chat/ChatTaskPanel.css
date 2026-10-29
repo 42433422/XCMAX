@@ -348,3 +348,14 @@
   display: inline-flex;
   text-decoration: none;
 }
+
+.task-sync-status {
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--app-border-subtle, #e5e7eb);
+  border-radius: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.task-sync-status p { margin: 0 0 6px; }
+.task-sync-status button { margin: 4px 0 0; }

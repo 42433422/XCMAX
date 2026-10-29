@@ -173,6 +173,18 @@ describe('useChatRequest', () => {
     expect(chatApi.sendUnifiedChat).toHaveBeenCalled()
   })
 
+  it('sends a plan-only card control with the selected plan ID without consuming draft attachments', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    const deps = makeDeps(), req = useChatRequest(deps)
+    await req.requestChatByMode('确认', {}, { expectedWorkflowPlanId: 'clicked-plan' }, { sessionId: 'original', messages: [] })
+    expect(chatApi.sendUnifiedChat).toHaveBeenCalledWith(expect.objectContaining({
+      message: '确认', user_id: 'web_normal_original',
+      context: expect.objectContaining({ session_id: 'original', expected_workflow_plan_id: 'clicked-plan' }),
+    }), expect.anything())
+    expect(deps.consumeMultimodalIntoPlannerContext).not.toHaveBeenCalled()
+    expect(deps.injectExcelContextPayload).not.toHaveBeenCalled()
+  })
+
   it('requestChatByModeBatch calls sendUnifiedChatBatch', async () => {
     const chatApi = (await import('@/api/chat')).default
     await request.requestChatByModeBatch(['msg1', 'msg2'])
@@ -188,6 +200,11 @@ describe('useChatRequest', () => {
     request.startWaitProgressTimer()
     vi.advanceTimersByTime(2000)
     expect(request.loadingProgressText.value).toContain('已发送请求')
+    vi.advanceTimersByTime(8000)
+    expect(request.loadingProgressText.value).toContain('停止回复')
+    expect(request.loadingProgressText.value).toContain('勿重复提交')
+    expect(request.loadingProgressText.value).toContain('CHAT_WAIT')
+    expect(request.loadingProgressText.value).not.toContain('VITE_API_BASE_URL')
     request.stopLoadingProgress()
     vi.useRealTimers()
   })

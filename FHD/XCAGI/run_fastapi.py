@@ -248,6 +248,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=None, help="监听端口")
     parser.add_argument("--data-dir", default=None, help="桌面数据目录")
     parser.add_argument("--verify-backup", default="", help="只读校验 SQLite 备份后退出")
+    parser.add_argument(
+        "--export-model-usage-ledger",
+        default="",
+        help="后端停写后将计量账本交接给旧版；成功后退出，不启动服务器",
+    )
     parser.add_argument("--migrate-only", action="store_true", help="仅执行数据库迁移后退出")
     parser.add_argument(
         "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
@@ -300,6 +305,16 @@ def main(argv: list[str] | None = None) -> None:
     _ensure_sys_path()
     _apply_no_console_child_defaults()
     _bootstrap_stage("child-defaults-ready")
+
+    if args.export_model_usage_ledger:
+        from app.infrastructure.billing.model_usage_export import main as export_ledger
+
+        ledger = str(Path(args.export_model_usage_ledger).expanduser().resolve())
+        result = export_ledger(["--ledger", ledger, "--output", ledger, "--handoff"])
+        if result:
+            raise SystemExit(result)
+        print(f"XCAGI_MODEL_USAGE_HANDOFF={ledger}", flush=True)
+        return
 
     if args.verify_backup:
         from app.desktop_runtime.db import integrity_check_ok

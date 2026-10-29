@@ -1,6 +1,8 @@
-import { nextTick, type Ref } from 'vue'
+import { nextTick, watch, type Ref } from 'vue'
 import { fetchCsInbox, fetchCsInboxMessages, type ImConversationSummary, type ImMessage } from '@/api/im'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { captureMessageScroll } from './useChatSession'
+import { reconcileImSnapshot, useVisiblePolling } from './useVisiblePolling'
 
 type Options = {
   enabled: Ref<boolean>
@@ -13,63 +15,69 @@ type Options = {
 
 /** Keep the selected admin CS inbox thread in sync with the production SSOT. */
 export function useCsInboxBridge(options: Options) {
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let pollBusy = false
+  let selection = 0
+  let busySelection: number | null = null
+  const polling = useVisiblePolling(readInbox)
+  watch([options.activeConversationId, options.enabled], () => { selection++; polling.stop() }, { flush: 'sync' })
+  watch(productReadAccountEpoch, () => {
+    selection++
+    polling.stop()
+    options.messages.value = []
+  }, { flush: 'sync' })
 
   function isActiveCsInbox(id = options.activeConversationId.value): boolean {
     if (!options.enabled.value || !id) return false
     return Boolean(options.conversations.value.find((item) => item.id === id)?.is_cs_inbox)
   }
 
-  function stopPolling(): void {
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = null
-  }
-
-  async function refreshInbox(): Promise<void> {
+  async function readInbox(): Promise<boolean> {
     const activeId = options.activeConversationId.value
-    if (!activeId || !isActiveCsInbox(activeId) || pollBusy) return
-    pollBusy = true
+    if (!activeId || !isActiveCsInbox(activeId) || busySelection === selection) return false
+    const requestSelection = selection
+    busySelection = requestSelection
+    const current = () => selection === requestSelection && options.activeConversationId.value === activeId && options.enabled.value
     try {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const [inbox, remoteMessages] = await Promise.all([fetchCsInbox(), fetchCsInboxMessages(activeId)])
-      if (options.activeConversationId.value !== activeId || !options.enabled.value) return
+      if (!current()) return false
       const restoreScroll = captureMessageScroll(options.scrollEl)
 
       const regular = options.conversations.value.filter((item) => !item.is_cs_inbox)
       const regularIds = new Set(regular.map((item) => item.id))
-      options.conversations.value = [...inbox.filter((item) => !regularIds.has(item.id)), ...regular]
-      options.messages.value = remoteMessages
-
-      const active = options.conversations.value.find((item) => item.id === activeId)
+      const active = inbox.find((item) => item.id === activeId)
       const last = remoteMessages[remoteMessages.length - 1]
       if (active) {
         active.unread_count = 0
         active.last_message_at = last?.created_at ?? active.last_message_at
         active.last_message_preview = last?.body ?? ''
       }
+      const conversationUpdate = reconcileImSnapshot(options.conversations.value, [...inbox.filter((item) => !regularIds.has(item.id)), ...regular])
+      const messageUpdate = reconcileImSnapshot(options.messages.value, remoteMessages)
+      options.conversations.value = conversationUpdate.items
+      options.messages.value = messageUpdate.items
       const incoming = remoteMessages.find((item) => !oldIds.has(item.id) && (item.origin === 'customer' || item.is_self === false))
       if (incoming) void options.playIncoming(incoming.body)
-      if (remoteMessages.some((item) => !oldIds.has(item.id))) {
+      if (messageUpdate.changed) {
         await nextTick()
-        if (options.activeConversationId.value === activeId && options.enabled.value) restoreScroll()
+        if (current()) restoreScroll()
       }
+      return conversationUpdate.changed || messageUpdate.changed || active?.cs_status === 'ai_processing'
     } catch {
-      // The regular IM websocket remains usable; retry this production bridge on the next tick.
+      return false
     } finally {
-      pollBusy = false
+      if (busySelection === requestSelection) busySelection = null
     }
   }
 
   function startPolling(): void {
-    stopPolling()
+    polling.stop()
     if (!isActiveCsInbox()) return
-    pollTimer = setInterval(() => void refreshInbox(), 2500)
+    polling.start()
   }
 
   return {
-    refreshCsInbox: refreshInbox,
+    refreshCsInbox: async (): Promise<void> => { await readInbox() },
     startCsInboxPolling: startPolling,
-    stopCsInboxPolling: stopPolling,
+    stopCsInboxPolling: polling.stop,
   }
 }

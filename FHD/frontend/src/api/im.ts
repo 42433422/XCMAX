@@ -1,4 +1,5 @@
 import { apiFetch, getApiBase } from '@/utils/apiBase'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 export type ImConversationSummary = {
   id: number
@@ -66,10 +67,23 @@ export async function fetchImContacts(keyword?: string): Promise<ImContact[]> {
 }
 
 export async function fetchImConversations(): Promise<ImConversationSummary[]> {
-  const res = await apiFetch('/api/im/conversations', { headers: jsonHeaders })
-  const data = await readJson<{ success?: boolean; conversations?: ImConversationSummary[] }>(res)
-  if (!data.success) throw new Error('加载会话失败')
-  return data.conversations ?? []
+  const epoch = productReadAccountEpoch.value
+  const conversations = new Map<number, ImConversationSummary>()
+  const cursors = new Set<string>()
+  let cursor = ''
+  do {
+    const query = new URLSearchParams({ limit: '50' })
+    if (cursor) query.set('cursor', cursor)
+    const res = await apiFetch(`/api/im/conversations?${query}`, { headers: jsonHeaders })
+    const data = await readJson<{ success?: boolean; conversations?: ImConversationSummary[]; next_cursor?: string | null }>(res)
+    if (epoch !== productReadAccountEpoch.value) throw new Error('账号已切换，请重新加载会话')
+    if (!data.success) throw new Error('加载会话失败')
+    for (const item of data.conversations ?? []) if (!conversations.has(item.id)) conversations.set(item.id, item)
+    cursor = data.next_cursor || '' // Older hosts return a complete snapshot without a cursor.
+    if (cursor && cursors.has(cursor)) throw new Error('会话分页游标重复，请重新加载')
+    if (cursor) cursors.add(cursor)
+  } while (cursor)
+  return [...conversations.values()]
 }
 
 export async function fetchImUnreadTotal(): Promise<number> {
