@@ -357,7 +357,7 @@ def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
     from app.infrastructure.billing.model_usage import (
         get_model_wallet,
         list_model_usage_entries,
-        model_usage_ledger_path,
+        model_usage_database_path,
         model_usage_wallet_backend,
     )
 
@@ -371,7 +371,7 @@ def usage(limit: int = 50, run_id: str = "", user_id: str = ""):
                 "count": len(items),
                 "wallet": wallet,
                 "wallet_backend": model_usage_wallet_backend(),
-                "ledger_path": str(model_usage_ledger_path()),
+                "ledger_path": str(model_usage_database_path()),
                 "backend": model_payment_backend(),
             },
         }

@@ -10,7 +10,7 @@ import { createEtlCenterState } from './etlCenter/etlCenterState'
 import { createEtlCenterRuns } from './etlCenter/useEtlCenterRuns'
 import { useProductsStore } from '@/stores/products'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
-import type { EtlRun } from '@/api/etl'
+import type { EtlRun, EtlRunRow } from '@/api/etl'
 
 const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), upload: vi.fn(), preview: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: api }))
@@ -48,7 +48,12 @@ beforeEach(() => {
   vi.clearAllMocks(); updateProductReadAccountScope({ tenantId: 1, marketUserId: 11 }); price = 99; run = fixture()
   api.getCustomers.mockResolvedValue({ success: true, data: [{ unit_name: '客户甲' }] })
   api.getProducts.mockImplementation(async () => ({ success: true, data: [{ id: 1, name: 'PM90', model_number: 'PM90-001', specification: '人工规格', price }], total: 1 }))
-  api.rows.mockResolvedValue({ items: [], total: 1, preview_revision: 'a'.repeat(64) })
+  api.rows.mockResolvedValue({ page: 1, page_size: 50, total: 1, preview_revision: run.preview_revision, items: [{
+    id: 1, source_sheet: 'Sheet1', source_row: 2, source: { 产品名称: 'PM90', 单价: 109 },
+    normalized: { product_name: 'PM90', price: 109 }, provenance: {}, validation_issues: [], llm_suggestion: {},
+    suggested_action: 'update', final_action: 'update', action_overridden: false, match_ref: 'product:1',
+    before: { price: 99 }, after: { price: 109 },
+  } satisfies EtlRunRow] })
   api.run.mockImplementation(async () => run); api.runs.mockImplementation(async () => [run])
   api.execute.mockImplementation(async () => { price = 109; run = fixture('completed'); return run })
   api.rollback.mockImplementation(async () => { price = 99; run = { ...run, rollback_status: 'completed', receipt: { rollback: { status: 'completed', rows: 1 } } }; return run })
@@ -57,6 +62,18 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.restoreAllMocks(); vi.useRealTimers() })
 
 describe('kept-alive product freshness', () => {
+  it('does not execute or refresh products when an empty preview page has not been reviewed', async () => {
+    api.rows.mockResolvedValue({ page: 1, page_size: 50, items: [], total: 1, preview_revision: run.preview_revision })
+    const { etl, state } = await setup()
+    const reads = api.getProducts.mock.calls.length
+    await etl.executeCurrentRun(); await flushPromises()
+    expect(state.reviewedPreviewRevision.value).toBeNull()
+    expect(api.execute).not.toHaveBeenCalled()
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(api.getProducts).toHaveBeenCalledTimes(reads)
+    expect(rowPrice()).toBe('99')
+  })
+
   it.each([['shipped Mod', ModProductsView], ['host', HostProductsView]] as const)('%s shows 99 → import 109 → rollback 99 without a document reload', async (_label, view) => {
     const { router, etl } = await setup(view)
     expect(rowPrice()).toBe('99')
@@ -93,7 +110,8 @@ describe('kept-alive product freshness', () => {
         templateId: ref(''), compatibilityPresetId: ref(''), targetConfigId: ref(''), runs: state.runs,
         currentRun: state.currentRun, activeTab: state.activeTab, busy: state.busy, pageError: state.pageError,
         router,
-        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows })
+        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows,
+        captureReadContext: state.captureReadContext, beginBusy: state.beginBusy, selectRun: etl.selectRun })
       return () => h('div')
     } })
     const harness = mount(BatchHarness, { global: { stubs: { DataTable: Table, ConfirmDialog: true } } })

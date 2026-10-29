@@ -473,6 +473,19 @@ class WorkflowSession:
         if control and not pending and session_id:
             if self.callbacks._hydrate_pending_workflow(user_id, session_id):
                 pending = self.pending.get(user_id)
+        # Inline cards bind a control to the plan the user actually clicked.
+        # Older clients omit this field and retain their existing session contract.
+        if control and "expected_workflow_plan_id" in context:
+            expected = context["expected_workflow_plan_id"]
+            actual = getattr((pending or {}).get("plan"), "plan_id", None)
+            if not isinstance(expected, str) or not expected.strip() or expected != actual:
+                return _control_reply(
+                    "此确认卡对应的计划已失效或已变化，请返回原任务核对后重试；未执行本次操作。",
+                    "workflow_confirmation_stale",
+                    {"plan_id": expected if isinstance(expected, str) else ""},
+                    success=False,
+                    message="待确认计划不匹配",
+                )
         invalid_plan = False
         if control and pending:
             from app.application.workflow.workflow_types import PlanGraph, validate_plan_graph

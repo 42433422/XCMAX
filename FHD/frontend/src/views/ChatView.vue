@@ -7,9 +7,14 @@
       @control="controlWorkspaceTask"
     />
     <ChatQuickActions :buttons="visibleQuickButtons" @quick="sendQuick" />
+    <div v-if="cacheError" class="chat-cache-warning chat-composer-status chat-composer-status--error" role="alert">
+      {{ cacheError }} <button type="button" class="btn btn-secondary btn-sm" @click="retryMessagesCache">重试本机保存</button>
+    </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
+        :session-key="messageSessionKey"
         :messages="messages"
+        @retry-save="retryMessageSave"
         :is-loading="isLoading"
         :is-streaming-reply="isStreamingReply"
         :loading-progress-text="loadingProgressText"
@@ -39,6 +44,9 @@
       <ChatSidePanel
         :current-task="currentTask"
         :task-list="visibleTaskList"
+        :task-control-states="taskControlStates"
+        :task-sync-state="taskSyncState"
+        @refresh-tasks="refreshTasks"
         :filtered-task-list="visibleFilteredTaskList"
         :active-task-id="visibleActiveTaskId"
         :expanded-task-ids="expandedTaskIds"
@@ -58,6 +66,9 @@
         :current-session-id="currentSessionId"
         :history-loading="historyLoading"
         :history-error="historyError"
+        :history-has-more="historyHasMore"
+        :history-loading-more="historyLoadingMore"
+        @load-more-history="loadMoreHistorySessions"
         @confirm-task="confirmTask"
         @cancel-task="cancelTask"
         @refetch-order-number="refetchTaskOrderNumber"
@@ -171,6 +182,9 @@
       </div>
     </div>
     <ChatHistoryModal
+      :history-has-more="historyHasMore"
+      :history-loading-more="historyLoadingMore"
+      @load-more="loadMoreHistorySessions"
       :show="showHistory"
       :history-sessions="historySessions"
       :history-loading="historyLoading"
@@ -222,6 +236,7 @@ import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
@@ -256,6 +271,7 @@ function generateSessionId(): string {
 const _storedSessionId = readAiSessionIdFromStorage()
 const initialWorkspaceSessionId = resolveWorkspaceSessionId(props)
 const currentSessionId = ref(initialWorkspaceSessionId || _storedSessionId || generateSessionId())
+const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
@@ -266,6 +282,9 @@ const chatRefBag = {
 
 const {
   messages,
+  cacheError,
+  retryMessagesCache,
+  retryMessageSave,
   currentTask,
   orderNumberFetching,
   isLoading,
@@ -273,6 +292,9 @@ const {
   isExecuting,
   latestAssistantPush,
   taskList,
+  taskControlStates,
+  taskSyncState,
+  refreshTasks,
   activeTaskId,
   filteredTaskList,
   expandedTaskIds,
@@ -281,6 +303,9 @@ const {
   historySessions,
   historyLoading,
   historyError,
+  historyHasMore,
+  historyLoadingMore,
+  loadMoreHistorySessions,
   pushCopied,
   loadingProgressText,
   excelAnalyzeUploading,
@@ -364,7 +389,7 @@ const {
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
-} = useChatVoiceInput({ messageInput, isLoading })
+} = useChatVoiceInput({ messageInput, isLoading, sessionId: currentSessionId })
 
 const {
   messageHeights,
@@ -378,7 +403,7 @@ const {
   toggleMessageTts,
   batchCalculateHeights,
   stopMessageTts,
-} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef })
+} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef, sessionKey: messageSessionKey })
 
 const {
   paneStyle: chatPaneStyle,

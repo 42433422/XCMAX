@@ -5,7 +5,7 @@
         <h2 id="platform-model-title">平台模型配置</h2>
         <p>管理员配置 · 平台共用密钥 · 与用户自带密钥（BYOK）分开管理</p>
       </div>
-      <button type="button" class="btn btn-sm btn-secondary" :disabled="busy" @click="load">重新读取</button>
+      <button type="button" class="btn btn-sm btn-secondary" :disabled="busy" @click="reload">重新读取</button>
     </header>
     <div class="platform-model__scope">
       <strong>实际生效范围</strong>
@@ -24,7 +24,7 @@
         <legend class="platform-model__legend">供应商与默认模型</legend>
         <div class="platform-model__fields">
           <label for="platform-model-provider">模型供应商
-            <select id="platform-model-provider" v-model="provider">
+            <select id="platform-model-provider" :value="provider" @change="changeProvider">
               <option value="" disabled>请选择供应商</option>
               <option v-for="row in state?.providers || []" :key="row.provider" :value="row.provider">{{ row.label }}</option>
             </select>
@@ -67,6 +67,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { platformModelApi, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
+import { appConfirm } from '@/utils/appDialog'
 
 const props = defineProps<{ canManage: boolean }>()
 const state = ref<PlatformModelList | null>(null)
@@ -80,12 +81,38 @@ const loadError = ref('')
 const actionError = ref('')
 const testMessage = ref('')
 const saveMessage = ref('')
-const busy = computed(() => loading.value || pending.value !== '')
+const confirming = ref(false)
+const busy = computed(() => loading.value || pending.value !== '' || confirming.value)
 const selected = computed(() => state.value?.providers.find(row => row.provider === provider.value))
 const defaultLabel = computed(() => state.value?.providers.find(row => row.provider === state.value?.default_provider)?.label || '未设置（沿用现有路由）')
 const keySource = computed(() => ({ stored: '服务端加密配置', environment: '服务端环境变量', none: '未配置' })[selected.value?.source || 'none'])
 let request: AbortController | null = null
 let epoch = 0
+const dirty = computed(() => loaded.value && selected.value && (
+  keyDraft.value !== '' || draft.base_url !== (selected.value.base_url || '') || draft.model !== (selected.value.model || '') ||
+  draft.display_name !== (selected.value.display_name || '') || draft.make_default !== Boolean(selected.value.is_default || !state.value?.default_provider)
+))
+
+async function discardChanges(): Promise<boolean> {
+  if (busy.value || !props.canManage) return false
+  if (!dirty.value) return true
+  const current = epoch
+  confirming.value = true
+  try {
+    return await appConfirm('平台模型配置尚未保存。放弃修改会清除当前页面中的新密钥和其他草稿。', {
+      title: '放弃未保存的修改？', confirmText: '放弃修改', cancelText: '继续编辑', danger: true,
+    }) && current === epoch && props.canManage
+  } finally { confirming.value = false }
+}
+async function changeProvider(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const next = select.value
+  select.value = provider.value
+  if (next !== provider.value && await discardChanges()) provider.value = next
+}
+async function reload() {
+  if (await discardChanges()) await load()
+}
 
 function clearMessages() { actionError.value = ''; testMessage.value = ''; saveMessage.value = '' }
 function resetDraft() {
@@ -201,6 +228,7 @@ function dispose() {
   loaded.value = false
   loading.value = false
   pending.value = ''
+  confirming.value = false
   loadError.value = ''
   resetDraft()
 }

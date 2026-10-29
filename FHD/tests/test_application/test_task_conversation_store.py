@@ -238,3 +238,135 @@ def test_normal_chat_and_terminal_feedback_reopen_under_authenticated_owner(
         lambda _: SimpleNamespace(id=42),
     )
     assert conversations_get(request, "approval-session", user_id="41", mod_id="")["messages"] == []
+
+
+@pytest.mark.parametrize("existing_session", [False, True])
+def test_client_message_retry_is_atomic_across_connections(tmp_path, monkeypatch, existing_session):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'retry.sqlite'}", connect_args={"timeout": 10})
+    for model in (User, AIConversationSession, AIConversation):
+        model.__table__.create(engine)
+    factory = sessionmaker(bind=engine)
+    with factory() as db:
+        db.add(User(id=41, username="retry-owner", password="test"))
+        db.commit()
+
+    @contextmanager
+    def connection():
+        with factory() as db:
+            yield db
+
+    monkeypatch.setattr("app.application.task_conversation_store.get_db", connection)
+    durable = TaskConversationStore()
+    if existing_session:
+        durable.save_message(
+            session_id="retry-session", user_id=41, role="user", content="existing"
+        )
+    barrier = Barrier(2)
+
+    def save(_):
+        barrier.wait(timeout=5)
+        return durable.save_message(
+            session_id="retry-session",
+            user_id=41,
+            role="user",
+            content="one message",
+            client_message_id="message-stable-1",
+            metadata='{"ui":{"contextSummary":"summary"}}',
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = list(pool.map(save, range(2)))
+    assert ids[0] == ids[1]
+    history = durable.get_conversation(session_id="retry-session", user_id=41)
+    assert history["session"]["message_count"] == (2 if existing_session else 1)
+    assert sum(message["content"] == "one message" for message in history["messages"]) == 1
+    metadata = json.loads(history["messages"][-1]["metadata"])
+    assert metadata["client_message_id"] == "message-stable-1"
+    assert metadata["ui"]["contextSummary"] == "summary"
+    with pytest.raises(ValueError, match="original content"):
+        durable.save_message(
+            session_id="retry-session",
+            user_id=41,
+            role="user",
+            content="different",
+            client_message_id="message-stable-1",
+        )
+    engine.dispose()
+
+
+def test_paged_history_and_retried_save_use_authenticated_owner(store, monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import httpx
+    from fastapi import FastAPI
+
+    from app.legacy.routes.conversation.compat_extra import router
+
+    for index in range(25):
+        store.save_message(
+            session_id=f"owned-{index}", user_id=41, role="user", content=f"row {index}"
+        )
+    store.save_message(session_id="other-owner", user_id=42, role="user", content="private")
+    monkeypatch.setattr(
+        "app.infrastructure.auth.dependencies.resolve_session_user",
+        lambda _: SimpleNamespace(id=41),
+    )
+    monkeypatch.setattr(
+        "app.neuro_bus.route_event_publisher.publish_simple_event", lambda *args, **kwargs: None
+    )
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+
+    async def exercise():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            first = (
+                await client.get(
+                    "/api/conversations/sessions",
+                    params={"limit": 20, "offset": 0, "user_id": "42"},
+                )
+            ).json()
+            second = (
+                await client.get(
+                    "/api/conversations/sessions",
+                    params={"limit": 20, "offset": first["next_offset"]},
+                )
+            ).json()
+            assert len(first["sessions"]) == 20 and first["has_more"] is True
+            assert len(second["sessions"]) == 5 and second["has_more"] is False
+            assert len({row["session_id"] for row in first["sessions"] + second["sessions"]}) == 25
+            assert all(
+                row["session_id"] != "other-owner" for row in first["sessions"] + second["sessions"]
+            )
+            payload = {
+                "session_id": "retry-http",
+                "user_id": "42",
+                "role": "user",
+                "content": "save only",
+                "client_message_id": "message-http-1",
+            }
+            a = await client.post("/api/conversations/message", json=payload)
+            b = await client.post("/api/conversations/message", json=payload)
+            assert a.status_code == b.status_code == 200
+            assert a.json()["message_id"] == b.json()["message_id"]
+            assert a.json()["durable"] is True
+            rejected = await client.post(
+                "/api/conversations/message", json={**payload, "content": "changed"}
+            )
+            assert rejected.status_code == 409
+            foreign = await client.post(
+                "/api/conversations/message", json={**payload, "session_id": "other-owner"}
+            )
+            assert foreign.status_code == 403
+            assert (
+                await client.get("/api/conversations/sessions", params={"offset": -1})
+            ).status_code == 422
+
+    asyncio.run(exercise())
+    assert len(store.get_conversation(session_id="retry-http", user_id=41)["messages"]) == 1
+    assert store.get_conversation(session_id="retry-http", user_id=42)["messages"] == []

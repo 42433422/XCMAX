@@ -4,6 +4,7 @@
 import { computed } from 'vue'
 import type { EtlAction, EtlRunRow } from '@/api/etl'
 import type { EtlCenterState } from './etlCenterState'
+import { resultNeedsVerification, targetOperation } from './etlCenterShared'
 
 export interface EtlCenterDerivedDeps {
   state: EtlCenterState
@@ -45,6 +46,7 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
   })
   const canExecute = computed(() => {
     if (!currentRun.value || currentRun.value.status !== 'preview_ready') return false
+    if (!runRows.value.length || state.rowPage.value < 1 || (state.rowPage.value - 1) * 50 >= state.rowTotal.value) return false
     if (draftChanged.value) return false
     if (!currentRun.value.preview_revision || currentRun.value.preview_revision !== state.reviewedPreviewRevision.value) return false
     if (currentRun.value.summary.error && !validRowsOnly.value) return false
@@ -53,9 +55,22 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
   const canReplay = computed(() => {
     const run = currentRun.value
     const snapshot = run?.details.source_snapshot
-    return Boolean(run && ['preview_ready', 'completed', 'failed', 'interrupted'].includes(run.status) &&
+    return Boolean(run && !resultNeedsVerification(run) && ['preview_ready', 'completed', 'failed', 'interrupted'].includes(run.status) &&
       snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && (snapshot as Record<string, unknown>).version === 1)
   })
+  const operation = computed(() => targetOperation(currentRun.value?.target_type || targetType.value))
+  const canRetry = computed(() => Boolean(currentRun.value && ['failed', 'interrupted'].includes(currentRun.value.status) &&
+    !currentRun.value.rollback_status && !resultNeedsVerification(currentRun.value)))
+  const sourceColumns = computed(() => {
+    const headers = currentRun.value?.source_features.headers
+    return [...new Set([
+      ...(Array.isArray(headers) ? headers.filter((item): item is string => typeof item === 'string') : []),
+      ...runRows.value.flatMap(row => Object.keys(row.source)),
+      ...(currentRun.value?.draft.field_mappings || []).map(mapping => mapping.source),
+    ])].filter(Boolean)
+  })
+  const sourceSheets = computed(() => [...new Set(runRows.value.map(row => row.source_sheet))])
+  const rowPageCount = computed(() => Math.max(1, Math.ceil(state.rowTotal.value / 50)))
   const summaryCards = computed(() => [
     { action: 'new', label: '新增', count: currentRun.value?.summary.new || 0 },
     { action: 'update', label: '更新', count: currentRun.value?.summary.update || 0 },
@@ -102,9 +117,20 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
       return `已撤销本次写入；已回退 ${rollback?.rows ?? summary.executed} 行`
     }
     if (currentRun.value.status === 'completed') {
-      return `已写入 ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+      return `${operation.value.count} ${summary.executed} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+    }
+    if (['failed', 'interrupted', 'outcome_unknown'].includes(currentRun.value.status) || resultNeedsVerification(currentRun.value)) {
+      return `已确认${operation.value.verb} ${summary.executed} 行；计划新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
     }
     return `计划处理 ${plannedBusinessRows.value} 行；新增 ${summary.new}、更新 ${summary.update}、跳过 ${summary.skip}`
+  })
+  const recoveryMessage = computed(() => {
+    const run = currentRun.value
+    if (!run || run.rollback_status === 'completed') return ''
+    if (resultNeedsVerification(run)) return '结果尚未确认，请先核对业务库或外部系统，并联系管理员处理；暂勿再次执行或撤销。'
+    if (!['failed', 'interrupted'].includes(run.status)) return ''
+    const remaining = Math.max(0, run.summary.new + run.summary.update - run.summary.executed)
+    return `其余计划处理的 ${remaining} 行结果待核对，不能直接认定为未处理。请先核对实际数据；重新校验只生成预演，仍需再次审核确认。`
   })
   const regionSummary = computed<Record<string, unknown> | null>(() => {
     const value = currentRun.value?.source_features?.region_summary
@@ -139,6 +165,12 @@ export function createEtlCenterDerived({ state }: EtlCenterDerivedDeps) {
     draftChanged,
     canExecute,
     canReplay,
+    canRetry,
+    operation,
+    recoveryMessage,
+    sourceColumns,
+    sourceSheets,
+    rowPageCount,
     summaryCards,
     savedShipmentTemplate,
     savedShipmentTemplateName,

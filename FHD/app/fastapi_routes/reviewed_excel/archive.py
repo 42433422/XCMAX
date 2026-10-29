@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import defaultdict
 from io import BytesIO
 from pathlib import Path
 
@@ -99,6 +100,27 @@ def archive_assets(user=Depends(_read)):
             .limit(200)
             .all()
         )
+        versions_by_asset = defaultdict(list)
+        if assets:
+            versions = (
+                db.query(
+                    EtlArchiveVersion.asset_id,
+                    EtlArchiveVersion.id,
+                    EtlArchiveVersion.version,
+                    EtlArchiveVersion.status,
+                    EtlArchiveVersion.sha256,
+                    EtlArchiveVersion.size_bytes,
+                    EtlArchiveVersion.classification_id,
+                )
+                .filter(
+                    EtlArchiveVersion.tenant_id == tenant,
+                    EtlArchiveVersion.owner_user_id == owner,
+                    EtlArchiveVersion.asset_id.in_([asset.id for asset in assets]),
+                )
+                .order_by(EtlArchiveVersion.version.desc())
+            )
+            for version in versions:
+                versions_by_asset[version.asset_id].append(version)
         return {
             "assets": [
                 {
@@ -115,10 +137,7 @@ def archive_assets(user=Depends(_read)):
                             "size_bytes": version.size_bytes,
                             "classification_id": version.classification_id,
                         }
-                        for version in db.query(EtlArchiveVersion)
-                        .filter_by(tenant_id=tenant, owner_user_id=owner, asset_id=asset.id)
-                        .order_by(EtlArchiveVersion.version.desc())
-                        .all()
+                        for version in versions_by_asset[asset.id]
                     ],
                 }
                 for asset in assets

@@ -77,6 +77,8 @@ export function useChatTaskRuntimeBridge(options: UseChatTaskRuntimeBridgeOption
   }
 
   return {
+    taskControlStates: workspace.taskControlStates,
+    taskSyncState: workspace.taskSyncState,
     loadSession,
     newConversation,
     selectTask,

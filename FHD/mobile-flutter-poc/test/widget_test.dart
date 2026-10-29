@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_api.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_models.dart';
 import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
+import 'package:xcagi_flutter_poc/src/platform/credential_cipher.dart';
 import 'package:xcagi_flutter_poc/src/data/ai_group_snapshot.dart';
 import 'package:xcagi_flutter_poc/src/data/ai_employee_profile.dart';
 import 'package:xcagi_flutter_poc/src/data/demo_data.dart';
@@ -2923,6 +2924,7 @@ void main() {
     WidgetTester tester,
   ) async {
     final api = MobileApiClient(
+      credentialCipher: const _AuthTestCredentialCipher(),
       sessionStore: MemoryMobileSessionStore(
         const MobileSessionData(
           savedUsername: 'remembered-admin',
@@ -2963,6 +2965,32 @@ void main() {
     expect(saved.autoLogin, isTrue);
     expect(saved.savedUsername, 'remembered-admin');
     expect(saved.savedPassword, 'secret');
+  });
+
+  testWidgets('auth succeeds with a warning when secure password storage fails', (
+    WidgetTester tester,
+  ) async {
+    final store = MemoryMobileSessionStore(const MobileSessionData(
+      savedUsername: 'remembered-admin', savedPassword: 'secret',
+      rememberPassword: true, autoLogin: true,
+    ));
+    final api = MobileApiClient(sessionStore: store,
+        credentialCipher: const _UnavailableAuthTestCredentialCipher());
+    var completed = false;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: AuthScreen(repository: _FakeAuthRepository(api),
+          onDone: () => completed = true),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
+    await tester.pumpAndSettle();
+    expect(completed, isTrue);
+    expect(find.text('已登录，但当前设备无法安全保存密码，下次请手动输入。'), findsOneWidget);
+    final saved = await store.load();
+    expect(saved.savedPassword, isEmpty);
+    expect(saved.rememberPassword, isFalse);
+    expect(saved.autoLogin, isFalse);
   });
 
   testWidgets('auth agreement links open Flutter external legal URLs', (
@@ -6830,4 +6858,21 @@ class _SlowWalletProfileApi extends _FakeProfileApi {
       raw: const {'ok': true},
     );
   }
+}
+
+class _AuthTestCredentialCipher extends PlatformCredentialCipher {
+  const _AuthTestCredentialCipher();
+
+  @override
+  Future<String> encrypt(String plain) async => 'enc:v1:$plain';
+
+  @override
+  Future<String> decrypt(String stored) async => stored.substring('enc:v1:'.length);
+}
+
+class _UnavailableAuthTestCredentialCipher extends PlatformCredentialCipher {
+  const _UnavailableAuthTestCredentialCipher();
+
+  @override
+  Future<String> encrypt(String plain) async => throw StateError('unavailable');
 }

@@ -1,5 +1,5 @@
 import { AuthenticatedEventStream } from '@/utils/authenticatedEventStream'
-import type { Ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import agentRunsApi from '@/api/agentRuns'
 import { approveRunWithFreshGrant } from '@/api/agentRunApproval'
 import type { AgentTaskSummary } from '@/api/agentRuns'
@@ -7,6 +7,10 @@ import { buildFullApiUrl } from '@/api/core'
 import type { TaskItem } from './useChatPersistence'
 import { activeRunIdOfTask, conversationIdOfTask, groupAgentRunsIntoTasks, taskSummariesToTaskItems } from '@/utils/agentTaskWorkspaceModel'
 import { completeFirstAiTaskFromRun } from '@/constants/productFlow'
+
+export type TaskControlAction = 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'
+export type TaskControlState = { pending?: TaskControlAction; error?: string; message?: string; needsVerification?: boolean }
+export type TaskSyncState = { checking: boolean; stale: boolean; lastVerifiedAt: number; error: string }
 
 export interface UseAgentTaskWorkspaceOptions {
   taskList: Ref<TaskItem[]>
@@ -22,7 +26,9 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   let refreshTimer: number | null = null
   let reconnectTimer: number | null = null
   let taskStream: AuthenticatedEventStream | null = null
-  let refreshInFlight = false
+  let refreshInFlight: Promise<void> | null = null
+  const taskControlStates = ref<Record<string, TaskControlState>>({})
+  const taskSyncState = ref<TaskSyncState>({ checking: false, stale: true, lastVerifiedAt: 0, error: '' })
   let lifecycleVersion = 0
 
   function applyTaskItems(serverTasks: TaskItem[]): void {
@@ -35,6 +41,14 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     }
     options.sortTaskList()
     options.onPersist?.()
+    taskSyncState.value = { checking: false, stale: false, lastVerifiedAt: Date.now(), error: '' }
+    for (const state of Object.values(taskControlStates.value)) {
+      if (state.needsVerification) {
+        state.error = ''
+        state.message = '已重新核对任务状态，请查看当前状态后继续操作。'
+        state.needsVerification = false
+      }
+    }
   }
 
   function applyFirstTaskCompletionEvidence(tasks: AgentTaskSummary[]): void {
@@ -49,33 +63,44 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     applyTaskItems(taskSummariesToTaskItems(tasks))
   }
 
-  async function refreshTasks(): Promise<void> {
-    if (refreshInFlight) return
-    refreshInFlight = true
+  async function refreshTasks(afterAction = false): Promise<void> {
     const requestedVersion = lifecycleVersion
-    try {
-      let serverTasks: TaskItem[]
-      try {
-        const response = await agentRunsApi.listTasks({ limit: 200 })
-        if (requestedVersion !== lifecycleVersion) return
-        const tasks = Array.isArray(response?.data) ? response.data : []
-        applyFirstTaskCompletionEvidence(tasks)
-        serverTasks = taskSummariesToTaskItems(tasks)
-      } catch {
-        if (requestedVersion !== lifecycleVersion) return
-        // Compatibility with an older backend during rolling desktop upgrades.
-        const response = await agentRunsApi.listRuns({ limit: 200 })
-        if (requestedVersion !== lifecycleVersion) return
-        const runs = Array.isArray(response?.data) ? response.data : []
-        runs.forEach((run) => completeFirstAiTaskFromRun(run))
-        serverTasks = groupAgentRunsIntoTasks(runs)
-      }
-      applyTaskItems(serverTasks)
-    } catch {
-      // Keep the last durable snapshot in the panel while offline.
-    } finally {
-      if (requestedVersion === lifecycleVersion) refreshInFlight = false
+    while (refreshInFlight) {
+      await refreshInFlight
+      if (!afterAction || requestedVersion !== lifecycleVersion) return
     }
+    taskSyncState.value.checking = true
+    const request = (async () => {
+      try {
+        let serverTasks: TaskItem[]
+        try {
+          const response = await agentRunsApi.listTasks({ limit: 200 })
+          if (requestedVersion !== lifecycleVersion) return
+          if (response?.success === false || !Array.isArray(response?.data)) throw new Error('任务状态读取失败')
+          applyFirstTaskCompletionEvidence(response.data)
+          serverTasks = taskSummariesToTaskItems(response.data)
+        } catch {
+          if (requestedVersion !== lifecycleVersion) return
+          const response = await agentRunsApi.listRuns({ limit: 200 })
+          if (requestedVersion !== lifecycleVersion) return
+          if (response?.success === false || !Array.isArray(response?.data)) throw new Error('任务状态读取失败')
+          response.data.forEach((run) => completeFirstAiTaskFromRun(run))
+          serverTasks = groupAgentRunsIntoTasks(response.data)
+        }
+        applyTaskItems(serverTasks)
+      } catch {
+        if (requestedVersion === lifecycleVersion) markStale()
+      } finally {
+        if (requestedVersion === lifecycleVersion) taskSyncState.value.checking = false
+      }
+    })()
+    refreshInFlight = request
+    try { await request } finally { if (refreshInFlight === request) refreshInFlight = null }
+  }
+
+  function markStale(): void {
+    taskSyncState.value.stale = true
+    taskSyncState.value.error = '无法核实当前任务状态，正在显示上次结果；任务可能仍在执行，请勿重复提交。'
   }
 
   function scheduleReconnect(): void {
@@ -90,21 +115,28 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     if (typeof window === 'undefined' || typeof fetch === 'undefined') return
     if (typeof agentRunsApi.taskEventStreamPath !== 'function') return
     taskStream?.close()
-    taskStream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
+    const requestedVersion = lifecycleVersion
+    const stream = new AuthenticatedEventStream(buildFullApiUrl(agentRunsApi.taskEventStreamPath()))
+    taskStream = stream
+    const isCurrent = () => requestedVersion === lifecycleVersion && taskStream === stream
     taskStream.addEventListener('task.snapshot', (event) => {
+      if (!isCurrent()) return
       try {
         const snapshot = JSON.parse((event as MessageEvent).data)
-        if (Array.isArray(snapshot)) applyServerTasks(snapshot as AgentTaskSummary[])
-      } catch {
-        // Keep the last durable snapshot; the 15s fallback will retry.
-      }
+        if (!Array.isArray(snapshot)) throw new Error('invalid task snapshot')
+        applyServerTasks(snapshot as AgentTaskSummary[])
+      } catch { markStale() }
     })
     taskStream.addEventListener('stream.closed', () => {
+      if (!isCurrent()) return
+      markStale()
       taskStream?.close()
       taskStream = null
       scheduleReconnect()
     })
     taskStream.onerror = () => {
+      if (!isCurrent()) return
+      markStale()
       taskStream?.close()
       taskStream = null
       scheduleReconnect()
@@ -120,7 +152,9 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
 
   function stop(): void {
     lifecycleVersion += 1
-    refreshInFlight = false
+    refreshInFlight = null
+    taskControlStates.value = {}
+    taskSyncState.value = { checking: false, stale: true, lastVerifiedAt: 0, error: '' }
     if (refreshTimer !== null) window.clearInterval(refreshTimer)
     if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
     taskStream?.close()
@@ -157,19 +191,39 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
     options.onJumpToMessage?.(task)
   }
 
-  async function controlTask(taskId: string, action: 'pause' | 'resume' | 'cancel' | 'retry' | 'approve'): Promise<void> {
+  async function controlTask(taskId: string, action: TaskControlAction): Promise<void> {
+    if (taskControlStates.value[taskId]?.pending || taskControlStates.value[taskId]?.needsVerification) return
     const requestedVersion = lifecycleVersion
     const task = options.taskList.value.find((item) => item.id === taskId)
     if (!task || task.type !== 'agent_task') return
     const runId = activeRunIdOfTask(task)
     if (!runId) return
-    if (action === 'approve') await approveRunWithFreshGrant(runId, { isCurrent: () => requestedVersion === lifecycleVersion })
-    else if (action === 'pause') await agentRunsApi.pauseRun(runId)
-    else if (action === 'resume') await agentRunsApi.resumeRun(runId)
-    else if (action === 'retry') await agentRunsApi.retryRun(runId)
-    else await agentRunsApi.cancelRun(runId)
-    if (requestedVersion !== lifecycleVersion) return
-    await refreshTasks()
+    const labels: Record<TaskControlAction, string> = { pause: '暂停', resume: '恢复', cancel: '取消', retry: '重试', approve: '审批' }
+    taskControlStates.value[taskId] = { pending: action }
+    const state = taskControlStates.value[taskId]
+    let accepted = false
+    try {
+      const result = action === 'approve'
+        ? await approveRunWithFreshGrant(runId, { isCurrent: () => requestedVersion === lifecycleVersion })
+        : await ({ pause: agentRunsApi.pauseRun, resume: agentRunsApi.resumeRun, cancel: agentRunsApi.cancelRun, retry: agentRunsApi.retryRun })[action](runId)
+      if (requestedVersion !== lifecycleVersion) return
+      if (result?.success === false) throw new Error('task control rejected')
+      accepted = true
+      await refreshTasks(true)
+      if (requestedVersion !== lifecycleVersion) return
+      if (taskSyncState.value.stale) throw new Error('task readback failed')
+      state.message = `${labels[action]}请求已提交，已重新核对任务状态。`
+    } catch {
+      if (requestedVersion !== lifecycleVersion) return
+      state.error = `${labels[action]}${accepted ? '请求已提交，但当前结果无法核实' : '未确认成功'}。任务可能仍在执行，请先重新核对状态，勿重复提交。`
+      state.needsVerification = true
+      markStale()
+    } finally {
+      if (requestedVersion === lifecycleVersion) {
+        delete state.pending
+        taskControlStates.value[taskId] = { ...state }
+      }
+    }
   }
 
   async function archiveCompletedTasks(): Promise<void> {
@@ -190,6 +244,8 @@ export function useAgentTaskWorkspace(options: UseAgentTaskWorkspaceOptions) {
   }
 
   return {
+    taskControlStates,
+    taskSyncState,
     archiveCompletedTasks,
     controlTask,
     refreshTasks,

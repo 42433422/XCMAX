@@ -7,7 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
 from app.application.etl import service_execution
 from app.application.etl.errors import EtlError
@@ -16,6 +18,8 @@ from app.application.etl.service_support import dump_json, load_json
 from app.application.etl.targets import get_adapter
 from app.db.models import PurchaseUnit
 from app.db.models.etl import EtlRun, EtlRunRow, EtlTargetConfig, EtlUpload
+from app.fastapi_routes import etl as etl_routes
+from app.infrastructure.tenant_scope import tenant_scope
 from tests.test_application.test_etl_preview_task_boundaries import (
     create_preview,
     ready_preview,
@@ -155,12 +159,21 @@ def test_claim_refreshes_stale_session_before_accepting_revision(preview_store, 
     assert_unwritten(store, run_id)
 
 
-def test_rows_do_not_report_new_revision_for_old_displayed_rows(preview_store, monkeypatch):
+@pytest.mark.parametrize("located", [False, True])
+def test_rows_do_not_report_new_revision_for_old_displayed_rows(
+    preview_store, monkeypatch, located
+):
     store = preview_store
     run_id = ready_preview(store, monkeypatch)
     with store.factory() as db:
         rows = store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10)
     assert rows["preview_revision"] == snapshot(store, run_id)["preview_revision"]
+    first_row = rows["items"][0]
+    location = (
+        {"source_sheet": first_row["source_sheet"], "source_row": first_row["source_row"]}
+        if located
+        else {}
+    )
     row_dict = store.service.row_dict
     changed = False
 
@@ -180,8 +193,79 @@ def test_rows_do_not_report_new_revision_for_old_displayed_rows(preview_store, m
 
     monkeypatch.setattr(store.service, "row_dict", concurrent_edit)
     with store.factory() as db, pytest.raises(EtlError) as error:
-        store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10)
+        store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10, **location)
     assert error.value.code == "ETL_PREVIEW_CHANGED"
+
+
+def test_source_location_keeps_owner_scope_pagination_and_approval_revision(
+    preview_store, monkeypatch
+):
+    store = preview_store
+    run_id = ready_preview(store, monkeypatch)
+    with store.factory() as db:
+        all_rows = store.service.get_rows(db, run_id=run_id, owner_user_id=7, page=1, page_size=10)
+        row = all_rows["items"][-1]
+        query = {
+            "run_id": run_id,
+            "owner_user_id": 7,
+            "page": 1,
+            "page_size": 1,
+            "source_sheet": row["source_sheet"],
+            "source_row": row["source_row"],
+            "action": row["final_action"],
+        }
+        located = store.service.get_rows(db, **query)
+        assert located["total"] == 1
+        assert located["items"] == [row]
+        assert located["preview_revision"] == all_rows["preview_revision"]
+        assert store.service.get_rows(db, **{**query, "page": 2})["items"] == []
+        assert (
+            store.service.get_rows(db, **{**query, "source_sheet": "not-this-sheet"})["total"] == 0
+        )
+        with pytest.raises(EtlError):
+            store.service.get_rows(db, **{**query, "owner_user_id": 8})
+        with tenant_scope(2), pytest.raises(EtlError):
+            store.service.get_rows(db, **query)
+    assert_unwritten(store, run_id)
+
+
+@pytest.mark.asyncio
+async def test_source_location_route_validates_and_forwards_exact_coordinates(
+    preview_store, monkeypatch
+):
+    store = preview_store
+    run_id = ready_preview(store, monkeypatch)
+    app = FastAPI()
+    app.include_router(etl_routes.router)
+    app.dependency_overrides[etl_routes._feature_gate] = lambda: None
+    app.dependency_overrides[etl_routes._read] = lambda: SimpleNamespace(id=7)
+
+    def scoped_db():
+        with store.factory() as db:
+            yield db
+
+    app.dependency_overrides[etl_routes.get_db_dependency] = scoped_db
+    monkeypatch.setattr(etl_routes, "get_etl_service", lambda: store.service)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        unfiltered = (await client.get(f"/api/etl/runs/{run_id}/rows")).json()["data"]
+        row = unfiltered["items"][-1]
+        response = await client.get(
+            f"/api/etl/runs/{run_id}/rows",
+            params={
+                "source_sheet": row["source_sheet"],
+                "source_row": row["source_row"],
+                "page_size": 1,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["data"]["items"] == [row]
+        assert response.json()["data"]["preview_revision"] == unfiltered["preview_revision"]
+        for invalid_row in (0, -1, "not-a-row", "1.5"):
+            assert (
+                await client.get(f"/api/etl/runs/{run_id}/rows", params={"source_row": invalid_row})
+            ).status_code == 422
 
 
 @pytest.mark.parametrize("after_queue", [False, True])

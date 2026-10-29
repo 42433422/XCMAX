@@ -13,7 +13,7 @@ function withRequestList<T extends Record<string, unknown>>(res: T | null | unde
   if (!res || typeof res !== 'object') {
     return { success: false, message: '无效响应', data: { requests: [] as ApprovalRequest[] } }
   }
-  const raw = res as { success?: boolean; data?: unknown }
+  const raw = res as { success?: boolean; message?: string; data?: unknown; pagination?: { page: number; page_size: number; total: number } }
   const list = Array.isArray(raw.data) ? raw.data : []
   return { ...raw, data: { requests: list as ApprovalRequest[] } }
 }
@@ -119,11 +119,11 @@ export const approvalApi = {
   /**
    * 获取待我审批的请求
    */
-  async getPendingApprovals(userId: number) {
+  async getPendingApprovals(userId: number, page = 1, pageSize = 200) {
     try {
       const data = await api.get(
         ap('/api/approval/requests'),
-        { approver_id: userId, page: 1, page_size: 200 },
+        { approver_id: userId, page, page_size: pageSize },
         { headers: { 'X-User-ID': userId.toString() } },
       )
       return withRequestList(data as Record<string, unknown>)
@@ -140,11 +140,11 @@ export const approvalApi = {
   /**
    * 获取我发起的审批请求
    */
-  async getMyRequests(userId: number) {
+  async getMyRequests(userId: number, page = 1, pageSize = 500) {
     try {
       const data = await api.get(
         ap('/api/approval/requests'),
-        { applicant_id: userId, page: 1, page_size: 500 },
+        { applicant_id: userId, page, page_size: pageSize },
         { headers: { 'X-User-ID': userId.toString() } },
       )
       return withRequestList(data as Record<string, unknown>)

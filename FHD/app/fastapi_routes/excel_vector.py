@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Body, Request, UploadFile
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.application import get_excel_vector_ingest_app_service, get_excel_vector_search_app_service
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -132,8 +133,7 @@ async def ingest_excel_vector(request: Request):
                 cleanup_path = Path(get_upload_dir()).resolve() / f"vector_{uuid4().hex}{suffix}"
                 file_path = str(cleanup_path)
                 body = await upload_file.read()
-                with cleanup_path.open("wb") as f:
-                    f.write(body)
+                await run_in_threadpool(cleanup_path.write_bytes, body)
                 payload = {
                     k: v for k, v in form.items() if k != "excel_file" and isinstance(v, str)
                 }
@@ -156,7 +156,8 @@ async def ingest_excel_vector(request: Request):
         index_name = str(payload.get("index_name") or "").strip() or None
         index_id = str(payload.get("index_id") or "").strip() or None
 
-        run = _run_excel_vector_agent(
+        run = await run_in_threadpool(
+            _run_excel_vector_agent,
             request=request,
             action="execute",
             node_id="excel_vector_ingest",

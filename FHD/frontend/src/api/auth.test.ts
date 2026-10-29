@@ -34,7 +34,7 @@ describe('authApi', () => {
         password: 'p',
         account_kind: 'enterprise',
       },
-      { timeoutMs: 30_000 },
+      { timeoutMs: 30_000, signal: expect.any(AbortSignal) },
     )
   })
 
@@ -47,7 +47,7 @@ describe('authApi', () => {
         code: '0000',
         account_kind: 'personal',
       },
-      { timeoutMs: 30_000 },
+      { timeoutMs: 30_000, signal: expect.any(AbortSignal) },
     )
   })
 
@@ -83,7 +83,12 @@ describe('authApi', () => {
 
   it('logout clears storage and posts', async () => {
     window.localStorage.setItem('xcagi_market_access_token', 'tok')
+    window.localStorage.setItem('xcagi_market_refresh_token', 'refresh')
+    window.localStorage.setItem('xcagi_market_user_json', '{}')
     await authApi.logout()
-    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {}, { timeoutMs: 10_000 })
+    expect(apiMock.post).toHaveBeenCalledWith('/api/auth/logout', {}, { timeoutMs: 10_000, signal: expect.any(AbortSignal) })
+    for (const key of ['xcagi_market_access_token', 'xcagi_market_refresh_token', 'xcagi_market_user_json']) {
+      expect(window.localStorage.getItem(key)).toBeNull()
+    }
   })
 })

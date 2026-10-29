@@ -89,6 +89,7 @@ describe('useChatViewHost – coverage ramp', () => {
     expect(deps.syncSessionMessages).toHaveBeenCalledTimes(1)
     shown.value = false
     await nextTick()
+    expect(deps.cleanupVoiceInput).toHaveBeenCalledOnce()
     shown.value = true
     await nextTick()
     expect(deps.syncSessionMessages).toHaveBeenCalledTimes(2)

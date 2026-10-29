@@ -1,15 +1,13 @@
-import { ref, computed, getCurrentScope, onScopeDispose } from 'vue'
-import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+import { ref, computed, watch, getCurrentScope, onScopeDispose } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi, type User } from '@/api/auth'
-import { LS_MARKET_USER_JSON } from '@/api/marketAccount'
 import { buildFullApiUrl } from '@/api/core'
 import { useAccountProfileStore } from '@/stores/accountProfile'
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { errorMessage } from './utils'
-import { readValid, invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
+import { readValid, invalidateEnterpriseSessionCache, captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
 
 export function useSettingsAccount() {
   const { t } = useI18n()
@@ -24,7 +22,20 @@ export function useSettingsAccount() {
   const accountError = ref(false)
   let accountEpoch = 0
   let accountRequest: Promise<void> | null = null
-  if (getCurrentScope()) onScopeDispose(() => { ++accountEpoch; accountRequest = null })
+  let accountController: AbortController | null = null
+  if (getCurrentScope()) {
+    const stop = watch(getAuthSessionEpoch, () => {
+      ++accountEpoch
+      accountController?.abort()
+      accountRequest = null
+      accountLoading.value = false
+      accountError.value = false
+      localUser.value = null
+      sessionValid.value = false
+      syncProfileDraftsFromUser(null)
+    }, { flush: 'sync' })
+    onScopeDispose(() => { stop(); ++accountEpoch; accountController?.abort(); accountRequest = null })
+  }
   const companyBrandDraft = ref('')
   const companyBrandSaving = ref(false)
   const avatarInputRef = ref<HTMLInputElement | null>(null)
@@ -44,32 +55,12 @@ export function useSettingsAccount() {
     return username ? u : null
   }
 
-  function readMarketUserFromStorage(): User | null {
-    try {
-      const raw = window.localStorage.getItem(LS_MARKET_USER_JSON)
-      if (!raw) return null
-      const u = JSON.parse(raw) as Record<string, unknown>
-      const username = String(u.username || '').trim()
-      if (!username) return null
-      return {
-        id: Number(u.id) || 0,
-        username,
-        display_name: String(u.display_name || username).trim() || username,
-        email: String(u.email || '').trim(),
-        role: 'user',
-        is_active: true,
-      }
-    } catch {
-      return null
-    }
-  }
-
   function userFromSessionValidatePayload(res: unknown): User | null {
     if (!res || typeof res !== 'object') return null
     const o = res as Record<string, unknown>
     const data = o.data as Record<string, unknown> | undefined
     const username = String(data?.username || '').trim()
-    if (!username) return readMarketUserFromStorage()
+    if (!username) return null
     const uid = data?.user_id
     return {
       id: uid != null ? Number(uid) : 0,
@@ -91,6 +82,7 @@ export function useSettingsAccount() {
       company_brand: o.company_brand ?? base.company_brand,
       market_is_admin: o.market_is_admin ?? base.market_is_admin,
       market_is_enterprise: o.market_is_enterprise ?? base.market_is_enterprise,
+      ...Object.fromEntries(['tenant_id', 'tenant_name', 'market_user_id', 'local_user_id'].filter(key => key in o).map(key => [key, o[key]])),
       impersonating_market_user_id: o.impersonating_market_user_id ?? base.impersonating_market_user_id,
       impersonating_username: o.impersonating_username ?? base.impersonating_username,
     }).catch(() => undefined)
@@ -141,8 +133,15 @@ export function useSettingsAccount() {
     if (logoutLoading.value) return Promise.resolve()
     if (accountRequest) return accountRequest
     const epoch = ++accountEpoch
-    const scope = productReadAccountEpoch.value
-    const isCurrent = () => epoch === accountEpoch && scope === productReadAccountEpoch.value
+    const sessionCurrent = captureAuthSession()
+    const isCurrent = () => epoch === accountEpoch && sessionCurrent()
+    const controller = accountController = new AbortController()
+    const timeout = setTimeout(() => controller.abort(new Error('账号状态核实超时，请重试。')), 8_000)
+    let rejectOnAbort!: () => void
+    const aborted = new Promise<never>((_, reject) => {
+      rejectOnAbort = () => reject(controller.signal.reason)
+      controller.signal.addEventListener('abort', rejectOnAbort, { once: true })
+    })
     accountLoading.value = true
     accountError.value = false
     accountRequest = (async () => {
@@ -150,12 +149,15 @@ export function useSettingsAccount() {
         let payload: unknown
         let user: User | null = null
         try {
-          payload = await authApi.getCurrentUser()
+          payload = await Promise.race([authApi.getCurrentUser({ signal: controller.signal }), aborted])
           user = unwrapUserFromMe(payload)
-        } catch { /* Session validation distinguishes missing profile from logout. */ }
+        } catch (error) {
+          // A missing legacy profile can fall back; a network outage is not evidence of logout.
+          if ((error as { status?: number } | null)?.status !== 404) throw error
+        }
         if (!isCurrent()) return
         if (!user) {
-          payload = await authApi.validateSession()
+          payload = await Promise.race([authApi.validateSession({ signal: controller.signal }), aborted])
           if (!isCurrent()) return
           sessionValid.value = readValid(payload)
           user = sessionValid.value ? userFromSessionValidatePayload(payload) : null
@@ -180,6 +182,9 @@ export function useSettingsAccount() {
           syncProfileDraftsFromUser(null)
         } else accountError.value = true
       } finally {
+        clearTimeout(timeout)
+        controller.signal.removeEventListener('abort', rejectOnAbort)
+        if (accountController === controller) accountController = null
         if (epoch === accountEpoch) {
           accountLoading.value = false
           accountRequest = null
@@ -250,22 +255,11 @@ export function useSettingsAccount() {
   })
 
   const profileAvatarUrl = computed(() => {
-    const u = localUser.value
-    const local = String(u?.avatar_url || '').trim()
-    if (local) {
-      const base = local.startsWith('http') ? local : buildFullApiUrl(local)
-      const sep = base.includes('?') ? '&' : '?'
-      return `${base}${sep}v=${avatarCacheBust.value}`
-    }
-    try {
-      const raw = window.localStorage.getItem(LS_MARKET_USER_JSON)
-      if (!raw) return ''
-      const market = JSON.parse(raw) as Record<string, unknown>
-      const url = String(market.avatar_url || market.avatar || '').trim()
-      return url.startsWith('http') ? url : ''
-    } catch {
-      return ''
-    }
+    const local = String(localUser.value?.avatar_url || '').trim()
+    if (!local) return ''
+    const base = local.startsWith('http') ? local : buildFullApiUrl(local)
+    const sep = base.includes('?') ? '&' : '?'
+    return `${base}${sep}v=${avatarCacheBust.value}`
   })
 
   const profileHomeSummary = computed(() => {
@@ -341,19 +335,31 @@ export function useSettingsAccount() {
 
   async function onLogout() {
     if (logoutLoading.value) return
+    const confirmedSession = captureAuthSession()
     if (!(await appConfirm(t('settings.logoutConfirm'), { danger: true }))) return
-    if (logoutLoading.value) return
+    if (logoutLoading.value || !confirmedSession()) return
     logoutLoading.value = true
     ++accountEpoch
+    accountController?.abort()
     accountRequest = null
     accountLoading.value = false
+    accountError.value = false
+    localUser.value = null
+    sessionValid.value = false
+    syncProfileDraftsFromUser(null)
+    accountProfileStore.clear()
+    let logoutSession = getAuthSessionEpoch()
+    // Clearing the profile can retire this component; logout still owns its global redirect.
+    const current = () => logoutSession === getAuthSessionEpoch()
     try {
-      await authApi.logout()
-      accountProfileStore.clear()
-      localUser.value = null
-      sessionValid.value = false
+      const logout = authApi.logout()
+      logoutSession = getAuthSessionEpoch()
+      await logout
+      if (!current()) return
       await router.replace({ name: 'login', query: { redirect: '/' } })
     } catch (e) {
+      if (!current()) return
+      accountError.value = true
       const msg = e instanceof Error ? e.message : String(e)
       await appAlert(t('settings.logoutFailed', { detail: msg }))
     } finally {

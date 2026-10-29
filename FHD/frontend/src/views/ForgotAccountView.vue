@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ApiError } from '@/api'
 import { authApi } from '@/api/auth'
+import ConnectionRecovery from '@/components/login/ConnectionRecovery.vue'
 
 const route = useRoute()
 const email = ref('')
@@ -43,7 +44,7 @@ async function submitLookup() {
         (typeof errObj?.message === 'string' && (errObj.message as string)) ||
         error.message
     } else {
-      errorMessage.value = '查询失败，请确认后端已连接数据库'
+      errorMessage.value = '账号查询失败。请检查连接后重试；如仍失败，可复制诊断信息联系管理员。'
     }
   } finally {
     loading.value = false
@@ -57,7 +58,7 @@ async function submitLookup() {
       <router-link class="login-register-corner" :to="loginBackRoute"> 登录 </router-link>
 
       <h1 id="forgot-account-title" class="login-heading">忘记账号</h1>
-      <p class="page-hint">根据邮箱在本机服务器数据库（PostgreSQL）中查询已注册的用户名。</p>
+      <p class="page-hint">输入注册时填写的邮箱，查询关联账号。没有结果时请核对邮箱，或联系管理员协助找回。</p>
 
       <form class="login-form" @submit.prevent="submitLookup">
         <div class="login-field-line">
@@ -83,6 +84,8 @@ async function submitLookup() {
           <i class="fa fa-long-arrow-right" aria-hidden="true"></i>
         </button>
       </form>
+
+      <ConnectionRecovery v-if="errorMessage" code="AUTH_ACCOUNT_LOOKUP" />
 
       <p class="page-footer-link">
         <router-link :to="{ name: 'login-forgot-password', query: route.query }">忘记密码</router-link>

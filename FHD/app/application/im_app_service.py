@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import logging
+from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.application.im_employee_mixin import ImEmployeeMixin
@@ -117,64 +120,165 @@ class ImApplicationService(ImReadStateMixin, ImEmployeeMixin, EmployeePeerMixin)
     def list_conversations(
         self, user_id: int, *, include_enterprise_dedicated_cs: bool = True
     ) -> list[dict[str, Any]]:
-        rows = (
+        """Preserve the legacy complete-list API, with bounded batch queries."""
+        return self.list_conversations_page(
+            user_id, include_enterprise_dedicated_cs=include_enterprise_dedicated_cs
+        )[0]
+
+    def list_conversations_page(
+        self,
+        user_id: int,
+        *,
+        include_enterprise_dedicated_cs: bool = True,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        query = (
+            select(ImConversation)
+            .join(ImConversationMember, ImConversationMember.conversation_id == ImConversation.id)
+            .where(ImConversationMember.user_id == user_id)
+            .order_by(desc(ImConversation.last_message_at).nulls_last(), desc(ImConversation.id))
+        )
+        if not include_enterprise_dedicated_cs:
+            cs_peer = (
+                select(ImConversationMember.id)
+                .join(User, User.id == ImConversationMember.user_id)
+                .where(
+                    ImConversationMember.conversation_id == ImConversation.id,
+                    ImConversationMember.user_id != user_id,
+                    func.lower(func.trim(User.username)) == ENTERPRISE_DEDICATED_CS_USERNAME,
+                )
+                .correlate(ImConversation)
+                .exists()
+            )
+            query = query.where(~and_(ImConversation.is_direct.is_(True), cs_peer))
+        if cursor:
+            try:
+                if len(cursor) > 256:
+                    raise ValueError
+                stamp, last_id = json.loads(
+                    base64.b64decode(
+                        cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True
+                    )
+                )
+                if type(last_id) is not int or last_id <= 0:
+                    raise ValueError
+                if stamp is None:
+                    before = and_(
+                        ImConversation.last_message_at.is_(None), ImConversation.id < last_id
+                    )
+                else:
+                    stamp = datetime.fromisoformat(stamp)
+                    before = or_(
+                        ImConversation.last_message_at < stamp,
+                        and_(ImConversation.last_message_at == stamp, ImConversation.id < last_id),
+                        ImConversation.last_message_at.is_(None),
+                    )
+                query = query.where(before)
+            except (ValueError, TypeError, UnicodeError) as exc:
+                raise ValueError("会话分页游标无效") from exc
+        if limit is not None:
+            limit = max(1, min(int(limit), 200))
+            query = query.limit(limit + 1)
+        rows = self._db.execute(query).scalars().all()
+        more = limit is not None and len(rows) > limit
+        rows = rows[:limit] if more else rows
+        items = []
+        for start in range(0, len(rows), 200):
+            items.extend(self._conversation_batch(rows[start : start + 200], user_id))
+        next_cursor = None
+        if more:
+            last = rows[-1]
+            stamp = last.last_message_at.isoformat() if last.last_message_at else None
+            next_cursor = (
+                base64.urlsafe_b64encode(json.dumps([stamp, last.id]).encode()).decode().rstrip("=")
+            )
+        return items, next_cursor
+
+    def _conversation_batch(self, conversations, user_id: int) -> list[dict[str, Any]]:
+        ids = [conv.id for conv in conversations]
+        latest = (
+            select(func.max(ImMessage.id).label("id"))
+            .where(ImMessage.conversation_id.in_(ids))
+            .group_by(ImMessage.conversation_id)
+            .subquery()
+        )
+        previews = dict(
             self._db.execute(
-                select(ImConversation)
+                select(ImMessage.conversation_id, func.substr(ImMessage.body, 1, 120)).join(
+                    latest, latest.c.id == ImMessage.id
+                )
+            ).all()
+        )
+        unread = dict(
+            self._db.execute(
+                select(ImMessage.conversation_id, func.count(ImMessage.id))
                 .join(
                     ImConversationMember,
-                    ImConversationMember.conversation_id == ImConversation.id,
+                    ImConversationMember.conversation_id == ImMessage.conversation_id,
                 )
-                .where(ImConversationMember.user_id == user_id)
-                .order_by(desc(ImConversation.last_message_at), desc(ImConversation.id))
-            )
-            .scalars()
-            .all()
+                .where(
+                    ImMessage.conversation_id.in_(ids),
+                    ImConversationMember.user_id == user_id,
+                    ImMessage.id > func.coalesce(ImConversationMember.last_read_message_id, 0),
+                    ImMessage.sender_user_id != user_id,
+                )
+                .group_by(ImMessage.conversation_id)
+            ).all()
         )
-        out: list[dict[str, Any]] = []
-        for conv in rows:
-            last_msg = (
-                self._db.execute(
-                    select(ImMessage)
-                    .where(ImMessage.conversation_id == conv.id)
-                    .order_by(desc(ImMessage.id))
-                    .limit(1)
+        direct_ids = [conv.id for conv in conversations if conv.is_direct]
+        peers: dict[int, int] = {}
+        if direct_ids:
+            for conversation_id, peer_id in self._db.execute(
+                select(ImConversationMember.conversation_id, ImConversationMember.user_id)
+                .where(
+                    ImConversationMember.conversation_id.in_(direct_ids),
+                    ImConversationMember.user_id != user_id,
                 )
-                .scalars()
-                .first()
+                .order_by(ImConversationMember.id)
+            ):
+                peers.setdefault(conversation_id, peer_id)
+        users = (
+            {
+                user.id: user
+                for user in self._db.execute(
+                    select(User).where(User.id.in_(set(peers.values())))
+                ).scalars()
+            }
+            if peers
+            else {}
+        )
+        result = []
+        for conv in conversations:
+            peer_id = peers.get(conv.id)
+            peer = users.get(peer_id)
+            title = (
+                (
+                    (str(peer.display_name or "").strip() or str(peer.username or "").strip())
+                    if peer
+                    else f"用户{peer_id}"
+                )
+                if peer_id
+                else (conv.title or f"会话 #{conv.id}")
             )
-            unread = self._count_unread(conv.id, user_id)
-            if conv.is_direct:
-                peer_id = self._direct_peer_id(conv.id, user_id)
-                peer = self._db.get(User, int(peer_id)) if peer_id else None
-                title = (
-                    self._display_name(peer_id) if peer_id else (conv.title or f"会话 #{conv.id}")
-                )
-            else:
-                peer = None
-                title = conv.title or f"会话 #{conv.id}"
-            peer_username = str(getattr(peer, "username", "") or "") if peer else ""
-            employee_id = peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
-            item: dict[str, Any] = {
+            title = title or f"用户{peer_id}"
+            username = str(peer.username or "") if peer else ""
+            item = {
                 "id": conv.id,
                 "title": title,
                 "is_direct": conv.is_direct,
-                "last_message_at": (
-                    conv.last_message_at.isoformat() if conv.last_message_at else None
-                ),
-                "last_message_preview": (last_msg.body[:120] if last_msg else ""),
-                "unread_count": unread,
-                "peer_username": peer_username,
-                "employee_id": employee_id,
+                "last_message_at": conv.last_message_at.isoformat()
+                if conv.last_message_at
+                else None,
+                "last_message_preview": previews.get(conv.id) or "",
+                "unread_count": unread.get(conv.id, 0),
+                "peer_username": username,
+                "employee_id": username[len("emp:") :] if username.startswith("emp:") else "",
             }
-            is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
-                peer
-            )
-            if is_enterprise_dedicated_cs and not include_enterprise_dedicated_cs:
-                continue
-            if is_enterprise_dedicated_cs:
+            if conv.is_direct and self._is_enterprise_dedicated_cs_user(peer):
                 item["is_enterprise_dedicated_cs"] = True
-            out.append(item)
-        return out
+            result.append(item)
+        return result
 
     def list_contacts(
         self, user_id: int, *, include_enterprise_dedicated_cs: bool = True

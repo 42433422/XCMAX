@@ -241,7 +241,10 @@ class TestNeuroBusMetrics:
         finally:
             await bus.stop()
         assert bus.publish(_make_event()) is False
-        assert neurobus_events_lost_total._value.get() == lost_before + 1
+        # Two admitted events were still queued at stop; shutdown accounts for
+        # their loss as well as the subsequently rejected publication.
+        assert bus.get_stats()["dropped"] == 2
+        assert neurobus_events_lost_total._value.get() == lost_before + 3
 
 
 class TestEventMetadata:

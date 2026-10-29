@@ -1,15 +1,26 @@
 <template>
   <div class="chat-messages-shell">
-    <div class="chat-messages" id="chatMessages" ref="messagesHostRef">
+    <nav v-if="messages.length > CHAT_HISTORY_WINDOW" class="chat-history-navigation" aria-label="聊天历史分页">
+      <button type="button" :disabled="windowStart === 0" @click="moveWindow(-1)">更早消息</button>
+      <span role="status">第 {{ windowStart + 1 }}–{{ windowEnd }} 条，共 {{ messages.length }} 条</span>
+      <button type="button" :disabled="windowEnd === messages.length" @click="moveWindow(1)">较新消息</button>
+      <button type="button" @click="showLatest">最新消息</button>
+    </nav>
+    <div class="chat-messages" id="chatMessages" ref="messagesHostRef" role="list" aria-label="聊天消息"
+      @scroll.passive="onScroll" @xcagi-reveal-chat-message="revealMessage">
       <div
-        v-for="(msg, idx) in messages"
-        :key="idx"
+        v-for="{ msg, idx } in visibleMessages"
+        :key="presentation(msg).key"
+        :data-message-index="idx"
+        role="listitem"
+        :aria-posinset="idx + 1"
+        :aria-setsize="messages.length"
         :class="['message', msg.role]"
         :style="{ minHeight: !isMessageCollapsed(msg, idx) && messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
         <CollapsedMessagePreview
           v-if="isMessageCollapsed(msg, idx)"
-          :preview="getCollapsedPreview(msg.content)"
+          :preview="messagePreview(msg)"
           expand-label="展开详情"
           @expand="$emit('expand-message', idx)"
         />
@@ -18,7 +29,7 @@
           <AgentRunTrace
             v-if="msg.role === 'ai' && hasOrchestrationTrace(msg)"
             :trace="orchestrationTraceFor(msg)"
-            @auto-approve-tool="$emit('approval-confirm')"
+            @auto-approve-tool="approveMessage(msg)"
           />
           <div v-if="waitingRunId(msg)" class="run-approve-row">
             <button type="button" class="run-approve-btn" data-testid="chat-run-approve" @click="$emit('approve-run', waitingRunId(msg))">
@@ -31,9 +42,7 @@
           <div
             v-else
             class="message-html"
-            v-html="
-              msg.role === 'ai' ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content)) : sanitizeChatBubbleHtml(msg.content)
-            "
+            v-html="messageHtml(msg)"
           ></div>
           <details
             v-if="msg.role === 'ai' && !hasOrchestrationTrace(msg) && (msg.toolProgressLabel || msg.executionProgress?.length)"
@@ -74,8 +83,9 @@
           <ChatApprovalInlineCard
             v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
             :card="msg.approvalCard"
-            @confirm="$emit('approval-confirm')"
-            @cancel="$emit('approval-cancel')"
+            :busy="isLoading || msg.approvalCard.submitting"
+            @confirm="$emit('approval-confirm', approvalCardId(msg.approvalCard))"
+            @cancel="$emit('approval-cancel', approvalCardId(msg.approvalCard))"
           />
           <div
             v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
@@ -114,12 +124,17 @@
         </template>
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
+          <span v-if="msg.persistence" class="message-save-status" role="status">
+            {{ saveLabels[msg.persistence.status] }}{{ msg.persistence.localSaved === false ? ' · 本机副本保存失败' : '' }}
+            <span v-if="msg.persistence.error" class="message-save-error">{{ msg.persistence.error }}</span>
+          </span>
+          <button v-if="msg.persistence?.request && ['failed', 'local'].includes(msg.persistence.status)" type="button" class="btn btn-secondary btn-sm" @click="$emit('retry-save', msg.persistence.id)">仅重试保存</button>
           <button v-if="!msg.streamingShell && msg.content" type="button" class="message-copy-btn" :title="copyLabels.get(msg) || '复制正文'" :aria-label="copyLabels.get(msg) || '复制正文'" @click.stop="copyMessage(msg, $event)">
             <i class="fa fa-copy" aria-hidden="true"></i>
           </button>
           <span v-if="copyLabels.get(msg)" class="message-copy-status" role="status">{{ copyLabels.get(msg) }}</span>
           <button
-            v-if="msg.role === 'ai' && canSpeakMessage(msg)"
+            v-if="msg.role === 'ai' && messageCanSpeak(msg)"
             class="message-tts-btn"
             :class="{ 'is-playing': playingMsgIdx === idx }"
             :title="playingMsgIdx === idx ? $t('chat.stopTts') : $t('chat.speakReply')"
@@ -130,7 +145,7 @@
           </button>
         </div>
       </div>
-      <div v-if="isLoading && !isStreamingReply" class="message ai">
+      <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply" class="message ai">
         <div class="chat-loading-row">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
           <span class="status-dot online"></span>
@@ -153,12 +168,17 @@ import AgentRunTrace from '@/components/chat/AgentRunTrace.vue'
 import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
 import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
+import { approvalCardId } from '@/utils/chatApprovalCard'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
+import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
 
 useI18n()
 
+const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正在保存…', saved: '已保存到服务端', failed: '保存未确认' }
+
 const props = defineProps<{
   messages: ChatMessage[]
+  sessionKey?: string
   isLoading: boolean
   isStreamingReply: boolean
   loadingProgressText: string
@@ -173,13 +193,14 @@ const props = defineProps<{
   showDiagnosticMetadata?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'expand-message': [idx: number]
   'collapse-message': [idx: number]
   'toggle-message-tts': [idx: number, content: string]
   'shipment-download-click': []
-  'approval-confirm': []
-  'approval-cancel': []
+  'approval-confirm': [cardId: string]
+  'approval-cancel': [cardId: string]
+  'retry-save': [id: string]
   'approve-run': [runId: string]
 }>()
 
@@ -190,8 +211,48 @@ function waitingRunId(message: ChatMessage): string {
   return String(trace.run_id || '')
 }
 
+function approveMessage(message: ChatMessage) {
+  if (message.approvalCard?.status === 'pending') {
+    emit('approval-confirm', approvalCardId(message.approvalCard))
+  } else {
+    const runId = waitingRunId(message)
+    if (runId) emit('approve-run', runId)
+  }
+}
+
 const messagesHostRef = ref<HTMLElement | null>(null)
 const copyLabels = ref(new Map<ChatMessage, string>())
+const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage } =
+  useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
+type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; preview?: string; canSpeak?: boolean }
+let presentations = new WeakMap<ChatMessage, Presentation>()
+let nextKey = 0
+function presentation(message: ChatMessage): Presentation {
+  let entry = presentations.get(message)
+  if (!entry || entry.content !== message.content || entry.role !== message.role) {
+    entry = { key: entry?.key ?? nextKey++, content: message.content, role: message.role }
+    presentations.set(message, entry)
+  }
+  return entry
+}
+function messageHtml(message: ChatMessage): string {
+  return presentation(message).html ??= message.role === 'ai'
+    ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content)) : sanitizeChatBubbleHtml(message.content)
+}
+function messagePreview(message: ChatMessage): string {
+  return presentation(message).preview ??= props.getCollapsedPreview(message.content)
+}
+function messageCanSpeak(message: ChatMessage): boolean {
+  return presentation(message).canSpeak ??= props.canSpeakMessage(message)
+}
+watch([() => props.sessionKey, () => props.messages, () => props.getCollapsedPreview, () => props.canSpeakMessage], () => {
+  presentations = new WeakMap()
+  copyLabels.value.clear()
+}, { flush: 'sync' })
+watch(visibleMessages, (rows) => {
+  const visible = new Set(rows.map(({ msg }) => msg))
+  for (const message of copyLabels.value.keys()) if (!visible.has(message)) copyLabels.value.delete(message)
+})
 function visibleBodyText(root: HTMLElement): string {
   const blocks = new Set(['P', 'DIV', 'LI', 'PRE', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TR'])
   let text = ''
@@ -225,9 +286,7 @@ async function copyMessage(message: ChatMessage, event: MouseEvent) {
     if (message.role === 'ai' && shouldCondenseOrchestrationBody(message)) {
       temporary.textContent = '执行计划已整理为任务编排，展开卡片可查看工具、步骤和运行详情。'
     } else {
-      const html = message.role === 'ai'
-        ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(message.content))
-        : sanitizeChatBubbleHtml(message.content)
+      const html = messageHtml(message)
       temporary.append(...new DOMParser().parseFromString(html, 'text/html').body.childNodes)
     }
     container.appendChild(temporary)
@@ -302,6 +361,32 @@ watch(
 </script>
 
 <style scoped>
+.chat-messages-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chat-messages {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.chat-history-navigation {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px;
+  font-size: 12px;
+}
+.message-save-status { font-size: 12px; }
+.message-save-error { display: block; color: var(--app-text-danger, #b42318); }
+
 .run-approve-row {
   margin-top: 6px;
 }

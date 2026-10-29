@@ -1,5 +1,5 @@
 {
-  "lines": 2370650,
+  "lines": 2383007,
   "updated": "2026-10-29",
-  "note": "合并冲突解决后按单一索引重算：最新main2370555，加本PR登录状态及主题修复95行，最终2370650。保留平台模型PR2746全部实现；合并后351项相关测试通过。用户授权修复到合入，执行人dot。"
+  "note": "Integrate authorized PR closeout #2740 and #2749-#2760: preserve ELT source archive, frontend lifecycle and UX repairs, performance ledger and paging, audit validators and regression coverage; deduplicate shared changelog entries rather than deleting required behavior or tests."
 }

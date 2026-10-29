@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -22,13 +23,13 @@ def _money(value: Any) -> Decimal:
 
 
 def _money_str(value: Any) -> str:
-    return format(_facade()._money(value), "f")
+    return format(_money(value), "f")
 
 
 def _market_amount_for_cost_units(cost_units: int) -> Decimal:
-    unit = _facade()._money(os.environ.get("MODEL_USAGE_MARKET_YUAN_PER_COST_UNIT") or "0.01")
-    minimum = _facade()._money(os.environ.get("MODEL_USAGE_MARKET_MIN_CHARGE") or "0.01")
-    amount = _facade()._money(max(_facade()._coerce_int(cost_units), 0) * unit)
+    unit = _money(os.environ.get("MODEL_USAGE_MARKET_YUAN_PER_COST_UNIT") or "0.01")
+    minimum = _money(os.environ.get("MODEL_USAGE_MARKET_MIN_CHARGE") or "0.01")
+    amount = _money(max(_facade()._coerce_int(cost_units), 0) * unit)
     if cost_units > 0 and amount < minimum:
         amount = minimum
     return cast(Decimal, amount)
@@ -57,7 +58,7 @@ def _strip_bearer(value: str) -> str:
 
 
 def _market_auth_token(user_id: str | None = None) -> str:
-    token = _facade()._strip_bearer(
+    token = _strip_bearer(
         os.environ.get("MODEL_USAGE_MARKET_AUTH_TOKEN")
         or os.environ.get("XCAGI_MARKET_AUTH_TOKEN")
         or os.environ.get("MODSTORE_AUTH_TOKEN")
@@ -74,7 +75,7 @@ def _market_auth_token(user_id: str | None = None) -> str:
                 uid_int = int(str(user_id).strip())
             except (TypeError, ValueError):
                 uid_int = None
-        return cast(str, _facade()._strip_bearer(latest_session_market_token(user_id=uid_int)))
+        return cast(str, _strip_bearer(latest_session_market_token(user_id=uid_int)))
     except (AttributeError, ImportError, OSError, RuntimeError):
         return ""
 
@@ -86,10 +87,29 @@ def _market_timeout() -> float:
         return 10.0
 
 
+def _prepare_market_request(user_id: str, cost_units: int) -> dict[str, str]:
+    """Freeze price/destination without persisting an authentication secret."""
+    return {
+        "amount_yuan": _money_str(_facade()._market_amount_for_cost_units(cost_units)),
+        "market_base_url": _facade()._market_base_url(),
+        "auth_fingerprint": hashlib.sha256(
+            _facade()._market_auth_token(user_id=user_id).encode()
+        ).hexdigest(),
+    }
+
+
+def _bound_market_token(user_id: str, request: dict[str, Any]) -> str | None:
+    token = _facade()._market_auth_token(user_id=user_id)
+    fingerprint = request.get("auth_fingerprint")
+    if fingerprint and hashlib.sha256(token.encode()).hexdigest() != fingerprint:
+        return None
+    return cast(str, token)
+
+
 def _market_post_json(
-    path: str, *, token: str, payload: dict[str, Any]
+    path: str, *, token: str, payload: dict[str, Any], base_url: str | None = None
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    base = _facade()._market_base_url()
+    base = _facade()._market_base_url() if base_url is None else base_url
     if not base:
         return (None, {"status": "market_debit_failed", "message": "market_base_url_missing"})
     if not token:
@@ -114,12 +134,29 @@ def _market_post_json(
                 "message": str(exc) or type(exc).__name__,
                 "market_base_url": base,
                 "path": path,
+                "outcome_unknown": True,
             },
         )
     try:
         data = response.json()
     except ValueError:
         data = {"message": response.text[:500]}
+        if 200 <= response.status_code < 300:
+            data["outcome_unknown"] = True
+    if not isinstance(data, dict):
+        data = {"message": "invalid_market_response", "outcome_unknown": True}
+    if (
+        response.status_code >= 500
+        or response.status_code in {408, 409}
+        or data.get("outcome_unknown")
+    ):
+        return None, {
+            "status": "market_debit_failed",
+            "outcome_unknown": True,
+            "message": str(data.get("message") or f"HTTP {response.status_code}"),
+            "market_base_url": base,
+            "path": path,
+        }
     if response.status_code == 402:
         return (
             None,
@@ -146,31 +183,48 @@ def _market_post_json(
 
 
 def _apply_market_wallet_debit(
-    *, user_id: str, provider: str, model: str, cost_units: int, usage_key: str
+    *,
+    user_id: str,
+    provider: str,
+    model: str,
+    cost_units: int,
+    usage_key: str,
+    request: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     uid = _facade()._wallet_user_id(user_id)
     if cost_units <= 0:
         return ("unmetered", {"status": "not_required", "user_id": uid, "cost_units": 0})
-    amount = _facade()._market_amount_for_cost_units(cost_units)
-    token = _facade()._market_auth_token(user_id=user_id)
+    request = request or _prepare_market_request(user_id, cost_units)
+    amount = _money(request["amount_yuan"])
+    token = _bound_market_token(user_id, request)
+    base_payload = {
+        "backend": "market",
+        "user_id": uid,
+        "cost_units": cost_units,
+        "amount_yuan": _money_str(amount),
+        "market_base_url": request["market_base_url"],
+    }
+    if token is None:
+        return "market_debit_failed", {
+            **base_payload,
+            "status": "market_debit_failed",
+            "outcome_unknown": True,
+            "message": "market_account_changed_reconciliation_required",
+        }
     request_id = (usage_key or f"usage_{uuid.uuid4().hex}")[:128]
     preauth_payload = {
-        "amount": _facade()._money_str(amount),
+        "amount": _money_str(amount),
         "provider": provider or "",
         "model": model or "",
         "request_id": request_id,
         "idempotency_key": f"{request_id}:preauth",
     }
     (preauth, err) = _facade()._market_post_json(
-        "/api/wallet/ai/preauthorize", token=token, payload=preauth_payload
+        "/api/wallet/ai/preauthorize",
+        token=token,
+        payload=preauth_payload,
+        base_url=request["market_base_url"],
     )
-    base_payload = {
-        "backend": "market",
-        "user_id": uid,
-        "cost_units": cost_units,
-        "amount_yuan": _facade()._money_str(amount),
-        "market_base_url": _facade()._market_base_url(),
-    }
     if err:
         return (str(err.get("status") or "market_debit_failed"), {**base_payload, **err})
     hold = preauth.get("hold") if isinstance(preauth, dict) else {}
@@ -182,16 +236,20 @@ def _apply_market_wallet_debit(
                 **base_payload,
                 "status": "market_debit_failed",
                 "message": "market_preauthorize_missing_hold_no",
+                "outcome_unknown": True,
                 "preauthorize": preauth,
             },
         )
     settle_payload = {
         "hold_no": hold_no,
-        "actual_amount": _facade()._money_str(amount),
+        "actual_amount": _money_str(amount),
         "idempotency_key": f"{request_id}:settle",
     }
     (settled, settle_err) = _facade()._market_post_json(
-        "/api/wallet/ai/settle", token=token, payload=settle_payload
+        "/api/wallet/ai/settle",
+        token=token,
+        payload=settle_payload,
+        base_url=request["market_base_url"],
     )
     if settle_err:
         return (
@@ -201,6 +259,7 @@ def _apply_market_wallet_debit(
                 **settle_err,
                 "hold_no": hold_no,
                 "preauthorized": True,
+                "outcome_unknown": True,
                 "preauthorize": preauth,
             },
         )
@@ -211,7 +270,7 @@ def _apply_market_wallet_debit(
             **base_payload,
             "status": "debited",
             "hold_no": hold_no,
-            "balance_after_yuan": None if balance is None else _facade()._money_str(balance),
+            "balance_after_yuan": None if balance is None else _money_str(balance),
             "preauthorize": preauth,
             "settle": settled,
         },
@@ -219,10 +278,16 @@ def _apply_market_wallet_debit(
 
 
 def _apply_market_wallet_refund(
-    *, user_id: str, hold_no: str, amount_yuan: Any, refund_key: str, reason: str
+    *,
+    user_id: str,
+    hold_no: str,
+    amount_yuan: Any,
+    refund_key: str,
+    reason: str,
+    request: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     uid = _facade()._wallet_user_id(user_id)
-    amount = _facade()._money(amount_yuan)
+    amount = _money(amount_yuan)
     if not hold_no:
         return (
             "refund_pending",
@@ -234,23 +299,32 @@ def _apply_market_wallet_refund(
         )
     if amount <= 0:
         return ("not_required", {"status": "not_required", "user_id": uid, "amount_yuan": "0.00"})
+    request = request or {"market_base_url": _facade()._market_base_url()}
+    token = _bound_market_token(user_id, request)
+    if token is None:
+        return "refund_pending", {
+            "status": "refund_pending",
+            "user_id": uid,
+            "message": "market_account_changed_reconciliation_required",
+        }
     payload = {
         "hold_no": hold_no,
-        "refund_amount": _facade()._money_str(amount),
+        "refund_amount": _money_str(amount),
         "reason": str(reason or "")[:128],
         "idempotency_key": str(refund_key or f"{hold_no}:refund")[:128],
     }
     (data, err) = _facade()._market_post_json(
         "/api/wallet/ai/refund",
-        token=_facade()._market_auth_token(user_id=user_id),
+        token=token,
         payload=payload,
+        base_url=request["market_base_url"],
     )
     base_payload = {
         "backend": "market",
         "user_id": uid,
         "hold_no": hold_no,
-        "amount_yuan": _facade()._money_str(amount),
-        "market_base_url": _facade()._market_base_url(),
+        "amount_yuan": _money_str(amount),
+        "market_base_url": request["market_base_url"],
     }
     if err:
         return ("refund_pending", {**base_payload, **err, "status": "refund_pending"})

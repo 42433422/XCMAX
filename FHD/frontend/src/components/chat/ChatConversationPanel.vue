@@ -16,15 +16,15 @@
 
     <div class="conv-panel-body">
       <div v-if="loading" class="conv-empty">{{ $t('chat.historyLoading') }}</div>
-      <div v-else-if="error" class="conv-error">
+      <div v-if="error" class="conv-error">
         <span class="conv-error-text">{{ error }}</span>
         <button type="button" class="btn btn-secondary btn-sm" @click="$emit('refresh')">{{ $t('chat.retry') }}</button>
       </div>
-      <div v-else-if="sessions.length === 0" class="conv-empty">
+      <div v-if="!loading && !error && sessions.length === 0" class="conv-empty">
         {{ $t('chat.historyEmpty') }}
         <div class="conv-empty-tip">{{ $t('chat.historyEmptyTip') }}</div>
       </div>
-      <template v-else>
+      <template v-if="!loading && sessions.length">
         <div v-for="group in groupedSessions" :key="group.key" class="conv-group">
           <div class="conv-group-label">{{ group.label }}</div>
           <ul class="conv-list">
@@ -66,6 +66,8 @@
             </li>
           </ul>
         </div>
+        <button v-if="hasMore" type="button" class="btn btn-secondary btn-sm" :disabled="loadingMore" @click="$emit('load-more')">{{ loadingMore ? '正在加载…' : '加载更早的会话' }}</button>
+        <p v-else-if="!error" class="conv-empty-tip">已显示全部可用会话</p>
       </template>
     </div>
 
@@ -102,12 +104,15 @@ const props = defineProps<{
   sessions: HistorySessionItem[]
   currentSessionId: string
   loading: boolean
+  hasMore?: boolean
+  loadingMore?: boolean
   error: string
 }>()
 
 const emit = defineEmits<{
   new: []
   refresh: []
+  'load-more': []
   clear: []
   load: [sessionId: string]
   rename: [sessionId: string, title: string]

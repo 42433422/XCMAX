@@ -34,11 +34,9 @@ def _isolated_agent_usage_ledger(tmp_path, monkeypatch):
 
 
 def _read_ledger(tmp_path):
-    path = tmp_path / "model_usage_ledger.json"
-    if not path.is_file():
-        return []
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return data.get("entries") or []
+    from app.infrastructure.billing.model_usage import list_model_usage_entries
+
+    return list_model_usage_entries(limit=1000)
 
 
 class TestAgentRuntimeHooksSwitch:

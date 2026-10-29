@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, Body, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.schemas.ocr_schema import (
     OcrAnalyzeResponse,
@@ -140,7 +141,8 @@ async def ocr_recognize(
                 {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
             )
 
-        run = _run_ocr_agent(
+        run = await run_in_threadpool(
+            _run_ocr_agent,
             request=request,
             action="recognize",
             node_id="ocr_recognize",
@@ -212,7 +214,8 @@ async def ocr_recognize_and_extract(
                 {"success": False, "message": "请提供图像文件或文件路径"}, status_code=400
             )
 
-        run = _run_ocr_agent(
+        run = await run_in_threadpool(
+            _run_ocr_agent,
             request=request,
             action="recognize_and_extract",
             node_id="ocr_recognize_and_extract",

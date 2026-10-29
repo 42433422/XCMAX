@@ -449,6 +449,62 @@ describe('useChatMessages', () => {
   })
 })
 
+describe('message persistence failure UX', () => {
+  beforeEach(() => { localStorage.clear(); setActivePinia(createPinia()); vi.clearAllMocks() })
+
+  it('retains a retryable bubble when both the server and local storage fail, then recovers its local copy', async () => {
+    const api = useChatMessages(ref('cache-failure'))
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.saveMessage).mockRejectedValueOnce(new Error('offline'))
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    api.addMessage('重要记录', 'user')
+    await api.saveMessage('user', '重要记录')
+    expect(api.cacheError.value).toContain('本机保存失败')
+    expect(api.messages.value.at(-1)?.persistence?.localSaved).toBe(false)
+    expect(api.messages.value.at(-1)?.persistence).toMatchObject({ status: 'failed', request: { role: 'user', content: '重要记录' } })
+    expect(api.messages.value.at(-1)?.content).toContain('重要记录')
+    write.mockRestore()
+    api.retryMessagesCache()
+    expect(api.cacheError.value).toBe('')
+    expect(api.messages.value.at(-1)?.persistence?.localSaved).toBe(true)
+  })
+
+  it.each(['message-b', ''])('preserves an unsaved repeated message when only the second copy is on the server (client id=%s)', async clientId => {
+    const chatApi = (await import('@/api/chat')).default
+    const api = useChatMessages(ref('repeated-content'))
+    const body = { role: 'user' as const, content: '相同消息', time: '12:00' }
+    api.loadMessages([
+      { ...body, persistence: { id: 'message-a', status: 'failed', request: { role: 'user', content: '相同消息' } } },
+      { ...body, persistence: { id: 'message-b', status: 'saved' } },
+    ])
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, messages: [
+      { ...body, id: 2, metadata: JSON.stringify({ client_message_id: clientId }) },
+    ] } as never)
+    expect(await api.syncFromServer()).toBe(true)
+    expect(api.messages.value).toHaveLength(2)
+    expect(api.messages.value.find(item => item.persistence?.id === 'message-a')?.persistence).toMatchObject({ status: 'failed', request: { content: '相同消息' } })
+    expect(api.messages.value.filter(item => item.persistence?.status === 'saved')).toHaveLength(1)
+    expect(chatApi.saveMessage).not.toHaveBeenCalled()
+  })
+
+  it('restores a failed save with the same id and retains it during server history synchronization', async () => {
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.saveMessage).mockRejectedValueOnce(new Error('offline'))
+    const first = useChatMessages(ref('persisted-failure'))
+    await first.addAndSaveMessage('需要保留的记录', 'user')
+    const id = first.messages.value.at(-1)!.persistence!.id
+    const restored = useChatMessages(ref('persisted-failure'))
+    expect(restored.messages.value.at(-1)?.persistence).toMatchObject({ id, status: 'failed' })
+    vi.mocked(chatApi.getConversation).mockResolvedValueOnce({ success: true, messages: [{ id: 12, role: 'ai', content: 'older server reply', timestamp: '2026-10-29T08:00:00Z' }] } as never)
+    await restored.syncFromServer()
+    expect(restored.messages.value.some(row => row.persistence?.id === id && row.persistence.status === 'failed')).toBe(true)
+    vi.mocked(chatApi.saveMessage).mockResolvedValueOnce({ success: true, saved: true, durable: true } as never)
+    await restored.retryMessageSave(id)
+    expect(vi.mocked(chatApi.saveMessage).mock.calls.at(-1)?.[0]).toMatchObject({ client_message_id: id, content: '需要保留的记录' })
+    expect(restored.messages.value.find(row => row.persistence?.id === id)?.persistence?.status).toBe('saved')
+  })
+})
+
 describe('queueVoice and clearVoiceQueue', () => {
   beforeEach(() => {
     vi.clearAllMocks()

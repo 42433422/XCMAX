@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="store.visible" class="app-dialog-host-overlay" role="presentation" @click.self="onOverlayClick">
-      <div class="app-dialog-host-panel" role="dialog" aria-modal="true" :aria-labelledby="titleId" @keydown.esc.prevent="onEscape">
+      <div ref="panel" class="app-dialog-host-panel" role="dialog" aria-modal="true" :aria-labelledby="titleId" tabindex="-1">
         <h2 :id="titleId" class="app-dialog-host-title">{{ store.title }}</h2>
         <p class="app-dialog-host-message">{{ store.message }}</p>
 
@@ -49,11 +49,21 @@
 </template>
 
 <script setup lang="ts">
-import { watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useAppDialogStore } from '@/stores/appDialog'
+import { useDialogFocus } from '@/composables/useDialogFocus'
 
 const store = useAppDialogStore()
 const titleId = 'app-dialog-host-title-text'
+const panel = ref<HTMLElement | null>(null)
+useDialogFocus(panel, () => store.visible, onEscape)
+watch(() => [store.visible, store.kind, store.message], async () => {
+  if (!store.visible || store.kind !== 'prompt') return
+  await nextTick()
+  const input = panel.value?.querySelector('input')
+  input?.focus()
+  input?.select()
+})
 
 function onOverlayClick() {
   if (store.kind === 'alert') {
@@ -83,18 +93,6 @@ function onPromptEnter() {
   store.ackPrompt(true)
 }
 
-watch(
-  () => store.visible,
-  (v) => {
-    if (v && store.kind === 'prompt') {
-      requestAnimationFrame(() => {
-        const el = document.querySelector('.app-dialog-host-input') as HTMLInputElement | null
-        el?.focus()
-        el?.select()
-      })
-    }
-  },
-)
 </script>
 
 <style scoped>

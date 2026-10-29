@@ -656,12 +656,27 @@ button:disabled {
   color: #b32833;
 }
 .etl-pagination {
+  flex-wrap: wrap;
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
   margin-top: 14px;
 }
+.etl-source-location, .etl-pagination form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 12px 0;
+}
+.etl-source-location label, .etl-pagination label { display: grid; gap: 4px; }
+.etl-source-location input, .etl-pagination input { max-width: 180px; padding: 6px; }
+.etl-record-fields { margin-top: 8px; }
+.etl-record-fields summary { cursor: pointer; }
+.etl-record-fields dl { margin: 8px 0; }
+.etl-record-fields dt { font-weight: 600; }
+.etl-record-fields dd { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .etl-pagination button {
   padding: 6px 10px;
   border: 1px solid #d6dee8;

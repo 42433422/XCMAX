@@ -39,6 +39,8 @@ async function openApprovalWorkspace() {
       <li v-for="(step, idx) in card.todo" :key="idx">{{ step }}</li>
     </ul>
     <div v-if="card.approval_request_ids?.length" class="approval-request-nos">审批请求号：{{ card.approval_request_ids.join('、') }}</div>
+    <div v-if="card.error" class="approval-reason" role="alert">{{ card.error }}</div>
+    <div v-if="card.submitting" class="approval-reason" role="status">正在提交，请等待服务端回执…</div>
     <div class="approval-actions">
       <a
         v-if="hasPersistedApproval"

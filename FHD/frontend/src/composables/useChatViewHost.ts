@@ -43,7 +43,7 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let onAssistantPush: ((evt: Event) => void) | null = null
   let taskPaneViewportMedia: MediaQueryList | null = null
   let returningToChat = false
-  onDeactivated(() => { returningToChat = true })
+  onDeactivated(() => { returningToChat = true; cleanupVoiceInput() })
   onActivated(() => {
     if (returningToChat) void syncSessionMessages().catch(() => {})
     returningToChat = false

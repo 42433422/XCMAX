@@ -28,8 +28,10 @@ export function createEtlCenterDraftActions({
     state
 
   async function saveMappings() {
-    if (!currentRun.value) return
-    busy.value = true
+    const run = currentRun.value
+    if (busy.value || !run) return
+    let isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     try {
       const mappings = editableMappings.value.map((mapping, index) => {
@@ -37,20 +39,24 @@ export function createEtlCenterDraftActions({
         if (!Array.isArray(parsed)) throw new Error(`${mapping.target} 的转换规则必须是 JSON 数组`)
         return { ...mapping, transforms: parsed }
       })
-      currentRun.value = await etlApi.patchDraft(currentRun.value.id, {
+      const updated = await etlApi.patchDraft(run.id, {
         field_mappings: mappings,
         allowed_update_fields: allowedUpdateFields.value,
         ocr_confirmed: ocrConfirmed.value,
       })
+      if (!isCurrent()) return
+      currentRun.value = updated
       syncDraft()
       activeTab.value = currentRun.value.status === 'previewing' ? 'upload' : 'preview'
+      isCurrent = state.captureReadContext()
       if (currentRun.value.status === 'preview_ready') await loadRows()
+      if (!isCurrent()) return
       schedulePoll()
       await refreshRuns()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '映射保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '映射保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
