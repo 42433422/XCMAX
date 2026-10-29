@@ -477,7 +477,9 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.status == "completed"
         assert run.metadata["runtime_context"]["workflow_trace_mode"] == "deterministic_shortcut"
 
-    def test_pro_excel_deterministic_import_customer_unavailable(self, local_tools, dataset_store, trusted_actor):
+    def test_pro_excel_deterministic_import_customer_unavailable(
+        self, local_tools, dataset_store, trusted_actor
+    ):
         actor = trusted_actor(role="admin")
         runtime = actor.context
         service = _make_service()
@@ -527,7 +529,9 @@ class TestTryHandleDynamicWorkflowExtended:
         assert not dataset_store.exists()
 
     @pytest.mark.parametrize("control", ["确认", "取消"])
-    def test_pro_excel_deterministic_import_success(self, local_tools, dataset_store, control, trusted_actor):
+    def test_pro_excel_deterministic_import_success(
+        self, local_tools, dataset_store, control, trusted_actor
+    ):
         from app.application.dataset_rag_app_service import (
             get_dataset_rag_app_service,
             reset_dataset_rag_app_service_for_tests,
@@ -596,7 +600,11 @@ class TestTryHandleDynamicWorkflowExtended:
             )
             if control == "取消":
                 rejected = service._try_handle_dynamic_workflow(
-                    "u1", "确认", "pro", {**runtime, "conversation_id": context["conversation_id"]}, {}
+                    "u1",
+                    "确认",
+                    "pro",
+                    {**runtime, "conversation_id": context["conversation_id"]},
+                    {},
                 )
                 assert rejected["data"]["action"] == "clarification_required"
 
@@ -640,7 +648,9 @@ class TestTryHandleDynamicWorkflowExtended:
         assert run.metadata["dataset_ingest_count"] == 1
 
     @pytest.mark.parametrize("failure", ["owner", "session", "persistence"])
-    def test_pending_import_cancel_preserves_unresolved_run(self, dataset_store, failure, trusted_actor):
+    def test_pending_import_cancel_preserves_unresolved_run(
+        self, dataset_store, failure, trusted_actor
+    ):
         actor = trusted_actor(role="admin")
         runtime = actor.context
         service = _make_service()
@@ -668,11 +678,17 @@ class TestTryHandleDynamicWorkflowExtended:
             elif failure == "session":
                 run.metadata["runtime_context"]["conversation_id"] = "another-session"
             repo.save(run)
-            with patch.object(repo, "save", wraps=repo.save) as save:
+            with patch.object(
+                repo, "save_control_if_unchanged", wraps=repo.save_control_if_unchanged
+            ) as save_control:
                 if failure == "persistence":
-                    save.side_effect = OSError("test storage unavailable")
+                    save_control.side_effect = OSError("test storage unavailable")
                 result = service._try_handle_dynamic_workflow(
-                    "u1", "取消", "pro", {**runtime, "conversation_id": context["conversation_id"]}, {}
+                    "u1",
+                    "取消",
+                    "pro",
+                    {**runtime, "conversation_id": context["conversation_id"]},
+                    {},
                 )
             assert result["success"] is False
             assert result["data"]["action"] == "workflow_cancel_failed"
