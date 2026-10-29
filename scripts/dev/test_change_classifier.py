@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, decide
+from scripts.dev.change_classifier import CATEGORY_MODE, RELEVANT, _changed_files, decide
 from scripts.dev.change_classifier import main as classifier_main
 
 DOCS_ONLY = ["docs/CI_SSOT.md", "FHD/docs/WINDOWS_RELEASE_SSOT.md"]
@@ -118,6 +118,65 @@ class MetricSnapshotFastPathTests(unittest.TestCase):
     def test_snapshot_plus_frontend_change_runs_frontend(self) -> None:
         changed = METRIC_SNAPSHOTS + FRONTEND_ONLY
         self.assertTrue(decide("frontend", changed))
+
+
+class MetricSnapshotRenameTests(unittest.TestCase):
+    RUNTIME_PATHS = (
+        ("FHD/app/runtime.py", ("backend", "release")),
+        ("FHD/config/runtime.json", ("backend", "release")),
+        ("FHD/requirements-server-api.txt", ("backend", "frontend", "release")),
+        ("FHD/frontend/package-lock.json", ("frontend",)),
+    )
+
+    def renamed_paths(self, old: str, new: str) -> list[str]:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args: str) -> str:
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), *args], text=True, stderr=subprocess.PIPE
+                ).strip()
+
+            git("init", "--quiet")
+            git("config", "user.email", "classifier-test@example.invalid")
+            git("config", "user.name", "Classifier regression")
+            git("config", "diff.renames", "true")
+            source = repo / old
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text('{"same_bytes": "rename regression"}\n', encoding="utf-8")
+            git("add", "--", old)
+            git("commit", "--quiet", "-m", "before rename")
+            before = git("rev-parse", "HEAD")
+            (repo / new).parent.mkdir(parents=True, exist_ok=True)
+            git("mv", "--", old, new)
+            git("commit", "--quiet", "-m", "after rename")
+            after = git("rev-parse", "HEAD")
+            self.assertEqual(
+                git("diff", "--name-status", "--find-renames=100%", before, after),
+                f"R100\t{old}\t{new}",
+            )
+            with patch("scripts.dev.change_classifier.REPO_ROOT", repo):
+                return _changed_files(before, after)
+
+    def test_runtime_rename_into_snapshot_runs_affected_suites(self) -> None:
+        for path, categories in self.RUNTIME_PATHS:
+            changed = self.renamed_paths(path, METRIC_SNAPSHOTS[0])
+            for category in categories:
+                with self.subTest(path=path, category=category):
+                    self.assertTrue(decide(category, changed))
+
+    def test_snapshot_rename_to_runtime_runs_affected_suites(self) -> None:
+        for path, categories in self.RUNTIME_PATHS:
+            changed = self.renamed_paths(METRIC_SNAPSHOTS[1], path)
+            for category in categories:
+                with self.subTest(path=path, category=category):
+                    self.assertTrue(decide(category, changed))
+
+    def test_snapshot_to_snapshot_rename_keeps_fast_path(self) -> None:
+        changed = self.renamed_paths(*METRIC_SNAPSHOTS)
+        for category in ("backend", "frontend", "release"):
+            with self.subTest(category=category):
+                self.assertFalse(decide(category, changed))
 
 
 class RunIfAnyRelevantTests(unittest.TestCase):

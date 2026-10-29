@@ -184,8 +184,9 @@ CATEGORY_MODE = {
 
 def _changed_files(base: str, head: str) -> list[str]:
     """返回 base..head 间改动文件（仓库根相对路径）。取不到则返回 []。"""
+    # 保留重命名的旧路径删除，避免业务文件移入快照白名单后漏跑原所属检查。
     proc = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "diff", "--name-only", base, head],
+        ["git", "-C", str(REPO_ROOT), "diff", "--no-renames", "--name-only", base, head],
         capture_output=True,
         text=True,
         check=False,
