@@ -54,6 +54,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-server-api.txt
           export XCAGI_DEBUG=1
+          export XCAGI_UVICORN_RELOAD=0
           export XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1
           export SECRET_KEY=test-secret-key-for-perf-smoke-at-least-32-chars
           export DATABASE_URL=sqlite:///./perf_smoke.db
@@ -87,6 +88,8 @@ jobs:
 
       - name: Build production UI and run budget negative controls
         working-directory: FHD/frontend
+        env:
+          VITE_XCAGI_GIT_SHA: ${{ github.sha }}
         run: |
           npm ci
           npm test -- tests/performance-budget.test.ts

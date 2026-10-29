@@ -117,7 +117,7 @@ def evidence(tmp_path):
         (
             (
                 "home shell ready within XCAGI_SLA_READY_MS",
-                {"samples_ms": [1000.5], "budget_ms": 3000},
+                {"samples_ms": [1000.5], "budget_ms": 3000, "build_source_sha": SOURCE_SHA},
             ),
             (
                 "/api/health responds within XCAGI_SLA_HEALTH_MS",
@@ -424,6 +424,21 @@ def test_frontend_attachment_is_recomputed(evidence, index, key, value):
     record["body"] = encode(data)
     write_json(path, report)
     with pytest.raises(REJECTED):
+        validator.validate(evidence, SOURCE_SHA)
+
+
+@pytest.mark.parametrize("build_sha", [None, "b" * 40], ids=["missing", "wrong"])
+def test_frontend_requires_the_measured_build_identity(evidence, build_sha):
+    path = evidence / "frontend.json"
+    report = json.loads(path.read_text())
+    record = attachment(report)
+    data = json.loads(base64.b64decode(record["body"]))
+    data.pop("build_source_sha")
+    if build_sha is not None:
+        data["build_source_sha"] = build_sha
+    record["body"] = encode(data)
+    write_json(path, report)
+    with pytest.raises(ValueError, match="Measured frontend build"):
         validator.validate(evidence, SOURCE_SHA)
 
 

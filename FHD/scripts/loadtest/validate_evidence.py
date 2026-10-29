@@ -288,6 +288,11 @@ def validate_frontend(directory: Path, frontend: dict, source_sha: str) -> None:
             data.get("source_sha") == source_sha,
             "Frontend measurements have the wrong source identity",
         )
+        if title == "home shell ready within XCAGI_SLA_READY_MS":
+            require(
+                data.get("build_source_sha") == source_sha,
+                "Measured frontend build has a missing or wrong source identity",
+            )
         budget, sample_count = FRONTEND_TESTS[title]
         exact_number(data["budget_ms"], budget, f"{title} budget")
         samples = [

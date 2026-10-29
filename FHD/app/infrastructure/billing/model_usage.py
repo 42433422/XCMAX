@@ -612,15 +612,26 @@ def _record_usage_entry(entry: dict[str, Any]) -> dict[str, Any]:
 def list_model_usage_entries(
     *, limit: int = 50, run_id: str = "", user_id: str = ""
 ) -> list[dict[str, Any]]:
-    clauses, params = [], []
-    for name, value in (("run_id", run_id), ("user_id", user_id)):
-        if str(value or "").strip():
-            clauses.append(f"{name} = ?")
-            params.append(str(value).strip())
-    where = " WHERE " + " AND ".join(clauses) if clauses else ""
+    run_id, user_id = (str(value or "").strip() for value in (run_id, user_id))
+    query = {
+        (False, False): "SELECT payload FROM entries ORDER BY created_at DESC LIMIT ?",
+        (
+            True,
+            False,
+        ): "SELECT payload FROM entries WHERE run_id = ? ORDER BY created_at DESC LIMIT ?",
+        (
+            False,
+            True,
+        ): "SELECT payload FROM entries WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+        (
+            True,
+            True,
+        ): "SELECT payload FROM entries WHERE run_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?",
+    }[bool(run_id), bool(user_id)]
+    params = [value for value in (run_id, user_id) if value]
     with _usage_db() as db:
         rows = db.execute(
-            f"SELECT payload FROM entries{where} ORDER BY created_at DESC LIMIT ?",
+            query,
             (*params, max(0, int(limit or 0))),
         ).fetchall()
     return [json.loads(row[0]) for row in rows]

@@ -4,11 +4,12 @@ import { assertWithinBudget, latencyPercentile, positiveBudget } from './perform
 
 const readyMs = positiveBudget(process.env.XCAGI_SLA_READY_MS, 3000)
 const healthMs = positiveBudget(process.env.XCAGI_SLA_HEALTH_MS, 500)
+const sourceSha = process.env.GITHUB_SHA || process.env.SOURCE_SHA || null
 const healthUrl = `${(process.env.E2E_API_BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '')}/api/health`
 
 async function record(testInfo: TestInfo, data: Record<string, unknown>): Promise<void> {
   await testInfo.attach('performance-measurements', {
-    body: JSON.stringify({ source_sha: process.env.GITHUB_SHA || process.env.SOURCE_SHA || null, ...data }, null, 2),
+    body: JSON.stringify({ source_sha: sourceSha, ...data }, null, 2),
     contentType: 'application/json',
   })
 }
@@ -21,10 +22,15 @@ test.describe('Measured performance budgets', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 })
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 30_000 })
     const elapsed = performance.now() - started
+    const buildSourceSha = await page.locator('head').evaluate((head) =>
+      head.querySelector('meta[name="xcmax-release-git-sha"]')?.getAttribute('content') ?? null,
+    )
     await record(testInfo, {
       scope: isFullStack() ? 'authenticated shell with real API' : 'isolated UI shell; authentication responses mocked',
-      samples_ms: [elapsed], budget_ms: readyMs,
+      samples_ms: [elapsed], budget_ms: readyMs, build_source_sha: buildSourceSha,
     })
+    expect(sourceSha, 'A source commit is required for the measured UI build').toMatch(/^[0-9a-f]{40}$/)
+    expect(buildSourceSha, 'The served UI must match the tested source commit').toBe(sourceSha)
     assertWithinBudget(elapsed, readyMs, 'home shell ready')
   })
 
