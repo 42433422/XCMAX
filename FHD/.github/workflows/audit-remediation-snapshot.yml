@@ -22,13 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Download the exact formatter used by the PR checks
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: Download verification dependencies without executing repository code
         shell: bash
         run: |
           set -euo pipefail
           destination="$RUNNER_TEMP/xcmax-audit-tools"
           mkdir -p "$destination"
-          python3 -m pip download --index-url https://pypi.org/simple --no-deps --only-binary=:all: --dest "$destination" ruff==0.17.3
+          python -m pip download --index-url https://pypi.org/simple --only-binary=:all: --dest "$destination" black==26.10.1 isort==6.1.0 mypy==2.4.0 'bcrypt>=4' 'apscheduler<4' 'redis>=5' 'paramiko>=3.4' 'PyJWT>=2.8' 'langchain-core>=0.3' types-requests types-redis types-PyYAML
           sha256sum "$destination"/*.whl > "$destination/SHA256SUMS.txt"
       - name: Retain public verification tooling for this audit only
         uses: actions/upload-artifact@v4
