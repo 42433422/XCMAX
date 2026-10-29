@@ -285,7 +285,7 @@ describe('EtlCenterView folder workflow', () => {
     expect(wrapper.text()).toContain('智能识别（推荐）')
     expect(wrapper.text()).toContain('送货单会自动选择“发货记录”')
     expect(wrapper.text()).toContain('已获取 1 个旧 YAML/知识库兼容预设')
-    expect(wrapper.find('input[type="file"][multiple]').exists()).toBe(true)
+    expect(wrapper.find('.etl-dropzone input[type="file"][multiple]').exists()).toBe(true)
     expect(wrapper.find('input[type="file"][webkitdirectory]').exists()).toBe(true)
   })
 
@@ -303,7 +303,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     const wrapper = await mountView()
     try {
-      const input = wrapper.find('input[type="file"][multiple]')
+      const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'products.csv')] })
       await input.trigger('change')
       await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
@@ -344,7 +344,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     const wrapper = await mountView()
     try {
-      const input = wrapper.find('input[type="file"][multiple]')
+      const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'duplicates.csv')] })
       await input.trigger('change')
       await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')
@@ -371,7 +371,7 @@ describe('EtlCenterView folder workflow', () => {
 
   it('explains the 100MB single-file limit before a file reaches the API', async () => {
     const wrapper = await mountView()
-    const input = wrapper.find('input[type="file"][multiple]')
+    const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
     const oversized = new File(['x'], 'over-limit.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -432,7 +432,7 @@ describe('EtlCenterView folder workflow', () => {
     })
     etlApiMock.runs.mockResolvedValue([])
     const wrapper = await mountView()
-    const input = wrapper.find('input[type="file"][multiple]')
+    const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
     const source = new File(['data'], '侯雪梅.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -467,7 +467,7 @@ describe('EtlCenterView folder workflow', () => {
     await flushPromises()
     await wrapper.find('select[aria-label="导入模板"]').setValue('preset:legacy')
 
-    const input = wrapper.find('input[type="file"][multiple]')
+    const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
     const file = new File(['data'], 'legacy.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
@@ -1041,7 +1041,7 @@ describe('EtlCenterView folder workflow', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const wrapper = await mountView()
     try {
-      const input = wrapper.find('input[type="file"][multiple]')
+      const input = wrapper.find('.etl-dropzone input[type="file"][multiple]')
       Object.defineProperty(input.element, 'files', { value: [new File(['data'], 'rollback.csv')] })
       await input.trigger('change')
       await buttonByText(wrapper, '上传并写入数据库')?.trigger('click')

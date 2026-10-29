@@ -6,6 +6,7 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { etlApi } from '@/api/etl'
+import ReviewedExcelTemplate from '@/components/template/ReviewedExcelTemplate.vue'
 import { batchFileStatusLabel, ignoredReasonLabel, useEtlFolderBatch } from '@/composables/useEtlFolderBatch'
 import { useEtlTemplateSelection } from '@/composables/useEtlTemplateSelection'
 import { ETL_FILE_ACCEPT, formatEtlBytes } from '@/utils/etlFileSelection'

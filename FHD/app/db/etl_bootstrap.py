@@ -16,6 +16,7 @@ from app.db.models.etl import (
     EtlTemplateVersion,
     EtlUpload,
 )
+from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 if TYPE_CHECKING:
@@ -45,6 +46,9 @@ def ensure_sqlite_etl_bootstrap(
             cast("Table", EtlRun.__table__),
             cast("Table", EtlRunRow.__table__),
             cast("Table", EtlTargetConfig.__table__),
+            cast("Table", EtlArchiveQuota.__table__),
+            cast("Table", EtlArchiveAsset.__table__),
+            cast("Table", EtlArchiveVersion.__table__),
         ]
         missing = [table for table in model_tables if table.name not in existing]
         if missing:

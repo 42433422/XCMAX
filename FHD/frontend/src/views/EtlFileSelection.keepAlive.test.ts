@@ -61,7 +61,7 @@ async function setup() {
   return router
 }
 function input(folder = false) {
-  return wrapper!.get<HTMLInputElement>(folder ? 'input[webkitdirectory]' : 'input[type="file"]:not([webkitdirectory])')
+  return wrapper!.get<HTMLInputElement>(folder ? '.etl-dropzone input[webkitdirectory]' : '.etl-dropzone input[type="file"]:not([webkitdirectory])')
 }
 async function choose(file: File, folder = false) {
   Object.defineProperty(input(folder).element, 'files', { value: [file], configurable: true })

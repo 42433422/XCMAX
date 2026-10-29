@@ -18,6 +18,8 @@
     <button type="button" @click="bootstrap">重试</button>
   </div>
 
+  <ReviewedExcelTemplate />
+
   <nav class="etl-tabs" aria-label="数据对接工作区">
     <button v-for="item in tabs" :key="item.id" type="button" :class="{ active: activeTab === item.id }" @click="activeTab = item.id">
       <span>{{ item.step }}</span>
