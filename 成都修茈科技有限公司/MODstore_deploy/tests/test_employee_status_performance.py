@@ -20,10 +20,17 @@ def test_employee_summary_uses_three_queries_and_latest_ten_window(
     tmp_path, monkeypatch, employee_count
 ):
     engine = create_engine(f"sqlite:///{tmp_path / 'status.sqlite'}")
+
+    @event.listens_for(engine, "connect")
+    def enable_foreign_keys(connection, _record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
     for model in (User, CatalogItem, EmployeeExecutionMetric, EmployeeChangeRequest):
         model.__table__.create(engine)
     now = datetime.now(UTC)
     with Session(engine) as db:
+        db.add(User(id=1, username="metric-user", password_hash="test-only"))
+        db.flush()
         for number in range(employee_count):
             eid = f"employee-{number:03}"
             db.add(CatalogItem(pkg_id=eid, version="1", name=eid, artifact="employee_pack"))

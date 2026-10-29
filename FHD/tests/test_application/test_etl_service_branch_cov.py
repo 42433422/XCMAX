@@ -23,6 +23,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.application.etl.errors import EtlConflict, EtlError, EtlNotFound
+from app.application.etl.parser_types import ParsedDataset, ParsedRow, ParsedRows
 from app.application.etl.preview_confirmation import (
     preview_revision,
     publish_preview,
@@ -111,18 +112,14 @@ class _FakeAdviser:
         return [{"degraded": False, "suggestion": {}, "reason": ""} for _ in payloads]
 
 
-class _FakeDataset:
-    source_features = {"kind": "sheet"}
-    warnings: list[str] = []
-    headers: list[str] = ["order_number"]
-    rows = [
-        SimpleNamespace(
-            values={"order_number": "O1"},
-            provenance={},
-            row_number=1,
-            sheet="S1",
+class _FakeDataset(ParsedDataset):
+    def __init__(self):
+        super().__init__(
+            source_features={"kind": "sheet"},
+            warnings=[],
+            headers=["order_number"],
+            rows=ParsedRows([ParsedRow("S1", 1, {"order_number": "O1"})]),
         )
-    ]
 
 
 class _FakeAdapter:
@@ -1491,15 +1488,17 @@ class TestServicePreview:
         run = _make_run(etl_db, upload_id="upx", status="queued")
         run.draft_json = dump_json({"field_mappings": [], "ocr_confirmed": True})
         etl_db.commit()
+        dataset = _FakeDataset()
         monkeypatch.setattr(
             "app.application.etl.service_preview.parse_file",
-            lambda *a, **k: _FakeDataset(),
+            lambda *a, **k: dataset,
         )
         monkeypatch.setattr(
             "app.application.etl.service_preview.enhance_mappings_with_llm",
             lambda *a, **k: ([], None),
         )
         svc._preview_worker(run.id, 1)
+        assert dataset.rows.closed
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "preview_ready"
 
@@ -1548,7 +1547,7 @@ class TestServicePreview:
                 values={"order_number": "O2"}, provenance={"ocr": True}, row_number=2, sheet="S1"
             ),
         ]
-        ds = SimpleNamespace(
+        ds = ParsedDataset(
             source_features={
                 "kind": "sheet",
                 "regions": [
@@ -1563,7 +1562,7 @@ class TestServicePreview:
             },
             warnings=["w"],
             headers=["order_number"],
-            rows=rows,
+            rows=ParsedRows(rows),
         )
         monkeypatch.setattr("app.application.etl.service_preview.parse_file", lambda *a, **k: ds)
         monkeypatch.setattr(
@@ -1587,6 +1586,7 @@ class TestServicePreview:
             lambda: SimpleNamespace(synonyms=lambda: {}),
         )
         svc._preview_worker(run.id, 1)
+        assert ds.rows.closed
         etl_db.expire_all()
         assert etl_db.get(EtlRun, run.id).status == "preview_ready"
         assert etl_db.get(EtlRun, run.id).error_rows == 1

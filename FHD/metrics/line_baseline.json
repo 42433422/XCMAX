@@ -1,5 +1,5 @@
 {
-  "lines": 2382992,
+  "lines": 2383027,
   "updated": "2026-10-29",
-  "note": "Authorized 13-PR closeout preserves required ELT, frontend, performance and audit implementation/tests; includes registered evidence validator, pinned Modstore formatting and explicitly typed SQLAlchemy Row conversion. No threshold or assertion weakened."
+  "note": "Authorized 13-PR closeout includes required implementation and regression contracts. Final CI fixes preserve FK enforcement and parent User fixture, real closeable ETL datasets, reviewed NeuroBus byte anchor and restore imported module identity to eliminate test pollution; no business assertion or gate weakened."
 }
