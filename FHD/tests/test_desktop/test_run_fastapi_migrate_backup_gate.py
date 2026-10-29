@@ -1,12 +1,62 @@
 from __future__ import annotations
 
+import json
+import os
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from XCAGI import run_fastapi
+
+
+def test_ledger_handoff_does_not_start_or_migrate_the_backend(monkeypatch, tmp_path):
+    from app.infrastructure.billing import model_usage_export
+
+    export = Mock(return_value=0)
+    monkeypatch.setattr(model_usage_export, "main", export)
+    bootstrap = Mock(side_effect=AssertionError("handoff must not bootstrap the application"))
+    monkeypatch.setattr(run_fastapi, "_apply_desktop_bootstrap", bootstrap)
+    ledger = tmp_path / "ledger with spaces.json"
+    run_fastapi.main(["--desktop", "--export-model-usage-ledger", str(ledger)])
+    export.assert_called_once_with(["--ledger", str(ledger), "--output", str(ledger), "--handoff"])
+    bootstrap.assert_not_called()
+
+
+def test_ledger_handoff_propagates_failure(monkeypatch, tmp_path):
+    from app.infrastructure.billing import model_usage_export
+
+    monkeypatch.setattr(model_usage_export, "main", Mock(side_effect=RuntimeError("pending debit")))
+    with pytest.raises(RuntimeError, match="pending debit"):
+        run_fastapi.main(["--export-model-usage-ledger", str(tmp_path / "ledger.json")])
+
+
+def test_real_desktop_entry_exports_current_wallet_before_retiring_sqlite(monkeypatch, tmp_path):
+    from app.infrastructure.billing import model_usage
+
+    ledger = tmp_path / "ledger with spaces.json"
+    monkeypatch.setenv("MODEL_USAGE_LEDGER_PATH", str(ledger))
+    model_usage.set_model_wallet_balance("synthetic-user", 42)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(Path(run_fastapi.__file__)),
+            "--export-model-usage-ledger",
+            str(ledger),
+        ],
+        env=os.environ.copy(),
+        capture_output=True,
+        text=True,
+        timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
+    assert f"XCAGI_MODEL_USAGE_HANDOFF={ledger}" in result.stdout
+    assert json.loads(ledger.read_text())["wallets"]["synthetic-user"]["balance_units"] == 42
+    assert not Path(f"{ledger}.sqlite3").exists()
+    assert list(tmp_path.glob("ledger with spaces.json.rollback-*.sqlite3"))
 
 
 def _patch_desktop_bootstrap(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,6 +7,10 @@ import re
 
 import httpx
 
+from app.application.tool_execution_deadline import (
+    check_invocation_deadline,
+    remaining_invocation_seconds,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .authentication import validate_demo_destination
@@ -30,9 +34,11 @@ def post_sync(
     client_factory: SyncClientFactory,
     response_ports: ResponsePorts,
 ) -> Payload:
+    check_invocation_deadline()
     start = response_ports.clock()
+    timeout = remaining_invocation_seconds(connection.timeout)
     with client_factory(
-        timeout=httpx.Timeout(connection.timeout, connect=10.0),
+        timeout=httpx.Timeout(timeout, connect=min(10.0, timeout)),
         limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
         headers=connection.headers(),
     ) as client:
@@ -59,6 +65,7 @@ def complete_sync(
     candidates = ports.candidates(*route)
     last_error: Exception | None = None
     for index, candidate in enumerate(candidates):
+        check_invocation_deadline()
         messages = ports.prepare_sync(request.messages, *candidate)
         try:
             return ports.post_sync(

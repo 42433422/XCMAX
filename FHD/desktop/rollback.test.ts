@@ -227,6 +227,23 @@ describe('rollback — commitRollback', () => {
   })
 })
 describe('rollback — triggerRollback', () => {
+  it('preserves the candidate and recovery marker when the ledger handoff fails', async () => {
+    const cleanup = setupPackagedBackend()
+    try {
+      const { prepareRollback, triggerRollback, checkPendingRollback } = await import('./rollback.js')
+      await prepareRollback('10.0.8')
+      const marker = checkPendingRollback()!
+      fs.writeFileSync(marker.backendPath, 'candidate remains intact')
+      const handoff = vi.fn(async () => { throw new Error('pending wallet settlement') })
+      await expect(triggerRollback('failed candidate', handoff)).rejects.toThrow('pending wallet settlement')
+      expect(handoff).toHaveBeenCalledOnce()
+      expect(checkPendingRollback()).not.toBeNull()
+      expect(fs.readFileSync(marker.backendPath, 'utf8')).toBe('candidate remains intact')
+      expect(windowsRollbackMocks.launchWindowsFullRollback).not.toHaveBeenCalled()
+      expect(macosRollbackMocks.launchMacOSFullRollback).not.toHaveBeenCalled()
+    } finally { cleanup() }
+  })
+
   it('returns silently when no marker (not update first-run)', async () => {
     const { triggerRollback } = await import('./rollback.js')
     await expect(triggerRollback('test reason')).resolves.toEqual({

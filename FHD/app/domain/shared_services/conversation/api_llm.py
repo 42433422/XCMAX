@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import TYPE_CHECKING, Any
@@ -33,7 +34,18 @@ class ConversationLlmMixin:
         **kwargs,
     ) -> dict[str, Any] | None:
         """Call the active platform, direct, or legacy LLM provider."""
+        from app.application.agent_orchestrator.context_window_manager import ContextWindowExceeded
+        from app.infrastructure.llm.token_estimator import estimate_tokens
+
         started = time.perf_counter()
+        context = kwargs.pop("conversation_context", None)
+        schemas = {
+            name: kwargs[name]
+            for name in ("tools", "functions", "response_format")
+            if name in kwargs
+        }
+        schema_text = json.dumps(schemas, ensure_ascii=False) if schemas else ""
+        schema_tokens = max(estimate_tokens(schema_text), (len(schema_text.encode()) + 3) // 4)
         try:
             from app.infrastructure.llm.providers.registry import get_active_provider
 
@@ -50,6 +62,8 @@ class ConversationLlmMixin:
                 messages,
                 user_id=str(getattr(getattr(self, "modstore_adapter", None), "user_id", "") or ""),
                 provider=provider,
+                context=context,
+                reserved_tokens=max_tokens + schema_tokens,
             )
             result = await provider.chat_completion(
                 messages=compression.messages,
@@ -117,6 +131,8 @@ class ConversationLlmMixin:
                     except RECOVERABLE_ERRORS:
                         pass
             return result
+        except ContextWindowExceeded as error:
+            return {"error": {"code": "context_window_exceeded", "message": str(error)}}
         except RECOVERABLE_ERRORS as error:
             logger.error("❌ LLM API调用异常: %s", error, exc_info=True)
             return None

@@ -155,6 +155,8 @@ class NeuroBusSubscriptionsMixin:
             "handlers": sum(len(h) for h in self._handlers.values()),
             "global_handlers": len(self._global_handlers),
             "running": self._running,
+            "active_events": len(getattr(self, "_inflight", ())),
+            "handler_timeouts": getattr(self, "_handler_timeout_count", 0),
             "reliability": self.get_reliability_status(),
         }
 
