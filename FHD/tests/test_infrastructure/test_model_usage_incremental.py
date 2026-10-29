@@ -7,6 +7,8 @@ import subprocess
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -98,24 +100,147 @@ def test_committed_migration_archive_interruption_is_reentrant(ledger, monkeypat
     assert len(usage.list_model_usage_entries()) == 1 and not ledger.exists()
 
 
-def test_concurrent_process_first_open_migrates_and_archives_once(ledger):
-    seed(ledger)
-    code = "from app.infrastructure.billing.model_usage import record_model_usage; record_model_usage(user_id='u',usage_key='cold-process',cost_units=9)"
-    children = [
-        subprocess.Popen(
-            [sys.executable, "-c", code],
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        for _ in range(4)
-    ]
-    for child in children:
-        _, error = child.communicate(timeout=15)
-        assert child.returncode == 0, error
+@pytest.mark.parametrize("legacy_wal", [True, False], ids=["old-statement-fails", "busy-retry"])
+def test_concurrent_process_first_open_migrates_and_archives_once(ledger, legacy_wal):
+    original = seed(ledger)
+    code = r"""
+import json, sqlite3, sys
+from app.infrastructure.billing import model_usage as usage
+
+connect = sqlite3.connect
+class ContendedConnection(sqlite3.Connection):
+    observed_busy = False
+    def execute(self, sql, *args, **kwargs):
+        if sql == "BEGIN IMMEDIATE":
+            assert super().execute("PRAGMA busy_timeout").fetchone()[0] == 30000
+        try:
+            return super().execute(sql, *args, **kwargs)
+        except sqlite3.OperationalError as exc:
+            if sql == "PRAGMA journal_mode=WAL" and not self.observed_busy:
+                assert exc.sqlite_errorcode & 0xff == sqlite3.SQLITE_BUSY
+                self.observed_busy = True
+                print("wal-busy", flush=True)
+                assert sys.stdin.readline() == "release\n"
+            raise
+
+usage.sqlite3.connect = lambda *a, **kw: connect(*a, factory=ContendedConnection, **kw)
+if sys.argv[1] == "legacy":
+    usage._enable_usage_wal = lambda db: db.execute("PRAGMA journal_mode=WAL")
+entry = usage.record_model_usage(user_id="u", usage_key="cold-process", cost_units=9)
+print(json.dumps({"usage_id": entry["usage_id"]}), flush=True)
+"""
+    holder = sqlite3.connect(usage.model_usage_database_path())
+    holder.execute("BEGIN IMMEDIATE")
+    children = []
+    with ThreadPoolExecutor(max_workers=4) as readers:
+        try:
+            children = [
+                subprocess.Popen(
+                    [sys.executable, "-c", code, "legacy" if legacy_wal else "fixed"],
+                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for _ in range(4)
+            ]
+            # Release only after all real SQLite connections observed BUSY.
+            # No sleep, scheduler race or mocked SQLite failure creates the interleaving.
+            observed = [readers.submit(child.stdout.readline) for child in children]
+            assert [future.result(timeout=15).strip() for future in observed] == ["wal-busy"] * 4
+            holder.rollback()
+            for child in children:
+                child.stdin.write("release\n")
+                child.stdin.flush()
+            results = [child.communicate(timeout=15) for child in children]
+        finally:
+            holder.close()
+            for child in children:
+                if child.poll() is None:
+                    child.kill()
+                    child.communicate(timeout=15)
+    if legacy_wal:
+        assert all(child.returncode != 0 for child in children)
+        assert all("sqlite3.OperationalError: database is locked" in error for _, error in results)
+        assert json.loads(ledger.read_text()) == original
+        assert not list(ledger.parent.glob("*.legacy.json"))
+        with closing(sqlite3.connect(usage.model_usage_database_path())) as db:
+            assert db.execute("PRAGMA user_version").fetchone() == (0,)
+            assert list(db.execute("SELECT name FROM sqlite_master")) == []
+        return
+    assert all(child.returncode == 0 for child in children), results
+    assert len({json.loads(output)["usage_id"] for output, _ in results}) == 1
     assert usage.get_model_wallet("u")["balance_units"] == 86
     assert len(usage.list_model_usage_entries()) == 2
-    assert len(list(ledger.parent.glob("*.legacy.json"))) == 1 and not ledger.exists()
+    backups = list(ledger.parent.glob("*.legacy.json"))
+    assert len(backups) == 1 and not ledger.exists()
+    assert json.loads(backups[0].read_text()) == original and not backups[0].stat().st_mode & 0o222
+    with usage._usage_db() as db:
+        assert db.execute("PRAGMA user_version").fetchone() == (1,)
+        assert db.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+        assert db.execute("SELECT count(*) FROM migration WHERE archived=1").fetchone() == (1,)
+        assert (
+            len(list(db.execute("SELECT name FROM sqlite_master WHERE name LIKE 'usage_%'"))) == 5
+        )
+    assert usage._load_usage_state()["summary"]["cost_units_total"] == 14
+
+
+@pytest.mark.parametrize("code", [sqlite3.SQLITE_BUSY, sqlite3.SQLITE_BUSY_RECOVERY])
+def test_wal_busy_deadline_does_not_attempt_again_after_expiry(ledger, monkeypatch, code):
+    error = sqlite3.OperationalError("controlled busy")
+    error.sqlite_errorcode = code
+    attempts = []
+
+    class BusyConnection(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            if sql == "PRAGMA journal_mode=WAL":
+                attempts.append(sql)
+                raise error
+            return super().execute(sql, *args, **kwargs)
+
+    clock = iter([10, 10.1, 40])
+    monkeypatch.setattr(
+        usage, "time", SimpleNamespace(monotonic=lambda: next(clock), sleep=lambda seconds: None)
+    )
+    with closing(sqlite3.connect(ledger.with_suffix(".sqlite"), factory=BusyConnection)) as db:
+        with pytest.raises(sqlite3.OperationalError) as raised:
+            usage._enable_usage_wal(db)
+        assert raised.value is error and len(attempts) == 1
+        assert db.execute("PRAGMA busy_timeout").fetchone() == (30000,)
+
+
+@pytest.mark.parametrize("code", [sqlite3.SQLITE_LOCKED, sqlite3.SQLITE_IOERR, None])
+def test_wal_nonbusy_errors_are_not_retried(ledger, monkeypatch, code):
+    error = sqlite3.OperationalError("controlled nonbusy")
+    if code is not None:
+        error.sqlite_errorcode = code
+
+    class BrokenConnection(sqlite3.Connection):
+        def execute(self, sql, *args, **kwargs):
+            if sql == "PRAGMA journal_mode=WAL":
+                raise error
+            return super().execute(sql, *args, **kwargs)
+
+    monkeypatch.setattr(
+        usage,
+        "time",
+        SimpleNamespace(
+            monotonic=lambda: 0, sleep=lambda _: pytest.fail("retried a non-BUSY error")
+        ),
+    )
+    with closing(sqlite3.connect(ledger.with_suffix(".sqlite"), factory=BrokenConnection)) as db:
+        with pytest.raises(sqlite3.OperationalError) as raised:
+            usage._enable_usage_wal(db)
+        assert raised.value is error
+        assert db.execute("PRAGMA busy_timeout").fetchone() == (30000,)
+
+
+def test_wal_mode_must_actually_be_enabled():
+    with closing(sqlite3.connect(":memory:")) as db:
+        with pytest.raises(RuntimeError, match="could not enter WAL"):
+            usage._enable_usage_wal(db)
+        assert db.execute("PRAGMA busy_timeout").fetchone() == (30000,)
 
 
 def test_corrupt_migration_or_missing_migrated_database_never_becomes_empty_wallet(ledger):

@@ -7,6 +7,7 @@ import os
 import sqlite3
 import sys
 import threading
+import time
 import uuid
 import weakref
 from contextlib import contextmanager
@@ -340,6 +341,35 @@ def _save_entry(db, entry, *, previous=None, state="complete", storage_key=None)
     )
 
 
+def _enable_usage_wal(db: sqlite3.Connection) -> None:
+    # A RESERVED lock can make this PRAGMA return BUSY without invoking SQLite's
+    # busy handler. Keep the original 30s budget, without stacking two waits.
+    deadline = time.monotonic() + 30
+    busy: sqlite3.OperationalError | None = None
+    db.execute("PRAGMA busy_timeout=0")
+    try:
+        while True:
+            if busy is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise busy
+                time.sleep(min(0.01, remaining))
+                if time.monotonic() >= deadline:
+                    raise busy
+            try:
+                mode = db.execute("PRAGMA journal_mode=WAL").fetchone()
+            except sqlite3.OperationalError as exc:
+                if (getattr(exc, "sqlite_errorcode", 0) or 0) & 0xFF != sqlite3.SQLITE_BUSY:
+                    raise
+                busy = exc
+            else:
+                if mode is None or str(mode[0]).lower() != "wal":
+                    raise RuntimeError("Usage ledger could not enter WAL mode")
+                return
+    finally:
+        db.execute("PRAGMA busy_timeout=30000")
+
+
 @contextmanager
 def _usage_db(*, write: bool = False):
     path = model_usage_database_path()
@@ -350,7 +380,7 @@ def _usage_db(*, write: bool = False):
         if version not in (0, 1):
             raise RuntimeError(f"Unsupported usage ledger schema: {version}")
         if version == 0:
-            db.execute("PRAGMA journal_mode=WAL")
+            _enable_usage_wal(db)
             with db:
                 db.execute("BEGIN IMMEDIATE")
                 # Another process may have migrated while this writer waited.
