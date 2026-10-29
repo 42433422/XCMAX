@@ -72,7 +72,7 @@ async def resolve_default_llm_route(
                 "source": "preference_first_model",
             }
     # Preserve user-owned credentials before considering a shared platform default.
-    for p in _facade().KNOWN_PROVIDERS:
+    for p in keys:
         if p in byok:
             m0 = await first_model_id(p)
             if m0:
