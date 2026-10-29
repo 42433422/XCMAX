@@ -1,5 +1,5 @@
 {
-  "lines": 2373287,
+  "lines": 2373341,
   "updated": "2026-10-29",
-  "note": "User-authorized partial audit PR2761 repairs with regression tests and CI formatting, preserving mainline2750 and active author tooling commits. No claim A01-A14 fully complete; branch-scoped tooling helpers remain for owner work until final cleanup."
+  "note": "Authorized partial audit closeout adds explicit interrupted-dispatch finalization and KeyboardInterrupt/SystemExit/no-replay regression tests; removes broad exception handler without weakening safety or ratchet. Other unfinished audit scope remains Draft."
 }

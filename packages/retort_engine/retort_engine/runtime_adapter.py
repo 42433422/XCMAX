@@ -51,13 +51,17 @@ class RetortEmployeeRuntimeAdapter:
         claimed = self.queue.claim_dispatch(record)
         if claimed is None:
             return False
+        hook_completed = False
         try:
             self.dispatch_hook(claimed)
-        except BaseException:
-            # A hook may have acted before raising. Do not automatically repeat
-            # a side effect whose outcome is unknown, including after restart.
-            with suppress(OSError, ValueError):
-                self.queue.finish_dispatch(claimed.queue_id, status="dispatch_unknown")
-            raise
+            hook_completed = True
+        finally:
+            # Even process-control interruptions can follow an external effect.
+            # Finalize uncertainty without catching or replacing that interruption.
+            if not hook_completed:
+                with suppress(OSError, ValueError):
+                    self.queue.finish_dispatch(
+                        claimed.queue_id, status="dispatch_unknown"
+                    )
         self.queue.finish_dispatch(claimed.queue_id, status="dispatched")
         return True

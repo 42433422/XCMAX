@@ -79,3 +79,53 @@ def test_unversioned_legacy_queued_task_does_not_repeat_old_hook(tmp_path):
     row = adapter.queue.load()[0]
     assert row["status"] == "dispatch_unknown"
     assert row["queue_id"] == "legacy-id" and row["extra"] == "preserve"
+
+
+@pytest.mark.parametrize(
+    "exception_type", [RuntimeError, KeyboardInterrupt, SystemExit]
+)
+@pytest.mark.parametrize("finalization_fails", [False, True])
+def test_interrupted_hook_preserves_exception_and_cannot_replay(
+    tmp_path, monkeypatch, exception_type, finalization_fails
+):
+    calls = []
+    interruption = exception_type("hook interrupted after possible side effect")
+
+    def hook(record):
+        calls.append(record.queue_id)
+        raise interruption
+
+    path = tmp_path / "q.jsonl"
+    adapter = RetortEmployeeRuntimeAdapter(path, dispatch_hook=hook)
+    if finalization_fails:
+
+        def fail(*args, **kwargs):
+            raise OSError("durable status write unavailable")
+
+        monkeypatch.setattr(adapter.queue, "finish_dispatch", fail)
+    with pytest.raises(exception_type) as caught:
+        adapter.submit_tasks([task()], source="review")
+    assert caught.value is interruption
+    expected = "dispatching" if finalization_fails else "dispatch_unknown"
+    assert adapter.queue.load()[0]["status"] == expected
+    restarted = RetortEmployeeRuntimeAdapter(path, dispatch_hook=calls.append)
+    restarted.submit_tasks([task()], source="review")
+    assert len(calls) == 1
+
+
+def test_successful_hook_with_failed_status_write_cannot_replay(tmp_path, monkeypatch):
+    calls = []
+    path = tmp_path / "q.jsonl"
+    adapter = RetortEmployeeRuntimeAdapter(path, dispatch_hook=calls.append)
+
+    def fail(*args, **kwargs):
+        raise OSError("durable status write unavailable")
+
+    monkeypatch.setattr(adapter.queue, "finish_dispatch", fail)
+    with pytest.raises(OSError):
+        adapter.submit_tasks([task()], source="review")
+    assert adapter.queue.load()[0]["status"] == "dispatching"
+    RetortEmployeeRuntimeAdapter(path, dispatch_hook=calls.append).submit_tasks(
+        [task()], source="review"
+    )
+    assert len(calls) == 1
