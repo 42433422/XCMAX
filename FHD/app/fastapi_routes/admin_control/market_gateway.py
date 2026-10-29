@@ -15,8 +15,43 @@ from app.application.admin_control.protocols import (
     MarketProxy,
     MarketTransport,
 )
+from app.fastapi_routes.xcmax_admin_auth import require_platform_model_admin_session
 
+from .backends import bound_market_authorization
 from .common import read_json_object
+
+
+def _platform_config_path(path: str) -> bool:
+    base = "/api/llm/admin/platform-model-config"
+    return path == base or path.startswith(base + "/")
+
+
+def _platform_config_response(payload: Any, status: int = 200) -> JSONResponse:
+    """Never relay raw transport/upstream errors on a credential-bearing endpoint."""
+    if isinstance(payload, JSONResponse):
+        status = payload.status_code
+        if status < 400:
+            payload.headers.update({"Cache-Control": "no-store", "Pragma": "no-cache"})
+            return payload
+    elif isinstance(payload, dict) and payload.get("__proxy_error__"):
+        status = int(payload.get("status_code") or 502)
+    if status >= 400:
+        message = {
+            400: "平台模型配置校验失败，请检查 API 地址、模型和密钥",
+            401: "管理员登录或市场绑定已失效，请重新登录",
+            403: "当前账号无权管理平台模型配置",
+            404: "平台模型配置接口尚未就绪，请检查服务端版本",
+            409: "配置已被其他管理员更新，请重新加载后再保存",
+            422: "平台模型配置格式不正确，请检查输入",
+            429: "请求过于频繁，请稍后重试",
+            503: "平台模型配置服务不可用，请检查服务端加密配置或稍后重试",
+        }.get(status, "平台模型配置请求失败，请稍后重试")
+        payload = {"success": False, "message": message}
+    return JSONResponse(
+        payload,
+        status_code=status,
+        headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+    )
 
 
 class MarketGateway:
@@ -46,7 +81,12 @@ class MarketGateway:
         authorization_override: str = "",
     ):
         """Proxy server-function calls through the market token bound to the local session."""
-        if require_admin_session:
+        sensitive = _platform_config_path(path)
+        if sensitive:
+            gate = require_platform_model_admin_session(request)
+            if gate is not None:
+                return _platform_config_response(gate)
+        elif require_admin_session:
             gate = self._gate(request)
             if gate is not None:
                 return gate
@@ -72,14 +112,24 @@ class MarketGateway:
         try:
             transport = self._transport()
         except self._errors.recoverable() as exc:
+            if sensitive:
+                return _platform_config_response(None, 503)
             return JSONResponse(
                 {"success": False, "message": f"市场账号代理不可用: {exc}"}, status_code=500
             )
-        body_for_auth = json_body if isinstance(json_body, dict) else {}
-        authorization = transport.authorization_header(authorization_override)
+        if sensitive:
+            try:
+                authorization = await bound_market_authorization(request)
+            except self._errors.recoverable():
+                return _platform_config_response(None, 503)
+        else:
+            body_for_auth = json_body if isinstance(json_body, dict) else {}
+            authorization = transport.authorization_header(authorization_override)
+            if not authorization:
+                authorization = await transport.resolve_authorization(request, body_for_auth)
         if not authorization:
-            authorization = await transport.resolve_authorization(request, body_for_auth)
-        if not authorization:
+            if sensitive:
+                return _platform_config_response(None, 401)
             return JSONResponse(
                 {
                     "success": False,
@@ -87,6 +137,20 @@ class MarketGateway:
                 },
                 status_code=401,
             )
+        if sensitive:
+            try:
+                payload = await transport.request(
+                    method,
+                    path,
+                    json_body=json_body,
+                    authorization=authorization,
+                    return_error_payload=True,
+                    sensitive=True,
+                    retries=1,
+                )
+            except self._errors.recoverable():
+                return _platform_config_response(None, 502)
+            return _platform_config_response(payload)
         payload = await transport.request(
             method,
             path,
@@ -111,11 +175,23 @@ class MarketGateway:
 
     async def _xcmax_market_proxy_impl(self, request: Request, subpath: str):
         """编制图 LLM / 员工执行等：经会话市场 token 转发至 MODstore ``/api/...``。"""
+        if (
+            any(part in {".", ".."} for part in subpath.split("/"))
+            or any(char in subpath for char in "\\%?#")
+            or "//" in subpath
+        ):
+            # Match authorization against exactly the path sent upstream. No
+            # second decoding or dot-segment normalization may change the target.
+            return _platform_config_response(None, 400)
+        api_path = f"/api/{str(subpath or '').lstrip('/')}"
+        if _platform_config_path(api_path):
+            gate = require_platform_model_admin_session(request)
+            if gate is not None:
+                return _platform_config_response(gate)
         method = request.method.upper()
         json_body: dict[str, Any] | None = None
         if method in {"POST", "PUT", "PATCH"}:
             json_body = await read_json_object(request, self._errors)
-        api_path = f"/api/{str(subpath or '').lstrip('/')}"
         if api_path.startswith("/api/ops/self-maintenance/"):
             return await self._maintenance(request, method, api_path, json_body=json_body)
         return await self._proxy(request, method, api_path, json_body=json_body)

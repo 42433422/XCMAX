@@ -248,7 +248,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "elt",
-        lambda: __import__("app.fastapi_routes.elt", fromlist=["router"]).router,
+        lambda: __import__("app.fastapi_routes.etl", fromlist=["sources_router"]).sources_router,
         priority=13,
         required_in_ci=True,
     )

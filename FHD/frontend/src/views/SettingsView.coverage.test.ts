@@ -14,7 +14,7 @@ const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
 const mockApiPut = vi.fn().mockResolvedValue({ success: true })
 const mockApiDelete = vi.fn().mockResolvedValue({ success: true, message: 'ok' })
-const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
+const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: true, valid: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
 const mockAuthApiUpdateCompanyBrand = vi.fn().mockResolvedValue({ success: true })
@@ -352,7 +352,7 @@ function resetApiMocks() {
     success: false,
     data: { user: null, permissions: [] },
   })
-  mockAuthApiValidateSession.mockResolvedValue({ success: false })
+  mockAuthApiValidateSession.mockResolvedValue({ success: true, valid: false })
   mockAuthApiLogout.mockResolvedValue({})
   mockAuthApiUpdateCompanyBrand.mockResolvedValue({ success: true })
   mockAuthApiUploadAvatar.mockResolvedValue({
@@ -462,7 +462,7 @@ describe('SettingsView – loadLocalUser 各种路径', () => {
 
   it('getCurrentUser 抛异常时走 session validate 兜底', async () => {
     mockAuthApiGetCurrentUser.mockRejectedValueOnce(new Error('network'))
-    mockAuthApiValidateSession.mockResolvedValueOnce({ success: false })
+    mockAuthApiValidateSession.mockResolvedValueOnce({ success: true, valid: false })
     const wrapper = await mountSettings()
     await nextTick()
     await nextTick()

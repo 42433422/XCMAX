@@ -37,7 +37,8 @@
             >
               {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
-            <router-link v-else-if="!adminSessionOnly" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
+            <button v-else-if="accountError && !adminSessionOnly" type="button" class="settings-profile__btn" :disabled="accountLoading" @click="loadLocalUser">{{ $t('chat.retry') }}</button>
+            <router-link v-else-if="!adminSessionOnly && !accountLoading && !accountError" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
               {{ $t('settings.login') }}
             </router-link>
           </div>
@@ -125,6 +126,7 @@
                 <span class="settings-row__arrow" aria-hidden="true"></span>
               </summary>
               <div class="settings-card__body settings-card__body--flush">
+                <SettingsPlatformModelCard :can-manage="accountProfile.isAdminAccount && !accountProfile.isImpersonating" />
                 <HostModBridgeView
                   v-if="showModelPaymentBridge"
                   embedded
@@ -251,6 +253,7 @@ import SettingsMemoryV2Card from './settings-view/SettingsMemoryV2Card.vue'
 import SettingsBasicCard from './settings-view/SettingsBasicCard.vue'
 import SettingsVersionsCard from './settings-view/SettingsVersionsCard.vue'
 import SettingsAboutCard from './settings-view/SettingsAboutCard.vue'
+import SettingsPlatformModelCard from './settings-view/SettingsPlatformModelCard.vue'
 
 const route = useRoute()
 const modsStore = useModsStore()
@@ -261,6 +264,7 @@ const {
   localUser,
   sessionValid,
   accountLoading,
+  accountError,
   logoutLoading,
   companyBrandDraft,
   companyBrandSaving,
@@ -462,6 +466,8 @@ function scrollToSettingsSection() {
 watch(() => route.query.section, scrollToSettingsSection)
 
 onMounted(async () => {
+  sidebarThemePreset.value = readStoredSidebarTheme()
+  applySidebarTheme(sidebarThemePreset.value)
   scrollToSettingsSection()
   await loadLocalUser()
   void loadAuditLogs()
@@ -472,8 +478,6 @@ onMounted(async () => {
       accountUsername: uname,
     })
   }
-  sidebarThemePreset.value = readStoredSidebarTheme()
-  applySidebarTheme(sidebarThemePreset.value)
   await industryStore.initialize()
   await loadIndustries()
   const piniaIndustryId = industryStore.currentIndustry?.id

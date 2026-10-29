@@ -243,6 +243,12 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
         if runtime_prov in KNOWN_PROVIDERS and runtime_model and platform_api_key(runtime_prov):
             return runtime_prov, runtime_model
 
+    from modstore_server.platform_model_config import default_config, stored_config
+
+    configured_default = default_config()
+    if configured_default:
+        return configured_default["provider"], configured_default["model"]
+
     env_prov = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_PROVIDER") or "").strip()
     env_mdl = (os.environ.get("MODSTORE_EMPLOYEE_BENCH_MODEL") or "").strip()
 
@@ -252,7 +258,12 @@ def resolve_platform_bench_llm() -> tuple[str, str] | tuple[None, None]:
     for prov in KNOWN_PROVIDERS:
         if not platform_api_key(prov):
             continue
-        mdl = (env_mdl if env_prov == prov else "") or _BENCH_DEFAULT_MODELS.get(prov, "")
+        saved = stored_config(prov)
+        mdl = (
+            (saved["model"] if saved else "")
+            or (env_mdl if env_prov == prov else "")
+            or _BENCH_DEFAULT_MODELS.get(prov, "")
+        )
         if mdl:
             return prov, mdl
 

@@ -20,7 +20,7 @@ from app.db.db_base import Base
 from app.db.models.etl import EtlRun, EtlUpload
 from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.session import get_db_dependency
-from app.fastapi_routes import elt, etl
+from app.fastapi_routes import etl
 from app.infrastructure.auth import dependencies
 from app.infrastructure.tenant_scope import tenant_scope
 
@@ -70,7 +70,7 @@ def source_client(tmp_path, monkeypatch):
             db.commit()
 
     app.dependency_overrides[get_db_dependency] = isolated_db
-    app.include_router(elt.router)
+    app.include_router(etl.sources_router)
     app.include_router(etl.router)
     try:
         with TestClient(app) as client:
@@ -130,7 +130,7 @@ def test_sources_preserve_versions_originals_and_never_create_business_runs(sour
 def test_download_streams_verified_snapshot_when_original_changes(source_client, monkeypatch):
     store = source_client
     source = create_source(store)
-    service = elt.get_etl_service()
+    service = etl.get_etl_service()
     get_verified_content = service.get_source_content
     snapshots = []
 

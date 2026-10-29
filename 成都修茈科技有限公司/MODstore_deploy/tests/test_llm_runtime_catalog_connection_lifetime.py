@@ -25,7 +25,9 @@ def platform_small_pool(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(models, "get_session_factory", lambda: factory)
     monkeypatch.setattr(llm_key_resolver, "KNOWN_PROVIDERS", ("openai", "deepseek"))
-    monkeypatch.setattr(llm_key_resolver, "platform_api_key", lambda _provider: "platform-test-key")
+    monkeypatch.setattr(
+        llm_key_resolver, "platform_credentials", lambda _provider: ("platform-test-key", None)
+    )
     monkeypatch.setattr(llm_catalog, "_cache", {})
     yield engine
     assert engine.pool.checkedout() == 0

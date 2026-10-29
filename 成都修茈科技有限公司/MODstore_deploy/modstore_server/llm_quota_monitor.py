@@ -18,6 +18,8 @@ from modstore_server.llm_key_resolver import (
     platform_base_url,
 )
 from modstore_server.operational_errors import BOUNDARY_ERRORS
+from modstore_server.platform_model_config import PlatformApiKey
+from modstore_server.platform_model_transport import llm_http_response, redact_key
 
 _BEARER_RE = re.compile(r"(?i)\bbearer\s+[a-z0-9._~+/=-]{8,}")
 _API_KEY_RE = re.compile(r"(?i)\b(?:sk|tp)-[a-z0-9_-]{8,}")
@@ -47,8 +49,10 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _minimax_remains_url(base_url: Optional[str] = None) -> str:
-    explicit = (os.environ.get("MINIMAX_TOKEN_PLAN_REMAINS_URL") or "").strip()
+def _minimax_remains_url(base_url: Optional[str] = None, *, use_environment: bool = True) -> str:
+    explicit = (
+        (os.environ.get("MINIMAX_TOKEN_PLAN_REMAINS_URL") or "").strip() if use_environment else ""
+    )
     if explicit:
         return explicit
     base = str(base_url or platform_base_url("minimax") or "").strip()
@@ -182,16 +186,44 @@ async def fetch_minimax_token_plan_quota(
 ) -> dict[str, Any]:
     from modstore_server.infrastructure.http_clients import get_external_client
 
-    url = _minimax_remains_url(base_url)
+    managed = isinstance(api_key, PlatformApiKey) and api_key.managed
+    if isinstance(api_key, PlatformApiKey):
+        base_url = api_key.configuration["base_url"]
+    if managed:
+        host = (urlsplit(base_url or "").hostname or "").lower()
+        if not any(
+            host == domain or host.endswith("." + domain)
+            for domain in ("minimaxi.com", "minimax.io")
+        ):
+            return {
+                "state": "unknown",
+                "visibility": "usage_only",
+                "remaining_percent": None,
+                "resources": [],
+                "error": "自定义模型网关不自动调用供应商官方额度接口",
+                "source": "platform_configuration",
+            }
+    url = _minimax_remains_url(base_url, use_environment=not managed)
     try:
-        response = await get_external_client().get(
-            url,
-            headers={
-                "Authorization": f"Bearer {normalize_minimax_api_key(api_key)}",
-                "Content-Type": "application/json",
-            },
-            timeout=timeout,
-        )
+        headers = {
+            "Authorization": f"Bearer {normalize_minimax_api_key(api_key)}",
+            "Content-Type": "application/json",
+        }
+        if managed:
+            import httpx
+
+            async with llm_http_response(
+                url,
+                api_key,
+                headers,
+                {},
+                timeout=timeout,
+                limits=httpx.Limits(),
+                method="GET",
+            ) as response:
+                pass
+        else:
+            response = await get_external_client().get(url, headers=headers, timeout=timeout)
         if response.status_code >= 400:
             return {
                 "state": "error",
@@ -201,7 +233,7 @@ async def fetch_minimax_token_plan_quota(
                 "error": f"http {response.status_code}",
                 "source": "minimax_token_plan_remains_api",
             }
-        out = parse_minimax_token_plan_remains(response.json())
+        out = parse_minimax_token_plan_remains(redact_key(response.json(), api_key))
         out["source"] = "minimax_token_plan_remains_api"
         return out
     except BOUNDARY_ERRORS as exc:  # noqa: BLE001
@@ -210,7 +242,7 @@ async def fetch_minimax_token_plan_quota(
             "visibility": "exact",
             "remaining_percent": None,
             "resources": [],
-            "error": scrub_llm_error(f"{type(exc).__name__}: {exc}")[:300],
+            "error": f"额度查询失败（{type(exc).__name__}）",
             "source": "minimax_token_plan_remains_api",
         }
 
