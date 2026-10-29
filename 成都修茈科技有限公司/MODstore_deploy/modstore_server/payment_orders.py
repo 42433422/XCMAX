@@ -176,6 +176,8 @@ def create(
     pay_type: str | None = None,
 ) -> dict[str, Any]:
     """创建订单记录。``order_kind``: ``plan`` | ``item`` | ``wallet``。"""
+    if _reject_local_write("create", out_trade_no):
+        return {"ok": False, "message": _JAVA_READONLY_MSG, "code": "java_sot_readonly"}
     with _order_lock(out_trade_no):
         if _reject_local_write("create", out_trade_no):
             return {
@@ -212,6 +214,8 @@ def create(
 
 def merge_fields(out_trade_no: str, **kwargs: Any) -> bool:
     """合并更新订单 JSON（用于写入二维码、支付类型、fulfilled 等）。"""
+    if _reject_local_write("merge_fields", out_trade_no):
+        return False
     with _order_lock(out_trade_no):
         if _reject_local_write("merge_fields", out_trade_no):
             return False
@@ -250,6 +254,8 @@ def update_status(
     buyer_id: Optional[str] = None,
     paid_at: Optional[str] = None,
 ) -> bool:
+    if _reject_local_write("update_status", out_trade_no):
+        return False
     with _order_lock(out_trade_no):
         if _reject_local_write("update_status", out_trade_no):
             return False

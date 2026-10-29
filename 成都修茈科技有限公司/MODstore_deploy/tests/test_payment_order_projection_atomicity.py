@@ -21,6 +21,30 @@ def create():
     )
 
 
+@pytest.mark.parametrize("operation", ["create", "merge_fields", "update_status"])
+@pytest.mark.parametrize("boundary", ["lock", "filesystem"])
+def test_java_mode_rejects_before_local_storage_access(monkeypatch, tmp_path, operation, boundary):
+    blocked = tmp_path / "not-a-directory"
+    blocked.write_text("retained local file", encoding="utf-8")
+    monkeypatch.setenv("MODSTORE_PAYMENT_ORDERS_DIR", str(blocked / "orders"))
+    monkeypatch.setenv("PAYMENT_BACKEND", "java")
+    if boundary == "lock":
+
+        def forbidden_lock(_order_no):
+            raise AssertionError("Java-owned orders must not acquire a local file lock")
+
+        monkeypatch.setattr(orders, "_order_lock", forbidden_lock)
+    if operation == "create":
+        result = create()
+        assert result["ok"] is False
+        assert result["code"] == "java_sot_readonly"
+    elif operation == "merge_fields":
+        assert orders.merge_fields("AUDIT-LOCAL", fulfilled=True) is False
+    else:
+        assert orders.update_status(out_trade_no="AUDIT-LOCAL", status="paid") is False
+    assert blocked.read_text(encoding="utf-8") == "retained local file"
+
+
 def _mutate_worker(root, barrier, operation):
     os.environ["MODSTORE_PAYMENT_ORDERS_DIR"] = root
     os.environ["PAYMENT_BACKEND"] = "python"
