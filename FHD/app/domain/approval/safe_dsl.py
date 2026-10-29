@@ -22,8 +22,6 @@ import tokenize
 from collections.abc import Callable
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
-
 logger = logging.getLogger(__name__)
 
 
@@ -163,15 +161,15 @@ class SafeExpressionEvaluator:
 
             # Evaluate the AST safely
             result = self._eval_node(tree.body)
-            self.logger.debug("Evaluated condition '%s' -> %s", expression, result)
+            self.logger.debug("Approval condition evaluated -> %s", bool(result))
             return bool(result)
 
         except SafeEvaluationError as e:
-            self.logger.warning("Unsafe condition expression: %s - %s", expression, e)
+            self.logger.warning("Approval condition rejected (%s)", type(e).__name__)
             raise
-        except RECOVERABLE_ERRORS as e:
-            self.logger.error("Failed to evaluate condition '%s': %s", expression, e)
-            raise SafeEvaluationError(f"Invalid condition expression: {expression}") from e
+        except (ArithmeticError, TypeError, ValueError, RecursionError) as e:
+            self.logger.warning("Approval condition evaluation failed (%s)", type(e).__name__)
+            raise SafeEvaluationError("Invalid condition expression") from e
 
     def _validate_ast(self, node: ast.AST) -> None:
         """Recursively validate that all AST nodes are in the allowed set."""
@@ -270,9 +268,6 @@ def should_trigger_condition(node, context: dict[str, Any]) -> bool:
         return evaluate_condition(node.condition_expression, context)
     except SafeEvaluationError as e:
         logger.warning(
-            "Condition evaluation failed for node %s: %s", getattr(node, "id", "unknown"), e
+            "Approval node condition rejected (%s)", type(e).__name__
         )
         return False  # Fail closed for safety
-    except RECOVERABLE_ERRORS as e:
-        logger.error("Unexpected error evaluating condition: %s", e)
-        return False
