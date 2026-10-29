@@ -8,6 +8,7 @@ import io
 import tempfile
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -39,10 +40,8 @@ def package_adapters(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> tuple[M
     registry = Mock()
     manager.install_mod_package.return_value = (True, "installed", None)
     registry.install_from_package.return_value = (True, "installed employee")
-    monkeypatch.setattr("app.infrastructure.mods.mod_manager.get_mod_manager", lambda: manager)
-    monkeypatch.setattr(
-        "app.infrastructure.mods.employee_registry.get_employee_registry", lambda: registry
-    )
+    monkeypatch.setattr(api, "_mod_manager", lambda: manager)
+    monkeypatch.setattr(api, "_employee_registry", lambda: registry)
     monkeypatch.setattr(
         "app.infrastructure.mods.artifact_package.peek_artifact", lambda _path: "mod"
     )
@@ -64,6 +63,39 @@ async def test_rejected_upload_closes_its_stream(
     assert list(tmp_path.iterdir()) == []
     for adapter in package_adapters:
         assert not adapter.mock_calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("name", "body"), [("invalid.txt", b"bad"), ("empty.zip", b"")])
+async def test_rejected_upload_does_not_capture_another_apps_mod_loader(
+    name: str,
+    body: bytes,
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+) -> None:
+    from app.fastapi_app import mod_startup
+    from app.infrastructure.mods import mod_manager
+
+    app = SimpleNamespace(state=SimpleNamespace())
+    runtime_manager = Mock()
+    runtime_manager.load_all_mods.return_value = []
+    monkeypatch.setattr(mod_manager, "get_mod_manager", lambda: runtime_manager)
+    monkeypatch.setattr(mod_manager, "load_mod_routes", lambda *_args: None)
+    monkeypatch.setattr("app.mod_sdk.employee_runtime.warm_employee_tool_registry", lambda: None)
+    try:
+        # Queue a real worker before this request's adapters are installed. It
+        # resolves the process-wide runtime only after those adapters exist.
+        with mod_startup._bg_work_lock:
+            mod_startup.schedule_background_mod_load(app)
+            adapters = request.getfixturevalue("package_adapters")
+        assert mod_startup.wait_for_background_mod_load(app, timeout=10)
+        await test_rejected_upload_closes_its_stream(name, body, adapters, tmp_path)
+        runtime_manager.load_all_mods.assert_called_once_with()
+        assert app.state.mods_full_load_done is True
+        assert app.state.mods_background_load_error is None
+    finally:
+        assert mod_startup.wait_for_background_mod_load(app, timeout=10)
 
 
 @pytest.mark.asyncio
