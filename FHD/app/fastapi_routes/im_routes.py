@@ -216,8 +216,8 @@ def im_list_conversations(
                 cursor=cursor,
             )
         return {"success": True, "user_id": uid, "conversations": items, "next_cursor": next_cursor}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "会话分页参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)

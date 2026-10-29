@@ -1,5 +1,5 @@
 {
-  "lines": 2383027,
+  "lines": 2383084,
   "updated": "2026-10-29",
-  "note": "Authorized 13-PR closeout includes required implementation and regression contracts. Final CI fixes preserve FK enforcement and parent User fixture, real closeable ETL datasets, reviewed NeuroBus byte anchor and restore imported module identity to eliminate test pollution; no business assertion or gate weakened."
+  "note": "Authorized 13-PR closeout includes validated fixture/isolation fixes, cold non-catalog tool startup regression, preserved catalog claims and safe IM error responses. Adds required regression tests and current-main metrics without disabling contracts, deadlines or security checks."
 }

@@ -137,3 +137,33 @@ def test_http_contract_keeps_legacy_list_and_exposes_next_cursor(conversations, 
         assert first["conversations"] + second["conversations"] == legacy["conversations"][:100]
         assert client.get("/api/im/conversations", params={"limit": 0}).status_code == 422
         assert client.get("/api/im/conversations", params={"cursor": "invalid"}).status_code == 400
+
+
+@pytest.mark.parametrize("params", [{}, {"limit": 50, "cursor": "invalid"}])
+def test_http_value_error_is_redacted_and_session_closed(monkeypatch, params):
+    from unittest.mock import Mock
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.fastapi_routes import im_routes
+    from app.infrastructure.auth.dependencies import CurrentUser, require_identified_user
+
+    app = FastAPI()
+    app.get("/api/im/conversations")(im_routes.im_list_conversations)
+    app.dependency_overrides[require_identified_user] = lambda: CurrentUser(1)
+    db = Mock()
+    service = Mock()
+    secret = "internal-token=do-not-disclose /private/db.sqlite"
+    service.list_conversations.side_effect = ValueError(secret)
+    service.list_conversations_page.side_effect = ValueError(secret)
+    monkeypatch.setattr(im_routes, "_ensure_schema", lambda: None)
+    monkeypatch.setattr(im_routes, "HostSessionLocal", lambda: db)
+    monkeypatch.setattr(im_routes, "ImApplicationService", lambda _db: service)
+    monkeypatch.setattr(im_routes, "_include_enterprise_dedicated_cs", lambda *_args: True)
+    with TestClient(app) as client:
+        response = client.get("/api/im/conversations", params=params)
+    assert response.status_code == 400
+    assert response.json() == {"success": False, "message": "会话分页参数无效"}
+    assert secret not in response.text
+    db.close.assert_called_once_with()
