@@ -8,7 +8,7 @@ import AppDialogHost from './AppDialogHost.vue'
 import { appConfirm } from '@/utils/appDialog'
 
 const wrappers: VueWrapper[] = []
-afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); document.body.innerHTML = '' })
+afterEach(() => { wrappers.splice(0).forEach(wrapper => wrapper.unmount()); document.body.replaceChildren() })
 function key(target: Element, value: string, shiftKey = false) {
   target.dispatchEvent(new KeyboardEvent('keydown', { key: value, shiftKey, bubbles: true, cancelable: true }))
 }
