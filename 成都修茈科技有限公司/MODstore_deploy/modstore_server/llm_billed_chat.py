@@ -112,6 +112,13 @@ async def run_billed_llm_chat(
                 )
             return out
         except HTTPException as exc:
+            if (
+                exc.status_code == 409
+                and getattr(request.state, "llm_pat_user_id", None) is not None
+                and isinstance(exc.detail, dict)
+                and exc.detail.get("request_id")
+            ):
+                raise
             last_exc = exc
             detail = str(exc.detail)
             rest = remaining_candidates_after_failure(

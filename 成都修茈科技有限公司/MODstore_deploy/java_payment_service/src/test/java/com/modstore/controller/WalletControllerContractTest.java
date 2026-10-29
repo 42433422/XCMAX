@@ -163,6 +163,10 @@ class WalletControllerContractTest {
         when(walletService.preauthorizeAiUsage(any(), any(), anyString(), anyString(), anyString(), anyString()))
                 .thenThrow(new IllegalArgumentException("insufficient balance"));
         assertEquals("insufficient balance", controller.preauthorizeAiUsage(Map.of("amount", "9")).get("message"));
+        doThrow(new IllegalStateException("预授权请求冲突"))
+                .when(walletService).preauthorizeAiUsage(any(), any(), anyString(), anyString(), anyString(), anyString());
+        assertEquals(Map.of("ok", false, "message", "预授权请求冲突"),
+                controller.preauthorizeAiUsage(Map.of("amount", "9")));
         when(walletService.settleAiUsage(any(), anyString(), any(), anyString()))
                 .thenThrow(new IllegalArgumentException("missing hold"));
         assertFalse((Boolean) controller.settleAiUsage(Map.of("actual_amount", "1")).get("ok"));

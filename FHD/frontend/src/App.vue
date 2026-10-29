@@ -9,9 +9,17 @@ import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/u
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
 import { usePrivateDeliverySync } from '@/composables/usePrivateDeliverySync'
+import { computed } from 'vue'
+import { useAccountProfileStore } from '@/stores/accountProfile'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 const { hideChrome, appReady, isAdminConsoleSpa } = useAppBoot()
 usePrivateDeliverySync()
+const account = useAccountProfileStore()
+const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value, account.loaded,
+  account.tenantId, account.marketUserId, account.localUserId, account.impersonatingMarketUserId,
+  account.accountKind, account.marketIsAdmin, account.tenantIsOwner, account.userRole,
+  [...account.permissions].sort(), [...account.entitledIndustries].sort()]))
 </script>
 
 <template>
@@ -32,7 +40,10 @@ usePrivateDeliverySync()
         <RouteFallbackPanel v-else-if="routeChunkErrorPath" key="route-chunk-error" mode="chunk-error" :path="routeChunkErrorPath" class="route-view-shell" @dismiss="clearRouteChunkError" />
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
-          <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+          <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="12">
+            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+          </keep-alive>
+          <component v-else :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
         </RouteErrorBoundary>
       </router-view>
     </MainLayout>

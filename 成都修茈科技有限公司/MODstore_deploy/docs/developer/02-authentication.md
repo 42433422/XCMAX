@@ -68,8 +68,14 @@ Refresh token 由 `/api/auth/login` 返回，刷新由前端 SDK 自动处理；
   - `catalog:read` —— 浏览市场/模板
   - `webhook:manage` —— 管理订阅
   - `mod:sync` —— 调用 `/v1/mod-sync/push` 与 `/v1/mod-sync/pull`，在本地库与 XCAGI `mods/` 之间同步
-  - `llm:use` —— 经平台配置/调用模型
+  - `llm:use` —— 模型网关能力；仅在专用计费服务配置并开启后可用
 - `/v1/mod-sync/*` 校验 `mod:sync` 和资源归属；通用账号/管理/员工/工作流入口拒绝 PAT（403），空 scope 不等于全部权限。PAT 不能创建其他 PAT 或兑换 browser handoff/JWT。
+
+模型 PAT 默认关闭。部署此代码时需先应用 Java Flyway V18，以保留普通钱包和专用预授权的来源隔离；不能在缺少迁移的数据库上启动新代码。启用时 Python 侧需设置 `MODSTORE_LLM_PAT_ENABLED=1`、`PAYMENT_BACKEND=java`、`MODSTORE_LLM_WALLET_SIGNING_KEY_PATH`、`MODSTORE_LLM_WALLET_KEY_ID` 和正整数 `MODSTORE_LLM_WALLET_MAX_CENTS`；私钥文件不得对组或其他用户开放。Java 侧需显式启用 `llm.wallet.service-enabled`，配置相同 key ID、对应公钥 `llm.wallet.public-key-pem` 和正整数 `llm.wallet.max-cents`。两侧限额都必须允许本次金额。
+
+Python 在预授权前重新核验令牌；核验成功即接受一次绑定账户、金额和请求的短期在途授权。之后吊销会阻止新授权，已经接受的操作仍可完成预授权及结算或释放。Java 验证专用声明并通过自己的数据库事务保证请求去重和账户归属，不读取 PAT 存储，不支持指定其他账户代扣。服务间请求应限制网络来源、使用受保护的传输通道，且不得记录签名声明或凭证。预授权结果、上游请求结果或结算不确定时返回待核对，不自动切换模型重试；客户端不能直接重新提交，应先凭返回的请求号及可用的预授权号人工核对，因为新 HTTP 请求会产生新请求号。目前没有自动核对或释放机制。此配置是服务间新信任，部署和启用须单独批准；轮换时须协调两侧 key ID 与公钥，避免中断在途结算。
+
+旧 Java 版本不识别专用预授权来源：必须确认所有钱包实例均已升级后才能启用。回滚旧版本前须停止 Python 侧新授权，并保持 Java 专用接口可用以核对、处理全部未终结专用预授权；也可在旧实例入口阻断普通钱包结算和释放。不得让旧实例处理仍未终结的专用预授权。
 
 ## 四、安全建议
 

@@ -29,7 +29,7 @@
 
 ## Scope 与 Mod / 模型
 
-本节派生自[账号体系 SSOT](https://github.com/42433422/XCMAX/blob/main/FHD/docs/account_system_ssot.md#04-modstore-pat-能力边界)。导出不会扩大原 scope，也不把 PAT 变成登录 JWT。当前明确支持 `mod:sync` 的专用同步接口；`llm:use`、`employee:execute` 等可存储名称不表示通用模型/员工接口已开放。导出和审计接口要求登录 JWT。
+本节派生自[账号体系 SSOT](https://github.com/42433422/XCMAX/blob/main/FHD/docs/account_system_ssot.md#04-modstore-pat-能力边界)。导出不会扩大原 scope，也不把 PAT 变成登录 JWT。`mod:sync` 可用于专用同步接口；`llm:use` 仅在专用模型计费服务配置并启用后可用于模型网关，其他未迁移接口仍拒绝 PAT。导出和审计接口要求登录 JWT。
 
 ## Python 解密示例（桌面侧）
 
