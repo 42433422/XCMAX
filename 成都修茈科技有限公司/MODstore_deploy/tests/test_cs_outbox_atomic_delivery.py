@@ -4,6 +4,7 @@ import json
 import multiprocessing as mp
 import os
 import queue
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -98,7 +99,10 @@ def _competing_worker(db, barrier, events, manual):
 @pytest.mark.parametrize(
     "method", [name for name in ("spawn", "fork") if name in mp.get_all_start_methods()]
 )
-def test_two_independent_workers_and_manual_replay_send_once(method):
+def test_two_independent_workers_and_manual_replay_send_once(method, monkeypatch):
+    # Python spawn imports this target by module name. Multiple repository test
+    # packages can shadow MODstore_deploy/tests unless its own root is first.
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
     rid = enqueue()
     assert rid == 1
     context = mp.get_context(method)
