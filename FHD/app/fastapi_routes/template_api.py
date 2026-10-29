@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["templates-compat"])
 router.include_router(template_create_router)
-from app.fastapi_routes.reviewed_excel_template import router as reviewed_excel_router
+from app.fastapi_routes.reviewed_excel import router as reviewed_excel_router
 
 router.include_router(reviewed_excel_router)
 

@@ -12,36 +12,48 @@ _CLASS_READY = "classification_ready"
 
 
 def _classification_run(db, classification_id, tenant, owner):
-    run = db.query(EtlRun).filter(
-        EtlRun.id == classification_id, EtlRun.tenant_id == tenant,
-        EtlRun.owner_user_id == owner, EtlRun.target_type == "template_classification",
-    ).first()
+    run = (
+        db.query(EtlRun)
+        .filter(
+            EtlRun.id == classification_id,
+            EtlRun.tenant_id == tenant,
+            EtlRun.owner_user_id == owner,
+            EtlRun.target_type == "template_classification",
+        )
+        .first()
+    )
     if run is None:
         raise HTTPException(status_code=404, detail="分类记录不存在")
     return run
 
 
 def _classification_version(source_sha, parent, payload):
-    return hashlib.sha256(dump_json({"source": source_sha, "parent": parent, "payload": payload}).encode()).hexdigest()
+    return hashlib.sha256(
+        dump_json({"source": source_sha, "parent": parent, "payload": payload}).encode()
+    ).hexdigest()
 
 
 def _confirmed_documents(source_sha, version, sheets, links, selected, source_cells):
     """Bind user-selected candidate edges to immutable source and classification versions."""
     if not isinstance(selected, list) or len(selected) > 200:
-        raise ValueError('片段关联选择无效')
-    candidates = {(link['sheet'], link['first'], link['second']): link for link in links.get('items', [])}
-    regions = {(sheet['sheet'], region['range']): region for sheet in sheets for region in sheet['regions']}
+        raise ValueError("片段关联选择无效")
+    candidates = {
+        (link["sheet"], link["first"], link["second"]): link for link in links.get("items", [])
+    }
+    regions = {
+        (sheet["sheet"], region["range"]): region for sheet in sheets for region in sheet["regions"]
+    }
     edges = set()
     for entry in selected:
-        if not isinstance(entry, dict) or set(entry) != {'sheet', 'first', 'second'}:
-            raise ValueError('片段关联格式无效')
-        key = (entry['sheet'], entry['first'], entry['second'])
+        if not isinstance(entry, dict) or set(entry) != {"sheet", "first", "second"}:
+            raise ValueError("片段关联格式无效")
+        key = (entry["sheet"], entry["first"], entry["second"])
         link = candidates.get(key)
-        if not link or link.get('status') != 'candidate' or key in edges:
-            raise ValueError('片段关联已失效或身份冲突')
+        if not link or link.get("status") != "candidate" or key in edges:
+            raise ValueError("片段关联已失效或身份冲突")
         nodes = [(key[0], key[1]), (key[0], key[2])]
-        if any(node not in regions or 'unknown' in regions[node]['labels'] for node in nodes):
-            raise ValueError('未知或不存在的片段不能合并')
+        if any(node not in regions or "unknown" in regions[node]["labels"] for node in nodes):
+            raise ValueError("未知或不存在的片段不能合并")
         edges.add(key)
     groups = []
     while edges:
@@ -57,19 +69,36 @@ def _confirmed_documents(source_sha, version, sheets, links, selected, source_ce
                     edges.remove(edge)
                     changed = True
         for link in candidates.values():
-            if link.get('status') == 'identity_conflict' and {(link['sheet'], link['first']), (link['sheet'], link['second'])} <= nodes:
-                raise ValueError('关联片段包含身份冲突，不能合并')
+            if (
+                link.get("status") == "identity_conflict"
+                and {(link["sheet"], link["first"]), (link["sheet"], link["second"])} <= nodes
+            ):
+                raise ValueError("关联片段包含身份冲突，不能合并")
         if len(nodes) > 20:
-            raise ValueError('单个逻辑文档最多关联20个片段')
+            raise ValueError("单个逻辑文档最多关联20个片段")
         from app.application.reviewed_excel_evidence import candidate_fragment_links
-        comparable = [{**regions[node], 'sheet': node[0], 'dependencies': [{'sheet': node[0], 'cell': 'A1'}]} for node in sorted(nodes)]
-        if any(link['status'] == 'identity_conflict' for link in candidate_fragment_links(comparable, source_cells)['items']):
-            raise ValueError('关联片段包含身份冲突，不能合并')
-        fragments = [{'sheet': sheet, 'range': area} for sheet, area in sorted(nodes)]
+
+        comparable = [
+            {**regions[node], "sheet": node[0], "dependencies": [{"sheet": node[0], "cell": "A1"}]}
+            for node in sorted(nodes)
+        ]
+        if any(
+            link["status"] == "identity_conflict"
+            for link in candidate_fragment_links(comparable, source_cells)["items"]
+        ):
+            raise ValueError("关联片段包含身份冲突，不能合并")
+        fragments = [{"sheet": sheet, "range": area} for sheet, area in sorted(nodes)]
         group_id = _classification_version(source_sha, version, fragments)
-        groups.append({'logical_document_id': group_id, 'source_sha256': source_sha,
-                       'classification_version': version, 'fragments': fragments, 'status': 'user_confirmed'})
-    return sorted(groups, key=lambda group: group['logical_document_id'])
+        groups.append(
+            {
+                "logical_document_id": group_id,
+                "source_sha256": source_sha,
+                "classification_version": version,
+                "fragments": fragments,
+                "status": "user_confirmed",
+            }
+        )
+    return sorted(groups, key=lambda group: group["logical_document_id"])
 
 
 def _confirmed_document_count(review, latest, groups, independent_confirmed):
@@ -80,33 +109,42 @@ def _confirmed_document_count(review, latest, groups, independent_confirmed):
         range_boundaries,
     )
 
-    if not independent_confirmed or latest.get('model_status') != 'returned':
+    if not independent_confirmed or latest.get("model_status") != "returned":
         return None
-    coverage = latest.get('coverage', [])
-    if len(coverage) != len(review['sheets']) or any(item['unread'] or item['unassigned'] or item.get('merged_omitted') for item in coverage):
+    coverage = latest.get("coverage", [])
+    if len(coverage) != len(review["sheets"]) or any(
+        item["unread"] or item["unassigned"] or item.get("merged_omitted") for item in coverage
+    ):
         return None
     populated = set()
-    for sheet in latest['sheets']:
-        for region in sheet['regions']:
-            c1, r1, c2, r2 = range_boundaries(region['range'])
-            for cell in review['cells']:
-                if cell['sheet'] != sheet['sheet']:
+    for sheet in latest["sheets"]:
+        for region in sheet["regions"]:
+            c1, r1, c2, r2 = range_boundaries(region["range"])
+            for cell in review["cells"]:
+                if cell["sheet"] != sheet["sheet"]:
                     continue
-                col, row = coordinate_from_string(cell['cell'])
+                col, row = coordinate_from_string(cell["cell"])
                 if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
-                    if 'unknown' in region['labels']:
+                    if "unknown" in region["labels"]:
                         return None
-                    populated.add((sheet['sheet'], region['range']))
+                    populated.add((sheet["sheet"], region["range"]))
                     break
-    grouped = {(part['sheet'], part['range']) for group in groups for part in group['fragments']}
+    grouped = {(part["sheet"], part["range"]) for group in groups for part in group["fragments"]}
     return len(groups) + len(populated - grouped)
 
 
 def _classification_cas(db, run, old_draft, state):
-    result = db.execute(update(EtlRun).where(
-        EtlRun.id == run.id, EtlRun.tenant_id == run.tenant_id, EtlRun.owner_user_id == run.owner_user_id,
-        EtlRun.status == _CLASS_READY, EtlRun.draft_json == old_draft,
-    ).values(draft_json=dump_json(state)))
+    result = db.execute(
+        update(EtlRun)
+        .where(
+            EtlRun.id == run.id,
+            EtlRun.tenant_id == run.tenant_id,
+            EtlRun.owner_user_id == run.owner_user_id,
+            EtlRun.status == _CLASS_READY,
+            EtlRun.draft_json == old_draft,
+        )
+        .values(draft_json=dump_json(state))
+    )
     if result.rowcount != 1:
         db.rollback()
         raise HTTPException(status_code=409, detail="分类版本已改变，请刷新")

@@ -69,16 +69,16 @@ def _identity(user):
     return int(user.tenant_id), int(user.id)
 
 
-@router.get('/api/templates/reviewed-excel/identity')
+@router.get("/api/templates/reviewed-excel/identity")
 def reviewed_excel_identity(user=Depends(_manage)):
     tenant, owner = _identity(user)
-    return {'actor': f'{tenant}:{owner}'}
+    return {"actor": f"{tenant}:{owner}"}
 
 
 def _expected_actor(expected: str, user):
     tenant, owner = _identity(user)
-    if expected != f'{tenant}:{owner}':
-        raise HTTPException(status_code=409, detail='登录用户或租户已改变，请重新选择文件')
+    if expected != f"{tenant}:{owner}":
+        raise HTTPException(status_code=409, detail="登录用户或租户已改变，请重新选择文件")
 
 
 def _recheck(request, expected):
@@ -92,8 +92,14 @@ def _build_candidate_previews(body, review, proposal):
     for candidate in proposal["candidates"]:
         cleaned = clean_workbook(body, review["sha256"], candidate["clear"])
         result = inspect_workbook(cleaned)
-        previews.append({"candidate_id": candidate["id"], "sha256": result["sha256"],
-                         "layout": result["layout"], "layout_truncated": result["layout_truncated"]})
+        previews.append(
+            {
+                "candidate_id": candidate["id"],
+                "sha256": result["sha256"],
+                "layout": result["layout"],
+                "layout_truncated": result["layout_truncated"],
+            }
+        )
     proposal["result_previews"] = previews
 
 
@@ -114,15 +120,19 @@ def _run(db, review_id, tenant, owner):
 
 
 def _source(db, run, tenant, owner):
-    archive_version_id = load_json(run.summary_json, {}).get('archive_version_id')
+    archive_version_id = load_json(run.summary_json, {}).get("archive_version_id")
     if archive_version_id:
         try:
-            content = read_original(db, owner=owner, version_id=archive_version_id,
-                                    root=Path(get_app_data_dir()) / 'etl' / 'archive')
+            content = read_original(
+                db,
+                owner=owner,
+                version_id=archive_version_id,
+                root=Path(get_app_data_dir()) / "etl" / "archive",
+            )
         except ArchivePolicyError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         if hashlib.sha256(content).hexdigest() != run.file_sha256:
-            raise HTTPException(status_code=409, detail='归档来源版本已改变')
+            raise HTTPException(status_code=409, detail="归档来源版本已改变")
         return content
     upload = (
         db.query(EtlUpload)
@@ -162,75 +172,106 @@ def _source(db, run, tenant, owner):
 
 
 def _rebuild_archived_document(db, run, tenant, owner):
-    scope = load_json(run.summary_json, {}).get('selected_region') or {}
-    if not scope.get('archive_version_id') or not scope.get('derived_sha256'):
+    scope = load_json(run.summary_json, {}).get("selected_region") or {}
+    if not scope.get("archive_version_id") or not scope.get("derived_sha256"):
         return None
     _review_source_version(db, run, tenant, owner)
     try:
-        original = read_original(db, owner=owner, version_id=scope['archive_version_id'],
-                                 root=Path(get_app_data_dir()) / 'etl' / 'archive')
-        derived = derive_document_workbook(original, scope['fragments'],
-                                           print_area_mode=scope['print_area_mode'])
+        original = read_original(
+            db,
+            owner=owner,
+            version_id=scope["archive_version_id"],
+            root=Path(get_app_data_dir()) / "etl" / "archive",
+        )
+        derived = derive_document_workbook(
+            original, scope["fragments"], print_area_mode=scope["print_area_mode"]
+        )
     except (ArchivePolicyError, ValueError, KeyError) as exc:
-        raise HTTPException(status_code=409, detail='归档派生副本无法保真重建，请重新预览') from exc
+        raise HTTPException(status_code=409, detail="归档派生副本无法保真重建，请重新预览") from exc
     if hashlib.sha256(derived).hexdigest() != run.file_sha256:
-        raise HTTPException(status_code=409, detail='重建结果与原预览不一致，请重新预览')
+        raise HTTPException(status_code=409, detail="重建结果与原预览不一致，请重新预览")
     return derived
 
 
 def _review_source_version(db, run, tenant, owner):
     """Fail closed when a derived document's original classification has changed."""
-    scope = load_json(run.summary_json, {}).get('selected_region') or {}
-    if not scope.get('derived_sha256'):
+    scope = load_json(run.summary_json, {}).get("selected_region") or {}
+    if not scope.get("derived_sha256"):
         return
-    classification = _classification_run(db, scope['classification_id'], tenant, owner)
+    classification = _classification_run(db, scope["classification_id"], tenant, owner)
     _source(db, classification, tenant, owner)
-    versions = load_json(classification.draft_json, {}).get('versions', [])
+    versions = load_json(classification.draft_json, {}).get("versions", [])
     latest = versions[-1] if versions else {}
-    if (classification.file_sha256 != scope['source_sha256'] or latest.get('version') != scope['version']
-        or not latest.get('confirmed') or run.file_sha256 != scope['derived_sha256']):
-        raise HTTPException(status_code=409, detail='文档分类或原件已变化，请重新生成候选')
+    if (
+        classification.file_sha256 != scope["source_sha256"]
+        or latest.get("version") != scope["version"]
+        or not latest.get("confirmed")
+        or run.file_sha256 != scope["derived_sha256"]
+    ):
+        raise HTTPException(status_code=409, detail="文档分类或原件已变化，请重新生成候选")
 
 
 def _lock_review_classification(db, run, tenant, owner):
     """Serialize classification changes with a derived-template library write."""
-    scope = load_json(run.summary_json, {}).get('selected_region') or {}
-    if not scope.get('derived_sha256'):
+    scope = load_json(run.summary_json, {}).get("selected_region") or {}
+    if not scope.get("derived_sha256"):
         return None
-    classification = _classification_run(db, scope['classification_id'], tenant, owner)
-    versions = load_json(classification.draft_json, {}).get('versions', [])
-    if not versions or versions[-1].get('version') != scope['version']:
-        raise HTTPException(status_code=409, detail='文档分类已变化，请重新生成候选')
-    locked = db.execute(update(EtlRun).where(
-        EtlRun.id == classification.id, EtlRun.tenant_id == tenant, EtlRun.owner_user_id == owner,
-        EtlRun.status == _CLASS_READY, EtlRun.draft_json == classification.draft_json,
-    ).values(status=_CLASS_SAVING))
+    classification = _classification_run(db, scope["classification_id"], tenant, owner)
+    versions = load_json(classification.draft_json, {}).get("versions", [])
+    if not versions or versions[-1].get("version") != scope["version"]:
+        raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
+    locked = db.execute(
+        update(EtlRun)
+        .where(
+            EtlRun.id == classification.id,
+            EtlRun.tenant_id == tenant,
+            EtlRun.owner_user_id == owner,
+            EtlRun.status == _CLASS_READY,
+            EtlRun.draft_json == classification.draft_json,
+        )
+        .values(status=_CLASS_SAVING)
+    )
     if locked.rowcount != 1:
         db.rollback()
-        raise HTTPException(status_code=409, detail='文档分类正在保存或已改变，请核对')
+        raise HTTPException(status_code=409, detail="文档分类正在保存或已改变，请核对")
     return classification.id
 
 
 def _unlock_review_classification(db, classification_id, tenant, owner):
     if classification_id is None:
         return
-    released = db.execute(update(EtlRun).where(
-        EtlRun.id == classification_id, EtlRun.tenant_id == tenant, EtlRun.owner_user_id == owner,
-        EtlRun.status == _CLASS_SAVING,
-    ).values(status=_CLASS_READY))
+    released = db.execute(
+        update(EtlRun)
+        .where(
+            EtlRun.id == classification_id,
+            EtlRun.tenant_id == tenant,
+            EtlRun.owner_user_id == owner,
+            EtlRun.status == _CLASS_SAVING,
+        )
+        .values(status=_CLASS_READY)
+    )
     if released.rowcount != 1:
-        raise HTTPException(status_code=409, detail='分类写入锁状态异常，请人工核对')
+        raise HTTPException(status_code=409, detail="分类写入锁状态异常，请人工核对")
 
 
-def _release_failed_review(db, review_id, tenant, owner, saving_draft, old_draft, classification_lock):
+def _release_failed_review(
+    db, review_id, tenant, owner, saving_draft, old_draft, classification_lock
+):
     """Release only this review's lock when the library was not called."""
-    released = db.execute(update(EtlRun).where(
-        EtlRun.id == review_id, EtlRun.tenant_id == tenant, EtlRun.owner_user_id == owner,
-        EtlRun.status == _SAVING, EtlRun.draft_json == saving_draft,
-    ).values(status=_READY, stage=_READY, draft_json=old_draft))
+    released = db.execute(
+        update(EtlRun)
+        .where(
+            EtlRun.id == review_id,
+            EtlRun.tenant_id == tenant,
+            EtlRun.owner_user_id == owner,
+            EtlRun.status == _SAVING,
+            EtlRun.draft_json == saving_draft,
+        )
+        .values(status=_READY, stage=_READY, draft_json=old_draft)
+    )
     if released.rowcount != 1:
         db.rollback()
-        raise HTTPException(status_code=409, detail='审阅锁状态已改变，请人工核对')
+        raise HTTPException(status_code=409, detail="审阅锁状态已改变，请人工核对")
     _unlock_review_classification(db, classification_lock, tenant, owner)
     db.commit()
 
@@ -270,219 +311,6 @@ async def _body(file):
     return body
 
 
-@router.get('/api/templates/reviewed-excel/archive-quota')
-def archive_quota(user=Depends(_archive_admin)):
-    tenant, _owner = _identity(user)
-    with tenant_scope(tenant), get_db() as db:
-        quota = db.get(EtlArchiveQuota, tenant)
-        return {'configured': quota is not None, 'limit_bytes': quota.limit_bytes if quota else None,
-                'reserved_bytes': quota.reserved_bytes if quota else 0}
-
-
-@router.post('/api/templates/reviewed-excel/archive-quota')
-def set_archive_quota(request: Request, limit_bytes: int = Form(..., gt=0, le=1099511627776),
-                      expected_actor: str = Form(..., max_length=80), user=Depends(_archive_admin)):
-    _expected_actor(expected_actor, user)
-    tenant, _owner = _identity(user)
-    with tenant_scope(tenant), get_db() as db:
-        quota = db.get(EtlArchiveQuota, tenant)
-        if quota is None:
-            quota = EtlArchiveQuota(tenant_id=tenant, limit_bytes=limit_bytes, reserved_bytes=0)
-            db.add(quota)
-        else:
-            result = db.execute(update(EtlArchiveQuota).where(
-                EtlArchiveQuota.tenant_id == tenant, EtlArchiveQuota.reserved_bytes <= limit_bytes,
-            ).values(limit_bytes=limit_bytes))
-            if result.rowcount != 1:
-                db.rollback()
-                raise HTTPException(status_code=409, detail='配额不能低于已预留空间')
-        db.commit()
-        return {'configured': True, 'limit_bytes': limit_bytes}
-
-
-@router.get('/api/templates/reviewed-excel/archive-assets')
-def archive_assets(user=Depends(_read)):
-    tenant, owner = _identity(user)
-    with tenant_scope(tenant), get_db() as db:
-        assets = db.query(EtlArchiveAsset).filter_by(tenant_id=tenant, owner_user_id=owner).order_by(
-            EtlArchiveAsset.created_at.desc()).limit(200).all()
-        return {'assets': [{'id': asset.id, 'name': asset.name, 'state': asset.state,
-            'retention_mode': asset.retention_mode,
-            'versions': [{'id': version.id, 'version': version.version, 'status': version.status,
-                          'sha256': version.sha256, 'size_bytes': version.size_bytes,
-                          'classification_id': version.classification_id}
-                         for version in db.query(EtlArchiveVersion).filter_by(
-                             tenant_id=tenant, owner_user_id=owner, asset_id=asset.id).order_by(
-                                 EtlArchiveVersion.version.desc()).all()]}
-                          for asset in assets]}
-
-
-@router.get('/api/templates/reviewed-excel/archive-versions/{version_id}/download')
-def archive_version_download(version_id: str, user=Depends(_read)):
-    tenant, owner = _identity(user)
-    try:
-        with tenant_scope(tenant), get_db() as db:
-            body = read_original(db, owner=owner, version_id=version_id,
-                                 root=Path(get_app_data_dir()) / 'etl' / 'archive')
-            return Response(content=body,
-                media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                headers={'Cache-Control': 'no-store', 'Content-Disposition': 'attachment; filename="original.xlsx"'})
-    except ArchivePolicyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.post('/api/templates/reviewed-excel/archive-assets/{asset_id}/versions')
-async def archive_new_version(asset_id: str, request: Request, file: UploadFile = File(...),
-                              request_key: str = Form(..., max_length=80),
-                              expected_actor: str = Form(..., max_length=80), user=Depends(_manage)):
-    _expected_actor(expected_actor, user)
-    tenant, owner = _identity(user)
-    body = await _body(file)
-    try:
-        await run_in_threadpool(inspect_workbook, body)
-        _recheck(request, (tenant, owner))
-        with tenant_scope(tenant), get_db() as db:
-            item = append_original_version(db, owner=owner, asset_id=asset_id, body=body,
-                root=Path(get_app_data_dir()) / 'etl' / 'archive', request_key=request_key)
-            return {'asset_id': item.asset_id, 'version_id': item.id, 'version': item.version,
-                    'sha256': item.sha256, 'status': item.status}
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-@router.post('/api/templates/reviewed-excel/archive-assets/{asset_id}/state')
-def archive_asset_state(asset_id: str, request: Request, state: str = Form(..., max_length=16),
-                        expected_actor: str = Form(..., max_length=80), user=Depends(_manage)):
-    _expected_actor(expected_actor, user)
-    if state not in {'active', 'trashed'}:
-        raise HTTPException(status_code=400, detail='归档状态无效')
-    tenant, owner = _identity(user)
-    with tenant_scope(tenant), get_db() as db:
-        # The row update serializes classification creation and trash/restore.
-        changed = db.execute(update(EtlArchiveAsset).where(
-            EtlArchiveAsset.id == asset_id, EtlArchiveAsset.tenant_id == tenant,
-            EtlArchiveAsset.owner_user_id == owner,
-        ).values(state=EtlArchiveAsset.state))
-        if changed.rowcount != 1:
-            db.rollback()
-            raise HTTPException(status_code=404, detail='归档不存在')
-        if state == 'trashed' and db.query(EtlArchiveVersion).filter(
-            EtlArchiveVersion.tenant_id == tenant, EtlArchiveVersion.owner_user_id == owner,
-            EtlArchiveVersion.asset_id == asset_id,
-            (EtlArchiveVersion.classification_id.is_not(None)) | (EtlArchiveVersion.status != 'ready'),
-        ).first():
-            db.rollback()
-            raise HTTPException(status_code=409, detail='归档存在分类依赖或待核对版本，不能撤回')
-        db.execute(update(EtlArchiveAsset).where(EtlArchiveAsset.id == asset_id,
-            EtlArchiveAsset.tenant_id == tenant, EtlArchiveAsset.owner_user_id == owner).values(state=state))
-        db.commit()
-        return {'asset_id': asset_id, 'state': state}
-
-
-@router.post('/api/templates/reviewed-excel/archive-versions/{version_id}/recover')
-def recover_archive_version(version_id: str, expected_actor: str = Form(..., max_length=80),
-                            user=Depends(_manage)):
-    _expected_actor(expected_actor, user)
-    tenant, owner = _identity(user)
-    try:
-        with tenant_scope(tenant), get_db() as db:
-            recover_complete_pending(db, owner=owner, version_id=version_id,
-                                     root=Path(get_app_data_dir()) / 'etl' / 'archive')
-            return {'version_id': version_id, 'status': 'ready'}
-    except ArchivePolicyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
-@router.post('/api/templates/reviewed-excel/archive-classify')
-async def archive_classify(request: Request, file: UploadFile = File(...),
-                           request_key: str = Form(..., max_length=80),
-                           expected_actor: str = Form(..., max_length=80),
-                           user=Depends(_manage)):
-    """Archive one explicitly requested original before creating its classification."""
-    _expected_actor(expected_actor, user)
-    tenant, owner = _identity(user)
-    body = await _body(file)
-    try:
-        review = await run_in_threadpool(inspect_workbook, body)
-        sheets = classify_review_workbook(review)
-        _recheck(request, (tenant, owner))
-        with tenant_scope(tenant), get_db() as db:
-            archived = create_original(db, owner=owner, name=file.filename or 'review.xlsx',
-                body=body, root=Path(get_app_data_dir()) / 'etl' / 'archive', request_key=request_key)
-            return _create_archive_classification(db, archived, body, review, sheets,
-                file.filename or 'review.xlsx', file.content_type, request, tenant, owner)
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
-def _create_archive_classification(db, archived, body, review, sheets, name, content_type, request, tenant, owner):
-    if archived.classification_id:
-        existing = _classification_run(db, archived.classification_id, tenant, owner)
-        latest = load_json(existing.draft_json, {}).get('versions', [])[-1]
-        return {'asset_id': archived.asset_id, 'archive_version_id': archived.id,
-                'sha256': archived.sha256, 'classification_id': existing.id,
-                'version': latest['version'], 'sheets': latest['sheets'],
-                'read_only_print_areas': latest.get('read_only_print_areas', []),
-                'model_status': latest['model_status'], 'confirmed': latest['confirmed'],
-                'name': name, 'status': 'classified'}
-    _recheck(request, (tenant, owner))
-    classification_id = new_id()
-    locked = db.execute(update(EtlArchiveAsset).where(
-        EtlArchiveAsset.id == archived.asset_id, EtlArchiveAsset.tenant_id == tenant,
-        EtlArchiveAsset.owner_user_id == owner, EtlArchiveAsset.state == 'active',
-    ).values(state=EtlArchiveAsset.state))
-    if locked.rowcount != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail='归档已撤回或不可用')
-    claimed = db.execute(update(EtlArchiveVersion).where(
-        EtlArchiveVersion.id == archived.id, EtlArchiveVersion.tenant_id == tenant,
-        EtlArchiveVersion.owner_user_id == owner, EtlArchiveVersion.status == 'ready',
-        EtlArchiveVersion.classification_id.is_(None),
-    ).values(classification_id=classification_id))
-    if claimed.rowcount != 1:
-        db.rollback()
-        raise HTTPException(status_code=409, detail='分类正在创建，请按原请求标识核对')
-    upload = UploadServiceMixin().save_upload(db, owner_user_id=owner,
-        file_name=name, content_type=content_type, stream=BytesIO(body))
-    upload_record = db.get(EtlUpload, upload['upload_id'])
-    os.chmod(upload_record.storage_path, 0o600)
-    version = _classification_version(review['sha256'], '', sheets)
-    db.add(EtlRun(id=classification_id, tenant_id=tenant, owner_user_id=owner,
-        upload_id=upload['upload_id'], target_type='template_classification', status=_CLASS_READY,
-        stage=_CLASS_READY, file_sha256=review['sha256'],
-        draft_json=dump_json({'versions': [{'version': version, 'sheets': sheets,
-            'model_status': 'not_called', 'confirmed': False,
-            'read_only_print_areas': review['read_only_print_areas']}]}),
-        summary_json=dump_json({'kind': 'classification', 'archive_version_id': archived.id})))
-    db.commit()
-    return {'asset_id': archived.asset_id, 'archive_version_id': archived.id,
-            'sha256': archived.sha256, 'classification_id': classification_id,
-            'version': version, 'sheets': sheets, 'model_status': 'not_called',
-            'read_only_print_areas': review['read_only_print_areas'],
-            'confirmed': False, 'name': name, 'status': 'classified'}
-
-
-@router.post('/api/templates/reviewed-excel/archive-versions/{version_id}/classify')
-def classify_archive_version(version_id: str, request: Request,
-                             expected_actor: str = Form(..., max_length=80), user=Depends(_manage)):
-    _expected_actor(expected_actor, user)
-    tenant, owner = _identity(user)
-    try:
-        with tenant_scope(tenant), get_db() as db:
-            body = read_original(db, owner=owner, version_id=version_id,
-                                 root=Path(get_app_data_dir()) / 'etl' / 'archive')
-            archived = db.query(EtlArchiveVersion).filter_by(id=version_id, tenant_id=tenant,
-                                                             owner_user_id=owner).one()
-            asset = db.query(EtlArchiveAsset).filter_by(id=archived.asset_id, tenant_id=tenant,
-                                                       owner_user_id=owner).one()
-            review = inspect_workbook(body)
-            return _create_archive_classification(db, archived, body, review, classify_review_workbook(review),
-                                                  asset.name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                                  request, tenant, owner)
-    except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-
 @router.post("/api/templates/reviewed-excel/classify")
 async def reviewed_excel_classify(
     request: Request,
@@ -504,17 +332,31 @@ async def reviewed_excel_classify(
             if total > 50 * 1024 * 1024:
                 raise HTTPException(status_code=413, detail="本批文件超过 50 MB")
             review = await run_in_threadpool(inspect_workbook, body)
-            result = {"name": file.filename, "sha256": review["sha256"], "status": "classified",
-                      "sheets": classify_review_workbook(review), "model_status": "not_called",
-                      "read_only_print_areas": review['read_only_print_areas']}
+            result = {
+                "name": file.filename,
+                "sha256": review["sha256"],
+                "status": "classified",
+                "sheets": classify_review_workbook(review),
+                "model_status": "not_called",
+                "read_only_print_areas": review["read_only_print_areas"],
+            }
             results.append(result)
             prepared.append((file, body, result))
         except HTTPException as exc:
             if exc.status_code == 413 and total > 50 * 1024 * 1024:
                 raise
-            results.append({"name": file.filename, "status": "unsupported", "message": str(exc.detail), "sheets": []})
+            results.append(
+                {
+                    "name": file.filename,
+                    "status": "unsupported",
+                    "message": str(exc.detail),
+                    "sheets": [],
+                }
+            )
         except (ValueError, TypeError) as exc:
-            results.append({"name": file.filename, "status": "unsupported", "message": str(exc), "sheets": []})
+            results.append(
+                {"name": file.filename, "status": "unsupported", "message": str(exc), "sheets": []}
+            )
     _recheck(request, identity)
     tenant, owner = identity
     from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -524,18 +366,46 @@ async def reviewed_excel_classify(
     try:
         with tenant_scope(tenant), get_db() as db:
             for file, body, result in prepared:
-                upload = UploadServiceMixin().save_upload(db, owner_user_id=owner,
-                    file_name=file.filename or "review.xlsx", content_type=file.content_type, stream=BytesIO(body))
+                upload = UploadServiceMixin().save_upload(
+                    db,
+                    owner_user_id=owner,
+                    file_name=file.filename or "review.xlsx",
+                    content_type=file.content_type,
+                    stream=BytesIO(body),
+                )
                 record = db.get(EtlUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
                 os.chmod(record.storage_path, 0o600)
                 version = _classification_version(result["sha256"], "", result["sheets"])
-                result.update({"classification_id": new_id(), "version": version, "confirmed": False})
-                db.add(EtlRun(id=result["classification_id"], tenant_id=tenant, owner_user_id=owner,
-                    upload_id=upload["upload_id"], target_type="template_classification", status=_CLASS_READY,
-                    stage=_CLASS_READY, file_sha256=result["sha256"],
-                    draft_json=dump_json({"versions": [{"version": version, "sheets": result["sheets"],
-                        "model_status": "not_called", "confirmed": False, "read_only_print_areas": result['read_only_print_areas']}]}), summary_json=dump_json({"kind": "classification"})))
+                result.update(
+                    {"classification_id": new_id(), "version": version, "confirmed": False}
+                )
+                db.add(
+                    EtlRun(
+                        id=result["classification_id"],
+                        tenant_id=tenant,
+                        owner_user_id=owner,
+                        upload_id=upload["upload_id"],
+                        target_type="template_classification",
+                        status=_CLASS_READY,
+                        stage=_CLASS_READY,
+                        file_sha256=result["sha256"],
+                        draft_json=dump_json(
+                            {
+                                "versions": [
+                                    {
+                                        "version": version,
+                                        "sheets": result["sheets"],
+                                        "model_status": "not_called",
+                                        "confirmed": False,
+                                        "read_only_print_areas": result["read_only_print_areas"],
+                                    }
+                                ]
+                            }
+                        ),
+                        summary_json=dump_json({"kind": "classification"}),
+                    )
+                )
             commit_attempted = True
             db.commit()
     except BOUNDARY_ERRORS:
@@ -550,45 +420,72 @@ def _checkpoint_view(checkpoint):
     if not checkpoint:
         return None
     phase = checkpoint["phase"]
-    message = {"inflight": "结果未知，不可重发；需人工核对，当前无解锁入口",
-               "paused": "本轮预算已用完；确认后可继续剩余批次",
-               "ready": "可继续剩余批次"}[phase]
-    return {"phase": phase, "version": checkpoint["version"],
-            "completed": len(checkpoint["results"]), "total": checkpoint["total"],
-            "remaining": checkpoint["total"] - len(checkpoint["results"]),
-            "max_calls": checkpoint["max_calls"], "calls_in_round": checkpoint.get('calls_in_round', 0),
-            "remaining_in_round": max(0, checkpoint['max_calls'] - checkpoint.get('calls_in_round', 0)), "message": message}
+    message = {
+        "inflight": "结果未知，不可重发；需人工核对，当前无解锁入口",
+        "paused": "本轮预算已用完；确认后可继续剩余批次",
+        "ready": "可继续剩余批次",
+    }[phase]
+    return {
+        "phase": phase,
+        "version": checkpoint["version"],
+        "completed": len(checkpoint["results"]),
+        "total": checkpoint["total"],
+        "remaining": checkpoint["total"] - len(checkpoint["results"]),
+        "max_calls": checkpoint["max_calls"],
+        "calls_in_round": checkpoint.get("calls_in_round", 0),
+        "remaining_in_round": max(0, checkpoint["max_calls"] - checkpoint.get("calls_in_round", 0)),
+        "message": message,
+    }
 
 
 @router.get("/api/templates/reviewed-excel/classifications")
 def reviewed_excel_recent_classifications(user=Depends(_read)):
     tenant, owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
-        runs = db.query(EtlRun).filter(EtlRun.tenant_id == tenant, EtlRun.owner_user_id == owner,
-            EtlRun.target_type == "template_classification").order_by(EtlRun.created_at.desc()).limit(200).all()
+        runs = (
+            db.query(EtlRun)
+            .filter(
+                EtlRun.tenant_id == tenant,
+                EtlRun.owner_user_id == owner,
+                EtlRun.target_type == "template_classification",
+            )
+            .order_by(EtlRun.created_at.desc())
+            .limit(200)
+            .all()
+        )
         result = []
         for run in runs:
             upload = db.get(EtlUpload, run.upload_id)
             state = load_json(run.draft_json, {})
             versions = state.get("versions", [])
-            result.append({"classification_id": run.id, "name": upload.file_name if upload else "",
-                "sha256": run.file_sha256, "latest": versions[-1] if versions else None,
-                "archive_version_id": load_json(run.summary_json, {}).get('archive_version_id'),
-                "template_write_state": 'locked' if run.status == _CLASS_SAVING else 'available',
-                "checkpoint": _checkpoint_view(state.get("analysis_checkpoint"))})
+            result.append(
+                {
+                    "classification_id": run.id,
+                    "name": upload.file_name if upload else "",
+                    "sha256": run.file_sha256,
+                    "latest": versions[-1] if versions else None,
+                    "archive_version_id": load_json(run.summary_json, {}).get("archive_version_id"),
+                    "template_write_state": "locked"
+                    if run.status == _CLASS_SAVING
+                    else "available",
+                    "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
+                }
+            )
         return {"files": result}
 
 
-@router.get('/api/templates/reviewed-excel/classifications/{classification_id}/source')
+@router.get("/api/templates/reviewed-excel/classifications/{classification_id}/source")
 def archived_classification_source(classification_id: str, user=Depends(_read)):
     tenant, owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
         run = _classification_run(db, classification_id, tenant, owner)
-        if not load_json(run.summary_json, {}).get('archive_version_id'):
-            raise HTTPException(status_code=404, detail='旧分类没有归档来源')
-        return Response(content=_source(db, run, tenant, owner),
-                        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        headers={'Cache-Control': 'no-store'})
+        if not load_json(run.summary_json, {}).get("archive_version_id"):
+            raise HTTPException(status_code=404, detail="旧分类没有归档来源")
+        return Response(
+            content=_source(db, run, tenant, owner),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 @router.get("/api/templates/reviewed-excel/classifications/{classification_id}")
@@ -597,16 +494,24 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
     with tenant_scope(tenant), get_db() as db:
         run = _classification_run(db, classification_id, tenant, owner)
         state = load_json(run.draft_json, {})
-        return {"classification_id": run.id, "sha256": run.file_sha256,
-                "template_write_state": 'locked' if run.status == _CLASS_SAVING else 'available',
-                "versions": state.get("versions", []), "checkpoint": _checkpoint_view(state.get("analysis_checkpoint"))}
+        return {
+            "classification_id": run.id,
+            "sha256": run.file_sha256,
+            "template_write_state": "locked" if run.status == _CLASS_SAVING else "available",
+            "versions": state.get("versions", []),
+            "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
+        }
 
 
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/confirm")
 def reviewed_excel_classification_confirm(
-    classification_id: str, request: Request, version: str = Form(..., max_length=64),
-    labels_json: str = Form(..., max_length=200_000), links_json: str = Form('[]', max_length=100_000),
-    independent_confirmed: bool = Form(False), user=Depends(_manage),
+    classification_id: str,
+    request: Request,
+    version: str = Form(..., max_length=64),
+    labels_json: str = Form(..., max_length=200_000),
+    links_json: str = Form("[]", max_length=100_000),
+    independent_confirmed: bool = Form(False),
+    user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
     try:
@@ -626,44 +531,83 @@ def reviewed_excel_classification_confirm(
             # Keep historical versions intact, but never copy legacy prompt bodies into a new version.
             latest.pop("input_messages", None)
             latest = apply_classification_corrections(review, latest, labels)
-            before = [[(region["range"], region["labels"]) for region in sheet["regions"]] for sheet in versions[-1]["sheets"]]
-            after = [[(region["range"], region["labels"]) for region in sheet["regions"]] for sheet in latest["sheets"]]
+            before = [
+                [(region["range"], region["labels"]) for region in sheet["regions"]]
+                for sheet in versions[-1]["sheets"]
+            ]
+            after = [
+                [(region["range"], region["labels"]) for region in sheet["regions"]]
+                for sheet in latest["sheets"]
+            ]
             if before != after:
                 latest["fragment_links"] = {"items": [], "omitted": 0}
-                latest['suggested_documents'] = []
-                latest['suggested_document_count'] = None
+                latest["suggested_documents"] = []
+                latest["suggested_document_count"] = None
             from app.application.reviewed_excel_classification_store import (
                 _confirmed_document_count,
                 _confirmed_documents,
             )
-            latest['logical_documents'] = _confirmed_documents(run.file_sha256, version, latest['sheets'],
-                latest.get('fragment_links', {}), selected_links, review['cells'])
-            latest['confirmed_document_count'] = _confirmed_document_count(review, latest, latest['logical_documents'], independent_confirmed)
-            latest['document_count_status'] = 'confirmed' if latest['confirmed_document_count'] is not None else 'partial'
-            latest['independent_confirmed'] = independent_confirmed
-            selected_set = {(edge['sheet'], edge['first'], edge['second']) for edge in selected_links}
-            for link in latest.get('fragment_links', {}).get('items', []):
-                link['selected'] = (link['sheet'], link['first'], link['second']) in selected_set
+
+            latest["logical_documents"] = _confirmed_documents(
+                run.file_sha256,
+                version,
+                latest["sheets"],
+                latest.get("fragment_links", {}),
+                selected_links,
+                review["cells"],
+            )
+            latest["confirmed_document_count"] = _confirmed_document_count(
+                review, latest, latest["logical_documents"], independent_confirmed
+            )
+            latest["document_count_status"] = (
+                "confirmed" if latest["confirmed_document_count"] is not None else "partial"
+            )
+            latest["independent_confirmed"] = independent_confirmed
+            selected_set = {
+                (edge["sheet"], edge["first"], edge["second"]) for edge in selected_links
+            }
+            for link in latest.get("fragment_links", {}).get("items", []):
+                link["selected"] = (link["sheet"], link["first"], link["second"]) in selected_set
             latest.update({"parent_version": version, "confirmed": True})
-            latest["version"] = _classification_version(run.file_sha256, version, {"sheets": latest["sheets"], "logical_documents": latest['logical_documents'], 'confirmed_document_count': latest['confirmed_document_count'], 'independent_confirmed': independent_confirmed})
+            latest["version"] = _classification_version(
+                run.file_sha256,
+                version,
+                {
+                    "sheets": latest["sheets"],
+                    "logical_documents": latest["logical_documents"],
+                    "confirmed_document_count": latest["confirmed_document_count"],
+                    "independent_confirmed": independent_confirmed,
+                },
+            )
             versions.append(latest)
             if len(versions) > 50:
                 raise ValueError("分类版本已达上限")
             _recheck(request, (tenant, owner))
             _classification_cas(db, run, old, state)
-        return {"classification_id": classification_id, "version": latest["version"], "confirmed": True,
-                "sheets": latest["sheets"], "coverage": latest.get("coverage", []),
-                "fragment_links": latest.get("fragment_links", {"items": [], "omitted": 0}), "logical_documents": latest['logical_documents'],
-                'confirmed_document_count': latest['confirmed_document_count'], 'document_count_status': latest['document_count_status']}
+        return {
+            "classification_id": classification_id,
+            "version": latest["version"],
+            "confirmed": True,
+            "sheets": latest["sheets"],
+            "coverage": latest.get("coverage", []),
+            "fragment_links": latest.get("fragment_links", {"items": [], "omitted": 0}),
+            "logical_documents": latest["logical_documents"],
+            "confirmed_document_count": latest["confirmed_document_count"],
+            "document_count_status": latest["document_count_status"],
+        }
     except (ValueError, TypeError, EtlError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/analyze")
 async def reviewed_excel_classification_analyze(
-    classification_id: str, request: Request, version: str = Form(..., max_length=64),
-    sample_authorized: bool = Form(False), own_file_authorized: bool = Form(False),
-    continue_authorized: bool = Form(False), user=Depends(_manage),
+    classification_id: str,
+    request: Request,
+    version: str = Form(..., max_length=64),
+    sample_authorized: bool = Form(False),
+    own_file_authorized: bool = Form(False),
+    continue_authorized: bool = Form(False),
+    user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
     if sample_authorized == own_file_authorized:
@@ -679,13 +623,24 @@ async def reviewed_excel_classification_analyze(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             checkpoint = state.get("analysis_checkpoint")
-            authorization_kind = 'owner_file' if own_file_authorized else 'authorized_sample'
-            if checkpoint and (checkpoint.get("version") != version or checkpoint.get("source_sha256") != run.file_sha256):
-                raise HTTPException(status_code=409, detail="分类或来源版本已改变；未覆盖已确认结果")
-            if checkpoint and checkpoint.get('authorization', {}).get('kind', authorization_kind) != authorization_kind:
-                raise HTTPException(status_code=409, detail='授权范围已改变，请核对已有批次')
+            authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
+            if checkpoint and (
+                checkpoint.get("version") != version
+                or checkpoint.get("source_sha256") != run.file_sha256
+            ):
+                raise HTTPException(
+                    status_code=409, detail="分类或来源版本已改变；未覆盖已确认结果"
+                )
+            if (
+                checkpoint
+                and checkpoint.get("authorization", {}).get("kind", authorization_kind)
+                != authorization_kind
+            ):
+                raise HTTPException(status_code=409, detail="授权范围已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
-                raise HTTPException(status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发")
+                raise HTTPException(
+                    status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
+                )
             if checkpoint and checkpoint.get("phase") == "paused":
                 if not continue_authorized:
                     raise HTTPException(status_code=409, detail="本轮预算已用完，需明确确认继续")
@@ -695,19 +650,48 @@ async def reviewed_excel_classification_analyze(
                 batches, max_calls = plan_semantic_batches(review, checkpoint["max_calls"])
             else:
                 batches, max_calls = plan_semantic_batches(review)
-                checkpoint = {"version": version, "source_sha256": run.file_sha256, "phase": "ready",
-                              "results": [], "total": len(batches), "max_calls": max_calls, "calls_in_round": 0,
-                              'authorization': {'kind': authorization_kind, 'tenant_id': tenant, 'owner_user_id': owner,
-                                  'source_sha256': run.file_sha256, 'provider': 'mimo', 'scope': 'this_file_bounded_cells_and_structure',
-                                  'authorized_at': utcnow().isoformat()}}
-            plan_digest = hashlib.sha256(dump_json([[(cell["sheet"], cell["cell"], bool(cell.get("context_only"))) for cell in batch] for batch in batches]).encode()).hexdigest()
-            if checkpoint.get("plan_digest", plan_digest) != plan_digest or checkpoint["total"] != len(batches):
+                checkpoint = {
+                    "version": version,
+                    "source_sha256": run.file_sha256,
+                    "phase": "ready",
+                    "results": [],
+                    "total": len(batches),
+                    "max_calls": max_calls,
+                    "calls_in_round": 0,
+                    "authorization": {
+                        "kind": authorization_kind,
+                        "tenant_id": tenant,
+                        "owner_user_id": owner,
+                        "source_sha256": run.file_sha256,
+                        "provider": "mimo",
+                        "scope": "this_file_bounded_cells_and_structure",
+                        "authorized_at": utcnow().isoformat(),
+                    },
+                }
+            plan_digest = hashlib.sha256(
+                dump_json(
+                    [
+                        [
+                            (cell["sheet"], cell["cell"], bool(cell.get("context_only")))
+                            for cell in batch
+                        ]
+                        for batch in batches
+                    ]
+                ).encode()
+            ).hexdigest()
+            if checkpoint.get("plan_digest", plan_digest) != plan_digest or checkpoint[
+                "total"
+            ] != len(batches):
                 raise HTTPException(status_code=409, detail="分析计划已改变，请重新核对")
             index = len(checkpoint["results"])
             if index >= len(batches):
                 raise HTTPException(status_code=409, detail="分析批次状态无效")
             full_structure_map = build_structure_map(review, classify_review_workbook(review))
-            batch_review = {**review, "cells": batches[index], "full_structure_map": full_structure_map}
+            batch_review = {
+                **review,
+                "cells": batches[index],
+                "full_structure_map": full_structure_map,
+            }
             # A budget failure is known to occur before any provider request; do not create an uncertain checkpoint.
             await run_in_threadpool(_classify_semantic_batch, batch_review, prepare_only=True)
             checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
@@ -722,14 +706,19 @@ async def reviewed_excel_classification_analyze(
             checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
             checkpoint["phase"] = "ready"
             # Validate all accumulated results, including cross-batch conflicts, before persistence.
-            result = combine_semantic_batches(review, batches[:index + 1], checkpoint["results"], max_calls)
+            result = combine_semantic_batches(
+                review, batches[: index + 1], checkpoint["results"], max_calls
+            )
             if index + 1 < len(batches):
                 if checkpoint["calls_in_round"] >= max_calls:
                     checkpoint["phase"] = "paused"
                 _classification_cas(db, run, claimed_draft, state)
-                return {"classification_id": classification_id, "version": version,
-                        "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
-                        "checkpoint": _checkpoint_view(checkpoint)}
+                return {
+                    "classification_id": classification_id,
+                    "version": version,
+                    "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
+                    "checkpoint": _checkpoint_view(checkpoint),
+                }
             old = claimed_draft
             state.pop("analysis_checkpoint", None)
             rule_sheets = classify_review_workbook(review)
@@ -745,40 +734,93 @@ async def reviewed_excel_classification_analyze(
                 regions = []
                 for region in (r for r in result["regions"] if r["sheet"] == rule_sheet["sheet"]):
                     c1, r1, c2, r2 = range_boundaries(region["range"])
+
                     def inside(ref):
                         col, row = coordinate_from_string(ref["cell"])
                         return c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
+
                     rule_regions = rule_sheet["regions"]
-                    headers = [h for candidate in rule_regions for h in candidate["header_cells"] if inside(h)]
-                    headings = [e for candidate in rule_regions for e in candidate["evidence"] if inside(e)]
+                    headers = [
+                        h
+                        for candidate in rule_regions
+                        for h in candidate["header_cells"]
+                        if inside(h)
+                    ]
+                    headings = [
+                        e for candidate in rule_regions for e in candidate["evidence"] if inside(e)
+                    ]
                     merged = []
                     for candidate in rule_regions:
                         for item in candidate["merged_ranges"]:
                             mc1, mr1, mc2, mr2 = range_boundaries(item)
-                            if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2 and item not in merged:
+                            if (
+                                c1 <= mc1 <= mc2 <= c2
+                                and r1 <= mr1 <= mr2 <= r2
+                                and item not in merged
+                            ):
                                 merged.append(item)
-                    regions.append({"range": region["range"], "labels": region["labels"], "label_source": "model", "range_source": "model",
-                        "evidence": [{"label": "model", "cell": ref["cell"], "matched": values[(ref["sheet"], ref["cell"])]} for ref in region["evidence"]],
-                        "parent_heading": headings[0]["matched"] if headings else "", "header_cells": headers, "merged_ranges": merged,
-                        "dependencies": region["dependencies"],
-                        "possible_shared_context": [{"cell": ref["cell"], "kind": f"{ref['sheet']}：模型建议依赖，待确认"} for ref in region["dependencies"]],
-                        "dependency_status": "模型建议，边界和跨区依赖待确认", "needs_confirmation": True,
-                        "checked_cells": 0, "reason": region["reason"], "suggested_labels": region.get("suggested_labels", []), "context_warning": region.get("context_warning", ""),
-                        "continuation_context": region.get("continuation_context"), "value_extent": region.get("value_extent")})
-                dimensions = next(item for item in review["sheet_overview"] if item["sheet"] == rule_sheet["sheet"])
+                    regions.append(
+                        {
+                            "range": region["range"],
+                            "labels": region["labels"],
+                            "label_source": "model",
+                            "range_source": "model",
+                            "evidence": [
+                                {
+                                    "label": "model",
+                                    "cell": ref["cell"],
+                                    "matched": values[(ref["sheet"], ref["cell"])],
+                                }
+                                for ref in region["evidence"]
+                            ],
+                            "parent_heading": headings[0]["matched"] if headings else "",
+                            "header_cells": headers,
+                            "merged_ranges": merged,
+                            "dependencies": region["dependencies"],
+                            "possible_shared_context": [
+                                {
+                                    "cell": ref["cell"],
+                                    "kind": f"{ref['sheet']}：模型建议依赖，待确认",
+                                }
+                                for ref in region["dependencies"]
+                            ],
+                            "dependency_status": "模型建议，边界和跨区依赖待确认",
+                            "needs_confirmation": True,
+                            "checked_cells": 0,
+                            "reason": region["reason"],
+                            "suggested_labels": region.get("suggested_labels", []),
+                            "context_warning": region.get("context_warning", ""),
+                            "continuation_context": region.get("continuation_context"),
+                            "value_extent": region.get("value_extent"),
+                        }
+                    )
+                dimensions = next(
+                    item
+                    for item in review["sheet_overview"]
+                    if item["sheet"] == rule_sheet["sheet"]
+                )
                 for candidate in rule_sheet["regions"]:
-                    regions.extend(unresolved_fragments(candidate, regions, dimensions["merged_regions"]))
+                    regions.extend(
+                        unresolved_fragments(candidate, regions, dimensions["merged_regions"])
+                    )
                 sheets.append({**rule_sheet, "regions": regions})
-            latest = {"parent_version": version, "sheets": sheets, "model_status": "returned",
-                      'model_authorization': checkpoint.get('authorization'),
-                      "read_only_print_areas": review['read_only_print_areas'],
-                      "suggested_documents": result['suggested_documents'],
-                      "suggested_document_count": result['suggested_document_count'],
-                      "document_count_status": result['document_count_status'],
-                      "layout_references": result['layout_references'],
-                      "coverage": result["coverage"], "input_summaries": result["input_summaries"],
-                      "structure_map": result["structure_map"], "budget": result["budget"],
-                      "fragment_links": result["fragment_links"], "confirmed": False}
+            latest = {
+                "parent_version": version,
+                "sheets": sheets,
+                "model_status": "returned",
+                "model_authorization": checkpoint.get("authorization"),
+                "read_only_print_areas": review["read_only_print_areas"],
+                "suggested_documents": result["suggested_documents"],
+                "suggested_document_count": result["suggested_document_count"],
+                "document_count_status": result["document_count_status"],
+                "layout_references": result["layout_references"],
+                "coverage": result["coverage"],
+                "input_summaries": result["input_summaries"],
+                "structure_map": result["structure_map"],
+                "budget": result["budget"],
+                "fragment_links": result["fragment_links"],
+                "confirmed": False,
+            }
             latest["version"] = _classification_version(run.file_sha256, version, latest)
             versions.append(latest)
             if len(versions) > 50:
@@ -818,51 +860,97 @@ async def reviewed_excel_preview(
                 state = load_json(classification.draft_json, {})
                 versions = state.get("versions", [])
                 latest = versions[-1] if versions else {}
-                if (classification.file_sha256 != review["sha256"] or latest.get("version") != classification_version
-                    or not latest.get("confirmed") or not any(
-                        sheet.get("sheet") == region_sheet and any(region.get("range") == region_range for region in sheet.get("regions", []))
-                        for sheet in latest.get("sheets", []))):
+                if (
+                    classification.file_sha256 != review["sha256"]
+                    or latest.get("version") != classification_version
+                    or not latest.get("confirmed")
+                    or not any(
+                        sheet.get("sheet") == region_sheet
+                        and any(
+                            region.get("range") == region_range
+                            for region in sheet.get("regions", [])
+                        )
+                        for sheet in latest.get("sheets", [])
+                    )
+                ):
                     raise HTTPException(status_code=409, detail="分类来源或区域已变化，请重新确认")
-                selected_region = {"classification_id": classification_id, "version": classification_version,
-                                   "sheet": region_sheet, "range": region_range}
-                selected_region['archive_version_id'] = load_json(classification.summary_json, {}).get('archive_version_id')
-                selected_region['logical_documents'] = [group for group in latest.get('logical_documents', [])
-                    if {'sheet': region_sheet, 'range': region_range} in group['fragments']]
-                fragments = selected_region['logical_documents'][0]['fragments'] if selected_region['logical_documents'] else [{'sheet': region_sheet, 'range': region_range}]
+                selected_region = {
+                    "classification_id": classification_id,
+                    "version": classification_version,
+                    "sheet": region_sheet,
+                    "range": region_range,
+                }
+                selected_region["archive_version_id"] = load_json(
+                    classification.summary_json, {}
+                ).get("archive_version_id")
+                selected_region["logical_documents"] = [
+                    group
+                    for group in latest.get("logical_documents", [])
+                    if {"sheet": region_sheet, "range": region_range} in group["fragments"]
+                ]
+                fragments = (
+                    selected_region["logical_documents"][0]["fragments"]
+                    if selected_region["logical_documents"]
+                    else [{"sheet": region_sheet, "range": region_range}]
+                )
                 from openpyxl.utils.cell import (
                     column_index_from_string,
                     coordinate_from_string,
                     range_boundaries,
                 )
+
                 def inside_fragment(ref):
-                    col, row = coordinate_from_string(ref['cell'])
+                    col, row = coordinate_from_string(ref["cell"])
                     col = column_index_from_string(col)
-                    return any(ref['sheet'] == part['sheet'] and c1 <= col <= c2 and r1 <= row <= r2
-                               for part in fragments for c1, r1, c2, r2 in [range_boundaries(part['range'])])
-                for sheet in latest['sheets']:
-                    for region in sheet['regions']:
-                        if {'sheet': sheet['sheet'], 'range': region['range']} in fragments:
-                            if any(not inside_fragment(ref) for ref in region.get('dependencies', [])):
-                                raise ValueError('所选文档依赖外部说明或标题，暂不能保证保真提取')
-                selected_region['source_sha256'] = review['sha256']
-                selected_region['fragments'] = fragments
-                selected_region['source_print_areas'] = [area for area in review['read_only_print_areas'] if area['sheet'] == region_sheet]
-                if not selected_region['source_print_areas']:
-                    original_print = next(sheet['print_area'] for sheet in review['sheet_overview'] if sheet['sheet'] == region_sheet)
+                    return any(
+                        ref["sheet"] == part["sheet"] and c1 <= col <= c2 and r1 <= row <= r2
+                        for part in fragments
+                        for c1, r1, c2, r2 in [range_boundaries(part["range"])]
+                    )
+
+                for sheet in latest["sheets"]:
+                    for region in sheet["regions"]:
+                        if {"sheet": sheet["sheet"], "range": region["range"]} in fragments:
+                            if any(
+                                not inside_fragment(ref) for ref in region.get("dependencies", [])
+                            ):
+                                raise ValueError("所选文档依赖外部说明或标题，暂不能保证保真提取")
+                selected_region["source_sha256"] = review["sha256"]
+                selected_region["fragments"] = fragments
+                selected_region["source_print_areas"] = [
+                    area
+                    for area in review["read_only_print_areas"]
+                    if area["sheet"] == region_sheet
+                ]
+                if not selected_region["source_print_areas"]:
+                    original_print = next(
+                        sheet["print_area"]
+                        for sheet in review["sheet_overview"]
+                        if sheet["sheet"] == region_sheet
+                    )
                     if original_print:
-                        selected_region['source_print_areas'] = [{'sheet': region_sheet, 'value': original_print}]
-                selected_region['print_area_mode'] = print_area_mode
+                        selected_region["source_print_areas"] = [
+                            {"sheet": region_sheet, "value": original_print}
+                        ]
+                selected_region["print_area_mode"] = print_area_mode
                 body = derive_document_workbook(body, fragments, print_area_mode=print_area_mode)
                 review = inspect_workbook(body)
-                selected_region['derived_print_area'] = next(sheet['print_area'] for sheet in review['sheet_overview'] if sheet['sheet'] == region_sheet)
-                selected_region['derived_sha256'] = review['sha256']
+                selected_region["derived_print_area"] = next(
+                    sheet["print_area"]
+                    for sheet in review["sheet_overview"]
+                    if sheet["sheet"] == region_sheet
+                )
+                selected_region["derived_sha256"] = review["sha256"]
         proposal = make_proposals(review)
         versions = [proposal]
         if model_opt_in:
             if sample_authorized == own_file_authorized:
                 raise ValueError("请明确选择获授权样本或授权本人文件发送模型")
-            if own_file_authorized and os.environ.get('FHD_TEMPLATE_LLM_PROVIDER', '').strip().lower() != 'mimo':
-                raise ValueError('本人文件仅授权 MiMo；当前供应商不匹配，未调用模型')
+            if (
+                own_file_authorized
+                and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
+            ):
+                raise ValueError("本人文件仅授权 MiMo；当前供应商不匹配，未调用模型")
             try:
                 with tenant_scope(tenant):
                     proposal = await run_in_threadpool(
@@ -876,20 +964,34 @@ async def reviewed_excel_preview(
                 versions.append(proposal)
             except ValueError as exc:
                 proposal["model"] = {"status": "unavailable", "message": str(exc)}
-            proposal['model']['authorization'] = {'kind': 'owner_file' if own_file_authorized else 'authorized_sample',
-                'provider': 'mimo' if os.environ.get('FHD_TEMPLATE_LLM_PROVIDER', '').strip().lower() == 'mimo' else 'etl_default', 'tenant_id': tenant, 'owner_user_id': owner,
-                'source_sha256': (selected_region or {}).get('source_sha256', review['sha256']),
-                'derived_sha256': review['sha256'], 'scope': 'this_document_bounded_cells_and_structure', 'authorized_at': utcnow().isoformat()}
+            proposal["model"]["authorization"] = {
+                "kind": "owner_file" if own_file_authorized else "authorized_sample",
+                "provider": "mimo"
+                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
+                else "etl_default",
+                "tenant_id": tenant,
+                "owner_user_id": owner,
+                "source_sha256": (selected_region or {}).get("source_sha256", review["sha256"]),
+                "derived_sha256": review["sha256"],
+                "scope": "this_document_bounded_cells_and_structure",
+                "authorized_at": utcnow().isoformat(),
+            }
         for version in versions:
             _build_candidate_previews(body, review, version)
         _recheck(request, (tenant, owner))
         with tenant_scope(tenant), get_db() as db:
-            if selected_region and selected_region.get('derived_sha256'):
-                current = _classification_run(db, selected_region['classification_id'], tenant, owner)
+            if selected_region and selected_region.get("derived_sha256"):
+                current = _classification_run(
+                    db, selected_region["classification_id"], tenant, owner
+                )
                 _source(db, current, tenant, owner)
-                current_versions = load_json(current.draft_json, {}).get('versions', [])
-                if not current_versions or current_versions[-1].get('version') != selected_region['version'] or not current_versions[-1].get('confirmed'):
-                    raise HTTPException(status_code=409, detail='文档分类已变化，请重新生成候选')
+                current_versions = load_json(current.draft_json, {}).get("versions", [])
+                if (
+                    not current_versions
+                    or current_versions[-1].get("version") != selected_region["version"]
+                    or not current_versions[-1].get("confirmed")
+                ):
+                    raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
             upload = UploadServiceMixin().save_upload(
                 db,
                 owner_user_id=owner,
@@ -909,7 +1011,9 @@ async def reviewed_excel_preview(
                 stage=_READY,
                 file_sha256=review["sha256"],
                 draft_json=dump_json({"versions": versions}),
-                summary_json=dump_json({"kind": "reviewed_excel", "selected_region": selected_region}),
+                summary_json=dump_json(
+                    {"kind": "reviewed_excel", "selected_region": selected_region}
+                ),
             )
             db.add(run)
             db.commit()
@@ -943,21 +1047,35 @@ def reviewed_excel_history(review_id: str, user=Depends(_read)):
         }
 
 
-@router.get("/api/templates/reviewed-excel/reviews/{review_id}/versions/{version}/candidates/{candidate_id}/download")
-def reviewed_excel_candidate_download(review_id: str, version: str, candidate_id: str, user=Depends(_read)):
+@router.get(
+    "/api/templates/reviewed-excel/reviews/{review_id}/versions/{version}/candidates/{candidate_id}/download"
+)
+def reviewed_excel_candidate_download(
+    review_id: str, version: str, candidate_id: str, user=Depends(_read)
+):
     tenant, owner = _identity(user)
     with tenant_scope(tenant), get_db() as db:
         run = _run(db, review_id, tenant, owner)
         _review_source_version(db, run, tenant, owner)
         _state, versions = _proposals(run)
         proposal = next((item for item in versions if item.get("version") == version), None)
-        candidate = next((item for item in (proposal or {}).get("candidates", []) if item.get("id") == candidate_id), None)
+        candidate = next(
+            (
+                item
+                for item in (proposal or {}).get("candidates", [])
+                if item.get("id") == candidate_id
+            ),
+            None,
+        )
         if not candidate or not proposal.get("result_previews"):
             raise HTTPException(status_code=404, detail="候选模板不存在")
         body = _source(db, run, tenant, owner)
         cleaned = clean_workbook(body, run.file_sha256, candidate["clear"])
-    return Response(cleaned, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": 'attachment; filename="candidate.xlsx"'})
+    return Response(
+        cleaned,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="candidate.xlsx"'},
+    )
 
 
 @router.post("/api/templates/reviewed-excel/refine")
@@ -975,8 +1093,13 @@ async def reviewed_excel_refine(
     tenant, owner = _identity(user)
     if not consent or sample_authorized == own_file_authorized:
         raise HTTPException(status_code=400, detail="请明确选择获授权样本或授权本人文件发送模型")
-    if own_file_authorized and os.environ.get('FHD_TEMPLATE_LLM_PROVIDER', '').strip().lower() != 'mimo':
-        raise HTTPException(status_code=400, detail='本人文件仅授权 MiMo；当前供应商不匹配，未调用模型')
+    if (
+        own_file_authorized
+        and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
+    ):
+        raise HTTPException(
+            status_code=400, detail="本人文件仅授权 MiMo；当前供应商不匹配，未调用模型"
+        )
     try:
         current_cells = json.loads(current)
         if not isinstance(current_cells, list):
@@ -1000,11 +1123,19 @@ async def reviewed_excel_refine(
                 current=current_cells,
                 initial=True,
             )
-            source_scope = load_json(run.summary_json, {}).get('selected_region') or {}
-            proposal['model']['authorization'] = {'kind': 'owner_file' if own_file_authorized else 'authorized_sample',
-                'provider': 'mimo' if os.environ.get('FHD_TEMPLATE_LLM_PROVIDER', '').strip().lower() == 'mimo' else 'etl_default', 'tenant_id': tenant, 'owner_user_id': owner,
-                'source_sha256': source_scope.get('source_sha256', run.file_sha256),
-                'derived_sha256': run.file_sha256, 'scope': 'this_document_bounded_cells_and_feedback', 'authorized_at': utcnow().isoformat()}
+            source_scope = load_json(run.summary_json, {}).get("selected_region") or {}
+            proposal["model"]["authorization"] = {
+                "kind": "owner_file" if own_file_authorized else "authorized_sample",
+                "provider": "mimo"
+                if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() == "mimo"
+                else "etl_default",
+                "tenant_id": tenant,
+                "owner_user_id": owner,
+                "source_sha256": source_scope.get("source_sha256", run.file_sha256),
+                "derived_sha256": run.file_sha256,
+                "scope": "this_document_bounded_cells_and_feedback",
+                "authorized_at": utcnow().isoformat(),
+            }
             _build_candidate_previews(body, review, proposal)
             _recheck(request, (tenant, owner))
             if len(versions) >= 50:
@@ -1087,7 +1218,9 @@ async def reviewed_excel_save(
                 db.expire_all()
                 _review_source_version(db, run, tenant, owner)
             except HTTPException:
-                _release_failed_review(db, run.id, tenant, owner, saving_draft, old_draft, classification_lock)
+                _release_failed_review(
+                    db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
+                )
                 raise
             root = Path(get_app_data_dir()) / "templates" / "reviewed_excel" / str(tenant)
             path = root / f"{uuid4().hex}.xlsx"
@@ -1113,10 +1246,12 @@ async def reviewed_excel_save(
                         path.unlink(missing_ok=True)
                     except OSError:
                         cleanup_failed = True
-                _release_failed_review(db, run.id, tenant, owner, saving_draft, old_draft, classification_lock)
-                detail = '临时文件写入失败，模板未提交，可以重试'
+                _release_failed_review(
+                    db, run.id, tenant, owner, saving_draft, old_draft, classification_lock
+                )
+                detail = "临时文件写入失败，模板未提交，可以重试"
                 if cleanup_failed:
-                    detail = '临时文件写入失败，模板未提交；临时副本需管理员清理'
+                    detail = "临时文件写入失败，模板未提交；临时副本需管理员清理"
                 raise HTTPException(status_code=503, detail=detail) from exc
             try:
                 from app.legacy.routes.document_templates_compat import run_archive_template_create
@@ -1132,9 +1267,13 @@ async def reviewed_excel_save(
                         "fields": [],
                         "preview_data": {
                             "reviewed_excel": True,
-                            "source_sha256": (load_json(run.summary_json, {}).get('selected_region') or {}).get('source_sha256', run.file_sha256),
+                            "source_sha256": (
+                                load_json(run.summary_json, {}).get("selected_region") or {}
+                            ).get("source_sha256", run.file_sha256),
                             "derived_sha256": run.file_sha256,
-                            "selected_region": load_json(run.summary_json, {}).get('selected_region'),
+                            "selected_region": load_json(run.summary_json, {}).get(
+                                "selected_region"
+                            ),
                             "review_id": review_id,
                         },
                     }
@@ -1195,10 +1334,15 @@ def reviewed_excel_download(template_id: int, user=Depends(_read)):
         metadata = json.loads(row.analyzed_data or "{}")
         review_id = (metadata.get("preview_data") or {}).get("review_id")
         with tenant_scope(tenant), get_db() as db:
-            run = db.query(EtlRun).filter(
-                EtlRun.id == review_id, EtlRun.tenant_id == tenant,
-                EtlRun.target_type == "template_review",
-            ).first()
+            run = (
+                db.query(EtlRun)
+                .filter(
+                    EtlRun.id == review_id,
+                    EtlRun.tenant_id == tenant,
+                    EtlRun.target_type == "template_review",
+                )
+                .first()
+            )
             if run is None:
                 raise ValueError("unavailable")
             receipt = load_json(run.receipt_json, {})

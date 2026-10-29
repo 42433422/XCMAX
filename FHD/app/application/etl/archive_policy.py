@@ -34,10 +34,17 @@ class ArchivePolicy:
         Quota reservation and concurrency must be enforced atomically by the
         eventual repository; this check alone does not reserve storage.
         """
-        if type(size_bytes) is not int or size_bytes <= 0 or type(used_bytes) is not int or used_bytes < 0:
+        if (
+            type(size_bytes) is not int
+            or size_bytes <= 0
+            or type(used_bytes) is not int
+            or used_bytes < 0
+        ):
             raise ArchivePolicyError("文件大小或已用配额无效")
         if used_bytes + size_bytes > self.quota_bytes:
             raise ArchivePolicyError("归档配额不足")
         if now.tzinfo is None or now.utcoffset() is None:
             raise ArchivePolicyError("归档时间必须包含时区")
-        return now + timedelta(days=self.retention_days) if self.retention_days is not None else None
+        return (
+            now + timedelta(days=self.retention_days) if self.retention_days is not None else None
+        )

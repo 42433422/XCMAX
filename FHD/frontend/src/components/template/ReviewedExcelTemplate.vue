@@ -216,7 +216,8 @@ function toggleLabel(sheet: ClassificationRegion, label: string, checked: boolea
   sheet.modified = true
   for (const item of classifications.value) if (item.sheets.some((entry) => entry.regions.includes(sheet))) item.confirmed = false
   const next = new Set(sheet.labels)
-  checked ? next.add(label) : next.delete(label)
+  if (checked) next.add(label)
+  else next.delete(label)
   if (label === 'unknown' && checked) { sheet.labels = ['unknown']; return }
   if (checked) next.delete('unknown')
   sheet.labels = [...next]; if (!sheet.labels.length) sheet.labels = ['unknown']

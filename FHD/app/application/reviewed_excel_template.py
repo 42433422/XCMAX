@@ -28,47 +28,79 @@ from app.application.reviewed_excel_classification import (
 
 def _validate_template_schema(schema: dict, payload: object) -> bool:
     """Validate the complete schema subset used by template requests; fail closed otherwise."""
-    permitted = {'type', 'required', 'properties', 'additionalProperties', 'items', 'minItems', 'maxItems', 'minLength', 'maxLength', 'enum'}
+    permitted = {
+        "type",
+        "required",
+        "properties",
+        "additionalProperties",
+        "items",
+        "minItems",
+        "maxItems",
+        "minLength",
+        "maxLength",
+        "enum",
+    }
 
     def supported(rule, depth=0):
         if not isinstance(rule, dict) or depth > 16 or set(rule) - permitted:
             return False
-        if rule.get('type') not in {'object', 'array', 'string'}:
+        if rule.get("type") not in {"object", "array", "string"}:
             return False
-        props = rule.get('properties', {})
-        if not isinstance(props, dict) or any(not isinstance(key, str) or not supported(value, depth + 1) for key, value in props.items()):
+        props = rule.get("properties", {})
+        if not isinstance(props, dict) or any(
+            not isinstance(key, str) or not supported(value, depth + 1)
+            for key, value in props.items()
+        ):
             return False
-        if 'items' in rule and not supported(rule['items'], depth + 1):
+        if "items" in rule and not supported(rule["items"], depth + 1):
             return False
-        if 'required' in rule and (not isinstance(rule['required'], list) or any(not isinstance(item, str) for item in rule['required'])):
+        if "required" in rule and (
+            not isinstance(rule["required"], list)
+            or any(not isinstance(item, str) for item in rule["required"])
+        ):
             return False
-        if 'additionalProperties' in rule and not isinstance(rule['additionalProperties'], bool):
+        if "additionalProperties" in rule and not isinstance(rule["additionalProperties"], bool):
             return False
-        if 'enum' in rule and not isinstance(rule['enum'], list):
+        if "enum" in rule and not isinstance(rule["enum"], list):
             return False
-        return all(key not in rule or (type(rule[key]) is int and rule[key] >= 0)
-                   for key in ('minItems', 'maxItems', 'minLength', 'maxLength'))
+        return all(
+            key not in rule or (type(rule[key]) is int and rule[key] >= 0)
+            for key in ("minItems", "maxItems", "minLength", "maxLength")
+        )
 
     def matches(rule, value):
-        kind = rule['type']
-        if kind == 'object':
+        kind = rule["type"]
+        if kind == "object":
             if not isinstance(value, dict):
                 return False
-            properties = rule.get('properties', {})
-            if any(key not in value for key in rule.get('required', [])):
+            properties = rule.get("properties", {})
+            if any(key not in value for key in rule.get("required", [])):
                 return False
-            if rule.get('additionalProperties') is False and any(key not in properties for key in value):
+            if rule.get("additionalProperties") is False and any(
+                key not in properties for key in value
+            ):
                 return False
-            if any(key in properties and not matches(properties[key], item) for key, item in value.items()):
+            if any(
+                key in properties and not matches(properties[key], item)
+                for key, item in value.items()
+            ):
                 return False
-        elif kind == 'array':
-            if not isinstance(value, list) or len(value) < rule.get('minItems', 0) or len(value) > rule.get('maxItems', len(value)):
+        elif kind == "array":
+            if (
+                not isinstance(value, list)
+                or len(value) < rule.get("minItems", 0)
+                or len(value) > rule.get("maxItems", len(value))
+            ):
                 return False
-            if 'items' in rule and any(not matches(rule['items'], item) for item in value):
+            if "items" in rule and any(not matches(rule["items"], item) for item in value):
                 return False
-        elif not isinstance(value, str) or len(value) < rule.get('minLength', 0) or len(value) > rule.get('maxLength', len(value)):
+        elif (
+            not isinstance(value, str)
+            or len(value) < rule.get("minLength", 0)
+            or len(value) > rule.get("maxLength", len(value))
+        ):
             return False
-        return 'enum' not in rule or value in rule['enum']
+        return "enum" not in rule or value in rule["enum"]
 
     return supported(schema) and matches(schema, payload)
 
@@ -87,9 +119,11 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
 
     base = os.environ.get("FHD_TEMPLATE_MIMO_BASE_URL", "").strip().rstrip("/")
     model = os.environ.get("FHD_TEMPLATE_MIMO_MODEL", "").strip()
-    if (llm_assist.etl_llm_mode() == "off" or
-        base != "https://token-plan-cn.xiaomimimo.com/v1" or
-        model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}):
+    if (
+        llm_assist.etl_llm_mode() == "off"
+        or base != "https://token-plan-cn.xiaomimimo.com/v1"
+        or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
+    ):
         raise ValueError("模板 MiMo 配置未完成或不受支持；未调用模型")
     adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
     if not adapter.is_configured:
@@ -99,8 +133,9 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
     async def call():
         try:
             return await asyncio.wait_for(
-                provider.chat_completion(messages, temperature=0.0, max_tokens=max_tokens,
-                                         thinking={"type": "disabled"}),
+                provider.chat_completion(
+                    messages, temperature=0.0, max_tokens=max_tokens, thinking={"type": "disabled"}
+                ),
                 timeout=llm_assist.etl_llm_timeout_seconds(),
             )
         finally:
@@ -127,49 +162,71 @@ def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
 
     from defusedxml import ElementTree
 
-    prefix = 'Print area cannot be set to Defined name: '
+    prefix = "Print area cannot be set to Defined name: "
     messages = [str(item.message) for item in found]
-    if any(item.category is not UserWarning or not message.startswith(prefix) or not message.endswith('.')
-           for item, message in zip(found, messages, strict=True)):
-        raise ValueError('工作簿含无法保证保真的扩展，暂不支持清理')
-    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+    if any(
+        item.category is not UserWarning
+        or not message.startswith(prefix)
+        or not message.endswith(".")
+        for item, message in zip(found, messages, strict=True)
+    ):
+        raise ValueError("工作簿含无法保证保真的扩展，暂不支持清理")
+    ns = {"x": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
     with ZipFile(BytesIO(body)) as archive:
-        root = ElementTree.fromstring(archive.read('xl/workbook.xml'))
-    sheets = [sheet.get('name') for sheet in root.findall('x:sheets/x:sheet', ns)]
-    names = root.findall('x:definedNames/x:definedName', ns)
+        root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+    sheets = [sheet.get("name") for sheet in root.findall("x:sheets/x:sheet", ns)]
+    names = root.findall("x:definedNames/x:definedName", ns)
     entries = []
-    pattern = re.compile(r"(?:'((?:[^']|'')+)'|([^'!,]+))!(\$?[A-Za-z]{1,3}\$?\d+:\$?[A-Za-z]{1,3}\$?\d+|\$?\d+:\$?\d+|\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3})")
+    pattern = re.compile(
+        r"(?:'((?:[^']|'')+)'|([^'!,]+))!(\$?[A-Za-z]{1,3}\$?\d+:\$?[A-Za-z]{1,3}\$?\d+|\$?\d+:\$?\d+|\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3})"
+    )
     for message in messages:
-        value = message[len(prefix):-1]
-        matching = [node for node in names if node.get('name') == '_xlnm.Print_Area' and node.text == value]
+        value = message[len(prefix) : -1]
+        matching = [
+            node for node in names if node.get("name") == "_xlnm.Print_Area" and node.text == value
+        ]
         if len(matching) != 1:
-            raise ValueError('打印区域定义无法核验，暂不支持')
-        raw_index = matching[0].get('localSheetId', '')
+            raise ValueError("打印区域定义无法核验，暂不支持")
+        raw_index = matching[0].get("localSheetId", "")
         if not raw_index.isdigit() or int(raw_index) >= len(sheets):
-            raise ValueError('打印区域来源工作表无效')
+            raise ValueError("打印区域来源工作表无效")
         sheet = sheets[int(raw_index)]
         offset = 0
         for match in pattern.finditer(value):
-            if match.start() != offset or (match.group(1) or match.group(2)).replace("''", "'") != sheet:
-                raise ValueError('打印区域定义无法核验，暂不支持')
-            parts = match.group(3).replace('$', '').split(':')
+            if (
+                match.start() != offset
+                or (match.group(1) or match.group(2)).replace("''", "'") != sheet
+            ):
+                raise ValueError("打印区域定义无法核验，暂不支持")
+            parts = match.group(3).replace("$", "").split(":")
             bounds = []
             for part in parts:
-                cell = re.fullmatch(r'([A-Za-z]+)?(\d+)?', part)
-                if not cell or (cell.group(1) and column_index_from_string(cell.group(1).upper()) > 16384) or (cell.group(2) and not 1 <= int(cell.group(2)) <= 1048576):
-                    raise ValueError('打印区域坐标无效')
-                bounds.append((column_index_from_string(cell.group(1).upper()) if cell.group(1) else None,
-                               int(cell.group(2)) if cell.group(2) else None))
-            if any(a is not None and b is not None and a > b for a, b in zip(bounds[0], bounds[1], strict=True)):
-                raise ValueError('打印区域坐标无效')
+                cell = re.fullmatch(r"([A-Za-z]+)?(\d+)?", part)
+                if (
+                    not cell
+                    or (cell.group(1) and column_index_from_string(cell.group(1).upper()) > 16384)
+                    or (cell.group(2) and not 1 <= int(cell.group(2)) <= 1048576)
+                ):
+                    raise ValueError("打印区域坐标无效")
+                bounds.append(
+                    (
+                        column_index_from_string(cell.group(1).upper()) if cell.group(1) else None,
+                        int(cell.group(2)) if cell.group(2) else None,
+                    )
+                )
+            if any(
+                a is not None and b is not None and a > b
+                for a, b in zip(bounds[0], bounds[1], strict=True)
+            ):
+                raise ValueError("打印区域坐标无效")
             offset = match.end()
-            if offset < len(value) and value[offset] == ',':
+            if offset < len(value) and value[offset] == ",":
                 offset += 1
             elif offset < len(value):
-                raise ValueError('打印区域定义无法核验，暂不支持')
-        if not value or offset != len(value) or value.endswith(','):
-            raise ValueError('打印区域定义无法核验，暂不支持')
-        entries.append({'sheet': sheet, 'value': value})
+                raise ValueError("打印区域定义无法核验，暂不支持")
+        if not value or offset != len(value) or value.endswith(","):
+            raise ValueError("打印区域定义无法核验，暂不支持")
+        entries.append({"sheet": sheet, "value": value})
     return entries
 
 
@@ -181,7 +238,9 @@ def inspect_workbook(body: bytes) -> dict:
             entries = archive.infolist()
             if len(entries) > 5000 or sum(item.file_size for item in entries) > MAX_UNPACKED:
                 raise ValueError("工作簿解压后过大")
-            if any(item.filename.startswith(("xl/embeddings/", "xl/vbaProject")) for item in entries):
+            if any(
+                item.filename.startswith(("xl/embeddings/", "xl/vbaProject")) for item in entries
+            ):
                 raise ValueError("含嵌入附件或宏，未读取或执行")
             unsupported = (
                 "xl/drawings/",
@@ -214,7 +273,7 @@ def inspect_workbook(body: bytes) -> dict:
     layout = []
     try:
         if len(wb.worksheets) > 100:
-            raise ValueError('工作表超过 100 张，暂不能安全预览')
+            raise ValueError("工作表超过 100 张，暂不能安全预览")
         grid_budget = 0
         for sheet in wb.worksheets:
             if len(sheet.merged_cells.ranges) > 5000:
@@ -223,7 +282,7 @@ def inspect_workbook(body: bytes) -> dict:
                 raise ValueError("工作表范围过大，暂不能安全预览")
             grid_budget += sheet.max_row * sheet.max_column
             if grid_budget > 250_000:
-                raise ValueError('工作簿总单元格范围过大，暂不能安全预览')
+                raise ValueError("工作簿总单元格范围过大，暂不能安全预览")
             for row in sheet.iter_rows():
                 for cell in row:
                     if isinstance(cell, MergedCell) or cell.value is None:
@@ -327,11 +386,20 @@ def inspect_workbook(body: bytes) -> dict:
                     "merged_regions": [str(item) for item in s.merged_cells.ranges],
                     "print_area": s.print_area,
                     "sheet_state": s.sheet_state,
-                    "hidden_rows": [int(key) for key, dim in s.row_dimensions.items() if dim.hidden],
-                    "hidden_columns": [str(key) for key, dim in s.column_dimensions.items() if dim.hidden],
-                    "hidden_column_ranges": [{"start": dim.min or column_index_from_string(key),
-                                              "end": dim.max or dim.min or column_index_from_string(key)}
-                                             for key, dim in s.column_dimensions.items() if dim.hidden],
+                    "hidden_rows": [
+                        int(key) for key, dim in s.row_dimensions.items() if dim.hidden
+                    ],
+                    "hidden_columns": [
+                        str(key) for key, dim in s.column_dimensions.items() if dim.hidden
+                    ],
+                    "hidden_column_ranges": [
+                        {
+                            "start": dim.min or column_index_from_string(key),
+                            "end": dim.max or dim.min or column_index_from_string(key),
+                        }
+                        for key, dim in s.column_dimensions.items()
+                        if dim.hidden
+                    ],
                 }
                 for s in wb.worksheets
             ],
@@ -350,40 +418,55 @@ def _restore_print_areas(body: bytes, areas: list[dict]) -> bytes:
 
     from defusedxml import ElementTree as SafeET
 
-    namespace = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
+    namespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+
     def tag(name):
-        return f'{{{namespace}}}{name}'
+        return f"{{{namespace}}}{name}"
+
     output = BytesIO()
-    with ZipFile(BytesIO(body)) as old, ZipFile(output, 'w', ZIP_DEFLATED) as new:
+    with ZipFile(BytesIO(body)) as old, ZipFile(output, "w", ZIP_DEFLATED) as new:
         for entry in old.infolist():
             data = old.read(entry.filename)
-            if entry.filename == 'xl/workbook.xml':
+            if entry.filename == "xl/workbook.xml":
                 root = SafeET.fromstring(data)
-                sheets = [sheet.get('name') for sheet in root.findall(f'{tag("sheets")}/{tag("sheet")}')]
-                names = root.find(tag('definedNames'))
+                sheets = [
+                    sheet.get("name") for sheet in root.findall(f"{tag('sheets')}/{tag('sheet')}")
+                ]
+                names = root.find(tag("definedNames"))
                 if names is None:
-                    names = ET.Element(tag('definedNames'))
-                    calc = root.find(tag('calcPr'))
+                    names = ET.Element(tag("definedNames"))
+                    calc = root.find(tag("calcPr"))
                     root.insert(list(root).index(calc) if calc is not None else len(root), names)
                 for area in areas:
-                    if area['sheet'] not in sheets:
-                        raise ValueError('打印区域的工作表不存在')
-                    index = str(sheets.index(area['sheet']))
+                    if area["sheet"] not in sheets:
+                        raise ValueError("打印区域的工作表不存在")
+                    index = str(sheets.index(area["sheet"]))
                     for node in list(names):
-                        if node.get('name') == '_xlnm.Print_Area' and node.get('localSheetId') == index:
+                        if (
+                            node.get("name") == "_xlnm.Print_Area"
+                            and node.get("localSheetId") == index
+                        ):
                             names.remove(node)
-                    node = ET.SubElement(names, tag('definedName'), {'name': '_xlnm.Print_Area', 'localSheetId': index})
-                    node.text = area['value']
-                data = ET.tostring(root, encoding='utf-8', xml_declaration=True)
+                    node = ET.SubElement(
+                        names,
+                        tag("definedName"),
+                        {"name": "_xlnm.Print_Area", "localSheetId": index},
+                    )
+                    node.text = area["value"]
+                data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
             new.writestr(entry, data)
     result = output.getvalue()
-    restored = inspect_workbook(result)['read_only_print_areas']
-    if sorted((x['sheet'], x['value']) for x in restored) != sorted((x['sheet'], x['value']) for x in areas):
-        raise ValueError('打印区域写回后核验失败，已停止')
+    restored = inspect_workbook(result)["read_only_print_areas"]
+    if sorted((x["sheet"], x["value"]) for x in restored) != sorted(
+        (x["sheet"], x["value"]) for x in areas
+    ):
+        raise ValueError("打印区域写回后核验失败，已停止")
     return result
 
 
-def derive_document_workbook(body: bytes, fragments: list[dict], *, print_area_mode: str = 'source') -> bytes:
+def derive_document_workbook(
+    body: bytes, fragments: list[dict], *, print_area_mode: str = "source"
+) -> bytes:
     """Create one isolated sheet at source coordinates; reject unprovable dependencies."""
     import re
 
@@ -391,27 +474,33 @@ def derive_document_workbook(body: bytes, fragments: list[dict], *, print_area_m
     from openpyxl.utils.cell import range_boundaries
 
     info = inspect_workbook(body)
-    if print_area_mode not in {'source', 'selected'}:
-        raise ValueError('打印区域选择无效')
-    if not fragments or len(fragments) > 20 or any(not isinstance(item, dict) or set(item) != {'sheet', 'range'} for item in fragments):
-        raise ValueError('文档片段范围无效')
-    sheets = {item['sheet'] for item in fragments}
-    if len(sheets) != 1 or next(iter(sheets)) not in info['sheets']:
-        raise ValueError('跨工作表文档暂不能保证保真')
+    if print_area_mode not in {"source", "selected"}:
+        raise ValueError("打印区域选择无效")
+    if (
+        not fragments
+        or len(fragments) > 20
+        or any(not isinstance(item, dict) or set(item) != {"sheet", "range"} for item in fragments)
+    ):
+        raise ValueError("文档片段范围无效")
+    sheets = {item["sheet"] for item in fragments}
+    if len(sheets) != 1 or next(iter(sheets)) not in info["sheets"]:
+        raise ValueError("跨工作表文档暂不能保证保真")
     sheet_name = next(iter(sheets))
-    special_areas = [area for area in info['read_only_print_areas'] if area['sheet'] == sheet_name]
-    if special_areas and print_area_mode != 'selected':
-        raise ValueError('原打印区域跨越文档边界，请明确选择所选片段作为派生打印区域')
-    dimensions = next(sheet for sheet in info['sheet_overview'] if sheet['sheet'] == sheet_name)
+    special_areas = [area for area in info["read_only_print_areas"] if area["sheet"] == sheet_name]
+    if special_areas and print_area_mode != "selected":
+        raise ValueError("原打印区域跨越文档边界，请明确选择所选片段作为派生打印区域")
+    dimensions = next(sheet for sheet in info["sheet_overview"] if sheet["sheet"] == sheet_name)
     rectangles = []
     for item in fragments:
         try:
-            bounds = range_boundaries(item['range'])
+            bounds = range_boundaries(item["range"])
             c1, r1, c2, r2 = bounds
-            if not all(isinstance(x, int) for x in bounds) or not (1 <= c1 <= c2 <= dimensions['columns'] and 1 <= r1 <= r2 <= dimensions['rows']):
-                raise ValueError('bounds')
+            if not all(isinstance(x, int) for x in bounds) or not (
+                1 <= c1 <= c2 <= dimensions["columns"] and 1 <= r1 <= r2 <= dimensions["rows"]
+            ):
+                raise ValueError("bounds")
         except (TypeError, ValueError):
-            raise ValueError('文档片段坐标无效') from None
+            raise ValueError("文档片段坐标无效") from None
         rectangles.append(bounds)
 
     def contained(bounds):
@@ -423,32 +512,55 @@ def derive_document_workbook(body: bytes, fragments: list[dict], *, print_area_m
         return any(c1 <= x2 and x1 <= c2 and r1 <= y2 and y1 <= r2 for x1, y1, x2, y2 in rectangles)
 
     with warnings.catch_warnings(record=True) as found:
-        warnings.simplefilter('always')
+        warnings.simplefilter("always")
         wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
-    if found and _read_only_print_area_warnings(body, found) != info['read_only_print_areas']:
+    if found and _read_only_print_area_warnings(body, found) != info["read_only_print_areas"]:
         wb.close()
-        raise ValueError('打印区域来源校验失败')
+        raise ValueError("打印区域来源校验失败")
     try:
         original_modified = wb.properties.modified
         ws = wb[sheet_name]
-        if ws.sheet_state != 'visible':
-            raise ValueError('隐藏工作表暂不能作为独立模板提取')
-        if (wb.defined_names or ws.defined_names or ws.print_title_rows or ws.print_title_cols
-            or ws.data_validations.count or len(ws.conditional_formatting) or ws.tables or ws.auto_filter.ref):
-            raise ValueError('工作簿存在未验证的名称或区域依赖，暂不能提取')
-        header_names = ('oddHeader', 'oddFooter', 'evenHeader', 'evenFooter', 'firstHeader', 'firstFooter')
+        if ws.sheet_state != "visible":
+            raise ValueError("隐藏工作表暂不能作为独立模板提取")
+        if (
+            wb.defined_names
+            or ws.defined_names
+            or ws.print_title_rows
+            or ws.print_title_cols
+            or ws.data_validations.count
+            or len(ws.conditional_formatting)
+            or ws.tables
+            or ws.auto_filter.ref
+        ):
+            raise ValueError("工作簿存在未验证的名称或区域依赖，暂不能提取")
+        header_names = (
+            "oddHeader",
+            "oddFooter",
+            "evenHeader",
+            "evenFooter",
+            "firstHeader",
+            "firstFooter",
+        )
         headers = {name: str(getattr(ws, name)) for name in header_names}
         print_settings = (str(ws.page_setup), str(ws.page_margins), str(ws.print_options))
-        source_print = [range_boundaries(str(item)) for item in ws._print_area.ranges] if ws._print_area else []
-        if source_print and any(not contained(bounds) for bounds in source_print) and print_area_mode != 'selected':
-            raise ValueError('打印区域跨越所选文档，请明确选择所选片段作为派生打印区域')
-        mapped_print = print_area_mode == 'selected'
+        source_print = (
+            [range_boundaries(str(item)) for item in ws._print_area.ranges]
+            if ws._print_area
+            else []
+        )
+        if (
+            source_print
+            and any(not contained(bounds) for bounds in source_print)
+            and print_area_mode != "selected"
+        ):
+            raise ValueError("打印区域跨越所选文档，请明确选择所选片段作为派生打印区域")
+        mapped_print = print_area_mode == "selected"
         if mapped_print:
-            ws.print_area = [item['range'] for item in fragments]
+            ws.print_area = [item["range"] for item in fragments]
         for merge in list(ws.merged_cells.ranges):
             bounds = range_boundaries(str(merge))
             if intersects(bounds) and not contained(bounds):
-                raise ValueError('所选范围切断合并单元格')
+                raise ValueError("所选范围切断合并单元格")
             if not intersects(bounds):
                 ws.unmerge_cells(str(merge))
         for row in ws.iter_rows():
@@ -461,58 +573,89 @@ def derive_document_workbook(body: bytes, fragments: list[dict], *, print_area_m
                     cell.hyperlink = None
                     continue
                 if cell.hyperlink:
-                    raise ValueError('文档包含未核验的链接，暂不能提取')
-                if cell.data_type == 'f':
+                    raise ValueError("文档包含未核验的链接，暂不能提取")
+                if cell.data_type == "f":
                     try:
                         tokens = Tokenizer(cell.value).items
                     except (TokenizerError, TypeError):
-                        raise ValueError('公式引用无法核验') from None
+                        raise ValueError("公式引用无法核验") from None
                     for token in tokens:
-                        if token.type == 'OPERAND' and token.subtype == 'ERROR':
-                            raise ValueError('公式含错误引用，暂不能提取')
-                        if token.type == 'FUNC' and token.subtype == 'OPEN' and token.value[:-1].upper() not in {'SUM', 'AVERAGE', 'MIN', 'MAX', 'ROUND', 'IF', 'IFERROR', 'COUNT', 'COUNTA'}:
-                            raise ValueError('公式函数依赖无法核验')
-                        if token.type == 'OPERAND' and token.subtype == 'RANGE':
-                            if not re.fullmatch(r'\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?', token.value):
-                                raise ValueError('公式含外部或名称引用，暂不能提取')
-                            if not contained(range_boundaries(token.value.replace('$', ''))):
-                                raise ValueError('公式引用跨越所选文档，暂不能提取')
+                        if token.type == "OPERAND" and token.subtype == "ERROR":
+                            raise ValueError("公式含错误引用，暂不能提取")
+                        if (
+                            token.type == "FUNC"
+                            and token.subtype == "OPEN"
+                            and token.value[:-1].upper()
+                            not in {
+                                "SUM",
+                                "AVERAGE",
+                                "MIN",
+                                "MAX",
+                                "ROUND",
+                                "IF",
+                                "IFERROR",
+                                "COUNT",
+                                "COUNTA",
+                            }
+                        ):
+                            raise ValueError("公式函数依赖无法核验")
+                        if token.type == "OPERAND" and token.subtype == "RANGE":
+                            if not re.fullmatch(
+                                r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
+                            ):
+                                raise ValueError("公式含外部或名称引用，暂不能提取")
+                            if not contained(range_boundaries(token.value.replace("$", ""))):
+                                raise ValueError("公式引用跨越所选文档，暂不能提取")
         for name in list(wb.sheetnames):
             if name != sheet_name:
                 del wb[name]
         wb.active = 0
         output = BytesIO()
         with warnings.catch_warnings(record=True) as found:
-            warnings.simplefilter('always')
+            warnings.simplefilter("always")
             wb.save(output)
         if found:
-            raise ValueError('文档保存存在未验证的内容，已停止')
+            raise ValueError("文档保存存在未验证的内容，已停止")
         result = output.getvalue()
         checked = load_workbook(BytesIO(result), data_only=False, keep_links=True, rich_text=True)
         try:
             saved_sheet = checked[sheet_name]
-            if headers != {name: str(getattr(saved_sheet, name)) for name in header_names} or print_settings != (str(saved_sheet.page_setup), str(saved_sheet.page_margins), str(saved_sheet.print_options)):
-                raise ValueError('派生页眉或打印设置写出后核验失败')
+            if headers != {
+                name: str(getattr(saved_sheet, name)) for name in header_names
+            } or print_settings != (
+                str(saved_sheet.page_setup),
+                str(saved_sheet.page_margins),
+                str(saved_sheet.print_options),
+            ):
+                raise ValueError("派生页眉或打印设置写出后核验失败")
             if mapped_print:
-                actual = sorted(range_boundaries(str(item)) for item in checked[sheet_name]._print_area.ranges)
+                actual = sorted(
+                    range_boundaries(str(item)) for item in checked[sheet_name]._print_area.ranges
+                )
                 if actual != sorted(rectangles):
-                    raise ValueError('派生打印区域写出后核验失败')
+                    raise ValueError("派生打印区域写出后核验失败")
         finally:
             checked.close()
         # ZIP member timestamps otherwise vary between saves, preventing a
         # verified re-derivation of exactly the same temporary document later.
         normalized = BytesIO()
-        with ZipFile(BytesIO(result)) as source, ZipFile(normalized, 'w') as target:
+        with ZipFile(BytesIO(result)) as source, ZipFile(normalized, "w") as target:
             for item in source.infolist():
                 item.date_time = (1980, 1, 1, 0, 0, 0)
                 contents = source.read(item.filename)
-                if item.filename == 'docProps/core.xml':
-                    modified = (original_modified.strftime('%Y-%m-%dT%H:%M:%SZ')
-                                if original_modified else '1980-01-01T00:00:00Z').encode('ascii')
-                    contents, count = re.subn(rb'(<dcterms:modified\b[^>]*>)[^<]*(</dcterms:modified>)',
-                                              lambda match: match.group(1) + modified + match.group(2), contents)
+                if item.filename == "docProps/core.xml":
+                    modified = (
+                        original_modified.strftime("%Y-%m-%dT%H:%M:%SZ")
+                        if original_modified
+                        else "1980-01-01T00:00:00Z"
+                    ).encode("ascii")
+                    contents, count = re.subn(
+                        rb"(<dcterms:modified\b[^>]*>)[^<]*(</dcterms:modified>)",
+                        lambda match: match.group(1) + modified + match.group(2),
+                        contents,
+                    )
                     if count != 1:
-                        raise ValueError('派生文件元数据无法稳定重建')
+                        raise ValueError("派生文件元数据无法稳定重建")
                 target.writestr(item, contents)
         return normalized.getvalue()
     finally:
@@ -537,11 +680,11 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
             raise ValueError("清理范围包含无效、重复或受保护的单元格")
         selected.add(key)
     with warnings.catch_warnings(record=True) as found:
-        warnings.simplefilter('always')
+        warnings.simplefilter("always")
         wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
-    if found and _read_only_print_area_warnings(body, found) != inspection['read_only_print_areas']:
+    if found and _read_only_print_area_warnings(body, found) != inspection["read_only_print_areas"]:
         wb.close()
-        raise ValueError('打印区域来源校验失败')
+        raise ValueError("打印区域来源校验失败")
     try:
         for sheet, address in selected:
             wb[sheet][address].value = None
@@ -557,8 +700,8 @@ def clean_workbook(body: bytes, expected_sha256: str, selections: list[dict]) ->
         if found:
             raise ValueError("保存时发现无法保证保真的内容，已停止")
         result = output.getvalue()
-        if inspection['read_only_print_areas']:
-            result = _restore_print_areas(result, inspection['read_only_print_areas'])
+        if inspection["read_only_print_areas"]:
+            result = _restore_print_areas(result, inspection["read_only_print_areas"])
         return result
     finally:
         wb.close()
@@ -750,7 +893,9 @@ def refine_proposal(
         schema = {
             "type": "object",
             "required": ["candidates"],
-            "properties": {"candidates": {"type": "array", "minItems": 3, "maxItems": 3, "items": schema}},
+            "properties": {
+                "candidates": {"type": "array", "minItems": 3, "maxItems": 3, "items": schema}
+            },
             "additionalProperties": False,
         }
     current = current or []
@@ -769,7 +914,11 @@ def refine_proposal(
     overview = [
         {
             "sheet": name,
-            **{key: value for key, value in dimensions.get(name, {}).items() if key != "merged_regions"},
+            **{
+                key: value
+                for key, value in dimensions.get(name, {}).items()
+                if key != "merged_regions"
+            },
             "nonempty_cells": len(items),
             "formulas": sum(c["kind"] == "formula" for c in items),
             "provided": sum(c["sheet"] == name for c in bounded),
@@ -840,8 +989,12 @@ def refine_proposal(
             raise ValueError("模型返回格式无效，原候选未改变")
         pairs = []
         for item in answer["clear"]:
-            if (not isinstance(item, dict) or set(item) != {"sheet", "cell"}
-                    or not isinstance(item["sheet"], str) or not isinstance(item["cell"], str)):
+            if (
+                not isinstance(item, dict)
+                or set(item) != {"sheet", "cell"}
+                or not isinstance(item["sheet"], str)
+                or not isinstance(item["cell"], str)
+            ):
                 raise ValueError("模型返回坐标无效，原候选未改变")
             pair = (item["sheet"], item["cell"])
             if pair not in allowed or pair in protected or pair in pairs:
@@ -875,8 +1028,14 @@ def refine_proposal(
     ).hexdigest()
     from app.application.reviewed_excel_evidence import summarize_model_input
 
-    input_summary = summarize_model_input(messages, bounded, source_sha256=review["sha256"],
-        provider=configured_provider or "etl_default", model=result.model, max_output_tokens=1400)
+    input_summary = summarize_model_input(
+        messages,
+        bounded,
+        source_sha256=review["sha256"],
+        provider=configured_provider or "etl_default",
+        model=result.model,
+        max_output_tokens=1400,
+    )
     base["model"] = {
         "status": "returned",
         "adopted": False,
