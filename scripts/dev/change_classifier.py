@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -60,6 +61,11 @@ IRRELEVANT = {
             "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
     "frontend": {
         "prefixes": [
@@ -78,6 +84,11 @@ IRRELEVANT = {
             "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
 }
 # release-gate 与 backend 同域（都是 FHD 后端发布契约）。
@@ -190,6 +201,8 @@ def _matches(path: str, spec: dict) -> bool:
     if any(path.startswith(p) for p in spec.get("prefixes", ())):
         return True
     if any(path.endswith(s) for s in spec.get("suffixes", ())):
+        return True
+    if any(re.fullmatch(pattern, path) for pattern in spec.get("regexes", ())):
         return True
     return any(c in path for c in spec.get("contains", ()))
 
