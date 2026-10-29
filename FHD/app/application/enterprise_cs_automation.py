@@ -72,6 +72,26 @@ _ALLOWED_MODES = {"ai", "human"}
 _ISSUE_DESCRIPTION_PROMPT = "请说明要登记的故障现象；暂未建立工单。"
 
 
+def _intake_excluded(text: str) -> bool:
+    # Reject intake withdrawal commands, not defect descriptions such as
+    # "cannot cancel an order" or error messages containing "not found".
+    text = text.strip()
+    if re.match(r"^(?:请|帮我|给我)?(?:查询|查一下|查查|查看|统计)", text) and not re.search(
+        r"按钮|软件|页面|界面|客户端|模块", text
+    ):
+        return True
+    return bool(
+        re.search(
+            r"已(?:经)?(?:解决|修复)(?:了|完成)?(?:谢谢|感谢)?[。！!?\s]*$"
+            r"|(?:^|[，。！？；,!?;\n])\s*(?:我)?(?:请|帮我|给我)?"
+            r"(?:(?:取消|撤回|停止|不要|不用|别|无需|不必|不想|暂不|不需要)"
+            r"[^，。！？；,\n]{0,12}(?:工单|建单|登记|提交)"
+            r"|(?:取消|算了|不用了)(?:[，。！？；,!?;\s]|$))",
+            text,
+        )
+    )
+
+
 def _enabled() -> bool:
     raw = os.environ.get("XCAGI_ENTERPRISE_CS_AI_ENABLED", "1").strip().lower()
     return raw not in {"0", "false", "no", "off"}
@@ -265,16 +285,10 @@ class EnterpriseCsAutomationService:
         )
         from app.application.im_app_service import ImApplicationService
 
+        if _intake_excluded(text):
+            return None
         if not _plain_intake_match(text):
-            from app.domain.shared_services.intent_service import is_negation_intent
-
-            if (
-                not looks_like_issue_report(text)
-                or is_negation_intent(text)
-                or re.search(
-                    r"已(?:经)?(?:解决|修复)|^(?:请|帮我|给我)?(?:查询|查一下|查查|查看|统计)", text
-                )
-            ):
+            if not looks_like_issue_report(text):
                 return None
             previous = self._db.scalar(
                 select(ImMessage)
@@ -312,8 +326,9 @@ class EnterpriseCsAutomationService:
             for item in prior:
                 if _bare_intake(item.body):
                     continue
-                if looks_like_issue_report(item.body) or re.search(
-                    r"软件|页面|界面|客户端|卡死|断连", item.body
+                if not _intake_excluded(item.body) and (
+                    looks_like_issue_report(item.body)
+                    or re.search(r"软件|页面|界面|客户端|卡死|断连", item.body)
                 ):
                     report, source_id = item.body, item.id
                 break
