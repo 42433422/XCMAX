@@ -26,6 +26,7 @@ import { installClientConsoleBridge } from './utils/clientDebugLog'
 import { initServiceWorker, unregisterStaleServiceWorkers } from './utils/serviceWorker'
 import { bootstrapHostConfig } from '@/stores/hostConfig'
 import { waitForInitialBootstrapDependencies } from './bootstrapDependencies'
+import { prefetchRouteChunks } from './utils/routePrefetch'
 
 import './styles/tokens.css'
 import './styles/css/base.css'
@@ -87,7 +88,7 @@ function scheduleRouterAddressSync(reason: string): void {
 
 /**
  * 后台分批预取静态路由的懒加载 chunk，使侧栏切换页面时无需等待 JS 拉取，消除「卡顿」。
- * 每次预取 4 个，交还主线程避免启动瞬间雪崩；仅预取非公开、非裸壳的业务/核心页面。
+ * 最多 4 个在途加载，完成后在空闲时继续；仅预取非公开、非裸壳的业务/核心页面。
  */
 function prefetchStaticRouteChunks(): void {
   const routes = router.getRoutes()
@@ -103,15 +104,7 @@ function prefetchStaticRouteChunks(): void {
     if (win.requestIdleCallback) win.requestIdleCallback(cb)
     else window.setTimeout(cb, 60)
   }
-  let index = 0
-  const step = (): void => {
-    const end = Math.min(index + 4, jobs.length)
-    for (; index < end; index++) {
-      jobs[index]().catch(() => {})
-    }
-    if (index < jobs.length) idle(step)
-  }
-  step()
+  void prefetchRouteChunks(jobs, idle)
 }
 
 /**

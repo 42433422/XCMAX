@@ -1,8 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, ref } from 'vue'
 import { useEnterpriseCsBridge } from '@/composables/messenger/useEnterpriseCsBridge'
 import { useCsInboxBridge } from '@/composables/messenger/useCsInboxBridge'
 import type { ImConversationSummary, ImMessage } from '@/api/im'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
+
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 
 const imMocks = vi.hoisted(() => ({
   fetchCsInbox: vi.fn(),
@@ -150,5 +153,68 @@ describe('customer CS reading position', () => {
     expect(el.scrollTop).toBe(expected)
     expect(notify).toHaveBeenCalledTimes(incoming ? 1 : 0)
     scope.stop()
+  })
+})
+
+describe.each(['admin', 'customer'] as const)('%s CS snapshot lifetime', (kind) => {
+  function fixture(status: ImConversationSummary['cs_status'] = 'human_pending') {
+    const scope = effectScope()
+    const messages = ref<ImMessage[]>([oldMessage])
+    const conversations = ref([{ ...csConversation, cs_status: status, is_cs_inbox: kind === 'admin', is_enterprise_dedicated_cs: kind === 'customer' }])
+    const options = { conversations, activeConversationId: ref<number | null>(21), messages, playIncoming: vi.fn(), scrollEl: ref(null) }
+    const bridge = scope.run(() => kind === 'admin'
+      ? useCsInboxBridge({ ...options, enabled: ref(true) })
+      : useEnterpriseCsBridge({ ...options, enabled: true }))!
+    const refresh = 'refreshCsInbox' in bridge ? bridge.refreshCsInbox : bridge.refreshEnterpriseCsThread
+    const start = 'startCsInboxPolling' in bridge ? bridge.startCsInboxPolling : bridge.startEnterpriseCsPolling
+    const request = kind === 'admin' ? imMocks.fetchCsInboxMessages : imMocks.fetchEnterpriseCsThread
+    const response = () => kind === 'admin' ? [{ ...oldMessage }] : {
+      conversation: { ...csConversation, cs_status: status, is_cs_inbox: false, is_enterprise_dedicated_cs: true }, messages: [{ ...oldMessage }],
+    }
+    imMocks.fetchCsInbox.mockImplementation(async () => [{ ...csConversation, cs_status: status }])
+    request.mockReset().mockImplementation(async () => response())
+    return { scope, messages, conversations, refresh, start, request, response, options }
+  }
+
+  it('retains unchanged message identity and pauses/resumes the actual bridge', async () => {
+    vi.useFakeTimers()
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden')
+    const f = fixture()
+    await f.refresh()
+    const previous = f.messages.value
+    await f.refresh()
+    expect(f.messages.value).toBe(previous)
+    f.start()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(f.request).toHaveBeenCalledTimes(2)
+    visibility.mockReturnValue('visible')
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(f.request).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.messages.value).toBe(previous)
+    f.scope.stop()
+  })
+
+  it('discards an in-flight response after switching accounts', async () => {
+    const f = fixture()
+    let resolve!: (value: unknown) => void
+    f.request.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+    const pending = f.refresh()
+    productReadAccountEpoch.value++
+    resolve(f.response())
+    await pending
+    expect(f.messages.value).toEqual([])
+    expect(f.options.playIncoming).not.toHaveBeenCalled()
+    f.scope.stop()
+  })
+
+  it('keeps the short polling interval while an AI response is still processing', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible')
+    const f = fixture('ai_processing')
+    f.start()
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(f.request).toHaveBeenCalledTimes(4)
+    f.scope.stop()
   })
 })

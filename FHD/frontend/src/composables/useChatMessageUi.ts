@@ -1,12 +1,13 @@
 import { ref, computed, watch, type Ref } from 'vue'
 import { plainTextFromChatHtml, plainTextFromChatMarkdown } from '@/utils/sanitizeHtml'
 import { speakText, stopSpeaking, cleanTextForSpeech } from '@/utils/tts'
-import { estimateMessageHeight, getPerformanceStats } from '@/utils/pretext'
+import { estimateMessageHeight } from '@/utils/pretext'
 import type { ChatMessage } from './useChatMessages'
 
 export interface UseChatMessageUiDeps {
   messages: Ref<ChatMessage[]>
   chatMessagesRef: Ref<HTMLElement | null>
+  sessionKey?: Ref<string>
 }
 
 export function useChatMessageUi(deps: UseChatMessageUiDeps) {
@@ -14,28 +15,18 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
 
   const expandedMessageIndexes = ref<number[]>([])
   const messageHeights = ref<Map<number, number>>(new Map())
-  const chatContainerWidth = ref(600)
   const playingMsgIdx = ref(-1)
-
-  function calculateMessageHeight(content: string, index: number): number {
-    const cached = messageHeights.value.get(index)
-    if (cached) return cached
-    const role = messages.value[index]?.role
-    const plainSource = role === 'ai' ? plainTextFromChatMarkdown(content) : plainTextFromChatHtml(content)
-    const height = estimateMessageHeight(plainSource, chatContainerWidth.value - 32, 14)
-    messageHeights.value.set(index, height)
-    return height
-  }
+  let speakable = new WeakMap<{ content?: string }, { content: string; text: string }>()
 
   function batchCalculateHeights() {
-    if (!chatMessagesRef.value) return
-    chatContainerWidth.value = chatMessagesRef.value.clientWidth
+    const host = chatMessagesRef.value
     messageHeights.value.clear()
-    messages.value.forEach((msg, idx) => {
-      calculateMessageHeight(msg.content, idx)
+    if (!host) return
+    // Only mounted, expanded bodies need a height hint. Their DOM is already sanitized.
+    host.querySelectorAll<HTMLElement>('[data-message-index] .message-html').forEach((body) => {
+      const index = Number(body.closest<HTMLElement>('[data-message-index]')?.dataset.messageIndex)
+      if (Number.isInteger(index)) messageHeights.value.set(index, estimateMessageHeight(body.textContent || '', host.clientWidth - 32, 14))
     })
-    const stats = getPerformanceStats()
-    console.log('📊 Pretext.js 性能统计:', stats)
   }
 
   function extractSpeakableText(raw: string | undefined | null): string {
@@ -49,7 +40,13 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
   }
 
   function canSpeakMessage(msg: { content?: string }): boolean {
-    return !!cleanTextForSpeech(extractSpeakableText(msg?.content))
+    const content = String(msg?.content || '')
+    let entry = speakable.get(msg)
+    if (!entry || entry.content !== content) {
+      entry = { content, text: cleanTextForSpeech(extractSpeakableText(content)) }
+      speakable.set(msg, entry)
+    }
+    return !!entry.text
   }
 
   async function toggleMessageTts(idx: number, rawContent: string | undefined | null) {
@@ -120,12 +117,14 @@ export function useChatMessageUi(deps: UseChatMessageUiDeps) {
     },
   )
 
-  watch(
-    () => messages.value.length,
-    () => {
-      setTimeout(() => batchCalculateHeights(), 50)
-    },
-  )
+  watch(() => messages.value.length, batchCalculateHeights, { flush: 'post' })
+  watch(() => messages.value[messages.value.length - 1]?.content, () => messageHeights.value.delete(messages.value.length - 1))
+  watch([messages, () => deps.sessionKey?.value], () => {
+    expandedMessageIndexes.value = []
+    messageHeights.value.clear()
+    speakable = new WeakMap()
+    stopMessageTts()
+  }, { flush: 'sync' })
 
   function stopMessageTts() {
     try {

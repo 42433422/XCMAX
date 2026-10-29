@@ -1,6 +1,7 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { captureMessageScroll } from './useChatSession'
+import { reconcileImSnapshot, useVisiblePolling } from './useVisiblePolling'
 import {
   fetchEnterpriseCsThread,
   type ImConversationSummary,
@@ -22,12 +23,13 @@ export function useEnterpriseCsBridge(options: Options) {
   const enterpriseCsSendError = ref('')
   const enterpriseCsUnconfirmed = ref(false)
   const enterpriseCsError = computed(() => enterpriseCsSendError.value || enterpriseCsReadError.value)
-  let pollTimer: ReturnType<typeof setInterval> | null = null
-  let pollBusy = false
+  let busySelection: number | null = null
   let selectionEpoch = 0
-  watch(options.activeConversationId, () => { selectionEpoch++ }, { flush: 'sync' })
+  const polling = useVisiblePolling(() => readThread())
+  watch(options.activeConversationId, () => { selectionEpoch++; polling.stop() }, { flush: 'sync' })
   watch(productReadAccountEpoch, () => {
     selectionEpoch++
+    polling.stop()
     options.messages.value = []
     enterpriseCsReadError.value = ''
   }, { flush: 'sync' })
@@ -39,50 +41,53 @@ export function useEnterpriseCsBridge(options: Options) {
   const activeCustomerCsConversation = computed(() => customerConversation())
   const isCustomerEnterpriseCs = (id = options.activeConversationId.value) => Boolean(options.enabled && customerConversation(id))
 
-  function stopPolling(): void {
-    if (pollTimer) clearInterval(pollTimer)
-    pollTimer = null
-  }
-
-  async function refreshThread(notifyIncoming = true): Promise<void> {
+  async function readThread(notifyIncoming = true): Promise<boolean> {
     const localId = options.activeConversationId.value
-    if (!localId || !isCustomerEnterpriseCs(localId) || pollBusy) return
-    pollBusy = true
+    if (!localId || !isCustomerEnterpriseCs(localId) || busySelection === selectionEpoch) return false
     const accountEpoch = productReadAccountEpoch.value
     const selection = selectionEpoch
+    busySelection = selection
     const current = () => options.activeConversationId.value === localId && selection === selectionEpoch && accountEpoch === productReadAccountEpoch.value
     try {
       const oldIds = new Set(options.messages.value.map((item) => item.id))
       const thread = await fetchEnterpriseCsThread()
-      if (!current()) return
+      if (!current()) return false
       const restoreScroll = captureMessageScroll(options.scrollEl)
       enterpriseCsReadError.value = ''
-      options.messages.value = thread.messages
+      const update = reconcileImSnapshot(options.messages.value, thread.messages)
+      options.messages.value = update.items
       const local = options.conversations.value.find((item) => item.id === localId)
       const last = thread.messages[thread.messages.length - 1]
+      let conversationChanged = false
       if (local) {
         const { id: remoteId, ...remoteState } = thread.conversation
-        Object.assign(local, remoteState, {
+        const next = { ...local, ...remoteState,
           remote_conversation_id: remoteId,
           last_message_at: last?.created_at ?? null,
           last_message_preview: last?.body ?? '',
-        })
+        }
+        conversationChanged = reconcileImSnapshot([local], [next]).changed
+        if (conversationChanged) Object.assign(local, next)
       }
       const incoming = thread.messages.find((item) => !oldIds.has(item.id) && !item.is_self)
       if (notifyIncoming && incoming) void options.playIncoming(incoming.body)
-      await nextTick()
-      if (current()) restoreScroll()
+      if (update.changed) {
+        await nextTick()
+        if (current()) restoreScroll()
+      }
+      return update.changed || conversationChanged || local?.cs_status === 'ai_processing' || enterpriseCsUnconfirmed.value
     } catch (error) {
       if (current()) enterpriseCsReadError.value = error instanceof Error ? error.message : '企业专属客服读取失败'
       if (!notifyIncoming) throw error
+      return false
     } finally {
-      pollBusy = false
+      if (busySelection === selection) busySelection = null
     }
   }
 
   function startPolling(): void {
-    stopPolling()
-    pollTimer = setInterval(() => void refreshThread(), 2500)
+    polling.stop()
+    if (isCustomerEnterpriseCs()) polling.start()
   }
 
   return {
@@ -91,8 +96,8 @@ export function useEnterpriseCsBridge(options: Options) {
     enterpriseCsUnconfirmed,
     activeCustomerCsConversation,
     isCustomerEnterpriseCs,
-    refreshEnterpriseCsThread: refreshThread,
+    refreshEnterpriseCsThread: async (notifyIncoming = true): Promise<void> => { await readThread(notifyIncoming) },
     startEnterpriseCsPolling: startPolling,
-    stopEnterpriseCsPolling: stopPolling,
+    stopEnterpriseCsPolling: polling.stop,
   }
 }
