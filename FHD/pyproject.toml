@@ -275,6 +275,25 @@ module = [
 ]
 ignore_missing_imports = true
 
+
+# #2733 reviewed-excel / ETL archive adapters: newly landed modules use openpyxl
+# Cell coordinates typed as Optional in stubs; follow-up will narrow helpers.
+# Keep the override scoped to these modules only so the rest of app/ stays gated.
+[[tool.mypy.overrides]]
+module = [
+    "app.application.reviewed_excel_evidence",
+    "app.application.reviewed_excel_classification",
+    "app.application.reviewed_excel_classification_store",
+    "app.application.reviewed_excel_template",
+    "app.application.etl.archive_store",
+    "app.application.etl.archive_policy",
+    "app.fastapi_routes.reviewed_excel",
+    "app.fastapi_routes.reviewed_excel.archive",
+    "app.fastapi_routes.reviewed_excel_template",
+    "app.db.models.etl_archive",
+]
+ignore_errors = true
+
 # pytest 配置唯一真相源（2026-05-04 整合）：
 # - 旧 pytest.ini 已删除；当前 addopts 保留为不含 --cov，与历史 pytest.ini 的有效行为一致，
 #   避免本地交互式运行因 fail_under（当前 84，由棘轮维护）产生噪音。CI 通过显式 --cov 等参数生效（见

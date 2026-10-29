@@ -1,5 +1,5 @@
 {
-  "lines": 2364878,
+  "lines": 2364897,
   "updated": "2026-10-29",
-  "note": "2026-10-29 #2733 ruff format remaining ETL model/tests；不包含客户资料或密钥。"
+  "note": "2026-10-29 #2733 为 reviewed-excel/ETL archive 新模块增加限定 mypy ignore_errors 覆盖；不包含客户资料或密钥。"
 }
