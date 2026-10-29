@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 import httpx
-from sqlalchemy import desc, select
+from sqlalchemy import desc, select, true
 from sqlalchemy.orm import Session
 
 from app.db.models.im import ImCustomerServiceAutomationState, ImMessage
@@ -368,7 +368,7 @@ class EnterpriseCsAutomationService:
                 ImMessage.conversation_id == conversation_id,
                 ImMessage.origin == "system",
                 ImMessage.body == reply,
-                ImMessage.id > message_id if not report else True,
+                ImMessage.id > message_id if not report else true(),
             )
             .order_by(ImMessage.id.desc())
             .limit(1)
