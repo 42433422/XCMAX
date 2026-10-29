@@ -1,4 +1,4 @@
-# 历史凭据泄露事件处置与发布解锁手册
+# 历史凭据泄露事件处置与发布解锁手册（流程 SSOT）
 
 > 适用事件：`.github/security/credential-incidents.json` 中的 MIMO / QQ Bot / SMTP 三项历史事件。  
 > **当前状态：尚未完成供应商侧撤销、轮换及旧凭据拒绝验证。** 不得把本手册、PR、CI 通过、`accepted_risk` 或代码删除视为已完成处置。  
@@ -23,7 +23,7 @@
 
 ## 3. 旧凭据失效和服务恢复验收
 
-- 通过供应商后台的状态或授权运维在**受控环境**执行一次最小、无业务副作用的旧凭据认证尝试，并确认返回明确的认证拒绝（不是网络超时、服务不可用、参数错误或限流）。如果无法安全复测，保持未解决并请求供应商出具撤销证明。
+- 先核对供应商后台撤销状态，再由授权运维在**受控环境**执行一次最小、无业务副作用的旧凭据认证尝试，确认返回明确的认证拒绝（不是网络超时、服务不可用、参数错误或限流）。后台显示停用不能替代旧凭据拒绝验证；无法安全复测时保持未解决并请求供应商协助。
 - 独立验证新凭据与受影响业务功能正常；对异常费用、发送行为和访问日志作出明确结论或保留未查清项。
 - 逐个事件生成**不含敏感值的私有证据包**：操作者和独立复核者身份、服务商/账号的非敏感标识、撤销和轮换时间、旧凭据拒绝时间及结果、新凭据健康检查结果、最小化日志、变更/审批编号、证据 SHA-256；保留原始证据于限制访问的私有位置，公开仓库仅登记不可逆哈希与必要时间。
 - 如果发现异常使用、数据访问或费用，按安全事件流程扩大影响面核查；不能仅凭“Key 已换”就宣布不存在客户数据影响。
@@ -35,7 +35,7 @@
 - `status: resolved`；
 - `revoked_at`、`rotated_at`、`old_credential_rejected_at`：使用真实且带时区的操作/验证时间；
 - `required_actions` 至少含 `revoke`、`rotate`、`verify_old_credential_rejected`，并提供匹配的实际完成记录；
-- 独立 `reviewer`、`reviewed_at`、有边界的 `review_due` 与有效的 `resolution_evidence_sha256`。以 `FHD/scripts/security/normalize_security_report.py` 的 `_credential_resolution_is_valid` 当前契约为准，若证据不满足其校验就继续保持未解决。
+- `author` 为实际执行者，独立 `reviewer` 不得与其相同；填写 `reviewed_at`、有边界的 `review_due` 与有效的 `resolution_evidence_sha256`。撤销和轮换均须不晚于旧凭据拒绝验证，验证不晚于复核，复核不得在未来且复核期限未过。以 `FHD/scripts/security/normalize_security_report.py` 的 `_credential_resolution_is_valid` 当前契约为准，若证据不满足其校验就继续保持未解决。
 
 **禁止**：直接将 `accepted_risk` 改成 `resolved`、编造时间或哈希、填入新旧密钥正文、添加忽略/豁免规则、屏蔽扫描器或削弱发布门禁。
 
