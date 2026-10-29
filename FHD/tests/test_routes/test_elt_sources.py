@@ -66,12 +66,8 @@ def source_client(tmp_path, monkeypatch):
 
     def isolated_db():
         with factory() as db:
-            try:
-                yield db
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
+            yield db
+            db.commit()
 
     app.dependency_overrides[get_db_dependency] = isolated_db
     app.include_router(elt.router)
