@@ -41,24 +41,25 @@ class PreviewWorkerMixin:
     def _submit_preview(
         self, run_id: str, tenant_id: int, owner_user_id: int, *, operation_token: str | None = None
     ) -> None:
-        with _facade().SUBMITTED_LOCK:
-            if run_id in _facade().SUBMITTED and operation_token is None:
+        facade = _facade()
+        with facade.SUBMITTED_LOCK:
+            if run_id in facade.SUBMITTED and operation_token is None:
                 return
-            _facade().SUBMITTED.add(run_id)
+            facade.SUBMITTED.add(run_id)
 
         def work() -> None:
             try:
                 with tenant_scope(tenant_id):
                     self._preview_worker(run_id, owner_user_id, operation_token=operation_token)
             finally:
-                with _facade().SUBMITTED_LOCK:
-                    _facade().SUBMITTED.discard(run_id)
+                with facade.SUBMITTED_LOCK:
+                    facade.SUBMITTED.discard(run_id)
 
         try:
-            _facade().EXECUTOR.submit(work)
+            facade.EXECUTOR.submit(work)
         except RECOVERABLE_ERRORS:
-            with _facade().SUBMITTED_LOCK:
-                _facade().SUBMITTED.discard(run_id)
+            with facade.SUBMITTED_LOCK:
+                facade.SUBMITTED.discard(run_id)
             raise
 
     def _preview_worker(

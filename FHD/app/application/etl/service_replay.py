@@ -82,7 +82,9 @@ class ReplayServiceMixin:
             ),
         )
         db.add(run)
-        self._persist_source_snapshot(db, run, dataset)
+        self._persist_source_snapshot(
+            db, run, dataset, source_expires_at=details["source_snapshot"]["expires_at"]
+        )
         try:
             self._submit_preview(run.id, tenant_id_for_write(), owner_user_id)
         except RECOVERABLE_ERRORS as exc:

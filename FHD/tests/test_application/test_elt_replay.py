@@ -217,3 +217,58 @@ def test_replay_route_uses_execute_permission_and_returns_accepted(monkeypatch):
     replay.reset_mock()
     assert client.post("/api/etl/runs/source/replay").status_code == 403
     replay.assert_not_called()
+
+
+def test_replay_chain_cannot_extend_original_snapshot_retention(replay_store, monkeypatch):
+    from app.application.etl import service_source
+
+    store = replay_store
+    original_time = datetime.now(UTC) - timedelta(days=89)
+    store.source.created_at = original_time
+    summary = load_json(store.source.summary_json, {})
+    expiry = (original_time + timedelta(days=90)).isoformat()
+    summary["source_snapshot"]["expires_at"] = expiry
+    store.source.summary_json = dump_json(summary)
+    store.db.commit()
+    first = store.service.replay(store.db, run_id="source", owner_user_id=7)
+    second = store.service.replay(store.db, run_id=first["id"], owner_user_id=7)
+    assert first["details"]["source_snapshot"]["expires_at"] == expiry
+    assert second["details"]["source_snapshot"]["expires_at"] == expiry
+    monkeypatch.setattr(service_source, "utcnow", lambda: datetime.now(UTC) + timedelta(days=2))
+    before = store.db.query(EtlRun).count()
+    for run_id in ("source", first["id"], second["id"]):
+        with pytest.raises(EtlError) as error:
+            store.service.replay(store.db, run_id=run_id, owner_user_id=7)
+        assert error.value.code == "ETL_SOURCE_SNAPSHOT_INVALID"
+    assert store.db.query(EtlRun).count() == before
+    assert store.db.query(PurchaseUnit).count() == 0
+
+
+@pytest.mark.parametrize(
+    "expiry", [None, "not-a-time", "2030-01-01T00:00:00", "2100-01-01T00:00:00+00:00"]
+)
+def test_replay_rejects_missing_or_invalid_retention_proof(replay_store, expiry):
+    store = replay_store
+    summary = load_json(store.source.summary_json, {})
+    summary["source_snapshot"]["expires_at"] = expiry
+    store.source.summary_json = dump_json(summary)
+    store.db.commit()
+    with pytest.raises(EtlError) as error:
+        store.service.replay(store.db, run_id="source", owner_user_id=7)
+    assert error.value.code == "ETL_SOURCE_SNAPSHOT_INVALID"
+    assert store.db.query(EtlRun).count() == 1
+
+
+@pytest.mark.parametrize("blocked", ["active_owner", "outcome_unknown"])
+def test_replay_does_not_reissue_active_or_uncertain_writes(replay_store, blocked):
+    store = replay_store
+    if blocked == "active_owner":
+        store.source.operation_token = "active-worker"
+    else:
+        store.source.status = "outcome_unknown"
+    store.db.commit()
+    with pytest.raises(EtlError) as error:
+        store.service.replay(store.db, run_id="source", owner_user_id=7)
+    assert error.value.code == "ETL_RUN_BUSY"
+    assert store.db.query(EtlRun).count() == 1
+    assert store.db.query(PurchaseUnit).count() == 0

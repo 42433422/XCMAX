@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.orm import Session
@@ -45,6 +45,22 @@ class SourceServiceMixin:
         manifest = summary.get("source_snapshot")
         if manifest is None:
             return None  # Historical previews keep their original compatibility path.
+        try:
+            expires_at = datetime.fromisoformat(manifest["expires_at"])
+            created_at = run.created_at or utcnow()
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=UTC)
+            if (
+                expires_at.tzinfo is None
+                or expires_at > created_at + timedelta(days=90)
+                or expires_at <= utcnow()
+            ):
+                raise ValueError("snapshot expiry")
+        except (KeyError, TypeError, ValueError):
+            raise EtlConflict(
+                "ETL_SOURCE_SNAPSHOT_INVALID",
+                "原始数据快照期限无效或已过期，请重新上传；已停止转换和写入",
+            ) from None
         rows = (
             db.query(EtlRunRow)
             .filter(
@@ -92,7 +108,14 @@ class SourceServiceMixin:
             warnings=summary.get("warnings", []),
         )
 
-    def _persist_source_snapshot(self, db: Session, run: EtlRun, dataset: ParsedDataset) -> None:
+    def _persist_source_snapshot(
+        self,
+        db: Session,
+        run: EtlRun,
+        dataset: ParsedDataset,
+        *,
+        source_expires_at: str | None = None,
+    ) -> None:
         if self._load_source_snapshot(db, run) is not None:
             raise EtlConflict("ETL_SOURCE_SNAPSHOT_EXISTS", "原始数据快照不可覆盖，请新建处理任务")
         if len(dataset.rows) > MAX_ROWS:
@@ -118,6 +141,9 @@ class SourceServiceMixin:
             )
             if index % 500 == 0:
                 db.flush()
+        created_at = run.created_at or utcnow()
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
         summary = load_json(run.summary_json, {})
         summary.update(
             {
@@ -132,6 +158,8 @@ class SourceServiceMixin:
                     "profile": self._source_profile(run),
                     "requires_original": run.target_type in {"knowledge", "attendance"},
                     "loaded_at": utcnow().isoformat(),
+                    "expires_at": source_expires_at
+                    or (created_at + timedelta(days=90)).isoformat(),
                 },
             }
         )
