@@ -73,15 +73,18 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
             session.query(ranked).filter(ranked.c.position <= 10).order_by(ranked.c.position)
         ):
             metrics_by_employee[item.employee_id].append(item)
-        pending_by_employee = dict(
-            session.query(EmployeeChangeRequest.source_employee_id, func.count())
-            .filter(
-                EmployeeChangeRequest.source_employee_id.in_(employee_ids),
-                EmployeeChangeRequest.status == "pending",
+        pending_by_employee: dict[str, int] = {
+            str(employee_id): int(count)
+            for employee_id, count in (
+                session.query(EmployeeChangeRequest.source_employee_id, func.count())
+                .filter(
+                    EmployeeChangeRequest.source_employee_id.in_(employee_ids),
+                    EmployeeChangeRequest.status == "pending",
+                )
+                .group_by(EmployeeChangeRequest.source_employee_id)
+                .all()
             )
-            .group_by(EmployeeChangeRequest.source_employee_id)
-            .all()
-        )
+        }
         result: List[Dict[str, Any]] = []
         for emp in employees:
             eid = str(emp.pkg_id or "")

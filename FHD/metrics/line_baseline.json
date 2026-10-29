@@ -1,5 +1,5 @@
 {
-  "lines": 2382989,
+  "lines": 2382992,
   "updated": "2026-10-29",
-  "note": "Authorized 13-PR closeout retains required ELT, lifecycle, performance and audit code/tests. Modstore Black formatting removes 19 lines; registering the new performance evidence validator in the existing dev inventory adds one maintained line. No validation gate weakened."
+  "note": "Authorized 13-PR closeout preserves required ELT, frontend, performance and audit implementation/tests; includes registered evidence validator, pinned Modstore formatting and explicitly typed SQLAlchemy Row conversion. No threshold or assertion weakened."
 }
