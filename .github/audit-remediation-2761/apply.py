@@ -47,8 +47,27 @@ def main() -> None:
     patch_path = ROOT / '.git/audit-remediation.patch'
     patch_path.write_bytes(patch)
     selected = tuple('--include=' + path for path in manifest)
-    run('git', 'apply', '--check', '--3way', '--index', *selected, str(patch_path))
-    run('git', 'apply', '--3way', '--index', *selected, str(patch_path))
+    applied = subprocess.run(
+        ('git', 'apply', '--3way', '--index', *selected, str(patch_path)),
+        cwd=ROOT, text=True, capture_output=True, check=False,
+    )
+    print(applied.stdout, end='')
+    print(applied.stderr, file=sys.stderr, end='')
+    if applied.returncode:
+        # Only the independently developed A07 regression file may conflict.
+        # Preserve its original assertions in the separate length-zero module.
+        conflict = 'FHD/tests/test_etl_validation_value_fidelity.py'
+        unmerged = run('git', 'diff', '--name-only', '--diff-filter=U').splitlines()
+        if unmerged != [conflict]:
+            raise SystemExit(f'Unexpected reviewed patch conflicts: {unmerged}')
+        stage3 = run('git', 'rev-parse', ':3:' + conflict)
+        if stage3 != manifest[conflict]:
+            raise SystemExit('Reviewed patch target hash mismatch for A07 conflict')
+        run('git', 'checkout', '--theirs', '--', conflict)
+        run('git', 'add', '--', conflict)
+    if run('git', 'ls-files', '-u'):
+        raise SystemExit('Unresolved merge stages remain')
+
     changed = set(run('git', 'diff', '--cached', '--name-only', '-z').split('\0')) - {''}
     if changed != set(manifest):
         raise SystemExit('Unexpected staged paths')
