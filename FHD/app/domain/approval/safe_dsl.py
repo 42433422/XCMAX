@@ -15,8 +15,10 @@ DO NOT use this for complex business logic that requires external function calls
 """
 
 import ast
+import io
 import logging
 import operator
+import tokenize
 from collections.abc import Callable
 from typing import Any
 
@@ -41,6 +43,8 @@ ALLOWED_NODES = {
     ast.And,
     ast.Or,
     ast.Not,
+    ast.UAdd,
+    ast.USub,
     ast.Eq,
     ast.NotEq,
     ast.Lt,
@@ -75,6 +79,8 @@ OPERATORS: dict[type[Any], Callable[..., Any]] = {
     ast.And: lambda a, b: a and b,
     ast.Or: lambda a, b: a or b,
     ast.Not: operator.not_,
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
 }
 
 # Whitelisted variable names that can be used in conditions
@@ -97,6 +103,23 @@ ALLOWED_VARIABLES = {
     "false",
     "null",
 }
+
+
+def _parse_condition(expression: str) -> ast.Expression:
+    """Normalize documented operators without rewriting quoted string values."""
+    aliases = {"AND": "and", "OR": "or", "NOT": "not"}
+    try:
+        tokens = []
+        for token in tokenize.generate_tokens(io.StringIO(expression).readline):
+            value = token.string
+            if token.type == tokenize.NAME:
+                value = aliases.get(value, value)
+            elif token.type == tokenize.OP and value == "=":
+                value = "=="
+            tokens.append((token.type, value))
+        return ast.parse(tokenize.untokenize(tokens), mode="eval")
+    except (SyntaxError, tokenize.TokenError) as exc:
+        raise SafeEvaluationError("Invalid condition syntax") from exc
 
 
 class SafeExpressionEvaluator:
@@ -133,7 +156,7 @@ class SafeExpressionEvaluator:
 
         try:
             # Parse the expression to AST
-            tree = ast.parse(expression, mode="eval")
+            tree = _parse_condition(expression)
 
             # Validate the AST for safety
             self._validate_ast(tree)
@@ -207,7 +230,7 @@ class SafeExpressionEvaluator:
             return True
 
         elif isinstance(node, ast.BoolOp):
-            values = [self._eval_node(value) for value in node.values]
+            values = (self._eval_node(value) for value in node.values)
             if isinstance(node.op, ast.And):
                 return all(values)
             elif isinstance(node.op, ast.Or):
