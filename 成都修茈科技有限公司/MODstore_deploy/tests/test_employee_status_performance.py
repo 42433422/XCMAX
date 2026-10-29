@@ -26,9 +26,7 @@ def test_employee_summary_uses_three_queries_and_latest_ten_window(
     with Session(engine) as db:
         for number in range(employee_count):
             eid = f"employee-{number:03}"
-            db.add(
-                CatalogItem(pkg_id=eid, version="1", name=eid, artifact="employee_pack")
-            )
+            db.add(CatalogItem(pkg_id=eid, version="1", name=eid, artifact="employee_pack"))
             for position in range(12):
                 db.add(
                     EmployeeExecutionMetric(
@@ -50,15 +48,9 @@ def test_employee_summary_uses_three_queries_and_latest_ten_window(
             )
             for status in ("pending", "pending", "applied"):
                 db.add(
-                    EmployeeChangeRequest(
-                        source_employee_id=eid, change_kind="test", status=status
-                    )
+                    EmployeeChangeRequest(source_employee_id=eid, change_kind="test", status=status)
                 )
-        db.add(
-            CatalogItem(
-                pkg_id="not-an-employee", version="1", name="mod", artifact="mod"
-            )
-        )
+        db.add(CatalogItem(pkg_id="not-an-employee", version="1", name="mod", artifact="mod"))
         db.commit()
     statements = []
 
@@ -74,10 +66,7 @@ def test_employee_summary_uses_three_queries_and_latest_ten_window(
         for number, employee in enumerate(result):
             assert employee["employee_id"] == f"employee-{number:03}"
             assert employee["runs_7d"] == 10 and employee["success_7d"] == 7
-            assert (
-                employee["pending_change_requests"] == 2
-                and employee["health"] == "degraded"
-            )
+            assert employee["pending_change_requests"] == 2 and employee["health"] == "degraded"
             assert employee["last_execution"]["duration_ms"] == 11
             assert len(employee["last_execution"]["task"]) == 200
     finally:

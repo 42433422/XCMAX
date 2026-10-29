@@ -70,9 +70,7 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
         )
         metrics_by_employee = defaultdict(list)
         for item in (
-            session.query(ranked)
-            .filter(ranked.c.position <= 10)
-            .order_by(ranked.c.position)
+            session.query(ranked).filter(ranked.c.position <= 10).order_by(ranked.c.position)
         ):
             metrics_by_employee[item.employee_id].append(item)
         pending_by_employee = dict(
@@ -101,9 +99,7 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
                 }
 
             total_runs_7d = len(recent_metrics)
-            success_runs_7d = sum(
-                1 for m in recent_metrics if (m.status or "") == "success"
-            )
+            success_runs_7d = sum(1 for m in recent_metrics if (m.status or "") == "success")
 
             result.append(
                 {
@@ -117,11 +113,7 @@ def _employee_status_summary() -> List[Dict[str, Any]]:
                     "health": (
                         "healthy"
                         if total_runs_7d == 0
-                        else (
-                            "healthy"
-                            if success_runs_7d / total_runs_7d >= 0.8
-                            else "degraded"
-                        )
+                        else ("healthy" if success_runs_7d / total_runs_7d >= 0.8 else "degraded")
                     ),
                 }
             )

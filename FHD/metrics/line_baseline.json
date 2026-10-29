@@ -1,5 +1,5 @@
 {
-  "lines": 2383007,
+  "lines": 2382988,
   "updated": "2026-10-29",
-  "note": "Integrate authorized PR closeout #2740 and #2749-#2760: preserve ELT source archive, frontend lifecycle and UX repairs, performance ledger and paging, audit validators and regression coverage; deduplicate shared changelog entries rather than deleting required behavior or tests."
+  "note": "Integrate authorized PR closeout #2740 and #2749-#2760: preserve ELT source archive, frontend lifecycle and UX repairs, performance ledger and paging, audit validators and regression coverage; deduplicate shared changelog entries rather than deleting required behavior or tests. Modstore Black 26.10.1 formatting removes 19 additional lines; final measured baseline 2382988."
 }
