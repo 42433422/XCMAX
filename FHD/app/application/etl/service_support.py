@@ -152,7 +152,7 @@ def apply_validation_rules(
                 failed = True
         elif op in {"min_length", "max_length"}:
             try:
-                actual_length = len(str(value or ""))
+                actual_length = len("" if value is None else str(value))
                 expected_length = int(expected or 0)
                 failed = (
                     actual_length < expected_length

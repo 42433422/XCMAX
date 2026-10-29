@@ -6,16 +6,21 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from vibe_coding.operational_errors import BOUNDARY_ERRORS
 
-from ..sandbox import SandboxDriver, SandboxPolicy, SubprocessSandboxDriver
+if TYPE_CHECKING:
+    from ..sandbox import SandboxDriver, SandboxPolicy
 
 
 @dataclass(slots=True)
 class ToolReport:
-    """Outcome of running one tool against a workspace."""
+    """Outcome of running one tool against a workspace.
+
+    An unavailable tool is not an executed failure and must never be a pass.
+    Keep ``passed`` for existing consumers, with an explicit execution state.
+    """
 
     tool: str
     passed: bool
@@ -25,6 +30,17 @@ class ToolReport:
     exit_code: int = 0
     duration_ms: float = 0.0
     error: str = ""
+    executed: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.executed:
+            self.passed = False
+
+    @property
+    def status(self) -> str:
+        if not self.executed:
+            return "UNAVAILABLE"
+        return "PASS" if self.passed else "FAIL"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -36,6 +52,8 @@ class ToolReport:
             "exit_code": self.exit_code,
             "duration_ms": self.duration_ms,
             "error": self.error,
+            "executed": self.executed,
+            "status": self.status,
         }
 
 
@@ -61,11 +79,9 @@ class ToolAdapter(Protocol):
 
 
 class ToolRunner:
-    """Run a collection of :class:`ToolAdapter` instances sequentially.
+    """Run configured verification tools; none may silently count as passed.
 
-    ``fail_fast=True`` stops after the first failing tool (default ``False``
-    so all diagnostics are collected in one pass — useful for the
-    ``heal_project`` loop that needs the full picture to compose a repair).
+    ``fail_fast=True`` stops after the first failure or unavailable tool.
     """
 
     def __init__(
@@ -76,41 +92,60 @@ class ToolRunner:
         policy: SandboxPolicy | None = None,
         fail_fast: bool = False,
     ) -> None:
-        self.adapters: list[ToolAdapter] = list(adapters or _default_adapters())
-        self.sandbox: SandboxDriver = sandbox or SubprocessSandboxDriver()
+        self.adapters: list[ToolAdapter] = list(
+            _default_adapters() if adapters is None else adapters
+        )
+        if sandbox is None:
+            from ..sandbox import SubprocessSandboxDriver
+
+            sandbox = SubprocessSandboxDriver()
+        self.sandbox: SandboxDriver = sandbox
         self.policy: SandboxPolicy | None = policy
         self.fail_fast = fail_fast
 
     def run_all(self, root: str | Path) -> list[ToolReport]:
         root = Path(root)
         reports: list[ToolReport] = []
+        if not self.adapters:
+            return [ToolReport(
+                tool="verification", passed=False, executed=False, exit_code=-1,
+                error="no verification adapters configured",
+            )]
         for adapter in self.adapters:
-            if not adapter.is_available():
-                reports.append(
-                    ToolReport(
-                        tool=adapter.name,
-                        passed=True,
-                        error=f"{adapter.name} not available; skipped",
-                    )
-                )
-                continue
             t0 = time.perf_counter()
+            executed = False
             try:
-                report = adapter.run(root, sandbox=self.sandbox, policy=self.policy)
+                if not adapter.is_available():
+                    report = ToolReport(
+                        tool=adapter.name,
+                        passed=False,
+                        executed=False,
+                        exit_code=-1,
+                        error=f"{adapter.name} not available; verification not executed",
+                    )
+                else:
+                    executed = True
+                    report = adapter.run(root, sandbox=self.sandbox, policy=self.policy)
             except BOUNDARY_ERRORS as exc:
                 report = ToolReport(
                     tool=adapter.name,
                     passed=False,
+                    executed=executed,
+                    exit_code=-1,
                     error=f"{type(exc).__name__}: {exc}",
                     duration_ms=round((time.perf_counter() - t0) * 1000, 3),
                 )
+            # A custom adapter cannot turn an explicit non-execution into pass.
+            if not report.executed:
+                report.passed = False
             reports.append(report)
             if self.fail_fast and not report.passed:
                 break
         return reports
 
     def all_passed(self, root: str | Path) -> bool:
-        return all(r.passed for r in self.run_all(root))
+        reports = self.run_all(root)
+        return bool(reports) and all(r.executed and r.passed for r in reports)
 
 
 def _default_adapters() -> list[ToolAdapter]:
