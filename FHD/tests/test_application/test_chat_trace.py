@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -8,6 +7,7 @@ import pytest
 
 from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
 from app.application.agent_orchestrator.run_repository import InMemoryAgentRunRepository
+from app.infrastructure.billing import model_usage
 
 
 @pytest.fixture(autouse=True)
@@ -136,7 +136,8 @@ def test_attach_chat_trace_run_records_llm_calls(tmp_path, monkeypatch) -> None:
         "billing.recorded",
         "run.completed",
     ]
-    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    assert model_usage.model_usage_database_path().is_file()
+    ledger = model_usage._load_usage_state()
     assert ledger["summary"]["entry_count"] == 1
     assert ledger["summary"]["cost_units_total"] == 1
     assert ledger["entries"][0]["run_id"] == run.run_id
