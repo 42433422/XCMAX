@@ -13,6 +13,7 @@ vi.mock('@/api', async () => ({ ApiError: (await import('@/api/core')).ApiError 
 vi.mock('@/api/marketAccount', () => ({
  LS_MARKET_REFRESH_TOKEN: 'test-market-refresh', LS_MARKET_ACCESS_TOKEN: 'test-market-token', LS_MARKET_USER_JSON: 'test-market-user',
  applyMarketTokensAfterFhdLogin: vi.fn().mockResolvedValue(undefined),
+ clearMarketCredentials: vi.fn(),
 }))
 vi.mock('@/utils/platformShellApi', () => ({ clearDeliverableStatusCache: vi.fn() }))
 vi.mock('@/utils/hostPackOnboardingGate', () => ({ clearHostPackSkippedSession: vi.fn() }))

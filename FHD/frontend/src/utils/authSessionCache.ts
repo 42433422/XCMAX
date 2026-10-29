@@ -1,10 +1,23 @@
 import { authApi } from '@/api/auth'
+import { ref } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 
 let cachedValid: boolean | null = null
 let cachedAt = 0
-let cacheEpoch = 0
+const cacheEpoch = ref(0)
 let validationInFlight: Promise<boolean> | null = null
 let desktopBootstrapSessionHint: boolean | null = null
+
+/** Retire work across logout/relogin as well as A -> B -> A workspace changes. */
+export function captureAuthSession(): () => boolean {
+  const session = cacheEpoch.value
+  const account = productReadAccountEpoch.value
+  return () => session === cacheEpoch.value && account === productReadAccountEpoch.value
+}
+
+export function getAuthSessionEpoch(): number {
+  return cacheEpoch.value
+}
 /** 企业版会话校验缓存：减少侧栏频繁切换时重复打 /api/auth/session/validate */
 const SESSION_TTL_MS = 5 * 60_000
 /**
@@ -101,7 +114,7 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
     return cachedValid
   }
   if (validationInFlight) return validationInFlight
-  const requestEpoch = cacheEpoch
+  const requestEpoch = cacheEpoch.value
   const pending = (async () => {
     let valid: boolean
     try { valid = readValid(await authApi.validateSession()) }
@@ -110,7 +123,7 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
       if (status !== 401 && status !== 403) throw error
       valid = false
     }
-    if (requestEpoch !== cacheEpoch) {
+    if (requestEpoch !== cacheEpoch.value) {
       return cachedValid === true
     }
     cachedValid = valid
@@ -128,7 +141,7 @@ export async function validateEnterpriseSessionCached(force = false): Promise<bo
 }
 
 export function invalidateEnterpriseSessionCache(): void {
-  cacheEpoch += 1
+  cacheEpoch.value += 1
   validationInFlight = null
   cachedValid = null
   cachedAt = 0
@@ -138,7 +151,7 @@ export function invalidateEnterpriseSessionCache(): void {
 
 /** Login just established the cookie; avoid an immediate blocking validate round-trip. */
 export function markEnterpriseSessionValid(): void {
-  cacheEpoch += 1
+  cacheEpoch.value += 1
   validationInFlight = null
   cachedValid = true
   cachedAt = Date.now()
