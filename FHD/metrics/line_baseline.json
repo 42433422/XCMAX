@@ -1,5 +1,5 @@
 {
-  "lines": 2374026,
+  "lines": 2383084,
   "updated": "2026-10-29",
-  "note": "PR#2761：用户要求审计问题全量整改；本批新增事务履约、回调验签、并发领取与负向回归，维护行数2373341→2374026（净增685）。按仓库显式例外提交评审，不删除无关代码凑数，不修改测试或安全门槛；剩余审计项未关闭。"
+  "note": "Authorized 13-PR closeout includes validated fixture/isolation fixes, cold non-catalog tool startup regression, preserved catalog claims and safe IM error responses. Adds required regression tests and current-main metrics without disabling contracts, deadlines or security checks."
 }

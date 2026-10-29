@@ -195,10 +195,16 @@ class AIConversationService(
         # 实际 token 预算裁剪由 ContextWindowManager 在 call_llm_api 内统一处理
         history_max = _resolve_history_max()
         if len(context.conversation_history) > history_max:
+            removed = len(context.conversation_history) - history_max
             context.conversation_history = context.conversation_history[-history_max:]
-            # 更新摘要覆盖索引：被裁剪的老消息不再可用，summary_covered_until 重置
-            context.summary_covered_until = -1
-            context.summary = None
+            context.summary_covered_until = max(-1, context.summary_covered_until - removed)
+            from app.application.agent_orchestrator.context_window_manager import (
+                summary_fingerprint,
+            )
+
+            context.summary_fingerprint = summary_fingerprint(
+                context.conversation_history[: context.summary_covered_until + 1]
+            )
 
         # 刷新 token 估算缓存
         context.estimate_history_tokens()

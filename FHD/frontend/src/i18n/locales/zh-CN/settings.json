@@ -1,5 +1,11 @@
 {
   "settings": {
+    "persyReadRetry": "人设资料暂时无法更新。下方如有资料，为上次成功读取的内容；请点击刷新重试。",
+    "itemSaved": "{item}：已保存",
+    "itemSaveFailed": "{item}：保存失败，请重试",
+    "preferencesNotSubmitted": "AI 模式与助手名称尚未提交；请先重试部署设置。",
+    "partialSaveRetry": "部分设置保存失败。已成功的设置会保留，重试只提交尚未完成或已修改的项目。",
+    "retryIncompleteSettings": "重试未完成设置",
     "pageTitle": "系统设置",
     "profileAria": "账号",
     "changeAvatar": "点击更换头像",

@@ -213,7 +213,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { showHistoryPanel, historySessions, historyError } = makeHistory(deps)
       await showHistoryPanel()
       expect(historySessions.value.length).toBe(1)
-      expect(historyError.value).toBe('') // local fallback exists, error suppressed
+      expect(historyError.value).toBe('Network error') // cached history remains usable, but the failed sync is visible
     })
 
     it('shows error message when API throws and no local fallback', async () => {
@@ -321,7 +321,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { loadSession, refreshHistorySessions, historySessions } = makeHistory(deps)
       await loadSession('sale')
       expect(mocks.loadMessages.mock.calls[0][0]).toEqual([
-        local[0], expect.objectContaining({ role: 'ai', time: '20:35', approvalCard: local[1].approvalCard }),
+        local[0], expect.objectContaining({ role: 'ai', time: '20:35', approvalCard: expect.objectContaining(local[1].approvalCard) }),
         local[2], expect.objectContaining({ content: expect.stringContaining('订单SO1') }),
       ])
       await refreshHistorySessions()
@@ -569,7 +569,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { deps } = makeDeps()
       const { clearHistorySessions, historyError } = makeHistory(deps)
       await clearHistorySessions()
-      expect(historyError.value).toBe('清空历史失败，请稍后重试')
+      expect(historyError.value).toBe('清空历史失败，本机记录已保留，请稍后重试')
     })
 
     it('sets historyLoading to false in finally block', async () => {
@@ -586,6 +586,34 @@ describe('useChatSessionHistory — coverage ramp', () => {
       const { clearHistorySessions } = makeHistory(deps)
       await clearHistorySessions()
       expect(chatApiMock.clearConversations).toHaveBeenCalledWith({ user_id: 'default' })
+    })
+
+    it('preserves both local cache and visible sessions until a successful remote receipt', async () => {
+      let resolve!: (value: unknown) => void
+      chatApiMock.clearConversations.mockReturnValue(new Promise(r => { resolve = r }))
+      const { deps } = makeDeps()
+      const history = makeHistory(deps)
+      const original = [{ session_id: 's1', title: 'preserved' }]
+      history.historySessions.value = original
+      localStorage.setItem('xcagi_chat_messages_s1', 'original')
+      const clearing = history.clearHistorySessions()
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toBe('original')
+      resolve({ success: false, message: 'remote refused' })
+      await clearing
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toBe('original')
+      expect(history.historySessions.value).toEqual(original)
+      expect(history.historyError.value).toBe('remote refused')
+    })
+
+    it('reports remote success and local failure as a partial clear', async () => {
+      chatApiMock.clearConversations.mockResolvedValue({ success: true })
+      localStorage.setItem('xcagi_chat_messages_s1', JSON.stringify([{ role: 'user', content: 'retained' }]))
+      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => { throw new Error('storage denied') })
+      const history = makeHistory(makeDeps().deps)
+      await history.clearHistorySessions()
+      expect(history.historyError.value).toContain('服务端历史已清空，本机缓存清理未完成')
+      expect(localStorage.getItem('xcagi_chat_messages_s1')).toContain('retained')
+      expect(history.historySessions.value.some(item => item.session_id === 's1')).toBe(true)
     })
   })
 
@@ -903,6 +931,61 @@ describe('useChatSessionHistory — coverage ramp', () => {
     expect(deps.clearMessages).toHaveBeenCalledTimes(cleared + 1)
     expect(onIdentityChange).toHaveBeenCalledTimes(identityChanges + 1)
     expect(deps.taskList.value).toEqual([])
+  })
+
+  it('loads the twenty-first to twenty-fifth server conversations on an empty device', async () => {
+    const sessions = Array.from({ length: 25 }, (_, index) => ({ session_id: `server-${index}`, title: `会话${index}` }))
+    chatApiMock.getConversations.mockImplementation(async ({ limit, offset }) => ({
+      success: true, sessions: sessions.slice(offset, offset + limit), has_more: offset + limit < sessions.length,
+      next_offset: Math.min(sessions.length, offset + limit),
+    }))
+    const history = makeHistory(makeDeps().deps)
+    await history.refreshHistorySessions()
+    expect(history.historySessions.value).toHaveLength(20)
+    expect(history.historyHasMore.value).toBe(true)
+    await history.loadMoreHistorySessions()
+    expect(history.historySessions.value).toHaveLength(25)
+    expect(history.historySessions.value.map(row => row.session_id)).toContain('server-24')
+    expect(history.historyHasMore.value).toBe(false)
+    expect(chatApiMock.getConversations).toHaveBeenLastCalledWith({ limit: 20, offset: 20 })
+  })
+
+  it.each(['message-b', ''])('keeps the first repeated message retryable when the server only saved the second (client id=%s)', async clientId => {
+    const body = { role: 'user', content: '相同消息', time: '12:00' }
+    localStorage.setItem('xcagi_chat_messages_repeat', JSON.stringify([
+      { ...body, persistence: { id: 'message-a', status: clientId ? 'failed' : 'saving', request: { role: 'user', content: '相同消息' } } },
+      { ...body, persistence: { id: 'message-b', status: 'saved' } },
+    ]))
+    chatApiMock.getConversation.mockResolvedValueOnce({ success: true, messages: [
+      { ...body, id: 2, metadata: JSON.stringify({ client_message_id: clientId }) },
+    ] })
+    const { deps, mocks } = makeDeps()
+    await makeHistory(deps).loadSession('repeat')
+    const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
+    expect(loaded).toHaveLength(2)
+    expect(loaded[0].persistence).toMatchObject({ id: 'message-a', status: 'failed', request: { content: '相同消息' } })
+    expect(loaded[1].persistence).toMatchObject({ id: clientId || 'server:2', status: 'saved' })
+  })
+
+  it('retains loaded pages on failure and discards a late page after an owner switch', async () => {
+    const first = [{ session_id: 'owner-a-page-one' }]
+    chatApiMock.getConversations.mockResolvedValueOnce({ success: true, sessions: first, next_offset: 20, has_more: true })
+    const history = makeHistory(makeDeps().deps)
+    history.registerHistoryModWatch(async () => {})
+    await history.refreshHistorySessions()
+    chatApiMock.getConversations.mockRejectedValueOnce(new Error('503'))
+    await history.loadMoreHistorySessions()
+    expect(history.historySessions.value[0].session_id).toBe('owner-a-page-one')
+    expect(history.historyError.value).toBe('503')
+    let resolve!: (value: unknown) => void
+    chatApiMock.getConversations.mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = history.loadMoreHistorySessions()
+    setRuntimeTenantStorageScopeInput({ tenantId: 9, localUserId: 2 })
+    resolve({ success: true, sessions: [{ session_id: 'owner-a-secret' }], next_offset: 21, has_more: false })
+    await pending
+    expect(history.historySessions.value).toEqual([])
+    expect(history.historyHasMore.value).toBe(false)
+    expect(history.historyLoadingMore.value).toBe(false)
   })
 
 })

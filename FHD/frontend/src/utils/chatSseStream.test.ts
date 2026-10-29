@@ -71,10 +71,20 @@ describe('chatSseStream', () => {
   it('ignores non-data lines and empty payloads in the stream', async () => {
     const events: string[] = []
     await readPlannerSseResponse(
-      mockSseResponse(['event: message\nid: 1\n\n', 'data:\n\n', 'data: {"type":"token","text":"x"}\n\n']),
+      mockSseResponse(['event: message\nid: 1\n\n', 'data:\n\n', 'data: {"type":"token","text":"x"}\n\n', 'data: {"type":"done"}\n\n']),
       (ev) => events.push(ev.type),
     )
-    expect(events).toEqual(['token'])
+    expect(events).toEqual(['token', 'done'])
+  })
+
+  it.each([
+    { chunks: [] },
+    { chunks: ['data: {"type":"token","text":"partial"}\n\n'] },
+    { chunks: ['data: {"type":"done"}\n\ndata: {"type":"tool_progress","run_id":"run-pending"}\n\n'] },
+  ])('rejects EOF without a final completion receipt: $chunks', async ({ chunks }) => {
+    const response = mockSseResponse(chunks)
+    await expect(readPlannerSseResponse(response, vi.fn())).rejects.toMatchObject({ name: 'IncompletePlannerSseError' })
+    expect(response.body?.locked).toBe(false)
   })
 
   it('ignores malformed JSON payloads', async () => {
@@ -95,6 +105,12 @@ describe('chatSseStream', () => {
     const events: Array<{ type: string; message?: string }> = []
     await readPlannerSseResponse(mockSseResponse(['data: {"type":"error","message":"boom"}\n\n']), (ev) => events.push(ev))
     expect(events[0]).toMatchObject({ type: 'error', message: 'boom' })
+  })
+
+  it('accepts an explicit authorization pause as the backend terminal receipt', async () => {
+    const onEvent = vi.fn()
+    await readPlannerSseResponse(mockSseResponse(['data: {"type":"requires_token","token_name":"DB_WRITE"}\n\n']), onEvent)
+    expect(onEvent).toHaveBeenCalledWith({ type: 'requires_token', token_name: 'DB_WRITE' })
   })
 
   it('returns on iteration failure without EOF or waiting for cancellation', async () => {

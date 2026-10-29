@@ -76,6 +76,32 @@ class FixtureExecutor(AgentToolExecutor):
         return {"success": True, "tenant": runtime_context.get("tenant_id"), "pid": os.getpid()}
 
 
+def test_non_catalog_worker_handoff_does_not_import_business_runtime():
+    # A fresh interpreter catches cold imports hidden by the rest of this suite.
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import sys
+from types import SimpleNamespace
+from app.application.agent_orchestrator.catalog_product_worker import (
+    capture_catalog_worker_profile, restore_catalog_claim, restore_catalog_worker_profile,
+)
+assert capture_catalog_worker_profile(SimpleNamespace(tool_id="fixture")) is None
+restore_catalog_worker_profile(None)
+with restore_catalog_claim(None):
+    pass
+assert "app.mod_sdk.catalog_product_store" not in sys.modules
+assert "app.application.agent_orchestrator.run_sql_repository" not in sys.modules
+assert "app.db.models" not in sys.modules
+""",
+        ],
+        check=True,
+        timeout=5,
+    )
+
+
 @pytest.mark.parametrize("budget", [2, 8])
 def test_real_adapter_reaps_hung_tool_and_child_then_reuses_executor(tmp_path, budget):
     executor = FixtureExecutor()

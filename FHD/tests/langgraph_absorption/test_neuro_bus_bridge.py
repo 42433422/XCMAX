@@ -26,9 +26,9 @@ from app.infrastructure.workflow.neuro_bus_bridge import NeuroBusEventBridge
 from app.neuro_bus.events.events_base import NeuroEvent
 
 _BUS_PATH = Path(__file__).resolve().parents[2] / "app" / "neuro_bus" / "bus.py"
-# Reviewed with the production NeuroBus delivery SLI instrumentation.  Any
-# future bus change must update this only after the full NeuroBus regression.
-_BUS_SHA256 = "8c1de2c098432b91aca72511deb427f6b0f712ac2bc8bf6bfe1a3162935de8dd"
+# Reviewed with PR #2749 bounded entity dispatch, priority eviction and lifecycle
+# protection; retain this byte anchor after the full NeuroBus regression.
+_BUS_SHA256 = "7ee280d81163845f3d5b908107d213acf05ce191c716f4eab0a0e6a67931e50d"
 
 
 class RecordingBus:

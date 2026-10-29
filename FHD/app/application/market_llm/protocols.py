@@ -56,7 +56,7 @@ class ChatInput:
             payload["stream"] = True
         if allow_failover is not None:
             payload["allow_failover"] = allow_failover
-        payload.update(self.extra)
+        payload.update({key: value for key, value in self.extra.items() if key != "timeout"})
         if connection.user_id:
             payload["user_id"] = connection.user_id
         return payload

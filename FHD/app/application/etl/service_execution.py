@@ -437,6 +437,8 @@ class ExecutionServiceMixin(RollbackServiceMixin):
         if run.rollback_status == "completed":
             raise EtlConflict("ETL_ALREADY_ROLLED_BACK", "本次运行已经撤销，不能重试")
         source_snapshot = self._load_source_snapshot(db, run)
+        if source_snapshot is not None:
+            source_snapshot.close()
         operation = claim_operation(
             db,
             run,

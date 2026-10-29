@@ -188,3 +188,58 @@ def test_archive_migration_matches_models_and_preserves_data_on_downgrade(monkey
     finally:
         engine.dispose()
         model_engine.dispose()
+
+
+def test_archive_listing_batches_versions_and_preserves_owner_scope(store, monkeypatch):
+    from types import SimpleNamespace
+
+    from sqlalchemy import event
+
+    from app.fastapi_routes.reviewed_excel import archive
+
+    db, _root = store
+    engine = db.bind
+    for number in range(205):
+        asset_id = f"asset-{number}"
+        db.add(
+            EtlArchiveAsset(
+                id=asset_id,
+                tenant_id=1,
+                owner_user_id=3,
+                name=asset_id,
+                request_key=asset_id,
+            )
+        )
+        for version in range(1, 6):
+            key = f"{asset_id}-{version}"
+            db.add(
+                EtlArchiveVersion(
+                    id=key,
+                    asset_id=asset_id,
+                    version=version,
+                    size_bytes=12,
+                    sha256="digest",
+                    storage_path="synthetic",
+                    status="ready",
+                    request_key=key,
+                    tenant_id=2 if version == 5 else 1,
+                    owner_user_id=9 if version == 4 else 3,
+                )
+            )
+    db.commit()
+    queries = []
+
+    def count_sql(_conn, _cursor, statement, _params, _context, _many):
+        queries.append(statement)
+
+    event.listen(engine, "before_cursor_execute", count_sql)
+    monkeypatch.setattr(archive, "get_db", lambda: Session(engine))
+    try:
+        result = archive.archive_assets(SimpleNamespace(tenant_id=1, id=3))
+        assert len(queries) == 2
+        assert len(result["assets"]) == 200
+        assert all(
+            [v["version"] for v in asset["versions"]] == [3, 2, 1] for asset in result["assets"]
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count_sql)

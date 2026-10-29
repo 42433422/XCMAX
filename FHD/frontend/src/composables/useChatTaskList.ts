@@ -182,9 +182,10 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
   function jumpToTaskMessage(task: TaskItem) {
     const refKey = String(task?.messageRef || '').trim()
     const index = Number(refKey)
-    if (!Number.isFinite(index) || !chatMessagesRef?.value) return
-    const nodes = chatMessagesRef.value.querySelectorAll('.message')
-    const target = nodes[index] as HTMLElement | undefined
+    if (!refKey || !Number.isInteger(index) || index < 0 || !chatMessagesRef?.value) return
+    const event = new CustomEvent('xcagi-reveal-chat-message', { detail: index, cancelable: true })
+    if (!chatMessagesRef.value.dispatchEvent(event)) return
+    const target = chatMessagesRef.value.querySelector<HTMLElement>(`[data-message-index="${index}"]`)
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }

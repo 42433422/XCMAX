@@ -47,6 +47,9 @@ type EtlFolderBatchOptions = {
   syncDraft: () => void
   schedulePoll: () => void
   loadRows: () => Promise<void>
+  captureReadContext: () => () => boolean
+  beginBusy: () => () => void
+  selectRun: (run: Pick<EtlRun, 'id'>) => Promise<void>
 }
 
 const PARSE_DONE_STATUSES = new Set<BatchFileStatus>(['preview_ready', 'completed', 'failed', 'interrupted'])
@@ -97,6 +100,8 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   const fileInput = ref<HTMLInputElement | null>(null)
   const folderInput = ref<HTMLInputElement | null>(null)
   let batchPollTimer: ReturnType<typeof setTimeout> | null = null
+  let batchPollGeneration = 0
+  let disposed = false
 
   const maxFileBytes = computed(() => options.capabilities.value?.limits.max_file_bytes || ETL_MAX_FILE_BYTES)
   const selectedTotalBytes = computed(() => selectedFiles.value.reduce((sum, item) => sum + item.file.size, 0))
@@ -200,24 +205,33 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
   }
 
   function scheduleBatchPoll() {
+    const polling = ++batchPollGeneration
     if (batchPollTimer) clearTimeout(batchPollTimer)
+    batchPollTimer = null
     const pending = selectedFiles.value.some((item) => item.runId && !PARSE_DONE_STATUSES.has(item.status))
-    if (!pending || !batchId.value) return
+    const requestedBatch = batchId.value
+    if (disposed || !pending || !requestedBatch) return
     batchPollTimer = setTimeout(async () => {
+      const isCurrent = options.captureReadContext()
+      const ownsBatch = () => !disposed && polling === batchPollGeneration && requestedBatch === batchId.value && isCurrent()
       try {
+        if (!ownsBatch()) return
         const limit = Math.min(500, Math.max(50, selectedFiles.value.length))
-        const latest = await productChanges.readMany(() => etlApi.runs(limit, batchId.value))
-        mergeBatchRuns(latest)
+        const latest = await productChanges.readMany(() => etlApi.runs(limit, requestedBatch))
+        if (ownsBatch()) mergeBatchRuns(latest)
       } catch (error) {
-        options.pageError.value = error instanceof Error ? error.message : '读取文件夹解析进度失败'
+        if (ownsBatch()) options.pageError.value = error instanceof Error ? error.message : '读取文件夹解析进度失败'
+      } finally {
+        if (polling === batchPollGeneration) scheduleBatchPoll()
       }
-      scheduleBatchPoll()
     }, 1500)
   }
 
   async function startPreview() {
-    if (!selectedFiles.value.length || incompatibleFiles.value.length) return
-    options.busy.value = true
+    if (disposed || options.busy.value || !selectedFiles.value.length || incompatibleFiles.value.length) return
+    let isCurrent = options.captureReadContext()
+    const requestedBatch = batchId.value
+    const finishBusy = options.beginBusy()
     options.pageError.value = ''
     const createdRuns: EtlRun[] = []
     try {
@@ -256,6 +270,7 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
       }
       const workers = Array.from({ length: Math.min(3, Math.max(1, queue.length)) }, () => worker())
       await Promise.all(workers)
+      if (disposed || requestedBatch !== batchId.value || !isCurrent()) return
       if (createdRuns.length) {
         options.runs.value = [
           ...createdRuns,
@@ -266,40 +281,35 @@ export function useEtlFolderBatch(options: EtlFolderBatchOptions) {
           options.targetType.value = createdRuns[0].target_type
         }
         options.syncDraft()
+        isCurrent = options.captureReadContext()
         await options.router.replace({
           path: '/business-docking',
           query: { run_id: createdRuns[0].id },
         })
+        if (!isCurrent()) return
         if (selectedFiles.value.length === 1) {
           options.activeTab.value = tabForRunStatus(createdRuns[0].status)
           if (createdRuns[0].status === 'preview_ready') await options.loadRows()
-          options.schedulePoll()
+          if (isCurrent()) options.schedulePoll()
         } else {
           scheduleBatchPoll()
         }
       }
-      if (batchFailedCount.value) {
+      if (isCurrent() && batchFailedCount.value) {
         options.pageError.value = `${batchFailedCount.value} 个文件提交失败；可在文件清单中查看原因并重试。`
       }
     } finally {
-      options.busy.value = false
+      finishBusy()
     }
   }
 
   async function openBatchRun(item: EtlBatchFile) {
-    if (!item.runId) return
-    options.currentRun.value = await productChanges.read(() => etlApi.run(item.runId!))
-    options.syncDraft()
-    options.activeTab.value = tabForRunStatus(options.currentRun.value.status)
-    if (options.currentRun.value.status === 'preview_ready') await options.loadRows()
-    await options.router.replace({
-      path: '/business-docking',
-      query: { run_id: item.runId },
-    })
-    options.schedulePoll()
+    if (!disposed && item.runId) await options.selectRun({ id: item.runId })
   }
 
   onBeforeUnmount(() => {
+    disposed = true
+    batchPollGeneration += 1
     if (batchPollTimer) clearTimeout(batchPollTimer)
   })
 

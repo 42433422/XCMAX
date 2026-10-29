@@ -173,6 +173,7 @@
             <SettingsMemoryV2Card
               :persy-fold-meta="persyFoldMeta" :persy-loading="persyLoading" :persy-profile="persyProfile"
               :persy-inferring="persyInferring" :persy-last-reason="persyLastReason"
+              :persy-error="persyError" :reload-persy-profile="loadPersyProfile"
               :memory-v2-status-filters="memoryV2StatusFilters" :memory-v2-type-options="memoryV2TypeOptions"
               :memory-v2-loading="memoryV2Loading" :memory-v2-error="memoryV2Error"
               :memory-v2-draft="memoryV2Draft" :memory-v2-creating="memoryV2Creating"
@@ -209,6 +210,7 @@
               :selectable-extension-mods="selectableExtensionMods" :active-mod-id="activeModId"
               :on-active-mod-change="onActiveModChange" :load-error="loadError" :loading="loading"
               :save-settings="saveSettings"
+              :save-summary="settingsSaveSummary" :save-had-failures="settingsSaveHadFailures"
               v-model:sidebar-theme-preset="sidebarThemePreset" v-model:company-brand-draft="companyBrandDraft"
               v-model:assistant-name="assistantName" v-model:app-locale="appLocale"
               v-model:deployment-mode="deploymentMode" v-model:postgres-url-draft="postgresUrlDraft"
@@ -366,6 +368,7 @@ const {
   memoryV2Edit,
   persyProfile,
   persyLoading,
+  persyError,
   persyInferring,
   persyLastReason,
   persyUserId,
@@ -396,6 +399,8 @@ const {
   onLocaleChange,
   loading,
   loadingVersions,
+  settingsSaveSummary,
+  settingsSaveHadFailures,
   aiMode,
   deploymentModes,
   deploymentMode,

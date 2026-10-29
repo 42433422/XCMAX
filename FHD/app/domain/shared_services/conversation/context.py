@@ -26,6 +26,7 @@ class ConversationContext:
     # 上下文压缩 / Token 预算（由 ContextWindowManager 维护）
     summary: str | None = None  # 历史摘要（覆盖 summary_covered_until 之前的轮次）
     summary_covered_until: int = -1  # 摘要覆盖到 conversation_history 的哪个 index（-1 表示无摘要）
+    summary_fingerprint: str = ""
     estimated_tokens: int = 0  # 当前 conversation_history 估算 token 数（缓存值）
     token_budget: int = 8000  # 单次 LLM 调用 token 预算（可由环境变量覆盖）
     compression_strategy: str = "truncate"  # "truncate" / "summarize" / "rolling" — 当前生效策略
@@ -64,6 +65,10 @@ class ContextMixin:
         if not context:
             return None
 
+        if "conversation_history" in kwargs:
+            context.summary = None
+            context.summary_covered_until = -1
+            context.summary_fingerprint = ""
         for key, value in kwargs.items():
             if hasattr(context, key):
                 setattr(context, key, value)

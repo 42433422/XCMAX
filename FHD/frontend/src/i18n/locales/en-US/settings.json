@@ -1,5 +1,11 @@
 {
   "settings": {
+    "persyReadRetry": "The profile could not be updated. Any profile shown is the last successfully loaded copy. Refresh to retry.",
+    "itemSaved": "{item}: saved",
+    "itemSaveFailed": "{item}: save failed; retry",
+    "preferencesNotSubmitted": "AI mode and assistant name were not submitted. Retry the deployment settings first.",
+    "partialSaveRetry": "Some settings failed to save. Saved settings are retained; retry sends only incomplete or changed items.",
+    "retryIncompleteSettings": "Retry incomplete settings",
     "pageTitle": "Settings",
     "profileAria": "Account",
     "changeAvatar": "Click to change avatar",

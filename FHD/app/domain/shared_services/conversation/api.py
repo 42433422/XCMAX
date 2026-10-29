@@ -369,7 +369,13 @@ class ApiMixin(ConversationLlmMixin, NeuroEventPublisherMixin):
 
         logger.info("准备调用 LLM API [%s]: %s", mode_tag, provider_info)
 
-        response = await self.call_llm_api(messages)  # 使用三级路由方法
+        response = await self.call_llm_api(messages, conversation_context=context)
+        if response and (response.get("error") or {}).get("code") == "context_window_exceeded":
+            return {
+                "text": response["error"]["message"],
+                "action": "context_limit",
+                "data": {"error_code": "context_window_exceeded"},
+            }
 
         logger.info(
             "LLM API 响应 [%s %s]: %s...",

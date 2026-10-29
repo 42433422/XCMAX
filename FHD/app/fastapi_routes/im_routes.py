@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -194,16 +195,29 @@ async def _notify_offline_im_members(
 def im_list_conversations(
     request: Request,
     user: CurrentUser = Depends(require_identified_user),
+    limit: Annotated[int | None, Query(ge=1, le=200)] = None,
+    cursor: Annotated[str | None, Query(max_length=256)] = None,
 ):
     _ensure_schema()
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        items = ImApplicationService(db).list_conversations(
-            uid,
-            include_enterprise_dedicated_cs=_include_enterprise_dedicated_cs(request, db),
-        )
-        return {"success": True, "user_id": uid, "conversations": items}
+        # Omitted limit preserves old desktop/mobile clients' complete-list contract.
+        service = ImApplicationService(db)
+        include_cs = _include_enterprise_dedicated_cs(request, db)
+        next_cursor = None
+        if limit is None and cursor is None:
+            items = service.list_conversations(uid, include_enterprise_dedicated_cs=include_cs)
+        else:
+            items, next_cursor = service.list_conversations_page(
+                uid,
+                include_enterprise_dedicated_cs=include_cs,
+                limit=limit,
+                cursor=cursor,
+            )
+        return {"success": True, "user_id": uid, "conversations": items, "next_cursor": next_cursor}
+    except ValueError:
+        return JSONResponse({"success": False, "message": "会话分页参数无效"}, status_code=400)
     except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
         return JSONResponse({"success": False, "message": _IM_UNAVAILABLE}, status_code=500)

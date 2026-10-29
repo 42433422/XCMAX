@@ -1,4 +1,4 @@
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import api from '@/api'
 import {
@@ -10,6 +10,7 @@ import {
 import { SIDEBAR_THEME_OPTIONS, persistSidebarTheme } from '@/utils/sidebarTheme'
 import { appAlert } from '@/utils/appDialog'
 import { setAppLocale } from '@/i18n'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import {
   errorMessage,
   type ApiMessageResult,
@@ -31,6 +32,11 @@ export function useSettingsBasics() {
   }
 
   const loading = ref(false)
+  const settingsSaveSummary = ref('')
+  const settingsSaveHadFailures = ref(false)
+  const confirmedWrites = new Map<string, string>()
+  let saveEpoch = 0
+  let deploymentEpoch = 0
   const loadingVersions = ref(false)
   const aiMode = ref('online')
   const deploymentModes = ref<DeploymentMode[]>([...DEPLOYMENT_MODES])
@@ -238,49 +244,79 @@ export function useSettingsBasics() {
   }
 
   async function saveSettings() {
+    if (loading.value) return
+    const request = ++saveEpoch
+    const account = productReadAccountEpoch.value
+    const isCurrent = () => request === saveEpoch && account === productReadAccountEpoch.value
+    if (!settingsSaveHadFailures.value) confirmedWrites.clear()
     loading.value = true
+    settingsSaveSummary.value = ''
+    settingsSaveHadFailures.value = false
+    const lines: string[] = []
+    const outcome = (label: string, saved: boolean) => {
+      lines.push(t(saved ? 'settings.itemSaved' : 'settings.itemSaveFailed', { item: label }))
+      if (!saved) settingsSaveHadFailures.value = true
+    }
     try {
       if (desktopDatabaseVisible.value && performanceModeSelected.value && !postgresUrlDraft.value.trim() && !postgresConfigured.value) {
         await appAlert(t('settings.performancePgRequired'))
         return
       }
-      const deploymentResult = await saveDeploymentSettings()
-      const saveResults = await Promise.all([
-        api.post<ApiMessageResult>('/api/preferences', {
-          user_id: 'default',
-          key: 'aiMode',
-          value: aiMode.value,
-        }),
-        api.post<ApiMessageResult>('/api/preferences', {
-          user_id: 'default',
-          key: ASSISTANT_NAME_KEY,
-          value: normalizedAssistantName.value,
-        }),
-      ])
-      const failed = saveResults.find((item) => !item?.success)
-      if (failed) throw new Error(failed?.message || t('settings.saveFailed'))
-      assistantName.value = normalizedAssistantName.value
-      window.localStorage.setItem(ASSISTANT_NAME_KEY, normalizedAssistantName.value)
-      window.dispatchEvent(
-        new CustomEvent('assistant-name-updated', {
-          detail: {
-            name: normalizedAssistantName.value,
-          },
-        }),
-      )
-      const restartHint = deploymentResult?.restartRequired ? t('settings.settingsSavedRestartHint') : ''
-      await appAlert(t('settings.settingsSaved', { hint: restartHint }))
-    } catch (e: unknown) {
-      console.error('保存设置失败:', e)
-      await appAlert(t('settings.saveFailedWithDetail', { detail: errorMessage(e, t('settings.unknownError')) }))
+      if (desktopDatabaseVisible.value) {
+        const fingerprint = JSON.stringify([account, deploymentMode.value, postgresUrlDraft.value.trim()])
+        try {
+          if (confirmedWrites.get('deployment') !== fingerprint) await saveDeploymentSettings()
+          if (!isCurrent()) return
+          confirmedWrites.set('deployment', fingerprint)
+          outcome(t('settings.aiDeployMode'), true)
+        } catch {
+          if (!isCurrent()) return
+          outcome(t('settings.aiDeployMode'), false)
+          lines.push(t('settings.preferencesNotSubmitted'))
+          settingsSaveSummary.value = lines.join('\n')
+          await appAlert(settingsSaveSummary.value)
+          return
+        }
+      }
+      const preferences = [
+        { key: 'aiMode', value: aiMode.value, label: t('settings.aiMode') },
+        { key: ASSISTANT_NAME_KEY, value: normalizedAssistantName.value, label: t('settings.assistantName') },
+      ]
+      const results = await Promise.allSettled(preferences.map(async item => {
+        const fingerprint = JSON.stringify([account, item.value])
+        if (confirmedWrites.get(item.key) === fingerprint) return
+        const result = await api.post<ApiMessageResult>('/api/preferences', { user_id: 'default', key: item.key, value: item.value })
+        if (!result?.success) throw new Error('preference save rejected')
+        if (!isCurrent()) return
+        confirmedWrites.set(item.key, fingerprint)
+        if (item.key === ASSISTANT_NAME_KEY) {
+          assistantName.value = item.value
+          try { window.localStorage.setItem(ASSISTANT_NAME_KEY, item.value) } catch { /* server receipt remains authoritative */ }
+          window.dispatchEvent(new CustomEvent('assistant-name-updated', { detail: { name: item.value } }))
+        }
+      }))
+      if (!isCurrent()) return
+      results.forEach((result, index) => outcome(preferences[index].label, result.status === 'fulfilled'))
+      if (desktopDatabaseVisible.value && deploymentRestartRequired.value) lines.push(t('settings.settingsSavedRestartHint'))
+      settingsSaveSummary.value = lines.join('\n')
+      const title = settingsSaveHadFailures.value ? t('settings.partialSaveRetry') : t('settings.settingsSaved', { hint: '' })
+      await appAlert(`${title}\n${settingsSaveSummary.value}`)
     } finally {
-      loading.value = false
+      if (isCurrent()) loading.value = false
     }
   }
+  watch(productReadAccountEpoch, () => {
+    saveEpoch++; confirmedWrites.clear(); loading.value = false
+    deploymentEpoch++; deploymentSaving.value = false; deploymentStatusMessage.value = ''
+    settingsSaveSummary.value = ''; settingsSaveHadFailures.value = false
+  }, { flush: 'sync' })
+  onBeforeUnmount(() => { saveEpoch++; deploymentEpoch++; confirmedWrites.clear() })
 
   async function saveDeploymentSettings(): Promise<DesktopDeploymentUpdateResponse | null> {
     if (!desktopDatabaseVisible.value) return null
     deploymentSaving.value = true
+    const request = ++deploymentEpoch
+    const account = productReadAccountEpoch.value
     deploymentStatusMessage.value = ''
     deploymentSyncCommand.value = ''
     try {
@@ -292,6 +328,7 @@ export function useSettingsBasics() {
       const result = await api.put<DesktopDeploymentUpdateResponse>('/api/desktop/deployment', payload)
       const data = (result?.data ?? result) as DesktopDeploymentUpdateResponse
       if (!data?.success) throw new Error(t('settings.deploymentSaveFailed'))
+      if (account !== productReadAccountEpoch.value || request !== deploymentEpoch) return data
       const db = data.database || {}
       databaseStorageLabel.value = storageLabel(String(db.storageMode || ''))
       currentDbPath.value = String(db.sqlitePath || db.databaseUrlRedacted || currentDbPath.value || '')
@@ -301,7 +338,7 @@ export function useSettingsBasics() {
       deploymentStatusMessage.value = performanceModeSelected.value ? t('settings.deploymentSavedPerf') : t('settings.deploymentSaved')
       return data
     } finally {
-      deploymentSaving.value = false
+      if (request === deploymentEpoch) deploymentSaving.value = false
     }
   }
 
@@ -406,6 +443,8 @@ export function useSettingsBasics() {
     appLocale,
     onLocaleChange,
     loading,
+    settingsSaveSummary,
+    settingsSaveHadFailures,
     loadingVersions,
     aiMode,
     deploymentModes,

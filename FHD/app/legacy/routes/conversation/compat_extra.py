@@ -10,7 +10,7 @@ import threading
 import time
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 
@@ -130,6 +130,11 @@ def conversations_save_message(
     session_id = str(body.get("session_id") or "").strip()
     role = _xcagi_normalize_chat_role(body.get("role"))
     content = str(body.get("content") or "")
+    client_message_id = str(body.get("client_message_id") or "")
+    if client_message_id and not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9:_-]{0,127}", client_message_id
+    ):
+        raise HTTPException(status_code=422, detail="invalid client_message_id")
     if not session_id or not content.strip():
         return {"success": True, "saved": False, "message": "empty session_id or content"}
 
@@ -147,9 +152,14 @@ def conversations_save_message(
                 content=content,
                 intent=str(body.get("intent") or ""),
                 metadata=str(body.get("metadata") or ""),
+                client_message_id=client_message_id,
             )
         except PermissionError as exc:
             raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=409, detail="消息标识与原消息不匹配，请核对原记录"
+            ) from exc
         publish_simple_event(
             "conversation.message.saved",
             {
@@ -166,12 +176,18 @@ def conversations_save_message(
             "success": True,
             "saved": True,
             "message_id": message_id,
+            "client_message_id": client_message_id,
             "mod_id": mod_id,
             "durable": True,
         }
 
     now = time.time()
-    msg = {"role": role, "content": content, "timestamp": _xcagi_iso_from_ts(now)}
+    msg = {
+        "role": role,
+        "content": content,
+        "timestamp": _xcagi_iso_from_ts(now),
+        "client_message_id": client_message_id,
+    }
 
     with _conversation_lock:
         user_bucket = _xcagi_user_sessions.setdefault(scope, {})
@@ -182,6 +198,14 @@ def conversations_save_message(
         if rec is None:
             rec = {"messages": [], "created_ts": now, "updated_ts": now}
             user_bucket[session_id] = rec
+        if client_message_id:
+            for prior in rec["messages"]:
+                if prior.get("client_message_id") == client_message_id:
+                    if prior.get("role") != role or prior.get("content") != content:
+                        raise HTTPException(
+                            status_code=409, detail="消息标识与原消息不匹配，请核对原记录"
+                        )
+                    return {"success": True, "saved": True, "durable": False, "mod_id": mod_id}
         rec["messages"].append(msg)
         rec["updated_ts"] = now
 
@@ -198,7 +222,7 @@ def conversations_save_message(
         domain="conversation",
     )
 
-    return {"success": True, "saved": True, "mod_id": mod_id}
+    return {"success": True, "saved": True, "durable": False, "mod_id": mod_id}
 
 
 @router.get("/conversations/sessions")
@@ -207,18 +231,23 @@ def conversations_sessions_list(
     limit: int = Query(default=50, ge=1, le=500),
     user_id: str = Query(default="default"),
     mod_id: str = Query(default=""),
+    offset: Annotated[int, Query(ge=0, le=1_000_000)] = 0,
 ) -> dict:
     resolved_user_id = _xcagi_request_user_id(request, user_id)
     scope = _xcagi_resolve_session_scope(resolved_user_id, mod_id)
     numeric_user_id = durable_user_id(scope[0])
     if numeric_user_id is not None:
+        page = task_conversation_store.list_sessions(
+            user_id=numeric_user_id,
+            limit=int(limit) + 1,
+            offset=offset,
+        )
         return {
             "success": True,
             "mod_id": scope[1],
-            "sessions": task_conversation_store.list_sessions(
-                user_id=numeric_user_id,
-                limit=int(limit),
-            ),
+            "sessions": page[: int(limit)],
+            "has_more": len(page) > int(limit),
+            "next_offset": offset + min(len(page), int(limit)),
         }
     with _conversation_lock:
         user_bucket = dict(_xcagi_user_sessions.get(scope) or {})
@@ -245,7 +274,9 @@ def conversations_sessions_list(
     return {
         "success": True,
         "mod_id": scope[1],
-        "sessions": [r[1] for r in rows[: int(limit)]],
+        "sessions": [r[1] for r in rows[offset : offset + int(limit)]],
+        "has_more": len(rows) > offset + int(limit),
+        "next_offset": offset + min(max(0, len(rows) - offset), int(limit)),
     }
 
 

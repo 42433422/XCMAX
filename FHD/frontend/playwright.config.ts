@@ -5,6 +5,10 @@ import { defineConfig, devices } from '@playwright/test'
  * 运行：cd frontend && npx playwright install chromium && npm run test:smoke:5001
  */
 export default defineConfig({
+  metadata: {
+    source_sha: process.env.GITHUB_SHA || process.env.SOURCE_SHA || null,
+    node: process.version,
+  },
   testDir: './e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,

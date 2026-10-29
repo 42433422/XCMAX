@@ -10,6 +10,7 @@ import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
 import { canResumeRecentDesktopSession } from '@/utils/authSessionCache'
 import OtpCells from '@/components/OtpCells.vue'
 import LoginAccountActions from '@/components/login/LoginAccountActions.vue'
+import ConnectionRecovery from '@/components/login/ConnectionRecovery.vue'
 import { useLoginViewState } from './login-view/useLoginViewState'
 import { useLoginViewMeta } from './login-view/useLoginViewMeta'
 import { useLoginViewSession } from './login-view/useLoginViewSession'
@@ -301,6 +302,8 @@ onUnmounted(() => {
             {{ $t('login.refreshQr') }}
           </button>
         </div>
+
+        <ConnectionRecovery v-if="errorMessage" />
 
         <!-- SSO 仅在启用时显示 -->
         <div v-if="oidcEnabled && accountKind === 'enterprise'" class="login-alt">

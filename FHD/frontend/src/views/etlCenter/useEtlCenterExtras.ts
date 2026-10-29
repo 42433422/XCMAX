@@ -52,7 +52,9 @@ export function createEtlCenterExtras({
   const targetLabel = createTargetLabel(state.capabilities)
 
   async function saveWebhook() {
-    busy.value = true
+    if (busy.value) return
+    const isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     try {
       const headers = JSON.parse(webhookDraft.headersJson || '{}')
       if (!headers || Array.isArray(headers) || typeof headers !== 'object') {
@@ -64,7 +66,10 @@ export function createEtlCenterExtras({
         headers,
         secret: webhookDraft.secret,
       })
-      targetConfigs.value = await etlApi.targetConfigs()
+      if (!isCurrent()) return
+      const configs = await etlApi.targetConfigs()
+      if (!isCurrent()) return
+      targetConfigs.value = configs
       targetConfigId.value = config.id
       showWebhookForm.value = false
       webhookDraft.name = ''
@@ -72,31 +77,35 @@ export function createEtlCenterExtras({
       webhookDraft.headersJson = '{}'
       webhookDraft.secret = ''
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : 'Webhook 配置保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : 'Webhook 配置保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function testWebhook() {
-    if (!targetConfigId.value) return
-    busy.value = true
+    const configId = targetConfigId.value
+    if (busy.value || !configId) return
+    const ownsContext = state.captureReadContext()
+    const isCurrent = () => ownsContext() && configId === targetConfigId.value
+    const finishBusy = state.beginBusy()
     webhookTestMessage.value = ''
     try {
-      await etlApi.testTarget(targetConfigId.value)
-      webhookTestMessage.value = '连接测试成功'
+      await etlApi.testTarget(configId)
+      if (isCurrent()) webhookTestMessage.value = '连接测试成功'
     } catch (error) {
-      webhookTestMessage.value = error instanceof Error ? error.message : '连接测试失败'
+      if (isCurrent()) webhookTestMessage.value = error instanceof Error ? error.message : '连接测试失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function saveCurrentAsTemplate() {
-    if (!currentRun.value) return
+    if (busy.value || !currentRun.value) return
     const name = window.prompt('模板名称', `${targetLabel(currentRun.value.target_type)}-${new Date().toLocaleDateString()}`)
     if (!name?.trim()) return
-    busy.value = true
+    const isCurrent = state.captureReadContext()
+    const finishBusy = state.beginBusy()
     try {
       await etlApi.createTemplate({
         name: name.trim(),
@@ -104,45 +113,54 @@ export function createEtlCenterExtras({
         draft: currentRun.value.draft,
         source_features: currentRun.value.source_features,
       })
-      templates.value = await etlApi.templates()
+      if (!isCurrent()) return
+      const savedTemplates = await etlApi.templates()
+      if (isCurrent()) templates.value = savedTemplates
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '模板保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '模板保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function saveCurrentAsShipmentTemplate() {
-    if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+    if (busy.value || !currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+    const run = currentRun.value
+    const isCurrent = state.captureReadContext()
     const requestedName = window.prompt('发货单版式名称（可选；留空将按识别到的客户命名）', '')
     if (requestedName === null) return
     const name = requestedName.trim()
-    busy.value = true
+    const finishBusy = state.beginBusy()
     shipmentTemplateMessage.value = ''
     try {
       const result = await etlApi.saveShipmentTemplate(
-        currentRun.value.id,
+        run.id,
         name,
         String(shipmentTemplateCandidate.value?.source_region_id || ''),
       )
+      if (!isCurrent()) return
+      const latest = await etlApi.run(run.id)
+      if (!isCurrent()) return
       shipmentTemplateMessage.value = result.name ? `已保存“${result.name}”。${result.message}` : result.message
-      currentRun.value = await etlApi.run(currentRun.value.id)
+      currentRun.value = latest
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '发货单版式保存失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '发货单版式保存失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 
   async function previewCustomerProductsFromShipment() {
-    if (!currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+    if (busy.value || !currentRun.value || currentRun.value.target_type !== 'shipment_records') return
+    let isCurrent = state.captureReadContext()
     const sourceRun = currentRun.value
     const linkedRunId = String(linkedCustomerProductPreview.value?.run_id || '').trim()
     if (linkedRunId) {
-      busy.value = true
+      const finishBusy = state.beginBusy()
       pageError.value = ''
       try {
         const customerProductRun = await etlApi.run(linkedRunId)
+        if (!isCurrent()) return
         currentRun.value = customerProductRun
         targetType.value = 'customer_products'
         rowPage.value = 1
@@ -155,16 +173,18 @@ export function createEtlCenterExtras({
         customerProductPreviewMessage.value = '这是同一上传文件自动建立的客户及产品导入任务；尚未执行，不会写入客户库或产品库。'
         syncDraft()
         activeTab.value = tabForRunStatus(customerProductRun.status)
+        isCurrent = state.captureReadContext()
         if (customerProductRun.status === 'preview_ready') await loadRows()
+        if (!isCurrent()) return
         await router.replace({
           path: '/business-docking',
           query: { run_id: customerProductRun.id },
         })
-        schedulePoll()
+        if (isCurrent()) schedulePoll()
       } catch (error) {
-        pageError.value = error instanceof Error ? error.message : '读取关联客户及产品任务失败'
+        if (isCurrent()) pageError.value = error instanceof Error ? error.message : '读取关联客户及产品任务失败'
       } finally {
-        busy.value = false
+        finishBusy()
       }
       return
     }
@@ -172,7 +192,7 @@ export function createEtlCenterExtras({
       pageError.value = '原始上传文件不可用，无法创建客户及产品导入。请重新上传该工作簿。'
       return
     }
-    busy.value = true
+    const finishBusy = state.beginBusy()
     pageError.value = ''
     shipmentTemplateMessage.value = ''
     customerProductPreviewMessage.value = ''
@@ -181,6 +201,7 @@ export function createEtlCenterExtras({
         upload_id: sourceRun.upload_id,
         target_type: 'customer_products',
       })
+      if (!isCurrent()) return
       currentRun.value = customerProductRun
       targetType.value = 'customer_products'
       rowPage.value = 1
@@ -192,16 +213,18 @@ export function createEtlCenterExtras({
       customerProductPreviewMessage.value = '已从同一上传文件创建客户及产品导入任务；请核对后点击“写入数据库”。'
       syncDraft()
       activeTab.value = 'preview'
+      isCurrent = state.captureReadContext()
       await router.replace({
         path: '/business-docking',
         query: { run_id: customerProductRun.id },
       })
+      if (!isCurrent()) return
       if (customerProductRun.status === 'preview_ready') await loadRows()
-      schedulePoll()
+      if (isCurrent()) schedulePoll()
     } catch (error) {
-      pageError.value = error instanceof Error ? error.message : '创建客户及产品导入失败'
+      if (isCurrent()) pageError.value = error instanceof Error ? error.message : '创建客户及产品导入失败'
     } finally {
-      busy.value = false
+      finishBusy()
     }
   }
 

@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 
+from app.application.elt.sources import SourceAssetServiceMixin
 from app.application.etl.adviser import EtlRowAdviser, get_etl_row_adviser
 from app.application.etl.parsers import (
     KNOWLEDGE_ONLY_SUFFIXES,
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class EtlService(
+    SourceAssetServiceMixin,
     UploadServiceMixin,
     PreviewServiceMixin,
     ReplayServiceMixin,

@@ -11,7 +11,11 @@
 
     <div class="settings-card__body settings-card__body--compact">
       <div class="persy-profile">
-        <div v-if="persyLoading" class="persy-profile__state muted">
+        <div v-if="persyError" class="memory-v2-error" role="alert">
+          <p>{{ persyError }}</p>
+          <button type="button" class="btn btn-sm btn-secondary" :disabled="persyLoading" @click="reloadPersyProfile">{{ $t('settings.refresh') }}</button>
+        </div>
+        <div v-if="persyLoading && !persyProfile" class="persy-profile__state muted">
           {{ $t('settings.persyLoading') }}
         </div>
         <div v-else-if="persyProfile" class="persy-profile__body">
@@ -59,7 +63,7 @@
             <span v-if="persyLastReason" class="persy-profile__reason">{{ persyLastReason }}</span>
           </div>
         </div>
-        <div v-else class="persy-profile__state muted">
+        <div v-else-if="!persyError" class="persy-profile__state muted">
           {{ $t('settings.persyEmpty') }}
         </div>
       </div>
@@ -249,6 +253,8 @@ import type { ButlerProfileView } from '@/api/butlerProfile'
 const props = defineProps<{
   persyFoldMeta: string
   persyLoading: boolean
+  persyError: string
+  reloadPersyProfile: () => unknown
   persyProfile: ButlerProfileView | null
   persyInferring: boolean
   persyLastReason: string

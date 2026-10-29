@@ -8,6 +8,10 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from app.application.tool_execution_deadline import (
+    invocation_deadline,
+    remaining_invocation_seconds,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -150,6 +154,7 @@ def run_employee_agent_loop(
     model: str | None = None,
 ) -> dict[str, Any]:
     """运行员工多轮工具循环，返回统一结果 dict。"""
+    deadline = time.monotonic() + remaining_invocation_seconds(max(0.001, wall_time_limit_sec))
     try:
         from app.infrastructure.llm.client import (
             get_openai_compatible_client,
@@ -186,28 +191,41 @@ def run_employee_agent_loop(
     tool_trace: list[dict[str, Any]] = []
     trajectory: list[dict[str, Any]] = []
     action_fingerprints: list[str] = []
-    started = time.monotonic()
     rounds = 0
+
+    def expired_result(*, uncertain: bool = False) -> dict[str, Any]:
+        return {
+            "handler": "agent",
+            "ok": False,
+            "output": "",
+            "rounds": rounds,
+            "tool_calls": tool_trace,
+            "trajectory": trajectory,
+            "exit_status": "wall_time_limit",
+            "retryable": False,
+            "reconciliation_required": uncertain,
+            "execution_state": "unknown" if uncertain else "stopped",
+        }
+
+    # Real OpenAI clients can otherwise retry beyond the remaining total budget.
+    if callable(getattr(type(client), "with_options", None)):
+        client = client.with_options(max_retries=0)
     for _ in range(max(1, max_iterations)):
-        if time.monotonic() - started >= max(0.001, wall_time_limit_sec):
-            return {
-                "handler": "agent",
-                "ok": False,
-                "output": "",
-                "rounds": rounds,
-                "tool_calls": tool_trace,
-                "trajectory": trajectory,
-                "exit_status": "wall_time_limit",
-            }
+        if time.monotonic() >= deadline:
+            return expired_result()
         rounds += 1
         try:
-            completion = client.chat.completions.create(
-                model=mdl,
-                messages=messages,
-                tools=tool_specs if tool_specs else None,
-                tool_choice="auto" if tool_specs else None,
-            )
+            with invocation_deadline(deadline):
+                completion = client.chat.completions.create(
+                    model=mdl,
+                    messages=messages,
+                    tools=tool_specs if tool_specs else None,
+                    tool_choice="auto" if tool_specs else None,
+                    timeout=max(0.001, deadline - time.monotonic()),
+                )
         except RECOVERABLE_ERRORS:
+            if time.monotonic() >= deadline:
+                return expired_result()
             logger.exception("employee agent loop LLM call failed")
             return {
                 "handler": "agent",
@@ -239,6 +257,8 @@ def run_employee_agent_loop(
             )
         except RECOVERABLE_ERRORS:
             logger.debug("employee agent loop metering skipped", exc_info=True)
+        if time.monotonic() >= deadline:
+            return expired_result()
         tcs = getattr(msg, "tool_calls", None) or []
         messages.append(
             {
@@ -280,6 +300,8 @@ def run_employee_agent_loop(
             }
 
         for tc in tcs:
+            if time.monotonic() >= deadline:
+                return expired_result()
             fn = getattr(tc, "function", None)
             tool_name = str(getattr(fn, "name", "") or "").strip()
             raw_arguments = str(getattr(fn, "arguments", "") or "")
@@ -390,8 +412,24 @@ def run_employee_agent_loop(
             try:
                 from app.application.tools.workflow import execute_workflow_tool
 
-                result_raw = execute_workflow_tool(tool_name, args, workspace_root)
+                if time.monotonic() >= deadline:
+                    return expired_result()
+                with invocation_deadline(deadline) as budget:
+                    result_raw = execute_workflow_tool(tool_name, args, workspace_root)
+                if time.monotonic() >= deadline or budget.uncertain:
+                    tool_trace.append(
+                        {
+                            "tool": tool_name,
+                            "action_id": tc_id,
+                            "args": args,
+                            "success": False,
+                            "execution_state": "unknown",
+                        }
+                    )
+                    return expired_result(uncertain=True)
             except RECOVERABLE_ERRORS:
+                if time.monotonic() >= deadline:
+                    return expired_result(uncertain=True)
                 result_raw = json.dumps(
                     {
                         "success": False,

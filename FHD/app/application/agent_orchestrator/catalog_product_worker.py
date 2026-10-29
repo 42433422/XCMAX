@@ -1,6 +1,8 @@
 """Spawn handoff of expected identities, never authority from a caller's payload."""
 
-from app.mod_sdk.catalog_product_store import TOOL
+from contextlib import contextmanager
+
+TOOL = "catalog_products_v1"
 
 
 def capture_catalog_worker_profile(step):
@@ -30,18 +32,15 @@ def restore_catalog_worker_profile(expected):
         raise registry.GenerationObservationError("spawned catalog host identity changed")
 
 
-from contextlib import contextmanager
-
-
 @contextmanager
 def restore_catalog_claim(reference):
+    if reference is None:
+        yield
+        return
     from app.application.agent_orchestrator.business_write_guard import worker_claim_scope
     from app.application.agent_orchestrator.run_sql_repository import SQLAlchemyAgentRunRepository
     from app.application.agent_orchestrator.task_execution_models import AgentTaskExecution
 
-    if reference is None:
-        yield
-        return
     run_id, owner_id, count = reference
     execution = AgentTaskExecution(run_id=run_id, task_id="", user_id="", execution_count=count)
     with worker_claim_scope(SQLAlchemyAgentRunRepository(auto_create=False), execution, owner_id):

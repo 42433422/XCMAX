@@ -85,7 +85,7 @@ async def get_vlm_route(ports: ModelCatalog, params: Payload, ctx: Payload) -> P
 async def query_local_token_usage(ports: ModelCatalog, params: Payload, ctx: Payload) -> Payload:
     """查询本地 token 用量账本（真实数据，非 LLM 编造）。
 
-    读取 FHD 的 model_usage_ledger.json，返回 token 用量统计。
+    读取 FHD 的增量用量账本，返回 token 用量统计。
     b.ai/mimo 等平台不开放 usage 查询 API，但 FHD 在 agent_orchestrator
     路径下会记录每次 LLM 调用的 prompt/completion/total tokens 到本地账本。
 
@@ -98,7 +98,7 @@ async def query_local_token_usage(ports: ModelCatalog, params: Payload, ctx: Pay
     try:
         from app.infrastructure.billing.model_usage import (
             list_model_usage_entries,
-            model_usage_ledger_path,
+            model_usage_database_path,
         )
     except ImportError as exc:
         return _err(f"无法导入 billing 模块: {exc}")
@@ -106,7 +106,7 @@ async def query_local_token_usage(ports: ModelCatalog, params: Payload, ctx: Pay
     run_id = str(params.get("run_id") or "").strip()
     limit = int(str(params.get("limit") if params.get("limit") is not None else 20))
     group_by = str(params.get("group_by") or "model").strip().lower()
-    ledger_path = model_usage_ledger_path()
+    ledger_path = model_usage_database_path()
     entries = list_model_usage_entries(
         limit=max(limit, 500) if limit > 0 else 500, run_id=run_id, user_id=user_id
     )

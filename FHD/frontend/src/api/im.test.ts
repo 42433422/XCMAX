@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 const { apiFetch, getApiBase } = vi.hoisted(() => ({ apiFetch: vi.fn(), getApiBase: vi.fn(() => '') }))
 vi.mock('@/utils/apiBase', () => ({ apiFetch, getApiBase }))
 import * as im from './im'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 const jsonRes = (body: unknown, { ok = true, status = 200, ct = 'application/json' } = {}) => ({ ok, status, headers: { get: () => ct }, json: async () => body })
 const message = { id: 7, conversation_id: 3, sender_user_id: 9, body: 'hi', created_at: null }
 const conversation = { id: 2, title: null, created: true }
@@ -9,11 +10,30 @@ beforeEach(() => { apiFetch.mockReset(); getApiBase.mockReset().mockReturnValue(
 afterEach(() => vi.unstubAllGlobals())
 
 describe('IM request and response contracts', () => {
+  it('walks every conversation page, deduplicates moving rows, and accepts a legacy final snapshot', async () => {
+    apiFetch.mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 1 }, { id: 2 }], next_cursor: 'next / &?' }))
+      .mockResolvedValueOnce(jsonRes({ success: true, conversations: [{ id: 2 }, { id: 3 }] }))
+    expect(await im.fetchImConversations()).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }])
+    expect(apiFetch.mock.calls.map(([url]) => url)).toEqual(['/api/im/conversations?limit=50', '/api/im/conversations?limit=50&cursor=next+%2F+%26%3F'])
+  })
+  it('rejects repeated cursors instead of looping or silently truncating history', async () => {
+    apiFetch.mockResolvedValue(jsonRes({ success: true, conversations: [{ id: 1 }], next_cursor: 'same' }))
+    await expect(im.fetchImConversations()).rejects.toThrow('游标重复')
+    expect(apiFetch).toHaveBeenCalledTimes(2)
+  })
+  it('retires a paged read after an account switch without mixing accounts', async () => {
+    apiFetch.mockImplementationOnce(async () => {
+      productReadAccountEpoch.value++
+      return jsonRes({ success: true, conversations: [{ id: 1 }], next_cursor: 'next' })
+    })
+    await expect(im.fetchImConversations()).rejects.toThrow('账号已切换')
+    expect(apiFetch).toHaveBeenCalledTimes(1)
+  })
   it.each([
     [() => im.fetchImContacts('  tom & jerry  '), '/api/im/contacts?q=tom%20%26%20jerry', 'contacts'],
     [() => im.fetchImContacts(), '/api/im/contacts', 'contacts'],
     [() => im.fetchImContacts('  '), '/api/im/contacts', 'contacts'],
-    [im.fetchImConversations, '/api/im/conversations', 'conversations'],
+    [im.fetchImConversations, '/api/im/conversations?limit=50', 'conversations'],
     [() => im.fetchImMessages(3, { limit: 10, beforeId: 100 }), '/api/im/conversations/3/messages?limit=10&before_id=100', 'messages'],
     [() => im.fetchImMessages(3), '/api/im/conversations/3/messages', 'messages'],
     [() => im.fetchCsInboxMessages(3), '/api/im/cs/inbox/3/messages', 'messages'],

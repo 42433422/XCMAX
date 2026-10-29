@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import SettingsPlatformModelCard from './SettingsPlatformModelCard.vue'
 import { platformModelApi, type PlatformModelConfig, type PlatformModelDraft, type PlatformModelList } from '@/api/platformModel'
+import { appConfirm } from '@/utils/appDialog'
 
 vi.mock('@/api/platformModel', () => ({ platformModelApi: { list: vi.fn(), save: vi.fn(), test: vi.fn() } }))
+vi.mock('@/utils/appDialog', () => ({ appConfirm: vi.fn() }))
 
 const stored: PlatformModelConfig = {
   provider: 'openai', label: 'OpenAI / OpenAI 兼容', base_url: 'https://models.example.com/v1',
@@ -30,6 +32,7 @@ const saveResult = (config = stored) => ({ ok: true, config: { ...config }, ...s
 
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(appConfirm).mockResolvedValue(true)
   vi.mocked(platformModelApi.list).mockResolvedValue(configList())
   vi.mocked(platformModelApi.save).mockResolvedValue(saveResult())
   vi.mocked(platformModelApi.test).mockResolvedValue({ ok: true, tested_model: stored.model, latency_ms: 123 })
@@ -123,12 +126,36 @@ describe('platform model settings', () => {
     const wrapper = await render()
     await wrapper.get('#platform-model-key').setValue('example-original-key')
     await wrapper.get('#platform-model-provider').setValue('deepseek')
+    await flushPromises()
     expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('')
     await wrapper.get('#platform-model-id').setValue('other-model')
     await wrapper.get('#platform-model-name').setValue('其他模型')
     await wrapper.get('form').trigger('submit')
     expect(platformModelApi.save).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('请重新输入平台密钥')
+  })
+
+  it('keeps all unsaved fields and the memory-only key when a provider switch or reload is cancelled', async () => {
+    vi.mocked(appConfirm).mockResolvedValue(false)
+    const wrapper = await render()
+    await wrapper.get('#platform-model-id').setValue('unsaved-model')
+    await wrapper.get('#platform-model-key').setValue('synthetic-secret')
+    await wrapper.get('#platform-model-provider').setValue('deepseek')
+    await flushPromises()
+    expect(wrapper.get<HTMLSelectElement>('#platform-model-provider').element.value).toBe('openai')
+    expect(wrapper.get<HTMLInputElement>('#platform-model-id').element.value).toBe('unsaved-model')
+    expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('synthetic-secret')
+    await button(wrapper, '重新读取').trigger('click')
+    await flushPromises()
+    expect(platformModelApi.list).toHaveBeenCalledTimes(1)
+    expect(appConfirm).toHaveBeenCalledTimes(2)
+    expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('synthetic-secret')
+    vi.mocked(appConfirm).mockResolvedValue(true)
+    await button(wrapper, '重新读取').trigger('click')
+    await flushPromises()
+    expect(platformModelApi.list).toHaveBeenCalledTimes(2)
+    expect(wrapper.get<HTMLInputElement>('#platform-model-key').element.value).toBe('')
+    expect(wrapper.get<HTMLInputElement>('#platform-model-id').element.value).toBe(stored.model)
   })
 
   it.each(['http://models.example.com/v1', 'https://user:pass@models.example.com/v1', 'https://models.example.com/v1?key=example', 'https://models.example.com/v1/chat/completions'])('rejects a non-root or credential-bearing endpoint: %s', async endpoint => {

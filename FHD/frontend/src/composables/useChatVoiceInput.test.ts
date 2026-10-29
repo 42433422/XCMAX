@@ -105,6 +105,7 @@ describe('useChatVoiceInput', () => {
       expect(apiFetch).toHaveBeenCalledWith('/api/voice/transcribe', {
         method: 'POST',
         body: expect.any(FormData),
+        signal: expect.any(AbortSignal),
       })
       expect(messageInput.value).toBe('你好')
     } finally {

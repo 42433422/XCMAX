@@ -1,35 +1,35 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
-import { BASE_URL, API_PATHS } from './config.js';
+import { BASE_URL, API_PATHS, THRESHOLDS } from './config.js';
 
 export const options = {
   vus: 5,
   duration: '30s',
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(95)', 'p(99)'],
   thresholds: {
-    // GitHub-hosted runners are noisy; gate on availability not sub-500ms p99.
-    http_req_duration: ['p(99)<5000'],
-    http_req_failed: ['rate<0.05'],
+    http_req_duration: [`p(95)<${THRESHOLDS.p95}`, `p(99)<${THRESHOLDS.p99}`],
+    http_req_failed: ['rate==0'],
+    checks: ['rate==1'],
+    http_reqs: ['count>=20'],
   },
 };
 
 export function handleSummary(data) {
   return {
-    'results.json': JSON.stringify(data, null, 2),
+    'performance-results/k6-summary.json': JSON.stringify({
+      ...data,
+      source_sha: __ENV.GITHUB_SHA || __ENV.SOURCE_SHA || null,
+      scope: 'real HTTP health/ping regression; business datasets measured separately',
+      budgets_ms: { p95: THRESHOLDS.p95, p99: THRESHOLDS.p99 },
+      workload: { vus: options.vus, duration: options.duration },
+    }, null, 2),
   };
 }
 
 export default function () {
-  const healthRes = http.get(`${BASE_URL}${API_PATHS.health}`);
-  check(healthRes, {
-    'health status is 200': (r) => r.status === 200,
-  });
-
-  sleep(1);
-
-  const pingRes = http.get(`${BASE_URL}/api/ping`);
-  check(pingRes, {
-    'ping is 200': (r) => r.status === 200,
-  });
-
-  sleep(1);
+  for (const path of [API_PATHS.health, '/api/ping']) {
+    const response = http.get(`${BASE_URL}${path}`, { tags: { endpoint: path } });
+    check(response, { 'HTTP 200 JSON': (r) => r.status === 200 && String(r.headers['Content-Type']).includes('application/json') });
+    sleep(1);
+  }
 }
