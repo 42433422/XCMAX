@@ -464,6 +464,8 @@ function scrollToSettingsSection() {
 watch(() => route.query.section, scrollToSettingsSection)
 
 onMounted(async () => {
+  sidebarThemePreset.value = readStoredSidebarTheme()
+  applySidebarTheme(sidebarThemePreset.value)
   scrollToSettingsSection()
   await loadLocalUser()
   void loadAuditLogs()
@@ -474,8 +476,6 @@ onMounted(async () => {
       accountUsername: uname,
     })
   }
-  sidebarThemePreset.value = readStoredSidebarTheme()
-  applySidebarTheme(sidebarThemePreset.value)
   await industryStore.initialize()
   await loadIndustries()
   const piniaIndustryId = industryStore.currentIndustry?.id
