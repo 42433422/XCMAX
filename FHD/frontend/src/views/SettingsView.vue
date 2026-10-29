@@ -37,7 +37,8 @@
             >
               {{ logoutLoading ? $t('settings.loggingOut') : $t('settings.logout') }}
             </button>
-            <router-link v-else-if="!adminSessionOnly" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
+            <button v-else-if="accountError && !adminSessionOnly" type="button" class="settings-profile__btn" :disabled="accountLoading" @click="loadLocalUser">{{ $t('common.retry') }}</button>
+            <router-link v-else-if="!adminSessionOnly && !accountLoading && !accountError" class="settings-profile__btn settings-profile__btn--primary" :to="loginRoute">
               {{ $t('settings.login') }}
             </router-link>
           </div>
@@ -261,6 +262,7 @@ const {
   localUser,
   sessionValid,
   accountLoading,
+  accountError,
   logoutLoading,
   companyBrandDraft,
   companyBrandSaving,

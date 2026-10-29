@@ -1,4 +1,5 @@
-import { ref, computed } from 'vue'
+import { ref, computed, getCurrentScope, onScopeDispose } from 'vue'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { authApi, type User } from '@/api/auth'
@@ -8,6 +9,7 @@ import { useAccountProfileStore } from '@/stores/accountProfile'
 import adminAuditApi, { type AuditLogEntry } from '@/api/adminAudit'
 import { appAlert, appConfirm } from '@/utils/appDialog'
 import { errorMessage } from './utils'
+import { readValid, invalidateEnterpriseSessionCache } from '@/utils/authSessionCache'
 
 export function useSettingsAccount() {
   const { t } = useI18n()
@@ -19,6 +21,10 @@ export function useSettingsAccount() {
   const sessionValid = ref(false)
   const accountLoading = ref(true)
   const logoutLoading = ref(false)
+  const accountError = ref(false)
+  let accountEpoch = 0
+  let accountRequest: Promise<void> | null = null
+  if (getCurrentScope()) onScopeDispose(() => { ++accountEpoch; accountRequest = null })
   const companyBrandDraft = ref('')
   const companyBrandSaving = ref(false)
   const avatarInputRef = ref<HTMLInputElement | null>(null)
@@ -61,8 +67,6 @@ export function useSettingsAccount() {
   function userFromSessionValidatePayload(res: unknown): User | null {
     if (!res || typeof res !== 'object') return null
     const o = res as Record<string, unknown>
-    const ok = o.success === true || o.valid === true
-    if (!ok) return null
     const data = o.data as Record<string, unknown> | undefined
     const username = String(data?.username || '').trim()
     if (!username) return readMarketUserFromStorage()
@@ -90,25 +94,6 @@ export function useSettingsAccount() {
       impersonating_market_user_id: o.impersonating_market_user_id ?? base.impersonating_market_user_id,
       impersonating_username: o.impersonating_username ?? base.impersonating_username,
     }).catch(() => undefined)
-  }
-
-  async function hydrateUserFromSessionValidate(): Promise<boolean> {
-    try {
-      const res = await authApi.validateSession()
-      const user = userFromSessionValidatePayload(res)
-      if (!user) {
-        sessionValid.value = false
-        return false
-      }
-      sessionValid.value = true
-      localUser.value = user
-      applyAccountMetaFromAuthPayload(res)
-      companyBrandDraft.value = accountProfileStore.companyBrand || ''
-      return true
-    } catch {
-      sessionValid.value = false
-      return false
-    }
   }
 
   const isLoggedIn = computed(() => Boolean(localUser.value) || sessionValid.value)
@@ -152,44 +137,70 @@ export function useSettingsAccount() {
     profileEmailDraft.value = String(u.email || '').trim()
   }
 
-  async function loadLocalUser() {
+  function loadLocalUser(): Promise<void> {
+    if (logoutLoading.value) return Promise.resolve()
+    if (accountRequest) return accountRequest
+    const epoch = ++accountEpoch
+    const scope = productReadAccountEpoch.value
+    const isCurrent = () => epoch === accountEpoch && scope === productReadAccountEpoch.value
     accountLoading.value = true
-    sessionValid.value = false
-    try {
-      const res = await authApi.getCurrentUser()
-      localUser.value = unwrapUserFromMe(res)
-      if (res?.success && res.data && typeof res.data === 'object') {
-        applyAccountMetaFromAuthPayload(res)
-        companyBrandDraft.value = accountProfileStore.companyBrand || ''
+    accountError.value = false
+    accountRequest = (async () => {
+      try {
+        let payload: unknown
+        let user: User | null = null
+        try {
+          payload = await authApi.getCurrentUser()
+          user = unwrapUserFromMe(payload)
+        } catch { /* Session validation distinguishes missing profile from logout. */ }
+        if (!isCurrent()) return
+        if (!user) {
+          payload = await authApi.validateSession()
+          if (!isCurrent()) return
+          sessionValid.value = readValid(payload)
+          user = sessionValid.value ? userFromSessionValidatePayload(payload) : null
+        } else {
+          sessionValid.value = true
+        }
+        localUser.value = user
+        if (sessionValid.value) {
+          applyAccountMetaFromAuthPayload(payload)
+          companyBrandDraft.value = accountProfileStore.companyBrand || ''
+        }
+        if (!sessionValid.value) { invalidateEnterpriseSessionCache(); accountProfileStore.clear() }
+        syncProfileDraftsFromUser(user)
+      } catch (error) {
+        if (!isCurrent()) return
+        const status = (error as { status?: number } | null)?.status
+        if (status === 401 || status === 403) {
+          localUser.value = null
+          sessionValid.value = false
+          invalidateEnterpriseSessionCache()
+          accountProfileStore.clear()
+          syncProfileDraftsFromUser(null)
+        } else accountError.value = true
+      } finally {
+        if (epoch === accountEpoch) {
+          accountLoading.value = false
+          accountRequest = null
+        }
       }
-      if (localUser.value) {
-        sessionValid.value = true
-        syncProfileDraftsFromUser(localUser.value)
-      } else {
-        await hydrateUserFromSessionValidate()
-        syncProfileDraftsFromUser(localUser.value)
-      }
-    } catch {
-      localUser.value = null
-      await hydrateUserFromSessionValidate()
-      syncProfileDraftsFromUser(localUser.value)
-    } finally {
-      accountLoading.value = false
-    }
+    })()
+    return accountRequest
   }
 
   const profileBrandTitle = computed(() => {
     const brand = String(accountProfileStore.displayBrand || '').trim()
     if (brand) return brand
     const u = localUser.value
-    if (!u) return t('settings.notLoggedIn')
+    if (!u) return t(accountLoading.value ? 'settings.accountChecking' : accountError.value ? 'settings.accountUnavailable' : sessionValid.value ? 'settings.user' : 'settings.notLoggedIn')
     const name = String(u.display_name || u.username || '').trim()
     return name || t('settings.user')
   })
 
   const profileSubline = computed(() => {
     const u = localUser.value
-    if (!u) return t('settings.loginSyncHint')
+    if (!u) return t(accountLoading.value ? 'settings.accountChecking' : accountError.value ? 'settings.accountUnavailable' : sessionValid.value ? 'settings.marketAccount' : 'settings.loginSyncHint')
     const username = String(u.username || '').trim()
     const brand = String(accountProfileStore.displayBrand || '').trim()
     if (brand) {
@@ -329,8 +340,13 @@ export function useSettingsAccount() {
   }))
 
   async function onLogout() {
+    if (logoutLoading.value) return
     if (!(await appConfirm(t('settings.logoutConfirm'), { danger: true }))) return
+    if (logoutLoading.value) return
     logoutLoading.value = true
+    ++accountEpoch
+    accountRequest = null
+    accountLoading.value = false
     try {
       await authApi.logout()
       accountProfileStore.clear()
@@ -349,6 +365,7 @@ export function useSettingsAccount() {
     localUser,
     sessionValid,
     accountLoading,
+    accountError,
     logoutLoading,
     companyBrandDraft,
     companyBrandSaving,
