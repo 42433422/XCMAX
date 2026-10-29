@@ -43,7 +43,14 @@ describe('bounded chat history and derived content', () => {
     await nextTick()
     expect(sanitize).toHaveBeenCalledTimes(3) // AI source, rendered Markdown, speech eligibility.
     expect(f.wrapper.get('[data-message-index="499"] .message-html').text()).toContain('流式增量')
-    f.messages.value[498].content = '<b>修订</b><img src="x" onerror="bad()"><script>bad()</script>'
+    // Construct the hostile input in an inert document; never attach or execute it.
+    const fixtureDocument = document.implementation.createHTMLDocument('XSS fixture')
+    const unsafeImage = fixtureDocument.createElement('img')
+    unsafeImage.setAttribute('src', 'x')
+    unsafeImage.setAttribute('onerror', 'bad()')
+    expect(unsafeImage.isConnected).toBe(false)
+    expect(unsafeImage.getAttribute('onerror')).toBe('bad()')
+    f.messages.value[498].content = `<b>修订</b>${unsafeImage.outerHTML}<script>bad()</script>`
     await nextTick()
     const body = f.wrapper.get('[data-message-index="498"] .message-html')
     expect(body.text()).toBe('修订')
