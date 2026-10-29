@@ -24,27 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
-          fetch-depth: 1
-          submodules: false
-      - name: Archive tracked source with exact identity (no .git or credentials)
+      - name: Download the exact formatter used by the PR checks
         shell: bash
         run: |
           set -euo pipefail
-          destination="$RUNNER_TEMP/xcmax-audit-source"
+          destination="$RUNNER_TEMP/xcmax-audit-tools"
           mkdir -p "$destination"
-          git rev-parse HEAD > "$destination/source-sha.txt"
-          git rev-parse HEAD^{tree} > "$destination/tree-sha.txt"
-          git ls-tree -rz HEAD > "$destination/tracked-tree.bin"
-          git archive --format=tar.gz --output="$destination/source.tar.gz" HEAD
-          sha256sum "$destination/source.tar.gz" > "$destination/SHA256SUMS.txt"
-      - name: Retain source snapshot for this audit only
+          python3 -m pip download --index-url https://pypi.org/simple --no-deps --only-binary=:all: --dest "$destination" ruff==0.17.3
+          sha256sum "$destination"/*.whl > "$destination/SHA256SUMS.txt"
+      - name: Retain public verification tooling for this audit only
         uses: actions/upload-artifact@v4
         with:
-          name: audit-remediation-source-${{ github.event.pull_request.head.sha }}
-          path: ${{ runner.temp }}/xcmax-audit-source/
+          name: audit-remediation-tools-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/xcmax-audit-tools/
           retention-days: 1
           if-no-files-found: error
