@@ -105,6 +105,8 @@
     "ws": "8.21.0",
     "fast-glob": "$fast-glob",
     "source-map-js": "1.2.2",
-    "tinypool": "2.1.2"
+    "tinypool": "2.1.2",
+    "@intlify/shared": "11.4.16",
+    "@intlify/message-compiler": "11.4.16"
   }
 }

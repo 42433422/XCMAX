@@ -28,7 +28,7 @@ class EmbedderPort(ABC):
 
 
 class HashEmbedder(EmbedderPort):
-    """无需外部依赖的轻量哈希嵌入。"""
+    """非安全用途的特征哈希；摘要决定持久化向量坐标，变更算法须先迁移索引。"""
 
     def __init__(self, dimensions: int = 256) -> None:
         self._dimensions = max(64, dimensions)

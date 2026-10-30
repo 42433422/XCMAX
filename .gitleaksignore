@@ -4,3 +4,25 @@ d733524a95ed99689c7bb704509c986f4053184f:FHD/tests/test_application/test_enterpr
 6c146fec41c4fca7cac059488586a7cf103c7a3e:FHD/tests/test_services/test_tool_executor_log_privacy.py:generic-api-key:12
 # Historical synthetic RSA/GCM fixture only; exact commit/file/rule/line, no service credential.
 b7e420707aa5f97086df7e1a9b4e692f98c5c16e:成都修茈科技有限公司/MODstore_deploy/java_payment_service/src/test/java/com/modstore/controller/WechatNotificationVerificationTest.java:generic-api-key:37
+
+
+# Reviewed historical synthetic fixtures and public PEM/header constants only; no workspace or unverified credential exemptions.
+02a5c63fad17514b2e7c9a282783fecb91ac380a:FHD/desktop/desktop-config.ts:generic-api-key:78
+2833a2d7586fc342258fdbb7ee721eb711706e3d:FHD/tests/test_mod_sdk/test_employee_specialized_tools_cov.py:generic-api-key:1427
+2833a2d7586fc342258fdbb7ee721eb711706e3d:FHD/tests/test_mod_sdk/test_employee_specialized_tools_cov.py:generic-api-key:1426
+2833a2d7586fc342258fdbb7ee721eb711706e3d:FHD/tests/test_mod_sdk/test_employee_specialized_tools_cov.py:generic-api-key:1458
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:232
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:281
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:284
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:393
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:403
+3f440e7551e4ff3c181ae07bee034561a8cda807:FHD/tests/test_application/test_llm_ops_tools.py:generic-api-key:405
+0c2f86e5358bc31cb1095ff8870c047d1d7d557d:FHD/tests/test_infrastructure/test_alipay_ext2.py:private-key:37
+0c2f86e5358bc31cb1095ff8870c047d1d7d557d:FHD/tests/test_infrastructure/test_alipay_ext2.py:private-key:624
+326583feba47b61a3ebc243131e50767b880cd23:FHD/tests/test_infrastructure/test_alipay_ext2.py:private-key:700
+60f5bb48c47ca842e29fb3e6ca4a1ccd6df1545f:FHD/tests/test_security/test_license_guard.py:generic-api-key:231
+60f5bb48c47ca842e29fb3e6ca4a1ccd6df1545f:FHD/tests/test_security/test_license_guard.py:generic-api-key:294
+9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152:FHD/tests/test_infrastructure/test_payment_alipay_sign.py:private-key:64
+326583feba47b61a3ebc243131e50767b880cd23:成都修茈科技有限公司/MODstore_deploy/java_payment_service/src/main/java/com/modstore/util/AlipayKeyNormalizer.java:private-key:27
+9367bbcfd1c84ddf11c3e4a4cc53aa99d1f4c152:成都修茈科技有限公司/MODstore_deploy/tests/test_change_request_api.py:generic-api-key:30
+aa5ed862a31ecc5a46ba7713919e8a53859bac08:FHD/docs/legal/software-copyright/V10-申请材料-20260901/程序鉴别材料-完整源代码.txt:generic-api-key:339735
