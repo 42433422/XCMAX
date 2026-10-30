@@ -87,8 +87,8 @@ def classify_review_workbook(review: dict) -> list[dict]:
             if cell.get("kind") == "formula" or not (merged_title or sparse_title):
                 continue
             value = cell["value"].strip().rstrip(":：")
-            for label, pattern in section_headings.items():
-                if re.fullmatch(pattern, value, re.I):
+            for label, section_pattern in section_headings.items():
+                if re.fullmatch(section_pattern, value, re.I):
                     item = {"label": label, "cell": cell["cell"], "matched": cell["value"]}
                     anchors.setdefault(row, []).append(item)
                     if not any(ref["label"] == label for ref in evidence):

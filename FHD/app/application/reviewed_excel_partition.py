@@ -32,7 +32,7 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
         for sheet in latest["sheets"]
         for region in sheet["regions"]
     }
-    supplied = {}
+    supplied: dict[tuple[str, str], list[dict]] = {}
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
