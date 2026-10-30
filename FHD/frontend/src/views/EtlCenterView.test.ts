@@ -110,6 +110,46 @@ describe('data docking archive-first workflow', () => {
     wrapper.unmount()
   })
 
+  it('previews the canonical server-confirmed coordinates after a lowercase boundary edit', async () => {
+    archive.archiveClassifyExcel.mockResolvedValue(classification([region('A1:D8')]))
+    archive.confirmClassification.mockResolvedValue({ ...classification([region('A1:D3')]), version: 'canonical-v2', confirmed: true })
+    const { wrapper, choose, button } = await setup(); await choose()
+    const boundary = wrapper.findAll('.classification-region input').find(input => input.element.closest('label')?.textContent?.includes('调整区域坐标'))!
+    await boundary.setValue('a1:d3')
+    await button('确认分类并继续').trigger('click'); await flushPromises()
+    expect(wrapper.get<HTMLInputElement>('input[name="template-region"]').element.checked).toBe(true)
+    await button('预览清理候选').trigger('click'); await flushPromises()
+    const form = archive.reviewExcel.mock.calls[0][0] as FormData
+    expect(form.get('classification_version')).toBe('canonical-v2')
+    expect(form.get('region_sheet')).toBe('生产单')
+    expect(form.get('region_range')).toBe('A1:D3')
+    wrapper.unmount()
+  })
+
+  it.each([
+    ['removed range', '生产单', 'A5:D8'],
+    ['changed sheet', '另一张单', 'A1:D4'],
+  ])('requires an explicit new selection after the server returns a %s', async (_case, sheet, range) => {
+    archive.archiveClassifyExcel.mockResolvedValue(classification([region('A1:D4')]))
+    const confirmed = classification([region(range)])
+    confirmed.sheets[0].sheet = sheet
+    archive.confirmClassification.mockResolvedValue({ ...confirmed, version: 'changed-v2', confirmed: true })
+    const { wrapper, choose, button } = await setup(); await choose()
+    await button('确认分类并继续').trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('当前所选片段已变化，请从确认后的文档片段中重新选择')
+    expect(wrapper.get<HTMLInputElement>('input[name="template-region"]').element.checked).toBe(false)
+    expect(button('预览清理候选').attributes('disabled')).toBeDefined()
+    await button('预览清理候选').trigger('click'); await flushPromises()
+    expect(archive.reviewExcel).not.toHaveBeenCalled()
+    await wrapper.get('input[name="template-region"]').setValue(true)
+    expect(wrapper.text()).not.toContain('当前所选片段已变化')
+    await button('预览清理候选').trigger('click'); await flushPromises()
+    const form = archive.reviewExcel.mock.calls[0][0] as FormData
+    expect(form.get('region_sheet')).toBe(sheet)
+    expect(form.get('region_range')).toBe(range)
+    wrapper.unmount()
+  })
+
   it('keeps archive request identity when classification fails after the original may have been archived', async () => {
     archive.archiveClassifyExcel.mockRejectedValueOnce(new Error('分类结果未知'))
     const { wrapper, choose, button } = await setup(); await choose()

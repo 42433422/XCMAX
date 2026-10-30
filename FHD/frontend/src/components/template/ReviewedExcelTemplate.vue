@@ -39,6 +39,14 @@ const analysisErrors = ref<Record<string, string>>({})
 const recentClassifications = ref<RecentClassification[]>([])
 const selectedRegion = ref('')
 const selectedRegionCoordinates = ref<{ sheet: string; range: string } | null>(null)
+const selectedRegionNeedsChoice = ref(false)
+const previewSelectionReady = computed(() => {
+  const coordinates = selectedRegionCoordinates.value
+  if (!coordinates) return !props.archiveOnSelect && !selectedRegionNeedsChoice.value
+  const item = classifications.value[files.value.indexOf(file.value as File)]
+  return item?.sheets.filter(sheet => sheet.sheet === coordinates.sheet)
+    .flatMap(sheet => sheet.regions).filter(region => region.range === coordinates.range).length === 1
+})
 const selectedPrintArea = ref(false)
 const batchLabel = ref('unknown')
 const labelNames: Record<string, string> = { quotation: '报价', delivery: '送货', purchase: '采购', attendance: '考勤', production: '生产', process: '工艺', material: '原料', inspection: '检验', template: '模板', unknown: '未知/待理解' }
@@ -95,6 +103,7 @@ function choose(event: Event) {
   selectedRows.value = []
   selectedRegion.value = ''
   selectedRegionCoordinates.value = null
+  selectedRegionNeedsChoice.value = false
   selectedPrintArea.value = false
   name.value = ''
   review.value = null
@@ -217,14 +226,18 @@ function selectFile(index: number) {
   const firstSheet = classifications.value[index]?.sheets[0]
   selectedRegion.value = firstSheet?.regions[0] ? `${firstSheet.sheet} / ${firstSheet.regions[0].range}` : ''
   selectedRegionCoordinates.value = firstSheet?.regions[0] ? { sheet: firstSheet.sheet, range: firstSheet.regions[0].range } : null
+  selectedRegionNeedsChoice.value = false
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
   emit('stage', classifications.value[index].confirmed ? 'cleaning' : 'fragments')
 }
 function selectRegion(i: number, j: number, k: number) {
+  const neededChoice = selectedRegionNeedsChoice.value
   if (file.value !== files.value[i]) selectFile(i)
   const sheet = classifications.value[i].sheets[j]
   selectedRegion.value = `${sheet.sheet} / ${sheet.regions[k].range}`
   selectedRegionCoordinates.value = { sheet: sheet.sheet, range: sheet.regions[k].range }
+  selectedRegionNeedsChoice.value = false
+  if (neededChoice) classificationNotice.value = classifications.value[i].confirmed ? '' : '已选择新的文档片段，请再次确认分类和续表关系后清理。'
   selectedPrintArea.value = false
   review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
   sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false; publishToTenant.value = false
@@ -257,6 +270,7 @@ function toggleLabel(sheet: ClassificationRegion, label: string, checked: boolea
   sheet.labels = [...next]; if (!sheet.labels.length) sheet.labels = ['unknown']
 }
 function changeRegionRange(region: ClassificationRegion, sheet: ClassificationSheet, value: string) {
+  value = normalizeRegionRange(value)
   const oldRange = region.range
   if (!region.original_range) region.original_range = oldRange
   region.range = value; region.modified = true
@@ -264,6 +278,30 @@ function changeRegionRange(region: ClassificationRegion, sheet: ClassificationSh
   if (selectedRegionCoordinates.value?.sheet === sheet.sheet && selectedRegionCoordinates.value.range === oldRange) {
     selectedRegionCoordinates.value = { sheet: sheet.sheet, range: value }
     selectedRegion.value = `${sheet.sheet} / ${value}`
+  }
+}
+function normalizeRegionRange(value: string) {
+  const match = value.trim().match(/^\$?([a-z]{1,3})\$?([1-9]\d*)\s*:\s*\$?([a-z]{1,3})\$?([1-9]\d*)$/i)
+  return match ? `${match[1].toUpperCase()}${match[2]}:${match[3].toUpperCase()}${match[4]}` : value
+}
+function alignConfirmedSelection(item: Classification) {
+  const index = classifications.value.indexOf(item)
+  if (index < 0 || !file.value || index !== files.value.indexOf(file.value)) return
+  const previous = selectedRegionCoordinates.value
+  const matches = previous ? item.sheets.filter(sheet => sheet.sheet === previous.sheet).flatMap(sheet =>
+    sheet.regions.filter(region => normalizeRegionRange(region.range) === normalizeRegionRange(previous.range))
+      .map(region => ({ sheet: sheet.sheet, range: region.range }))) : []
+  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
+  selectedPrintArea.value = false; sampleAuthorized.value = false; templateOwnFileAuthorized.value = false
+  classificationSampleAuthorized.value = false; classificationOwnFileAuthorized.value = false
+  consent.value = false; publishToTenant.value = false
+  if (matches.length === 1) {
+    selectedRegionCoordinates.value = matches[0]
+    selectedRegion.value = `${matches[0].sheet} / ${matches[0].range}`
+    selectedRegionNeedsChoice.value = false
+  } else if (previous || props.archiveOnSelect || selectedRegionNeedsChoice.value) {
+    selectedRegionCoordinates.value = null; selectedRegion.value = ''; selectedRegionNeedsChoice.value = true
+    classificationNotice.value = `${item.confirmed ? '' : `${classificationNotice.value} `}当前所选片段已变化，请从确认后的文档片段中重新选择，再预览清理候选。`
   }
 }
 function applyBatchLabel() {
@@ -332,8 +370,9 @@ async function confirmClassifications() {
       const result = await templatePreviewApi.confirmClassification(item.classification_id, form) as { message?: string; version: string; confirmed: boolean; sheets: ClassificationSheet[]; fragment_links?: FragmentLinks; logical_documents?: LogicalDocument[]; confirmed_document_count?: number | null; document_count_status?: string; coverage?: Classification['coverage'] }
       item.version = result.version; item.confirmed = result.confirmed; item.sheets = result.sheets; item.fragment_links = result.fragment_links; item.logical_documents = result.logical_documents; item.confirmed_document_count = result.confirmed_document_count; item.document_count_status = result.document_count_status; item.coverage = result.coverage
       if (!result.confirmed) classificationNotice.value = result.message || '拆分已保存。请核对新的文档片段和续表关系，再次确认后才能清理模板。'
+      alignConfirmedSelection(item)
     }
-    if (classificationConfirmed.value) { classificationNotice.value = ''; emit('stage', 'cleaning') }
+    if (classificationConfirmed.value && previewSelectionReady.value) { classificationNotice.value = ''; emit('stage', 'cleaning') }
     else emit('stage', 'fragments')
   } catch (err) { error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
   finally { busy.value = false }
@@ -363,7 +402,7 @@ async function restoreClassification(item: RecentClassification) {
   finally { busy.value = false }
 }
 async function preview() {
-  if (!file.value || !classificationConfirmed.value || (props.archiveOnSelect && !selectedRegionCoordinates.value)) return
+  if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value) return
   busy.value = true
   error.value = ''
   try {
@@ -388,7 +427,7 @@ async function preview() {
   finally { busy.value = false }
 }
 async function save() {
-  if (!file.value || !classificationConfirmed.value || !review.value || !name.value.trim()) return
+  if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value || !review.value || !name.value.trim()) return
   busy.value = true
   error.value = ''
   try {
@@ -580,7 +619,7 @@ async function downloadCandidate(index: number) {
     <label><input v-model="initialModel" type="checkbox" :disabled="busy"> 首轮使用模型生成三个候选</label>
     <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
     <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至 MiMo：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
-    <button type="button" :disabled="!file || !classificationConfirmed || (archiveOnSelect && !selectedRegionCoordinates) || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview">预览清理候选</button>
+    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview">预览清理候选</button>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>
