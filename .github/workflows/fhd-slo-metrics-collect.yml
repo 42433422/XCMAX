@@ -117,14 +117,34 @@ jobs:
             -o StrictHostKeyChecking=accept-new \
             -o ConnectTimeout=30 \
             -o ExitOnForwardFailure=yes \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=3 \
+            -o TCPKeepAlive=yes \
+            -o ServerAliveInterval=10 \
+            -o ServerAliveCountMax=6 \
             -M -S "$control_socket" -fN \
             -L 127.0.0.1:19091:127.0.0.1:9091 \
             "${FHD_PUSH_USER:-root}@${FHD_PUSH_HOST}"
-          curl -fsS --retry 3 --connect-timeout 5 --max-time 15 \
-            -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
-            "${PRODUCTION_PROMETHEUS_URL}/-/ready" >/dev/null
+          # Probe /-/ready and authenticated query API before collect.
+          # 2026-10-29 ConnectionResetError happened after ready-only checks.
+          for probe in 1 2 3 4 5; do
+            if curl -fsS --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
+              -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
+              -H "Connection: close" \
+              "${PRODUCTION_PROMETHEUS_URL}/-/ready" >/dev/null \
+            && curl -fsS --retry 2 --retry-all-errors --connect-timeout 5 --max-time 20 \
+              -H "Authorization: Bearer ${PRODUCTION_PROMETHEUS_TOKEN}" \
+              -H "Connection: close" \
+              --get --data-urlencode 'query=vector(1)' \
+              "${PRODUCTION_PROMETHEUS_URL}/api/v1/query" \
+              | python3 -c 'import json,sys; data=json.load(sys.stdin); raise SystemExit(0 if data.get("status")=="success" else 1)'; then
+              echo "Prometheus tunnel query probe succeeded (attempt ${probe})"
+              break
+            fi
+            if [ "$probe" -eq 5 ]; then
+              echo "::error::Prometheus tunnel query probe failed after retries"
+              exit 1
+            fi
+            sleep $((probe * 2))
+          done
 
       - name: Collect SLO from Prometheus
         id: slo_collect
@@ -135,7 +155,7 @@ jobs:
           PRODUCTION_PROMETHEUS_RETENTION_DAYS: ${{ vars.PRODUCTION_PROMETHEUS_RETENTION_DAYS }}
           NO_PROXY: 127.0.0.1,localhost
         run: |
-          set -uo pipefail
+          set -euo pipefail
           args=(
             --window "$SLO_WINDOW"
             --mode "$SLO_MODE"
@@ -236,7 +256,7 @@ jobs:
           fi
           snapshot_date="$(date -u +%Y%m%d)"
           branch="automation/slo-metrics-${GITHUB_RUN_ID}"
-          title="chore(metrics): measured snapshot ${snapshot_date}"
+          title="chore(metrics): SLO snapshot ${snapshot_date} (see body for pass/fail-closed)"
           git switch -c "$branch"
           git commit -m "$title"
           git pull --rebase origin "$GITHUB_REF_NAME"
@@ -249,7 +269,7 @@ jobs:
           gh pr merge "$pr_url" --auto --squash --delete-branch
 
       - name: Fail closed when production SLO evidence is not admissible
-        if: steps.slo_collect.outcome != 'success'
+        if: always() && steps.slo_collect.outcome != 'success'
         run: |
-          echo "::error::Production SLO evidence is unavailable or formal targets/sample floors failed; no PASS was emitted."
+          echo "::error::Production SLO evidence is unavailable, empty, or formal targets/sample floors failed; no PASS was emitted."
           exit 1
