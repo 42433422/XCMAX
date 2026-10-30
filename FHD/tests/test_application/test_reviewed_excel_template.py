@@ -5070,3 +5070,186 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
             assert response.json()["proposal"]["model"]["status"] == "unavailable"
     assert sensitive not in response.text
     assert "文件或请求无法处理" in response.text
+
+
+def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, monkeypatch):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    source = sample()
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("sample.xlsx", source)},
+    ).json()["files"][0]
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+
+    def fake(messages, schema, max_tokens):
+        data = {
+            "physical_regions": [
+                {
+                    "sheet": "报价",
+                    "range": "A1:C4",
+                    "labels": ["unknown"],
+                    "evidence": [],
+                    "dependencies": [],
+                    "reason": "不确定类型",
+                }
+            ],
+            "logical_documents": [],
+            "layout_references": [],
+        }
+        return LlmAssistResult(used_llm=True, data=data)
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    analyzed = client.post(
+        path + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert analyzed.status_code == 200, analyzed.text
+    value = analyzed.json()
+    assert not value["confirmed"]
+    route = path + "/auto-slices/" + value["version"]
+    listing = client.get(route)
+    assert listing.status_code == 200, listing.text
+    result = listing.json()["slices"]
+    assert (
+        len(result) == 1 and result[0]["basis"] == "ungrouped_region" and not result[0]["confirmed"]
+    )
+    download = client.get(route + "/0")
+    assert download.status_code == 200
+    assert result[0]["filename"].endswith(".xlsx")
+    assert "filename*=UTF-8''" in download.headers["content-disposition"]
+    assert hashlib.sha256(download.content).hexdigest() == result[0]["sha256"]
+    assert load_workbook(BytesIO(download.content)).sheetnames == ["报价"]
+    assert client.get(path + "/auto-slices/" + item["version"]).status_code == 409
+    review_store.actor["tenant"] = 2
+    assert client.get(route).status_code == 404
+    review_store.actor["tenant"] = 1
+    review_store.actor["read"] = False
+    assert client.get(route + "/0").status_code == 403
+
+
+def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
+    from app.application.etl.errors import ReviewedExcelError
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_classification import _classify_semantic_batch
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    review = inspect_workbook(sample())
+    first = next(cell for cell in review["cells"] if cell["cell"] == "A1")
+    second = next(cell for cell in review["cells"] if cell["cell"] == "B2")
+    third = next(cell for cell in review["cells"] if cell["cell"] == "A3")
+    review["cells"] = [first, {**second, "context_only": True}]
+    region = {
+        "sheet": "报价",
+        "range": "B2:B2",
+        "labels": ["unknown"],
+        "evidence": [],
+        "dependencies": [],
+        "reason": "仅重复上下文",
+    }
+
+    def fake(messages, schema, tokens):
+        return LlmAssistResult(
+            used_llm=True,
+            data={"physical_regions": [region], "logical_documents": [], "layout_references": []},
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    with pytest.raises(ReviewedExcelError, match="仅包含上下文或未读内容"):
+        _classify_semantic_batch(review)
+    region.update(range="A1:C4", evidence=[{"sheet": "报价", "cell": "B2"}])
+    review["full_cells"] = [first]
+    with pytest.raises(ReviewedExcelError, match="证据仅为重复上下文"):
+        _classify_semantic_batch(review)
+    region["evidence"] = []
+    review["full_cells"] = [first, second]
+    clipped = _classify_semantic_batch(review)["regions"][0]
+    assert clipped["range"] == "A1:C1" and clipped["model_original_range"] == "A1:C4"
+    assert clipped["open_fragment"]
+    review["cells"].append(third)
+    review["full_cells"].append(third)
+    with pytest.raises(ReviewedExcelError, match="包含本批未读内容"):
+        _classify_semantic_batch(review)
+
+
+def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypatch):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    calls = []
+
+    def fake(messages, schema, tokens):
+        payload = json.loads(messages[1]["content"])
+        if "groups" in schema["properties"]:
+            calls.append("group")
+            fragments = [
+                {"sheet": part["sheet"], "range": part["range"]} for part in payload["fragments"]
+            ]
+            evidence = [{"sheet": cell["sheet"], "cell": cell["cell"]} for cell in payload["cells"]]
+            return LlmAssistResult(
+                used_llm=True,
+                data={
+                    "groups": [
+                        {
+                            "document_id": "d1",
+                            "fragments": fragments,
+                            "evidence": evidence,
+                            "reason": "已读片段有相同文档标识",
+                        }
+                    ]
+                },
+            )
+        calls.append("batch")
+        primary = [c for c in payload["cells"] if not c["context_only"]]
+        rows = [int(c["cell"][1:]) for c in primary]
+        area = f"A{min(rows)}:A{max(rows)}"
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "physical_regions": [
+                    {
+                        "sheet": "报价",
+                        "range": area,
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "合成",
+                    }
+                ],
+                "logical_documents": [],
+                "layout_references": [],
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("batch.xlsx", large_quotation())},
+    ).json()["files"][0]
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true", "auto_group": "true"}
+    first = client.post(path + "/analyze", data=form)
+    assert first.status_code == 200 and first.json()["phase"] == "pending"
+    second = client.post(path + "/analyze", data=form)
+    assert second.status_code == 200 and second.json()["phase"] == "paused"
+    assert calls == ["batch", "batch"]
+    assert client.post(path + "/analyze", data=form).status_code == 409
+    done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
+    assert done.status_code == 200, done.text
+    data = done.json()
+    assert calls == ["batch", "batch", "group"]
+    assert data["budget"]["grouping_calls"] == 1 and not data["confirmed"]
+    assert len(data["suggested_documents"]) == 1
+    url = path + "/auto-slices/" + data["version"]
+    listing = client.get(url)
+    assert listing.status_code == 200, listing.text
+    assert len(listing.json()["slices"]) == 1
+    download = client.get(url + "/0")
+    assert download.status_code == 200
+    book = load_workbook(BytesIO(download.content))
+    assert book["报价"]["A601"].value is not None

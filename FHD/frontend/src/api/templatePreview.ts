@@ -111,6 +111,14 @@ export const templatePreviewApi = {
     return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/analyze`, formData)
   },
 
+  autoSlices(id: string, version: string) {
+    return api.get(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/auto-slices/${encodeURIComponent(version)}`)
+  },
+
+  downloadAutoSlice(id: string, version: string, index: number) {
+    return api.download(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/auto-slices/${encodeURIComponent(version)}/${index}`)
+  },
+
   confirmClassification(id: string, formData: FormData) {
     return reviewedExcelPost(`/api/templates/reviewed-excel/classifications/${encodeURIComponent(id)}/confirm`, formData)
   },

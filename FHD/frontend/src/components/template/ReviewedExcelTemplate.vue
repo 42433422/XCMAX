@@ -15,6 +15,7 @@ type ClassificationSheet = { sheet: string; labels: string[]; checked_cells: num
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
+type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; fragments: { sheet: string; range: string }[] }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type Classification = { template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
 type RecentClassification = { archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
@@ -38,6 +39,7 @@ const cancelAnalysis = ref(false)
 const analysisProgress = ref('')
 const classificationNotice = ref('')
 const analysisErrors = ref<Record<string, string>>({})
+const autoSlices = ref<Record<string, { version: string; slices: AutoSlice[] }>>({})
 const recentClassifications = ref<RecentClassification[]>([])
 const selectedRegion = ref('')
 const selectedRegionCoordinates = ref<{ sheet: string; range: string } | null>(null)
@@ -105,6 +107,7 @@ function captureFileOperation() {
   return () => current() && epoch === selectionEpoch && !!selectedScope?.()
 }
 function resetSelectionState() {
+  autoSlices.value = {}
   file.value = null
   classifications.value = []
   classificationSampleAuthorized.value = false
@@ -409,6 +412,7 @@ async function analyzeClassifications() {
         if (!item.classification_id || !item.version) throw new Error('分类来源或版本缺失，请重新分类')
         while (!cancelAnalysis.value) {
           const form = new FormData(); form.append('version', item.version); form.append(classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
+          form.append('auto_group', 'true')
           if (item.checkpoint?.phase === 'paused') form.append('continue_authorized', 'true')
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
           if (!current()) return
@@ -419,6 +423,14 @@ async function analyzeClassifications() {
             continue
           }
           item.checkpoint = null; item.version = result.version; item.sheets = result.sheets; item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
+          try {
+            const generated = await templatePreviewApi.autoSlices(item.classification_id, result.version) as { slices: AutoSlice[] }
+            if (!current()) return
+            autoSlices.value[item.classification_id] = { version: result.version, slices: generated.slices }
+          } catch (err) {
+            if (!current()) return
+            analysisErrors.value[item.classification_id] = err instanceof Error ? `裁切失败：${err.message}` : '裁切失败，请检查模型边界及依赖'
+          }
           break
         }
       } catch (err) { if (!current()) return;
@@ -436,6 +448,19 @@ async function analyzeClassifications() {
     const index = files.value.indexOf(file.value as File)
     if (index >= 0) selectFile(index)
   } finally { if (current()) busy.value = false }
+}
+async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
+  const current = captureFileOperation()
+  if (!current()) return
+  if (!item.classification_id || !item.version || autoSlices.value[item.classification_id]?.version !== item.version) return
+  try {
+    const response = await templatePreviewApi.downloadAutoSlice(item.classification_id, item.version, slice.index)
+    if (!current()) return
+    const blob = await response.blob()
+    if (!current()) return
+    const url = URL.createObjectURL(blob); const link = document.createElement('a')
+    link.href = url; link.download = slice.filename; link.click(); URL.revokeObjectURL(url)
+  } catch (err) { if (current()) error.value = err instanceof Error ? err.message : '下载失败' }
 }
 async function confirmClassifications() {
   const current = captureFileOperation()
@@ -655,7 +680,7 @@ async function downloadCandidate(index: number) {
     <div v-if="classifications.length" class="classification-results">
       <label><input v-model="classificationSampleAuthorized" type="checkbox" :disabled="busy"> 确认所有待分析文件为获准发送的合成或公开样本，同意发送有界单元格及结构（每文件每轮默认一次，按服务配置最多四次，逐次执行；预算用完需再次确认）</label>
       <label v-if="file"><input v-model="classificationOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的内容发送至 MiMo：每批最多 500 个单元格的文本、公式和结构坐标可能包含敏感数据；仅发送当前文件，逐批分析，每轮最多四次。</label>
-      <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized" @click="analyzeClassifications">模型分析已分类文件</button>
+      <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized" @click="analyzeClassifications()">模型分析已分类文件</button>
       <button v-if="busy && analysisProgress" type="button" @click="cancelAnalysis = true">停止后续分析</button>
       <p v-if="analysisProgress">{{ analysisProgress }}</p>
       <p>下方坐标是物理片段；是否属于同一业务文档需另行核对。同类别不会自动合并，范围可能包含空白边缘，不表示已精确裁剪。</p>
@@ -689,6 +714,15 @@ async function downloadCandidate(index: number) {
         <details v-for="coverage in item.coverage || []" :key="`coverage-${coverage.sheet}`"><summary>{{ coverage.sheet }} 未读、截断与未分配坐标</summary><p>未发送：{{ coverage.unread.join('，') || '无' }}</p><p>单元格值截断：{{ coverage.value_truncated.join('，') || '无' }}</p><p>超出单格预算、尚未发送：{{ coverage.deferred_large_values?.join('，') || '无' }}</p><p>当前未归入区域：{{ coverage.unassigned.join('，') || '无' }}</p><p v-if="coverage.model_unassigned">模型原始未分配：{{ coverage.model_unassigned.join('，') || '无' }}</p></details>
         <small v-if="item.status !== 'classified'">未支持：{{ item.message }}</small>
         <small v-if="analysisErrors[item.classification_id || item.name]">分析失败：{{ analysisErrors[item.classification_id || item.name] }}。</small>
+        <div v-if="item.classification_id && autoSlices[item.classification_id]?.version === item.version">
+          <p>自动裁切结果：未确认的区域关系请核对，下载文件保留原始数据。</p>
+          <p v-for="slice in autoSlices[item.classification_id].slices" :key="slice.index">
+            {{ slice.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}
+            {{ slice.basis === 'ungrouped_region' ? '（模型未确定单据归组）' : '（模型建议同一单据）' }}
+            {{ slice.filename }}
+            <button type="button" :disabled="busy" @click="downloadAutoSlice(item, slice)">下载裁切 Excel</button>
+          </p>
+        </div>
         <div v-for="(sheet, j) in item.sheets" :key="j">
           <strong>{{ sheet.sheet }}（已读取 {{ sheet.checked_cells }} 个非空格）</strong>
           <div v-for="(region, k) in sheet.regions" :key="k" class="classification-region">

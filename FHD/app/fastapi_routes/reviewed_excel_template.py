@@ -8,6 +8,7 @@ import os
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -522,6 +523,80 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         }
 
 
+def _auto_slices(db, classification_id, version, tenant, owner):
+    from app.application.reviewed_excel_auto_slice import derive_classified_documents
+
+    run = _classification_run(db, classification_id, tenant, owner)
+    versions = load_json(run.draft_json, {}).get("versions", [])
+    latest = versions[-1] if versions else {}
+    if latest.get("version") != version or latest.get("model_status") != "returned":
+        raise HTTPException(status_code=409, detail="分类版本已改变或模型尚未完成")
+    body = _source(db, run, tenant, owner)
+    regions = [
+        {**region, "sheet": sheet["sheet"]}
+        for sheet in latest.get("sheets", [])
+        for region in sheet.get("regions", [])
+        if region.get("range_source") == "model"
+    ]
+    return derive_classified_documents(
+        body,
+        {
+            "source_sha256": run.file_sha256,
+            "model_status": latest["model_status"],
+            "regions": regions,
+            "suggested_documents": latest.get("suggested_documents", []),
+        },
+    ), latest.get("coverage", [])
+
+
+@router.get(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/auto-slices/{version}"
+)
+def reviewed_excel_auto_slices(classification_id: str, version: str, user=Depends(_read)):
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            slices, coverage = _auto_slices(db, classification_id, version, tenant, owner)
+        return {
+            "classification_id": classification_id,
+            "version": version,
+            "coverage": coverage,
+            "slices": [
+                {
+                    **{key: value for key, value in item.items() if key != "workbook"},
+                    "index": index,
+                    "sha256": hashlib.sha256(item["workbook"]).hexdigest(),
+                }
+                for index, item in enumerate(slices)
+            ],
+        }
+    except (ValueError, TypeError, EtlError) as exc:
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+
+
+@router.get(
+    "/api/templates/reviewed-excel/classifications/{classification_id}/auto-slices/{version}/{index}"
+)
+def reviewed_excel_auto_slice_download(
+    classification_id: str, version: str, index: int, user=Depends(_read)
+):
+    tenant, owner = _identity(user)
+    try:
+        with tenant_scope(tenant), get_db() as db:
+            slices, _coverage = _auto_slices(db, classification_id, version, tenant, owner)
+        if index < 0 or index >= len(slices):
+            raise HTTPException(status_code=404, detail="切片不存在")
+        return Response(
+            slices[index]["workbook"],
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(slices[index]['filename'])}"
+            },
+        )
+    except (ValueError, TypeError, EtlError) as exc:
+        raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
+
+
 @router.post("/api/templates/reviewed-excel/classifications/{classification_id}/confirm")
 def reviewed_excel_classification_confirm(
     classification_id: str,
@@ -640,6 +715,7 @@ async def reviewed_excel_classification_analyze(
     sample_authorized: bool = Form(False),
     own_file_authorized: bool = Form(False),
     continue_authorized: bool = Form(False),
+    auto_group: bool = Form(False),
     user=Depends(_manage),
 ):
     tenant, owner = _identity(user)
@@ -670,6 +746,8 @@ async def reviewed_excel_classification_analyze(
                 != authorization_kind
             ):
                 raise HTTPException(status_code=409, detail="授权范围已改变，请核对已有批次")
+            if checkpoint and checkpoint.get("auto_group", False) != auto_group:
+                raise HTTPException(status_code=409, detail="分组模式已改变，请核对已有批次")
             if checkpoint and checkpoint.get("phase") == "inflight":
                 raise HTTPException(
                     status_code=409, detail="上次请求结果未知，请核对后处理；不会自动重发"
@@ -691,6 +769,7 @@ async def reviewed_excel_classification_analyze(
                     "total": len(batches),
                     "max_calls": max_calls,
                     "calls_in_round": 0,
+                    "auto_group": auto_group,
                     "authorization": {
                         "kind": authorization_kind,
                         "tenant_id": tenant,
@@ -717,41 +796,74 @@ async def reviewed_excel_classification_analyze(
             ] != len(batches):
                 raise HTTPException(status_code=409, detail="分析计划已改变，请重新核对")
             index = len(checkpoint["results"])
-            if index >= len(batches):
+            if index > len(batches):
                 raise HTTPException(status_code=409, detail="分析批次状态无效")
-            full_structure_map = build_structure_map(review, classify_review_workbook(review))
-            batch_review = {
-                **review,
-                "cells": batches[index],
-                "full_structure_map": full_structure_map,
-            }
-            # A budget failure is known to occur before any provider request; do not create an uncertain checkpoint.
-            await run_in_threadpool(_classify_semantic_batch, batch_review, prepare_only=True)
-            checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
-            state["analysis_checkpoint"] = checkpoint
-            _recheck(request, (tenant, owner))
-            _classification_cas(db, run, old, state)
-            claimed_draft = dump_json(state)
-            batch_result = await run_in_threadpool(_classify_semantic_batch, batch_review)
-            _recheck(request, (tenant, owner))
-            _source(db, run, tenant, owner)
-            checkpoint["results"].append(batch_result)
-            checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
-            checkpoint["phase"] = "ready"
-            # Validate all accumulated results, including cross-batch conflicts, before persistence.
-            result = combine_semantic_batches(
-                review, batches[: index + 1], checkpoint["results"], max_calls
-            )
-            if index + 1 < len(batches):
-                if checkpoint["calls_in_round"] >= max_calls:
-                    checkpoint["phase"] = "paused"
-                _classification_cas(db, run, claimed_draft, state)
-                return {
-                    "classification_id": classification_id,
-                    "version": version,
-                    "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
-                    "checkpoint": _checkpoint_view(checkpoint),
+            if index < len(batches):
+                full_structure_map = build_structure_map(review, classify_review_workbook(review))
+                batch_review = {
+                    **review,
+                    "cells": batches[index],
+                    "full_cells": review["cells"],
+                    "full_structure_map": full_structure_map,
                 }
+                await run_in_threadpool(_classify_semantic_batch, batch_review, prepare_only=True)
+                checkpoint.update({"phase": "inflight", "plan_digest": plan_digest})
+                state["analysis_checkpoint"] = checkpoint
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, run, old, state)
+                claimed_draft = dump_json(state)
+                batch_result = await run_in_threadpool(_classify_semantic_batch, batch_review)
+                _recheck(request, (tenant, owner))
+                _source(db, run, tenant, owner)
+                checkpoint["results"].append(batch_result)
+                checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
+                checkpoint["phase"] = "ready"
+                result = combine_semantic_batches(
+                    review, batches[: index + 1], checkpoint["results"], max_calls
+                )
+                if index + 1 < len(batches):
+                    if checkpoint["calls_in_round"] >= max_calls:
+                        checkpoint["phase"] = "paused"
+                    _classification_cas(db, run, claimed_draft, state)
+                    return {
+                        "classification_id": classification_id,
+                        "version": version,
+                        "phase": "paused" if checkpoint["phase"] == "paused" else "pending",
+                        "checkpoint": _checkpoint_view(checkpoint),
+                    }
+            else:
+                if not auto_group or len(batches) <= 1:
+                    raise HTTPException(status_code=409, detail="分析批次状态无效")
+                claimed_draft = old
+                result = combine_semantic_batches(review, batches, checkpoint["results"], max_calls)
+            if auto_group and len(batches) > 1:
+                from app.application.reviewed_excel_grouping import group_semantic_fragments
+
+                # Persist complete fragment results before beginning a separate model request.
+                if index < len(batches):
+                    if checkpoint["calls_in_round"] >= max_calls:
+                        checkpoint["phase"] = "paused"
+                    _classification_cas(db, run, claimed_draft, state)
+                    claimed_draft = dump_json(state)
+                    if checkpoint["phase"] == "paused":
+                        return {
+                            "classification_id": classification_id,
+                            "version": version,
+                            "phase": "paused",
+                            "checkpoint": _checkpoint_view(checkpoint),
+                        }
+                await run_in_threadpool(group_semantic_fragments, review, result, prepare_only=True)
+                checkpoint["phase"] = "inflight"
+                _recheck(request, (tenant, owner))
+                _classification_cas(db, run, claimed_draft, state)
+                claimed_draft = dump_json(state)
+                result["suggested_documents"] = await run_in_threadpool(
+                    group_semantic_fragments, review, result
+                )
+                _recheck(request, (tenant, owner))
+                _source(db, run, tenant, owner)
+                checkpoint["calls_in_round"] = checkpoint.get("calls_in_round", 0) + 1
+                result["budget"]["grouping_calls"] = 1
             old = claimed_draft
             state.pop("analysis_checkpoint", None)
             rule_sheets = classify_review_workbook(review)
@@ -820,6 +932,8 @@ async def reviewed_excel_classification_analyze(
                             "needs_confirmation": True,
                             "checked_cells": 0,
                             "reason": region["reason"],
+                            "open_fragment": region.get("open_fragment", False),
+                            "model_original_range": region.get("model_original_range"),
                             "suggested_labels": region.get("suggested_labels", []),
                             "context_warning": region.get("context_warning", ""),
                             "continuation_context": region.get("continuation_context"),

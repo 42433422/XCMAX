@@ -222,6 +222,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
+        get_column_letter,
     )
 
     if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
@@ -247,6 +248,12 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     ):
         raise ReviewedExcelError("本批模型证据超过安全预算，未调用模型")
     sent = {(c["sheet"], c["cell"]): c for c in chosen}
+    primary = {}
+    primary_keys = {(c["sheet"], c["cell"]) for c in chosen if not c.get("context_only")}
+    for cell in chosen:
+        if not cell.get("context_only"):
+            col, row = coordinate_from_string(cell["cell"])
+            primary.setdefault(cell["sheet"], []).append((column_index_from_string(col), row))
     overview = []
     merge_budget = 100
     for sheet in review["sheet_overview"]:
@@ -383,7 +390,8 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
             "content": (
                 "Identify business document regions. Return exactly one JSON object matching output_schema, no extra fields. "
                 "physical_regions are geometric fragments, not document counts. logical_documents group physical fragments only when supported; "
-                "use distinct document_id values and leave uncertain fragments ungrouped. Do not provide a document count; software calculates it. "
+                "A supported standalone fragment is also a logical document with one fragment. "
+                "Use distinct document_id values and leave uncertain fragments ungrouped. Do not provide a document count; software calculates it. "
                 "layout_references contain only exact merged ranges from sheets.merged, including blank anchors; they are not semantic evidence. "
                 "Evidence and dependencies are objects with sheet and cell fields; cell MUST be a bare coordinate like A1, never append a value or explanation. "
                 "Structure coordinates are only an index, not evidence: classify only from cell values actually sent. "
@@ -396,6 +404,9 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 "Each request may contain only part of a workbook; do not assume cells outside this batch were read. "
                 "Cells marked context_only are repeated context, not part of this batch's primary consecutive rows; "
                 "use them as dependencies where relevant and do not create a new document solely from them. "
+                "Every physical region must contain a primary cell from this batch; do not propose regions solely from repeated context or unread rows. "
+                "Use primary cells as evidence, not context_only cells. "
+                "For each region, choose at most 20 concise evidence cells and at most 20 dependencies; do not list every cell. "
                 "If evidence is insufficient or the relevant cells were not sent, use unknown; do not guess. "
                 "Use relationship_context as observations, not proof: adjacency, identical or shifted headers, titles and shared notes "
                 "may suggest continuation but may also occur in different documents. For a category change, cite category-specific "
@@ -467,6 +478,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     by_dimensions = {s["sheet"]: s for s in review["sheet_overview"]}
     rects: dict[str, list[tuple[int, int, int, int]]] = {}
     accepted = []
+    range_map = {}
     for region in physical:
         if not isinstance(region, dict) or set(region) != {
             "sheet",
@@ -478,6 +490,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         }:
             raise ReviewedExcelError("模型区域格式无效，原分类未改变")
         sheet, area, labels = region["sheet"], region["range"], region["labels"]
+        original_area = area
         if (
             not isinstance(sheet, str)
             or sheet not in by_dimensions
@@ -502,6 +515,32 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 raise ReviewedExcelError("bounds")
         except (ValueError, TypeError):
             raise ReviewedExcelError("模型区域坐标越界，原分类未改变") from None
+        if not legacy and not any(
+            c1 <= col <= c2 and r1 <= row <= r2 for col, row in primary.get(sheet, [])
+        ):
+            raise ReviewedExcelError("模型区域仅包含上下文或未读内容，原分类未改变")
+        fragment_metadata = {}
+        if not legacy:
+            unread_in_region = []
+            for cell in review.get("full_cells", review["cells"]):
+                if cell["sheet"] != sheet or (sheet, cell["cell"]) in primary_keys:
+                    continue
+                col, row = coordinate_from_string(cell["cell"])
+                if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
+                    unread_in_region.append(row)
+            if unread_in_region:
+                observed_rows = [
+                    row
+                    for col, row in primary.get(sheet, [])
+                    if c1 <= col <= c2 and r1 <= row <= r2
+                ]
+                first, last = min(observed_rows), max(observed_rows)
+                if any(first <= row <= last for row in unread_in_region):
+                    raise ReviewedExcelError("模型区域包含本批未读内容，原分类未改变")
+                fragment_metadata = {"model_original_range": area, "open_fragment": True}
+                r1, r2 = first, last
+                area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+                region = {**region, "range": area}
         for old_c1, old_r1, old_c2, old_r2 in rects.setdefault(sheet, []):
             if c1 <= old_c2 and old_c1 <= c2 and r1 <= old_r2 and old_r1 <= r2:
                 raise ReviewedExcelError("模型区域重叠，原分类未改变")
@@ -531,11 +570,14 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     raise ReviewedExcelError("模型分类缺少依据，原分类未改变")
                 for ref in refs:
                     col, row = coordinate_from_string(ref["cell"])
+                    if not legacy and sent[(ref["sheet"], ref["cell"])].get("context_only"):
+                        raise ReviewedExcelError("模型分类证据仅为重复上下文，原分类未改变")
                     if ref["sheet"] != sheet or not (
                         c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
                     ):
                         raise ReviewedExcelError("模型证据不在区域内，原分类未改变")
-        accepted.append({**region, "needs_confirmation": True})
+        accepted.append({**region, **fragment_metadata, "needs_confirmation": True})
+        range_map[(sheet, original_area)] = (sheet, area)
     suggested_documents, layout_references = [], []
     if not legacy:
         documents, layout = data["logical_documents"], data["layout_references"]
@@ -570,11 +612,11 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                     or not isinstance(ref["range"], str)
                 ):
                     raise ReviewedExcelError("模型文档片段格式无效，原分类未改变")
-                key = (ref["sheet"], ref["range"])
+                key = range_map.get((ref["sheet"], ref["range"]), (ref["sheet"], ref["range"]))
                 if key not in known or key in assigned:
                     raise ReviewedExcelError("模型文档片段来源无效或重复，原分类未改变")
                 assigned.add(key)
-                refs.append(ref)
+                refs.append({"sheet": key[0], "range": key[1]})
             suggested_documents.append(
                 {"document_id": document["document_id"], "fragments": refs, "status": "candidate"}
             )
@@ -646,11 +688,15 @@ def combine_semantic_batches(
     accepted = []
     rectangles: dict[str, list[tuple[int, int, int, int, dict]]] = {}
     sent: set[tuple[str, str]] = set()
+    primary_sent: set[tuple[str, str]] = set()
     input_summaries = []
     merge_sent: dict[str, int] = {}
     for batch, result in zip(batches, results, strict=True):
         input_summaries.append(result["input_summary"])
         sent.update((cell["sheet"], cell["cell"]) for cell in batch)
+        primary_sent.update(
+            (cell["sheet"], cell["cell"]) for cell in batch if not cell.get("context_only")
+        )
         for coverage in result["coverage"]:
             merge_sent[coverage["sheet"]] = max(
                 merge_sent.get(coverage["sheet"], 0), coverage["merged_sent"]
@@ -675,7 +721,7 @@ def combine_semantic_batches(
     coverage = []
     for name in review["sheets"]:
         cells = [cell for cell in review["cells"] if cell["sheet"] == name]
-        unread = [cell["cell"] for cell in cells if (name, cell["cell"]) not in sent]
+        unread = [cell["cell"] for cell in cells if (name, cell["cell"]) not in primary_sent]
         unassigned = []
         for cell in cells:
             col, row = coordinate_from_string(cell["cell"])
@@ -742,7 +788,7 @@ def combine_semantic_batches(
             col, row = coordinate_from_string(cell["cell"])
             if c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2:
                 region_keys.add((cell["sheet"], cell["cell"]))
-        unread_region = region_keys - sent
+        unread_region = region_keys - primary_sent
         if unread_region:
             if region["labels"] != ["unknown"]:
                 region.setdefault("suggested_labels", region["labels"])
@@ -829,7 +875,12 @@ def classify_semantic_workbook(review: dict) -> dict:
     for batch in batches[:max_calls]:
         results.append(
             _classify_semantic_batch(
-                {**review, "cells": batch, "full_structure_map": full_structure_map}
+                {
+                    **review,
+                    "cells": batch,
+                    "full_cells": review["cells"],
+                    "full_structure_map": full_structure_map,
+                }
             )
         )
         combined = combine_semantic_batches(review, batches[: len(results)], results, max_calls)
