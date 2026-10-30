@@ -5062,9 +5062,7 @@ def test_reviewed_excel_never_returns_underlying_exception_payload(
     assert "文件或请求无法处理" in response.text
 
 
-def test_auto_slice_api_without_confirmation_and_owner_isolation(
-    review_store, monkeypatch
-):
+def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, monkeypatch):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5249,9 +5247,7 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
     assert book["报价"]["A601"].value is not None
 
 
-def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(
-    review_store, monkeypatch
-):
+def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_store, monkeypatch):
     import base64
 
     from app.application.etl.llm_assist_runtime import LlmAssistResult
@@ -5565,4 +5561,3 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     assert listing.status_code == 400 and "完整覆盖" in listing.text
     download = client.get(endpoint + "/0")
     assert download.status_code == 400 and "完整覆盖" in download.text
-
