@@ -49,7 +49,7 @@ def test_credential_incident_sources_are_not_silenced() -> None:
 
 def test_historical_secrets_and_unverified_assets_still_scan() -> None:
     for _, path in _exceptions():
-        assert re.search(r"(^|/)\\.env($|[.-])", path) is None, path
+        assert re.search(r"(^|/)\.env($|[.-])", path) is None, path
         assert not path.endswith("/mobile_relay_desktop.json"), path
         assert path != "deploy_staging.sh", path
         assert "/assets/js/" not in path, path
