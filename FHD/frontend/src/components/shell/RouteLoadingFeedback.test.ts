@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
+import { h, nextTick, ref } from 'vue'
 import RouteLoadingFeedback from './RouteLoadingFeedback.vue'
 
 afterEach(() => vi.useRealTimers())
@@ -30,9 +31,13 @@ it('reveals a slow navigation and removes feedback as soon as it completes', asy
 
 it('retires a previous target timer and cleans up on unmount', async () => {
   vi.useFakeTimers()
-  const wrapper = mount(RouteLoadingFeedback, { props: { active: 'first' } })
+  const target = ref('first')
+  const wrapper = mount({
+    setup: () => () => h(RouteLoadingFeedback, { key: target.value, active: !!target.value }),
+  })
   await vi.advanceTimersByTimeAsync(200)
-  await wrapper.setProps({ active: 'second' })
+  target.value = 'second'
+  await nextTick()
   await vi.advanceTimersByTimeAsync(80)
   expect(wrapper.find('[role="status"]').exists()).toBe(false)
   wrapper.unmount()

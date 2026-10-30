@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from 'vue'
 
-const props = defineProps<{ active: boolean | string }>()
+const props = defineProps<{ active: boolean }>()
 const visible = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 

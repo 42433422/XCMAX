@@ -36,7 +36,7 @@
           </div>
         </div>
         <TopQuickNav @select="handleViewChange" />
-        <RouteLoadingFeedback :active="pendingSidebarView" class="route-nav-feedback" data-testid="route-nav-feedback" />
+        <RouteLoadingFeedback :key="pendingSidebarView" :active="!!pendingSidebarView" class="route-nav-feedback" data-testid="route-nav-feedback" />
         <div class="top-bar-actions">
           <button
             type="button"
