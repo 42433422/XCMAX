@@ -108,7 +108,8 @@ def test_watchdog_never_closes_without_independent_health(
         assert not (tmp_path / "restarted").exists()
 
 
-def test_slo_closes_opened_tunnel_when_readiness_fails(tmp_path):
+@pytest.mark.parametrize("failure", ["readiness", "query", "query_payload"])
+def test_slo_closes_opened_tunnel_when_probe_retries_fail(tmp_path, failure):
     workflow_steps = steps("FHD/.github/workflows/slo-metrics-collect.yml", "collect")
     opening = next(s for s in workflow_steps if s.get("id") == "prometheus_tunnel")
     closing = next(
@@ -125,7 +126,17 @@ def test_slo_closes_opened_tunnel_when_readiness_fails(tmp_path):
     fi
     """,
     )
-    stub(tmp_path / "curl", "exit 56\n")
+    stub(
+        tmp_path / "curl",
+        """
+    echo probe >> "$RUNNER_TEMP/probes"
+    [ "$FAILURE" != readiness ] || exit 56
+    [[ " $* " == *"/-/ready"* ]] && exit 0
+    [ "$FAILURE" != query ] || exit 56
+    echo '{"status":"error"}'
+    """,
+    )
+    stub(tmp_path / "sleep", "exit 0\n")
     env = {
         **os.environ,
         "PATH": f"{tmp_path}:{os.environ['PATH']}",
@@ -135,8 +146,14 @@ def test_slo_closes_opened_tunnel_when_readiness_fails(tmp_path):
         "FHD_PUSH_SSH_KEY_RAW": "test key",
         "PRODUCTION_PROMETHEUS_URL": "http://127.0.0.1:19091",
         "PRODUCTION_PROMETHEUS_TOKEN": "test token",
+        "FAILURE": failure,
     }
-    assert run(opening["run"], env).returncode == 56
+    result = run(opening["run"], env)
+    assert result.returncode == 1, result.stderr
+    assert b"Prometheus tunnel query probe failed after retries" in result.stdout
+    assert len((tmp_path / "probes").read_text().splitlines()) == (
+        5 if failure == "readiness" else 10
+    )
     env.update(line.split("=", 1) for line in (tmp_path / "env").read_text().splitlines())
     assert run(closing["run"], env).returncode == 0
     assert (tmp_path / "trace").read_text().splitlines() == ["opened", "closed"]
