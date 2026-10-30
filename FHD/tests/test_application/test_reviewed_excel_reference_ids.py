@@ -201,6 +201,7 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
     properties = payload["output_schema"]["properties"]["physical_regions"]["items"]["properties"]
     assert "labels" not in properties
     assert "unknown" not in captured["messages"][0]["content"]
+    assert "Every sent non-context primary cell" in captured["messages"][0]["content"]
     assert payload["cells"] and payload["integrity_constraints"]["merged_ranges"]
     assert result["regions"][0]["labels"] == ["unknown"]
     assert (

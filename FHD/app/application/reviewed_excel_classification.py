@@ -353,6 +353,8 @@ def _classify_semantic_batch(
                 "Cells marked context_only are repeated context, not part of this batch's primary consecutive rows; "
                 "use them as dependencies where relevant and do not create a new document solely from them. "
                 "Every physical region must contain a primary cell from this batch; do not propose regions solely from repeated context or unread rows. "
+                "Every sent non-context primary cell must be covered by exactly one non-overlapping physical region, "
+                "including isolated headers, footnotes, and formulas; never cover unread cells to force completeness. "
                 "Use primary cells as evidence, not context_only cells. "
                 "For each region, choose at most 20 concise evidence cells and at most 20 dependencies; do not list every cell. "
                 "If evidence is insufficient or the relevant cells were not sent, use unknown; do not guess. "

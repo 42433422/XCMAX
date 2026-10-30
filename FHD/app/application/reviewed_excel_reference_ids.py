@@ -320,6 +320,8 @@ IDENTIFY_PROMPT = (
     "do not list every cell. Include only necessary dependency IDs, also at most 100. "
     "Integrity constraints show primary row spans, direct formula references and known merged ranges. "
     "Do not sever merged ranges or treat formula references as proof of one business document. "
+    "Every sent non-context primary cell must be inside exactly one non-overlapping physical region, "
+    "including isolated headers, footnotes, and formulas; do not include unread cells to fill gaps. "
     "Unresolved references and omitted merges require caution; unread cells are not evidence."
 )
 GROUP_PROMPT = (
@@ -361,7 +363,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "fd3c4a833f821b8ffbdc77dbd35557e8eeda9059c7fee59c4a6960bac5ac308e",
+        "d0525bd578e88317be891c061ec5bf79fd3ddcd65d4d2287aa93569d372a1be0",
         "e2e1ceb650586cdc2954e2e622e6807a03a3fec251aa122dc17d1fdd6dc01b4a",
     ),
     "group": (
