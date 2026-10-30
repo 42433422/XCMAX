@@ -134,7 +134,7 @@ def prepare_reference_messages(messages: list[dict], schema: dict) -> tuple[dict
         coverage["sent_nonempty"] = sum(not cell.get("context_only") for cell in selected)
         coverage["context_only"] = len(selected) - coverage["sent_nonempty"]
         coverage["unread_nonempty"] = coverage["total_nonempty"] - coverage["sent_nonempty"]
-    messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
+    messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     messages[0]["content"] = (
         DRAWING_IDENTIFY_PROMPT if payload.get("drawing_evidence") else IDENTIFY_PROMPT
     )
@@ -153,7 +153,7 @@ def neutralize_messages(messages: list[dict]) -> None:
         coverage["sent_nonempty"] = sum(not cell.get("context_only") for cell in selected)
         coverage["context_only"] = len(selected) - coverage["sent_nonempty"]
         coverage["unread_nonempty"] = coverage["total_nonempty"] - coverage["sent_nonempty"]
-    messages[1]["content"] = json.dumps(payload, ensure_ascii=False)
+    messages[1]["content"] = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     messages[0]["content"] = (
         "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
         "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -306,7 +306,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
                 if current:
                     batches.append(current)
                     current, current_cost = [], 0
-                continue
+                raise ReviewedExcelError("单行超出模型安全预算，未调用模型")
             if current and (
                 len(current) + len(group) > MAX_MODEL_CELLS - reserved_count
                 or current_cost + cost > MAX_MODEL_TEXT_BYTES - reserved_cost

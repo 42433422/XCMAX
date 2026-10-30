@@ -124,3 +124,160 @@ def test_unsent_audit_cannot_release_a_received_or_different_request():
         record_not_sent(state, digest, "未发送")
     assert state["model_audit"][-1]["state"] == "response_received"
     assert state["analysis_checkpoint"]["calls_in_round"] == 2
+
+
+@pytest.mark.parametrize("seconds", [1, 10.5, 120, 180])
+def test_template_transport_timeout_is_private_and_bounded(monkeypatch, seconds):
+    import asyncio
+
+    import httpx
+
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    seen = []
+
+    class Client:
+        async def post(self, url, *, headers, json, timeout):
+            assert not any(key.startswith("_reviewed_excel") for key in json)
+            assert timeout.read == timeout.write == timeout.pool == seconds
+            assert timeout.connect == min(10, seconds)
+            seen.append(json)
+            return httpx.Response(200, json={"choices": []}, request=httpx.Request("POST", url))
+
+    async def fake_client():
+        return Client()
+
+    adapter = OpenAICompatibleAdapter(provider="xiaomi", api_key="synthetic-key")
+    monkeypatch.setattr(adapter, "_get_client", fake_client)
+    asyncio.run(adapter.chat_completion([], _reviewed_excel_transport_timeout=seconds))
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    "seconds", [None, True, "120", 0, -1, 181, 10**1000, float("inf"), float("-inf"), float("nan")]
+)
+def test_invalid_template_transport_timeout_is_rejected_before_client(monkeypatch, seconds):
+    import asyncio
+
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    adapter = OpenAICompatibleAdapter(provider="xiaomi", api_key="synthetic-key")
+
+    async def unexpected_client():
+        pytest.fail("Invalid timeout must not create a client or send a request")
+
+    monkeypatch.setattr(adapter, "_get_client", unexpected_client)
+    with pytest.raises(ValueError, match="bounded template transport timeout"):
+        asyncio.run(adapter.chat_completion([], _reviewed_excel_transport_timeout=seconds))
+
+
+@pytest.mark.parametrize("provider", ["xiaomi", "openai", "deepseek"])
+def test_ordinary_transport_preserves_default_timeout(monkeypatch, provider):
+    import asyncio
+
+    import httpx
+
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    real_client = httpx.AsyncClient
+    seen = []
+
+    def capture(request):
+        seen.append(request.extensions["timeout"])
+        return httpx.Response(200, json={"choices": []})
+
+    def fake_client(**kwargs):
+        return real_client(**kwargs, transport=httpx.MockTransport(capture), trust_env=False)
+
+    monkeypatch.setattr(httpx, "AsyncClient", fake_client)
+    adapter = OpenAICompatibleAdapter(provider=provider, api_key="synthetic-key")
+
+    async def call():
+        try:
+            await adapter.chat_completion([])
+        finally:
+            await adapter.close()
+
+    asyncio.run(call())
+    assert seen == [{"connect": 10.0, "read": 30.0, "write": 30.0, "pool": 30.0}]
+
+
+def test_template_transport_timeout_preserves_exception_without_retry(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    calls = []
+    failure = httpx.ReadTimeout("synthetic timeout")
+
+    class Client:
+        async def post(self, url, **kwargs):
+            calls.append(url)
+            raise failure
+
+    async def fake_client():
+        return Client()
+
+    adapter = OpenAICompatibleAdapter(provider="xiaomi", api_key="synthetic-key")
+    monkeypatch.setattr(adapter, "_get_client", fake_client)
+    with pytest.raises(httpx.ReadTimeout) as caught:
+        asyncio.run(adapter.chat_completion([], _reviewed_excel_transport_timeout=120))
+    assert caught.value is failure
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("provider", ["openai", "minimax"])
+def test_template_timeout_cannot_override_other_providers(monkeypatch, provider):
+    import asyncio
+
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    adapter = OpenAICompatibleAdapter(provider=provider, api_key="synthetic-key")
+
+    async def unexpected(*args, **kwargs):
+        pytest.fail("Template timeout must not change other provider requests")
+
+    monkeypatch.setattr(adapter, "_get_client", unexpected)
+    monkeypatch.setattr(adapter, "_chat_minimax_token_plan", unexpected)
+    with pytest.raises(ValueError, match="bounded template transport timeout"):
+        asyncio.run(adapter.chat_completion([], _reviewed_excel_transport_timeout=120))
+
+
+@pytest.mark.parametrize("setting, expected", [(None, 120), ("180", 180)])
+def test_template_call_passes_configured_timeout_to_http(monkeypatch, setting, expected):
+    import httpx
+
+    from app.application.reviewed_excel_template import _template_mimo_complete
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    for name, value in {
+        "FHD_TEMPLATE_MIMO_BASE_URL": "https://token-plan-cn.xiaomimimo.com/v1",
+        "FHD_TEMPLATE_MIMO_MODEL": "mimo-v2.6-flash",
+        "MIMO_API_KEY": "synthetic-placeholder",
+        "FHD_ETL_LLM": "on",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", raising=False)
+    if setting is not None:
+        monkeypatch.setenv("FHD_TEMPLATE_LLM_TIMEOUT_SECONDS", setting)
+    seen = []
+
+    class Client:
+        async def post(self, url, *, headers, json, timeout):
+            assert timeout.read == expected
+            assert "_reviewed_excel_transport_timeout" not in json
+            seen.append(url)
+            return httpx.Response(
+                200,
+                json={"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]},
+                request=httpx.Request("POST", url),
+            )
+
+    async def fake_client(self):
+        return Client()
+
+    monkeypatch.setattr(OpenAICompatibleAdapter, "_get_client", fake_client)
+    assert _template_mimo_complete([], {"type": "object"}, 100).data == {}
+    assert len(seen) == 1

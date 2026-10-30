@@ -8,6 +8,7 @@
 
 import asyncio
 import logging
+import math
 import os
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, cast
@@ -365,6 +366,15 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         if not self._api_key:
             raise ValueError(f"[{self.provider}] API Key未配置")
 
+        has_template_timeout = "_reviewed_excel_transport_timeout" in kwargs
+        template_timeout = kwargs.pop("_reviewed_excel_transport_timeout", None)
+        if has_template_timeout and (
+            self.provider != "xiaomi"
+            or type(template_timeout) not in (int, float)
+            or not 1 <= template_timeout <= 180
+            or not math.isfinite(template_timeout)
+        ):
+            raise ValueError("Invalid bounded template transport timeout")
         if self._is_minimax_token_plan():
             return await self._chat_minimax_token_plan(messages, max_tokens=max_tokens)
 
@@ -385,7 +395,15 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         logger.debug("LLM completion request started")
 
         client = await self._get_client()
-        response = await client.post(url, headers=headers, json=payload)
+        if template_timeout is None:
+            response = await client.post(url, headers=headers, json=payload)
+        else:
+            response = await client.post(
+                url,
+                headers=headers,
+                json=payload,
+                timeout=httpx.Timeout(template_timeout, connect=min(10.0, template_timeout)),
+            )
         if audit_response is not None:
             self._capture_reviewed_excel_response(response, audit_response)
         response.raise_for_status()

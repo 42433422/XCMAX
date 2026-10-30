@@ -196,11 +196,14 @@ def _classify_semantic_batch(
         get_column_letter,
     )
 
-    if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
+    if (
+        not prepare_only
+        and os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo"
+    ):
         raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
     allowed_labels = DOCUMENT_LABELS
-    rules = classify_review_workbook(review)
+    rules = [] if reference_ids else classify_review_workbook(review)
     from app.application.reviewed_excel_evidence import (
         MAX_MODEL_CELLS,
         MAX_MODEL_TEXT_BYTES,
@@ -211,7 +214,18 @@ def _classify_semantic_batch(
         build_structure_map,
     )
 
-    structure_map = review.get("full_structure_map") or build_structure_map(review, rules)
+    if reference_ids:
+        source_cells = review.get("full_cells", review["cells"])
+        structure_map = [
+            {
+                **sheet,
+                "regions": [],
+                "nonempty_cells": sum(c["sheet"] == sheet["sheet"] for c in source_cells),
+            }
+            for sheet in review["sheet_overview"]
+        ]
+    else:
+        structure_map = review.get("full_structure_map") or build_structure_map(review, rules)
     chosen = list(review["cells"])
     drawings = [d for cell in chosen for d in cell.get("drawing_evidence", [])]
     if (
@@ -416,16 +430,21 @@ def _classify_semantic_batch(
         from app.application.reviewed_excel_reference_ids import verify_contract
 
         verify_contract(messages[0]["content"], provider_schema, "identify")
-    if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
-        raise ReviewedExcelError("本批结构与证据超过模型输入安全预算，未调用模型")
-    audit_request = {"messages": messages, "schema": provider_schema, "max_tokens": 4000}
+    from app.application.reviewed_excel_budget import output_budget, validate_request_budget
+
+    max_output_tokens = output_budget(chosen)
+    audit_request = {
+        "messages": messages,
+        "schema": provider_schema,
+        "max_tokens": max_output_tokens,
+    }
+    validate_request_budget(audit_request)
     if prepare_only:
         return audit_request
     if expected_request_sha256 is not None:
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    max_output_tokens = 4000
     response = _template_mimo_complete(messages, provider_schema, max_output_tokens)
     data = response.data
     raw_reference_response = None

@@ -341,9 +341,25 @@ def _archive_classification_receipt(archived, classification_id, latest, name):
 
 
 def _create_archive_classification(
-    db, archived, body, review, sheets, name, content_type, request, tenant, owner
+    db,
+    archived,
+    body,
+    review,
+    sheets,
+    name,
+    content_type,
+    request,
+    tenant,
+    owner,
+    *,
+    reclassify=False,
+    expected_classification_id=None,
 ):
-    if archived.classification_id:
+    if reclassify and (
+        not expected_classification_id or archived.classification_id != expected_classification_id
+    ):
+        raise HTTPException(status_code=409, detail="归档分类已变更，请刷新档案后重新确认")
+    if archived.classification_id and not reclassify:
         existing = _classification_run(db, archived.classification_id, tenant, owner)
         latest = load_json(existing.draft_json, {}).get("versions", [])[-1]
         return _archive_classification_receipt(archived, existing.id, latest, name)
@@ -370,7 +386,9 @@ def _create_archive_classification(
             EtlArchiveVersion.tenant_id == tenant,
             EtlArchiveVersion.owner_user_id == owner,
             EtlArchiveVersion.status == "ready",
-            EtlArchiveVersion.classification_id.is_(None),
+            (EtlArchiveVersion.classification_id == expected_classification_id)
+            if reclassify
+            else EtlArchiveVersion.classification_id.is_(None),
         )
         .values(classification_id=classification_id)
     )
@@ -438,6 +456,8 @@ def classify_archive_version(
     version_id: str,
     request: Request,
     expected_actor: str = Form(..., max_length=80),
+    reclassify: bool = Form(False),
+    expected_classification_id: str | None = Form(None, max_length=80),
     user=Depends(_manage),
 ):
     _expected_actor(expected_actor, user)
@@ -472,6 +492,8 @@ def classify_archive_version(
                 request,
                 tenant,
                 owner,
+                reclassify=reclassify,
+                expected_classification_id=expected_classification_id,
             )
     except (ArchivePolicyError, ValueError, TypeError, EtlError) as exc:
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None

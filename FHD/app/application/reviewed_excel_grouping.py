@@ -225,22 +225,26 @@ def group_semantic_fragments(
         {"role": "system", "content": DRAWING_GROUP_PROMPT if drawings else GROUP_PROMPT},
         {
             "role": "user",
-            "content": json.dumps({"output_schema": schema, **shown}, ensure_ascii=False),
+            "content": json.dumps(
+                {"output_schema": schema, **shown}, ensure_ascii=False, separators=(",", ":")
+            ),
         },
     ]
     from app.application.reviewed_excel_reference_ids import verify_contract
 
     verify_contract(messages[0]["content"], schema, "group")
-    if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
-        raise ReviewedExcelError("分组请求超过安全预算，未调用模型")
-    audit_request = {"messages": messages, "schema": schema, "max_tokens": 4000}
+    from app.application.reviewed_excel_budget import output_budget, validate_request_budget
+
+    max_output_tokens = output_budget(group_input["fragments"])
+    audit_request = {"messages": messages, "schema": schema, "max_tokens": max_output_tokens}
+    validate_request_budget(audit_request)
     if prepare_only:
         return audit_request
     if expected_request_sha256 is not None:
         from app.application.reviewed_excel_audit import verify_request
 
         verify_request(audit_request, expected_request_sha256)
-    response = _template_mimo_complete(messages, schema, 4000)
+    response = _template_mimo_complete(messages, schema, max_output_tokens)
     if not _validate_template_schema(schema, response.data):
         raise ReviewedExcelError("模型分组编号不在白名单")
     normalized = {

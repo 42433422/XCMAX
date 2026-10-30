@@ -672,13 +672,15 @@ def plan_semantic_batches(
     if not 1 <= max_calls <= 4:
         raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
     if review.get("drawing_evidence"):
+        from app.application.reviewed_excel_budget import fit_transport_batches
         from app.application.reviewed_excel_drawing import plan_drawing_batches
 
-        return plan_drawing_batches(review), max_calls
+        return fit_transport_batches(review, plan_drawing_batches(review)), max_calls
     if neutral:
+        from app.application.reviewed_excel_budget import fit_transport_batches
         from app.application.reviewed_excel_reference_ids import neutral_transport_batches
 
-        return neutral_transport_batches(review), max_calls
+        return fit_transport_batches(review, neutral_transport_batches(review)), max_calls
     return plan_complete_batches(review, classify_review_workbook(review)), max_calls
 
 

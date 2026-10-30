@@ -1,6 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 const layout = (value: string) => [{ sheet: '报价', widths: [20], rows: [{ height: 20, cells: [{ cell: 'B2', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
@@ -64,6 +64,33 @@ describe('reviewed Excel template', () => {
     expect(wrapper.text()).toContain('版本 1')
     await wrapper.findAll('button').find((b) => b.text() === '撤回')!.trigger('click'); await flushPromises()
     expect(wrapper.text()).toContain('存在分类依赖')
+    confirm.mockRestore()
+  })
+  it('only reclassifies after explicit confirmation and clears every old authorization and preview', async () => {
+    const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
+    api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-1', name: '报价.xlsx', state: 'active', versions: [{ id: 'v1', version: 1, status: 'ready', sha256: 'abc', classification_id: 'old' }] }] })
+    api.classifyArchiveVersion.mockReset().mockResolvedValue({ name: '报价.xlsx', status: 'classified', classification_id: 'new', version: 'v-new', sheets: [sheet], model_status: 'not_called', confirmed: false })
+    api.downloadArchiveVersion.mockResolvedValue({ blob: async () => new Blob(['test']) })
+    api.analyzeClassification.mockClear(); api.reviewExcel.mockClear()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mount(ReviewedExcelTemplate)
+    await wrapper.findAll('button').find((b) => b.text() === '查看原件档案')!.trigger('click'); await flushPromises()
+    const button = wrapper.findAll('button').find((b) => b.text() === '重新分类（保留历史）')!
+    expect(api.classifyArchiveVersion).not.toHaveBeenCalled()
+    await button.trigger('click'); await flushPromises()
+    expect(api.classifyArchiveVersion).not.toHaveBeenCalled()
+    const state = wrapper.vm.$.setupState as Record<string, unknown>
+    for (const key of ['classificationSampleAuthorized', 'classificationOwnFileAuthorized', 'sampleAuthorized', 'templateOwnFileAuthorized', 'initialModel', 'consent', 'publishToTenant']) state[key] = true
+    state.retryBudget = { old: true }; state.autoSlices = { old: { version: 'v-old', slices: [] } }
+    state.selectedSliceKey = 'old-slice'; state.proposals = [proposal('old-preview')]; state.savedId = 'old-template'
+    confirm.mockReturnValue(true)
+    await button.trigger('click'); await flushPromises()
+    expect(api.classifyArchiveVersion).toHaveBeenCalledTimes(1)
+    const [id, form] = api.classifyArchiveVersion.mock.calls[0] as [string, FormData]
+    expect(id).toBe('v1'); expect(form.get('reclassify')).toBe('true'); expect(form.get('expected_classification_id')).toBe('old')
+    for (const key of ['classificationSampleAuthorized', 'classificationOwnFileAuthorized', 'sampleAuthorized', 'templateOwnFileAuthorized', 'initialModel', 'consent', 'publishToTenant']) expect(state[key]).toBe(false)
+    expect(state.retryBudget).toEqual({}); expect(state.autoSlices).toEqual({}); expect(state.proposals).toEqual([]); expect(state.savedId).toBe(''); expect(state.selectedSliceKey).toBe('')
+    expect(api.analyzeClassification).not.toHaveBeenCalled(); expect(api.reviewExcel).not.toHaveBeenCalled()
     confirm.mockRestore()
   })
   it('stops before the next model request and resumes without repeating the completed one', async () => {

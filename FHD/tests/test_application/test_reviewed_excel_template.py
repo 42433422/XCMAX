@@ -219,7 +219,9 @@ def test_template_mimo_is_explicit_scoped_and_single_call(monkeypatch, caplog):
         await asyncio.sleep(1)
 
     monkeypatch.setattr(XiaomiMimoProvider, "chat_completion", slow)
-    monkeypatch.setattr("app.application.etl.llm_assist.etl_llm_timeout_seconds", lambda: 0.01)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_budget.template_timeout_seconds", lambda: 0.01
+    )
     with pytest.raises(ValueError, match="未自动重试"):
         refine_proposal(
             review, make_proposals(review)["version"], "生成候选", owner_id=7, initial=True
@@ -2753,7 +2755,17 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     from datetime import UTC, datetime, timedelta
 
     from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+    from app.fastapi_routes import reviewed_excel_template as routes
 
+    original_planner = routes.plan_semantic_batches
+    planning_calls = []
+
+    def plan_once(*args, **kwargs):
+        planning_calls.append(1)
+        return original_planner(*args, **kwargs)
+
+    monkeypatch.setattr(routes, "plan_semantic_batches", plan_once)
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
     source = large_quotation()
@@ -2797,11 +2809,20 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
     assert len(checkpoint_state["results"][0]["input_summary"]["input_sha256"]) == 64
     # Ending the request is a batch-boundary stop. The persisted checkpoint survives a new client/session.
     history = client.get(url).json()
-    assert history["checkpoint"]["phase"] == "ready" and history["checkpoint"]["total"] == 2
+    expected_total = len(plan_semantic_batches(inspect_workbook(source), 2, neutral=True)[0])
+    assert history["checkpoint"]["phase"] == "ready"
+    assert history["checkpoint"]["total"] == expected_total
+    assert expected_total >= 2
     assert len(calls) == 1
     resumed = client.post(url + "/analyze", data=data)
-    assert resumed.status_code == 200 and resumed.json()["budget"]["calls"] == 2
-    assert len(calls) == 2 and client.get(url).json()["checkpoint"] is None
+    assert resumed.status_code == 200 and len(calls) == 2
+    for completed in range(2, expected_total):
+        resumed = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+        assert resumed.status_code == 200 and len(calls) == completed + 1
+    assert len(calls) == expected_total and client.get(url).json()["checkpoint"] is None
+    assert (
+        len(planning_calls) == 1
+    )  # Continuations restore coordinates, not expensive full planning.
     # A separate checkpoint cannot resume after the original upload expires.
     item2 = client.post(
         "/api/templates/reviewed-excel/classify",
@@ -2822,7 +2843,8 @@ def test_checkpoint_resume_after_stop_and_expiry(review_store, monkeypatch):
             },
         )
     assert client.post(url2 + "/analyze", data=data2).status_code == 410
-    assert len(calls) == 3
+    assert len(calls) == expected_total + 1
+    assert len(planning_calls) == 2
 
 
 def test_concurrent_checkpoint_resume_never_sends_twice(review_store, monkeypatch):
@@ -2885,7 +2907,7 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
     wb = Workbook()
     ws = wb.active
     ws.title = "往来资料"
@@ -2933,24 +2955,23 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
     payload, output_tokens = captured[0]
-    sent = {cell["cell"] for cell in payload["cells"]}
+    sent = {cell["cell"] for payload, _ in captured for cell in payload["cells"]}
     assert set(tail) <= sent
     assert "structure_map" not in payload and "rule_hints" not in payload
     assert "实际发送" not in payload["cells"][0]["value"]
     assert not result["coverage"][0]["unread"] and len(sent) == 442
-    assert (
-        payload["batch_coverage"][0]["sent_nonempty"]
-        == payload["batch_coverage"][0]["total_nonempty"]
-        == 442
-    )
+    assert sum(p["batch_coverage"][0]["sent_nonempty"] for p, _ in captured) == 442
+    assert all(p["batch_coverage"][0]["total_nonempty"] == 442 for p, _ in captured)
     source_values = {
         (cell["sheet"], cell["cell"]): cell["value"]
         for cell in inspect_workbook(out.getvalue())["cells"]
     }
     assert {
-        (cell["sheet"], cell["cell"]): cell["value"] for cell in payload["cells"]
+        (cell["sheet"], cell["cell"]): cell["value"]
+        for payload, _ in captured
+        for cell in payload["cells"]
     } == source_values
-    assert 3000 <= output_tokens <= 4000
+    assert all(4000 <= tokens <= 16000 for _, tokens in captured)
 
 
 def test_semantic_finish_length_rejected_without_retry(monkeypatch):
@@ -3311,43 +3332,20 @@ def test_adjacent_unrelated_suggestions_are_not_merged_or_relabelled():
     assert len(observed) == 2 and all(region["needs_confirmation"] for region in observed)
 
 
-def test_overlong_cell_is_deferred_and_unread_region_stays_unknown(monkeypatch):
-    from app.application.etl.llm_assist_runtime import LlmAssistResult
+def test_overlong_cell_refuses_whole_plan_without_dropping_evidence(monkeypatch):
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
-    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "1")
     wb = Workbook()
     ws = wb.active
-    ws.title = "表"
-    ws["A1"], ws["A2"], ws["A3"] = "报价单", "长" * 4001, "末尾"
+    ws["A1"], ws["A2"], ws["A3"] = "title", "x" * 4001, "tail"
     out = BytesIO()
     wb.save(out)
-
-    def fake(messages, schema, tokens):
-        return LlmAssistResult(
-            used_llm=True,
-            data={
-                "regions": [
-                    {
-                        "sheet": "表",
-                        "range": "A1:A3",
-                        "labels": ["quotation"],
-                        "evidence": [{"sheet": "表", "cell": "A1"}],
-                        "dependencies": [],
-                        "reason": "标题",
-                    }
-                ]
-            },
-        )
-
-    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
-    result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    assert result["coverage"][0]["deferred_large_values"] == ["A2"]
-    assert "A2" in result["coverage"][0]["unread"]
-    assert result["regions"][0]["labels"] == ["unknown"]
-    assert result["regions"][0]["suggested_labels"] == ["quotation"]
-    assert "未发送" in result["regions"][0]["context_warning"]
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *args: pytest.fail("oversized plan must not call provider"),
+    )
+    with pytest.raises(ValueError, match="单行"):
+        classify_semantic_workbook(inspect_workbook(out.getvalue()))
 
 
 def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monkeypatch):
@@ -3387,11 +3385,17 @@ def test_budget_pause_requires_explicit_resume_and_no_resend(review_store, monke
     data = {"version": item["version"], "sample_authorized": "true"}
     first = client.post(url + "/analyze", data=data)
     assert first.status_code == 200 and first.json()["phase"] == "paused"
-    assert first.json()["checkpoint"]["remaining"] == 1 and len(calls) == 1
+    total = first.json()["checkpoint"]["total"]
+    assert first.json()["checkpoint"]["remaining"] == total - 1 and len(calls) == 1
     assert client.post(url + "/analyze", data=data).status_code == 409 and len(calls) == 1
     second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
-    assert second.status_code == 200 and second.json()["budget"]["calls"] == 2
-    assert second.json()["coverage"][0]["sent"] == 601 and len(calls) == 2
+    assert second.status_code == 200 and len(calls) == 2
+    for completed in range(2, total):
+        assert client.post(url + "/analyze", data=data).status_code == 409
+        assert len(calls) == completed
+        second = client.post(url + "/analyze", data={**data, "continue_authorized": "true"})
+        assert second.status_code == 200 and len(calls) == completed + 1
+    assert second.json()["coverage"][0]["sent"] == 601 and len(calls) == total
 
 
 def test_oversized_single_row_refused_before_provider_and_checkpoint(review_store, monkeypatch):
@@ -3427,7 +3431,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
     from app.application.reviewed_excel_template import classify_semantic_workbook
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
-    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "4")
     wb = Workbook()
     ws = wb.active
     ws.title = "大表"
@@ -3458,7 +3462,7 @@ def test_large_contiguous_batches_retain_title_and_shared_note(monkeypatch):
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    assert len(captured) == 2 and result["budget"]["unread"] == 0
+    assert 2 <= len(captured) <= 4 and result["budget"]["unread"] == 0
     assert all({"A1", "H602"} <= {cell["cell"] for cell in batch["cells"]} for batch in captured)
     assert next(cell["context_only"] for cell in captured[0]["cells"] if cell["cell"] == "H602")
     assert next(cell["context_only"] for cell in captured[1]["cells"] if cell["cell"] == "A1")
@@ -4100,7 +4104,14 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
     ).json()["files"][0]
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     form = {"version": item["version"], "own_file_authorized": "true"}
-    for index in range(9):
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+
+    planned, _ = plan_semantic_batches(
+        inspect_workbook(_nine_batch_workbook()), per_round, neutral=True
+    )
+    total = len(planned)
+    assert total >= 9
+    for index in range(total):
         if index and index % per_round == 0:
             assert client.post(url + "/analyze", data=form).status_code == 409
             assert (
@@ -4122,21 +4133,22 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
             },
         )
         assert response.status_code == 200, response.text
-        if index < 8 and (index + 1) % per_round == 0:
+        if index < total - 1 and (index + 1) % per_round == 0:
             assert (
                 response.json()["phase"] == "paused"
-                and response.json()["checkpoint"]["remaining"] == 8 - index
+                and response.json()["checkpoint"]["remaining"] == total - 1 - index
             )
-        elif index < 8:
+        elif index < total - 1:
             assert response.json()["phase"] == "pending"
         if index == 1:
             assert client.get(url).json()["checkpoint"]["completed"] == 2
     result = response.json()
-    assert len(calls) == 9 and [sheet for sheet, _ in calls[:4]] == ["表0", "表1", "表2", "表3"]
+    assert len(calls) == total
+    assert [sheet for sheet, _ in calls] == [batch[0]["sheet"] for batch in planned]
     assert (
         result["suggested_document_count"] is None and result["document_count_status"] == "partial"
     )
-    assert len({doc["document_id"] for doc in result["suggested_documents"]}) == 9
+    assert len({doc["document_id"] for doc in result["suggested_documents"]}) == total
     assert all(not item["unread"] for item in result["coverage"])
     authorization = client.get(url).json()["versions"][-1]["model_authorization"]
     assert (
@@ -4156,7 +4168,7 @@ def test_nine_batch_real_route_pauses_resumes_and_namespaces_model_ids(
         },
     )
     assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()["confirmed_document_count"] == 9
+    assert confirmed.json()["confirmed_document_count"] == total
 
 
 def test_nine_batch_concurrent_resume_does_not_resend(review_store, monkeypatch):
@@ -5235,17 +5247,22 @@ def test_auto_group_resume_budget_and_download_multibatch(
     assert second.status_code == 200 and second.json()["phase"] == "paused"
     assert calls == ["batch", "batch"]
     assert client.post(path + "/analyze", data=form).status_code == 409
+    from app.application.reviewed_excel_evidence import plan_semantic_batches
+
+    total = len(plan_semantic_batches(inspect_workbook(large_quotation()), 2, neutral=True)[0])
     done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
+    while done.status_code == 200 and done.json().get("phase") in {"pending", "paused"}:
+        done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
     if group_not_sent:
         assert done.status_code == 400, done.text
         checkpoint = client.get(path).json()["checkpoint"]
-        assert checkpoint["phase"] == "ready" and checkpoint["completed"] == 2
-        assert checkpoint["calls_in_round"] == 0
+        assert checkpoint["phase"] == "ready" and checkpoint["completed"] == total
+        assert checkpoint["calls_in_round"] == total % 2
         done = client.post(path + "/analyze", data=form)
         calls.remove("not_sent")
     assert done.status_code == 200, done.text
     data = done.json()
-    assert calls == ["batch", "batch", "group"]
+    assert calls == ["batch"] * total + ["group"]
     assert data["budget"]["grouping_calls"] == 1 and not data["confirmed"]
     assert all(
         summary["reference_response"] and summary["reference_index"]
@@ -5640,3 +5657,64 @@ def test_unsent_model_configuration_does_not_lock_classification(review_store, m
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", repaired)
     retry = client.post(base + "/analyze", data=form)
     assert retry.status_code == 200, retry.text
+
+
+@pytest.mark.parametrize(
+    "budget_version", [None, "previous-budget", "missing-plan", "tampered-plan"]
+)
+def test_checkpoint_budget_change_is_409_preserving_original_audit(
+    review_store, monkeypatch, budget_version
+):
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", large_quotation())},
+    ).json()["files"][0]
+    calls = []
+
+    def unknown(*args):
+        calls.append(1)
+        raise ValueError("synthetic unknown outcome")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", unknown)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url, data=data).status_code == 400
+    with review_store.engine.begin() as conn:
+        raw = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+        state = json.loads(raw)
+        if budget_version == "missing-plan":
+            state["analysis_checkpoint"]["phase"] = "ready"
+            state["analysis_checkpoint"].pop("coordinate_plan")
+        elif budget_version == "tampered-plan":
+            state["analysis_checkpoint"]["phase"] = "ready"
+            state["analysis_checkpoint"]["coordinate_plan"][0][0][1] = "Z9999"
+        elif budget_version is None:
+            state["analysis_checkpoint"].pop("budget_version")
+        else:
+            state["analysis_checkpoint"]["budget_version"] = budget_version
+        original = json.dumps(state, ensure_ascii=False)
+        conn.execute(
+            text("UPDATE etl_runs SET draft_json=:draft WHERE id=:id"),
+            {"draft": original, "id": item["classification_id"]},
+        )
+    result = client.post(
+        url, data={**data, "continue_authorized": "true", "retry_authorized": "true"}
+    )
+    assert result.status_code == 409
+    assert (
+        "坐标计划" if budget_version in {"missing-plan", "tampered-plan"} else "预算版本"
+    ) in result.json()["detail"]
+    assert len(calls) == 1
+    with review_store.engine.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+            == original
+        )

@@ -64,13 +64,6 @@ def _marker(node) -> dict:
     return result
 
 
-def _anchor_identity(anchor) -> str:
-    node = anchor.find(f".//{{{X}}}cNvPr")
-    if node is None or not node.get("id"):
-        raise ReviewedExcelError("绘图对象编号缺失")
-    return str(node.attrib["id"])
-
-
 def extract_drawing_evidence(z: ZipFile) -> list[dict]:
     """Extract stable object identities and content; reject unrecognized relationships.
 
@@ -302,10 +295,11 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
             ext = anchor.find(f"{{{X}}}ext")
             if kind == "oneCellAnchor":
                 if ext is None or any(
-                    not (ext.get(k) or "").isdecimal() or int(ext.attrib[k]) <= 0 for k in ("cx", "cy")
+                    not (ext.get(k) or "").isdecimal() or int(ext.get(k) or "0") <= 0
+                    for k in ("cx", "cy")
                 ):
                     raise ReviewedExcelError("绘图尺寸无效")
-                size = {k: int(ext.attrib[k]) for k in ("cx", "cy")}
+                size = {k: int(ext.get(k) or "0") for k in ("cx", "cy")}
             else:
                 size = None
             transforms = list(obj.iter(f"{{{A}}}xfrm"))
@@ -533,7 +527,7 @@ def set_drawing_columns(sheet, drawings: list[dict]) -> int:
         if not obj.get("geometry_error"):
             obj["last_row"] = end["row"] + 1
             obj["last_col"] = end["col"] + 1
-    return int(max([sheet.max_column, *(obj.get("last_col", 0) for obj in drawings)]))
+    return max([int(sheet.max_column), *(int(obj.get("last_col", 0)) for obj in drawings)])
 
 
 def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> list[dict]:
@@ -549,6 +543,14 @@ def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> l
         if intersects:
             selected.append(obj)
     return selected
+
+
+def _anchor_identity(anchor) -> str:
+    node = anchor.find(f".//{{{X}}}cNvPr")
+    identifier = node.get("id") if node is not None else None
+    if not isinstance(identifier, str) or not identifier.isdecimal():
+        raise ReviewedExcelError("绘图对象编号无效")
+    return identifier
 
 
 def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -> bytes:
@@ -579,8 +581,7 @@ def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -
             raise ReviewedExcelError("绘图主题发生变化，不能保证保真")
         root = ET.fromstring(old.read(part))
         original_xml = {
-            _anchor_identity(anchor): XML.tostring(anchor, encoding="utf-8")
-            for anchor in root
+            _anchor_identity(anchor): XML.tostring(anchor, encoding="utf-8") for anchor in root
         }
         for anchor in list(root):
             if any(n.tag.split("}")[-1] in {"stCxn", "endCxn"} for n in anchor.iter()):

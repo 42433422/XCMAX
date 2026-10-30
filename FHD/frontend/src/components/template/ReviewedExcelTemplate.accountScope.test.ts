@@ -117,14 +117,18 @@ describe('reviewed workbook account and component ownership', () => {
     expect(wrapper.get('input[type="file"][multiple]').attributes('disabled')).toBeUndefined()
   })
 
-  it('does not restore an A archive when its downloaded bytes arrive after switching to B', async () => {
+  it.each(['分类此版本', '重新分类（保留历史）'])('does not restore an A archive via %s when bytes arrive after switching to B', async (action) => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     const bytes = deferred<Blob>()
     api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-A', name: 'A-private.xlsx', state: 'active', versions: [{ id: 'version-A', version: 1, status: 'ready', sha256: 'sha', classification_id: 'c-A' }] }] })
     api.classifyArchiveVersion.mockResolvedValue(classified('A-private.xlsx'))
     api.downloadArchiveVersion.mockResolvedValue({ blob: () => bytes.promise })
     wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
     await wrapper.findAll('button').find(button => button.text() === '查看原件档案')!.trigger('click'); await flushPromises()
-    await wrapper.findAll('button').find(button => button.text() === '分类此版本')!.trigger('click'); await flushPromises()
+    await wrapper.findAll('button').find(button => button.text() === action)!.trigger('click'); await flushPromises()
+    const form = api.classifyArchiveVersion.mock.calls.at(-1)![1] as FormData
+    expect(form.get('reclassify')).toBe(action === '分类此版本' ? null : 'true')
+    expect(form.get('expected_classification_id')).toBe(action === '分类此版本' ? null : 'c-A')
     account('B')
     bytes.resolve(new Blob(['A original bytes'])); await flushPromises()
     expect(wrapper.text()).not.toContain('A-private.xlsx')

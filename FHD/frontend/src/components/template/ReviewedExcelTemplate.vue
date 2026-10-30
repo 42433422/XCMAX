@@ -291,13 +291,20 @@ async function downloadArchiveVersion(versionId: string, name: string) {
     link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url)
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '原件读取失败' }
 }
-async function classifyArchiveVersion(versionId: string, name: string) {
+async function classifyArchiveVersion(versionId: string, name: string, expectedClassificationId?: string) {
+  if (busy.value) return
+  if (expectedClassificationId && !window.confirm("重新分类将保留原件及历史分类、审计，不会调用模型。继续？")) return
   const current = captureOperation()
   if (!current()) return
   busy.value = true; error.value = ''
   try {
-    const item = await templatePreviewApi.classifyArchiveVersion(versionId, new FormData()) as Classification
+    const form = new FormData()
+    if (expectedClassificationId) {
+      form.append('reclassify', 'true'); form.append('expected_classification_id', expectedClassificationId)
+    }
+    const item = await templatePreviewApi.classifyArchiveVersion(versionId, form) as Classification
     if (!current()) return
+    resetSelectionState()
     const response = await templatePreviewApi.downloadArchiveVersion(versionId)
     if (!current()) return
     const blob = await response.blob()
@@ -718,6 +725,7 @@ async function downloadCandidate(index: number) {
         <button v-if="entry.status === 'pending'" type="button" :disabled="busy" @click="recoverArchive(entry.id)">核对完整性并恢复</button>
         <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="downloadArchiveVersion(entry.id, asset.name)">下载原件版本</button>
         <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name)">分类此版本</button>
+        <button v-if="entry.status === 'ready' && asset.state === 'active' && entry.classification_id" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name, entry.classification_id)">重新分类（保留历史）</button>
       </p>
       <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
       <button v-if="asset.state === 'active'" type="button" :disabled="busy || !versionUploads[asset.id]" @click="appendArchiveVersion(asset)">保存新版本</button>

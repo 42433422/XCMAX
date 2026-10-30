@@ -39,7 +39,6 @@ from app.application.reviewed_excel_classification_store import (
 )
 from app.application.reviewed_excel_evidence import (
     bounded_range,
-    build_structure_map,
     unresolved_fragments,
 )
 from app.application.reviewed_excel_template import (
@@ -797,6 +796,16 @@ async def reviewed_excel_classification_analyze(
             body = _source(db, run, tenant, owner)
             review = inspect_workbook(body)
             checkpoint = state.get("analysis_checkpoint")
+            from app.application.reviewed_excel_budget import (
+                BUDGET_VERSION,
+                validate_checkpoint_budget,
+                validate_remaining_audit_budget,
+            )
+
+            try:
+                validate_checkpoint_budget(checkpoint)
+            except ReviewedExcelError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
             authorization_kind = "owner_file" if own_file_authorized else "authorized_sample"
             if checkpoint and (
                 checkpoint.get("version") != version
@@ -832,13 +841,23 @@ async def reviewed_excel_classification_analyze(
                     raise HTTPException(status_code=409, detail="本轮预算已用完，需明确确认继续")
                 checkpoint["phase"] = "ready"
                 checkpoint["calls_in_round"] = 0
+            from app.application.reviewed_excel_plan import (
+                restore_coordinate_plan,
+                store_coordinate_plan,
+            )
+
             if checkpoint:
-                batches, max_calls = plan_semantic_batches(
-                    review, checkpoint["max_calls"], neutral=True
-                )
+                try:
+                    batches = restore_coordinate_plan(review, checkpoint)
+                except ReviewedExcelError as exc:
+                    raise HTTPException(status_code=409, detail=str(exc)) from exc
+                max_calls = checkpoint["max_calls"]
             else:
-                batches, max_calls = plan_semantic_batches(review, neutral=True)
+                batches, max_calls = await run_in_threadpool(
+                    plan_semantic_batches, review, neutral=True
+                )
                 checkpoint = {
+                    "budget_version": BUDGET_VERSION,
                     "version": version,
                     "source_sha256": run.file_sha256,
                     "phase": "ready",
@@ -858,31 +877,17 @@ async def reviewed_excel_classification_analyze(
                         "authorized_at": utcnow().isoformat(),
                     },
                 }
-            plan_digest = hashlib.sha256(
-                dump_json(
-                    [
-                        [
-                            (cell["sheet"], cell["cell"], bool(cell.get("context_only")))
-                            for cell in batch
-                        ]
-                        for batch in batches
-                    ]
-                ).encode()
-            ).hexdigest()
-            if checkpoint.get("plan_digest", plan_digest) != plan_digest or checkpoint[
-                "total"
-            ] != len(batches):
-                raise HTTPException(status_code=409, detail="分析计划已改变，请重新核对")
+                store_coordinate_plan(checkpoint, batches)
+            validate_remaining_audit_budget(state, checkpoint, len(batches))
+            plan_digest = checkpoint["plan_digest"]
             index = len(checkpoint["results"])
             if index > len(batches):
                 raise HTTPException(status_code=409, detail="分析批次状态无效")
             if index < len(batches):
-                full_structure_map = build_structure_map(review, classify_review_workbook(review))
                 batch_review = {
                     **review,
                     "cells": batches[index],
                     "full_cells": review["cells"],
-                    "full_structure_map": full_structure_map,
                 }
                 prepared = await run_in_threadpool(
                     _classify_semantic_batch,

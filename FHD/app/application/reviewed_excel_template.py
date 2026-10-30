@@ -133,6 +133,9 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
     ):
         raise ModelRequestNotSent("模板 MiMo 配置未完成或不受支持；未调用模型")
+    from app.application.reviewed_excel_budget import template_timeout_seconds
+
+    timeout_seconds = template_timeout_seconds()
     adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
     if not adapter.is_configured:
         raise ModelRequestNotSent("模板 MiMo 凭据未配置；未调用模型")
@@ -149,11 +152,12 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
                     temperature=0.0,
                     max_tokens=max_tokens,
                     thinking={"type": "disabled"},
+                    _reviewed_excel_transport_timeout=timeout_seconds,
                     **(
                         {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
                     ),
                 ),
-                timeout=llm_assist.etl_llm_timeout_seconds(),
+                timeout=timeout_seconds,
             )
         finally:
             await adapter.close()
