@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref, type CSSProperties } from 'vue'
+import { computed, onBeforeUnmount, ref, watch, type CSSProperties } from 'vue'
+import { captureAuthSession, getAuthSessionEpoch } from '@/utils/authSessionCache'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import templatePreviewApi from '@/api/templatePreview'
 
 type Cell = { sheet: string; cell: string; value: string; kind: string; reason: string }
@@ -90,12 +92,19 @@ function cellStyle(cell: LayoutCell): CSSProperties {
   return { fontWeight: cell.bold ? 'bold' : 'normal', fontStyle: cell.italic ? 'italic' : 'normal', fontSize: `${cell.font_size}pt`, color: /^[0-9a-fA-F]{6}$/.test(cell.font_color) ? `#${cell.font_color}` : undefined, backgroundColor: /^[0-9a-fA-F]{6}$/.test(cell.fill) ? `#${cell.fill}` : undefined, textAlign: ['left', 'right', 'center'].includes(cell.align) ? cell.align as CSSProperties['textAlign'] : undefined }
 }
 function switchVersion(index: number) { selectedVersion.value = index; candidateIndex.value = 0 }
-function choose(event: Event) {
-  const input = event.target as HTMLInputElement
-  files.value = Array.from(input.files || [])
-  input.value = ''
-  archiveKeys.value = files.value.map(() => crypto.randomUUID())
-  archiveProgress.value = ''
+let alive = true
+let operationEpoch = 0
+let selectionEpoch = 0
+let selectedFilesCurrent: (() => boolean) | null = null
+function captureOperation() {
+  const currentSession = captureAuthSession(), epoch = operationEpoch
+  return () => alive && epoch === operationEpoch && currentSession()
+}
+function captureFileOperation() {
+  const current = captureOperation(), selectedScope = selectedFilesCurrent, epoch = selectionEpoch
+  return () => current() && epoch === selectionEpoch && !!selectedScope?.()
+}
+function resetSelectionState() {
   file.value = null
   classifications.value = []
   classificationSampleAuthorized.value = false
@@ -118,6 +127,27 @@ function choose(event: Event) {
   candidateIndex.value = 0
   savedId.value = ''
   savedModelStatus.value = ''
+  analysisProgress.value = ''; analysisErrors.value = {}; classificationNotice.value = ''
+}
+watch([getAuthSessionEpoch, () => productReadAccountEpoch.value], () => {
+  const hadWork = busy.value || files.value.length || archiveAssets.value.length || recentClassifications.value.length
+  operationEpoch += 1; selectionEpoch += 1; selectedFilesCurrent = null
+  files.value = []; archiveKeys.value = []; archiveAssets.value = []; recentClassifications.value = []; versionUploads.value = {}
+  archiveQuotaInfo.value = ''; archiveQuotaMiB.value = null; archiveProgress.value = ''
+  resetSelectionState(); busy.value = false
+  error.value = hadWork ? '登录身份已变化，已停止后续原件处理；请在当前账号重新选择文件，已发出的请求请在原账号核对。' : ''
+  emit('stage', 'archive')
+}, { flush: 'sync' })
+onBeforeUnmount(() => { alive = false; operationEpoch += 1; selectionEpoch += 1 })
+function choose(event: Event) {
+  if (!alive || busy.value) return
+  const input = event.target as HTMLInputElement
+  files.value = Array.from(input.files || [])
+  input.value = ''
+  archiveKeys.value = files.value.map(() => crypto.randomUUID())
+  archiveProgress.value = ''
+  selectionEpoch += 1; selectedFilesCurrent = captureAuthSession()
+  resetSelectionState()
   error.value = files.value.length > 200 ? '一次最多上传 200 个文件，请分批上传' : ''
   analysisProgress.value = ''; analysisErrors.value = {}
   classificationNotice.value = ''
@@ -125,6 +155,8 @@ function choose(event: Event) {
   if (props.archiveOnSelect) void classify()
 }
 async function classify() {
+  const current = captureFileOperation()
+  if (!current()) return
   if (busy.value || !files.value.length || files.value.length > 200) return
   if (files.value.reduce((sum, item) => sum + item.size, 0) > 50 * 1024 * 1024) {
     error.value = '本批文件超过 50 MB，请分批上传'; return
@@ -134,17 +166,22 @@ async function classify() {
   try {
     const previousSelection = file.value
     const results: Classification[] = []
-    for (const [index, item] of files.value.entries()) {
+    const batchFiles = [...files.value], requestKeys = [...archiveKeys.value]
+    for (const [index, item] of batchFiles.entries()) {
+      if (!current()) return
       const existing = props.archiveOnSelect ? classifications.value[index] : undefined
       if (existing?.status === 'classified') { results.push(existing); continue }
       archiveProgress.value = `归档及分类 ${index + 1}/${files.value.length}：${item.name}`
       try {
-        const form = new FormData(); form.append('file', item); form.append('request_key', archiveKeys.value[index])
-        results.push(await templatePreviewApi.archiveClassifyExcel(form) as Classification)
-      } catch (err) {
+        const form = new FormData(); form.append('file', item); form.append('request_key', requestKeys[index])
+        const result = await templatePreviewApi.archiveClassifyExcel(form) as Classification
+        if (!current()) return
+        results.push(result)
+      } catch (err) { if (!current()) return;
         results.push({ name: item.name, status: 'unsupported', sheets: [], message: `${err instanceof Error ? err.message : '归档或分类未完成'}；请先查看原件档案核对，勿重新选择文件重复上传。` })
       }
     }
+    if (!current()) return
     classifications.value = results
     archiveProgress.value = props.archiveOnSelect && results.every((item) => item.status === 'classified')
       ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
@@ -152,69 +189,109 @@ async function classify() {
     const index = results.findIndex((item) => item.status === 'classified')
     if (index >= 0 && (!props.archiveOnSelect || !previousSelection || results[files.value.indexOf(previousSelection)]?.status !== 'classified')) selectFile(index)
     if (index >= 0) emit('stage', classificationConfirmed.value ? review.value ? 'template' : 'cleaning' : 'fragments')
-  } catch (err) { error.value = err instanceof Error ? err.message : '分类失败' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败' }
+  finally { if (current()) busy.value = false }
 }
 async function loadArchiveQuota() {
+  const current = captureOperation()
+  if (!current()) return
   try {
     const quota = await templatePreviewApi.archiveQuota() as { configured: boolean; limit_bytes: number | null; reserved_bytes: number }
+    if (!current()) return
     archiveQuotaInfo.value = quota.configured ? `已预留 ${quota.reserved_bytes} / ${quota.limit_bytes} 字节` : '尚未设置配额，不能归档'
-  } catch (err) { archiveQuotaInfo.value = err instanceof Error ? err.message : '无法读取配额' }
+  } catch (err) { if (!current()) return; archiveQuotaInfo.value = err instanceof Error ? err.message : '无法读取配额' }
 }
 async function saveArchiveQuota() {
+  const current = captureOperation()
+  if (!current()) return
   const value = archiveQuotaMiB.value
   if (!value || !Number.isSafeInteger(value) || value < 1 || value > 1048576) { archiveQuotaInfo.value = '请输入 1 至 1048576 MiB 的整数'; return }
   try {
     const form = new FormData(); form.append('limit_bytes', String(value * 1024 * 1024))
-    await templatePreviewApi.setArchiveQuota(form); await loadArchiveQuota()
-  } catch (err) { archiveQuotaInfo.value = err instanceof Error ? err.message : '配额设置失败' }
+    await templatePreviewApi.setArchiveQuota(form)
+    if (!current()) return
+    await loadArchiveQuota()
+  } catch (err) { if (!current()) return; archiveQuotaInfo.value = err instanceof Error ? err.message : '配额设置失败' }
 }
 async function loadArchiveAssets() {
-  try { archiveAssets.value = (await templatePreviewApi.archiveAssets() as { assets: ArchiveAsset[] }).assets }
-  catch (err) { error.value = err instanceof Error ? err.message : '归档列表读取失败' }
+  const current = captureOperation()
+  if (!current()) return
+  try {
+    const result = await templatePreviewApi.archiveAssets() as { assets: ArchiveAsset[] }
+    if (!current()) return
+    archiveAssets.value = result.assets
+  }
+  catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '归档列表读取失败' }
 }
 async function changeArchiveState(asset: ArchiveAsset, state: string) {
+  const current = captureOperation()
+  if (!current()) return
   if (state === 'trashed' && !window.confirm(`撤回 ${asset.name}？原件保留，可恢复；存在分类依赖时不能撤回。`)) return
   try {
     const form = new FormData(); form.append('state', state)
-    await templatePreviewApi.setArchiveAssetState(asset.id, form); await loadArchiveAssets()
-  } catch (err) { error.value = err instanceof Error ? err.message : '归档状态更新失败' }
+    await templatePreviewApi.setArchiveAssetState(asset.id, form)
+    if (!current()) return
+    await loadArchiveAssets()
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '归档状态更新失败' }
 }
 async function recoverArchive(versionId: string) {
-  try { await templatePreviewApi.recoverArchiveVersion(versionId, new FormData()); await loadArchiveAssets() }
-  catch (err) { error.value = err instanceof Error ? err.message : '核对失败，未修改原件' }
+  const current = captureOperation()
+  if (!current()) return
+  try {
+    await templatePreviewApi.recoverArchiveVersion(versionId, new FormData())
+    if (!current()) return
+    await loadArchiveAssets()
+  }
+  catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '核对失败，未修改原件' }
 }
 function chooseArchiveVersion(assetId: string, event: Event) {
+  if (!alive || busy.value) return
   const chosen = (event.target as HTMLInputElement).files?.[0]
   if (chosen) versionUploads.value[assetId] = { file: chosen, requestKey: crypto.randomUUID() }
 }
 async function appendArchiveVersion(asset: ArchiveAsset) {
+  const current = captureOperation()
+  if (!current()) return
   const selected = versionUploads.value[asset.id]
   if (!selected) return
   busy.value = true; error.value = ''
   try {
     const form = new FormData(); form.append('file', selected.file); form.append('request_key', selected.requestKey)
-    await templatePreviewApi.appendArchiveVersion(asset.id, form); delete versionUploads.value[asset.id]
+    await templatePreviewApi.appendArchiveVersion(asset.id, form)
+    if (!current()) return
+    delete versionUploads.value[asset.id]
     await loadArchiveAssets()
-  } catch (err) { error.value = (err instanceof Error ? err.message : '版本写入失败') + '；结果未知时请先查看档案，勿重新选择文件重复提交。' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = (err instanceof Error ? err.message : '版本写入失败') + '；结果未知时请先查看档案，勿重新选择文件重复提交。' }
+  finally { if (current()) busy.value = false }
 }
 async function downloadArchiveVersion(versionId: string, name: string) {
+  const current = captureOperation()
+  if (!current()) return
   try {
     const response = await templatePreviewApi.downloadArchiveVersion(versionId)
-    const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a')
+    if (!current()) return
+    const blob = await response.blob()
+    if (!current()) return
+    const url = URL.createObjectURL(blob); const link = document.createElement('a')
     link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url)
-  } catch (err) { error.value = err instanceof Error ? err.message : '原件读取失败' }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '原件读取失败' }
 }
 async function classifyArchiveVersion(versionId: string, name: string) {
+  const current = captureOperation()
+  if (!current()) return
   busy.value = true; error.value = ''
   try {
     const item = await templatePreviewApi.classifyArchiveVersion(versionId, new FormData()) as Classification
+    if (!current()) return
     const response = await templatePreviewApi.downloadArchiveVersion(versionId)
-    files.value = [new File([await response.blob()], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
+    if (!current()) return
+    const blob = await response.blob()
+    if (!current()) return
+    selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
+    files.value = [new File([blob], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
     classifications.value = [item]; selectFile(0); await loadArchiveAssets()
-  } catch (err) { error.value = err instanceof Error ? err.message : '分类失败，请查看档案后核对' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败，请查看档案后核对' }
+  finally { if (current()) busy.value = false }
 }
 function selectFile(index: number) {
   if (classifications.value[index]?.status !== 'classified') return
@@ -318,6 +395,8 @@ function invalidateClassification(item: Classification) {
   }
 }
 async function analyzeClassifications() {
+  const current = captureFileOperation()
+  if (!current()) return
   if (classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
   busy.value = true; error.value = ''; cancelAnalysis.value = false
   const selectedFile = classifications.value[files.value.indexOf(file.value as File)]
@@ -332,6 +411,7 @@ async function analyzeClassifications() {
           const form = new FormData(); form.append('version', item.version); form.append(classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
           if (item.checkpoint?.phase === 'paused') form.append('continue_authorized', 'true')
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
+          if (!current()) return
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`
@@ -341,7 +421,7 @@ async function analyzeClassifications() {
           item.checkpoint = null; item.version = result.version; item.sheets = result.sheets; item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
           break
         }
-      } catch (err) {
+      } catch (err) { if (!current()) return;
         const message = err instanceof Error ? err.message : '分析失败'
         if (message.includes('未调用模型')) {
           analysisErrors.value[item.classification_id || item.name] = message
@@ -355,9 +435,11 @@ async function analyzeClassifications() {
     selectedRows.value = []
     const index = files.value.indexOf(file.value as File)
     if (index >= 0) selectFile(index)
-  } finally { busy.value = false }
+  } finally { if (current()) busy.value = false }
 }
 async function confirmClassifications() {
+  const current = captureFileOperation()
+  if (!current()) return
   busy.value = true; error.value = ''
   try {
     for (const item of classifications.value) {
@@ -368,40 +450,58 @@ async function confirmClassifications() {
       const links = item.sheets.some((sheet) => sheet.regions.some((region) => region.modified)) ? [] : (item.fragment_links?.items || []).filter((link) => link.selected).map(({ sheet, first, second }) => ({ sheet, first, second }))
       const form = new FormData(); form.append('version', item.version); form.append('labels_json', JSON.stringify(labels)); form.append('links_json', JSON.stringify(links)); form.append('independent_confirmed', String(!!item.independent_confirmed))
       const result = await templatePreviewApi.confirmClassification(item.classification_id, form) as { message?: string; version: string; confirmed: boolean; sheets: ClassificationSheet[]; fragment_links?: FragmentLinks; logical_documents?: LogicalDocument[]; confirmed_document_count?: number | null; document_count_status?: string; coverage?: Classification['coverage'] }
+      if (!current()) return
       item.version = result.version; item.confirmed = result.confirmed; item.sheets = result.sheets; item.fragment_links = result.fragment_links; item.logical_documents = result.logical_documents; item.confirmed_document_count = result.confirmed_document_count; item.document_count_status = result.document_count_status; item.coverage = result.coverage
       if (!result.confirmed) classificationNotice.value = result.message || '拆分已保存。请核对新的文档片段和续表关系，再次确认后才能清理模板。'
       alignConfirmedSelection(item)
     }
     if (classificationConfirmed.value && previewSelectionReady.value) { classificationNotice.value = ''; emit('stage', 'cleaning') }
     else emit('stage', 'fragments')
-  } catch (err) { error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类确认失败，请刷新后重试' }
+  finally { if (current()) busy.value = false }
 }
 async function loadRecentClassifications() {
+  const current = captureOperation()
+  if (!current()) return
   busy.value = true; error.value = ''
-  try { recentClassifications.value = (await templatePreviewApi.recentClassifications() as { files: typeof recentClassifications.value }).files }
-  catch (err) { error.value = err instanceof Error ? err.message : '分类记录读取失败' }
-  finally { busy.value = false }
+  try {
+    const result = await templatePreviewApi.recentClassifications() as { files: typeof recentClassifications.value }
+    if (!current()) return
+    recentClassifications.value = result.files
+  }
+  catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类记录读取失败' }
+  finally { if (current()) busy.value = false }
 }
 async function restoreClassification(item: RecentClassification) {
+  const current = captureOperation()
+  if (!current()) return
   if ((!item.archive_version_id && files.value.length !== 1) || !item.latest) return
   busy.value = true; error.value = ''
   try {
     if (item.archive_version_id) {
       const response = await templatePreviewApi.downloadClassificationSource(item.classification_id)
-      files.value = [new File([await response.blob()], item.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
+      if (!current()) return
+      const blob = await response.blob()
+      if (!current()) return
+      selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
+      files.value = [new File([blob], item.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
     }
     if (!globalThis.crypto?.subtle) throw new Error('当前环境不能校验文件哈希，请使用安全连接')
-    const digest = await globalThis.crypto.subtle.digest('SHA-256', await files.value[0].arrayBuffer())
+    const source = await files.value[0].arrayBuffer()
+    if (!current()) return
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', source)
+    if (!current()) return
     const sha = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
     if (sha !== item.sha256) throw new Error('所选文件与分类来源不一致')
     classifications.value = [{ name: files.value[0].name, status: 'classified', sha256: sha,
       classification_id: item.classification_id, ...item.latest, checkpoint: item.checkpoint, template_write_state: item.template_write_state }]
     selectFile(0)
-  } catch (err) { error.value = err instanceof Error ? err.message : '恢复分类失败' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '恢复分类失败' }
+  finally { if (current()) busy.value = false }
 }
 async function preview() {
+  const current = captureFileOperation()
+  if (!current()) return
   if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value) return
   busy.value = true
   error.value = ''
@@ -418,15 +518,18 @@ async function preview() {
       form.append('print_area_mode', selectedPrintArea.value ? 'selected' : 'source')
     }
     const result = await templatePreviewApi.reviewExcel(form) as Review
+    if (!current()) return
     proposals.value = result.versions?.length ? result.versions : [result.proposal]
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
     review.value = result
     emit('stage', 'template')
-  } catch (err) { error.value = err instanceof Error ? err.message : '预览失败' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '预览失败' }
+  finally { if (current()) busy.value = false }
 }
 async function save() {
+  const current = captureFileOperation()
+  if (!current()) return
   if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value || !review.value || !name.value.trim()) return
   busy.value = true
   error.value = ''
@@ -439,14 +542,17 @@ async function save() {
     form.append('candidate_id', proposal.value.candidates[candidateIndex.value].id)
     form.append('selections', JSON.stringify(selected.value))
     const result = await templatePreviewApi.saveReviewedExcel(form) as { template_id: string }
+    if (!current()) return
     savedId.value = result.template_id
     savedModelStatus.value = proposal.value.candidates[candidateIndex.value].id.startsWith('model_') ? '已选择模型建议，并以本次确认的清理范围保存。' : '本次保存使用规则或人工选择。'
     review.value = null
     emit('saved')
-  } catch (err) { error.value = `${err instanceof Error ? err.message : '保存失败'}；如果结果未知，请先核对模板库和分类记录，勿重复提交。` }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = `${err instanceof Error ? err.message : '保存失败'}；如果结果未知，请先核对模板库和分类记录，勿重复提交。` }
+  finally { if (current()) busy.value = false }
 }
 async function refine() {
+  const current = captureFileOperation()
+  if (!current()) return
   if (!file.value || !review.value || !proposal.value || !consent.value || !feedback.value.trim()) return
   busy.value = true
   error.value = ''
@@ -460,37 +566,48 @@ async function refine() {
     form.append('sample_authorized', String(sampleAuthorized.value))
     form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
     const result = await templatePreviewApi.refineReviewedExcel(form) as { proposal: Proposal }
+    if (!current()) return
     proposals.value.push(result.proposal)
     selectedVersion.value = proposals.value.length - 1
     candidateIndex.value = 0
-  } catch (err) { error.value = err instanceof Error ? err.message : '模型不可用，原候选未改变' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '模型不可用，原候选未改变' }
+  finally { if (current()) busy.value = false }
 }
 async function download(id: string) {
+  const current = captureOperation()
+  if (!current()) return
   busy.value = true
   error.value = ''
   try {
     const response = await templatePreviewApi.downloadReviewedExcel(id)
-    const url = URL.createObjectURL(await response.blob())
+    if (!current()) return
+    const blob = await response.blob()
+    if (!current()) return
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     link.download = `${name.value || '模板'}.xlsx`
     link.click()
     URL.revokeObjectURL(url)
-  } catch (err) { error.value = err instanceof Error ? err.message : '下载失败' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '下载失败' }
+  finally { if (current()) busy.value = false }
 }
 async function downloadCandidate(index: number) {
+  const current = captureFileOperation()
+  if (!current()) return
   if (!review.value) return
   busy.value = true
   error.value = ''
   try {
     const response = await templatePreviewApi.downloadReviewedCandidate(review.value.review_id, proposal.value.version, proposal.value.candidates[index].id)
-    const url = URL.createObjectURL(await response.blob())
+    if (!current()) return
+    const blob = await response.blob()
+    if (!current()) return
+    const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url; link.download = `候选模板-${index + 1}.xlsx`; link.click(); URL.revokeObjectURL(url)
-  } catch (err) { error.value = err instanceof Error ? err.message : '候选下载失败' }
-  finally { busy.value = false }
+  } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '候选下载失败' }
+  finally { if (current()) busy.value = false }
 }
 </script>
 

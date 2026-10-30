@@ -1,25 +1,43 @@
 import api, { ApiError, primeCsrfCookie } from './core'
 import type { RequestOptions } from './core'
 import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
+import { captureAuthSession } from '@/utils/authSessionCache'
 
 // A rejected CSRF request never reaches the handler. Concurrent initial GETs can
 // replace the cookie after a POST reads it, so retry only that explicit rejection.
 async function reviewedExcelPost(path: string, form: FormData) {
-  if (path.endsWith('/preview') || path.endsWith('/classify') || path.endsWith('/archive-classify') || path.endsWith('/archive-quota') || path.includes('/archive-assets/') || path.includes('/archive-versions/')) {
-    const identity = await api.get<{ actor: string }>('/api/templates/reviewed-excel/identity')
-    if (!identity.actor) throw new Error('无法确认当前登录身份')
-    form.set('expected_actor', identity.actor)
+  const sessionCurrent = captureAuthSession()
+  const requireCurrentSession = () => {
+    if (!sessionCurrent()) throw Object.assign(new Error('登录身份已变化，已停止后续原件处理；已发出的请求请在原账号核对'), { name: 'ReviewedExcelSessionChangedError' })
   }
-  if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await api.post(path, form)
-    } catch (error) {
-      if (!(error instanceof ApiError) || error.status !== 403 ||
-          !['CSRF token missing', 'CSRF token mismatch'].includes(error.message) || attempt >= 2) throw error
-      if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
-      await new Promise((resolve) => setTimeout(resolve, 50))
+  try {
+    requireCurrentSession()
+    if (path.endsWith('/preview') || path.endsWith('/classify') || path.endsWith('/archive-classify') || path.endsWith('/archive-quota') || path.includes('/archive-assets/') || path.includes('/archive-versions/')) {
+      const identity = await api.get<{ actor: string }>('/api/templates/reviewed-excel/identity')
+      requireCurrentSession()
+      if (!identity.actor) throw new Error('无法确认当前登录身份')
+      form.set('expected_actor', identity.actor)
     }
+    if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
+    requireCurrentSession()
+    for (let attempt = 0; ; attempt++) {
+      requireCurrentSession()
+      try {
+        const result = await api.post(path, form)
+        requireCurrentSession()
+        return result
+      } catch (error) {
+        requireCurrentSession()
+        if (!(error instanceof ApiError) || error.status !== 403 ||
+            !['CSRF token missing', 'CSRF token mismatch'].includes(error.message) || attempt >= 2) throw error
+        if (!readCsrfTokenFromCookie()) await primeCsrfCookie()
+        requireCurrentSession()
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+  } catch (error) {
+    requireCurrentSession()
+    throw error
   }
 }
 /**
