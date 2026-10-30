@@ -139,9 +139,10 @@ export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsD
     let userIndex = -1
     list.forEach((message, index) => {
       if (isUser(message)) { lastUser = message; userIndex = index }
-      const text = messageText(message)
-      if (!isAssistant(message) || !text || message.streamingShell
+      if (!isAssistant(message) || message.streamingShell
         || (busy && index > latestUserIndex)) return
+      const text = messageText(message)
+      if (!text) return
       const contextUser = index - userIndex < 8 ? lastUser : undefined
       const messageId = proactiveReplyMessageId(message)
       const source = [scope, messageId, text, contextUser ? messageText(contextUser) : '']

@@ -67,8 +67,10 @@ describe('buildLocalProactiveSuggestions', () => {
       const latestId = proactiveReplyMessageId(messages.value[3]!)
       expect(api.proactiveSuggestionsByMessage.value.get(firstId)?.map(item => item.text).join()).toContain('客户')
       expect(api.proactiveSuggestionsByMessage.value.has(latestId)).toBe(false)
+      const streamingMap = api.proactiveSuggestionsByMessage.value
       const oldChoice = api.proactiveSuggestionsByMessage.value.get(firstId)![0]
       messages.value[3]!.content += '，仍在流式输出'
+      expect(api.proactiveSuggestionsByMessage.value).toBe(streamingMap)
       expect(api.proactiveSuggestionsByMessage.value.get(firstId)![0]).toBe(oldChoice)
       isStreamingReply.value = false
       const current = api.proactiveSuggestionsByMessage.value.get(latestId)!
