@@ -5508,6 +5508,7 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
         == 404
     )
 
+
 def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     """An apparently valid model group must not silently omit source cells."""
     from app.application.etl.llm_assist_runtime import LlmAssistResult
