@@ -245,11 +245,11 @@ def _classify_semantic_batch(
             col, row = coordinate_from_string(cell["cell"])
             primary.setdefault(cell["sheet"], []).append((column_index_from_string(col), row))
     overview = []
-    merge_budget = 100
     for sheet in review["sheet_overview"]:
         merges = sheet.get("merged_regions", [])
-        included = merges[:merge_budget]
-        merge_budget -= len(included)
+        # Complete structural facts are budgeted with the full prepared request.
+        # Never silently omit later source merges and then claim full coverage.
+        included = list(merges)
         overview.append(
             {
                 "sheet": sheet["sheet"],
@@ -643,7 +643,14 @@ def _classify_semantic_batch(
 
         add_reference_trace(input_summary, raw_reference_response, references)
     # Final coverage is computed from the source and all accepted batches by the combiner.
-    coverage = [{"sheet": item["sheet"], "merged_sent": len(item["merged"])} for item in overview]
+    coverage = [
+        {
+            "sheet": item["sheet"],
+            "merged_sent": len(item["merged"]),
+            "merged_ranges": list(item["merged"]),
+        }
+        for item in overview
+    ]
     return {
         "regions": accepted,
         "coverage": coverage,
@@ -667,7 +674,10 @@ def combine_semantic_batches(
     sent: set[tuple[str, str]] = set()
     primary_sent: set[tuple[str, str]] = set()
     input_summaries = []
-    merge_sent: dict[str, int] = {}
+    source_merges = {
+        sheet["sheet"]: set(sheet.get("merged_regions", [])) for sheet in review["sheet_overview"]
+    }
+    merge_sent: dict[str, set[str]] = {}
     for batch, result in zip(batches, results, strict=True):
         input_summaries.append(result["input_summary"])
         sent.update((cell["sheet"], cell["cell"]) for cell in batch)
@@ -675,9 +685,17 @@ def combine_semantic_batches(
             (cell["sheet"], cell["cell"]) for cell in batch if not cell.get("context_only")
         )
         for coverage in result["coverage"]:
-            merge_sent[coverage["sheet"]] = max(
-                merge_sent.get(coverage["sheet"], 0), coverage["merged_sent"]
-            )
+            name = coverage["sheet"]
+            identities = coverage.get("merged_ranges", [])
+            if (
+                name not in source_merges
+                or not isinstance(identities, list)
+                or any(not isinstance(area, str) for area in identities)
+                or not set(identities) <= source_merges[name]
+            ):
+                raise ReviewedExcelError("合并单元格覆盖身份不在源工作簿中")
+            # Legacy counts are not proof that any specific source merge was sent.
+            merge_sent.setdefault(name, set()).update(identities)
         for region in result["regions"]:
             c1, r1, c2, r2 = bounded_range(region["range"])
             prior = rectangles.setdefault(region["sheet"], [])
@@ -739,8 +757,9 @@ def combine_semantic_batches(
                 "sent": len(cells) - len(unread),
                 "unread": unread,
                 "unassigned": unassigned,
-                "merged_sent": merge_sent.get(name, 0),
-                "merged_omitted": merges_total - merge_sent.get(name, 0),
+                "merged_sent": len(merge_sent.get(name, set())),
+                "merged_ranges": sorted(merge_sent.get(name, set())),
+                "merged_omitted": merges_total - len(merge_sent.get(name, set())),
                 "value_truncated": [],
                 "deferred_large_values": [
                     cell["cell"] for cell in cells if len(cell["value"]) > MAX_VALUE_CHARS

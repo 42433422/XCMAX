@@ -373,7 +373,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v3-source-coordinates"
+CONTRACT_VERSION = "independent-excel-v4-complete-merges"
 IDENTIFY_PROMPT = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "

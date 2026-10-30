@@ -2541,8 +2541,8 @@ def test_semantic_large_workbook_discloses_unread_regions_and_merge_omissions(mo
         and f"A{business_row}" in coverage["unassigned"]
     )
     assert f"A{legend_row}" not in coverage["unread"] and f"A{legend_row}" in coverage["unassigned"]
-    assert coverage["merged_sent"] == 100 and coverage["merged_omitted"] == 10
-    assert len(seen[0]["sheets"][0]["merged"]) == 100
+    assert coverage["merged_sent"] == 110 and coverage["merged_omitted"] == 0
+    assert len(seen[0]["sheets"][0]["merged"]) == 110
     assert {f"A{business_row}", f"A{legend_row}"} <= {cell["cell"] for cell in seen[0]["cells"]}
     assert result["budget"]["unread"] == 0
 
