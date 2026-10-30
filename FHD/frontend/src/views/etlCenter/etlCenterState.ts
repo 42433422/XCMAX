@@ -30,7 +30,6 @@ export function createEtlCenterState() {
   const runs = ref<EtlRun[]>([])
   const currentRun = ref<EtlRun | null>(null)
   const targetType = ref('auto')
-  const targetConfigId = ref('')
   const runRows = ref<EtlRunRow[]>([])
   const rowPage = ref(1)
   const rowTotal = ref(0)
@@ -51,9 +50,6 @@ export function createEtlCenterState() {
   const allowedUpdateFields = ref<string[]>([])
   const ocrConfirmed = ref(false)
   const hasOcrRows = ref(false)
-  const showWebhookForm = ref(false)
-  const webhookDraft = reactive({ name: '', endpoint_url: '', headersJson: '{}', secret: '' })
-  const webhookTestMessage = ref('')
   const shipmentTemplateMessage = ref('')
   const customerProductPreviewMessage = ref('')
   const selectedShipmentTemplateRegionId = ref('')
@@ -105,7 +101,6 @@ export function createEtlCenterState() {
     runs,
     currentRun,
     targetType,
-    targetConfigId,
     runRows,
     rowPage,
     rowTotal,
@@ -126,9 +121,6 @@ export function createEtlCenterState() {
     allowedUpdateFields,
     ocrConfirmed,
     hasOcrRows,
-    showWebhookForm,
-    webhookDraft,
-    webhookTestMessage,
     shipmentTemplateMessage,
     customerProductPreviewMessage,
     selectedShipmentTemplateRegionId,
