@@ -662,8 +662,8 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     assert payload["drawing_evidence"][0]["drawing_id"] == "D0001"
     properties = request["schema"]["properties"]["physical_regions"]["items"]["properties"]
     assert "labels" not in properties and properties["drawing_ids"]["items"]["enum"] == ["D0001"]
-    assert all(key.startswith("E") for key in properties["primary_id"]["enum"])
-    ids, area, primary = ["D0001"], "A1:B2", "E0001"
+    assert all(key.startswith("S1:") for key in properties["primary_id"]["enum"])
+    ids, area, primary = ["D0001"], "A1:B2", "S1:A1"
 
     def model(messages, schema, max_tokens):
         return LlmAssistResult(
@@ -695,7 +695,7 @@ def test_independent_drawing_ids_and_contract_reject_forged_duplicate_or_outside
     ids = ["D0001", "D0001"]
     with pytest.raises(ReviewedExcelError, match="重复"):
         _classify_semantic_batch(review, reference_ids=True)
-    ids, area, primary = ["D0001"], "B2:B2", "E0003"
+    ids, area, primary = ["D0001"], "B2:B2", "S1:B2"
     with pytest.raises(ReviewedExcelError, match="绘图证据不在区域内"):
         _classify_semantic_batch(review, reference_ids=True)
 
@@ -790,7 +790,7 @@ def test_grouping_drawing_id_contract_and_duplicate_rejection(monkeypatch):
                     {
                         "document_id": "d1",
                         "fragment_ids": ["R0001"],
-                        "evidence_ids": ["E0001"],
+                        "evidence_ids": ["S1:A1"],
                         "drawing_ids": ids,
                         "reason": "source",
                     }

@@ -81,3 +81,40 @@ def test_grouping_contract_has_stable_template_across_model_fragments():
         fingerprints[0]["schema_template_sha256"]
         == "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379"
     )
+
+
+def test_identification_and_grouping_keep_workbook_prefix_when_batch_skips_first_sheet():
+    book = Workbook()
+    book.active.title = "First"
+    second = book.create_sheet("O'Brien ! 表")
+    second["C17"] = "synthetic"
+    stream = BytesIO()
+    book.save(stream)
+    review = inspect_workbook(stream.getvalue())
+    batch_review = {**review, "full_cells": review["cells"], "cells": review["cells"]}
+    identify = _classify_semantic_batch(batch_review, prepare_only=True, reference_ids=True)
+    identify_payload = json.loads(identify["messages"][1]["content"])
+    prefixes = [
+        {"sheet": "First", "prefix": "S1"},
+        {"sheet": "O'Brien ! 表", "prefix": "S2"},
+    ]
+    assert identify_payload["source_sheet_prefixes"] == prefixes
+    assert [cell["evidence_id"] for cell in identify_payload["cells"]] == ["S2:C17"]
+    classification = {
+        "source_sha256": review["sha256"],
+        "coverage": [
+            {"sheet": name, "unread": [], "unassigned": [], "merged_omitted": 0}
+            for name in ["First", "O'Brien ! 表"]
+        ],
+        "regions": [
+            {
+                "sheet": "O'Brien ! 表",
+                "range": "C17",
+                "evidence": [{"sheet": "O'Brien ! 表", "cell": "C17"}],
+            }
+        ],
+    }
+    grouping = group_semantic_fragments(review, classification, prepare_only=True)
+    grouping_payload = json.loads(grouping["messages"][1]["content"])
+    assert grouping_payload["source_sheet_prefixes"] == prefixes
+    assert [cell["evidence_id"] for cell in grouping_payload["cells"]] == ["S2:C17"]

@@ -62,7 +62,14 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
     cells = list(chosen.values())
     if len(cells) > 500 or sum(len(c["value"].encode("utf-8")) + 64 for c in cells) > 96_000:
         raise ReviewedExcelError("分组证据超过本轮安全预算")
-    output = {"source_sha256": review["sha256"], "fragments": fragments, "cells": cells}
+    from app.application.reviewed_excel_reference_ids import source_sheet_prefixes
+
+    output = {
+        "source_sha256": review["sha256"],
+        "fragments": fragments,
+        "cells": cells,
+        "source_sheet_prefixes": source_sheet_prefixes(review["sheets"]),
+    }
     if review.get("drawing_evidence"):
         from app.application.reviewed_excel_drawing import grouping_drawings
 
@@ -174,7 +181,15 @@ def group_semantic_fragments(
 
     group_input = prepare_grouping(review, classification)
     fragments = {f"R{i:04d}": part for i, part in enumerate(group_input["fragments"], 1)}
-    cells = {f"E{i:04d}": cell for i, cell in enumerate(group_input["cells"], 1)}
+    from app.application.reviewed_excel_reference_ids import source_cell_ids
+
+    cells = dict(
+        zip(
+            source_cell_ids(group_input["cells"], group_input["source_sheet_prefixes"]),
+            group_input["cells"],
+            strict=True,
+        )
+    )
     drawings = {
         f"D{i:04d}": obj for i, obj in enumerate(group_input.get("drawing_evidence", []), 1)
     }

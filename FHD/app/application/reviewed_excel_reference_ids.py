@@ -10,16 +10,45 @@ from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
 
+def source_sheet_prefixes(sheets: list) -> list[dict]:
+    """Assign source identities in workbook order, independent of selected batch cells."""
+    names = [sheet["sheet"] if isinstance(sheet, dict) else sheet for sheet in sheets]
+    if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(
+        names
+    ):
+        raise ReviewedExcelError("源工作表身份无效或重复")
+    return [{"sheet": name, "prefix": f"S{index}"} for index, name in enumerate(names, 1)]
+
+
+def source_cell_ids(cells: list[dict], prefixes: list[dict]) -> list[str]:
+    """Encode only supplied source identities; returned IDs must still pass the exact whitelist."""
+    mapping = {item["sheet"]: item["prefix"] for item in prefixes}
+    identifiers = []
+    for cell in cells:
+        if cell["sheet"] not in mapping:
+            raise ReviewedExcelError("证据工作表不在源工作簿中")
+        identifiers.append(f"{mapping[cell['sheet']]}:{cell['cell']}")
+    if len(set(identifiers)) != len(identifiers):
+        raise ReviewedExcelError("证据坐标重复")
+    return identifiers
+
+
 def reference_contract(
-    cells: list[dict], original_schema: dict, drawings: list[dict] | None = None
+    cells: list[dict],
+    original_schema: dict,
+    drawings: list[dict] | None = None,
+    *,
+    sheets: list | None = None,
 ) -> tuple[list[dict], dict, dict]:
     drawings = drawings or []
     if not cells or len(cells) + len(drawings) > 500:
         raise ReviewedExcelError("证据数量超出范围")
     references: dict[str, dict] = {}
     presented = []
-    for index, cell in enumerate(cells, 1):
-        identifier = f"E{index:04d}"
+    prefixes = source_sheet_prefixes(
+        sheets if sheets is not None else list(dict.fromkeys(cell["sheet"] for cell in cells))
+    )
+    for identifier, cell in zip(source_cell_ids(cells, prefixes), cells, strict=True):
         ref = {"sheet": cell["sheet"], "cell": cell["cell"]}
         if any(entry["ref"] == ref for entry in references.values()):
             raise ReviewedExcelError("证据坐标重复")
@@ -120,13 +149,14 @@ def prepare_reference_messages(messages: list[dict], schema: dict) -> tuple[dict
     neutralize_messages(messages)
     payload = json.loads(messages[1]["content"])
     payload["cells"], references, provider_schema = reference_contract(
-        payload["cells"], schema, payload.get("drawing_evidence")
+        payload["cells"], schema, payload.get("drawing_evidence"), sheets=payload["sheets"]
     )
     if payload.get("drawing_evidence"):
         payload["drawing_evidence"] = [
             {**drawing, "drawing_id": f"D{index:04d}"}
             for index, drawing in enumerate(payload["drawing_evidence"], 1)
         ]
+    payload["source_sheet_prefixes"] = source_sheet_prefixes(payload["sheets"])
     payload["output_schema"] = provider_schema
     payload["integrity_constraints"] = integrity_constraints(payload["cells"], payload["sheets"])
     for coverage in payload["batch_coverage"]:
@@ -343,7 +373,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v1"
+CONTRACT_VERSION = "independent-excel-v3-source-coordinates"
 IDENTIFY_PROMPT = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -353,6 +383,7 @@ IDENTIFY_PROMPT = (
     "of continuation or a business category. Treat structural observations, not proof, as context only. "
     "Return exactly one JSON object matching output_schema, without extra fields."
     " Use only supplied evidence_id values for evidence_ids, dependency_ids and primary_id. "
+    "Evidence IDs encode source_sheet_prefixes and source coordinates, not sequence numbers. "
     "The primary_id must identify a non-context cell inside its region. "
     "For each region cite only a small set of representative evidence IDs, at most 100; "
     "do not list every cell. Include only necessary dependency IDs, also at most 100. "
@@ -361,6 +392,14 @@ IDENTIFY_PROMPT = (
     "Every sent non-context primary cell must be inside exactly one non-overlapping physical region, "
     "including isolated headers, footnotes, and formulas; do not include unread cells to fill gaps. "
     "Unresolved references and omitted merges require caution; unread cells are not evidence."
+    " Create physical_regions only for ranges containing at least one supplied non-context nonempty source cell. "
+    "Never create a standalone physical_region for blank layout, formatting-only areas, merge metadata alone, "
+    "or unread areas; never borrow a primary_id from outside a region to satisfy the schema. "
+    "Blank cells may remain inside a larger region that also contains its own supplied primary evidence. "
+    "Full primary-cell coverage does not require enumerating all cells as evidence: "
+    "choose 1 to 8 representative evidence_ids per region. "
+    "Check each selected ID against its supplied sheet and coordinate; "
+    "related references outside the region belong only in dependency_ids."
 )
 DRAWING_IDENTIFY_PROMPT = IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
@@ -406,7 +445,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
         raise ValueError("unknown contract phase")
     canonical = json.dumps(template, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return {
-        "version": "independent-excel-v2-drawing" if "drawing_ids" in props else CONTRACT_VERSION,
+        "version": CONTRACT_VERSION + "-drawing" if "drawing_ids" in props else CONTRACT_VERSION,
         "phase": phase,
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "schema_template_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
@@ -415,7 +454,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "d0525bd578e88317be891c061ec5bf79fd3ddcd65d4d2287aa93569d372a1be0",
+        "bc3cb2f15272d8836e7e8d901f08e68a498d528965012a378a0ff111f22ca9e0",
         "e2e1ceb650586cdc2954e2e622e6807a03a3fec251aa122dc17d1fdd6dc01b4a",
     ),
     "group": (
@@ -423,7 +462,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "e31a404a374524b18cbe75a2745e5c7fd96b0706b19f457c06da8420afaf82b5",
+        "408312653f628e6e79865b17e0bdaee17e636cfa902573cda6a1620ec56dc097",
         "544e978d9e1b964e64b14c9f7a5fe5ffcd5bec9670dcdc463836c10a0e33e5ee",
     ),
     "group_drawing": (

@@ -46,9 +46,9 @@ def contract():
             {
                 "sheet": "表",
                 "range": "A1:B4",
-                "primary_id": "E0001",
-                "evidence_ids": ["E0001"],
-                "dependency_ids": ["E0002"],
+                "primary_id": "S1:A1",
+                "evidence_ids": ["S1:A1"],
+                "dependency_ids": ["S1:D11"],
                 "reason": "主体与上下文",
             }
         ],
@@ -63,7 +63,7 @@ def test_id_mapping_preserves_source_and_original_schema():
     result = normalize_reference_ids(data, refs, id_schema, schema)
     assert result["physical_regions"][0]["evidence"] == [{"sheet": "表", "cell": "A1"}]
     assert result["physical_regions"][0]["dependencies"] == [{"sheet": "表", "cell": "D11"}]
-    assert data["physical_regions"][0]["evidence_ids"] == ["E0001"]
+    assert data["physical_regions"][0]["evidence_ids"] == ["S1:A1"]
 
 
 def test_rejects_sheet_as_cell_and_unread_phantom_region():
@@ -81,11 +81,11 @@ def test_rejects_sheet_as_cell_and_unread_phantom_region():
     with pytest.raises(ReviewedExcelError, match="主体证据"):
         normalize_reference_ids(wrong, refs, id_schema, schema)
     wrong = deepcopy(data)
-    wrong["physical_regions"][0]["primary_id"] = "E0002"
+    wrong["physical_regions"][0]["primary_id"] = "S1:D11"
     with pytest.raises(ReviewedExcelError, match="白名单"):
         normalize_reference_ids(wrong, refs, id_schema, schema)
     wrong = deepcopy(data)
-    wrong["physical_regions"][0]["evidence_ids"] = ["E0002"]
+    wrong["physical_regions"][0]["evidence_ids"] = ["S1:D11"]
     with pytest.raises(ReviewedExcelError, match="分类证据不能只来自上下文"):
         normalize_reference_ids(wrong, refs, id_schema, schema)
 
@@ -98,6 +98,7 @@ def test_grouping_uses_only_validated_region_and_evidence_ids(monkeypatch):
 
     source = {
         "source_sha256": "test",
+        "source_sheet_prefixes": [{"sheet": "表", "prefix": "S1"}],
         "fragments": [{"sheet": "表", "range": "A1:A2", "labels": ["unknown"], "reason": ""}],
         "cells": [{"sheet": "表", "cell": "A1", "value": "标题", "kind": "review"}],
     }
@@ -105,7 +106,7 @@ def test_grouping_uses_only_validated_region_and_evidence_ids(monkeypatch):
     group = {
         "document_id": "d",
         "fragment_ids": ["R0001"],
-        "evidence_ids": ["E0001"],
+        "evidence_ids": ["S1:A1"],
         "reason": "主体",
     }
     monkeypatch.setattr(
@@ -113,7 +114,7 @@ def test_grouping_uses_only_validated_region_and_evidence_ids(monkeypatch):
     )
     result = grouping.group_semantic_fragments({}, {})
     assert result[0]["fragments"] == [{"sheet": "表", "range": "A1:A2"}]
-    assert result[0]["reference_ids"] == {"fragment_ids": ["R0001"], "evidence_ids": ["E0001"]}
+    assert result[0]["reference_ids"] == {"fragment_ids": ["R0001"], "evidence_ids": ["S1:A1"]}
     group["fragment_ids"] = ["R9999"]
     with pytest.raises(ReviewedExcelError, match="白名单"):
         grouping.group_semantic_fragments({}, {})
@@ -206,7 +207,7 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
     assert result["regions"][0]["labels"] == ["unknown"]
     assert (
         result["input_summary"]["reference_response"]["physical_regions"][0]["primary_id"]
-        == "E0001"
+        == "S1:A1"
     )
 
 
@@ -230,3 +231,81 @@ def test_neutral_batches_do_not_invoke_business_prefilter(monkeypatch):
     ]
     assert len(keys) == len(set(keys)) == len(review["cells"])
     assert all(len(batch) <= 500 for batch in batches) and budget == 4
+
+
+def test_source_coordinate_ids_are_stable_across_batches_and_special_sheet_names():
+    _, _, schema, _ = contract()
+    sheets = [{"sheet": "先行"}, {"sheet": "O'Brien ! 表"}, {"sheet": "S1"}]
+    cells = [
+        {"sheet": "O'Brien ! 表", "cell": "C17", "value": "synthetic", "kind": "review"},
+        {"sheet": "S1", "cell": "C17", "value": "synthetic", "kind": "review"},
+    ]
+    presented, refs, _ = reference_contract(cells, schema, sheets=sheets)
+    assert [cell["evidence_id"] for cell in presented] == ["S2:C17", "S3:C17"]
+    assert refs["S2:C17"]["ref"] == {"sheet": "O'Brien ! 表", "cell": "C17"}
+    for cell in cells:
+        one, one_refs, _ = reference_contract([cell], schema, sheets=sheets)
+        key = one[0]["evidence_id"]
+        assert key in refs and one_refs[key] == refs[key]
+    assert cells[0] == {
+        "sheet": "O'Brien ! 表",
+        "cell": "C17",
+        "value": "synthetic",
+        "kind": "review",
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("primary_id", "S1:B1", "白名单"),
+        ("primary_id", "S2:A1", "白名单"),
+        ("primary_id", "E0001", "白名单"),
+        ("range", "B1:B1", "主体证据"),
+        ("evidence_ids", ["S1:A1"] * 101, "白名单"),
+    ],
+)
+def test_coordinate_contract_rejects_unknown_blank_and_oversized_responses(field, value, error):
+    refs, id_schema, schema, data = contract()
+    original = deepcopy(data)
+    data["physical_regions"][0][field] = value
+    with pytest.raises(ReviewedExcelError, match=error):
+        normalize_reference_ids(data, refs, id_schema, schema)
+    assert data["physical_regions"][0][field] == value
+    assert original["physical_regions"][0]["primary_id"] == "S1:A1"
+
+
+def test_coordinate_contract_keeps_blank_space_inside_evidenced_region():
+    refs, id_schema, schema, data = contract()
+    result = normalize_reference_ids(data, refs, id_schema, schema)
+    assert result["physical_regions"][0]["range"] == "A1:B4"
+    assert result["physical_regions"][0]["evidence"] == [{"sheet": "表", "cell": "A1"}]
+
+
+def test_coordinate_primary_cannot_borrow_other_sent_cell():
+    _, _, original, _ = contract()
+    cells = [
+        {"sheet": "表", "cell": "A1", "value": "first", "kind": "review"},
+        {"sheet": "表", "cell": "C1", "value": "second", "kind": "review"},
+    ]
+    _, refs, schema = reference_contract(cells, original)
+    data = {
+        "physical_regions": [
+            {
+                "sheet": "表",
+                "range": "C1",
+                "primary_id": "S1:A1",
+                "evidence_ids": ["S1:C1"],
+                "dependency_ids": [],
+                "reason": "synthetic",
+            }
+        ],
+        "logical_documents": [],
+        "layout_references": [],
+    }
+    with pytest.raises(ReviewedExcelError, match="主体证据"):
+        normalize_reference_ids(data, refs, schema, original)
+    assert data["physical_regions"][0]["primary_id"] == "S1:A1"
+    data["physical_regions"][0]["primary_id"] = "S1:C1"
+    result = normalize_reference_ids(data, refs, schema, original)
+    assert result["physical_regions"][0]["evidence"] == [{"sheet": "表", "cell": "C1"}]
