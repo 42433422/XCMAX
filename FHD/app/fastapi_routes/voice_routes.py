@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -46,9 +47,15 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB；等同于 OpenAI Whisper 官方�
 
 # 懒加载：第一次调用才把 faster-whisper 模型加载进内存，避免服务冷启动时白耗几百 MB
 _model_holder: dict[str, Any] = {"instance": None, "signature": None}
+_model_lock = threading.Lock()
 
 
 def _get_model():
+    with _model_lock:
+        return _load_model()
+
+
+def _load_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
         from faster_whisper import WhisperModel
@@ -215,7 +222,7 @@ async def voice_health():
 
 
 @router.post("/warm")
-async def voice_warm():
+def voice_warm():
     """Best-effort model warm so the first push-to-talk is not a 6–7s cold load.
 
     Safe: only loads into memory; does not delete data or change config.

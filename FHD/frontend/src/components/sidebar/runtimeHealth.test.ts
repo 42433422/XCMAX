@@ -283,3 +283,16 @@ it('clears false offline after xcagi:api-reachable (e.g. successful voice)', asy
   expect(sidebar.runtimeHealth.value.tone).not.toBe('offline')
   sidebar.stopHealthPolling()
 })
+
+it('a successful voice API cannot certify overall health while health checks fail', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('health unavailable')))
+  const sidebar = useSidebarAppVersion({ shouldShowAdminDeployStatus: ref(false) })
+  sidebar.startHealthPolling()
+  await vi.advanceTimersByTimeAsync(0)
+  window.dispatchEvent(new CustomEvent('xcagi:api-reachable'))
+  await vi.advanceTimersByTimeAsync(0)
+  expect(sidebar.runtimeHealth.value.tone).toBe('pending')
+  expect(sidebar.runtimeHealth.value.text).toContain('状态待确认')
+  sidebar.stopHealthPolling()
+})

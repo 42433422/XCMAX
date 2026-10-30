@@ -24,6 +24,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   let recorder: MediaRecorder | null = null
   let stream: MediaStream | null = null
   let transcription: AbortController | null = null
+  let warmRequest: AbortController | null = null
   let generation = 0
   let maxTimer: number | undefined, tickTimer: number | undefined, errorTimer: number | undefined
   const scopeKey = () => JSON.stringify([sessionId?.value, resolveChatIdentity(), productReadAccountEpoch.value])
@@ -97,6 +98,8 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
 
   function cleanupVoiceInput() {
     generation += 1
+    warmRequest?.abort()
+    warmRequest = null
     transcription?.abort()
     transcription = null
     resetTimers()
@@ -229,15 +232,22 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   }
 
   async function warmVoiceModel() {
-    if (voiceModelWarm.value) return
+    if (voiceModelWarm.value || warmRequest) return
+    const token = generation, scope = scopeKey()
+    const controller = new AbortController()
+    warmRequest = controller
     try {
-      const response = await apiFetch('/api/voice/warm', { method: 'POST', timeoutMs: 120_000 })
+      const response = await apiFetch('/api/voice/warm', { method: 'POST', signal: controller.signal, timeoutMs: 120_000 })
       if (response.ok) {
-        voiceModelWarm.value = true
+        const result = await response.json()
+        if (token !== generation || scope !== scopeKey() || controller.signal.aborted) return
+        voiceModelWarm.value = result?.success === true && result?.data?.model_loaded === true
         notifyApiReachable('voice-warm')
       }
     } catch {
       /* warm is best-effort; first transcribe still works with cold hint */
+    } finally {
+      if (warmRequest === controller) warmRequest = null
     }
   }
 

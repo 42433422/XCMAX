@@ -1,5 +1,8 @@
 /** Translate service health into a state users can act on without exposing internal errors. */
 export function runtimeHealthPresentation(data, connection = 'ready') {
+  if (connection === 'reachable') {
+    return { tone: 'pending', text: '服务可连接，状态待确认', detail: '接口已响应，整体健康状态仍待健康检查确认。' }
+  }
   if (connection === 'checking') {
     return { tone: 'pending', text: '正在检查服务', detail: '正在确认业务服务与 AI 能力是否就绪。' }
   }
