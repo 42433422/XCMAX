@@ -5529,7 +5529,7 @@ def test_auto_slice_refuses_unassigned_source_cells_in_list_and_download(review_
                 "physical_regions": [
                     {
                         "sheet": "报价",
-                        "range": "A1:A1",
+                        "range": "A1:C1",
                         "labels": ["unknown"],
                         "evidence": [],
                         "dependencies": [],
@@ -5537,7 +5537,7 @@ def test_auto_slice_refuses_unassigned_source_cells_in_list_and_download(review_
                     }
                 ],
                 "logical_documents": [
-                    {"document_id": "only-first", "fragments": [{"sheet": "报价", "range": "A1:A1"}]}
+                    {"document_id": "only-first", "fragments": [{"sheet": "报价", "range": "A1:C1"}]}
                 ],
                 "layout_references": [],
             },
