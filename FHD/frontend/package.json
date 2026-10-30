@@ -46,7 +46,7 @@
     "echarts": "^6.1.0",
     "element-plus": "^2.14.7",
     "font-awesome": "^4.7.0",
-    "mermaid": "^11.16.1",
+    "mermaid": "^12.2.0",
     "mime-types": "^2.1.35",
     "pinia": "^4.0.3",
     "qrcode": "^1.5.4",
