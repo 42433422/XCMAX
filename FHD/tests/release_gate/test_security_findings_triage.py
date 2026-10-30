@@ -5,7 +5,11 @@ import json
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "security" / "triage_security_findings.py"
+import pytest
+
+SCRIPT = (
+    Path(__file__).resolve().parents[2] / "scripts" / "security" / "triage_security_findings.py"
+)
 
 
 def _mod():
@@ -46,3 +50,21 @@ def test_no_blocking_findings_exits_zero(tmp_path, monkeypatch):
         ["triage_security_findings.py", "--reports-dir", str(tmp_path)],
     )
     assert mod.main() == 0
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        None,
+        "invalid json",
+        "[]",
+        '{"available":false,"findings":[]}',
+        '{"available":true,"findings":[null]}',
+    ],
+)
+def test_unavailable_or_malformed_reports_cannot_succeed(tmp_path, monkeypatch, raw):
+    mod = _mod()
+    if raw is not None:
+        (tmp_path / "scan.json").write_text(raw)
+    monkeypatch.setattr(mod.sys, "argv", ["triage", "--reports-dir", str(tmp_path)])
+    assert mod.main() == 2

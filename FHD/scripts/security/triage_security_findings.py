@@ -28,18 +28,22 @@ def triage(reports_dir: Path) -> dict[str, Any]:
     unique: dict[tuple[str, ...], dict[str, Any]] = {}
     by_severity: Counter[str] = Counter()
     scanners_seen: list[str] = []
+    errors: list[str] = []
     for path in sorted(reports_dir.glob("*.json")):
         try:
             report = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
+            errors.append(f"invalid_report:{path.name}")
             continue
         scanner = path.stem
         scanners_seen.append(scanner)
         findings = report.get("findings") if isinstance(report, dict) else None
-        if not isinstance(findings, list):
+        if not isinstance(findings, list) or report.get("available") is not True:
+            errors.append(f"unavailable_report:{path.name}")
             continue
         for finding in findings:
             if not isinstance(finding, dict):
+                errors.append(f"invalid_finding:{path.name}")
                 continue
             if str(finding.get("status") or "open").lower() not in {"open", "active"}:
                 continue
@@ -60,9 +64,12 @@ def triage(reports_dir: Path) -> dict[str, Any]:
                     "title": finding.get("title") or finding.get("message") or "",
                 }
                 by_severity[severity] += 1
+    if not scanners_seen:
+        errors.append("no_reports")
     return {
         "schema": "xcagi.security_findings_triage/v1",
         "scanners": scanners_seen,
+        "errors": errors,
         "raw_blocking_count": raw_blocking,
         "unique_blocking_count": len(unique),
         "unique_by_severity": dict(by_severity),
@@ -84,7 +91,7 @@ def main() -> int:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 1 if result["unique_blocking_count"] else 0
+    return 2 if result["errors"] else 1 if result["unique_blocking_count"] else 0
 
 
 if __name__ == "__main__":

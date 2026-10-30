@@ -25,7 +25,7 @@ wait_one() {
   local wf="$1" run_id="" attempt
   for attempt in $(seq 1 90); do
     runs="$(gh run list --repo "${REPO}" --workflow "${wf}" --branch "${REF}" --limit 30 --json databaseId,createdAt,headSha,status,conclusion,event)"
-    run_id="$(jq -r --arg sha "${RELEASE_SHA}" --arg started "${started_at}" '[.[] | select(.headSha == $sha and .createdAt >= $started)] | sort_by(.createdAt) | last | .databaseId // empty' <<<"${runs}")"
+    run_id="$(jq -r --arg sha "${RELEASE_SHA}" --arg started "${started_at}" '[.[] | select(.headSha == $sha and .createdAt >= $started and .event == "workflow_dispatch")] | sort_by(.createdAt) | last | .databaseId // empty' <<<"${runs}")"
     if [[ "${run_id}" =~ ^[0-9]+$ ]]; then break; fi
     sleep 5
   done

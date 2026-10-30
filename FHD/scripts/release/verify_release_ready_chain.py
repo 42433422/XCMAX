@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,7 @@ def evaluate(
     blockers: list[str] = []
     release_ready = download_release.get("release_ready") is True
     version = str(
-        download_release.get("download_version")
-        or download_release.get("version_lock")
-        or ""
+        download_release.get("download_version") or download_release.get("version_lock") or ""
     )
     if not version:
         blockers.append("missing_download_version")
@@ -33,16 +32,24 @@ def evaluate(
         if isinstance(download_release.get("artifacts"), dict)
         else {}
     )
-    enterprise = artifacts.get("enterprise") if isinstance(artifacts.get("enterprise"), dict) else {}
+    enterprise = (
+        artifacts.get("enterprise") if isinstance(artifacts.get("enterprise"), dict) else {}
+    )
     installer = str(enterprise.get("win") or "")
     if not installer:
         blockers.append("missing_windows_installer_artifact")
 
     source_sha = ""
+    installer_sha256 = ""
     if five_mode_evidence and isinstance(five_mode_evidence, dict):
         source_sha = str(
             five_mode_evidence.get("source_sha") or five_mode_evidence.get("git_sha") or ""
         )
+        installer_sha256 = str(five_mode_evidence.get("installer_sha256") or "")
+        if five_mode_evidence.get("version") != version:
+            blockers.append("five_mode_version_mismatch")
+        if five_mode_evidence.get("installer") != installer:
+            blockers.append("five_mode_installer_mismatch")
         modes = five_mode_evidence.get("modes")
         if not isinstance(modes, dict):
             blockers.append("five_mode_evidence_missing_modes")
@@ -54,8 +61,10 @@ def evaluate(
     else:
         blockers.append("five_mode_evidence_missing")
 
-    if not source_sha or len(source_sha) != 40:
+    if not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         blockers.append("missing_or_invalid_version_sha")
+    if not re.fullmatch(r"[0-9a-f]{64}", installer_sha256):
+        blockers.append("missing_or_invalid_installer_sha256")
 
     if not prod_receipt or not isinstance(prod_receipt, dict):
         blockers.append("prod_release_receipt_missing")
@@ -63,11 +72,15 @@ def evaluate(
         if prod_receipt.get("ok") is not True:
             blockers.append("prod_release_receipt_not_ok")
         receipt_sha = str(prod_receipt.get("git_sha") or prod_receipt.get("source_sha") or "")
-        if source_sha and receipt_sha and receipt_sha != source_sha:
+        if not re.fullmatch(r"[0-9a-f]{40}", receipt_sha) or receipt_sha != source_sha:
             blockers.append("prod_receipt_sha_mismatch")
         receipt_version = str(prod_receipt.get("version") or "")
-        if version and receipt_version and receipt_version != version:
+        if not receipt_version or receipt_version != version:
             blockers.append("prod_receipt_version_mismatch")
+        if prod_receipt.get("installer") != installer:
+            blockers.append("prod_receipt_installer_mismatch")
+        if prod_receipt.get("installer_sha256") != installer_sha256:
+            blockers.append("prod_receipt_installer_sha256_mismatch")
 
     if blockers and release_ready:
         blockers.append("release_ready_true_without_complete_chain")
@@ -79,6 +92,7 @@ def evaluate(
         "version": version,
         "installer": installer,
         "source_sha": source_sha,
+        "installer_sha256": installer_sha256,
         "required_modes": list(REQUIRED_MODES),
         "blockers": blockers,
         "passed": not (release_ready and blockers),
