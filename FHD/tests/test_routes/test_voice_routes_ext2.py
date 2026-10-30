@@ -30,6 +30,30 @@ from app.fastapi_routes.voice_routes import (
 )
 
 
+@pytest.mark.parametrize(
+    "disabled,loaded,unavailable",
+    [(True, False, False), (False, True, False), (False, False, False), (False, False, True)],
+)
+def test_voice_warm_contract(client, monkeypatch, disabled, loaded, unavailable):
+    monkeypatch.setenv("XCAGI_CHAT_ASR_WARM", "0" if disabled else "1")
+    failure = HTTPException(status_code=503, detail="model unavailable") if unavailable else None
+    with (
+        patch("app.fastapi_routes.voice_routes._model_is_loaded", return_value=loaded),
+        patch("app.fastapi_routes.voice_routes._get_model", side_effect=failure) as load,
+    ):
+        response = client.post("/api/voice/warm")
+    if disabled or loaded:
+        load.assert_not_called()
+    else:
+        load.assert_called_once()
+    assert response.status_code == (503 if unavailable else 200)
+    if not unavailable:
+        data = response.json()["data"]
+        assert data["warmed"] is (not disabled)
+        assert data["model_loaded"] is (loaded or not disabled)
+        assert data["skipped"] is (disabled or loaded)
+
+
 @pytest.fixture
 def client() -> TestClient:
     app = FastAPI()
