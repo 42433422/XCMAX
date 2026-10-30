@@ -26,6 +26,7 @@ from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     apply_classification_corrections,
     combine_semantic_batches,
+    observe_fragment_relationships,
     plan_semantic_batches,
 )
 from app.application.reviewed_excel_classification_store import (
@@ -344,6 +345,7 @@ async def reviewed_excel_classify(
                 "model_status": "not_called",
                 "read_only_print_areas": review["read_only_print_areas"],
             }
+            result["fragment_links"] = observe_fragment_relationships(review, result["sheets"])
             results.append(result)
             prepared.append((file, body, result))
         except HTTPException as exc:
@@ -385,7 +387,14 @@ async def reviewed_excel_classify(
                 record = db.get(EtlUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
                 os.chmod(record.storage_path, 0o600)
-                version = _classification_version(result["sha256"], "", result["sheets"])
+                version = _classification_version(
+                    result["sha256"],
+                    "",
+                    {
+                        "sheets": result["sheets"],
+                        "fragment_links": result["fragment_links"],
+                    },
+                )
                 result.update(
                     {"classification_id": new_id(), "version": version, "confirmed": False}
                 )
@@ -405,6 +414,7 @@ async def reviewed_excel_classify(
                                     {
                                         "version": version,
                                         "sheets": result["sheets"],
+                                        "fragment_links": result["fragment_links"],
                                         "model_status": "not_called",
                                         "confirmed": False,
                                         "read_only_print_areas": result["read_only_print_areas"],
@@ -548,10 +558,17 @@ def reviewed_excel_classification_confirm(
                 [(region["range"], region["labels"]) for region in sheet["regions"]]
                 for sheet in latest["sheets"]
             ]
+            partition_pending = latest["partition_pending"] or (
+                versions[-1].get("partition_pending", False) and before != after
+            )
+            latest["partition_pending"] = partition_pending
             if before != after:
                 latest["fragment_links"] = {"items": [], "omitted": 0}
                 latest["suggested_documents"] = []
                 latest["suggested_document_count"] = None
+            if partition_pending:
+                # New slices never inherit an approval or relationships from their old geometry.
+                latest["fragment_links"] = observe_fragment_relationships(review, latest["sheets"])
             from app.application.reviewed_excel_classification_store import (
                 _confirmed_document_count,
                 _confirmed_documents,
@@ -562,22 +579,26 @@ def reviewed_excel_classification_confirm(
                 version,
                 latest["sheets"],
                 latest.get("fragment_links", {}),
-                selected_links,
+                [] if partition_pending else selected_links,
                 review["cells"],
             )
             latest["confirmed_document_count"] = _confirmed_document_count(
-                review, latest, latest["logical_documents"], independent_confirmed
+                review,
+                latest,
+                latest["logical_documents"],
+                independent_confirmed and not partition_pending,
             )
             latest["document_count_status"] = (
                 "confirmed" if latest["confirmed_document_count"] is not None else "partial"
             )
-            latest["independent_confirmed"] = independent_confirmed
+            latest["independent_confirmed"] = independent_confirmed and not partition_pending
             selected_set = {
-                (edge["sheet"], edge["first"], edge["second"]) for edge in selected_links
+                (edge["sheet"], edge["first"], edge["second"])
+                for edge in ([] if partition_pending else selected_links)
             }
             for link in latest.get("fragment_links", {}).get("items", []):
                 link["selected"] = (link["sheet"], link["first"], link["second"]) in selected_set
-            latest.update({"parent_version": version, "confirmed": True})
+            latest.update({"parent_version": version, "confirmed": not partition_pending})
             latest["version"] = _classification_version(
                 run.file_sha256,
                 version,
@@ -585,7 +606,8 @@ def reviewed_excel_classification_confirm(
                     "sheets": latest["sheets"],
                     "logical_documents": latest["logical_documents"],
                     "confirmed_document_count": latest["confirmed_document_count"],
-                    "independent_confirmed": independent_confirmed,
+                    "independent_confirmed": latest["independent_confirmed"],
+                    "confirmed": latest["confirmed"],
                 },
             )
             versions.append(latest)
@@ -596,7 +618,9 @@ def reviewed_excel_classification_confirm(
         return {
             "classification_id": classification_id,
             "version": latest["version"],
-            "confirmed": True,
+            "confirmed": latest["confirmed"],
+            "partition_pending": partition_pending,
+            "message": "拆分已保存，核对新片段与续表关系后再次确认" if partition_pending else "",
             "sheets": latest["sheets"],
             "coverage": latest.get("coverage", []),
             "fragment_links": latest.get("fragment_links", {"items": [], "omitted": 0}),

@@ -5,6 +5,7 @@ import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import RouteFallbackPanel from '@/components/shell/RouteFallbackPanel.vue'
 import RouteErrorBoundary from '@/components/shell/RouteErrorBoundary.vue'
+import RouteLoadingFeedback from '@/components/shell/RouteLoadingFeedback.vue'
 import { clearRouteChunkError, isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { isDesktopShell } from '@/utils/desktopShell'
 import { useAppBoot } from '@/composables/useAppBoot'
@@ -44,14 +45,14 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
             <Suspense>
               <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
               <template #fallback>
-                <div class="route-view-shell route-view-shell--loading" role="status" aria-live="polite">页面加载中…</div>
+                <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
               </template>
             </Suspense>
           </keep-alive>
           <Suspense v-else>
             <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
             <template #fallback>
-              <div class="route-view-shell route-view-shell--loading" role="status" aria-live="polite">页面加载中…</div>
+              <div class="route-view-shell route-view-shell--loading" aria-busy="true"><RouteLoadingFeedback active /></div>
             </template>
           </Suspense>
         </RouteErrorBoundary>
@@ -97,6 +98,10 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.route-view-shell--loading {
+  position: relative;
 }
 
 .route-view-shell > * {

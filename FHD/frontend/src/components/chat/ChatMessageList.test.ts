@@ -5,6 +5,7 @@ import { afterEach } from 'vitest'
 enableAutoUnmount(afterEach)
 import ChatMessageList from './ChatMessageList.vue'
 import AgentRunTrace from './AgentRunTrace.vue'
+import { proactiveReplyMessageId } from '@/composables/useProactiveReplySuggestions'
 
 const defaultProps = {
   isLoading: false, isStreamingReply: false, loadingProgressText: '',
@@ -47,6 +48,23 @@ function mountList(showDiagnosticMetadata = false) {
 }
 
 describe('ChatMessageList', () => {
+  it('keeps completed suggestions visible at the bottom without moving someone reading earlier messages', async () => {
+    const messages = [{ role: 'ai' as const, content: '第一条回复', time: '12:00' },
+      { role: 'ai' as const, content: '第二条回复', time: '12:01' }]
+    const wrapper = mount(ChatMessageList, { props: { ...defaultProps, messages, sessionKey: 'scope' } })
+    const host = wrapper.get('#chatMessages').element as HTMLElement
+    Object.defineProperties(host, { scrollHeight: { configurable: true, writable: true, value: 5000 }, clientHeight: { configurable: true, value: 500 } })
+    const choice = (message: typeof messages[number]) => ({ id: 'choice', text: '继续说明', scopeKey: 'scope', messageId: proactiveReplyMessageId(message) })
+    const first = choice(messages[0]!), second = choice(messages[1]!)
+    await wrapper.setProps({ proactiveSuggestions: new Map([[second.messageId, [second]]]) })
+    expect(host.scrollTop).toBe(5000)
+    host.scrollTop = 120
+    await wrapper.get('#chatMessages').trigger('scroll')
+    Object.defineProperty(host, 'scrollHeight', { value: 6000 })
+    await wrapper.setProps({ proactiveSuggestions: new Map([[first.messageId, [first]], [second.messageId, [second]]]) })
+    expect(host.scrollTop).toBe(120)
+  })
+
   it('shows server and cache failures separately and retries only the same saved-message identity', async () => {
     const message = { role: 'user' as const, content: '记录', time: '12:00', persistence: {
       id: 'message-a', status: 'failed' as const, localSaved: false, error: '消息保存未确认。不会重新执行任务。',

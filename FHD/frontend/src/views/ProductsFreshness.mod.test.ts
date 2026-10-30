@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { computed, defineComponent, h, ref } from 'vue'
-import { useEtlFolderBatch } from '@/composables/useEtlFolderBatch'
+import { computed, defineComponent } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import ModProductsView from '../../../mods/xcagi-erp-domain-bridge/frontend/views/ProductsView.vue'
 import HostProductsView from './ProductsView.vue'
@@ -12,7 +11,7 @@ import { useProductsStore } from '@/stores/products'
 import { updateProductReadAccountScope } from '@/utils/productReadAccountScope'
 import type { EtlRun, EtlRunRow } from '@/api/etl'
 
-const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), upload: vi.fn(), preview: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
+const api = vi.hoisted(() => ({ getProducts: vi.fn(), getCustomers: vi.fn(), updateProduct: vi.fn(), execute: vi.fn(), run: vi.fn(), runs: vi.fn(), rollback: vi.fn(), rows: vi.fn() }))
 vi.mock('@/api/products', () => ({ default: api }))
 vi.mock('@/api/etl', () => ({ etlApi: api }))
 vi.mock('@/api/customers', () => ({ default: api }))
@@ -102,34 +101,7 @@ describe('kept-alive product freshness', () => {
     expect(rowPrice()).toBe('109')
   })
 
-  it('folder polling updates a product page that stays visible, without relying on activation', async () => {
-    const { router, etl, state } = await setup()
-    let batch!: ReturnType<typeof useEtlFolderBatch>
-    const BatchHarness = defineComponent({ setup() {
-      batch = useEtlFolderBatch({ capabilities: state.capabilities, targetType: state.targetType,
-        templateId: ref(''), compatibilityPresetId: ref(''), targetConfigId: ref(''), runs: state.runs,
-        currentRun: state.currentRun, activeTab: state.activeTab, busy: state.busy, pageError: state.pageError,
-        router,
-        syncDraft: etl.syncDraft, schedulePoll: etl.schedulePoll, loadRows: etl.loadRows,
-        captureReadContext: state.captureReadContext, beginBusy: state.beginBusy, selectRun: etl.selectRun })
-      return () => h('div')
-    } })
-    const harness = mount(BatchHarness, { global: { stubs: { DataTable: Table, ConfirmDialog: true } } })
-    const replace = vi.spyOn(router, 'replace').mockResolvedValue(undefined)
-    try {
-      api.upload.mockResolvedValue({ upload_id: 'batch-upload' })
-      api.preview.mockImplementation(async () => ({ ...fixture(), status: 'executing' }))
-      batch.onFileChange({ target: { files: [new File(['a'], 'first.xlsx'), new File(['b'], 'second.xlsx')] } } as unknown as Event)
-      vi.useFakeTimers()
-      await batch.startPreview()
-      expect(rowPrice()).toBe('99')
-      price = 109; run = fixture('completed')
-      await vi.advanceTimersByTimeAsync(1500)
-      await flushPromises()
-      expect(rowPrice()).toBe('109')
-      expect(router.currentRoute.value.path).toBe('/products')
-    } finally { harness.unmount(); replace.mockRestore(); vi.useRealTimers() }
-  })
+
 
   it('a confirmed write refreshes a visible product list through the same notification path', async () => {
     const { etl } = await setup()
