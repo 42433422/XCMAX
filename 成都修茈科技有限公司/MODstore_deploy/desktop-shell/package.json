@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "electron": "^44.9.3",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.18.0"
   },
   "overrides": {
     "brace-expansion@^1.0.0": "1.1.21",
