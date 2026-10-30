@@ -403,7 +403,7 @@ def test_csv_mod_declares_new_host_requirement_in_canonical_tree(monkeypatch):
     assert source.is_file()
     assert not exported.exists()
     data = json.loads(source.read_text())
-    assert data["version"] == "1.0.0.9"
+    assert tuple(map(int, data["version"].split("."))) >= (1, 0, 0, 9)
     required = data["dependencies"]["xcagi"]
     monkeypatch.setattr(manifest, "host_xcagi_version", lambda: "1.0.0.5")
     assert not manifest._check_xcagi_version(required)

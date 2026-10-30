@@ -103,13 +103,20 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
     gh = tmp_path / "gh"
     gh.write_text(
         f"#!{sys.executable}\nimport json, os, sys\n"
-        "with open(os.environ['CALLS'], 'a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')\n"
-        "sys.exit(1 if sys.argv[3] == os.environ['FAILED_WORKFLOW'] else 0)\n"
+        "args = sys.argv[1:]\n"
+        "with open(os.environ['CALLS'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
+        "if args[:2] == ['workflow', 'run']:\n"
+        "    sys.exit(1 if args[2] == os.environ['FAILED_WORKFLOW'] else 0)\n"
+        "if args[:2] == ['run', 'list']:\n"
+        "    print(json.dumps([{'databaseId': 7, 'createdAt': '2099-01-01T00:00:00Z', "
+        "'headSha': os.environ['RELEASE_SHA'], 'event': 'workflow_dispatch'}]))\n"
+        "elif args[:2] != ['run', 'watch']: sys.exit(3)\n"
     )
     gh.chmod(0o700)
     sha = "fd143dae58e26f01b9a9d86716abe7045fa1d507"
     result = subprocess.run(
         ["bash", "-c", fanout["run"]],
+        cwd=REPO_ROOT,
         env={
             **os.environ,
             "PATH": f"{tmp_path}:{os.environ['PATH']}",
@@ -117,18 +124,25 @@ def test_nightly_dispatch_supplies_required_inputs_and_propagates_failure(
             "FAILED_WORKFLOW": failed_workflow,
             "REF": "main",
             "RELEASE_SHA": sha,
+            "GH_TOKEN": "test-token",
+            "GITHUB_REPOSITORY": "example/test",
         },
         capture_output=True,
         text=True,
         check=False,
+        timeout=30,
     )
-    assert result.returncode == (1 if failed_workflow else 0)
-    dispatched = [json.loads(line) for line in calls.read_text().splitlines()]
+    assert result.returncode == (1 if failed_workflow else 0), result.stderr
+    commands = [json.loads(line) for line in calls.read_text().splitlines()]
+    dispatched = [command for command in commands if command[:2] == ["workflow", "run"]]
     assert len(dispatched) == 7
+    assert len([c for c in commands if c[:2] == ["run", "watch"]]) == (0 if failed_workflow else 7)
     for command in dispatched:
-        assert command[:2] == ["workflow", "run"]
-        assert command[3:5] == ["--ref", "main"]
-        supplied = dict(item.split("=", 1) for item in command[6::2])
+        assert command[command.index("--ref") + 1] == "main"
+        assert command[command.index("--repo") + 1] == "example/test"
+        supplied = dict(
+            command[index + 1].split("=", 1) for index, flag in enumerate(command) if flag == "-f"
+        )
         target = yaml.load(
             (REPO_ROOT / ".github/workflows" / command[2]).read_text(), Loader=yaml.BaseLoader
         )
