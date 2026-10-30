@@ -37,6 +37,8 @@ from app.application.reviewed_excel_classification_store import (
 from app.application.reviewed_excel_evidence import (
     bounded_range,
     build_structure_map,
+    candidate_fragment_links,
+    flag_repeated_header_conflicts,
     unresolved_fragments,
 )
 from app.application.reviewed_excel_template import (
@@ -548,10 +550,41 @@ def reviewed_excel_classification_confirm(
                 [(region["range"], region["labels"]) for region in sheet["regions"]]
                 for sheet in latest["sheets"]
             ]
+            partition_pending = latest["partition_pending"] or (
+                versions[-1].get("partition_pending", False) and before != after
+            )
+            latest["partition_pending"] = partition_pending
             if before != after:
                 latest["fragment_links"] = {"items": [], "omitted": 0}
                 latest["suggested_documents"] = []
                 latest["suggested_document_count"] = None
+            if partition_pending:
+                # New slices never inherit an approval or relationships from their old geometry.
+                regions = [
+                    {
+                        **region,
+                        "sheet": sheet["sheet"],
+                        "evidence": [
+                            {"sheet": sheet["sheet"], **ref} for ref in region["evidence"]
+                        ],
+                    }
+                    for sheet in latest["sheets"]
+                    for region in sheet["regions"]
+                ]
+                observed = flag_repeated_header_conflicts(regions, review["cells"])
+                by_region = {(region["sheet"], region["range"]): region for region in observed}
+                for sheet in latest["sheets"]:
+                    for region in sheet["regions"]:
+                        observation = by_region[(sheet["sheet"], region["range"])]
+                        for field in ("continuation_context", "context_warning"):
+                            if field in observation:
+                                region[field] = observation[field]
+                        # Labels remain the user's explicit choices; observations only suggest edges.
+                for region in regions:
+                    observation = by_region[(region["sheet"], region["range"])]
+                    if "continuation_context" in observation:
+                        region["continuation_context"] = observation["continuation_context"]
+                latest["fragment_links"] = candidate_fragment_links(regions, review["cells"])
             from app.application.reviewed_excel_classification_store import (
                 _confirmed_document_count,
                 _confirmed_documents,
@@ -562,22 +595,26 @@ def reviewed_excel_classification_confirm(
                 version,
                 latest["sheets"],
                 latest.get("fragment_links", {}),
-                selected_links,
+                [] if partition_pending else selected_links,
                 review["cells"],
             )
             latest["confirmed_document_count"] = _confirmed_document_count(
-                review, latest, latest["logical_documents"], independent_confirmed
+                review,
+                latest,
+                latest["logical_documents"],
+                independent_confirmed and not partition_pending,
             )
             latest["document_count_status"] = (
                 "confirmed" if latest["confirmed_document_count"] is not None else "partial"
             )
-            latest["independent_confirmed"] = independent_confirmed
+            latest["independent_confirmed"] = independent_confirmed and not partition_pending
             selected_set = {
-                (edge["sheet"], edge["first"], edge["second"]) for edge in selected_links
+                (edge["sheet"], edge["first"], edge["second"])
+                for edge in ([] if partition_pending else selected_links)
             }
             for link in latest.get("fragment_links", {}).get("items", []):
                 link["selected"] = (link["sheet"], link["first"], link["second"]) in selected_set
-            latest.update({"parent_version": version, "confirmed": True})
+            latest.update({"parent_version": version, "confirmed": not partition_pending})
             latest["version"] = _classification_version(
                 run.file_sha256,
                 version,
@@ -585,7 +622,8 @@ def reviewed_excel_classification_confirm(
                     "sheets": latest["sheets"],
                     "logical_documents": latest["logical_documents"],
                     "confirmed_document_count": latest["confirmed_document_count"],
-                    "independent_confirmed": independent_confirmed,
+                    "independent_confirmed": latest["independent_confirmed"],
+                    "confirmed": latest["confirmed"],
                 },
             )
             versions.append(latest)
@@ -596,7 +634,9 @@ def reviewed_excel_classification_confirm(
         return {
             "classification_id": classification_id,
             "version": latest["version"],
-            "confirmed": True,
+            "confirmed": latest["confirmed"],
+            "partition_pending": partition_pending,
+            "message": "拆分已保存，核对新片段与续表关系后再次确认" if partition_pending else "",
             "sheets": latest["sheets"],
             "coverage": latest.get("coverage", []),
             "fragment_links": latest.get("fragment_links", {"items": [], "omitted": 0}),

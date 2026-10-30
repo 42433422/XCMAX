@@ -7,6 +7,21 @@ from openpyxl.utils import get_column_letter
 from app.application.etl.errors import ReviewedExcelError
 from app.application.reviewed_excel_evidence import bounded_range
 
+DOCUMENT_LABELS = frozenset(
+    {
+        "quotation",
+        "delivery",
+        "purchase",
+        "attendance",
+        "production",
+        "process",
+        "material",
+        "inspection",
+        "template",
+        "unknown",
+    }
+)
+
 
 def classify_review_workbook(review: dict) -> list[dict]:
     """Suggest non-exclusive document labels from inspected cell text only."""
@@ -53,9 +68,51 @@ def classify_review_workbook(review: dict) -> list[dict]:
         )
         max_row = max(1, int(dimensions.get("rows", 1)))
         max_col = max(1, int(dimensions.get("columns", 1)))
-        rows = sorted(anchors)
-        split = len(rows) > 1 and all(b - a >= 3 for a, b in zip(rows, rows[1:]))
         merges = dimensions.get("merged_regions", [])
+        section_headings = {
+            "production": r"生产(?:任务|计划)?单|production (?:order|sheet)",
+            "process": r"工艺(?:流程|说明|要求)?|工序(?:说明|要求)?|process(?: instructions?| sheet)?",
+            "material": r"原(?:辅)?料(?:清单|明细)?|物料(?:清单|明细)|materials?(?: list)?|bill of materials",
+            "inspection": r"检验(?:说明|要求|标准|记录|结果)?|质检(?:说明|要求|标准|记录)?|inspection(?: instructions?| standards?| report)?",
+        }
+        rows_of_cells: dict[int, list[dict]] = {}
+        for cell in cells:
+            rows_of_cells.setdefault(coordinate_from_string(cell["cell"])[1], []).append(cell)
+        merged_titles = {
+            f"{get_column_letter(c1)}{r1}"
+            for c1, r1, c2, _r2 in map(bounded_range, merges)
+            if c2 > c1
+        }
+        for cell in cells:
+            column, row = coordinate_from_string(cell["cell"])
+            merged_title = cell["cell"] in merged_titles
+            sparse_title = (
+                column == "A"
+                and len(rows_of_cells[row]) == 1
+                and any(
+                    len(rows_of_cells.get(next_row, [])) >= 2 for next_row in (row + 1, row + 2)
+                )
+            )
+            if cell.get("kind") == "formula" or not (merged_title or sparse_title):
+                continue
+            value = cell["value"].strip().rstrip(":：")
+            for label, pattern in section_headings.items():
+                if re.fullmatch(pattern, value, re.I):
+                    item = {"label": label, "cell": cell["cell"], "matched": cell["value"]}
+                    anchors.setdefault(row, []).append(item)
+                    if not any(ref["label"] == label for ref in evidence):
+                        evidence.append(item)
+        rows = sorted(anchors)
+        if (
+            len(rows) > 1
+            and {item["label"] for item in anchors[rows[0]]} == {"production"}
+            and any(
+                item["label"] in {"process", "material", "inspection"} for item in anchors[rows[1]]
+            )
+        ):
+            # A workbook title remains in the first section, rather than becoming a title-only slice.
+            rows = rows[1:]
+        split = len(rows) > 1 and all(b - a >= 3 for a, b in zip(rows, rows[1:]))
         if split and any(
             min_row < boundary <= max_row_of_merge
             for merged in merges
@@ -136,7 +193,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     if os.environ.get("FHD_TEMPLATE_LLM_PROVIDER", "").strip().lower() != "mimo":
         raise ReviewedExcelError("模板模型供应商未配置，未进行模型分类，未调用模型")
 
-    allowed_labels = {"quotation", "delivery", "purchase", "attendance", "template", "unknown"}
+    allowed_labels = DOCUMENT_LABELS
     rules = classify_review_workbook(review)
     from app.application.reviewed_excel_evidence import (
         MAX_MODEL_CELLS,
@@ -747,13 +804,14 @@ def classify_semantic_workbook(review: dict) -> dict:
 
 def apply_classification_corrections(review: dict, latest: dict, labels: list) -> dict:
     """Validate user corrections against source geometry, preserving shared context conservatively."""
+    from copy import deepcopy
+
     expected = {
         (sheet["sheet"], region["range"]): region
         for sheet in latest["sheets"]
         for region in sheet["regions"]
     }
     supplied = {}
-    permitted = {"quotation", "delivery", "purchase", "attendance", "template", "unknown"}
     from openpyxl.utils.cell import (
         column_index_from_string,
         coordinate_from_string,
@@ -761,6 +819,9 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
 
     dimensions = {sheet["sheet"]: sheet for sheet in review["sheet_overview"]}
     rectangles: dict[str, list[tuple[int, int, int, int]]] = {}
+    limit = max(200, len(expected))
+    if not isinstance(labels, list) or len(labels) > limit:
+        raise ReviewedExcelError(f"分类区域数量无效，最多{limit}个片段")
     for item in labels:
         if (
             not isinstance(item, dict)
@@ -771,13 +832,16 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
             or ("original_range" in item and not isinstance(item["original_range"], str))
             or not isinstance(item["labels"], list)
             or not item["labels"]
-            or any(not isinstance(label, str) or label not in permitted for label in item["labels"])
+            or any(
+                not isinstance(label, str) or label not in DOCUMENT_LABELS
+                for label in item["labels"]
+            )
             or len(set(item["labels"])) != len(item["labels"])
             or ("unknown" in item["labels"] and len(item["labels"]) > 1)
         ):
             raise ReviewedExcelError("分类修正无效")
         key = (item["sheet"], item.get("original_range", item["range"]))
-        if key in supplied or key not in expected:
+        if key not in expected:
             raise ReviewedExcelError("分类区域不属于该版本")
         try:
             c1, r1, c2, r2 = bounded_range(item["range"])
@@ -802,34 +866,68 @@ def apply_classification_corrections(review: dict, latest: dict, labels: list) -
                 and not (c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2)
             ):
                 raise ReviewedExcelError("分类区域切断合并单元格")
-        supplied[key] = item
+        supplied.setdefault(key, []).append(item)
     if set(supplied) != set(expected):
         raise ReviewedExcelError("分类区域不完整")
-    for key, region in expected.items():
-        item = supplied[key]
-        old_range = region["range"]
-        if region["labels"] != item["labels"]:
-            region["label_source"] = "user"
-        region["labels"] = item["labels"]
-        region["range"] = item["range"]
-        if old_range != item["range"]:
-            region["range_source"] = "user"
+    partition_changed = False
+    corrected: dict[str, list[dict]] = {sheet["sheet"]: [] for sheet in latest["sheets"]}
+    for key, original in expected.items():
+        children = supplied[key]
+        if len(children) > 1:
+            partition_changed = True
+            c1, r1, c2, r2 = bounded_range(original["range"])
+            area = 0
+            for child in children:
+                sc1, sr1, sc2, sr2 = bounded_range(child["range"])
+                if not (c1 <= sc1 <= sc2 <= c2 and r1 <= sr1 <= sr2 <= r2):
+                    raise ReviewedExcelError("拆分片段必须位于原区域内")
+                area += (sc2 - sc1 + 1) * (sr2 - sr1 + 1)
+            # All final rectangles were checked for overlap above; equal area proves no holes.
+            if area != (c2 - c1 + 1) * (r2 - r1 + 1):
+                raise ReviewedExcelError("拆分必须完整覆盖原区域，不能遗漏行列")
+        for item in children:
+            region = deepcopy(original)
+            if region["labels"] != item["labels"]:
+                region["label_source"] = "user"
+            region["labels"] = item["labels"]
             c1, r1, c2, r2 = bounded_range(item["range"])
+            region["range"] = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+            for field in ("original_range", "modified"):
+                region.pop(field, None)
+            if original["range"] != region["range"]:
+                region["range_source"] = "user"
 
-            def in_region(ref):
-                col, row = coordinate_from_string(ref["cell"])
-                return c1 <= column_index_from_string(col) <= c2 and r1 <= row <= r2
+                def in_region(ref):
+                    col, row = coordinate_from_string(ref["cell"])
+                    return (
+                        ref.get("sheet", key[0]) == key[0]
+                        and c1 <= column_index_from_string(col) <= c2
+                        and r1 <= row <= r2
+                    )
 
-            region["evidence"] = [ref for ref in region["evidence"] if in_region(ref)]
-            region["header_cells"] = [ref for ref in region["header_cells"] if in_region(ref)]
-            region["merged_ranges"] = []
-            for merged in dimensions[key[0]].get("merged_regions", []):
-                mc1, mr1, mc2, mr2 = bounded_range(merged)
-                if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2:
-                    region["merged_ranges"].append(merged)
-            region["parent_heading"] = ""
-            region["dependency_status"] = "用户修改边界；共享说明和依赖需重新确认"
-            region["needs_confirmation"] = True
+                region["evidence"] = [ref for ref in original["evidence"] if in_region(ref)]
+                region["header_cells"] = [ref for ref in original["header_cells"] if in_region(ref)]
+                region["checked_cells"] = sum(
+                    in_region(cell) for cell in review["cells"] if cell["sheet"] == key[0]
+                )
+                region["merged_ranges"] = [
+                    merged
+                    for merged in dimensions[key[0]].get("merged_regions", [])
+                    for mc1, mr1, mc2, mr2 in [bounded_range(merged)]
+                    if c1 <= mc1 <= mc2 <= c2 and r1 <= mr1 <= mr2 <= r2
+                ]
+                region.pop("continuation_context", None)
+                region.pop("value_extent", None)
+                region["parent_heading"] = ""
+                region["dependency_status"] = "用户修改边界；共享说明和依赖需重新确认"
+                region["needs_confirmation"] = True
+            corrected[key[0]].append(region)
+    for sheet in latest["sheets"]:
+        sheet["regions"] = corrected[sheet["sheet"]]
+        sheet["labels"] = list(
+            dict.fromkeys(label for region in sheet["regions"] for label in region["labels"])
+        )
+    latest["partition_pending"] = partition_changed
     for coverage in latest.get("coverage", []):
         name = coverage["sheet"]
         coverage.setdefault("model_unassigned", list(coverage["unassigned"]))
