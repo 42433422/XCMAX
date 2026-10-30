@@ -75,4 +75,4 @@ jobs:
             echo "::error::Nightly 派发失败:${failed}"
             exit 1
           fi
-          echo "✅ Nightly 已派发 ${REF}：各套件结果见对应 workflow 运行。"
+          echo "✅ Nightly 已派发 ${REF}：各套件结果见对应 workflow 运行（须聚合下游结论）。"
