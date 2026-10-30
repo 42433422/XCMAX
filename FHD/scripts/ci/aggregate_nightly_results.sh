@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Aggregate real downstream conclusions for Nightly Full CI.
-# Must not succeed only because dispatch was accepted.
 set -euo pipefail
 
 : "${GH_TOKEN:?required}"
