@@ -94,6 +94,27 @@ async function ensureModRoutesRegistered(router: Router, getModRoutes?: () => un
   }
 }
 
+/** Race mod-route registration against generation so a newer click can abort wait early. */
+async function ensureModRoutesRegisteredUnlessStale(
+  router: Router,
+  getModRoutes: (() => unknown[] | undefined) | undefined,
+  isStale: () => boolean,
+): Promise<void> {
+  if (isStale()) return
+  const pending = ensureModRoutesRegistered(router, getModRoutes)
+  let timer: ReturnType<typeof setInterval> | undefined
+  try {
+    await Promise.race([
+      pending,
+      new Promise<void>((resolve) => {
+        timer = globalThis.setInterval(() => { if (isStale()) resolve() }, 40)
+      }),
+    ])
+  } finally {
+    globalThis.clearInterval(timer)
+  }
+}
+
 async function performSidebarNavigation(
   router: Router,
   viewKey: string,
@@ -119,7 +140,7 @@ async function performSidebarNavigation(
   if (modItem?.path) {
     if (router.resolve(modItem.path).matched.length === 0) {
       try {
-        await ensureModRoutesRegistered(router, options.getModRoutes)
+        await ensureModRoutesRegisteredUnlessStale(router, options.getModRoutes, isStale)
       } catch (e) {
         console.warn('[sidebarNavigation] 补注册 Mod 路由失败:', e)
       }
@@ -148,7 +169,7 @@ async function performSidebarNavigation(
     if (modBusinessPath) {
       if (router.resolve(modBusinessPath).matched.length === 0) {
         try {
-          await ensureModRoutesRegistered(router, options.getModRoutes)
+          await ensureModRoutesRegisteredUnlessStale(router, options.getModRoutes, isStale)
         } catch (e) {
           console.warn('[sidebarNavigation] 补注册 Mod 路由失败:', e)
         }
@@ -213,8 +234,17 @@ async function drainSidebarNavigationQueue(router: Router): Promise<boolean> {
   return applied
 }
 
+export function getQueuedSidebarViewKey(): string | null {
+  return queuedSidebarViewKey
+}
+
+export function isSidebarNavigationPending(): boolean {
+  return sidebarNavDrain != null || queuedSidebarViewKey != null
+}
+
 /**
  * 侧栏 / xcagi:switch-view 统一导航：单队列 drain + 合并连点 + Enterprise 宿主路由优先。
+ * 新点击会抬升 generation，使仍在 await 的旧导航尽快判定 stale 并让出，不堵住快速连点。
  */
 export function navigateFromSidebarKey(router: Router, viewKey: string, options: NavigateFromSidebarOptions = {}): Promise<boolean> {
   const normalized = String(viewKey || '').trim()

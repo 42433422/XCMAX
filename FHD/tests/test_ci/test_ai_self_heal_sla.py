@@ -303,11 +303,7 @@ class TestProcessRegularPr:
         client.dispatch_workflow.assert_any_call(
             "fhd-ci-cd.yml",
             ref="main",
-            inputs={
-                "release_channel": "stable",
-                "push_to_cvm": "true",
-                "push_image_tar": "false",
-            },
+            inputs={"release_sha": "a" * 40},
         )
         client.dispatch_workflow.assert_any_call(
             "modstore-ci-backend-python.yml",

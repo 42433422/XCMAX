@@ -411,6 +411,7 @@ async function downloadCandidate(index: number) {
 
 <template>
   <section class="reviewed-template" aria-label="Excel 模板清理">
+    <div class="reviewed-template__step">
     <h3>第一步：原件归档</h3>
     <p>原件长期保留，不会自动删除；撤回后可恢复，存在分类依赖时不能撤回。永久清除尚未开放。未配置归档配额或配额不足时不能归档。</p>
     <details><summary>管理员：归档配额</summary>
@@ -434,9 +435,11 @@ async function downloadCandidate(index: number) {
     </div>
     <p>分类先做规则预筛；可选择模型分析。分类仅供确认，不关联业务库或写入业务数据。依据及未读范围需核对，不表示理解全部语义。</p>
     <input type="file" accept=".xlsx" multiple :disabled="busy" @change="choose">
-    <p>每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB；超出请分批。</p>
+    <p class="reviewed-template__limits">模板归档流水线：每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB（与数据对接中心导入单文件 100 MB 上限不同）；超出请分批。</p>
     <button type="button" :disabled="!files.length || files.length > 200 || busy" @click="classify">归档并分类所选文件</button>
     <p v-if="archiveProgress" role="status">{{ archiveProgress }}</p>
+    </div>
+    <div class="reviewed-template__step">
     <h3>第二步：文件分类</h3>
     <button type="button" :disabled="busy" @click="loadRecentClassifications">查看已保存分类</button>
     <details v-if="recentClassifications.length"><summary>已保存分类（归档来源可直接恢复；旧记录需选择相同原文件）</summary>
@@ -512,6 +515,8 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="!file || busy" @click="confirmClassifications">确认分类并继续</button>
       <small>预览前需确认分类；未知会保留为未知，用户可确认继续。</small>
     </div>
+    </div>
+    <div class="reviewed-template__step">
     <h3>第三步：清理 Excel 并保存到模板库</h3>
     <p v-for="group in classifications[files.indexOf(file as File)]?.logical_documents || []" :key="group.logical_document_id">已确认的文档片段：{{ group.fragments.map((part) => `${part.sheet}!${part.range}`).join('、') }}。</p>
     <p>从所选文档片段生成副本并提供清理建议；无法保真的跨区依赖会阻断生成。公式和不确定内容默认保留。默认不调用模型；使用模型前须明确授权文件内容发送范围。</p>
@@ -555,16 +560,127 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="!name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.reviewed-template { padding: 1rem; border: 1px solid #d9e0e8; border-radius: 8px; margin: 1rem 0; }
-.reviewed-template__previews { display: grid; grid-template-columns: repeat(4, minmax(12rem, 1fr)); gap: .6rem; overflow-x: auto; }
-.reviewed-template__preview { border: 1px solid #d9e0e8; padding: .5rem; max-height: 16rem; overflow: auto; overflow-wrap: anywhere; }
+.reviewed-template {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid #d9e0e8;
+  border-radius: 12px;
+  margin: 1rem 0;
+  background: #fff;
+  min-width: 0;
+}
+.reviewed-template__step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid #e4ebf3;
+  border-radius: 10px;
+  background: #f8fafc;
+  min-width: 0;
+}
+.reviewed-template__step h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+  color: #16355f;
+}
+.reviewed-template__step > p,
+.reviewed-template__limits {
+  margin: 0;
+  color: #5f6f7e;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.reviewed-template__step > label,
+.reviewed-template__step .classification-results > label,
+.classification-region > label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.35rem 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.reviewed-template__step > label input[type="checkbox"],
+.reviewed-template__step > label input[type="radio"],
+.classification-results > label input[type="checkbox"],
+.classification-region > label input[type="checkbox"],
+.classification-region > label input[type="radio"] {
+  flex: 0 0 auto;
+  margin-top: 0.2rem;
+}
+.reviewed-template__step > label input[type="text"],
+.reviewed-template__step > label input:not([type]),
+.reviewed-template__step input[type="file"],
+.reviewed-template__step input[type="number"],
+.reviewed-template__step select {
+  display: block;
+  width: min(100%, 28rem);
+  max-width: 100%;
+  margin-top: 0.25rem;
+  box-sizing: border-box;
+}
+.reviewed-template__step > button,
+.reviewed-template__step .classification-results > button {
+  align-self: flex-start;
+  margin: 0.15rem 0;
+}
+.reviewed-template__step details {
+  margin: 0.25rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed #d5deea;
+  border-radius: 8px;
+  background: #fff;
+}
+.classification-results,
+.classification-region {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.classification-region {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e4ebf3;
+  border-radius: 8px;
+  background: #fff;
+}
+.reviewed-template__previews {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.6rem;
+  overflow-x: auto;
+}
+.reviewed-template__preview {
+  border: 1px solid #d9e0e8;
+  border-radius: 8px;
+  padding: 0.5rem;
+  max-height: 16rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  background: #fff;
+}
 .reviewed-template__preview small { display: block; }
 .reviewed-template__preview table { border-collapse: collapse; table-layout: fixed; }
 .reviewed-template__preview td { border: 1px solid #ddd; white-space: pre-wrap; min-width: 24px; font-size: 11px; }
-.reviewed-template__cells { max-height: 25rem; overflow: auto; display: grid; gap: .4rem; margin: .8rem 0; }
+.reviewed-template__cells { max-height: 25rem; overflow: auto; display: grid; gap: 0.4rem; margin: 0.8rem 0; }
 .reviewed-template__cells label { display: block; overflow-wrap: anywhere; }
+@media (max-width: 720px) {
+  .reviewed-template,
+  .reviewed-template__step {
+    padding: 0.75rem;
+  }
+  .reviewed-template__previews {
+    grid-template-columns: 1fr;
+  }
+}
 </style>

@@ -41,9 +41,19 @@ const cacheScope = computed(() => JSON.stringify([productReadAccountEpoch.value,
         <RouteFallbackPanel v-else-if="!Component && isUnmatchedRoute(route)" :key="`not-found:${route.fullPath}`" mode="not-found" :path="route.fullPath" class="route-view-shell" />
         <RouteErrorBoundary v-else :path="route.fullPath">
           <keep-alive v-if="isDesktopShell() && !isAdminConsoleSpa()" :key="cacheScope" :max="12">
-            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+            <Suspense>
+              <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+              <template #fallback>
+                <div class="route-view-shell route-view-shell--loading" role="status" aria-live="polite">页面加载中…</div>
+              </template>
+            </Suspense>
           </keep-alive>
-          <component v-else :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+          <Suspense v-else>
+            <component :is="Component" :key="route.fullPath.split('#')[0]" class="route-view-shell" />
+            <template #fallback>
+              <div class="route-view-shell route-view-shell--loading" role="status" aria-live="polite">页面加载中…</div>
+            </template>
+          </Suspense>
         </RouteErrorBoundary>
       </router-view>
     </MainLayout>

@@ -245,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onDeactivated } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useIndustryStore } from '@/stores/industry'
 import { useAgentTaskCenterStore } from '@/stores/agentTaskCenter'
@@ -481,7 +481,18 @@ const {
   startVoiceRecording,
   stopVoiceRecording,
   cleanupVoiceInput,
+  warmVoiceModel,
 } = useChatVoiceInput({ messageInput, isLoading, sessionId: currentSessionId })
+
+// Best-effort ASR warm so first push-to-talk is not a 6–7s cold load (item 4 latency).
+let voiceWarmTimer: number | undefined
+onMounted(() => {
+  voiceWarmTimer = window.setTimeout(() => {
+    void warmVoiceModel()
+  }, 2500)
+})
+onBeforeUnmount(() => window.clearTimeout(voiceWarmTimer))
+onDeactivated(() => window.clearTimeout(voiceWarmTimer))
 
 const {
   messageHeights,

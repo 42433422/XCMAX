@@ -18,9 +18,13 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   const voiceState = ref<VoiceState>('idle')
   const voiceErrorText = ref('')
   const voiceElapsedSecs = ref(0)
+  /** First ASR in this session often pays faster-whisper load cost (~6–7s). */
+  const voiceModelWarm = ref(false)
+  const voiceColdHint = ref(false)
   let recorder: MediaRecorder | null = null
   let stream: MediaStream | null = null
   let transcription: AbortController | null = null
+  let warmRequest: AbortController | null = null
   let generation = 0
   let maxTimer: number | undefined, tickTimer: number | undefined, errorTimer: number | undefined
   const scopeKey = () => JSON.stringify([sessionId?.value, resolveChatIdentity(), productReadAccountEpoch.value])
@@ -41,16 +45,36 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
   const voiceButtonText = computed(() => {
     if (voiceState.value === 'requesting') return '等待麦克风授权…'
     if (voiceState.value === 'recording') return `松开发送 ${voiceElapsedSecs.value.toFixed(1)}s`
-    if (voiceState.value === 'transcribing') return '识别中...'
+    if (voiceState.value === 'transcribing') {
+      return voiceColdHint.value || !voiceModelWarm.value ? '首次识别需加载模型…' : '识别中...'
+    }
     return voiceState.value === 'error' ? voiceErrorText.value || '语音失败' : '按住说话'
   })
   const voiceButtonTitle = computed(() => {
     if (voiceState.value === 'requesting') return '正在等待麦克风权限；松开或移出按钮可取消'
     if (voiceState.value === 'recording') return '松开立即识别并填入输入框；移出按钮可取消本次录音'
-    if (voiceState.value === 'transcribing') return '正在把语音转成文字...'
+    if (voiceState.value === 'transcribing') {
+      return voiceColdHint.value || !voiceModelWarm.value
+        ? '首次识别需加载语音模型，可能需要数秒；这不是服务断开'
+        : '正在把语音转成文字...'
+    }
     return voiceState.value === 'error' ? voiceErrorText.value || '语音识别失败' : '按住这里说话，松开后会自动转写成文字填入输入框'
   })
-  const voiceFeedbackText = computed(() => voiceState.value === 'error' ? voiceErrorText.value || '语音识别失败，请重试' : '')
+  const voiceFeedbackText = computed(() => {
+    if (voiceState.value === 'error') return voiceErrorText.value || '语音识别失败，请重试'
+    if (voiceState.value === 'transcribing' && (voiceColdHint.value || !voiceModelWarm.value)) {
+      return '首次识别需加载模型，请稍候（通常数秒）；语音可用时不代表业务健康检查失败'
+    }
+    return ''
+  })
+
+  function notifyApiReachable(source: string) {
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:api-reachable', { detail: { source } }))
+    } catch {
+      /* ignore */
+    }
+  }
 
   function setVoiceError(message: string) {
     voiceErrorText.value = message
@@ -74,6 +98,8 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
 
   function cleanupVoiceInput() {
     generation += 1
+    warmRequest?.abort()
+    warmRequest = null
     transcription?.abort()
     transcription = null
     resetTimers()
@@ -92,6 +118,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
     const controller = new AbortController()
     transcription = controller
     const timeout = window.setTimeout(() => controller.abort(), MAX_RECORD_MS)
+    voiceColdHint.value = !voiceModelWarm.value
     voiceState.value = 'transcribing'
     try {
       const mime = blob.type.toLowerCase()
@@ -102,15 +129,22 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
       const raw = await response.text()
       if (!isCurrent()) return
       if (controller.signal.aborted) throw new DOMException('请求已中断', 'AbortError')
-      let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string } } | null = null
+      let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string; elapsed_ms?: number; cold_start?: boolean; model_loaded?: boolean } } | null = null
       try { data = raw ? JSON.parse(raw) : null } catch { /* report invalid response below */ }
       if (!response.ok || !data || data.success === false) throw new Error(String(data?.detail || data?.message || data?.error || raw || `HTTP ${response.status}`))
+      // Successful voice proves API is reachable — clear false「服务连接中断」from sidebar health.
+      notifyApiReachable('voice-transcribe')
+      const elapsed = Number(data.data?.elapsed_ms || 0)
+      const cold = data.data?.cold_start === true || (!voiceModelWarm.value && elapsed >= 2500)
+      voiceColdHint.value = cold
+      voiceModelWarm.value = true
       const text = String(data.data?.text || '').trim()
       if (!text) { setVoiceError('未识别到语音，请靠近麦克风后重试'); return }
       const existing = messageInput.value.trimEnd()
       messageInput.value = existing ? `${existing} ${text}` : text
       voiceState.value = 'idle'
       voiceErrorText.value = ''
+      voiceColdHint.value = false
       const input = document.getElementById('messageInput') as HTMLTextAreaElement | null
       input?.focus()
       try { input?.setSelectionRange(input.value.length, input.value.length) } catch { /* unsupported input */ }
@@ -189,6 +223,7 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
     if (voiceState.value === 'requesting') { cleanupVoiceInput(); return }
     if (voiceState.value !== 'recording' || !recorder) return
     if (cancel) { cleanupVoiceInput(); return }
+    voiceColdHint.value = !voiceModelWarm.value
     voiceState.value = 'transcribing'
     try { if (recorder.state !== 'inactive') recorder.stop() } catch {
       cleanupVoiceInput()
@@ -196,5 +231,25 @@ export function useChatVoiceInput({ messageInput, isLoading, sessionId }: UseCha
     }
   }
 
-  return { voiceButtonDisabled, voiceButtonClass, voiceButtonIcon, voiceButtonText, voiceButtonTitle, voiceFeedbackText, startVoiceRecording, stopVoiceRecording, cleanupVoiceInput }
+  async function warmVoiceModel() {
+    if (voiceModelWarm.value || warmRequest) return
+    const token = generation, scope = scopeKey()
+    const controller = new AbortController()
+    warmRequest = controller
+    try {
+      const response = await apiFetch('/api/voice/warm', { method: 'POST', signal: controller.signal, timeoutMs: 120_000 })
+      if (response.ok) {
+        const result = await response.json()
+        if (token !== generation || scope !== scopeKey() || controller.signal.aborted) return
+        voiceModelWarm.value = result?.success === true && result?.data?.model_loaded === true
+        notifyApiReachable('voice-warm')
+      }
+    } catch {
+      /* warm is best-effort; first transcribe still works with cold hint */
+    } finally {
+      if (warmRequest === controller) warmRequest = null
+    }
+  }
+
+  return { voiceButtonDisabled, voiceButtonClass, voiceButtonIcon, voiceButtonText, voiceButtonTitle, voiceFeedbackText, startVoiceRecording, stopVoiceRecording, cleanupVoiceInput, warmVoiceModel, voiceModelWarm }
 }
