@@ -110,14 +110,8 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     multimodalStaging.value = []
   }
 
-  async function onMultimodalFileChange(ev: Event) {
-    const el = ev.target as HTMLInputElement | null
-    if (!el?.files?.length) return
-    // FileList is tied to the input and can become empty as soon as value is
-    // reset. Snapshot the File objects first; otherwise image/PDF selection is
-    // a silent no-op on Electron/macOS.
-    const list = Array.from(el.files)
-    el.value = ''
+  async function stageMultimodalFiles(list: File[]) {
+    if (!list.length) return
     syncScope()
     const capturedScope = activeScope, capturedRevision = revision
     const isCurrent = deps.captureIsCurrent?.() || (() => true)
@@ -132,6 +126,17 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
       `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
       'ai',
     )
+  }
+
+  async function onMultimodalFileChange(ev: Event) {
+    const el = ev.target as HTMLInputElement | null
+    if (!el?.files?.length) return
+    // FileList is tied to the input and can become empty as soon as value is
+    // reset. Snapshot the File objects first; otherwise image/PDF selection is
+    // a silent no-op on Electron/macOS.
+    const list = Array.from(el.files)
+    el.value = ''
+    await stageMultimodalFiles(list)
   }
 
   async function bindExcelSheetToChat(sheet: LinkedExcelSheet): Promise<void> {
@@ -201,6 +206,7 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
     onMultimodalFileChange,
+    stageMultimodalFiles,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,
     persistExcelAnalysisContextForSession: (sid: string, ctx: Record<string, unknown> | null) => persistExcelAnalysisContext(sid, ctx),

@@ -43,6 +43,12 @@ function host() {
 }
 
 describe('voice lifecycle regressions', () => {
+  it('does not claim a skipped warm request loaded the model', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({ ok: true, json: async () => ({ success: true, data: { skipped: true, model_loaded: false } }) } as Response)
+    const test = host()
+    await test.api.warmVoiceModel()
+    expect(test.api.voiceModelWarm.value).toBe(false)
+  })
   beforeEach(() => {
     vi.useFakeTimers(); vi.setSystemTime(1000); vi.clearAllMocks()
     vi.stubGlobal('MediaRecorder', MockMediaRecorder)
