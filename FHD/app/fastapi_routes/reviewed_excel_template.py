@@ -969,9 +969,11 @@ async def reviewed_excel_classification_analyze(
                             "phase": "paused",
                             "checkpoint": _checkpoint_view(checkpoint),
                         }
-                prepared = await run_in_threadpool(
+                prepared: dict | list[dict] = await run_in_threadpool(
                     group_semantic_fragments, review, result, prepare_only=True
                 )
+                if not isinstance(prepared, dict):
+                    raise ReviewedExcelError("分组请求格式无效")
                 import os
 
                 from app.application.reviewed_excel_audit import claim_request
