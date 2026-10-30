@@ -23,6 +23,7 @@ from app.application.etl.archive_store import (
 from app.application.etl.errors import EtlError, ReviewedExcelError, public_excel_error
 from app.application.etl.service_support import dump_json, load_json, new_id, utcnow
 from app.application.etl.service_uploads import UploadServiceMixin
+from app.application.reviewed_excel_audit import ModelRequestNotSent, record_not_sent
 from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     apply_classification_corrections,
@@ -931,6 +932,10 @@ async def reviewed_excel_classification_analyze(
                     result = combine_semantic_batches(
                         review, batches[: index + 1], checkpoint["results"], max_calls
                     )
+                except ModelRequestNotSent as exc:
+                    record_not_sent(state, request_sha, exc.public_message)
+                    _classification_cas(db, run, claimed_draft, state)
+                    raise
                 except (ValueError, TypeError, EtlError):
                     if audit_holder[0] != audit_draft_before_response:
                         checkpoint["results"] = checkpoint["results"][:index]
@@ -1006,6 +1011,10 @@ async def reviewed_excel_classification_analyze(
                         result,
                         expected_request_sha256=request_sha,
                     )
+                except ModelRequestNotSent as exc:
+                    record_not_sent(state, request_sha, exc.public_message)
+                    _classification_cas(db, run, claimed_draft, state)
+                    raise
                 except (ValueError, TypeError, EtlError):
                     if audit_holder[0] != claimed_draft:
                         checkpoint["phase"] = "failed"

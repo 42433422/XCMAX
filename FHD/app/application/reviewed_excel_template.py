@@ -119,6 +119,7 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
     import os
 
     from app.application.etl import llm_assist
+    from app.application.reviewed_excel_audit import ModelRequestNotSent
     from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
     from app.infrastructure.llm.providers.openai_compatible_provider import XiaomiMimoProvider
     from app.infrastructure.llm.structured_output import extract_json
@@ -131,10 +132,10 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         or base != "https://token-plan-cn.xiaomimimo.com/v1"
         or model not in {"mimo-v2.6-flash", "mimo-v2.6-pro"}
     ):
-        raise ReviewedExcelError("模板 MiMo 配置未完成或不受支持；未调用模型")
+        raise ModelRequestNotSent("模板 MiMo 配置未完成或不受支持；未调用模型")
     adapter = OpenAICompatibleAdapter(provider="xiaomi", model=model, base_url=base)
     if not adapter.is_configured:
-        raise ReviewedExcelError("模板 MiMo 凭据未配置；未调用模型")
+        raise ModelRequestNotSent("模板 MiMo 凭据未配置；未调用模型")
     provider = XiaomiMimoProvider(adapter)
     from app.application.reviewed_excel_audit import response_capture
 

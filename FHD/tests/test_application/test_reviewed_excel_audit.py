@@ -100,3 +100,27 @@ def test_response_record_rejects_duplicate_and_over_budget():
     record_response(state, digest, b"{}", 200, "req")
     with pytest.raises(ReviewedExcelError, match="状态"):
         record_response(state, digest, b"{}", 200, "req")
+
+
+def test_unsent_audit_cannot_release_a_received_or_different_request():
+    from app.application.reviewed_excel_audit import record_not_sent, record_response
+
+    state = {"analysis_checkpoint": {"phase": "inflight", "calls_in_round": 2}}
+    digest = claim_request(
+        state,
+        {"messages": [], "schema": {}, "max_tokens": 1},
+        source_sha256="s",
+        version="v",
+        classification_id="i",
+        code_version="c",
+        model="m",
+        phase="classification",
+    )
+    with pytest.raises(ReviewedExcelError, match="未解除"):
+        record_not_sent(state, "other-request", "未发送")
+    assert state["analysis_checkpoint"]["phase"] == "inflight"
+    record_response(state, digest, b"{}", 200, "synthetic")
+    with pytest.raises(ReviewedExcelError, match="未解除"):
+        record_not_sent(state, digest, "未发送")
+    assert state["model_audit"][-1]["state"] == "response_received"
+    assert state["analysis_checkpoint"]["calls_in_round"] == 2

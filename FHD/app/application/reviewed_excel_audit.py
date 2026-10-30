@@ -9,6 +9,22 @@ from app.application.etl.errors import ReviewedExcelError
 MAX_ARCHIVE_BYTES = 20_000_000
 
 
+class ModelRequestNotSent(ReviewedExcelError):
+    """Only local pre-send validation may raise this; never use for transport errors."""
+
+
+def record_not_sent(state: dict, expected: str, reason: str) -> None:
+    records = state.get("model_audit")
+    if (
+        not records
+        or records[-1].get("request_sha256") != expected
+        or records[-1].get("state") != "inflight"
+    ):
+        raise ReviewedExcelError("模型归档状态已改变，未解除请求锁")
+    records[-1].update({"state": "not_sent", "reason": reason})
+    state["analysis_checkpoint"]["phase"] = "ready"
+
+
 def request_digest(request: dict) -> str:
     encoded = json.dumps(request, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()

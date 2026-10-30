@@ -1,6 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 const layout = (value: string) => [{ sheet: '报价', widths: [20], rows: [{ height: 20, cells: [{ cell: 'B2', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
@@ -282,6 +282,171 @@ describe('reviewed Excel template', () => {
     await authorization.setValue(true)
     await wrapper.findAll('input[name="template-file"]')[1].setValue()
     expect((authorization.element as HTMLInputElement).checked).toBe(false)
+  })
+  const sliceResults = [0, 1].map(index => ({ index, filename: `${index ? '乙' : '甲'}单.xlsx`, sha256: `slice-${index}`, basis: 'model_group', confirmed: false, fragments: [{ sheet: '报价', range: 'A1:B2' }] }))
+  const sliceReview = (id: string) => ({ review_id: id, sha256: 'source', sheets: ['报价'], cells: [], layout: layout(id), proposal: proposal(id), selected_region: { selection_basis: 'model_group' } })
+  async function classifiedSlices(checkpoint?: { phase: string; calls_in_round: number; max_calls: number; version?: string; source_sha256?: string }) {
+    const sheets = [{ sheet: '报价', labels: ['quotation'], checked_cells: 1, evidence: [], regions: [] }]
+    api.classifyExcel.mockResolvedValue({ files: [{ name: '报价.xlsx', status: 'classified', classification_id: 'slices', sha256: 'source-hash', version: 'v1', sheets }] })
+    api.analyzeClassification.mockReset().mockResolvedValue({ version: 'v2', model_status: 'returned', sheets })
+    api.recentClassifications.mockReset()
+    if (checkpoint) {
+      api.analyzeClassification.mockRejectedValueOnce(new Error('模型响应验证失败'))
+      api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'slices', sha256: checkpoint.source_sha256 || 'source-hash', latest: { version: 'v1' }, checkpoint: { version: 'v1', completed: 0, total: 2, message: '已核对状态', ...checkpoint } }] })
+    }
+    api.autoSlices.mockReset().mockResolvedValue({ slices: sliceResults })
+    api.reviewExcel.mockReset().mockResolvedValue(sliceReview('甲'))
+    api.saveReviewedExcel.mockReset().mockResolvedValue({ template_id: 'saved' })
+    const wrapper = mount(ReviewedExcelTemplate)
+    const input = wrapper.find('input[type=file]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], '报价.xlsx')] })
+    await input.trigger('change')
+    await wrapper.findAll('button').find(b => b.text().includes('分类所选'))!.trigger('click'); await flushPromises()
+    await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('所有待分析文件'))!.setValue(true)
+    await wrapper.findAll('button').find(b => b.text().includes('模型分析已分类'))!.trigger('click'); await flushPromises()
+    return wrapper
+  }
+  it.each([0, 1])('retries a persisted failed response only with explicit consent and budget (used=%s)', async used => {
+    const wrapper = await classifiedSlices({ phase: 'failed', calls_in_round: used, max_calls: 1 })
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    await wrapper.findAll('button').find(b => b.text() === '模型分析已分类文件')!.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    const retry = wrapper.findAll('button').find(b => b.text().includes('确认再次调用模型重试'))!
+    if (used) {
+      expect(retry.attributes('disabled')).toBeDefined()
+      await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认开启新一轮预算'))!.setValue(true)
+    }
+    api.analyzeClassification.mockResolvedValueOnce({ phase: 'pending', version: 'v1', checkpoint: { phase: 'ready', version: 'v1', completed: 1, total: 2, max_calls: 1, calls_in_round: 1, message: '下一批待处理' } })
+    await retry.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
+    const form = api.analyzeClassification.mock.calls[1][1] as FormData
+    expect(form.get('retry_authorized')).toBe('true')
+    expect(form.get('continue_authorized')).toBe(used ? 'true' : null)
+    expect(wrapper.findAll('button').some(b => b.text().includes('确认再次调用模型重试'))).toBe(false)
+    wrapper.unmount()
+  })
+  it.each(['inflight', 'stale-failed', 'hash-mismatch', 'ready'])('uses persisted matching checkpoint evidence and preserves %s behavior', async phase => {
+    const wrapper = await classifiedSlices({ phase: ['stale-failed', 'hash-mismatch'].includes(phase) ? 'failed' : phase, version: phase === 'stale-failed' ? 'old-version' : 'v1', source_sha256: phase === 'hash-mismatch' ? 'wrong-source' : 'source-hash', calls_in_round: 0, max_calls: 1 })
+    expect(wrapper.findAll('button').some(b => b.text().includes('确认再次调用模型重试'))).toBe(false)
+    await wrapper.findAll('button').find(b => b.text() === '模型分析已分类文件')!.trigger('click'); await flushPromises()
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(phase === 'ready' ? 2 : 1)
+    if (phase === 'ready') expect((api.analyzeClassification.mock.calls[1][1] as FormData).get('retry_authorized')).toBeNull()
+    wrapper.unmount()
+  })
+  it.each([true, false])('clears prior slice review and sharing consent when next preview fails=%s', async fails => {
+    const wrapper = await classifiedSlices()
+    const buttons = () => wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')
+    await buttons()[0].trigger('click'); await flushPromises()
+    await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认发布'))!.setValue(true)
+    const oldSave = wrapper.findAll('button').find(b => b.text() === '保存所选模板')!
+    let finish!: () => void
+    api.reviewExcel.mockImplementationOnce(() => new Promise((resolve, reject) => { finish = () => fails ? reject(new Error('乙预览失败')) : resolve(sliceReview('乙')) }))
+    const second = buttons()[1]
+    second.element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    second.element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(api.reviewExcel).toHaveBeenCalledTimes(2)
+    expect(wrapper.findAll('.reviewed-template__preview')).toHaveLength(0)
+    oldSave.element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    finish(); await flushPromises()
+    if (fails) {
+      expect(wrapper.text()).toContain('乙预览失败')
+      expect(wrapper.findAll('button').some(b => b.text() === '保存所选模板')).toBe(false)
+    } else {
+      const save = wrapper.findAll('button').find(b => b.text() === '保存所选模板')!
+      expect(save.attributes('disabled')).toBeDefined()
+      await wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认发布'))!.setValue(true)
+      await save.trigger('click'); await flushPromises()
+      const form = api.saveReviewedExcel.mock.calls[0][0] as FormData
+      expect(form.get('name')).toBe('乙单'); expect(form.get('review_id')).toBe('乙')
+    }
+    wrapper.unmount()
+  })
+  it('reloads slices after a transient failure without reanalyzing or duplicate requests', async () => {
+    const wrapper = await classifiedSlices()
+    api.autoSlices.mockRejectedValueOnce(new Error('网络中断'))
+    const reload = () => wrapper.findAll('button').find(b => b.text().includes('重新加载切片'))!
+    await reload().trigger('click'); await flushPromises()
+    expect(wrapper.text()).toContain('裁切失败：网络中断')
+    expect(wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')).toHaveLength(0)
+    let finish!: (value: unknown) => void
+    api.autoSlices.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+    reload().element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    reload().element.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    expect(api.autoSlices).toHaveBeenCalledTimes(3)
+    finish({ slices: sliceResults }); await flushPromises()
+    expect(wrapper.text()).not.toContain('裁切失败：网络中断')
+    expect(wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')).toHaveLength(2)
+    expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+  it('binds model opt-in to the selected slice and requires fresh authorization for another slice', async () => {
+    const wrapper = await classifiedSlices()
+    const slices = () => wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')
+    const checkbox = (label: string) => wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes(label))!
+    await slices()[0].trigger('click'); await flushPromises()
+    await checkbox('首轮使用模型').setValue(true)
+    await checkbox('的所选文档发送至 MiMo').setValue(true)
+    await slices()[0].trigger('click'); await flushPromises()
+    let form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
+    expect(form.get('model_opt_in')).toBe('true'); expect(form.get('own_file_authorized')).toBe('true')
+    await slices()[1].trigger('click'); await flushPromises()
+    form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
+    expect(form.get('model_opt_in')).toBe('false')
+    expect(form.get('own_file_authorized')).toBe('false'); expect(form.get('sample_authorized')).toBe('false')
+    expect((checkbox('首轮使用模型').element as HTMLInputElement).checked).toBe(false)
+    await checkbox('首轮使用模型').setValue(true)
+    await checkbox('的所选文档发送至 MiMo').setValue(true)
+    await slices()[1].trigger('click'); await flushPromises()
+    form = api.reviewExcel.mock.calls.at(-1)![0] as FormData
+    expect(form.get('auto_slice_index')).toBe('1')
+    expect(form.get('model_opt_in')).toBe('true'); expect(form.get('own_file_authorized')).toBe('true')
+    wrapper.unmount()
+  })
+  it('does not reuse budget consent when restoring the same classification at a new version', async () => {
+    const wrapper = await classifiedSlices({ phase: 'failed', calls_in_round: 1, max_calls: 1 })
+    const budget = () => wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认开启新一轮预算'))!
+    await budget().setValue(true)
+    api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'slices', name: '报价.xlsx', sha256: '01', latest: { version: 'new-version', confirmed: false, model_status: 'not_called', sheets: [] }, checkpoint: { phase: 'failed', version: 'new-version', completed: 0, total: 2, max_calls: 1, calls_in_round: 1, message: '失败待确认' } }] })
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer) } })
+    try {
+      const input = wrapper.find('input[type=file]')
+      const file = (input.element as HTMLInputElement).files![0]
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1]).buffer })
+      await wrapper.findAll('button').find(b => b.text() === '查看已保存分类')!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
+      expect((budget().element as HTMLInputElement).checked).toBe(false)
+      const retry = wrapper.findAll('button').find(b => b.text().includes('确认再次调用模型重试'))!
+      expect(retry.attributes('disabled')).toBeDefined()
+      expect(api.analyzeClassification).toHaveBeenCalledTimes(1)
+      await budget().setValue(true)
+      await retry.trigger('click'); await flushPromises()
+      expect(api.analyzeClassification).toHaveBeenCalledTimes(2)
+      const form = api.analyzeClassification.mock.calls[1][1] as FormData
+      expect(form.get('version')).toBe('new-version')
+      expect(form.get('continue_authorized')).toBe('true')
+    } finally { wrapper.unmount(); vi.unstubAllGlobals() }
+  })
+  it.each([true, false])('restores automatic slices without another model call, load fails=%s', async fails => {
+    api.analyzeClassification.mockReset(); api.autoSlices.mockReset()
+    if (fails) api.autoSlices.mockRejectedValue(new Error('分类版本已改变'))
+    else api.autoSlices.mockResolvedValue({ slices: sliceResults })
+    api.recentClassifications.mockResolvedValue({ files: [{ classification_id: 'restored', name: '恢复.xlsx', sha256: '01', latest: { version: 'current-version', confirmed: false, model_status: 'returned', sheets: [] } }] })
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array([1]).buffer) } })
+    const wrapper = mount(ReviewedExcelTemplate)
+    try {
+      const file = new File(['x'], '恢复.xlsx')
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1]).buffer })
+      const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
+      await input.trigger('change')
+      await wrapper.findAll('button').find(b => b.text().includes('查看已保存分类'))!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
+      expect(api.autoSlices).toHaveBeenCalledWith('restored', 'current-version')
+      expect(api.analyzeClassification).not.toHaveBeenCalled()
+      expect(wrapper.findAll('button').filter(b => b.text() === '用此单据生成模板')).toHaveLength(fails ? 0 : 2)
+      if (fails) expect(wrapper.text()).toContain('裁切失败：分类版本已改变')
+    } finally { wrapper.unmount(); vi.unstubAllGlobals() }
   })
   it('displays generated results and saves the chosen plan without cell selection', async () => {
     api.classifyExcel.mockResolvedValue({ files: [{ name: '报价.xlsx', status: 'classified', classification_id: 'class-1', version: 'v1', sheets: [{ sheet: '报价', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:B2', labels: ['unknown'], checked_cells: 1, evidence: [], parent_heading: '', dependency_status: '未分析', needs_confirmation: true, header_cells: [], merged_ranges: [], possible_shared_context: [] }] }] }] })

@@ -16,7 +16,7 @@ type FragmentLinks = { items: { sheet: string; first: string; second: string; sh
 type LogicalDocument = { logical_document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; fragments: { sheet: string; range: string }[] }
-type Checkpoint = { phase: 'ready' | 'paused' | 'inflight'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
+type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
 type Classification = { template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
 type RecentClassification = { archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
 const props = withDefaults(defineProps<{ archiveOnSelect?: boolean }>(), { archiveOnSelect: false })
@@ -39,6 +39,7 @@ const cancelAnalysis = ref(false)
 const analysisProgress = ref('')
 const classificationNotice = ref('')
 const analysisErrors = ref<Record<string, string>>({})
+const retryBudget = ref<Record<string, boolean>>({})
 const autoSlices = ref<Record<string, { version: string; slices: AutoSlice[] }>>({})
 const recentClassifications = ref<RecentClassification[]>([])
 const selectedRegion = ref('')
@@ -72,6 +73,7 @@ const selectedVersion = ref(0)
 const proposal = computed(() => proposals.value[selectedVersion.value])
 const feedback = ref('')
 const initialModel = ref(false)
+const selectedSliceKey = ref('')
 const sampleAuthorized = ref(false)
 const templateOwnFileAuthorized = ref(false)
 const sheetIndex = ref(0)
@@ -106,8 +108,17 @@ function captureFileOperation() {
   const current = captureOperation(), selectedScope = selectedFilesCurrent, epoch = selectionEpoch
   return () => current() && epoch === selectionEpoch && !!selectedScope?.()
 }
+function clearTemplateModelAuthorization() {
+  initialModel.value = false; sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false
+}
+function resetReview() {
+  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0
+  savedId.value = ''; savedModelStatus.value = ''; sheetIndex.value = 0
+  feedback.value = ''; consent.value = false; publishToTenant.value = false
+}
 function resetSelectionState() {
-  autoSlices.value = {}
+  autoSlices.value = {}; retryBudget.value = {}; selectedSliceKey.value = ''
+  clearTemplateModelAuthorization()
   file.value = null
   classifications.value = []
   classificationSampleAuthorized.value = false
@@ -185,6 +196,7 @@ async function classify() {
       }
     }
     if (!current()) return
+    retryBudget.value = {}
     classifications.value = results
     archiveProgress.value = props.archiveOnSelect && results.every((item) => item.status === 'classified')
       ? '原件已归档并完成规则预筛，请继续核对单据分类、片段边界和续表关系。'
@@ -292,7 +304,7 @@ async function classifyArchiveVersion(versionId: string, name: string) {
     if (!current()) return
     selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
     files.value = [new File([blob], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
-    classifications.value = [item]; selectFile(0); await loadArchiveAssets()
+    retryBudget.value = {}; classifications.value = [item]; selectFile(0); await loadArchiveAssets()
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败，请查看档案后核对' }
   finally { if (current()) busy.value = false }
 }
@@ -301,13 +313,13 @@ function selectFile(index: number) {
   file.value = files.value[index]
   classificationOwnFileAuthorized.value = false
   selectedPrintArea.value = false
-  sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false; publishToTenant.value = false
+  clearTemplateModelAuthorization(); publishToTenant.value = false; selectedSliceKey.value = ''
   name.value = file.value.name.replace(/\.xlsx$/i, '')
   const firstSheet = classifications.value[index]?.sheets[0]
   selectedRegion.value = firstSheet?.regions[0] ? `${firstSheet.sheet} / ${firstSheet.regions[0].range}` : ''
   selectedRegionCoordinates.value = firstSheet?.regions[0] ? { sheet: firstSheet.sheet, range: firstSheet.regions[0].range } : null
   selectedRegionNeedsChoice.value = false
-  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
+  resetReview()
   emit('stage', classifications.value[index].confirmed ? 'cleaning' : 'fragments')
 }
 function selectRegion(i: number, j: number, k: number) {
@@ -319,8 +331,8 @@ function selectRegion(i: number, j: number, k: number) {
   selectedRegionNeedsChoice.value = false
   if (neededChoice) classificationNotice.value = classifications.value[i].confirmed ? '' : '已选择新的文档片段，请再次确认分类和续表关系后清理。'
   selectedPrintArea.value = false
-  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
-  sampleAuthorized.value = false; templateOwnFileAuthorized.value = false; consent.value = false; publishToTenant.value = false
+  resetReview()
+  clearTemplateModelAuthorization(); publishToTenant.value = false; selectedSliceKey.value = ''
   if (props.archiveOnSelect) name.value = `${file.value?.name.replace(/\.xlsx$/i, '')} · ${sheet.sheet} ${sheet.regions[k].range}`
   emit('stage', classifications.value[i].confirmed ? 'cleaning' : 'fragments')
 }
@@ -371,7 +383,7 @@ function alignConfirmedSelection(item: Classification) {
   const matches = previous ? item.sheets.filter(sheet => sheet.sheet === previous.sheet).flatMap(sheet =>
     sheet.regions.filter(region => normalizeRegionRange(region.range) === normalizeRegionRange(previous.range))
       .map(region => ({ sheet: sheet.sheet, range: region.range }))) : []
-  review.value = null; proposals.value = []; selectedVersion.value = 0; candidateIndex.value = 0; savedId.value = ''
+  resetReview()
   selectedPrintArea.value = false; sampleAuthorized.value = false; templateOwnFileAuthorized.value = false
   classificationSampleAuthorized.value = false; classificationOwnFileAuthorized.value = false
   consent.value = false; publishToTenant.value = false
@@ -397,13 +409,22 @@ function invalidateClassification(item: Classification) {
     emit('stage', 'fragments')
   }
 }
-async function analyzeClassifications() {
+async function reconcileCheckpoint(item: Classification, current: () => boolean) {
+  try {
+    const result = await templatePreviewApi.recentClassifications() as { files: RecentClassification[] }
+    if (!current()) return
+    const saved = result.files.find(entry => entry.classification_id === item.classification_id && !!item.sha256 && entry.sha256 === item.sha256 && entry.latest?.version === item.version)
+    if (saved?.checkpoint?.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(saved.checkpoint.phase)) item.checkpoint = saved.checkpoint
+  } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
+}
+async function analyzeClassifications(retryItem?: Classification, extendBudget = false) {
   const current = captureFileOperation()
-  if (!current()) return
+  if (!current() || busy.value) return
   if (classificationSampleAuthorized.value === classificationOwnFileAuthorized.value) return
+  if (retryItem && (retryItem.checkpoint?.phase !== 'failed' || ((retryItem.checkpoint.calls_in_round ?? 0) >= retryItem.checkpoint.max_calls && !extendBudget))) return
   busy.value = true; error.value = ''; cancelAnalysis.value = false
   const selectedFile = classifications.value[files.value.indexOf(file.value as File)]
-  const pending = classifications.value.filter((item) => (!classificationOwnFileAuthorized.value || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && !item.confirmed && item.checkpoint?.phase !== 'inflight')
+  const pending = classifications.value.filter((item) => (!classificationOwnFileAuthorized.value || item === selectedFile) && item.status === 'classified' && item.model_status !== 'returned' && !item.confirmed && item.checkpoint?.phase !== 'inflight' && (retryItem ? item === retryItem : item.checkpoint?.phase !== 'failed'))
   try {
     for (const [index, item] of pending.entries()) {
       if (cancelAnalysis.value) break
@@ -414,33 +435,33 @@ async function analyzeClassifications() {
           const form = new FormData(); form.append('version', item.version); form.append(classificationOwnFileAuthorized.value ? 'own_file_authorized' : 'sample_authorized', 'true')
           form.append('auto_group', 'true')
           if (item.checkpoint?.phase === 'paused') form.append('continue_authorized', 'true')
+          if (retryItem && item.checkpoint?.phase === 'failed') {
+            form.append('retry_authorized', 'true')
+            if (extendBudget) form.append('continue_authorized', 'true')
+            delete retryBudget.value[item.classification_id]
+          }
           const result = await templatePreviewApi.analyzeClassification(item.classification_id, form) as { phase?: string; checkpoint?: Checkpoint; version: string; sheets: ClassificationSheet[]; model_status: string; budget?: Classification['budget']; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; fragment_links?: FragmentLinks; coverage: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] }
           if (!current()) return
           if (result.phase === 'pending' || result.phase === 'paused') {
             item.checkpoint = result.checkpoint
             analysisProgress.value = `${item.name}：已完成 ${result.checkpoint?.completed}/${result.checkpoint?.total} 批`
-            if (result.phase === 'paused') break
+            if (result.phase === 'paused' || retryItem) break
             continue
           }
+          delete retryBudget.value[item.classification_id]
           item.checkpoint = null; item.version = result.version; item.sheets = result.sheets; item.model_status = result.model_status; item.budget = result.budget; item.suggested_documents = result.suggested_documents; item.suggested_document_count = result.suggested_document_count; item.fragment_links = result.fragment_links; item.coverage = result.coverage; item.input_messages = result.input_messages; item.input_summaries = result.input_summaries; item.confirmed = false
-          try {
-            const generated = await templatePreviewApi.autoSlices(item.classification_id, result.version) as { slices: AutoSlice[] }
-            if (!current()) return
-            autoSlices.value[item.classification_id] = { version: result.version, slices: generated.slices }
-          } catch (err) {
-            if (!current()) return
-            analysisErrors.value[item.classification_id] = err instanceof Error ? `裁切失败：${err.message}` : '裁切失败，请检查模型边界及依赖'
-          }
+          await loadAutoSlices(item, current)
           break
         }
       } catch (err) { if (!current()) return;
         const message = err instanceof Error ? err.message : '分析失败'
-        if (message.includes('未调用模型')) {
-          analysisErrors.value[item.classification_id || item.name] = message
-        } else {
-          analysisErrors.value[item.classification_id || item.name] = message + '；请求结果可能未知，请查看已保存分类核对，勿重复发送'
-          item.checkpoint = { phase: 'inflight', version: item.version || '', completed: item.checkpoint?.completed || 0, total: item.checkpoint?.total || 0, max_calls: item.checkpoint?.max_calls || 1, message: '结果未知，不可重发；需人工核对，当前无解锁入口' }
-        }
+        const key = item.classification_id || item.name
+        delete retryBudget.value[key]
+        analysisErrors.value[key] = message
+        item.checkpoint = { phase: 'inflight', version: item.version || '', completed: item.checkpoint?.completed || 0, total: item.checkpoint?.total || 0, max_calls: item.checkpoint?.max_calls || 1, message: '结果未知，不可重发；需人工核对服务端记录' }
+        await reconcileCheckpoint(item, current)
+        if (!current()) return
+        if (item.checkpoint?.phase === 'inflight') analysisErrors.value[key] += '；请求结果可能未知，请查看已保存分类核对，勿重复发送'
       }
     }
     analysisProgress.value = cancelAnalysis.value ? '已停止后续批次；当前请求可能已完成，请查看已保存分类。' : classifications.value.some((item) => item.checkpoint?.phase === 'inflight') ? '部分请求结果未知，不可重发，需人工核对。' : classifications.value.some((item) => item.checkpoint?.phase === 'paused') ? '本轮预算已用完；可再次点击模型分析继续剩余批次。' : '本轮分析结束。'
@@ -449,8 +470,32 @@ async function analyzeClassifications() {
     if (index >= 0) selectFile(index)
   } finally { if (current()) busy.value = false }
 }
+async function loadAutoSlices(item: Classification, current: () => boolean) {
+  const id = item.classification_id, version = item.version
+  if (!id || !version || !current()) return
+  delete autoSlices.value[id]
+  try {
+    const generated = await templatePreviewApi.autoSlices(id, version) as { slices: AutoSlice[] }
+    if (!current()) return
+    autoSlices.value[id] = { version, slices: generated.slices }
+    delete analysisErrors.value[id]
+  } catch (err) {
+    if (current()) analysisErrors.value[id] = err instanceof Error ? `裁切失败：${err.message}` : '裁切失败，请检查模型边界及依赖'
+  }
+}
+async function reloadAutoSlices(item: Classification) {
+  const current = captureFileOperation()
+  if (busy.value || !current() || item.model_status !== 'returned') return
+  busy.value = true
+  try { await loadAutoSlices(item, current) }
+  finally { if (current()) busy.value = false }
+}
 async function previewAutoSlice(index: number, slice: AutoSlice) {
+  if (busy.value) return
   if (file.value !== files.value[index]) selectFile(index)
+  const item = classifications.value[index]
+  const key = JSON.stringify([item?.classification_id, item?.version, slice.index, slice.sha256])
+  if (selectedSliceKey.value !== key) { clearTemplateModelAuthorization(); selectedSliceKey.value = key }
   name.value = slice.filename.replace(/\.xlsx$/i, '')
   await preview(slice)
 }
@@ -481,6 +526,7 @@ async function confirmClassifications() {
       const form = new FormData(); form.append('version', item.version); form.append('labels_json', JSON.stringify(labels)); form.append('links_json', JSON.stringify(links)); form.append('independent_confirmed', String(!!item.independent_confirmed))
       const result = await templatePreviewApi.confirmClassification(item.classification_id, form) as { message?: string; version: string; confirmed: boolean; sheets: ClassificationSheet[]; fragment_links?: FragmentLinks; logical_documents?: LogicalDocument[]; confirmed_document_count?: number | null; document_count_status?: string; coverage?: Classification['coverage'] }
       if (!current()) return
+      delete retryBudget.value[item.classification_id]
       item.version = result.version; item.confirmed = result.confirmed; item.sheets = result.sheets; item.fragment_links = result.fragment_links; item.logical_documents = result.logical_documents; item.confirmed_document_count = result.confirmed_document_count; item.document_count_status = result.document_count_status; item.coverage = result.coverage
       if (!result.confirmed) classificationNotice.value = result.message || '拆分已保存。请核对新的文档片段和续表关系，再次确认后才能清理模板。'
       alignConfirmedSelection(item)
@@ -503,6 +549,7 @@ async function loadRecentClassifications() {
   finally { if (current()) busy.value = false }
 }
 async function restoreClassification(item: RecentClassification) {
+  if (busy.value) return
   const current = captureOperation()
   if (!current()) return
   if ((!item.archive_version_id && files.value.length !== 1) || !item.latest) return
@@ -525,14 +572,18 @@ async function restoreClassification(item: RecentClassification) {
     if (sha !== item.sha256) throw new Error('所选文件与分类来源不一致')
     classifications.value = [{ name: files.value[0].name, status: 'classified', sha256: sha,
       classification_id: item.classification_id, ...item.latest, checkpoint: item.checkpoint, template_write_state: item.template_write_state }]
+    autoSlices.value = {}; analysisErrors.value = {}; retryBudget.value = {}
     selectFile(0)
+    if (item.latest.model_status === 'returned') await loadAutoSlices(classifications.value[0], current)
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '恢复分类失败' }
   finally { if (current()) busy.value = false }
 }
 async function preview(slice?: AutoSlice) {
+  if (busy.value) return
   const current = captureFileOperation()
   if (!current()) return
   if (!file.value || (!slice && (!classificationConfirmed.value || !previewSelectionReady.value))) return
+  resetReview()
   busy.value = true
   error.value = ''
   try {
@@ -563,6 +614,7 @@ async function preview(slice?: AutoSlice) {
   finally { if (current()) busy.value = false }
 }
 async function save() {
+  if (busy.value || !publishToTenant.value) return
   const current = captureFileOperation()
   if (!current()) return
   if (!file.value || !review.value || !name.value.trim()) return
@@ -703,6 +755,11 @@ async function downloadCandidate(index: number) {
         <small v-if="item.sha256">来源 SHA-256：{{ item.sha256 }}</small>
         <p v-if="item.read_only_print_areas?.length">原打印区域：{{ item.read_only_print_areas.map((area) => `${area.sheet}: ${area.value}`).join('；') }}。逐文档提取时可能需要确认派生打印区域。</p>
         <small v-if="item.checkpoint">批次 {{ item.checkpoint.completed }}/{{ item.checkpoint.total }}；本轮 {{ item.checkpoint.calls_in_round ?? 0 }}/{{ item.checkpoint.max_calls }} 次：{{ item.checkpoint.message }}；停止只在批次之间生效。</small>
+        <template v-if="item.checkpoint?.phase === 'failed' && item.classification_id">
+          <p>服务端已记录失败响应；重试会再次调用模型，不会自动重发。</p>
+          <label v-if="(item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls"><input v-model="retryBudget[item.classification_id]" type="checkbox" :disabled="busy"> 本轮预算已用完，我确认开启新一轮预算并重试此次失败请求</label>
+          <button type="button" :disabled="busy || classificationSampleAuthorized === classificationOwnFileAuthorized || (classificationOwnFileAuthorized && file !== files[i]) || ((item.checkpoint.calls_in_round ?? 0) >= item.checkpoint.max_calls && !retryBudget[item.classification_id])" @click="analyzeClassifications(item, retryBudget[item.classification_id] === true)">上次响应失败，确认再次调用模型重试</button>
+        </template>
         <small v-if="item.template_write_state === 'locked'">模板保存正在进行或结果待核对；请勿重复保存，当前没有自动解锁入口。</small>
         <small v-if="item.status === 'classified'">{{ classificationStatus(item) }}</small>
         <template v-if="!item.sheets.some((sheet) => sheet.regions.some((region) => region.modified))">
@@ -725,6 +782,7 @@ async function downloadCandidate(index: number) {
         <details v-for="coverage in item.coverage || []" :key="`coverage-${coverage.sheet}`"><summary>{{ coverage.sheet }} 未读、截断与未分配坐标</summary><p>未发送：{{ coverage.unread.join('，') || '无' }}</p><p>单元格值截断：{{ coverage.value_truncated.join('，') || '无' }}</p><p>超出单格预算、尚未发送：{{ coverage.deferred_large_values?.join('，') || '无' }}</p><p>当前未归入区域：{{ coverage.unassigned.join('，') || '无' }}</p><p v-if="coverage.model_unassigned">模型原始未分配：{{ coverage.model_unassigned.join('，') || '无' }}</p></details>
         <small v-if="item.status !== 'classified'">未支持：{{ item.message }}</small>
         <small v-if="analysisErrors[item.classification_id || item.name]">分析失败：{{ analysisErrors[item.classification_id || item.name] }}。</small>
+        <button v-if="item.classification_id && item.version && item.model_status === 'returned'" type="button" :disabled="busy" @click="reloadAutoSlices(item)">重新加载切片（不调用模型）</button>
         <div v-if="item.classification_id && autoSlices[item.classification_id]?.version === item.version">
           <p>自动裁切结果：未确认的区域关系请核对，下载文件保留原始数据。</p>
           <p v-for="slice in autoSlices[item.classification_id].slices" :key="slice.index">

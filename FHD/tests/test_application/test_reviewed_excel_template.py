@@ -5164,7 +5164,10 @@ def test_model_cannot_create_region_or_evidence_from_context_only(monkeypatch):
         _classify_semantic_batch(review)
 
 
-def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypatch):
+@pytest.mark.parametrize("group_not_sent", [False, True])
+def test_auto_group_resume_budget_and_download_multibatch(
+    review_store, monkeypatch, group_not_sent
+):
     from app.application.etl.llm_assist_runtime import LlmAssistResult
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
@@ -5174,6 +5177,11 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
     def fake(messages, schema, tokens):
         payload = json.loads(messages[1]["content"])
         if "groups" in schema["properties"]:
+            if group_not_sent and "not_sent" not in calls:
+                from app.application.reviewed_excel_audit import ModelRequestNotSent
+
+                calls.append("not_sent")
+                raise ModelRequestNotSent("配置未完成；未调用模型")
             calls.append("group")
             fragments = [part["region_id"] for part in payload["fragments"]]
             evidence = [cell["evidence_id"] for cell in payload["cells"]]
@@ -5228,6 +5236,13 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
     assert calls == ["batch", "batch"]
     assert client.post(path + "/analyze", data=form).status_code == 409
     done = client.post(path + "/analyze", data={**form, "continue_authorized": "true"})
+    if group_not_sent:
+        assert done.status_code == 400, done.text
+        checkpoint = client.get(path).json()["checkpoint"]
+        assert checkpoint["phase"] == "ready" and checkpoint["completed"] == 2
+        assert checkpoint["calls_in_round"] == 0
+        done = client.post(path + "/analyze", data=form)
+        calls.remove("not_sent")
     assert done.status_code == 200, done.text
     data = done.json()
     assert calls == ["batch", "batch", "group"]
@@ -5561,3 +5576,67 @@ def test_auto_slice_blocks_unassigned_cells(review_store, monkeypatch):
     assert listing.status_code == 400 and "完整覆盖" in listing.text
     download = client.get(endpoint + "/0")
     assert download.status_code == 400 and "完整覆盖" in download.text
+
+
+@pytest.mark.parametrize("fault", ["off", "missing_key", "invalid_base", "invalid_model"])
+def test_unsent_model_configuration_does_not_lock_classification(review_store, monkeypatch, fault):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+    from app.domain.shared_services.conversation.llm_adapter import OpenAICompatibleAdapter
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_ETL_LLM", "on")
+    monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1")
+    monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "mimo-v2.6-flash")
+    monkeypatch.setenv("MIMO_API_KEY", "synthetic-placeholder")
+    if fault == "off":
+        monkeypatch.setenv("FHD_ETL_LLM", "off")
+    elif fault == "invalid_base":
+        monkeypatch.setenv("FHD_TEMPLATE_MIMO_BASE_URL", "https://unsupported.invalid/v1")
+    elif fault == "invalid_model":
+        monkeypatch.setenv("FHD_TEMPLATE_MIMO_MODEL", "unsupported")
+    else:
+        monkeypatch.setattr(OpenAICompatibleAdapter, "is_configured", property(lambda self: False))
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("synthetic.xlsx", sample())},
+    ).json()["files"][0]
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true"}
+    failed = client.post(base + "/analyze", data=form)
+    assert failed.status_code == 400 and "未调用模型" in failed.json()["detail"]
+    checkpoint = client.get(base).json()["checkpoint"]
+    assert checkpoint["phase"] == "ready" and checkpoint["calls_in_round"] == 0
+    with review_store.engine.connect() as conn:
+        state = json.loads(
+            conn.execute(
+                text("SELECT draft_json FROM etl_runs WHERE id=:id"),
+                {"id": item["classification_id"]},
+            ).scalar_one()
+        )
+    assert state["model_audit"][-1]["state"] == "not_sent"
+    assert "未调用模型" in state["model_audit"][-1]["reason"]
+
+    def repaired(messages, schema, tokens):
+        response_capture()(b'{"choices":[]}', 200, "synthetic")
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:C4",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "synthetic",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", repaired)
+    retry = client.post(base + "/analyze", data=form)
+    assert retry.status_code == 200, retry.text
