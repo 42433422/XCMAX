@@ -408,7 +408,11 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
     assert cells[0]["required_extent"] == "A1:B2"
     assert "required_extent" not in cells[1]
     assert [c["cell"] for c in cells] == ["A1", "D1"]  # Blank subordinate cells are not evidence.
-    assert "not a business boundary or a separate document" in request["messages"][0]["content"]
+    assert (
+        "never business candidates"
+        if reference_ids
+        else "not a business boundary or a separate document"
+    ) in request["messages"][0]["content"]
     assert review == original
 
     if reference_ids:
@@ -434,6 +438,6 @@ def test_required_extent_is_source_derived_not_a_business_region(reference_ids, 
             "app.application.reviewed_excel_template._template_mimo_complete",
             lambda *args: LlmAssistResult(used_llm=True, data=raw),
         )
-        with pytest.raises(ReviewedExcelError, match="切断合并"):
+        with pytest.raises(ReviewedExcelError, match="白名单"):
             _classify_semantic_batch(review, reference_ids=True)
         assert raw == untouched  # The source extent never repairs the model's returned range.

@@ -122,14 +122,157 @@ def reference_contract(
     return presented, references, schema
 
 
+def _atom_contract(payload: dict, schema: dict, review: dict) -> tuple[dict, dict]:
+    """Select source atoms; geometry is decoded once, never repaired from model coordinates."""
+    payload["cells"], references, schema = reference_contract(
+        payload["cells"], schema, sheets=payload["sheets"]
+    )
+    source = {(c["sheet"], c["cell"]) for c in review.get("full_cells", review["cells"])}
+    prefixes = {row["sheet"]: row["prefix"] for row in source_sheet_prefixes(payload["sheets"])}
+    for cell in payload["cells"]:
+        references[cell["evidence_id"]]["atom_range"] = cell.get("required_extent", cell["cell"])
+    layouts, blank = [], []
+    primary_sheets = {cell["sheet"] for cell in payload["cells"] if not cell.get("context_only")}
+    for sheet in payload["sheets"]:
+        for area in sheet["merged"]:
+            identifier = "M" + prefixes[sheet["sheet"]][1:] + ":" + area
+            layouts.append(identifier)
+            references[identifier] = {
+                "ref": {"sheet": sheet["sheet"], "range": area},
+                "primary": False,
+                "layout": True,
+                "atom_range": area,
+                "blank": (sheet["sheet"], area.split(":", 1)[0]) not in source,
+            }
+            if references[identifier]["blank"] and sheet["sheet"] in primary_sheets:
+                blank.append(identifier)
+    region = schema["properties"]["physical_regions"]["items"]
+    props = region["properties"]
+    for key in ("sheet", "range", "evidence_ids"):
+        props.pop(key)
+    props["atom_ids"] = {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": len(props["primary_id"]["enum"]) + len(blank),
+        "items": {"type": "string", "enum": list(props["primary_id"]["enum"]) + blank},
+    }
+    region["required"] = ["atom_ids", "primary_id", "dependency_ids", "reason"]
+    schema["properties"]["logical_documents"]["items"]["properties"]["fragments"]["items"] = {
+        "type": "string"
+    }
+    schema["properties"]["layout_references"] = {
+        "type": "array",
+        "maxItems": 100 if layouts else 0,
+        "items": {"type": "string", **({"enum": layouts} if layouts else {})},
+    }
+    return references, schema
+
+
+def _normalize_atom_ids(data: dict, references: dict, review: dict) -> dict:
+    from openpyxl.utils.cell import get_column_letter
+
+    expected = {key for key, entry in references.items() if entry["primary"]}
+    source = review.get("full_cells", review["cells"])
+    used: set[str] = set()
+    decoded: list[dict] = []
+    by_primary: dict[str, dict] = {}
+    for region in data["physical_regions"]:
+        identifiers = region["atom_ids"]
+        if any(key not in references for key in identifiers):
+            raise ReviewedExcelError("源原子身份不在已发送事实中")
+        if any(key not in expected and not references[key].get("blank") for key in identifiers):
+            raise ReviewedExcelError("布局原子不是空白源合并区域，不能替代主体")
+        if len(identifiers) != len(set(identifiers)) or used.intersection(identifiers):
+            raise ReviewedExcelError("源原子重复分配，未修改模型答案")
+        primary = region["primary_id"]
+        if primary not in identifiers or primary not in expected:
+            raise ReviewedExcelError("原子矩形必须选择自身主体原子")
+        sheets = {references[key]["ref"]["sheet"] for key in identifiers}
+        if len(sheets) != 1:
+            raise ReviewedExcelError("源原子矩形不能跨工作表")
+        sheet = next(iter(sheets))
+        boxes = [bounded_range(references[key]["atom_range"]) for key in identifiers]
+        c1, r1 = min(b[0] for b in boxes), min(b[1] for b in boxes)
+        c2, r2 = max(b[2] for b in boxes), max(b[3] for b in boxes)
+        selected = {
+            (references[key]["ref"]["sheet"], references[key]["ref"]["cell"])
+            for key in identifiers
+            if key in expected
+        }
+        for cell in source:
+            col, row = coordinate_from_string(cell["cell"])
+            if (
+                cell["sheet"] == sheet
+                and c1 <= column_index_from_string(col) <= c2
+                and r1 <= row <= r2
+            ):
+                if (sheet, cell["cell"]) not in selected:
+                    raise ReviewedExcelError("原子矩形含未选主体、上下文或未发送内容，不能自动补齐")
+        for overview in review["sheet_overview"]:
+            if overview["sheet"] != sheet:
+                continue
+            for merge in overview.get("merged_regions", []):
+                mc1, mr1, mc2, mr2 = bounded_range(merge)
+                if c1 <= mc2 and mc1 <= c2 and r1 <= mr2 and mr1 <= r2:
+                    if not (c1 <= mc1 and mc2 <= c2 and r1 <= mr1 and mr2 <= r2):
+                        raise ReviewedExcelError("原子矩形切断合并单元格，不能自动扩框")
+        dependencies = region["dependency_ids"]
+        if len(dependencies) != len(set(dependencies)):
+            raise ReviewedExcelError("模型依赖原子重复")
+        area = f"{get_column_letter(c1)}{r1}:{get_column_letter(c2)}{r2}"
+        decoded.append(
+            {
+                "sheet": sheet,
+                "range": area,
+                "labels": ["unknown"],
+                "evidence": [deepcopy(references[primary]["ref"])],
+                "dependencies": [deepcopy(references[key]["ref"]) for key in dependencies],
+                "reason": region["reason"],
+            }
+        )
+        by_primary[primary] = {"sheet": sheet, "range": area}
+        used.update(identifiers)
+    if used.intersection(expected) != expected:
+        raise ReviewedExcelError("源主体原子未完整分配，不能自动补齐")
+    documents = []
+    for document in data["logical_documents"]:
+        if any(key not in by_primary for key in document["fragments"]):
+            raise ReviewedExcelError("文档引用未知主体片段编号")
+        documents.append(
+            {
+                "document_id": document["document_id"],
+                "fragments": [deepcopy(by_primary[key]) for key in document["fragments"]],
+            }
+        )
+    return {
+        "physical_regions": decoded,
+        "logical_documents": documents,
+        "layout_references": [
+            deepcopy(references[key]["ref"]) for key in data["layout_references"]
+        ],
+    }
+
+
 def normalize_reference_ids(
-    data: dict, references: dict, id_schema: dict, original_schema: dict
+    data: dict,
+    references: dict,
+    id_schema: dict,
+    original_schema: dict,
+    *,
+    review: dict | None = None,
 ) -> dict:
     """Fail closed on unknown IDs or primary evidence outside the proposed region."""
     from app.application.reviewed_excel_template import _validate_template_schema
 
     if not _validate_template_schema(id_schema, data):
         raise ReviewedExcelError("模型证据编号不在本批白名单")
+    if "atom_ids" in id_schema["properties"]["physical_regions"]["items"]["properties"]:
+        if review is None:
+            raise ReviewedExcelError("源原子解码缺少原件核验上下文")
+        normalized = _normalize_atom_ids(data, references, review)
+        if not _validate_template_schema(original_schema, normalized):
+            raise ReviewedExcelError("原分类schema校验失败")
+        return normalized
     normalized = deepcopy(data)
     for region in normalized["physical_regions"]:
         # Internal compatibility state only; it is not supplied to or predicted by the model.
@@ -162,14 +305,19 @@ def normalize_reference_ids(
     return normalized
 
 
-def prepare_reference_messages(messages: list[dict], schema: dict) -> tuple[dict, dict]:
+def prepare_reference_messages(
+    messages: list[dict], schema: dict, *, review: dict
+) -> tuple[dict, dict]:
     import json
 
     neutralize_messages(messages)
     payload = json.loads(messages[1]["content"])
-    payload["cells"], references, provider_schema = reference_contract(
-        payload["cells"], schema, payload.get("drawing_evidence"), sheets=payload["sheets"]
-    )
+    if not payload.get("drawing_evidence"):
+        references, provider_schema = _atom_contract(payload, schema, review)
+    else:
+        payload["cells"], references, provider_schema = reference_contract(
+            payload["cells"], schema, payload.get("drawing_evidence"), sheets=payload["sheets"]
+        )
     if payload.get("drawing_evidence"):
         payload["drawing_evidence"] = [
             {**drawing, "drawing_id": f"D{index:04d}"}
@@ -222,11 +370,13 @@ def add_reference_trace(summary: dict, raw: dict, references: dict) -> None:
         for region in raw["physical_regions"]
         for identifier in [
             region["primary_id"],
-            *region["evidence_ids"],
+            *region.get("atom_ids", region.get("evidence_ids", [])),
             *region["dependency_ids"],
             *region.get("drawing_ids", []),
         ]
     }
+    if "atom_ids" in raw["physical_regions"][0]:
+        used.update(raw["layout_references"])
     summary["reference_response"] = raw
     summary["reference_index"] = {key: references[key] for key in sorted(used)}
 
@@ -394,7 +544,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v6-merge-closed"
+CONTRACT_VERSION = "independent-excel-v7-source-atoms"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -424,7 +574,7 @@ SOURCE_PROTOCOL = (
     "not physical-region or document bounding boxes. It is an optional subset of source layout references, "
     "not a merge-coverage ledger: use [] when none is needed, not an enumeration of every merge."
 )
-IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
+LEGACY_IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
     " Use only supplied evidence_id values for evidence_ids, dependency_ids and primary_id. "
     "Evidence IDs encode source_sheet_prefixes and source coordinates, not sequence numbers. "
     "The primary_id must identify a non-context cell inside its region. "
@@ -446,7 +596,29 @@ IDENTIFY_PROMPT = SOURCE_PROTOCOL + (
     "Never synthesize evidence IDs from formula targets or other metadata coordinates; "
     "only cells[].evidence_id values are available, with context_only IDs restricted to dependency_ids."
 )
-DRAWING_IDENTIFY_PROMPT = IDENTIFY_PROMPT + (
+IDENTIFY_PROMPT = (
+    "Partition supplied primary source atoms into rectangular physical fragments, then optionally group those fragments into logical documents. "
+    "Source atoms are geometry facts, never business candidates or document-count hints. "
+    "Each cells[].evidence_id names a source cell; its extent is required_extent when present, otherwise that one cell. "
+    "M-prefixed layout IDs encode the matching S-prefixed source sheet and exact merged range; use only IDs in the relevant schema whitelist. "
+    "The atom_ids whitelist contains primary cells and explicitly available blank-merge layout atoms, not context cells. "
+    "Return only atom IDs, never sheet/range coordinates. For each physical region select atom_ids and choose primary_id from its selected non-context cell atoms. "
+    "Its rectangle is defined once as the smallest bounding rectangle of the selected atoms' complete source extents. "
+    "Ordinary source blank cells inside that rectangle are allowed; no padding outside those bounds is added. "
+    "Every nonempty source cell inside the rectangle must be a selected primary atom of that same region. "
+    "Never bridge an unselected cell, context_only cell or unread content. Any intersected merged range must be entirely contained. "
+    "Invalid selections are rejected, never expanded, repaired or automatically regrouped. "
+    "Use multiple physical regions for nonrectangular content, not an enclosing box that absorbs other content. "
+    "Assign every primary cell atom exactly once; do not duplicate atoms across or within regions, and do not overlap rectangles. "
+    "Each region must have its own primary_id; blank layout alone cannot form a region. "
+    "dependency_ids may name supplied cell evidence, including context_only, but formula targets and metadata do not create additional evidence IDs. "
+    "logical_documents.fragments contains the primary_id values of returned physical regions, each region at most once; "
+    "document_id must be nonblank, unique and at most 80 characters. Leave uncertain fragments ungrouped. "
+    "layout_references is an optional subset of supplied M-prefixed merge IDs, not a coverage ledger; [] is valid. "
+    "Transport batches, sheet boundaries, adjacency and repeated headers do not establish a business document. "
+    "Return exactly one JSON object matching output_schema with no extra fields."
+)
+DRAWING_IDENTIFY_PROMPT = LEGACY_IDENTIFY_PROMPT + (
     " When drawing_evidence is present, use only supplied drawing_id values in drawing_ids. "
     "Drawing text and anchors are source evidence; last_col and last_row are conservative outer bounds, not document suggestions. "
     "Every drawing must be wholly inside one region; do not cut objects horizontally or vertically. "
@@ -472,32 +644,63 @@ def contract_hashes(schema: dict, phase: str) -> dict:
     template = deepcopy(schema)
     if phase == "identify":
         props = template["properties"]["physical_regions"]["items"]["properties"]
-        if props["evidence_ids"]["items"]["enum"] != props["primary_id"]["enum"]:
-            raise ValueError("classification evidence must use the primary source whitelist")
-        props["sheet"]["enum"] = ["<SOURCE_SHEETS>"]
-        props["evidence_ids"]["items"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
-        props["dependency_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
-        props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
-        if "drawing_ids" in props:
-            props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
-        layout = template["properties"]["layout_references"]
-        layout_props = layout["items"]["properties"]
-        if type(layout["maxItems"]) is not int:
-            raise ValueError("invalid layout source bound")
-        if layout["maxItems"] == 0:
-            if any("enum" in layout_props[key] for key in ("sheet", "range")):
-                raise ValueError("empty layout source has unexpected enums")
-            layout["maxItems"] = 100
-        elif layout["maxItems"] != 100 or any(
-            not isinstance(layout_props[key].get("enum"), list)
-            or not layout_props[key]["enum"]
-            or any(not isinstance(value, str) or not value for value in layout_props[key]["enum"])
-            for key in ("sheet", "range")
-        ):
-            raise ValueError("invalid source layout enum contract")
-        layout_props["sheet"]["enum"] = ["<SOURCE_MERGE_SHEETS>"]
-        layout_props["range"]["enum"] = ["<SOURCE_MERGE_RANGES>"]
-        prompt = DRAWING_IDENTIFY_PROMPT if "drawing_ids" in props else IDENTIFY_PROMPT
+        if "atom_ids" in props:
+            atoms = props["atom_ids"]["items"]["enum"]
+            primary = props["primary_id"]["enum"]
+            if not isinstance(atoms, list) or not set(primary) <= set(atoms):
+                raise ValueError("atom contract lacks source primary cells")
+            if type(props["atom_ids"]["maxItems"]) is not int or props["atom_ids"][
+                "maxItems"
+            ] != len(atoms):
+                raise ValueError("atom selection bound must match its source whitelist")
+            props["atom_ids"]["maxItems"] = 0  # Source-count placeholder, never a provider schema.
+            if any(key not in primary and not key.startswith("M") for key in atoms):
+                raise ValueError("atom contract contains non-primary cell identities")
+            props["atom_ids"]["items"]["enum"] = ["<PRIMARY_AND_BLANK_MERGE_ATOMS>"]
+            props["dependency_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
+            props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
+            layout = template["properties"]["layout_references"]
+            if type(layout["maxItems"]) is not int or layout["maxItems"] not in (0, 100):
+                raise ValueError("invalid layout source bound")
+            if layout["maxItems"] == 0:
+                if "enum" in layout["items"]:
+                    raise ValueError("empty layout source has unexpected enum")
+                layout["maxItems"] = 100
+            elif not isinstance(layout["items"].get("enum"), list) or not layout["items"]["enum"]:
+                raise ValueError("layout source enum is missing")
+            if not (set(atoms) - set(primary)) <= set(layout["items"].get("enum", [])):
+                raise ValueError("layout atoms must reference source merges")
+            layout["items"]["enum"] = ["<SOURCE_MERGE_IDS>"]
+            prompt = IDENTIFY_PROMPT
+        else:
+            if props["evidence_ids"]["items"]["enum"] != props["primary_id"]["enum"]:
+                raise ValueError("classification evidence must use the primary source whitelist")
+            props["sheet"]["enum"] = ["<SOURCE_SHEETS>"]
+            props["evidence_ids"]["items"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
+            props["dependency_ids"]["items"]["enum"] = ["<SOURCE_EVIDENCE_IDS>"]
+            props["primary_id"]["enum"] = ["<PRIMARY_EVIDENCE_IDS>"]
+            if "drawing_ids" in props:
+                props["drawing_ids"]["items"]["enum"] = ["<SOURCE_DRAWING_IDS>"]
+            layout = template["properties"]["layout_references"]
+            layout_props = layout["items"]["properties"]
+            if type(layout["maxItems"]) is not int:
+                raise ValueError("invalid layout source bound")
+            if layout["maxItems"] == 0:
+                if any("enum" in layout_props[key] for key in ("sheet", "range")):
+                    raise ValueError("empty layout source has unexpected enums")
+                layout["maxItems"] = 100
+            elif layout["maxItems"] != 100 or any(
+                not isinstance(layout_props[key].get("enum"), list)
+                or not layout_props[key]["enum"]
+                or any(
+                    not isinstance(value, str) or not value for value in layout_props[key]["enum"]
+                )
+                for key in ("sheet", "range")
+            ):
+                raise ValueError("invalid source layout enum contract")
+            layout_props["sheet"]["enum"] = ["<SOURCE_MERGE_SHEETS>"]
+            layout_props["range"]["enum"] = ["<SOURCE_MERGE_RANGES>"]
+            prompt = DRAWING_IDENTIFY_PROMPT if "drawing_ids" in props else IDENTIFY_PROMPT
     elif phase == "group":
         props = template["properties"]["groups"]["items"]["properties"]
         props["fragment_ids"]["items"]["enum"] = ["<MODEL_FRAGMENT_IDS>"]
@@ -518,8 +721,8 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "dc367beb7386ca10082be112dff5b50d32dce0968aa6a868be5e8c06841106f5",
-        "bb4c8dca5c9e7fa2815e2066ea4ff82af17ef3cf1e9c4067bae8ff8a8021bc80",
+        "2bd9134e0414c5b6c6660c515e9c2e494cb8b9564eeeaa861b8ee5143541c8ca",
+        "ffab0241efd5e7fba5087b4ca32774b3ba3b2ccb95124709f624d095ddd0adc0",
     ),
     "group": (
         "440a63ab70be709c7825a4e6374ef3c1f3e52687a3e8b4f3f5927235459ee22e",

@@ -27,7 +27,8 @@ from app.application.reviewed_excel_classification_store import (
     _classification_run,
     _classification_version,
 )
-from app.application.reviewed_excel_template import classify_review_workbook, inspect_workbook
+from app.application.reviewed_excel_legacy import OLE_MAGIC, prepare_archive_workbook
+from app.application.reviewed_excel_template import classify_review_workbook
 from app.db.models.etl import EtlRun, EtlUpload
 from app.db.models.etl_archive import EtlArchiveAsset, EtlArchiveQuota, EtlArchiveVersion
 from app.db.session import get_db
@@ -40,6 +41,7 @@ from app.fastapi_routes.reviewed_excel_template import (
     _manage,
     _read,
     _recheck,
+    _source,
 )
 from app.infrastructure.tenant_scope import tenant_scope
 from app.utils.operational_errors import BOUNDARY_ERRORS
@@ -157,12 +159,17 @@ def archive_version_download(version_id: str, user=Depends(_read)):
                 version_id=version_id,
                 root=Path(get_app_data_dir()) / "etl" / "archive",
             )
+            legacy = body.startswith(OLE_MAGIC)
             return Response(
                 content=body,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                media_type="application/vnd.ms-excel"
+                if legacy
+                else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 headers={
                     "Cache-Control": "no-store",
-                    "Content-Disposition": 'attachment; filename="original.xlsx"',
+                    "Content-Disposition": 'attachment; filename="original.xls"'
+                    if legacy
+                    else 'attachment; filename="original.xlsx"',
                 },
             )
     except ArchivePolicyError as exc:
@@ -176,13 +183,20 @@ async def archive_new_version(
     file: UploadFile = File(...),
     request_key: str = Form(..., max_length=80),
     expected_actor: str = Form(..., max_length=80),
+    legacy_test_only: bool = Form(False),
+    legacy_source_sha256: str = Form("", max_length=64),
     user=Depends(_manage),
 ):
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    body = await _body(file)
+    body = await _body(file, allow_legacy=True)
     try:
-        await run_in_threadpool(inspect_workbook, body)
+        await run_in_threadpool(
+            prepare_archive_workbook,
+            body,
+            legacy_test_only=legacy_test_only,
+            legacy_source_sha256=legacy_source_sha256,
+        )
         _recheck(request, (tenant, owner))
         with tenant_scope(tenant), get_db() as db:
             item = append_original_version(
@@ -282,14 +296,45 @@ async def archive_classify(
     file: UploadFile = File(...),
     request_key: str = Form(..., max_length=80),
     expected_actor: str = Form(..., max_length=80),
+    legacy_test_only: bool = Form(False),
+    legacy_source_sha256: str = Form("", max_length=64),
     user=Depends(_manage),
 ):
     """Archive one explicitly requested original before creating its classification."""
     _expected_actor(expected_actor, user)
     tenant, owner = _identity(user)
-    body = await _body(file)
+    body = await _body(file, allow_legacy=True)
     try:
-        review = await run_in_threadpool(inspect_workbook, body)
+        with tenant_scope(tenant), get_db() as db:
+            existing_asset = (
+                db.query(EtlArchiveAsset)
+                .filter_by(tenant_id=tenant, owner_user_id=owner, request_key=request_key)
+                .first()
+            )
+            if existing_asset:
+                existing_version = create_original(
+                    db,
+                    owner=owner,
+                    name=file.filename or "review.xlsx",
+                    body=body,
+                    root=Path(get_app_data_dir()) / "etl" / "archive",
+                    request_key=request_key,
+                )
+                if existing_version.classification_id:
+                    _recheck(request, (tenant, owner))
+                    return _existing_archive_receipt(
+                        db,
+                        existing_version,
+                        tenant,
+                        owner,
+                        str(Path(existing_asset.name).with_suffix(".xlsx")),
+                    )
+        derived_body, review = await run_in_threadpool(
+            prepare_archive_workbook,
+            body,
+            legacy_test_only=legacy_test_only,
+            legacy_source_sha256=legacy_source_sha256,
+        )
         sheets = classify_review_workbook(review)
         _recheck(request, (tenant, owner))
         with tenant_scope(tenant), get_db() as db:
@@ -304,11 +349,11 @@ async def archive_classify(
             return _create_archive_classification(
                 db,
                 archived,
-                body,
+                derived_body,
                 review,
                 sheets,
-                file.filename or "review.xlsx",
-                file.content_type,
+                str(Path(file.filename or "review.xlsx").with_suffix(".xlsx")),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 request,
                 tenant,
                 owner,
@@ -317,12 +362,15 @@ async def archive_classify(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
-def _archive_classification_receipt(archived, classification_id, latest, name):
+def _archive_classification_receipt(
+    archived, classification_id, latest, name, conversion=None, restrictions=None
+):
     """Use the same persisted classification state for first replies and idempotent recovery."""
     return {
         "asset_id": archived.asset_id,
         "archive_version_id": archived.id,
-        "sha256": archived.sha256,
+        "sha256": (conversion or {}).get("derived_sha256", archived.sha256),
+        "original_sha256": archived.sha256,
         "classification_id": classification_id,
         "version": latest["version"],
         "sheets": latest["sheets"],
@@ -337,7 +385,23 @@ def _archive_classification_receipt(archived, classification_id, latest, name):
         "document_count_status": latest.get("document_count_status"),
         "name": name,
         "status": "classified",
+        "conversion_receipt": conversion,
+        "usage_restrictions": restrictions or [],
     }
+
+
+def _existing_archive_receipt(db, archived, tenant, owner, name):
+    existing = _classification_run(db, archived.classification_id, tenant, owner)
+    _source(db, existing, tenant, owner)
+    latest = load_json(existing.draft_json, {}).get("versions", [])[-1]
+    return _archive_classification_receipt(
+        archived,
+        existing.id,
+        latest,
+        name,
+        load_json(existing.summary_json, {}).get("conversion_receipt"),
+        load_json(existing.summary_json, {}).get("usage_restrictions", []),
+    )
 
 
 def _create_archive_classification(
@@ -360,9 +424,7 @@ def _create_archive_classification(
     ):
         raise HTTPException(status_code=409, detail="归档分类已变更，请刷新档案后重新确认")
     if archived.classification_id and not reclassify:
-        existing = _classification_run(db, archived.classification_id, tenant, owner)
-        latest = load_json(existing.draft_json, {}).get("versions", [])[-1]
-        return _archive_classification_receipt(archived, existing.id, latest, name)
+        return _existing_archive_receipt(db, archived, tenant, owner, name)
     fragment_links = observe_fragment_relationships(review, sheets)
     _recheck(request, (tenant, owner))
     classification_id = new_id()
@@ -398,10 +460,24 @@ def _create_archive_classification(
     created_paths: list[Path] = []
     commit_attempted = False
     try:
+        if review.get("conversion_receipt"):
+            charged = db.execute(
+                update(EtlArchiveQuota)
+                .where(
+                    EtlArchiveQuota.tenant_id == tenant,
+                    EtlArchiveQuota.reserved_bytes + len(body) <= EtlArchiveQuota.limit_bytes,
+                )
+                .values(reserved_bytes=EtlArchiveQuota.reserved_bytes + len(body))
+            )
+            if charged.rowcount != 1:
+                db.rollback()
+                raise ArchivePolicyError("归档配额不足以保留验证后的转换副本")
         upload = UploadServiceMixin().save_upload(
             db, owner_user_id=owner, file_name=name, content_type=content_type, stream=BytesIO(body)
         )
         upload_record = db.get(EtlUpload, upload["upload_id"])
+        if review.get("conversion_receipt"):
+            upload_record.expires_at = None
         created_paths.append(Path(upload_record.storage_path))
         os.chmod(upload_record.storage_path, 0o600)
         version = _classification_version(
@@ -424,6 +500,8 @@ def _create_archive_classification(
             "model_status": "not_called",
             "confirmed": False,
             "read_only_print_areas": review["read_only_print_areas"],
+            "conversion_receipt": review.get("conversion_receipt"),
+            "usage_restrictions": review.get("usage_restrictions", []),
         }
         db.add(
             EtlRun(
@@ -437,7 +515,12 @@ def _create_archive_classification(
                 file_sha256=review["sha256"],
                 draft_json=dump_json({"versions": [latest]}),
                 summary_json=dump_json(
-                    {"kind": "classification", "archive_version_id": archived.id}
+                    {
+                        "kind": "classification",
+                        "archive_version_id": archived.id,
+                        "conversion_receipt": review.get("conversion_receipt"),
+                        "usage_restrictions": review.get("usage_restrictions", []),
+                    }
                 ),
             )
         )
@@ -448,7 +531,14 @@ def _create_archive_classification(
             for path in created_paths:
                 path.unlink(missing_ok=True)
         raise
-    return _archive_classification_receipt(archived, classification_id, latest, name)
+    return _archive_classification_receipt(
+        archived,
+        classification_id,
+        latest,
+        name,
+        review.get("conversion_receipt"),
+        review.get("usage_restrictions", []),
+    )
 
 
 @router.post("/api/templates/reviewed-excel/archive-versions/{version_id}/classify")
@@ -458,6 +548,8 @@ def classify_archive_version(
     expected_actor: str = Form(..., max_length=80),
     reclassify: bool = Form(False),
     expected_classification_id: str | None = Form(None, max_length=80),
+    legacy_test_only: bool = Form(False),
+    legacy_source_sha256: str = Form("", max_length=64),
     user=Depends(_manage),
 ):
     _expected_actor(expected_actor, user)
@@ -480,14 +572,21 @@ def classify_archive_version(
                 .filter_by(id=archived.asset_id, tenant_id=tenant, owner_user_id=owner)
                 .one()
             )
-            review = inspect_workbook(body)
+            if archived.classification_id and not reclassify:
+                _recheck(request, (tenant, owner))
+                return _existing_archive_receipt(
+                    db, archived, tenant, owner, str(Path(asset.name).with_suffix(".xlsx"))
+                )
+            derived_body, review = prepare_archive_workbook(
+                body, legacy_test_only=legacy_test_only, legacy_source_sha256=legacy_source_sha256
+            )
             return _create_archive_classification(
                 db,
                 archived,
-                body,
+                derived_body,
                 review,
                 classify_review_workbook(review),
-                asset.name,
+                str(Path(asset.name).with_suffix(".xlsx")),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 request,
                 tenant,

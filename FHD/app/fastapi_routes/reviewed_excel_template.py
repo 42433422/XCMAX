@@ -124,7 +124,9 @@ def _run(db, review_id, tenant, owner):
 
 
 def _source(db, run, tenant, owner):
-    archive_version_id = load_json(run.summary_json, {}).get("archive_version_id")
+    summary = load_json(run.summary_json, {})
+    archive_version_id = summary.get("archive_version_id")
+    conversion = summary.get("conversion_receipt")
     if archive_version_id:
         try:
             content = read_original(
@@ -135,9 +137,13 @@ def _source(db, run, tenant, owner):
             )
         except ArchivePolicyError as exc:
             raise HTTPException(status_code=409, detail=public_excel_error(exc)) from None
-        if hashlib.sha256(content).hexdigest() != run.file_sha256:
+        source_sha = conversion.get("source_sha256") if conversion else run.file_sha256
+        if hashlib.sha256(content).hexdigest() != source_sha:
             raise HTTPException(status_code=409, detail="归档来源版本已改变")
-        return content
+        if not conversion:
+            return content
+        if conversion.get("derived_sha256") != run.file_sha256:
+            raise HTTPException(status_code=409, detail="转换副本与归档收据不一致")
     upload = (
         db.query(EtlUpload)
         .filter(
@@ -187,6 +193,9 @@ def _rebuild_archived_document(db, run, tenant, owner):
             version_id=scope["archive_version_id"],
             root=Path(get_app_data_dir()) / "etl" / "archive",
         )
+        classification = _classification_run(db, scope["classification_id"], tenant, owner)
+        if load_json(classification.summary_json, {}).get("conversion_receipt"):
+            original = _source(db, classification, tenant, owner)
         derived = derive_document_workbook(
             original, scope["fragments"], print_area_mode=scope["print_area_mode"]
         )
@@ -197,6 +206,20 @@ def _rebuild_archived_document(db, run, tenant, owner):
     if hashlib.sha256(derived).hexdigest() != run.file_sha256:
         raise HTTPException(status_code=409, detail="重建结果与原预览不一致，请重新预览")
     return derived
+
+
+def _usage_restrictions(db, run, tenant, owner):
+    """Server-side immutable source lineage, not just removable workbook metadata."""
+    summary = load_json(run.summary_json, {})
+    restrictions = list(summary.get("usage_restrictions", []))
+    conversion = summary.get("conversion_receipt") or {}
+    if conversion.get("purpose") == "data_template_test_only":
+        restrictions.append("仅供数据/模板测试；打印版式未验证，不得发布到企业模板库")
+    scope = summary.get("selected_region") or {}
+    if scope.get("classification_id"):
+        classification = _classification_run(db, scope["classification_id"], tenant, owner)
+        restrictions.extend(_usage_restrictions(db, classification, tenant, owner))
+    return list(dict.fromkeys(restrictions))
 
 
 def _review_source_version(db, run, tenant, owner):
@@ -312,8 +335,9 @@ def _cas(db, run, old_draft, **values):
     db.commit()
 
 
-async def _body(file):
-    if not (file.filename or "").lower().endswith(".xlsx"):
+async def _body(file, *, allow_legacy=False):
+    extensions = (".xlsx", ".xls") if allow_legacy else (".xlsx",)
+    if not (file.filename or "").lower().endswith(extensions):
         raise HTTPException(status_code=400, detail="仅支持 .xlsx；其他格式暂不能保证保真")
     body = await file.read(MAX_BYTES + 1)
     if len(body) > MAX_BYTES:
@@ -349,6 +373,7 @@ async def reviewed_excel_classify(
                 "sheets": classify_review_workbook(review),
                 "model_status": "not_called",
                 "read_only_print_areas": review["read_only_print_areas"],
+                "usage_restrictions": list(review.get("usage_restrictions", [])),
             }
             result["fragment_links"] = observe_fragment_relationships(review, result["sheets"])
             results.append(result)
@@ -423,11 +448,17 @@ async def reviewed_excel_classify(
                                         "model_status": "not_called",
                                         "confirmed": False,
                                         "read_only_print_areas": result["read_only_print_areas"],
+                                        "usage_restrictions": result["usage_restrictions"],
                                     }
                                 ]
                             }
                         ),
-                        summary_json=dump_json({"kind": "classification"}),
+                        summary_json=dump_json(
+                            {
+                                "kind": "classification",
+                                "usage_restrictions": result["usage_restrictions"],
+                            }
+                        ),
                     )
                 )
             commit_attempted = True
@@ -490,6 +521,8 @@ def reviewed_excel_recent_classifications(user=Depends(_read)):
                     "sha256": run.file_sha256,
                     "latest": versions[-1] if versions else None,
                     "archive_version_id": load_json(run.summary_json, {}).get("archive_version_id"),
+                    "conversion_receipt": load_json(run.summary_json, {}).get("conversion_receipt"),
+                    "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
                     "template_write_state": "locked"
                     if run.status == _CLASS_SAVING
                     else "available",
@@ -522,6 +555,8 @@ def reviewed_excel_classification_history(classification_id: str, user=Depends(_
         return {
             "classification_id": run.id,
             "sha256": run.file_sha256,
+            "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
+            "conversion_receipt": load_json(run.summary_json, {}).get("conversion_receipt"),
             "template_write_state": "locked" if run.status == _CLASS_SAVING else "available",
             "versions": state.get("versions", []),
             "checkpoint": _checkpoint_view(state.get("analysis_checkpoint")),
@@ -1177,6 +1212,7 @@ async def reviewed_excel_preview(
     try:
         body = await _body(file)
         review = inspect_workbook(body)
+        source_restrictions = list(review.get("usage_restrictions", []))
         selected_region: dict[str, Any] | None = None
         if auto_slice_index >= 0:
             if not classification_id or not classification_version or region_sheet or region_range:
@@ -1345,6 +1381,7 @@ async def reviewed_excel_preview(
                     db, selected_region["classification_id"], tenant, owner
                 )
                 _source(db, current, tenant, owner)
+                source_restrictions.extend(_usage_restrictions(db, current, tenant, owner))
                 current_versions = load_json(current.draft_json, {}).get("versions", [])
                 if (
                     not current_versions
@@ -1356,6 +1393,7 @@ async def reviewed_excel_preview(
                     )
                 ):
                     raise HTTPException(status_code=409, detail="文档分类已变化，请重新生成候选")
+            review["usage_restrictions"] = list(dict.fromkeys(source_restrictions))
             upload = UploadServiceMixin().save_upload(
                 db,
                 owner_user_id=owner,
@@ -1376,7 +1414,11 @@ async def reviewed_excel_preview(
                 file_sha256=review["sha256"],
                 draft_json=dump_json({"versions": versions}),
                 summary_json=dump_json(
-                    {"kind": "reviewed_excel", "selected_region": selected_region}
+                    {
+                        "kind": "reviewed_excel",
+                        "selected_region": selected_region,
+                        "usage_restrictions": review["usage_restrictions"],
+                    }
                 ),
             )
             db.add(run)
@@ -1404,6 +1446,7 @@ def reviewed_excel_history(review_id: str, user=Depends(_read)):
             "success": True,
             "review_id": run.id,
             "source_sha256": run.file_sha256,
+            "usage_restrictions": _usage_restrictions(db, run, tenant, owner),
             "status": run.status,
             "versions": versions,
             "confirmation": state.get("confirmation"),
@@ -1535,6 +1578,11 @@ async def reviewed_excel_save(
         with tenant_scope(tenant), get_db() as db:
             run = _run(db, review_id, tenant, owner)
             _review_source_version(db, run, tenant, owner)
+            if _usage_restrictions(db, run, tenant, owner):
+                raise HTTPException(
+                    status_code=409,
+                    detail="此来源仅供数据/模板测试，打印版式未验证；可预览和下载测试候选，不得发布到企业模板库",
+                )
             state, versions = _proposals(run)
             request_key = hashlib.sha256(
                 dump_json(

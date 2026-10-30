@@ -9,7 +9,7 @@ type Candidate = { id: string; label: string; explanation: string; clear: { shee
 type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
-type Review = { review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
+type Review = { usage_restrictions?: string[]; review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
 type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
 type ClassificationSheet = { sheet: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
@@ -17,8 +17,9 @@ type LogicalDocument = { logical_document_id: string; fragments: { sheet: string
 type SuggestedDocument = { document_id: string; fragments: { sheet: string; range: string }[]; status: string }
 type AutoSlice = { index: number; basis: string; confirmed: boolean; sha256: string; filename: string; fragments: { sheet: string; range: string }[] }
 type Checkpoint = { phase: 'ready' | 'paused' | 'inflight' | 'failed'; version: string; completed: number; total: number; max_calls: number; calls_in_round?: number; remaining_in_round?: number; message: string }
-type Classification = { template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
-type RecentClassification = { archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
+type ConversionReceipt = { converter: string; source_sha256: string; derived_sha256: string; purpose?: string; print_layout_verified?: boolean; warnings?: string[] }
+type Classification = { usage_restrictions?: string[]; original_sha256?: string; conversion_receipt?: ConversionReceipt | null; template_write_state?: string; independent_confirmed?: boolean; confirmed_document_count?: number | null; document_count_status?: string; suggested_documents?: SuggestedDocument[]; suggested_document_count?: number | null; read_only_print_areas?: { sheet: string; value: string }[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; checkpoint?: Checkpoint | null; name: string; status: string; sha256?: string; message?: string; classification_id?: string; version?: string; confirmed?: boolean; model_status?: string; budget?: { calls: number; max_calls: number; unread: number }; input_messages?: unknown[]; input_summaries?: unknown[]; coverage?: { sheet: string; total: number; sent: number; unread: string[]; unassigned: string[]; model_unassigned?: string[]; value_truncated: string[]; deferred_large_values?: string[]; deferred_oversized_rows?: string[]; merged_sent: number; merged_omitted: number }[]; sheets: ClassificationSheet[] }
+type RecentClassification = { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; archive_version_id?: string | null; template_write_state?: string; checkpoint?: Checkpoint | null; classification_id: string; name: string; sha256: string; latest: { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null; version: string; confirmed: boolean; model_status: string; sheets: ClassificationSheet[]; logical_documents?: LogicalDocument[]; fragment_links?: FragmentLinks; coverage?: Classification['coverage']; input_messages?: unknown[]; input_summaries?: unknown[] } | null }
 const props = withDefaults(defineProps<{ archiveOnSelect?: boolean }>(), { archiveOnSelect: false })
 const emit = defineEmits<{ saved: []; stage: [stage: string] }>()
 const file = ref<File | null>(null)
@@ -67,6 +68,17 @@ const classificationGroups = computed(() => Object.entries(labelNames).map(([key
 })).filter((group) => group.files.length))
 const name = ref('')
 const review = ref<Review | null>(null)
+function restrictions(item?: { usage_restrictions?: string[]; conversion_receipt?: ConversionReceipt | null } | null) {
+  const receipt = item?.conversion_receipt
+  const limited = receipt?.purpose === 'data_template_test_only' || receipt?.print_layout_verified === false
+  return [...new Set([...(item?.usage_restrictions || []), ...(receipt?.warnings || []), ...(limited ? ['仅数据/模板测试；打印版式未验证，不可发布企业模板库。'] : [])])]
+}
+const currentRestrictions = computed(() => [...new Set([
+  ...restrictions(classifications.value[files.value.indexOf(file.value as File)]),
+  ...(review.value?.usage_restrictions || []),
+])])
+const publicationRestricted = computed(() => currentRestrictions.value.length > 0)
+
 const candidateIndex = ref(0)
 const proposals = ref<Proposal[]>([])
 const selectedVersion = ref(0)
@@ -79,6 +91,7 @@ const templateOwnFileAuthorized = ref(false)
 const sheetIndex = ref(0)
 const consent = ref(false)
 const publishToTenant = ref(false)
+watch(publicationRestricted, value => { if (value) publishToTenant.value = false }, { flush: 'sync' })
 const selected = computed(() => proposal.value?.candidates[candidateIndex.value]?.clear || [])
 const error = ref('')
 const busy = ref(false)
@@ -168,6 +181,24 @@ function choose(event: Event) {
   emit('stage', 'archive')
   if (props.archiveOnSelect) void classify()
 }
+function confirmLegacyScope(form: FormData, name: string, hash: string, current: () => boolean) {
+  if (!current()) return false
+  if (!/^[a-f0-9]{64}$/i.test(hash)) throw new Error('无法绑定旧 XLS 原件哈希，请刷新档案或重新选择文件')
+  if (!window.confirm(`${name}\n原件 SHA-256：${hash}\n保留原件并生成派生副本，仅数据/模板测试；打印版式未验证，不可发布企业模板库。自定义纸张、WPS 扩展等未验证项会另行提示。是否继续？`)) return false
+  if (!current()) return false
+  form.append('legacy_test_only', 'true'); form.append('legacy_source_sha256', hash.toLowerCase())
+  return true
+}
+async function authorizeLegacyFile(form: FormData, source: File, current: () => boolean) {
+  if (!/\.xls$/i.test(source.name)) return true
+  if (!globalThis.crypto?.subtle) throw new Error('当前环境不能校验旧 XLS 哈希，请使用安全连接')
+  const bytes = await source.arrayBuffer()
+  if (!current()) return false
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
+  if (!current()) return false
+  const hash = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+  return confirmLegacyScope(form, source.name, hash, current)
+}
 async function classify() {
   const current = captureFileOperation()
   if (!current()) return
@@ -188,6 +219,10 @@ async function classify() {
       archiveProgress.value = `归档及分类 ${index + 1}/${files.value.length}：${item.name}`
       try {
         const form = new FormData(); form.append('file', item); form.append('request_key', requestKeys[index])
+        if (!await authorizeLegacyFile(form, item, current)) {
+          if (!current()) return
+          results.push({ name: item.name, status: 'unsupported', sheets: [], message: '已取消旧 XLS 有限用途转换；未上传。' }); continue
+        }
         const result = await templatePreviewApi.archiveClassifyExcel(form) as Classification
         if (!current()) return
         results.push(result)
@@ -272,6 +307,7 @@ async function appendArchiveVersion(asset: ArchiveAsset) {
   busy.value = true; error.value = ''
   try {
     const form = new FormData(); form.append('file', selected.file); form.append('request_key', selected.requestKey)
+    if (!await authorizeLegacyFile(form, selected.file, current)) return
     await templatePreviewApi.appendArchiveVersion(asset.id, form)
     if (!current()) return
     delete versionUploads.value[asset.id]
@@ -302,15 +338,20 @@ async function classifyArchiveVersion(versionId: string, name: string, expectedC
     if (expectedClassificationId) {
       form.append('reclassify', 'true'); form.append('expected_classification_id', expectedClassificationId)
     }
+    const archived = archiveAssets.value.flatMap(asset => asset.versions).find(version => version.id === versionId)
+    if (/\.xls$/i.test(name) && (!archived?.classification_id || expectedClassificationId)) {
+      if (!confirmLegacyScope(form, name, archived?.sha256 || '', current)) return
+    }
     const item = await templatePreviewApi.classifyArchiveVersion(versionId, form) as Classification
     if (!current()) return
     resetSelectionState()
-    const response = await templatePreviewApi.downloadArchiveVersion(versionId)
+    if (!item.classification_id) throw new Error("分类来源标识缺失")
+    const response = await templatePreviewApi.downloadClassificationSource(item.classification_id)
     if (!current()) return
     const blob = await response.blob()
     if (!current()) return
     selectedFilesCurrent = captureAuthSession(); selectionEpoch += 1
-    files.value = [new File([blob], name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
+    files.value = [new File([blob], name.replace(/\.xls$/i, ".xlsx"), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })]
     retryBudget.value = {}; classifications.value = [item]; selectFile(0); await loadArchiveAssets()
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '分类失败，请查看档案后核对' }
   finally { if (current()) busy.value = false }
@@ -579,7 +620,7 @@ async function restoreClassification(item: RecentClassification) {
     const sha = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('')
     if (sha !== item.sha256) throw new Error('所选文件与分类来源不一致')
     classifications.value = [{ name: files.value[0].name, status: 'classified', sha256: sha,
-      classification_id: item.classification_id, ...item.latest, checkpoint: item.checkpoint, template_write_state: item.template_write_state }]
+      classification_id: item.classification_id, ...item.latest, conversion_receipt: item.conversion_receipt ?? item.latest.conversion_receipt, usage_restrictions: item.usage_restrictions ?? item.latest.usage_restrictions, checkpoint: item.checkpoint, template_write_state: item.template_write_state }]
     autoSlices.value = {}; analysisErrors.value = {}; retryBudget.value = {}
     selectFile(0)
     if (item.latest.model_status === 'returned') await loadAutoSlices(classifications.value[0], current)
@@ -601,6 +642,14 @@ async function preview(slice?: AutoSlice) {
     form.append('sample_authorized', String(sampleAuthorized.value))
     form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
+    if (/\.xls$/i.test(file.value.name)) {
+      if (!selectedFile?.classification_id) throw new Error('旧 XLS 必须先通过归档转换校验')
+      const response = await templatePreviewApi.downloadClassificationSource(selectedFile.classification_id)
+      if (!current()) return
+      const blob = await response.blob()
+      if (!current()) return
+      form.set('file', new File([blob], file.value.name.replace(/\.xls$/i, '.xlsx'), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    }
     if (slice) {
       const available = selectedFile?.classification_id && selectedFile.version && autoSlices.value[selectedFile.classification_id]
       if (!available || available.version !== selectedFile.version || !available.slices.some(item => item.index === slice.index && item.sha256 === slice.sha256)) throw new Error('裁切结果已变化，请重新选择')
@@ -623,6 +672,7 @@ async function preview(slice?: AutoSlice) {
 }
 async function save() {
   if (busy.value || !publishToTenant.value) return
+  if (publicationRestricted.value) { publishToTenant.value = false; error.value = '仅数据/模板测试；打印版式未验证，不可发布企业模板库。'; return }
   const current = captureFileOperation()
   if (!current()) return
   if (!file.value || !review.value || !name.value.trim()) return
@@ -727,13 +777,14 @@ async function downloadCandidate(index: number) {
         <button v-if="entry.status === 'ready' && asset.state === 'active'" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name)">分类此版本</button>
         <button v-if="entry.status === 'ready' && asset.state === 'active' && entry.classification_id" type="button" :disabled="busy" @click="classifyArchiveVersion(entry.id, asset.name, entry.classification_id)">重新分类（保留历史）</button>
       </p>
-      <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
+      <label v-if="asset.state === 'active'">为此档案新增版本：<input type="file" accept=".xlsx,.xls" :disabled="busy" @change="chooseArchiveVersion(asset.id, $event)"></label>
       <button v-if="asset.state === 'active'" type="button" :disabled="busy || !versionUploads[asset.id]" @click="appendArchiveVersion(asset)">保存新版本</button>
       <button v-if="asset.state === 'active'" type="button" :disabled="busy" @click="changeArchiveState(asset, 'trashed')">撤回</button>
       <button v-else type="button" :disabled="busy" @click="changeArchiveState(asset, 'active')">恢复</button>
     </div>
     <p>分类先做规则预筛；可选择模型分析。分类仅供确认，不关联业务库或写入业务数据。依据及未读范围需核对，不表示理解全部语义。</p>
-    <input type="file" accept=".xlsx" multiple :disabled="busy" @change="choose">
+    <p v-if="props.archiveOnSelect">旧 XLS 需逐文件确认仅数据/模板测试：保留原件及派生哈希；打印版式未验证，不可发布企业模板库。公式、宏、外链及不支持类型会被拒绝。</p>
+    <input type="file" :accept="props.archiveOnSelect ? '.xlsx,.xls' : '.xlsx'" multiple :disabled="busy" @change="choose">
     <p class="reviewed-template__limits">模板归档流水线：每批最多 200 个文件，单个不超过 20 MB，整批不超过 50 MB<span v-if="!archiveOnSelect">（与旧业务导入单文件 100 MB 上限不同）</span>；超出请分批。</p>
     <button v-if="!archiveOnSelect || classifications.some((item) => item.status !== 'classified')" type="button" :disabled="!files.length || files.length > 200 || busy" @click="classify">{{ archiveOnSelect ? '重试未完成文件' : '归档并分类所选文件' }}</button>
     <p v-if="archiveProgress" role="status">{{ archiveProgress }}</p>
@@ -745,6 +796,7 @@ async function downloadCandidate(index: number) {
     <details v-if="recentClassifications.length"><summary>已保存分类（归档来源可直接恢复；旧记录需选择相同原文件）</summary>
       <div v-for="item in recentClassifications" :key="item.sha256"><p>{{ item.name }} · {{ item.sha256 }} · {{ classificationStatus(item.latest) }}</p>
         <p v-if="item.template_write_state === 'locked'">模板保存正在进行或结果待核对；请勿重复保存，当前没有自动解锁入口。</p>
+        <p v-for="warning in restrictions(item)" :key="warning" role="alert">{{ warning }}</p>
         <p v-for="sheet in item.latest?.sheets || []" :key="sheet.sheet">{{ sheet.sheet }}：{{ sheet.regions.map((region) => `${region.range} ${region.labels.map((label) => labelNames[label] || label).join('、')}`).join('；') }}</p>
         <button type="button" :disabled="busy || (!item.archive_version_id && files.length !== 1)" @click="restoreClassification(item)">恢复此分类并继续</button>
       </div>
@@ -761,7 +813,9 @@ async function downloadCandidate(index: number) {
       <button type="button" :disabled="!selectedRows.length || busy" @click="applyBatchLabel">应用到选中区域</button>
       <div v-for="(item, i) in classifications" :key="i">
         <label><input type="radio" name="template-file" :checked="file === files[i]" :disabled="busy || item.status !== 'classified'" @change="selectFile(i)"> {{ item.name }}</label>
-        <small v-if="item.sha256">来源 SHA-256：{{ item.sha256 }}</small>
+        <small v-if="item.sha256">分类来源 SHA-256：{{ item.sha256 }}</small>
+        <small v-if="item.conversion_receipt">有限用途 XLS 派生副本；原件 SHA-256：{{ item.conversion_receipt.source_sha256 }}；转换器：{{ item.conversion_receipt.converter }}。未验证 Windows 像素级保真。</small>
+        <p v-for="warning in restrictions(item)" :key="warning" role="alert">{{ warning }}</p>
         <p v-if="item.read_only_print_areas?.length">原打印区域：{{ item.read_only_print_areas.map((area) => `${area.sheet}: ${area.value}`).join('；') }}。逐文档提取时可能需要确认派生打印区域。</p>
         <small v-if="item.checkpoint">批次 {{ item.checkpoint.completed }}/{{ item.checkpoint.total }}；本轮 {{ item.checkpoint.calls_in_round ?? 0 }}/{{ item.checkpoint.max_calls }} 次：{{ item.checkpoint.message }}；停止只在批次之间生效。</small>
         <template v-if="item.checkpoint?.phase === 'failed' && item.classification_id">
@@ -877,8 +931,9 @@ async function downloadCandidate(index: number) {
       <label><input v-model="consent" type="checkbox" :disabled="busy"> 同意向已配置模型发送最多 100 个非空单元格的文本样本及修改要求（单格最多 160 字）</label>
       <button type="button" :disabled="busy || selectedVersion !== proposals.length - 1 || !consent || sampleAuthorized === templateOwnFileAuthorized || !feedback.trim()" @click="refine">生成新一轮三个模板</button>
       <p>服务端保留 {{ proposals.length }} 个提案版本；历史版本仅供查看，保存和修改需使用最新版本。</p>
-      <label><input v-model="publishToTenant" type="checkbox" :disabled="busy"> 确认发布清理后的文件到企业共享模板库；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
-      <button type="button" :disabled="!name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
+      <p v-for="warning in currentRestrictions" :key="warning" role="alert">{{ warning }}</p>
+      <label><input v-model="publishToTenant" type="checkbox" :disabled="busy || publicationRestricted"> 确认发布清理后的文件到企业共享模板库；请检查是否仍有不应共享的信息。原件和审阅记录仍为私有。</label>
+      <button type="button" :disabled="publicationRestricted || !name.trim() || !publishToTenant || busy || selectedVersion !== proposals.length - 1 || proposal.result_previews?.length !== 3" @click="save">保存所选模板</button>
     </div>
     <p v-if="savedId">已保存到模板库。{{ savedModelStatus }} 可再次预览当前原件并保存新模板，已有模板不会被覆盖。<button type="button" :disabled="busy" @click="download(savedId)">下载清理后的模板</button></p>
     </div>

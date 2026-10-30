@@ -1,6 +1,6 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
+const api = vi.hoisted(() => ({ classifyExcel: vi.fn(), archiveClassifyExcel: vi.fn(), archiveQuota: vi.fn(), setArchiveQuota: vi.fn(), archiveAssets: vi.fn(), classifyArchiveVersion: vi.fn(), downloadArchiveVersion: vi.fn(), downloadClassificationSource: vi.fn(), setArchiveAssetState: vi.fn(), confirmClassification: vi.fn().mockResolvedValue({ version: "confirmed-version", confirmed: true }), analyzeClassification: vi.fn(), recentClassifications: vi.fn(), autoSlices: vi.fn(), reviewExcel: vi.fn(), refineReviewedExcel: vi.fn(), saveReviewedExcel: vi.fn(), downloadReviewedExcel: vi.fn(), downloadReviewedCandidate: vi.fn() }))
 vi.mock('@/api/templatePreview', () => ({ default: api }))
 import ReviewedExcelTemplate from './ReviewedExcelTemplate.vue'
 const layout = (value: string) => [{ sheet: '报价', widths: [20], rows: [{ height: 20, cells: [{ cell: 'B2', value, formula: false, rowspan: 1, colspan: 1, bold: false, italic: false, font_size: 11, font_color: '', fill: '', align: 'left' }] }], truncated: false }]
@@ -28,6 +28,101 @@ describe('reviewed Excel template', () => {
       }
       return { version: 'confirmed-version', confirmed: true, sheets }
     })
+  })
+  it('only offers legacy XLS through the archive conversion boundary', () => {
+    const ordinary = mount(ReviewedExcelTemplate)
+    expect(ordinary.find('input[type=file]').attributes('accept')).toBe('.xlsx')
+    const archived = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    expect(archived.find('input[type=file]').attributes('accept')).toBe('.xlsx,.xls')
+    expect(archived.text()).toContain('打印版式未验证，不可发布企业模板库')
+  })
+  it.each([false, true])('binds limited XLS consent to the exact file hash (accepted=%s)', async accepted => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(accepted)
+    vi.stubGlobal('crypto', { randomUUID: () => 'legacy-test-key', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).fill(7).buffer) } })
+    api.archiveClassifyExcel.mockReset().mockResolvedValue({ name: 'sample.xlsx', status: 'classified', classification_id: 'legacy-c', version: 'v1', sheets: [], usage_restrictions: ['打印版式未验证'] })
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const file = new File(['source'], 'sample.xls')
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new Uint8Array([1, 2, 3]).buffer })
+      const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
+      await input.trigger('change'); await flushPromises()
+      expect(confirmation).toHaveBeenCalledTimes(1)
+      expect(confirmation.mock.calls[0][0]).toContain('仅数据/模板测试；打印版式未验证，不可发布企业模板库')
+      expect(api.archiveClassifyExcel).toHaveBeenCalledTimes(accepted ? 1 : 0)
+      if (accepted) {
+        const form = api.archiveClassifyExcel.mock.calls[0][0] as FormData
+        expect(form.get('legacy_test_only')).toBe('true')
+        expect(form.get('legacy_source_sha256')).toBe('07'.repeat(32))
+      } else expect(wrapper.text()).toContain('已取消旧 XLS 有限用途转换；未上传')
+    } finally { wrapper.unmount(); confirmation.mockRestore(); vi.unstubAllGlobals() }
+  })
+  it('does not prompt or upload after the legacy hash operation becomes stale', async () => {
+    let finish!: (value: ArrayBuffer) => void
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    vi.stubGlobal('crypto', { randomUUID: () => 'stale-key', subtle: { digest: () => new Promise<ArrayBuffer>(resolve => { finish = resolve }) } })
+    api.archiveClassifyExcel.mockReset()
+    const wrapper = mount(ReviewedExcelTemplate, { props: { archiveOnSelect: true } })
+    try {
+      const file = new File(['source'], 'stale.xls')
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(1) })
+      const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
+      await input.trigger('change'); await flushPromises(); wrapper.unmount()
+      finish(new Uint8Array(32).buffer); await flushPromises()
+      expect(confirmation).not.toHaveBeenCalled(); expect(api.archiveClassifyExcel).not.toHaveBeenCalled()
+    } finally { confirmation.mockRestore(); vi.unstubAllGlobals() }
+  })
+  it.each(['receipt', 'xlsx-marker'])('blocks publishing limited-use %s while keeping preview and downloads available', async kind => {
+    const wrapper = mount(ReviewedExcelTemplate)
+    const state = wrapper.vm.$.setupState as Record<string, unknown>
+    const file = new File(['derived'], 'test-only.xlsx')
+    state.files = [file]; state.file = file
+    state.classifications = [{ name: file.name, status: 'classified', confirmed: true, sheets: [], ...(kind === 'receipt' ? { conversion_receipt: { purpose: 'data_template_test_only', print_layout_verified: false, warnings: ['自定义纸张 256 的实际尺寸未验证'] } } : { usage_restrictions: ['打印版式未验证'] }) }]
+    state.review = { review_id: 'r1', sheets: [], cells: [], proposal: proposal('v1') }
+    state.proposals = [proposal('v1')]; state.name = 'test-only'; state.publishToTenant = true
+    api.saveReviewedExcel.mockClear()
+    await flushPromises()
+    expect(wrapper.text()).toContain('打印版式未验证')
+    expect(wrapper.findAll('input[type=checkbox]').find(el => el.element.closest('label')?.textContent?.includes('确认发布'))!.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button').find(b => b.text() === '保存所选模板')!.attributes('disabled')).toBeDefined()
+    expect(wrapper.findAll('button').find(b => b.text() === '预览清理候选')!.attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').filter(b => b.text() === '下载候选核对').every(b => b.attributes('disabled') === undefined)).toBe(true)
+    await (state.save as () => Promise<void>)()
+    expect(api.saveReviewedExcel).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+  it('retains top-level restrictions when restoring a saved classification', async () => {
+    const receipt = { converter: 'python', source_sha256: 'a'.repeat(64), derived_sha256: '07'.repeat(32), purpose: 'data_template_test_only', print_layout_verified: false, warnings: ['WPS 扩展未验证'] }
+    const item = { classification_id: 'saved-limited', name: 'test-only.xlsx', sha256: '07'.repeat(32), conversion_receipt: receipt, usage_restrictions: ['打印版式未验证'], latest: { version: 'v1', confirmed: false, model_status: 'not_called', sheets: [] } }
+    api.recentClassifications.mockResolvedValue({ files: [item] })
+    vi.stubGlobal('crypto', { randomUUID: () => 'restore-key', subtle: { digest: vi.fn().mockResolvedValue(new Uint8Array(32).fill(7).buffer) } })
+    const wrapper = mount(ReviewedExcelTemplate)
+    try {
+      const file = new File(['source'], 'test-only.xlsx')
+      Object.defineProperty(file, 'arrayBuffer', { value: async () => new ArrayBuffer(1) })
+      const input = wrapper.find('input[type=file]'); Object.defineProperty(input.element, 'files', { value: [file] })
+      await input.trigger('change')
+      await wrapper.findAll('button').find(b => b.text() === '查看已保存分类')!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '恢复此分类并继续')!.trigger('click'); await flushPromises()
+      const state = wrapper.vm.$.setupState as Record<string, unknown>
+      expect((state.classifications as { conversion_receipt: unknown }[])[0].conversion_receipt).toEqual(receipt)
+      expect(state.publicationRestricted).toBe(true)
+      expect(wrapper.text()).toContain('WPS 扩展未验证')
+    } finally { wrapper.unmount(); vi.unstubAllGlobals() }
+  })
+  it('does not request conversion consent for an existing legacy classification recovery', async () => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    api.archiveAssets.mockResolvedValue({ assets: [{ id: 'existing', name: 'old.xls', state: 'active', versions: [{ id: 'existing-v', version: 1, status: 'ready', sha256: 'a'.repeat(64), classification_id: 'existing-c' }] }] })
+    api.classifyArchiveVersion.mockReset().mockResolvedValue({ name: 'old.xlsx', status: 'classified', classification_id: 'existing-c', version: 'v1', sheets: [] })
+    api.downloadClassificationSource.mockResolvedValue({ blob: async () => new Blob(['derived']) })
+    const wrapper = mount(ReviewedExcelTemplate)
+    try {
+      await wrapper.findAll('button').find(b => b.text() === '查看原件档案')!.trigger('click'); await flushPromises()
+      await wrapper.findAll('button').find(b => b.text() === '分类此版本')!.trigger('click'); await flushPromises()
+      expect(confirmation).not.toHaveBeenCalled()
+      expect(api.classifyArchiveVersion).toHaveBeenCalledTimes(1)
+      expect(api.classifyArchiveVersion.mock.calls[0][1].has('legacy_test_only')).toBe(false)
+      expect(api.downloadClassificationSource).toHaveBeenLastCalledWith('existing-c')
+    } finally { wrapper.unmount(); confirmation.mockRestore() }
   })
   it.each([0, 1, 20, 200, 201])('enforces the 200 file limit for %i selections', async (count) => {
     const wrapper = mount(ReviewedExcelTemplate); const input = wrapper.find('input[type=file]')
@@ -66,11 +161,39 @@ describe('reviewed Excel template', () => {
     expect(wrapper.text()).toContain('存在分类依赖')
     confirm.mockRestore()
   })
+  it('loads the bound derived source after legacy archive classification and previews those same bytes', async () => {
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const sheets = [{ sheet: 'Sheet', labels: ['quotation'], checked_cells: 1, evidence: [], regions: [{ range: 'A1:A1', labels: ['quotation'], header_cells: [], merged_ranges: [], possible_shared_context: [], evidence: [] }] }]
+    api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-xls', name: 'legacy.xls', state: 'active', versions: [{ id: 'xls-v1', version: 1, status: 'ready', sha256: 'a'.repeat(64), classification_id: null }] }] })
+    api.classifyArchiveVersion.mockResolvedValue({ name: 'legacy.xlsx', status: 'classified', classification_id: 'converted-id', version: 'converted-version', sha256: 'derived-hash', sheets, model_status: 'not_called', confirmed: true })
+    api.downloadClassificationSource.mockReset().mockResolvedValue({ blob: async () => new Blob(['persistent-derived-bytes']) })
+    api.downloadArchiveVersion.mockReset().mockResolvedValue({ blob: async () => new Blob(['original-xls-bytes']) })
+    api.reviewExcel.mockReset().mockResolvedValue({ review_id: 'review', sha256: 'derived-hash', sheets: ['Sheet'], cells: [], proposal: proposal('v1') })
+    const wrapper = mount(ReviewedExcelTemplate)
+    await wrapper.findAll('button').find(b => b.text() === '查看原件档案')!.trigger('click'); await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === '分类此版本')!.trigger('click'); await flushPromises()
+    expect(api.downloadClassificationSource).toHaveBeenCalledWith('converted-id')
+    expect(api.downloadArchiveVersion).not.toHaveBeenCalled()
+    const state = wrapper.vm.$.setupState as Record<string, unknown>
+    expect((state.file as File).name).toBe('legacy.xlsx')
+    expect((state.file as File).size).toBe(new Blob(['persistent-derived-bytes']).size)
+    state.initialModel = false
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text().includes('预览清理'))!.trigger('click'); await flushPromises()
+    expect(api.reviewExcel).toHaveBeenCalledTimes(1)
+    const form = api.reviewExcel.mock.calls[0][0] as FormData
+    expect((form.get('file') as File).name).toBe('legacy.xlsx')
+    expect((form.get('file') as File).size).toBe(new Blob(['persistent-derived-bytes']).size)
+    expect(form.get('classification_id')).toBe('converted-id')
+    expect(api.classifyArchiveVersion.mock.calls.at(-1)![1].get('legacy_test_only')).toBe('true')
+    expect(api.classifyArchiveVersion.mock.calls.at(-1)![1].get('legacy_source_sha256')).toBe('a'.repeat(64))
+    confirmation.mockRestore()
+  })
   it('only reclassifies after explicit confirmation and clears every old authorization and preview', async () => {
     const sheet = { sheet: '表', labels: ['unknown'], checked_cells: 1, evidence: [], regions: [] }
     api.archiveAssets.mockResolvedValue({ assets: [{ id: 'asset-1', name: '报价.xlsx', state: 'active', versions: [{ id: 'v1', version: 1, status: 'ready', sha256: 'abc', classification_id: 'old' }] }] })
     api.classifyArchiveVersion.mockReset().mockResolvedValue({ name: '报价.xlsx', status: 'classified', classification_id: 'new', version: 'v-new', sheets: [sheet], model_status: 'not_called', confirmed: false })
-    api.downloadArchiveVersion.mockResolvedValue({ blob: async () => new Blob(['test']) })
+    api.downloadClassificationSource.mockResolvedValue({ blob: async () => new Blob(['derived-test']) })
     api.analyzeClassification.mockClear(); api.reviewExcel.mockClear()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const wrapper = mount(ReviewedExcelTemplate)

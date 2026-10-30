@@ -35,15 +35,12 @@ def classify_part(monkeypatch, review, cells):
 
     monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
     rows = [int(cell["cell"][1:]) for cell in cells]
-    area = f"A{min(rows)}:B{max(rows)}"
     primary_id = f"S1:A{min(rows)}"
     raw = {
         "physical_regions": [
             {
-                "sheet": "Synthetic",
-                "range": area,
                 "primary_id": primary_id,
-                "evidence_ids": [primary_id],
+                "atom_ids": [f"S1:{cell['cell']}" for cell in cells],
                 "dependency_ids": [],
                 "reason": "synthetic evidence",
             }
@@ -51,7 +48,7 @@ def classify_part(monkeypatch, review, cells):
         "logical_documents": [
             {
                 "document_id": "synthetic",
-                "fragments": [{"sheet": "Synthetic", "range": area}],
+                "fragments": [primary_id],
             }
         ],
         "layout_references": [],

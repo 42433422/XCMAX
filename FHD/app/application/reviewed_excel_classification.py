@@ -422,7 +422,7 @@ def _classify_semantic_batch(
     if reference_ids:
         from app.application.reviewed_excel_reference_ids import prepare_reference_messages
 
-        references, provider_schema = prepare_reference_messages(messages, schema)
+        references, provider_schema = prepare_reference_messages(messages, schema, review=review)
     else:
         from app.application.reviewed_excel_reference_ids import neutralize_messages
 
@@ -454,7 +454,7 @@ def _classify_semantic_batch(
         from app.application.reviewed_excel_reference_ids import normalize_reference_ids
 
         raw_reference_response = data
-        data = normalize_reference_ids(data, references, provider_schema, schema)
+        data = normalize_reference_ids(data, references, provider_schema, schema, review=review)
     if not isinstance(data, dict):
         raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     # Legacy in-process replays contain only regions; the live provider receives

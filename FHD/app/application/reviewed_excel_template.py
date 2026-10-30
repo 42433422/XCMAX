@@ -418,6 +418,9 @@ def inspect_workbook(body: bytes, *, allow_drawings: bool = True) -> dict:
                 if drawing_columns[sheet.title] * sheet.max_row > 100_000:
                     raise ReviewedExcelError("绘图工作表范围过大，暂不能安全预览")
         return {
+            "usage_restrictions": ["仅供数据/模板测试；打印版式未验证，不得发布到企业模板库"]
+            if "ELTUsageRestriction" in wb.custom_doc_props.names
+            else [],
             "drawing_evidence": drawing_evidence,
             "sha256": hashlib.sha256(body).hexdigest(),
             "read_only_print_areas": read_only_print_areas,

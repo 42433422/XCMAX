@@ -5212,16 +5212,12 @@ def test_auto_group_resume_budget_and_download_multibatch(
             )
         calls.append("batch")
         primary = [c for c in payload["cells"] if not c["context_only"]]
-        rows = [int(c["cell"][1:]) for c in primary]
-        area = f"A{min(rows)}:A{max(rows)}"
         return LlmAssistResult(
             used_llm=True,
             data={
                 "physical_regions": [
                     {
-                        "sheet": "报价",
-                        "range": area,
-                        "evidence_ids": [],
+                        "atom_ids": [c["evidence_id"] for c in primary],
                         "dependency_ids": [],
                         "primary_id": primary[0]["evidence_id"],
                         "reason": "合成",
@@ -5470,17 +5466,15 @@ def test_archived_model_slice_can_be_selected_for_template_without_coordinate_co
         data = {
             "physical_regions": [
                 {
-                    "sheet": "报价",
-                    "range": "A1:C4",
-                    "evidence_ids": [primary],
+                    "atom_ids": schema["properties"]["physical_regions"]["items"]["properties"][
+                        "primary_id"
+                    ]["enum"],
                     "dependency_ids": [],
                     "primary_id": primary,
                     "reason": "synthetic",
                 }
             ],
-            "logical_documents": [
-                {"document_id": "fixture", "fragments": [{"sheet": "报价", "range": "A1:C4"}]}
-            ],
+            "logical_documents": [{"document_id": "fixture", "fragments": [primary]}],
             "layout_references": [],
         }
         response_capture()(

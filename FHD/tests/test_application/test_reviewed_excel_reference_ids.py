@@ -182,9 +182,11 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
             data={
                 "physical_regions": [
                     {
-                        "sheet": primary["sheet"],
-                        "range": "A1:C4",
-                        "evidence_ids": [primary["evidence_id"]],
+                        "atom_ids": [
+                            cell["evidence_id"]
+                            for cell in payload["cells"]
+                            if not cell.get("context_only")
+                        ],
                         "dependency_ids": [],
                         "primary_id": primary["evidence_id"],
                         "reason": "基于所发送源内容",
@@ -202,7 +204,7 @@ def test_independent_prompt_has_only_source_facts_and_no_program_candidates(monk
     properties = payload["output_schema"]["properties"]["physical_regions"]["items"]["properties"]
     assert "labels" not in properties
     assert "unknown" not in captured["messages"][0]["content"]
-    assert "Every sent non-context primary cell" in captured["messages"][0]["content"]
+    assert "Assign every primary cell atom exactly once" in captured["messages"][0]["content"]
     assert payload["cells"] and payload["integrity_constraints"]["merged_ranges"]
     assert result["regions"][0]["labels"] == ["unknown"]
     assert (
