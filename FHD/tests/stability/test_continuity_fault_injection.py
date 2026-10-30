@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib.util
-import time
 from pathlib import Path
 
 import pytest
@@ -58,15 +57,13 @@ def test_streaming_drop_then_resume_from_cursor():
     assert h.session.stream_cursor == 5
 
 
-def test_tool_timeout_is_retryable_unknown():
+def test_tool_timeout_is_retryable_unknown(monkeypatch):
     mod = _harness_mod()
     h = mod.ContinuityHarness()
 
-    def slow():
-        time.sleep(0.05)
-        return "late"
-
-    h.set_tool(slow, timeout_seconds=0.01)
+    clock = iter((0.0, 0.05))
+    monkeypatch.setattr(mod.time, "monotonic", lambda: next(clock))
+    h.set_tool(lambda: "late", timeout_seconds=0.01)
     outcome = h.run_tool_with_deadline()
     assert outcome["ok"] is False
     assert outcome["error"] == "tool_timeout"

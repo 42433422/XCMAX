@@ -73,7 +73,9 @@ class ContinuityHarness:
     # --- history restore ---
     def append_history(self, role: str, content: str) -> None:
         self.require_connected()
-        self.session.history.append({"role": role, "content": content, "seq": len(self.session.history)})
+        self.session.history.append(
+            {"role": role, "content": content, "seq": len(self.session.history)}
+        )
 
     def restore_history(self) -> list[dict[str, Any]]:
         """After reconnect, history must be intact and ordered."""
@@ -118,7 +120,7 @@ class ContinuityHarness:
         started = time.monotonic()
         try:
             result = self._tool_impl()
-        except Exception as exc:  # noqa: BLE001 — harness records tool faults
+        except (OSError, RuntimeError) as exc:
             return {
                 "ok": False,
                 "error": type(exc).__name__,
@@ -138,16 +140,22 @@ class ContinuityHarness:
         return {"ok": True, "result": result, "elapsed": elapsed}
 
     # --- task retry / idempotency ---
-    def submit_task(self, task_id: str, idempotency_key: str, work: Callable[[], Any]) -> TaskRecord:
+    def submit_task(
+        self, task_id: str, idempotency_key: str, work: Callable[[], Any]
+    ) -> TaskRecord:
         self.require_connected()
-        existing = next((t for t in self.tasks.values() if t.idempotency_key == idempotency_key), None)
+        existing = next(
+            (t for t in self.tasks.values() if t.idempotency_key == idempotency_key), None
+        )
         if existing is not None:
             return existing
-        record = TaskRecord(task_id=task_id, idempotency_key=idempotency_key, status="running", attempts=1)
+        record = TaskRecord(
+            task_id=task_id, idempotency_key=idempotency_key, status="running", attempts=1
+        )
         try:
             record.result = work()
             record.status = "succeeded"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError) as exc:
             record.status = "failed"
             record.result = {"error": type(exc).__name__, "message": str(exc)}
         self.tasks[task_id] = record
@@ -162,7 +170,7 @@ class ContinuityHarness:
         try:
             record.result = work()
             record.status = "succeeded"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError) as exc:
             record.status = "failed"
             record.result = {"error": type(exc).__name__, "message": str(exc)}
         return record
