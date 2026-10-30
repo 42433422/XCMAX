@@ -33,7 +33,7 @@
     "@playwright/test": "^1.64.0",
     "@types/node": "26.6.5",
     "@vitest/coverage-v8": "^5.0.4",
-    "electron": "44.9.3",
+    "electron": "45.1.0",
     "electron-builder": "26.15.3",
     "typescript": "6.0.3",
     "vitest": "^5.0.4"
