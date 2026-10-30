@@ -64,6 +64,13 @@ def _marker(node) -> dict:
     return result
 
 
+def _anchor_identity(anchor) -> str:
+    node = anchor.find(f".//{{{X}}}cNvPr")
+    if node is None or not node.get("id"):
+        raise ReviewedExcelError("绘图对象编号缺失")
+    return str(node.attrib["id"])
+
+
 def extract_drawing_evidence(z: ZipFile) -> list[dict]:
     """Extract stable object identities and content; reject unrecognized relationships.
 
@@ -75,7 +82,8 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
         raise ReviewedExcelError("工作簿存在重复部件，无法核验")
     root = ET.fromstring(z.read("xl/workbook.xml"))
     workbook_rels = _relations(z, "xl/workbook.xml")
-    evidence, seen_parts = [], set()
+    evidence: list[dict] = []
+    seen_parts: set[str] = set()
     for sheet in root.findall(f"{{{S}}}sheets/{{{S}}}sheet"):
         name, rid = sheet.get("name"), sheet.get(f"{{{R}}}id")
         if not name or rid not in workbook_rels:
@@ -284,7 +292,7 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
                 raise ReviewedExcelError("绘图对象引用不受支持")
             if any(el.tag == f"{{{A}}}xfrm" and el.get("rot", "0") != "0" for el in obj.iter()):
                 raise ReviewedExcelError("旋转绘图对象的边界暂不能核验")
-            start = _marker(anchor.find(f"{{{X}}}from"))
+            start = _marker(anchor.find("{" + X + "}from"))
             end = _marker(anchor.find(f"{{{X}}}to")) if kind == "twoCellAnchor" else None
             if end and (
                 (end["row"], end["rowOff"]) < (start["row"], start["rowOff"])
@@ -294,10 +302,10 @@ def extract_drawing_evidence(z: ZipFile) -> list[dict]:
             ext = anchor.find(f"{{{X}}}ext")
             if kind == "oneCellAnchor":
                 if ext is None or any(
-                    not (ext.get(k) or "").isdecimal() or int(ext.get(k)) <= 0 for k in ("cx", "cy")
+                    not (ext.get(k) or "").isdecimal() or int(ext.attrib[k]) <= 0 for k in ("cx", "cy")
                 ):
                     raise ReviewedExcelError("绘图尺寸无效")
-                size = {k: int(ext.get(k)) for k in ("cx", "cy")}
+                size = {k: int(ext.attrib[k]) for k in ("cx", "cy")}
             else:
                 size = None
             transforms = list(obj.iter(f"{{{A}}}xfrm"))
@@ -374,7 +382,7 @@ def drawing_row_boundaries(sheet, drawings: list[dict]) -> list[int]:
     from app.application.reviewed_excel_evidence import bounded_range
 
     max_row = sheet.max_row
-    unsafe = set()
+    unsafe: set[int] = set()
     for merged in sheet.merged_cells.ranges:
         _, first, _, last = bounded_range(str(merged))
         unsafe.update(range(first + 1, last + 1))
@@ -437,7 +445,8 @@ def plan_drawing_batches(review: dict) -> list[list[dict]]:
     overview = {entry["sheet"]: entry for entry in review["sheet_overview"]}
     for sheet in review["sheets"]:
         boundaries = overview[sheet]["drawing_row_boundaries"]
-        current, amount, used, first = [], 0, 0, boundaries[0]
+        current: list[dict] = []
+        amount, used, first = 0, 0, boundaries[0]
         for start, end in zip(boundaries, boundaries[1:]):
             group = [cell for row in range(start, end) for cell in rows.get((sheet, row), [])]
             n, size = sum(map(count, group)), sum(map(cost, group))
@@ -524,7 +533,7 @@ def set_drawing_columns(sheet, drawings: list[dict]) -> int:
         if not obj.get("geometry_error"):
             obj["last_row"] = end["row"] + 1
             obj["last_col"] = end["col"] + 1
-    return max([sheet.max_column, *(obj.get("last_col", 0) for obj in drawings)])
+    return int(max([sheet.max_column, *(obj.get("last_col", 0) for obj in drawings)]))
 
 
 def select_drawing_objects(info: dict, sheet: str, rectangles: list[tuple]) -> list[dict]:
@@ -570,7 +579,7 @@ def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -
             raise ReviewedExcelError("绘图主题发生变化，不能保证保真")
         root = ET.fromstring(old.read(part))
         original_xml = {
-            anchor.find(f".//{{{X}}}cNvPr").get("id"): XML.tostring(anchor, encoding="utf-8")
+            _anchor_identity(anchor): XML.tostring(anchor, encoding="utf-8")
             for anchor in root
         }
         for anchor in list(root):
@@ -648,7 +657,7 @@ def restore_drawing_parts(source: bytes, derived: bytes, selected: list[dict]) -
         found = extract_drawing_evidence(z)
         written_root = ET.fromstring(z.read(part))
         written_xml = {
-            anchor.find(f".//{{{X}}}cNvPr").get("id"): XML.tostring(anchor, encoding="utf-8")
+            _anchor_identity(anchor): XML.tostring(anchor, encoding="utf-8")
             for anchor in written_root
         }
     if set(written_xml) != wanted or any(written_xml[key] != original_xml[key] for key in wanted):

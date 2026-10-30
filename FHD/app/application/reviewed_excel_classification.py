@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from openpyxl.utils import get_column_letter
 
 from app.application.etl.errors import ReviewedExcelError
@@ -257,7 +259,7 @@ def _classify_semantic_batch(
         "additionalProperties": False,
         "properties": {"sheet": {"type": "string"}, "cell": {"type": "string"}},
     }
-    region_schema = {
+    region_schema: dict[str, Any] = {
         "type": "object",
         "required": ["sheet", "range", "labels", "evidence", "dependencies", "reason"],
         "additionalProperties": False,

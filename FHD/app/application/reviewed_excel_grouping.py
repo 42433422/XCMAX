@@ -1,5 +1,7 @@
 """Bounded second-stage grouping of fully covered model fragments."""
 
+from typing import Any
+
 from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
 
 from app.application.etl.errors import ReviewedExcelError
@@ -183,7 +185,7 @@ def group_semantic_fragments(
     }
     if drawings:
         shown["drawing_evidence"] = [{**obj, "drawing_id": key} for key, obj in drawings.items()]
-    group = {
+    group: dict[str, Any] = {
         "type": "object",
         "required": ["document_id", "fragment_ids", "evidence_ids", "reason"],
         "additionalProperties": False,
