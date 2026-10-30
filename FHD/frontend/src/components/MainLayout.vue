@@ -36,6 +36,7 @@
           </div>
         </div>
         <TopQuickNav @select="handleViewChange" />
+        <RouteLoadingFeedback :active="pendingSidebarView" class="route-nav-feedback" data-testid="route-nav-feedback" />
         <div class="top-bar-actions">
           <button
             type="button"
@@ -51,15 +52,6 @@
           <TopAssistantFloat />
           <GlobalTaskCenter />
         </div>
-      </div>
-      <div
-        v-if="showRouteNavFeedback"
-        class="route-nav-feedback"
-        role="status"
-        aria-live="polite"
-        data-testid="route-nav-feedback"
-      >
-        页面加载中…
       </div>
       <slot></slot>
     </div>
@@ -93,6 +85,7 @@ import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarA
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
+import RouteLoadingFeedback from './shell/RouteLoadingFeedback.vue'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
 import DocumentPreviewPictureInPicture from './DocumentPreviewPictureInPicture.vue'
@@ -234,26 +227,13 @@ const currentRouteName = computed(() => {
 
 /** Optimistic sidebar highlight: paint target immediately while router/chunk catches up. */
 const pendingSidebarView = ref('')
-const routeNavInFlight = ref(false)
-const showRouteNavFeedback = ref(false)
-let routeNavFeedbackTimer = 0
 let routeNavGeneration = 0
 const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
-
-function clearRouteNavFeedbackTimer() {
-  if (routeNavFeedbackTimer) {
-    globalThis.clearTimeout(routeNavFeedbackTimer)
-    routeNavFeedbackTimer = 0
-  }
-}
 
 function syncPendingSidebarWithRoute() {
   if (!pendingSidebarView.value) return
   if (pendingSidebarView.value === currentRouteName.value || routeChunkErrorPath.value) {
     pendingSidebarView.value = ''
-    routeNavInFlight.value = false
-    showRouteNavFeedback.value = false
-    clearRouteNavFeedbackTimer()
   }
 }
 
@@ -317,14 +297,6 @@ async function navigateToView(viewKey) {
   const generation = ++routeNavGeneration
   // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
   pendingSidebarView.value = normalized
-  routeNavInFlight.value = true
-  clearRouteNavFeedbackTimer()
-  showRouteNavFeedback.value = false
-  routeNavFeedbackTimer = globalThis.setTimeout(() => {
-    if (routeNavInFlight.value && pendingSidebarView.value) {
-      showRouteNavFeedback.value = true
-    }
-  }, 280)
   try {
     await navigateFromSidebarKey(router, normalized, {
       modMenuItems: modMenuItems.value,
@@ -334,9 +306,6 @@ async function navigateToView(viewKey) {
   } finally {
     if (generation === routeNavGeneration) {
       pendingSidebarView.value = ''
-      routeNavInFlight.value = false
-      showRouteNavFeedback.value = false
-      clearRouteNavFeedbackTimer()
     }
   }
 }
@@ -484,7 +453,6 @@ onBeforeUnmount(() => {
   stopSidebarResize()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
-  clearRouteNavFeedbackTimer()
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.removeEventListener(eventName, handleGlobalActivity)
   })
@@ -511,12 +479,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .route-nav-feedback {
-  margin: 0 16px 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(13, 71, 161, 0.08);
-  color: var(--app-text-muted, #475467);
-  font-size: var(--app-font-size-caption, 12px);
-  line-height: 1.4;
+  top: calc(100% + 6px);
+  z-index: 8;
 }
 </style>

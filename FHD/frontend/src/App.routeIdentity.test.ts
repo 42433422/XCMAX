@@ -1,6 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { onMounted, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { expect, it, vi } from 'vitest'
 import App from './App.vue'
 import { useAccountProfileStore } from '@/stores/accountProfile'
@@ -75,4 +75,33 @@ it('limits the desktop cache and handles rapid route changes', async () => {
   expect(router.currentRoute.value.path).toBe('/page/2')
   expect(wrapper.text()).toContain('page')
   wrapper.unmount(); mode.admin = true; mode.desktop = false
+})
+
+it.each([80, 450])('shows async page content immediately after its %sms setup, without a bare-text flash', async (delay) => {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+  mode.admin = false; mode.desktop = true
+  const page = {
+    async setup() {
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return () => h('section', { 'data-testid': 'async-page' }, 'ready')
+    },
+  }
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/async', component: page }] })
+  await router.push('/async')
+  const wrapper = mount(App, { global: { plugins: [router] } })
+  try {
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    if (delay > 280) {
+      await vi.advanceTimersByTimeAsync(280)
+      expect(wrapper.get('[role="status"]').text()).toBe('页面加载中…')
+    }
+    await vi.advanceTimersByTimeAsync(delay > 280 ? delay - 280 : delay)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="async-page"]').text()).toBe('ready')
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+  } finally {
+    wrapper.unmount(); mode.admin = true; mode.desktop = false
+    vi.useRealTimers()
+  }
 })
