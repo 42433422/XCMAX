@@ -26,6 +26,7 @@ from app.application.reviewed_excel_classification import (
     _classify_semantic_batch,
     apply_classification_corrections,
     combine_semantic_batches,
+    observe_fragment_relationships,
     plan_semantic_batches,
 )
 from app.application.reviewed_excel_classification_store import (
@@ -37,8 +38,6 @@ from app.application.reviewed_excel_classification_store import (
 from app.application.reviewed_excel_evidence import (
     bounded_range,
     build_structure_map,
-    candidate_fragment_links,
-    flag_repeated_header_conflicts,
     unresolved_fragments,
 )
 from app.application.reviewed_excel_template import (
@@ -346,6 +345,7 @@ async def reviewed_excel_classify(
                 "model_status": "not_called",
                 "read_only_print_areas": review["read_only_print_areas"],
             }
+            result["fragment_links"] = observe_fragment_relationships(review, result["sheets"])
             results.append(result)
             prepared.append((file, body, result))
         except HTTPException as exc:
@@ -387,7 +387,14 @@ async def reviewed_excel_classify(
                 record = db.get(EtlUpload, upload["upload_id"])
                 created_paths.append(Path(record.storage_path))
                 os.chmod(record.storage_path, 0o600)
-                version = _classification_version(result["sha256"], "", result["sheets"])
+                version = _classification_version(
+                    result["sha256"],
+                    "",
+                    {
+                        "sheets": result["sheets"],
+                        "fragment_links": result["fragment_links"],
+                    },
+                )
                 result.update(
                     {"classification_id": new_id(), "version": version, "confirmed": False}
                 )
@@ -407,6 +414,7 @@ async def reviewed_excel_classify(
                                     {
                                         "version": version,
                                         "sheets": result["sheets"],
+                                        "fragment_links": result["fragment_links"],
                                         "model_status": "not_called",
                                         "confirmed": False,
                                         "read_only_print_areas": result["read_only_print_areas"],
@@ -560,31 +568,7 @@ def reviewed_excel_classification_confirm(
                 latest["suggested_document_count"] = None
             if partition_pending:
                 # New slices never inherit an approval or relationships from their old geometry.
-                regions = [
-                    {
-                        **region,
-                        "sheet": sheet["sheet"],
-                        "evidence": [
-                            {"sheet": sheet["sheet"], **ref} for ref in region["evidence"]
-                        ],
-                    }
-                    for sheet in latest["sheets"]
-                    for region in sheet["regions"]
-                ]
-                observed = flag_repeated_header_conflicts(regions, review["cells"])
-                by_region = {(region["sheet"], region["range"]): region for region in observed}
-                for sheet in latest["sheets"]:
-                    for region in sheet["regions"]:
-                        observation = by_region[(sheet["sheet"], region["range"])]
-                        for field in ("continuation_context", "context_warning"):
-                            if field in observation:
-                                region[field] = observation[field]
-                        # Labels remain the user's explicit choices; observations only suggest edges.
-                for region in regions:
-                    observation = by_region[(region["sheet"], region["range"])]
-                    if "continuation_context" in observation:
-                        region["continuation_context"] = observation["continuation_context"]
-                latest["fragment_links"] = candidate_fragment_links(regions, review["cells"])
+                latest["fragment_links"] = observe_fragment_relationships(review, latest["sheets"])
             from app.application.reviewed_excel_classification_store import (
                 _confirmed_document_count,
                 _confirmed_documents,

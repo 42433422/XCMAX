@@ -180,6 +180,49 @@ def classify_review_workbook(review: dict) -> list[dict]:
     return results
 
 
+def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
+    """Attach source observations and unselected candidate edges, never approve a relationship."""
+    from app.application.reviewed_excel_evidence import (
+        candidate_fragment_links,
+        flag_repeated_header_conflicts,
+    )
+
+    regions = [
+        {
+            **region,
+            "sheet": sheet["sheet"],
+            "evidence": [{"sheet": sheet["sheet"], **ref} for ref in region["evidence"]],
+        }
+        for sheet in sheets
+        for region in sheet["regions"]
+    ]
+    for region in regions:
+        region.pop("continuation_context", None)
+    observed = flag_repeated_header_conflicts(regions, review["cells"])
+    by_region = {(region["sheet"], region["range"]): region for region in observed}
+    for sheet in sheets:
+        for region in sheet["regions"]:
+            observation = by_region[(sheet["sheet"], region["range"])]
+            region.pop("continuation_context", None)
+            for field in ("continuation_context", "context_warning"):
+                if field in observation:
+                    region[field] = observation[field]
+            if region.get("context_warning"):
+                region["context_warning"] = (
+                    region["context_warning"]
+                    .replace("模型分类", "分类")
+                    .replace("模型建议", "分类建议")
+                )
+    for region in regions:
+        observation = by_region[(region["sheet"], region["range"])]
+        if "continuation_context" in observation:
+            region["continuation_context"] = observation["continuation_context"]
+    links = candidate_fragment_links(regions, review["cells"])
+    for link in links["items"]:
+        link["selected"] = False
+    return links
+
+
 def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dict:
     """Request bounded semantic regions; validate every reference before adoption."""
     import json

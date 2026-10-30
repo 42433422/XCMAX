@@ -586,9 +586,175 @@ def test_production_words_require_title_structure_and_do_not_cut_merges():
     assert result["regions"][0]["merged_ranges"] == ["B3:B6"]
 
 
+@pytest.mark.parametrize("archived", [False, True])
+@pytest.mark.parametrize("combine", [False, True])
+def test_initial_rule_continuation_requires_explicit_selection_and_replays_state(
+    review_store, monkeypatch, archived, combine
+):
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "工艺"
+    for row in [["工艺说明"], ["工序", "要求"], ["焊接", "合成规范"], ["复核", "合成记录"]] * 2:
+        ws.append(row)
+    output = BytesIO()
+    wb.save(output)
+    body = output.getvalue()
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *_: pytest.fail("未授权模型被调用"),
+    )
+    client = review_store.client
+    upload = {"file": ("工艺.xlsx", body)}
+    request = {"expected_actor": "1:7", "request_key": "initial-continuation"}
+    if archived:
+        with review_store.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                )
+            )
+        response = client.post(
+            "/api/templates/reviewed-excel/archive-classify", data=request, files=upload
+        )
+        assert response.status_code == 200, response.text
+        item = response.json()
+        replay = client.post(
+            "/api/templates/reviewed-excel/archive-classify", data=request, files=upload
+        )
+        assert replay.status_code == 200 and replay.json() == item
+    else:
+        response = client.post(
+            "/api/templates/reviewed-excel/classify",
+            data=request,
+            files={"files": ("工艺.xlsx", body)},
+        )
+        assert response.status_code == 200, response.text
+        item = response.json()["files"][0]
+    assert not item["confirmed"] and item["model_status"] == "not_called"
+    regions = item["sheets"][0]["regions"]
+    assert [r["range"] for r in regions] == ["A1:B4", "A5:B8"]
+    assert regions[1]["continuation_context"]["parent_range"] == "A1:B4"
+    links = item["fragment_links"]["items"]
+    assert len(links) == 1 and links[0]["repeated_header_observed"] and not links[0]["selected"]
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    history = client.get(url).json()
+    assert (
+        len(history["versions"]) == 1
+        and history["versions"][-1]["fragment_links"] == item["fragment_links"]
+    )
+    labels = [{"sheet": "工艺", "range": r["range"], "labels": r["labels"]} for r in regions]
+    edge = [{key: links[0][key] for key in ["sheet", "first", "second"]}] if combine else []
+    response = client.post(
+        url + "/confirm",
+        data={
+            "version": item["version"],
+            "labels_json": json.dumps(labels),
+            "links_json": json.dumps(edge),
+            "independent_confirmed": "true",
+        },
+    )
+    assert response.status_code == 200, response.text
+    confirmed = response.json()
+    assert confirmed["confirmed"] and len(confirmed["logical_documents"]) == int(combine)
+    assert confirmed["fragment_links"]["items"][0]["selected"] is combine
+    if archived:
+        replay = client.post(
+            "/api/templates/reviewed-excel/archive-classify", data=request, files=upload
+        )
+        assert replay.status_code == 200, replay.text
+        for key in [
+            "version",
+            "sheets",
+            "confirmed",
+            "fragment_links",
+            "logical_documents",
+            "partition_pending",
+            "confirmed_document_count",
+            "document_count_status",
+        ]:
+            assert replay.json()[key] == confirmed[key]
+        assert replay.json()["independent_confirmed"] is True
+        recovered = client.post(
+            f"/api/templates/reviewed-excel/archive-versions/{item['archive_version_id']}/classify",
+            data={"expected_actor": "1:7"},
+        )
+        assert recovered.status_code == 200 and recovered.json() == replay.json()
+        original = client.get(
+            f"/api/templates/reviewed-excel/archive-versions/{item['archive_version_id']}/download"
+        )
+        assert original.status_code == 200 and original.content == body
+        with review_store.engine.connect() as conn:
+            assert conn.execute(text("SELECT count(*) FROM etl_archive_assets")).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM etl_archive_versions")).scalar_one() == 1
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM etl_runs WHERE target_type='template_classification'"
+                    )
+                ).scalar_one()
+                == 1
+            )
+    preview = client.post(
+        "/api/templates/reviewed-excel/preview",
+        data={
+            "expected_actor": "1:7",
+            "classification_id": item["classification_id"],
+            "classification_version": confirmed["version"],
+            "region_sheet": "工艺",
+            "region_range": "A1:B4",
+        },
+        files=upload,
+    )
+    assert preview.status_code == 200, preview.text
+    value = preview.json()
+    assert len(value["selected_region"]["fragments"]) == (2 if combine else 1)
+    candidate = client.get(
+        f"/api/templates/reviewed-excel/reviews/{value['review_id']}/versions/{value['proposal']['version']}/candidates/preserve/download"
+    )
+    assert candidate.status_code == 200, candidate.text
+    sheet = load_workbook(BytesIO(candidate.content))["工艺"]
+    assert sheet["B4"].value == "合成记录"
+    assert sheet["B8"].value == ("合成记录" if combine else None)
+
+
+def test_initial_rule_continuation_identity_conflict_cannot_be_selected(review_store):
+    wb = Workbook()
+    ws = wb.active
+    for number in ["PO-1", "PO-2"]:
+        for row in [["工艺说明"], ["工序", "要求"], ["订单号", number], ["合成工序", "规范"]]:
+            ws.append(row)
+    output = BytesIO()
+    wb.save(output)
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("工艺.xlsx", output.getvalue())},
+    ).json()["files"][0]
+    link = item["fragment_links"]["items"][0]
+    assert link["status"] == "identity_conflict" and not link["selected"]
+    labels = [
+        {"sheet": s["sheet"], "range": r["range"], "labels": r["labels"]}
+        for s in item["sheets"]
+        for r in s["regions"]
+    ]
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    response = client.post(
+        url + "/confirm",
+        data={
+            "version": item["version"],
+            "labels_json": json.dumps(labels),
+            "links_json": json.dumps([{key: link[key] for key in ["sheet", "first", "second"]}]),
+        },
+    )
+    assert response.status_code == 400 and "身份冲突" in response.text
+    assert len(client.get(url).json()["versions"]) == 1
+
+
 @pytest.mark.parametrize("initial_label", ["template", "unknown"])
+@pytest.mark.parametrize("archived", [False, True])
 def test_manual_split_requires_new_version_second_confirmation_and_scoped_access(
-    review_store, initial_label
+    review_store, initial_label, archived
 ):
     wb = Workbook()
     ws = wb.active
@@ -599,11 +765,24 @@ def test_manual_split_requires_new_version_second_confirmation_and_scoped_access
     wb.save(output)
     body = output.getvalue()
     client = review_store.client
-    item = client.post(
-        "/api/templates/reviewed-excel/classify",
-        data={"expected_actor": "1:7"},
-        files={"files": ("原稿.xlsx", body)},
-    ).json()["files"][0]
+    if archived:
+        with review_store.engine.begin() as conn:
+            conn.execute(
+                text(
+                    "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+                )
+            )
+        item = client.post(
+            "/api/templates/reviewed-excel/archive-classify",
+            data={"expected_actor": "1:7", "request_key": "manual-split-recovery"},
+            files={"file": ("原稿.xlsx", body)},
+        ).json()
+    else:
+        item = client.post(
+            "/api/templates/reviewed-excel/classify",
+            data={"expected_actor": "1:7"},
+            files={"files": ("原稿.xlsx", body)},
+        ).json()["files"][0]
     url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
     labels = [
         {"sheet": "原稿", "original_range": "A1:B12", "range": area, "labels": [initial_label]}
@@ -626,6 +805,23 @@ def test_manual_split_requires_new_version_second_confirmation_and_scoped_access
     assert not split["confirmed"] and split["partition_pending"]
     assert "再次确认" in split["message"] and split["logical_documents"] == []
     assert split["confirmed_document_count"] is None
+    if archived:
+        replay = client.post(
+            "/api/templates/reviewed-excel/archive-classify",
+            data={"expected_actor": "1:7", "request_key": "manual-split-recovery"},
+            files={"file": ("原稿.xlsx", body)},
+        )
+        assert replay.status_code == 200, replay.text
+        for key in [
+            "version",
+            "sheets",
+            "confirmed",
+            "partition_pending",
+            "fragment_links",
+            "logical_documents",
+        ]:
+            assert replay.json()[key] == split[key]
+        assert replay.json()["independent_confirmed"] is False
     assert all(
         "original_range" not in region and "modified" not in region
         for region in split["sheets"][0]["regions"]
