@@ -43,8 +43,25 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let onAssistantPush: ((evt: Event) => void) | null = null
   let taskPaneViewportMedia: MediaQueryList | null = null
   let returningToChat = false
-  onDeactivated(() => { returningToChat = true; cleanupVoiceInput() })
+  let chatViewActive = true
+  const emitChatViewActive = (active: boolean) => {
+    chatViewActive = active
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:chat-view-active', { detail: { active } }))
+    } catch {
+      /* ignore */
+    }
+  }
+  onDeactivated(() => {
+    returningToChat = true
+    // Pause non-critical ChatView work while keep-alive caches this instance (nav jank 2B).
+    cleanupVoiceInput()
+    stopMessageTts()
+    stopTaskPaneResize()
+    emitChatViewActive(false)
+  })
   onActivated(() => {
+    emitChatViewActive(true)
     if (returningToChat) void syncSessionMessages().catch(() => {})
     returningToChat = false
   })
@@ -73,7 +90,9 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       }
     })()
     void syncSessionMessages().catch(() => {})
-    setTimeout(() => batchCalculateHeights(), 100)
+    setTimeout(() => {
+      if (chatViewActive) batchCalculateHeights()
+    }, 100)
 
     legacyAutoActionHandler =
       typeof (window as unknown as { handleAutoAction?: unknown }).handleAutoAction === 'function'

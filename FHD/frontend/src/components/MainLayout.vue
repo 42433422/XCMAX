@@ -1,7 +1,7 @@
 <template>
   <div class="main-container">
     <div class="sidebar-shell" :class="{ collapsed: sidebarCollapsed }" :style="sidebarShellStyle" @mouseenter="onSidebarMouseEnter">
-      <Sidebar :active-view="currentRouteName" @change-view="handleViewChange" />
+      <Sidebar :active-view="displayedActiveView" @change-view="handleViewChange" />
       <PaneResizeHandle
         v-if="isSidebarFeatureEnabled && !sidebarCollapsed"
         orientation="vertical"
@@ -52,6 +52,15 @@
           <GlobalTaskCenter />
         </div>
       </div>
+      <div
+        v-if="showRouteNavFeedback"
+        class="route-nav-feedback"
+        role="status"
+        aria-live="polite"
+        data-testid="route-nav-feedback"
+      >
+        页面加载中…
+      </div>
       <slot></slot>
     </div>
     <DocumentPreviewPictureInPicture />
@@ -82,7 +91,7 @@ import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS, MENU_DEFAULT_NAMES } from '@/utils/coreNavLabel'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
-import { isUnmatchedRoute } from '@/utils/routeLoadState'
+import { isUnmatchedRoute, routeChunkErrorPath } from '@/utils/routeLoadState'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
@@ -223,6 +232,34 @@ const currentRouteName = computed(() => {
   return normalizeSidebarActiveKey(raw, route)
 })
 
+/** Optimistic sidebar highlight: paint target immediately while router/chunk catches up. */
+const pendingSidebarView = ref('')
+const routeNavInFlight = ref(false)
+const showRouteNavFeedback = ref(false)
+let routeNavFeedbackTimer = 0
+const displayedActiveView = computed(() => pendingSidebarView.value || currentRouteName.value)
+
+function clearRouteNavFeedbackTimer() {
+  if (routeNavFeedbackTimer) {
+    globalThis.clearTimeout(routeNavFeedbackTimer)
+    routeNavFeedbackTimer = 0
+  }
+}
+
+function syncPendingSidebarWithRoute() {
+  if (!pendingSidebarView.value) return
+  if (pendingSidebarView.value === currentRouteName.value || routeChunkErrorPath.value) {
+    pendingSidebarView.value = ''
+    routeNavInFlight.value = false
+    showRouteNavFeedback.value = false
+    clearRouteNavFeedbackTimer()
+  }
+}
+
+watch(currentRouteName, () => {
+  syncPendingSidebarWithRoute()
+})
+
 /** 侧栏选中「智能对话」时隐藏悬浮入口（含 Mod 门面 /mod/.../chat） */
 const shouldShowFloatingChatAssistant = computed(() => !isChatSidebarActive(currentRouteName.value, route) && !documentPreviewPip.visible)
 
@@ -274,14 +311,36 @@ const currentViewTitle = computed(() => {
 })
 
 async function navigateToView(viewKey) {
-  await navigateFromSidebarKey(router, viewKey, {
-    modMenuItems: modMenuItems.value,
-    routeNameMap,
-    getModRoutes: () => modsStore.modRoutes,
-  })
+  const normalized = String(viewKey || '').trim()
+  if (!normalized) return
+  // Optimistic: highlight immediately so cold chunk / mod-route wait does not look like a dead click.
+  pendingSidebarView.value = normalized
+  routeNavInFlight.value = true
+  clearRouteNavFeedbackTimer()
+  showRouteNavFeedback.value = false
+  routeNavFeedbackTimer = globalThis.setTimeout(() => {
+    if (routeNavInFlight.value && pendingSidebarView.value) {
+      showRouteNavFeedback.value = true
+    }
+  }, 280)
+  try {
+    await navigateFromSidebarKey(router, normalized, {
+      modMenuItems: modMenuItems.value,
+      routeNameMap,
+      getModRoutes: () => modsStore.modRoutes,
+    })
+  } finally {
+    syncPendingSidebarWithRoute()
+    if (!pendingSidebarView.value) {
+      routeNavInFlight.value = false
+      showRouteNavFeedback.value = false
+      clearRouteNavFeedbackTimer()
+    }
+  }
 }
 
 const handleViewChange = (viewKey) => {
+  // Fire-and-forget: do not serialize UI behind a prior slow navigate promise.
   void navigateToView(viewKey)
 }
 
@@ -423,6 +482,7 @@ onBeforeUnmount(() => {
   stopSidebarResize()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
+  clearRouteNavFeedbackTimer()
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.removeEventListener(eventName, handleGlobalActivity)
   })
@@ -446,3 +506,15 @@ onBeforeUnmount(() => {
 <style scoped src="./main-layout/main-layout.css"></style>
 
 <style scoped src="./MainLayoutActions.css"></style>
+
+<style scoped>
+.route-nav-feedback {
+  margin: 0 16px 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(13, 71, 161, 0.08);
+  color: var(--app-text-muted, #475467);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.4;
+}
+</style>
