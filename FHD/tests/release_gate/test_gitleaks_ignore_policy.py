@@ -14,7 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 IGNORE = ROOT / ".gitleaksignore"
 INCIDENTS = ROOT / ".github" / "security" / "credential-incidents.json"
-FINGERPRINT = re.compile(r"(?P<commit>[0-9a-f]{40}):(?P<path>.+):(?P<rule>[a-z0-9-]+):(?P<line>[1-9][0-9]*)")
+FINGERPRINT = re.compile(
+    r"(?P<commit>[0-9a-f]{40}):(?P<path>.+):(?P<rule>[a-z0-9-]+):(?P<line>[1-9][0-9]*)"
+)
 
 
 def _exceptions() -> list[tuple[str, str]]:
@@ -24,7 +26,9 @@ def _exceptions() -> list[tuple[str, str]]:
         if not line or line.startswith("#"):
             continue
         match = FINGERPRINT.fullmatch(line)
-        assert match is not None, f".gitleaksignore:{number}: fingerprint must be commit:file:rule:line"
+        assert match is not None, (
+            f".gitleaksignore:{number}: fingerprint must be commit:file:rule:line"
+        )
         entries.append((line, match.group("path")))
     return entries
 
