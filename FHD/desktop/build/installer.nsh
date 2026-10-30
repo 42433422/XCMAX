@@ -22,7 +22,6 @@
 ; Prefer refuse-until-quit over killing the process or deleting locked user data
 ; (e.g. %APPDATA%\XCAGI\data\neuro_health_events.db). Never delete the DB.
 !macro customCheckAppRunning
-  StrCpy $R1 0
   xcagi_check_app_running:
     ${nsProcess::FindProcess} "${APP_EXECUTABLE_FILENAME}" $R0
     ${If} $R0 == 0
