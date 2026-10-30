@@ -127,6 +127,31 @@ jobs:
   guard-temp-scripts:
     runs-on: ubuntu-latest
     steps:
+      - name: Validate explicit CVM release inputs
+        if: github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true
+        working-directory: .
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RELEASE_CHANNEL: ${{ inputs.release_channel }}
+          CURRENT_SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
+          PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::release_sha must be an explicit full lowercase 40-character SHA for CVM upload."
+            exit 1
+          fi
+          case "$RELEASE_CHANNEL" in
+            staging) exit 0 ;;
+            stable) ;;
+            *) echo "::error::Invalid CVM release channel"; exit 1 ;;
+          esac
+          for name in CURRENT_SECURITY_SCAN_RUN_ID PREVIOUS_SECURITY_SCAN_RUN_ID; do
+            if [[ ! "${!name}" =~ ^[1-9][0-9]*$ ]]; then
+              echo "::error::${name} must be a positive numeric GitHub Actions run id for stable upload."
+              exit 1
+            fi
+          done
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.release_sha || github.sha }}
@@ -1124,21 +1149,6 @@ jobs:
         with:
           ref: ${{ inputs.release_sha || github.sha }}
           fetch-depth: 0
-
-      - name: Validate security scan run ids
-        if: ${{ inputs.release_channel == 'stable' }}
-        env:
-          CURRENT_SECURITY_SCAN_RUN_ID: ${{ inputs.security_scan_run_id }}
-          PREVIOUS_SECURITY_SCAN_RUN_ID: ${{ inputs.previous_security_scan_run_id }}
-        run: |
-          set -euo pipefail
-          for name in CURRENT_SECURITY_SCAN_RUN_ID PREVIOUS_SECURITY_SCAN_RUN_ID; do
-            value="${!name}"
-            if ! printf '%s' "${value}" | grep -Eq '^[0-9]+$'; then
-              echo "::error::${name} must be a numeric GitHub Actions run id; got '${value}'."
-              exit 1
-            fi
-          done
 
       - name: Download normalized security evidence for stable upload
         if: ${{ inputs.release_channel == 'stable' }}

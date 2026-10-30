@@ -45,6 +45,10 @@ def test_daily_workflow_uses_private_authenticated_prometheus_tunnel() -> None:
     assert "PRODUCTION_PROMETHEUS_TOKEN" in workflow
     assert "NO_PROXY: 127.0.0.1,localhost" in workflow
     assert "Close production Prometheus SSH tunnel" in workflow
+    assert "TCPKeepAlive=yes" in workflow
+    assert "query=vector(1)" in workflow
+    assert "/api/v1/query" in workflow
+    assert "always() && steps.slo_collect.outcome != 'success'" in workflow
     assert "seed" not in workflow.lower()
 
 
@@ -340,3 +344,95 @@ def test_metric_presence_cannot_replace_real_per_target_scrape_coverage(
     assert payload["day0_eligible"] is eligible
     if not eligible:
         assert payload["scrape_coverage"] < 0.99
+
+
+def test_connection_reset_is_retried_then_succeeds(tmp_path: Path, monkeypatch) -> None:
+    mod = _module()
+
+    class Resp:
+        def __init__(self, payload: bytes):
+            self._payload = payload
+
+        def read(self):
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    state = {"n": 0}
+
+    def fake_urlopen(req, timeout=30):
+        state["n"] += 1
+        if state["n"] < 3:
+            raise ConnectionResetError("simulated tunnel reset")
+        return Resp(b'{"status":"success","data":{"result":[{"value":[0,"5760"]}]}}')
+
+    monkeypatch.setattr(mod.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(mod.time, "sleep", lambda *_: None)
+    assert mod.prom_query("http://127.0.0.1:19091", "up", bearer_token="t") == "5760"
+    assert state["n"] == 3
+
+
+def test_main_exits_nonzero_when_source_unavailable(tmp_path: Path, monkeypatch, capsys) -> None:
+    mod = _module()
+    out = tmp_path / "fail.json"
+    monkeypatch.setattr(
+        mod.sys,
+        "argv",
+        [
+            "collect_slo_metrics.py",
+            "--prom-url",
+            "",
+            "--prom-token",
+            "",
+            "--window",
+            "1d",
+            "--mode",
+            "preflight",
+            "--raw-retention-days",
+            "0",
+            "--out",
+            str(out),
+        ],
+    )
+    code = mod.main()
+    assert code == 2
+    payload = json.loads(out.read_text())
+    assert payload["source_status"] == "source_unavailable"
+    assert payload["coverage"] == 0
+    assert payload["all_pass"] is False
+    assert mod.telemetry_admissible(payload) is False
+
+
+def test_empty_coverage_fails_preflight_gate(tmp_path: Path, monkeypatch) -> None:
+    mod = _module()
+    monkeypatch.setattr(mod, "prom_query", lambda *_a, **_k: None)
+    out = tmp_path / "empty.json"
+    monkeypatch.setattr(
+        mod.sys,
+        "argv",
+        [
+            "collect_slo_metrics.py",
+            "--prom-url",
+            "http://127.0.0.1:19091",
+            "--prom-token",
+            "tok",
+            "--window",
+            "1d",
+            "--mode",
+            "preflight",
+            "--raw-retention-days",
+            "120",
+            "--out",
+            str(out),
+        ],
+    )
+    code = mod.main()
+    assert code == 2
+    payload = json.loads(out.read_text())
+    assert payload["source_status"] == "available"
+    assert payload["coverage"] == 0
+    assert mod.telemetry_admissible(payload) is False

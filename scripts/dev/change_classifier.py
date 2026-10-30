@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -60,6 +61,11 @@ IRRELEVANT = {
             "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
     "frontend": {
         "prefixes": [
@@ -78,6 +84,11 @@ IRRELEVANT = {
             "FHD/scripts/package/",
         ],
         "suffixes": [".md"],
+        # 只放行经命名规则约束的只读历史快照；其他 metrics 文件仍触发完整测试。
+        "regexes": [
+            r"FHD/metrics/dora-[0-9]{8}\.json",
+            r"FHD/metrics/slo-production/[0-9]{8}T[0-9]{6}Z-[0-9]+-[0-9]+\.json",
+        ],
     },
 }
 # release-gate 与 backend 同域（都是 FHD 后端发布契约）。
@@ -173,8 +184,9 @@ CATEGORY_MODE = {
 
 def _changed_files(base: str, head: str) -> list[str]:
     """返回 base..head 间改动文件（仓库根相对路径）。取不到则返回 []。"""
+    # 保留重命名的旧路径删除，避免业务文件移入快照白名单后漏跑原所属检查。
     proc = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "diff", "--name-only", base, head],
+        ["git", "-C", str(REPO_ROOT), "diff", "--no-renames", "--name-only", base, head],
         capture_output=True,
         text=True,
         check=False,
@@ -190,6 +202,8 @@ def _matches(path: str, spec: dict) -> bool:
     if any(path.startswith(p) for p in spec.get("prefixes", ())):
         return True
     if any(path.endswith(s) for s in spec.get("suffixes", ())):
+        return True
+    if any(re.fullmatch(pattern, path) for pattern in spec.get("regexes", ())):
         return True
     return any(c in path for c in spec.get("contains", ()))
 
