@@ -6,7 +6,13 @@
         <p class="muted" style="margin:0;font-size:13px;">展示导出用 Excel 与 Word 模板：可按业务分组管理，也可选「自定义」自由新建任意模板；Word 若有「适用业务」或可从文件名推断则归入对应分组，否则在各分组中均显示。</p>
       </div>
 
-      <ReviewedExcelTemplate @saved="refreshTemplates" />
+      <section class="template-archive-panel" aria-label="原件归档分类与模板清理">
+        <header class="template-archive-panel__header">
+          <h3>原件归档 → 分类 → 模板</h3>
+          <p class="muted">三步向导与下方已保存模板列表分开排布；归档单文件 20&nbsp;MB / 整批 50&nbsp;MB，与数据对接导入上限不同。</p>
+        </header>
+        <ReviewedExcelTemplate @saved="refreshTemplates" />
+      </section>
 
       <div class="template-preview-toolbar" style="display:flex;gap:8px;align-items:center;margin:12px 0 16px;flex-wrap:wrap;">
         <button
@@ -92,3 +98,27 @@ const {
 </script>
 
 <style scoped src="./template-preview/template-preview.css"></style>
+<style scoped>
+.template-archive-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+  min-width: 0;
+}
+.template-archive-panel__header h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  color: #16355f;
+}
+.template-archive-panel__header p {
+  margin: 0 0 0.25rem;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.template-preview-toolbar {
+  position: relative;
+  z-index: 1;
+}
+</style>
