@@ -414,7 +414,8 @@ async function reconcileCheckpoint(item: Classification, current: () => boolean)
     const result = await templatePreviewApi.recentClassifications() as { files: RecentClassification[] }
     if (!current()) return
     const saved = result.files.find(entry => entry.classification_id === item.classification_id && !!item.sha256 && entry.sha256 === item.sha256 && entry.latest?.version === item.version)
-    if (saved?.checkpoint?.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(saved.checkpoint.phase)) item.checkpoint = saved.checkpoint
+    const checkpoint = saved?.checkpoint
+    if (checkpoint && checkpoint.version === item.version && ['ready', 'paused', 'failed', 'inflight'].includes(checkpoint.phase)) item.checkpoint = checkpoint
   } catch { /* Keep the unknown-outcome lock when the persisted state cannot be verified. */ }
 }
 async function analyzeClassifications(retryItem?: Classification, extendBudget = false) {
