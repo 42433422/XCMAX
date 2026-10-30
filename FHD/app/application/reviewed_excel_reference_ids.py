@@ -195,6 +195,16 @@ def neutralize_messages(messages: list[dict]) -> None:
     import json
 
     payload = json.loads(messages[1]["content"])
+    anchors = {
+        (sheet["sheet"], area.split(":", 1)[0]): area
+        for sheet in payload["sheets"]
+        for area in sheet["merged"]
+    }
+    for cell in payload["cells"]:
+        cell.pop("required_extent", None)
+        area = anchors.get((cell["sheet"], cell["cell"]))
+        if area:
+            cell["required_extent"] = area
     for key in ("rule_hints", "structure_map", "relationship_context", "labels"):
         payload.pop(key, None)
     for coverage in payload["batch_coverage"]:
@@ -384,7 +394,7 @@ def neutral_transport_batches(review: dict) -> list[list[dict]]:
     return result
 
 
-CONTRACT_VERSION = "independent-excel-v5-source-protocol"
+CONTRACT_VERSION = "independent-excel-v6-merge-closed"
 SOURCE_PROTOCOL = (
     "Identify physical fragments and group them into logical documents using only the supplied source cells and structure. "
     "Do not assume a document count or infer a business boundary from a transport batch or sheet boundary. "
@@ -398,6 +408,9 @@ SOURCE_PROTOCOL = (
     "A physical region must contain its own supplied non-context nonempty evidence; "
     "blank cells may be included, but blank layout, formatting or merge metadata alone cannot form a region. "
     "Any region intersecting a merged range must contain that entire merged range. "
+    "A cell's required_extent is its exact source merged rectangle, including blank subordinate cells: "
+    "the physical region containing that primary cell must contain the whole required_extent on that sheet. "
+    "This extent is indivisible source geometry, not a business boundary or a separate document. "
     "Use two-dimensional rectangles where needed, not just whole-row cuts; "
     "never cut a merge or borrow unread nonempty cells to complete a rectangle. "
     "context_only cells may be dependencies, never primary or classification evidence. "
@@ -505,7 +518,7 @@ def contract_hashes(schema: dict, phase: str) -> dict:
 
 _EXPECTED = {
     "identify": (
-        "d8d43e957f0856b5f3aa71fdaeff1156cbaeb52ac485af9ccd57b53b790bfd48",
+        "dc367beb7386ca10082be112dff5b50d32dce0968aa6a868be5e8c06841106f5",
         "bb4c8dca5c9e7fa2815e2066ea4ff82af17ef3cf1e9c4067bae8ff8a8021bc80",
     ),
     "group": (
@@ -513,7 +526,7 @@ _EXPECTED = {
         "f0f500cbbf7f3925cae7f6885e51a46c92cb4069a8ded998c2724fdc4ba5f379",
     ),
     "identify_drawing": (
-        "1fb743fe18dc55f5096467618dd5a0571c2832b70ffae8ee7714ae68d391c845",
+        "1c30723c74bd33de1608a802b67c735093f80f4192ab6d7c262de725c9c317a6",
         "15de0f5d41027cf4d1e6034fad68e704e3377763a0e91e37c3dda8509314209b",
     ),
     "group_drawing": (

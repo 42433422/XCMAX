@@ -5,7 +5,7 @@ from collections import deque
 
 from app.application.etl.errors import ReviewedExcelError
 
-BUDGET_VERSION = "full-request-plan-v5-source-protocol"
+BUDGET_VERSION = "full-request-plan-v6-merge-closed"
 MAX_REQUEST_BYTES = 96_000
 MAX_OUTPUT_TOKENS = 16_000
 MAX_CLASSIFICATION_BATCHES = 99  # Reserve one of the 100 audit slots for grouping.
@@ -31,9 +31,70 @@ def validate_request_budget(request: dict) -> None:
         raise RequestBudgetExceeded("完整模型请求超过安全预算，未调用模型")
 
 
-def fit_transport_batches(review: dict, batches: list[list[dict]]) -> list[list[dict]]:
-    """Repack neutral source rows; old cell-only chunk boundaries carry no meaning."""
+def _closed_axis_groups(cells: list[dict], merges: list[tuple], axis: int) -> list[list[dict]]:
+    """Group source coordinates between cuts that cannot bisect a merged rectangle."""
+    from openpyxl.utils.cell import column_index_from_string, coordinate_from_string
+
+    intervals: list[list[int]] = []
+    for first, last in sorted((area[axis], area[axis + 2]) for area in merges):
+        if intervals and first <= intervals[-1][1]:
+            intervals[-1][1] = max(intervals[-1][1], last)
+        else:
+            intervals.append([first, last])
+    grouped: dict[int, list[dict]] = {}
+    for cell in cells:
+        col, row = coordinate_from_string(cell["cell"])
+        coordinate = row if axis else column_index_from_string(col)
+        start = next(
+            (first for first, last in intervals if first <= coordinate <= last), coordinate
+        )
+        grouped.setdefault(start, []).append(cell)
+    return [grouped[start] for start in sorted(grouped)]
+
+
+def _split_closed_band(cells: list[dict], merges: list[tuple], prepare) -> list[list[dict]]:
+    """Only source-safe column cuts may split an over-budget merge-closed row band."""
     from openpyxl.utils.cell import coordinate_from_string
+
+    first = min(coordinate_from_string(cell["cell"])[1] for cell in cells)
+    last = max(coordinate_from_string(cell["cell"])[1] for cell in cells)
+    # Include the complete connected row span, even where merged subordinate cells are blank.
+    relevant = [area for area in merges if area[1] <= last and first <= area[3]]
+    while relevant:
+        bounds = (
+            min(first, *(area[1] for area in relevant)),
+            max(last, *(area[3] for area in relevant)),
+        )
+        if bounds == (first, last):
+            break
+        first, last = bounds
+        relevant = [area for area in merges if area[1] <= last and first <= area[3]]
+    groups = _closed_axis_groups(cells, relevant, 0)
+    result = []
+    offset = 0
+    while offset < len(groups):
+        low, high, best = 1, len(groups) - offset, 0
+        while low <= high:
+            amount = (low + high) // 2
+            chosen = [cell for group in groups[offset : offset + amount] for cell in group]
+            try:
+                prepare(chosen)
+            except RequestBudgetExceeded:
+                high = amount - 1
+            else:
+                best, low = amount, amount + 1
+        if not best:
+            raise RequestBudgetExceeded("单行或合并闭包无安全二维分割且超过请求预算，未调用模型")
+        chosen = [cell for group in groups[offset : offset + best] for cell in group]
+        prepare(chosen)
+        result.append(chosen)
+        offset += best
+    return result
+
+
+def fit_transport_batches(review: dict, batches: list[list[dict]]) -> list[list[dict]]:
+    """Pack merge-closed source bands; transport boundaries carry no business meaning."""
+    from openpyxl.utils.cell import coordinate_from_string, range_boundaries
 
     from app.application.reviewed_excel_classification import _classify_semantic_batch
     from app.application.reviewed_excel_evidence import (
@@ -77,8 +138,14 @@ def fit_transport_batches(review: dict, batches: list[list[dict]]) -> list[list[
         count = 0
         for sheet in review["sheets"]:
             rows = by_sheet.get(sheet, {})
-            groups = [rows[row] for row in sorted(rows)]
-            source = [cell for group in groups for cell in group]
+            source = [cell for row in sorted(rows) for cell in rows[row]]
+            merges = [
+                range_boundaries(area)
+                for overview in review.get("sheet_overview", [])
+                if overview["sheet"] == sheet
+                for area in overview.get("merged_regions", [])
+            ]
+            groups = _closed_axis_groups(source, merges, 1)
             context = source[:5] + source[-5:]
             queue: deque[list[dict]] = deque()
             offset = 0
@@ -110,9 +177,13 @@ def fit_transport_batches(review: dict, batches: list[list[dict]]) -> list[list[
                     try:
                         prepare(chosen)
                     except RequestBudgetExceeded:
-                        raise RequestBudgetExceeded(
-                            "单行完整模型请求超过安全预算，未调用模型"
-                        ) from None
+                        pieces = _split_closed_band(chosen, merges, prepare)
+                        queue.extend(pieces)
+                        offset += 1
+                        count += len(pieces)
+                        if count > MAX_CLASSIFICATION_BATCHES:
+                            raise RequestBudgetExceeded("完整分析计划超过99批审计预算，未调用模型")
+                        continue
                     best = 1
                 else:
                     chosen = candidate(best)

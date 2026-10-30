@@ -301,3 +301,139 @@ def test_optional_large_context_never_excludes_valid_primary_rows():
             reference_ids=True,
         )
         assert request_bytes(request) <= MAX_REQUEST_BYTES
+
+
+def test_merge_closed_band_uses_safe_column_cuts_without_rewriting_source(monkeypatch):
+    from openpyxl.utils.cell import (
+        column_index_from_string,
+        coordinate_from_string,
+        range_boundaries,
+    )
+
+    from app.application import reviewed_excel_classification as classification
+
+    book = Workbook()
+    sheet = book.active
+    for row in (1, 2):
+        for col in range(1, 5):
+            sheet.cell(row, col, "source")
+    sheet.merge_cells("A1:A2")
+    sheet.merge_cells("D1:D2")
+    output = BytesIO()
+    book.save(output)
+    review = inspect_workbook(output.getvalue())
+    original = deepcopy(review)
+    real_prepare = classification._classify_semantic_batch
+
+    def bounded_prepare(current, **kwargs):
+        assert kwargs == {"prepare_only": True, "reference_ids": True}
+        if len(current["cells"]) > 3:
+            raise RequestBudgetExceeded("synthetic transport limit")
+        return real_prepare(current, **kwargs)
+
+    monkeypatch.setattr(classification, "_classify_semantic_batch", bounded_prepare)
+    batches = fit_transport_batches(review, [review["cells"]])
+    assert len(batches) == 2
+    assert review == original
+    found = [cell["cell"] for batch in batches for cell in batch]
+    assert len(found) == len(set(found)) == len(review["cells"])
+    for batch in batches:
+        coords = [coordinate_from_string(cell["cell"]) for cell in batch]
+        left, right = (
+            min(column_index_from_string(c) for c, _ in coords),
+            max(column_index_from_string(c) for c, _ in coords),
+        )
+        # Both rows are supplied in each horizontal subset; no vertical merge is split.
+        assert {row for _, row in coords} == {1, 2}
+        for area in ("A1:A2", "D1:D2"):
+            c1, _, c2, _ = range_boundaries(area)
+            assert not (left <= c2 and c1 <= right) or left <= c1 <= c2 <= right
+        prepared = real_prepare(
+            {**review, "cells": batch, "full_cells": review["cells"]},
+            prepare_only=True,
+            reference_ids=True,
+        )
+        payload = json.loads(prepared["messages"][1]["content"])
+        for cell in payload["cells"]:
+            if cell["cell"] in {"A1", "D1"}:
+                assert cell["required_extent"] == f"{cell['cell']}:{cell['cell'][0]}2"
+            else:
+                assert "required_extent" not in cell
+
+
+def test_indivisible_merge_closure_rejects_before_provider(monkeypatch):
+    from app.application import reviewed_excel_classification as classification
+
+    book = Workbook()
+    sheet = book.active
+    # Nonoverlapping source merges form a pinwheel with no safe row or column cut.
+    for area in ("A1:C1", "D1:D3", "B4:D4", "A2:A4", "B2:C3"):
+        sheet[area.split(":")[0]] = "source"
+        sheet.merge_cells(area)
+    output = BytesIO()
+    book.save(output)
+    review = inspect_workbook(output.getvalue())
+
+    def reject(current, **kwargs):
+        assert kwargs == {"prepare_only": True, "reference_ids": True}
+        if len(current["cells"]) > 1:
+            raise RequestBudgetExceeded("synthetic transport limit")
+        pytest.fail("an indivisible source block must not be split")
+
+    monkeypatch.setattr(classification, "_classify_semantic_batch", reject)
+    monkeypatch.setattr(
+        "app.application.reviewed_excel_template._template_mimo_complete",
+        lambda *a: pytest.fail("must not call provider"),
+    )
+    with pytest.raises(RequestBudgetExceeded, match="合并闭包无安全二维分割"):
+        fit_transport_batches(review, [review["cells"]])
+
+
+@pytest.mark.parametrize("reference_ids", [False, True])
+def test_required_extent_is_source_derived_not_a_business_region(reference_ids, monkeypatch):
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "O'Brien ! 表"
+    sheet["A1"] = "source"
+    sheet.merge_cells("A1:B2")
+    sheet["D1"] = "separate source"
+    output = BytesIO()
+    book.save(output)
+    review = inspect_workbook(output.getvalue())
+    review["cells"][0]["required_extent"] = "A1:Z99"
+    review["cells"][1]["required_extent"] = "D1:Z99"
+    original = deepcopy(review)
+    request = _classify_semantic_batch(review, prepare_only=True, reference_ids=reference_ids)
+    cells = json.loads(request["messages"][1]["content"])["cells"]
+    assert cells[0]["required_extent"] == "A1:B2"
+    assert "required_extent" not in cells[1]
+    assert [c["cell"] for c in cells] == ["A1", "D1"]  # Blank subordinate cells are not evidence.
+    assert "not a business boundary or a separate document" in request["messages"][0]["content"]
+    assert review == original
+
+    if reference_ids:
+        from app.application.etl.llm_assist_runtime import LlmAssistResult
+
+        raw = {
+            "physical_regions": [
+                {
+                    "sheet": sheet.title,
+                    "range": "A1:B1",
+                    "primary_id": "S1:A1",
+                    "evidence_ids": ["S1:A1"],
+                    "dependency_ids": [],
+                    "reason": "source",
+                }
+            ],
+            "logical_documents": [],
+            "layout_references": [],
+        }
+        untouched = deepcopy(raw)
+        monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+        monkeypatch.setattr(
+            "app.application.reviewed_excel_template._template_mimo_complete",
+            lambda *args: LlmAssistResult(used_llm=True, data=raw),
+        )
+        with pytest.raises(ReviewedExcelError, match="切断合并"):
+            _classify_semantic_batch(review, reference_ids=True)
+        assert raw == untouched  # The source extent never repairs the model's returned range.
