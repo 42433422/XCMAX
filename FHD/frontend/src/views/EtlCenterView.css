@@ -12,12 +12,21 @@
 .etl-hero {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
   gap: 24px;
   padding: 28px 30px;
   color: #fff;
   border-radius: 18px;
   background: linear-gradient(135deg, #16355f, #235d8c 58%, #168294);
   box-shadow: 0 16px 40px rgb(22 53 95 / 16%);
+  overflow: hidden;
+  min-width: 0;
+}
+.etl-hero > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .etl-eyebrow {
   font-size: 12px;
@@ -32,6 +41,8 @@
   margin: 0;
   max-width: 680px;
   opacity: 0.84;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .etl-hero__limits {
   display: flex;
@@ -40,6 +51,8 @@
   align-content: flex-start;
   gap: 8px;
   max-width: 340px;
+  flex: 0 1 340px;
+  min-width: 0;
 }
 .etl-hero__limits span {
   padding: 7px 10px;
@@ -47,6 +60,54 @@
   border-radius: 999px;
   background: rgb(255 255 255 / 10%);
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.etl-template-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 0;
+  padding: 16px 18px;
+  border: 1px solid #d5deea;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgb(31 51 79 / 6%);
+  min-width: 0;
+}
+.etl-template-entry__copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.etl-template-entry__copy strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #16355f;
+  font-size: 15px;
+}
+.etl-template-entry__copy p {
+  margin: 0;
+  color: #5f6f7e;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.etl-template-entry__cta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #235d8c;
+  color: #fff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.etl-template-entry__cta:hover {
+  background: #1b4c73;
 }
 .etl-tabs {
   position: sticky;
@@ -800,6 +861,13 @@ button:disabled {
   }
   .etl-hero__limits {
     justify-content: flex-start;
+  }
+  .etl-template-entry {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .etl-template-entry__cta {
+    width: 100%;
   }
   .etl-upload-grid,
   .etl-webhook-form {

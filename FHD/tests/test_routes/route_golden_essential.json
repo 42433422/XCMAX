@@ -467,6 +467,7 @@
   "/api/voice/command",
   "/api/voice/health",
   "/api/voice/transcribe",
+  "/api/voice/warm",
   "/api/workspace/prefs",
   "/api/xcmax/admin/action-items",
   "/api/xcmax/admin/action-items/stats",

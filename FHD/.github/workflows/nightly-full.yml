@@ -31,6 +31,7 @@ concurrency:
 jobs:
   dispatch-nightly:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - name: Resolve latest main SHA
@@ -47,32 +48,9 @@ jobs:
           echo "sha=${sha}" >> "$GITHUB_OUTPUT"
           echo "Nightly 目标：${ref} @ ${sha}"
 
-      - name: Fan out heavy suites on latest main
+      - name: Fan out and aggregate heavy suites on latest main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ steps.target.outputs.ref }}
           RELEASE_SHA: ${{ steps.target.outputs.sha }}
-        run: |
-          set -uo pipefail
-          failed=""
-          for wf in \
-            fhd-release-gate-ci.yml \
-            fhd-mutation-smoke.yml \
-            codeql.yml \
-            fhd-security-full-scan.yml \
-            fhd-alembic-ssot.yml \
-            desktop-macos-smoke.yml \
-            fhd-ci-mobile-flutter.yml \
-          ; do
-            echo "==> dispatch ${wf} @ ${REF}"
-            if [ "${wf}" = "fhd-security-full-scan.yml" ]; then
-              gh workflow run "${wf}" --ref "${REF}" -f "release_sha=${RELEASE_SHA}" || failed="${failed} ${wf}"
-            elif ! gh workflow run "${wf}" --ref "${REF}"; then
-              failed="${failed} ${wf}"
-            fi
-          done
-          if [ -n "${failed}" ]; then
-            echo "::error::Nightly 派发失败:${failed}"
-            exit 1
-          fi
-          echo "✅ Nightly 已派发 ${REF}：各套件结果见对应 workflow 运行。"
+        run: bash FHD/scripts/ci/aggregate_nightly_results.sh

@@ -43,19 +43,43 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
   let onAssistantPush: ((evt: Event) => void) | null = null
   let taskPaneViewportMedia: MediaQueryList | null = null
   let returningToChat = false
-  onDeactivated(() => { returningToChat = true; cleanupVoiceInput() })
+  let chatViewActive = true
+  const emitChatViewActive = (active: boolean) => {
+    chatViewActive = active
+    try {
+      window.dispatchEvent(new CustomEvent('xcagi:chat-view-active', { detail: { active } }))
+    } catch {
+      /* ignore */
+    }
+  }
+  onDeactivated(() => {
+    returningToChat = true
+    // Pause non-critical ChatView work while keep-alive caches this instance (nav jank 2B).
+    cleanupVoiceInput()
+    stopMessageTts()
+    stopTaskPaneResize()
+    emitChatViewActive(false)
+  })
   onActivated(() => {
+    emitChatViewActive(true)
     if (returningToChat) void syncSessionMessages().catch(() => {})
     returningToChat = false
   })
 
+  /**
+   * Legacy WeChat star-refresh persist — retained for workflow settings callers only.
+   * Chat toolbar「主动意识」must NOT call this (isolates xcagi_auto_refresh_starred_wechat).
+   */
   const persistAutoRefreshWechatSetting = () => {
     const enabled = !!autoRefreshStarredWechat.value
     localStorage.setItem(AUTO_REFRESH_STARRED_WECHAT_KEY, enabled ? '1' : '0')
     window.dispatchEvent(new CustomEvent('xcagi:auto-refresh-wechat-changed', { detail: { enabled } }))
   }
 
+  /** @deprecated Chat toolbar no longer toggles WeChat polling. Prefer workflow settings. */
   const onAutoRefreshToolbarChange = (enabled: boolean) => {
+    // Intentionally do not write STAR_REFRESH from the chat proactive checkbox path.
+    // Keep function for unit tests / old callers that still import the name.
     autoRefreshStarredWechat.value = enabled
     persistAutoRefreshWechatSetting()
   }
@@ -73,7 +97,9 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
       }
     })()
     void syncSessionMessages().catch(() => {})
-    setTimeout(() => batchCalculateHeights(), 100)
+    setTimeout(() => {
+      if (chatViewActive) batchCalculateHeights()
+    }, 100)
 
     legacyAutoActionHandler =
       typeof (window as unknown as { handleAutoAction?: unknown }).handleAutoAction === 'function'

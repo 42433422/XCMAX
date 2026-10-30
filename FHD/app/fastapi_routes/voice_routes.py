@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -46,9 +47,15 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB；等同于 OpenAI Whisper 官方�
 
 # 懒加载：第一次调用才把 faster-whisper 模型加载进内存，避免服务冷启动时白耗几百 MB
 _model_holder: dict[str, Any] = {"instance": None, "signature": None}
+_model_lock = threading.Lock()
 
 
 def _get_model():
+    with _model_lock:
+        return _load_model()
+
+
+def _load_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
         from faster_whisper import WhisperModel
@@ -119,7 +126,12 @@ def _save_upload_to_tempfile(upload: UploadFile, raw: bytes) -> Path:
     return Path(tmp.name)
 
 
+def _model_is_loaded() -> bool:
+    return _model_holder.get("instance") is not None
+
+
 def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
+    cold_start = not _model_is_loaded()
     model = _get_model()
 
     beam = max(1, int(_env("XCAGI_CHAT_ASR_BEAM", "1")))
@@ -145,6 +157,8 @@ def _run_transcribe(path: Path, language: str | None) -> dict[str, Any]:
         "text": text,
         "language": getattr(info, "language", lang) or "",
         "audio_seconds": float(getattr(info, "duration", 0.0) or 0.0),
+        "cold_start": cold_start,
+        "model_loaded": True,
     }
 
 
@@ -202,6 +216,45 @@ async def voice_health():
             "reason": reason,
             "model": _resolve_model_name(),
             "device_hint": _resolve_device(),
+            "model_loaded": _model_is_loaded(),
+        },
+    }
+
+
+@router.post("/warm")
+def voice_warm():
+    """Best-effort model warm so the first push-to-talk is not a 6–7s cold load.
+
+    Safe: only loads into memory; does not delete data or change config.
+    Disabled when XCAGI_CHAT_ASR_WARM=0.
+    """
+    if (_env("XCAGI_CHAT_ASR_WARM", "1") or "1").strip().lower() in {"0", "false", "off", "no"}:
+        return {
+            "success": True,
+            "data": {
+                "warmed": False,
+                "skipped": True,
+                "model_loaded": _model_is_loaded(),
+            },
+        }
+    already = _model_is_loaded()
+    if already:
+        return {
+            "success": True,
+            "data": {"warmed": True, "skipped": True, "model_loaded": True, "cold_start": False},
+        }
+    t0 = time.monotonic()
+    _get_model()
+    elapsed_ms = int((time.monotonic() - t0) * 1000)
+    logger.info("voice model warm completed in %sms", elapsed_ms)
+    return {
+        "success": True,
+        "data": {
+            "warmed": True,
+            "skipped": False,
+            "model_loaded": True,
+            "cold_start": True,
+            "elapsed_ms": elapsed_ms,
         },
     }
 
