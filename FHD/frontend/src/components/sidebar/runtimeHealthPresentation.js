@@ -4,7 +4,12 @@ export function runtimeHealthPresentation(data, connection = 'ready') {
     return { tone: 'pending', text: '正在检查服务', detail: '正在确认业务服务与 AI 能力是否就绪。' }
   }
   if (connection === 'offline') {
-    return { tone: 'offline', text: '服务连接中断', detail: '暂时无法连接业务服务。打开设置检查连接，恢复后会自动重新检查。' }
+    // Soft copy: health probe failed — do not claim total product outage (voice/API may still work).
+    return {
+      tone: 'offline',
+      text: '健康检查未响应',
+      detail: '最近一次服务健康检查未成功。这不等于全部功能不可用；若语音或其它接口仍可用，请稍后自动重试或打开设置检查连接。',
+    }
   }
   const status = String(data?.status || '').toLowerCase()
   const runtime = data?.runtime || {}

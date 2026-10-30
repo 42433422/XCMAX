@@ -94,6 +94,27 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     if (!document.hidden) void refreshHealthAppVersion({ respectBackoff: true })
   }
 
+  /** Clear false offline after any successful API (e.g. voice transcribe) without waiting for /api/health. */
+  function markApiReachable(source = 'api') {
+    if (stopped) return
+    if (connection.value === 'offline' || connection.value === 'checking') {
+      connection.value = 'ready'
+      if (!healthData.value) {
+        healthData.value = { status: 'healthy', runtime: { status: 'healthy' }, _from: source }
+      }
+      failureCount = 0
+      nextRetryAt = 0
+      lastCheckedAt.value = Date.now()
+    }
+  }
+
+  function onApiReachableEvent(evt) {
+    const source = String(evt?.detail?.source || 'api')
+    markApiReachable(source)
+    // Soft refresh health in background to resync version/degraded reasons.
+    void refreshHealthAppVersion({ respectBackoff: false })
+  }
+
   function startHealthPolling() {
     stopped = false
     if (pollTimer !== null) return
@@ -103,6 +124,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     pollTimer = setInterval(refreshWhenVisible, 30_000)
     document.addEventListener('visibilitychange', refreshWhenVisible)
     window.addEventListener('online', refreshWhenVisible)
+    window.addEventListener('xcagi:api-reachable', onApiReachableEvent)
   }
 
   function stopHealthPolling() {
@@ -117,6 +139,7 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     requestTimeout = null
     document.removeEventListener('visibilitychange', refreshWhenVisible)
     window.removeEventListener('online', refreshWhenVisible)
+    window.removeEventListener('xcagi:api-reachable', onApiReachableEvent)
   }
 
   return {
@@ -127,5 +150,6 @@ export function useSidebarAppVersion({ shouldShowAdminDeployStatus }) {
     runtimeHealthCheck,
     startHealthPolling,
     stopHealthPolling,
+    markApiReachable,
   }
 }
