@@ -7,9 +7,9 @@
     </div>
     <div class="etl-hero__limits">
       <span>支持整文件夹</span>
-      <span>单文件 {{ formatEtlBytes(maxFileBytes) }}</span>
+      <span title="数据对接导入流水线（上传→映射→核对写入）">导入单文件 {{ formatEtlBytes(maxFileBytes) }}</span>
       <span>最多 10 万行</span>
-      <span>模板仅自己可见</span>
+      <span title="模板归档→分类流水线另计：单文件 20MB / 整批 50MB">模板归档见模板库</span>
     </div>
   </header>
 
@@ -18,7 +18,16 @@
     <button type="button" @click="bootstrap">重试</button>
   </div>
 
-  <ReviewedExcelTemplate />
+  <aside class="etl-template-entry" aria-label="原件归档与模板入口">
+    <div class="etl-template-entry__copy">
+      <strong>原件归档 → 分类 → 模板</strong>
+      <p>
+        归档、分类与清理 Excel 模板在「模板库 / 模板预览」完成，避免与下方上传→映射→核对写入→历史流程叠在同一页。
+        本页导入流水线单文件上限见上方横幅；模板归档另有「单文件 20&nbsp;MB / 整批 50&nbsp;MB」限制。
+      </p>
+    </div>
+    <RouterLink class="etl-template-entry__cta" to="/template-preview">打开模板库</RouterLink>
+  </aside>
 
   <nav class="etl-tabs" aria-label="数据对接工作区">
     <button v-for="item in tabs" :key="item.id" type="button" :class="{ active: activeTab === item.id }" @click="activeTab = item.id">
