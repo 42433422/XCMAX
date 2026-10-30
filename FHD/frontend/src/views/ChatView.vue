@@ -97,20 +97,50 @@
         @delete-session="deleteSession"
       />
     </div>
-    <div class="input-area" data-tour="chat-input-area">
+    <div
+      class="input-area"
+      data-tour="chat-input-area"
+      :class="{ 'input-area--dragover': composerDragOver }"
+      @dragenter.prevent="onComposerDragEnter"
+      @dragover.prevent="onComposerDragOver"
+      @dragleave.prevent="onComposerDragLeave"
+      @drop.prevent="onComposerDrop"
+    >
+      <div v-if="composerDragOver" class="composer-drop-overlay" role="status">松开以上传附件</div>
       <ChatInputToolbar
         :excel-analyze-uploading="excelAnalyzeUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :auto-refresh-starred-wechat="autoRefreshStarredWechat"
+        :proactive-suggestions-enabled="proactiveEnabled"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
-        @auto-refresh-change="onAutoRefreshToolbarChange"
+        @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
+      <div
+        v-if="proactiveEnabled && (proactiveLoading || proactiveSuggestions.length)"
+        class="proactive-suggestions"
+        data-testid="proactive-suggestions"
+      >
+        <div class="proactive-suggestions__hint">
+          {{ proactiveLoading ? '正在生成下一步建议…' : '选择一条建议填入输入框（不会自动发送）' }}
+        </div>
+        <div class="proactive-suggestions__chips">
+          <button
+            v-for="item in proactiveSuggestions"
+            :key="item.id"
+            type="button"
+            class="proactive-suggestions__chip"
+            :title="item.text"
+            @click="pickProactiveSuggestion(item)"
+          >
+            {{ item.text }}
+          </button>
+        </div>
+      </div>
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
@@ -235,6 +265,7 @@ import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
+import { useProactiveReplySuggestions, PROACTIVE_SUGGESTIONS_STORAGE_KEY } from '@/composables/useProactiveReplySuggestions'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { useChatViewHost } from '@/composables/useChatViewHost'
@@ -261,8 +292,15 @@ const taskCenterStore = useAgentTaskCenterStore()
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-// 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
-const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
+// Chat toolbar「主动意识」uses proactive suggestions storage — NOT starred WeChat polling.
+// Keep WeChat star-refresh forced off here so old checkbox events cannot misfire workflow polls.
+const autoRefreshStarredWechat = ref(false)
+try {
+  // Do not migrate old WeChat key into proactive; start from proactive key only.
+  void PROACTIVE_SUGGESTIONS_STORAGE_KEY
+} catch {
+  /* ignore */
+}
 const isTaskPaneResizable = ref(true)
 function generateSessionId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -378,6 +416,60 @@ const { approveTaskWithFeedback, approveRunFromChat } = useTaskApprovalFeedback(
 })
 
 const messageInput = ref('')
+const composerDragOver = ref(false)
+let composerDragDepth = 0
+
+const COMPOSER_ACCEPT_RE = /\.(xlsx|xlsm|pdf)$/i
+const COMPOSER_ACCEPT_MIME = /^(image\/(jpeg|png|webp|gif)|application\/pdf)/i
+
+function filesFromDataTransfer(dt: DataTransfer | null): File[] {
+  if (!dt?.files?.length) return []
+  return Array.from(dt.files)
+}
+
+function isComposerAcceptedFile(file: File): boolean {
+  return COMPOSER_ACCEPT_RE.test(file.name) || COMPOSER_ACCEPT_MIME.test(file.type || '')
+}
+
+function onComposerDragEnter(e: DragEvent) {
+  if (!e.dataTransfer?.types?.includes('Files')) return
+  composerDragDepth += 1
+  composerDragOver.value = true
+}
+
+function onComposerDragOver(e: DragEvent) {
+  if (!e.dataTransfer) return
+  e.dataTransfer.dropEffect = 'copy'
+  composerDragOver.value = true
+}
+
+function onComposerDragLeave() {
+  composerDragDepth = Math.max(0, composerDragDepth - 1)
+  if (composerDragDepth === 0) composerDragOver.value = false
+}
+
+async function onComposerDrop(e: DragEvent) {
+  composerDragDepth = 0
+  composerDragOver.value = false
+  const files = filesFromDataTransfer(e.dataTransfer)
+  if (!files.length) return
+  const accepted = files.filter(isComposerAcceptedFile)
+  const rejected = files.length - accepted.length
+  if (!accepted.length) {
+    await addAndSaveMessage('[附件] 不支持的文件类型，请拖入 Excel、图片或 PDF', 'ai')
+    return
+  }
+  if (rejected > 0) {
+    await addAndSaveMessage(`[附件] 已忽略 ${rejected} 个不支持的文件`, 'ai')
+  }
+  // Reuse the same picker pipeline (xlsx → excel analyze; images/pdf → onMultimodalFileChange).
+  const dt = new DataTransfer()
+  for (const f of accepted) dt.items.add(f)
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.files = dt.files
+  await onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+}
 
 const {
   voiceButtonDisabled,
@@ -484,7 +576,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const { onAutoRefreshToolbarChange } = useChatViewHost({
+const { onAutoRefreshToolbarChange: _legacyWechatToolbarChange } = useChatViewHost({
   modsStore,
   modsFromStore,
   autoRefreshStarredWechat,
@@ -499,6 +591,22 @@ const { onAutoRefreshToolbarChange } = useChatViewHost({
   cleanupVoiceInput,
   stopTaskPaneResize,
 })
+void _legacyWechatToolbarChange
+
+const {
+  proactiveEnabled,
+  proactiveSuggestions,
+  proactiveLoading,
+  persistProactiveEnabled,
+  pickProactiveSuggestion,
+} = useProactiveReplySuggestions({
+  messages: messages as any,
+  messageInput,
+})
+
+function onProactiveSuggestionsChange(enabled: boolean) {
+  persistProactiveEnabled(enabled)
+}
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))
@@ -520,5 +628,56 @@ function emitSwitchView(view: string) {
 
 .chat-composer-status--error {
   color: #b42318;
+}
+
+.input-area {
+  position: relative;
+}
+.input-area--dragover {
+  outline: 2px dashed var(--xc-color-primary, #0d47a1);
+  outline-offset: -2px;
+  background: rgba(13, 71, 161, 0.04);
+}
+.composer-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: var(--app-font-size-caption, 13px);
+  font-weight: 600;
+}
+.proactive-suggestions {
+  padding: 6px 2px 8px;
+}
+.proactive-suggestions__hint {
+  color: var(--app-text-muted, #667085);
+  font-size: var(--app-font-size-caption, 12px);
+  margin-bottom: 6px;
+}
+.proactive-suggestions__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.proactive-suggestions__chip {
+  max-width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border, #d0d5dd);
+  background: var(--app-surface, #fff);
+  color: var(--app-text, #1d2939);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.proactive-suggestions__chip:hover {
+  border-color: var(--xc-color-primary, #0d47a1);
+  color: var(--xc-color-primary, #0d47a1);
 }
 </style>

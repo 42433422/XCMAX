@@ -49,13 +49,20 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     returningToChat = false
   })
 
+  /**
+   * Legacy WeChat star-refresh persist — retained for workflow settings callers only.
+   * Chat toolbar「主动意识」must NOT call this (isolates xcagi_auto_refresh_starred_wechat).
+   */
   const persistAutoRefreshWechatSetting = () => {
     const enabled = !!autoRefreshStarredWechat.value
     localStorage.setItem(AUTO_REFRESH_STARRED_WECHAT_KEY, enabled ? '1' : '0')
     window.dispatchEvent(new CustomEvent('xcagi:auto-refresh-wechat-changed', { detail: { enabled } }))
   }
 
+  /** @deprecated Chat toolbar no longer toggles WeChat polling. Prefer workflow settings. */
   const onAutoRefreshToolbarChange = (enabled: boolean) => {
+    // Intentionally do not write STAR_REFRESH from the chat proactive checkbox path.
+    // Keep function for unit tests / old callers that still import the name.
     autoRefreshStarredWechat.value = enabled
     persistAutoRefreshWechatSetting()
   }
