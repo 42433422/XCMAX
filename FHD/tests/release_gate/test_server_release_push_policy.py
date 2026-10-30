@@ -311,6 +311,62 @@ def test_ci_requires_explicit_manual_opt_in_for_image_archive() -> None:
         assert "startsWith(github.ref, 'refs/tags/FHD/v')" not in cvm_job
 
 
+@pytest.mark.parametrize(
+    "overrides,valid",
+    [
+        ({}, True),
+        ({"RELEASE_SHA": ""}, False),
+        ({"RELEASE_SHA": "main"}, False),
+        ({"RELEASE_SHA": "A" * 40}, False),
+        ({"RELEASE_SHA": "a" * 39}, False),
+        ({"CURRENT_SECURITY_SCAN_RUN_ID": ""}, False),
+        ({"PREVIOUS_SECURITY_SCAN_RUN_ID": ""}, False),
+        ({"CURRENT_SECURITY_SCAN_RUN_ID": "0"}, False),
+        ({"PREVIOUS_SECURITY_SCAN_RUN_ID": "-1"}, False),
+        ({"CURRENT_SECURITY_SCAN_RUN_ID": "123; exit 0"}, False),
+        ({"RELEASE_CHANNEL": ""}, False),
+        ({"RELEASE_CHANNEL": "preview"}, False),
+        (
+            {
+                "RELEASE_CHANNEL": "staging",
+                "CURRENT_SECURITY_SCAN_RUN_ID": "",
+                "PREVIOUS_SECURITY_SCAN_RUN_ID": "",
+            },
+            True,
+        ),
+        ({"RELEASE_CHANNEL": "staging", "RELEASE_SHA": ""}, False),
+    ],
+)
+def test_cvm_inputs_fail_before_checkout_and_expensive_jobs(tmp_path, overrides, valid):
+    for path in (
+        FHD_ROOT / ".github/workflows/ci-cd.yml",
+        REPO_ROOT / ".github/workflows/fhd-ci-cd.yml",
+    ):
+        jobs = yaml.safe_load(path.read_text())["jobs"]
+        step = jobs["guard-temp-scripts"]["steps"][0]
+        assert step["name"] == "Validate explicit CVM release inputs"
+        assert (
+            step["if"] == "github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true"
+        )
+        assert step["working-directory"] == "."
+        assert "guard-temp-scripts" in jobs["backend-test"]["needs"]
+        result = _run_bash(
+            "-c",
+            step["run"],
+            cwd=tmp_path,
+            env={
+                "RELEASE_SHA": "a" * 40,
+                "RELEASE_CHANNEL": "stable",
+                "CURRENT_SECURITY_SCAN_RUN_ID": "123",
+                "PREVIOUS_SECURITY_SCAN_RUN_ID": "123",
+                **overrides,
+            },
+        )
+        assert (result.returncode == 0) is valid, result.stdout + result.stderr
+        if not valid:
+            assert "::error::" in result.stdout
+
+
 def test_evolution_dispatch_runs_before_any_checkout_directory_exists() -> None:
     source = yaml.safe_load((FHD_ROOT / ".github/workflows/ci-cd.yml").read_text(encoding="utf-8"))
     published = yaml.safe_load(
