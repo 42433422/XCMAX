@@ -1,0 +1,22 @@
+name: PR2805 Ruff formatting diagnostic
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/pr2805-ruff-diagnostic.yml'
+      - 'FHD/tests/test_application/test_reviewed_excel_template.py'
+permissions:
+  contents: read
+jobs:
+  format-diff:
+    if: github.event.pull_request.number == 2805
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Inspect formatter-only diff; do not change source
+        run: |
+          python -m pip install 'ruff==0.15.22'
+          ruff format --diff FHD/tests/test_application/test_reviewed_excel_template.py || true
