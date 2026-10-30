@@ -70,6 +70,23 @@ describe('MainLayout.vue', () => {
     wrapper.unmount()
   })
 
+  it('does not show loading feedback after the idle shell has settled', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const router = createTestRouter()
+    await router.push('/')
+    const wrapper = mount(MainLayout, { global: { plugins: [pinia, router] } })
+    try {
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(6000)
+      expect(wrapper.find('.route-nav-feedback').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps Windows desktop parity by navigating sidebar chat and aliases', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

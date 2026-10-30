@@ -1,4 +1,4 @@
-import { ref, watch, type Ref } from 'vue'
+import { computed, ref, shallowRef, toRaw, watch, type Ref } from 'vue'
 
 export const PROACTIVE_SUGGESTIONS_STORAGE_KEY = 'xcagi_proactive_suggestions'
 
@@ -8,6 +8,8 @@ export type ProactiveSuggestion = {
 }
 
 type ChatLikeMessage = {
+  persistence?: { id?: string }
+  streamingShell?: boolean
   role?: string
   type?: string
   content?: string
@@ -83,54 +85,99 @@ export function buildLocalProactiveSuggestions(messages: ChatLikeMessage[]): Pro
   return out.slice(0, 3).map((text, i) => ({ id: `local-${i}-${text.slice(0, 8)}`, text }))
 }
 
+export type ProactiveReplySuggestion = ProactiveSuggestion & {
+  messageId: string
+  scopeKey: string
+}
+
+const transientMessageIds = new WeakMap<ChatLikeMessage, string>()
+let nextMessageId = 0
+
+/** Persisted identities survive history hydration; legacy rows remain distinct by object. */
+export function proactiveReplyMessageId(message: ChatLikeMessage): string {
+  if (message.persistence?.id) return `saved:${message.persistence.id}`
+  const raw = toRaw(message)
+  let id = transientMessageIds.get(raw)
+  if (!id) {
+    id = `transient:${++nextMessageId}`
+    transientMessageIds.set(raw, id)
+  }
+  return id
+}
+
 export interface UseProactiveReplySuggestionsDeps {
   messages: Ref<ChatLikeMessage[]>
   messageInput: Ref<string>
   enabled?: Ref<boolean>
   isLoading?: Ref<boolean>
+  isStreamingReply?: Ref<boolean>
   scopeKey?: Ref<string>
 }
 
-/** Suggestions stay local; choosing one only fills the composer. */
+/** Local reply-bound choices; selecting one only fills the composer. */
 export function useProactiveReplySuggestions(deps: UseProactiveReplySuggestionsDeps) {
   const enabled = deps.enabled || ref(readEnabled())
-  const suggestions = ref<ProactiveSuggestion[]>([])
-  const loading = ref(false)
+  const scopeKey = () => deps.scopeKey?.value || ''
+  const blockedMessages = shallowRef<ChatLikeMessage[]>()
+  const cache = new WeakMap<ChatLikeMessage, { source: string[]; items: ProactiveReplySuggestion[] }>()
 
-  function refreshSuggestions() {
-    suggestions.value = enabled.value && !deps.isLoading?.value
-      && deps.messages.value.some(isAssistant)
-      ? buildLocalProactiveSuggestions(deps.messages.value) : []
-  }
+  // A scope can change before its history arrives. Never relabel the old array as the new session.
+  watch([scopeKey, () => deps.messages.value], ([scope, list], [previousScope, previousList]) => {
+    if (scope !== previousScope) blockedMessages.value = list === previousList ? list : undefined
+    else if (list !== previousList) blockedMessages.value = undefined
+  }, { flush: 'sync' })
+
+  const proactiveSuggestionsByMessage = computed(() => {
+    const result = new Map<string, ProactiveReplySuggestion[]>()
+    const list = deps.messages.value
+    if (!enabled.value || list === blockedMessages.value) return result
+    const scope = scopeKey()
+    const busy = deps.isLoading?.value || deps.isStreamingReply?.value
+    let latestUserIndex = -1
+    list.forEach((message, index) => { if (isUser(message)) latestUserIndex = index })
+    let lastUser: ChatLikeMessage | undefined
+    let userIndex = -1
+    list.forEach((message, index) => {
+      if (isUser(message)) { lastUser = message; userIndex = index }
+      if (!isAssistant(message) || message.streamingShell
+        || (busy && index > latestUserIndex)) return
+      const text = messageText(message)
+      if (!text) return
+      const contextUser = index - userIndex < 8 ? lastUser : undefined
+      const messageId = proactiveReplyMessageId(message)
+      const source = [scope, messageId, text, contextUser ? messageText(contextUser) : '']
+      let entry = cache.get(message)
+      if (!entry || entry.source.some((value, i) => value !== source[i])) {
+        entry = { source, items: buildLocalProactiveSuggestions(contextUser ? [contextUser, message] : [message])
+          .map(item => ({ ...item, id: `${messageId}:${item.id}`, messageId, scopeKey: scope })) }
+        cache.set(message, entry)
+      }
+      result.set(messageId, entry.items)
+    })
+    return result
+  })
 
   function persistEnabled(next: boolean) {
     enabled.value = next
     writeEnabled(next)
   }
 
-  function pickSuggestion(item: ProactiveSuggestion | string) {
-    if (!enabled.value) return
-    const text = (typeof item === 'string' ? item : item.text).trim()
+  function pickSuggestion(item: ProactiveReplySuggestion) {
+    if (!enabled.value || item.scopeKey !== scopeKey()
+      || !proactiveSuggestionsByMessage.value.get(item.messageId)?.includes(item)) return
+    const text = item.text.trim()
     if (!text) return
     const existing = deps.messageInput.value.trimEnd()
     deps.messageInput.value = existing ? `${existing}\n${text}` : text
     document.getElementById('messageInput')?.focus()
   }
 
-  watch([enabled, () => deps.isLoading?.value, () => {
-    const list = deps.messages.value
-    const last = list[list.length - 1]
-    return `${list.length}:${messageText(last || {})}:${last?.role || last?.type || ''}`
-  }], refreshSuggestions, { immediate: true })
-  watch(() => deps.scopeKey?.value, () => { suggestions.value = [] }, { flush: 'sync' })
-
   return {
     proactiveEnabled: enabled,
-    proactiveSuggestions: suggestions,
-    proactiveLoading: loading,
+    proactiveSuggestions: computed(() => [...proactiveSuggestionsByMessage.value.values()].flat()),
+    proactiveSuggestionsByMessage,
     persistProactiveEnabled: persistEnabled,
     pickProactiveSuggestion: pickSuggestion,
-    refreshProactiveSuggestions: refreshSuggestions,
     PROACTIVE_SUGGESTIONS_STORAGE_KEY,
   }
 }

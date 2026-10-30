@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
-import { ref } from 'vue'
+import { ref, type Component, type Ref } from 'vue'
+import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import type { AgentRun, AgentTaskSummary } from '@/api/agentRuns'
 import type { TaskItem } from '@/composables/useChatPersistence'
@@ -40,6 +41,7 @@ vi.mock('@/composables/useChatOfficeDocking', () => ({ useChatOfficeDocking: () 
 
 // Import the shipped Mod directly. The host ChatView and Vitest Mod alias cannot mask missing desktop wiring.
 import ModChatView from '../../../mods/xcagi-planner-bridge/frontend/views/ChatView.vue'
+import HostChatView from './ChatView.vue'
 
 const taskList = ref<TaskItem[]>([])
 const activeTaskId = ref('')
@@ -80,7 +82,7 @@ function inertApi(): Record<string, unknown> {
       'addAndSaveMessage', 'stageExcelAnalysisContext'].map(name => [name, vi.fn()])),
   }
 }
-async function mountView(task = summary(), feedback = false) {
+async function mountView(task = summary(), feedback = false, component: Component = ModChatView, renderSuggestions = false) {
   taskList.value = taskSummariesToTaskItems([task])
   api.listTasks.mockResolvedValue({ success: true, data: [task] })
   api.getRun.mockResolvedValue({ success: true, data: task.active_run, approval: { grant: 'fresh-action-bound-grant' } })
@@ -105,8 +107,9 @@ async function mountView(task = summary(), feedback = false) {
   ] })
   await router.push('/chat')
   await router.isReady()
-  wrapper = mount(ModChatView, { global: { plugins: [router], stubs: {
-    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: !feedback, ChatInputToolbar: true,
+  wrapper = mount(component, { global: { plugins: [createPinia(), router], stubs: {
+    PaneResizeHandle: true, ChatQuickActions: true, ChatMessageList: !feedback && !renderSuggestions, ChatInputToolbar: !renderSuggestions,
+    ChatSidePanel: true, TaskWorkspaceContextBar: true,
     ChatHistoryModal: !feedback, ChatOfficeDockingReview: true,
   } } })
   return { router, bridge }
@@ -114,6 +117,7 @@ async function mountView(task = summary(), feedback = false) {
 const controls = () => [api.continueRun, api.pauseRun, api.resumeRun, api.retryRun, api.cancelRun]
 const button = (label: string) => wrapper!.findAll('button').find(item => item.text() === label)!
 beforeEach(() => {
+  localStorage.clear()
   Object.values(api).forEach(mock => mock.mockReset().mockResolvedValue({ success: true }))
   activeTaskId.value = ''; expandedTaskIds.value = []
   loadConversation.mockClear(); toggleExpanded.mockClear()
@@ -121,6 +125,53 @@ beforeEach(() => {
 afterEach(() => { wrapper?.unmount(); wrapper = undefined })
 
 describe('shipped chat Mod task navigation', () => {
+  it.each([['host', HostChatView], ['desktop Mod', ModChatView]] as const)(
+    'keeps %s suggestions below their reply, waits for completion, and only fills the draft', async (_label, component) => {
+      await mountView(summary(), false, component, true)
+      const messages = chatApi.messages as Ref<UiChatMessage[]>
+      const loading = chatApi.isLoading as Ref<boolean>
+      const streaming = chatApi.isStreamingReply as Ref<boolean>
+      const vm = wrapper!.vm as unknown as { currentSessionId: string }
+      messages.value = [
+        { role: 'user', content: '帮我开单', time: '12:00' },
+        { role: 'ai', content: '请核对客户', time: '12:00', persistence: { id: 'order', status: 'saved' } },
+        { role: 'user', content: '现在导入 Excel', time: '12:01' },
+        { role: 'ai', content: 'Excel 映射完成', time: '12:01', persistence: { id: 'excel', status: 'saved' } },
+      ]
+      await flushPromises()
+      await wrapper!.get('[data-testid="proactive-suggestions-toggle"] input').setValue(true)
+      const rows = wrapper!.findAll('#chatMessages [data-message-index]')
+      expect(rows[0]!.find('[data-testid="proactive-suggestions"]').exists()).toBe(false)
+      expect(rows[1]!.get('[data-testid="proactive-suggestions"]').text()).toContain('客户')
+      expect(rows[3]!.findAll('.proactive-suggestions__chip')).toHaveLength(3)
+      expect(rows[3]!.get('.proactive-suggestions').text()).toContain('映射')
+      expect(wrapper!.find('.input-area .proactive-suggestions').exists()).toBe(false)
+      const choice = rows[3]!.get('.proactive-suggestions__chip')
+      await choice.trigger('click')
+      expect((wrapper!.get('#messageInput').element as HTMLTextAreaElement).value).toBe(choice.text())
+      expect(chatApi.sendMessage).not.toHaveBeenCalled()
+      expect(chatApi.handleAutoAction).not.toHaveBeenCalled()
+
+      loading.value = true; streaming.value = true
+      messages.value.push({ role: 'user', content: '继续整理', time: '12:02' },
+        { role: 'ai', content: '尚未结束的回复', time: '12:02', persistence: { id: 'pending', status: 'local' } })
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(2)
+      loading.value = false; streaming.value = false
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(3)
+
+      vm.currentSessionId = 'replacement-session'
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions')).toHaveLength(0)
+      messages.value = [{ role: 'ai', content: '历史中的打印回复', time: '09:00', persistence: { id: 'order', status: 'saved' } }]
+      await flushPromises()
+      expect(wrapper!.findAll('.proactive-suggestions__chip')).toHaveLength(3)
+      expect(wrapper!.get('.proactive-suggestions').text()).toContain('打印')
+      expect(wrapper!.get('#chatMessages .message-html').text()).toBe('历史中的打印回复')
+    },
+  )
+
   it('shows a confirmation link on the collapsed card and navigates by durable task and conversation without submitting', async () => {
     const { router } = await mountView()
     expect(wrapper!.find('.task-list-detail').exists()).toBe(false)

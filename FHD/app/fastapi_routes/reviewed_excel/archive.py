@@ -22,6 +22,7 @@ from app.application.etl.archive_store import (
 from app.application.etl.errors import EtlError, public_excel_error
 from app.application.etl.service_support import dump_json, load_json, new_id
 from app.application.etl.service_uploads import UploadServiceMixin
+from app.application.reviewed_excel_classification import observe_fragment_relationships
 from app.application.reviewed_excel_classification_store import (
     _classification_run,
     _classification_version,
@@ -316,25 +317,37 @@ async def archive_classify(
         raise HTTPException(status_code=400, detail=public_excel_error(exc)) from None
 
 
+def _archive_classification_receipt(archived, classification_id, latest, name):
+    """Use the same persisted classification state for first replies and idempotent recovery."""
+    return {
+        "asset_id": archived.asset_id,
+        "archive_version_id": archived.id,
+        "sha256": archived.sha256,
+        "classification_id": classification_id,
+        "version": latest["version"],
+        "sheets": latest["sheets"],
+        "read_only_print_areas": latest.get("read_only_print_areas", []),
+        "model_status": latest["model_status"],
+        "confirmed": latest["confirmed"],
+        "fragment_links": latest.get("fragment_links", {"items": [], "omitted": 0}),
+        "logical_documents": latest.get("logical_documents", []),
+        "independent_confirmed": latest.get("independent_confirmed", False),
+        "partition_pending": latest.get("partition_pending", False),
+        "confirmed_document_count": latest.get("confirmed_document_count"),
+        "document_count_status": latest.get("document_count_status"),
+        "name": name,
+        "status": "classified",
+    }
+
+
 def _create_archive_classification(
     db, archived, body, review, sheets, name, content_type, request, tenant, owner
 ):
     if archived.classification_id:
         existing = _classification_run(db, archived.classification_id, tenant, owner)
         latest = load_json(existing.draft_json, {}).get("versions", [])[-1]
-        return {
-            "asset_id": archived.asset_id,
-            "archive_version_id": archived.id,
-            "sha256": archived.sha256,
-            "classification_id": existing.id,
-            "version": latest["version"],
-            "sheets": latest["sheets"],
-            "read_only_print_areas": latest.get("read_only_print_areas", []),
-            "model_status": latest["model_status"],
-            "confirmed": latest["confirmed"],
-            "name": name,
-            "status": "classified",
-        }
+        return _archive_classification_receipt(archived, existing.id, latest, name)
+    fragment_links = observe_fragment_relationships(review, sheets)
     _recheck(request, (tenant, owner))
     classification_id = new_id()
     locked = db.execute(
@@ -373,7 +386,27 @@ def _create_archive_classification(
         upload_record = db.get(EtlUpload, upload["upload_id"])
         created_paths.append(Path(upload_record.storage_path))
         os.chmod(upload_record.storage_path, 0o600)
-        version = _classification_version(review["sha256"], "", sheets)
+        version = _classification_version(
+            review["sha256"],
+            "",
+            {
+                "sheets": sheets,
+                "fragment_links": fragment_links,
+            },
+        )
+        latest = {
+            "version": version,
+            "sheets": sheets,
+            "fragment_links": fragment_links,
+            "logical_documents": [],
+            "independent_confirmed": False,
+            "partition_pending": False,
+            "confirmed_document_count": None,
+            "document_count_status": "partial",
+            "model_status": "not_called",
+            "confirmed": False,
+            "read_only_print_areas": review["read_only_print_areas"],
+        }
         db.add(
             EtlRun(
                 id=classification_id,
@@ -384,19 +417,7 @@ def _create_archive_classification(
                 status=_CLASS_READY,
                 stage=_CLASS_READY,
                 file_sha256=review["sha256"],
-                draft_json=dump_json(
-                    {
-                        "versions": [
-                            {
-                                "version": version,
-                                "sheets": sheets,
-                                "model_status": "not_called",
-                                "confirmed": False,
-                                "read_only_print_areas": review["read_only_print_areas"],
-                            }
-                        ]
-                    }
-                ),
+                draft_json=dump_json({"versions": [latest]}),
                 summary_json=dump_json(
                     {"kind": "classification", "archive_version_id": archived.id}
                 ),
@@ -409,19 +430,7 @@ def _create_archive_classification(
             for path in created_paths:
                 path.unlink(missing_ok=True)
         raise
-    return {
-        "asset_id": archived.asset_id,
-        "archive_version_id": archived.id,
-        "sha256": archived.sha256,
-        "classification_id": classification_id,
-        "version": version,
-        "sheets": sheets,
-        "model_status": "not_called",
-        "read_only_print_areas": review["read_only_print_areas"],
-        "confirmed": False,
-        "name": name,
-        "status": "classified",
-    }
+    return _archive_classification_receipt(archived, classification_id, latest, name)
 
 
 @router.post("/api/templates/reviewed-excel/archive-versions/{version_id}/classify")

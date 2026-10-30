@@ -1,6 +1,6 @@
 /**
  * 数据对接中心附加动作（拆分自 views/EtlCenterView.vue，行为保持一致）：
- * Webhook 配置、个人模板 / 发货单版式保存、客户及产品导入创建。
+ * 既有任务的个人模板 / 发货单版式保存、关联客户及产品预演。
  */
 import type { ComputedRef } from 'vue'
 import type { Router } from 'vue-router'
@@ -35,70 +35,16 @@ export function createEtlCenterExtras({
     currentRun,
     targetType,
     templates,
-    targetConfigs,
-    targetConfigId,
     runRows,
     rowPage,
     rowTotal,
     rowActionFilter,
-    showWebhookForm,
-    webhookDraft,
-    webhookTestMessage,
     shipmentTemplateMessage,
     customerProductPreviewMessage,
     activeTab,
   } = state
 
   const targetLabel = createTargetLabel(state.capabilities)
-
-  async function saveWebhook() {
-    if (busy.value) return
-    const isCurrent = state.captureReadContext()
-    const finishBusy = state.beginBusy()
-    try {
-      const headers = JSON.parse(webhookDraft.headersJson || '{}')
-      if (!headers || Array.isArray(headers) || typeof headers !== 'object') {
-        throw new Error('普通请求头必须是 JSON 对象')
-      }
-      const config = await etlApi.createTargetConfig({
-        name: webhookDraft.name,
-        endpoint_url: webhookDraft.endpoint_url,
-        headers,
-        secret: webhookDraft.secret,
-      })
-      if (!isCurrent()) return
-      const configs = await etlApi.targetConfigs()
-      if (!isCurrent()) return
-      targetConfigs.value = configs
-      targetConfigId.value = config.id
-      showWebhookForm.value = false
-      webhookDraft.name = ''
-      webhookDraft.endpoint_url = ''
-      webhookDraft.headersJson = '{}'
-      webhookDraft.secret = ''
-    } catch (error) {
-      if (isCurrent()) pageError.value = error instanceof Error ? error.message : 'Webhook 配置保存失败'
-    } finally {
-      finishBusy()
-    }
-  }
-
-  async function testWebhook() {
-    const configId = targetConfigId.value
-    if (busy.value || !configId) return
-    const ownsContext = state.captureReadContext()
-    const isCurrent = () => ownsContext() && configId === targetConfigId.value
-    const finishBusy = state.beginBusy()
-    webhookTestMessage.value = ''
-    try {
-      await etlApi.testTarget(configId)
-      if (isCurrent()) webhookTestMessage.value = '连接测试成功'
-    } catch (error) {
-      if (isCurrent()) webhookTestMessage.value = error instanceof Error ? error.message : '连接测试失败'
-    } finally {
-      finishBusy()
-    }
-  }
 
   async function saveCurrentAsTemplate() {
     if (busy.value || !currentRun.value) return
@@ -229,8 +175,6 @@ export function createEtlCenterExtras({
   }
 
   return {
-    saveWebhook,
-    testWebhook,
     saveCurrentAsTemplate,
     saveCurrentAsShipmentTemplate,
     previewCustomerProductsFromShipment,

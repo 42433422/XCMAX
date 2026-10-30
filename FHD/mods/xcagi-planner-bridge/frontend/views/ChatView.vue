@@ -7,6 +7,9 @@
     </div>
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
+        :session-key="messageSessionKey"
+        :proactive-suggestions="proactiveSuggestionsByMessage"
+        @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
         @retry-save="retryMessageSave"
         :is-loading="isLoading"
@@ -81,7 +84,7 @@
       <ChatInputToolbar
         :excel-analyze-uploading="excelAnalyzeUploading"
         :multimodal-pending-count="multimodalPendingCount"
-        :auto-refresh-starred-wechat="autoRefreshStarredWechat"
+        :proactive-suggestions-enabled="proactiveEnabled"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
         :office-docking-processing="officeDockingProcessing"
@@ -89,7 +92,7 @@
         @show-history="showHistoryPanel"
         @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
-        @auto-refresh-change="onAutoRefreshToolbarChange"
+        @proactive-suggestions-change="persistProactiveEnabled"
         @toggle-tts="setTtsEnabled"
       />
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
@@ -212,6 +215,8 @@ import { useChatView } from '@/composables/useChatView'
 import { useChatVoiceInput } from '@/composables/useChatVoiceInput'
 import { useChatMessageUi } from '@/composables/useChatMessageUi'
 import { useChatViewHost } from '@/composables/useChatViewHost'
+import { useProactiveReplySuggestions } from '@/composables/useProactiveReplySuggestions'
+import { productReadAccountEpoch } from '@/utils/productReadAccountScope'
 import { workflowTaskDotStatusClassForTask, workflowTaskDotTitleForTask } from '@/workflow/coreWorkflowTaskUi'
 import { formatTaskTime, formatTaskSourceLabel } from '@/utils/chatTaskLabels'
 import { readAiSessionIdFromStorage, writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
@@ -222,8 +227,8 @@ const { mods: modsFromStore } = storeToRefs(modsStore)
 const industryStore = useIndustryStore()
 const { currentIndustryId } = storeToRefs(industryStore)
 
-// 主动意识：默认关闭，须用户主动勾选后才轮询星标会话
-const autoRefreshStarredWechat = ref(localStorage.getItem('xcagi_auto_refresh_starred_wechat') === '1')
+// The suggestions toggle must never activate WeChat polling.
+const autoRefreshStarredWechat = ref(false)
 const isTaskPaneResizable = ref(true)
 
 function generateSessionId(): string {
@@ -232,6 +237,7 @@ function generateSessionId(): string {
 
 const _storedSessionId = readAiSessionIdFromStorage()
 const currentSessionId = ref(_storedSessionId || generateSessionId())
+const messageSessionKey = computed(() => JSON.stringify([currentSessionId.value, modsStore.activeModId, productReadAccountEpoch.value]))
 if (!_storedSessionId) writeAiSessionIdToStorage(currentSessionId.value)
 
 const chatViewApi = useChatView({ sessionId: currentSessionId })
@@ -338,7 +344,7 @@ const {
   toggleMessageTts,
   batchCalculateHeights,
   stopMessageTts,
-} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef })
+} = useChatMessageUi({ messages, chatMessagesRef: chatRefBag.chatMessagesRef, sessionKey: messageSessionKey })
 
 const {
   paneStyle: chatPaneStyle,
@@ -425,7 +431,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
   }
 }
 
-const { onAutoRefreshToolbarChange } = useChatViewHost({
+useChatViewHost({
   modsStore,
   modsFromStore,
   autoRefreshStarredWechat,
@@ -440,6 +446,13 @@ const { onAutoRefreshToolbarChange } = useChatViewHost({
   cleanupVoiceInput,
   stopTaskPaneResize,
 })
+
+const {
+  proactiveEnabled,
+  proactiveSuggestionsByMessage,
+  persistProactiveEnabled,
+  pickProactiveSuggestion,
+} = useProactiveReplySuggestions({ messages, messageInput, isLoading, isStreamingReply, scopeKey: messageSessionKey })
 
 function openShipmentRecordsFromAuditTask() {
   window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'shipment-records' } }))

@@ -13,6 +13,8 @@
     <div class="chat-container" data-tour="chat-thread" :style="chatPaneStyle">
       <ChatMessageList
         :session-key="messageSessionKey"
+        :proactive-suggestions="proactiveSuggestionsByMessage"
+        @pick-proactive-suggestion="pickProactiveSuggestion"
         :messages="messages"
         @retry-save="retryMessageSave"
         :is-loading="isLoading"
@@ -120,27 +122,6 @@
         @proactive-suggestions-change="onProactiveSuggestionsChange"
         @toggle-tts="setTtsEnabled"
       />
-      <div
-        v-if="proactiveEnabled && (proactiveLoading || proactiveSuggestions.length)"
-        class="proactive-suggestions"
-        data-testid="proactive-suggestions"
-      >
-        <div class="proactive-suggestions__hint">
-          {{ proactiveLoading ? '正在生成下一步建议…' : '选择一条建议填入输入框（不会自动发送）' }}
-        </div>
-        <div class="proactive-suggestions__chips">
-          <button
-            v-for="item in proactiveSuggestions"
-            :key="item.id"
-            type="button"
-            class="proactive-suggestions__chip"
-            :title="item.text"
-            @click="pickProactiveSuggestion(item)"
-          >
-            {{ item.text }}
-          </button>
-        </div>
-      </div>
       <div v-if="excelSheetOptions.length" class="sheet-link-bar">
         <span class="sheet-link-label">关联工作表：</span>
         <button class="sheet-link-btn" :class="{ active: linkedExcelAllSheets }" @click="bindAllExcelSheetsToChat">
@@ -592,8 +573,7 @@ void _legacyWechatToolbarChange
 
 const {
   proactiveEnabled,
-  proactiveSuggestions,
-  proactiveLoading,
+  proactiveSuggestionsByMessage,
   persistProactiveEnabled,
   pickProactiveSuggestion,
 } = useProactiveReplySuggestions({
@@ -601,6 +581,7 @@ const {
   messageInput,
   isLoading,
   scopeKey: messageSessionKey,
+  isStreamingReply,
 })
 
 function onProactiveSuggestionsChange(enabled: boolean) {
@@ -649,34 +630,5 @@ function emitSwitchView(view: string) {
   color: var(--xc-color-primary, #0d47a1);
   font-size: var(--app-font-size-caption, 13px);
   font-weight: 600;
-}
-.proactive-suggestions {
-  padding: 6px 2px 8px;
-}
-.proactive-suggestions__hint {
-  color: var(--app-text-muted, #667085);
-  font-size: var(--app-font-size-caption, 12px);
-  margin-bottom: 6px;
-}
-.proactive-suggestions__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.proactive-suggestions__chip {
-  max-width: 100%;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--app-border, #d0d5dd);
-  background: var(--app-surface, #fff);
-  color: var(--app-text, #1d2939);
-  font-size: var(--app-font-size-caption, 12px);
-  line-height: 1.35;
-  cursor: pointer;
-}
-.proactive-suggestions__chip:hover {
-  border-color: var(--xc-color-primary, #0d47a1);
-  color: var(--xc-color-primary, #0d47a1);
 }
 </style>

@@ -144,6 +144,21 @@
             <i class="fa" :class="playingMsgIdx === idx ? 'fa-stop' : 'fa-volume-up'" aria-hidden="true"></i>
           </button>
         </div>
+        <div
+          v-if="!isMessageCollapsed(msg, idx) && suggestionsFor(msg).length"
+          class="proactive-suggestions"
+          data-testid="proactive-suggestions"
+          :data-reply-id="proactiveReplyMessageId(msg)"
+          aria-label="这条回复的下一步建议"
+        >
+          <div class="proactive-suggestions__hint">选择一条建议填入输入框（不会自动发送）</div>
+          <div class="proactive-suggestions__chips">
+            <button v-for="item in suggestionsFor(msg)" :key="item.id" type="button"
+              class="proactive-suggestions__chip" @click="$emit('pick-proactive-suggestion', item)">
+              {{ item.text }}
+            </button>
+          </div>
+        </div>
       </div>
       <div v-if="windowEnd === messages.length && isLoading && !isStreamingReply" class="message ai">
         <div class="chat-loading-row">
@@ -171,6 +186,7 @@ import { buildApprovalCardTrace } from '@/utils/chatOrchestrationTrace'
 import { approvalCardId } from '@/utils/chatApprovalCard'
 import type { AgentRunTraceData } from '@/utils/agentRunTraceModel'
 import { CHAT_HISTORY_WINDOW, useChatHistoryWindow } from '@/composables/useChatHistoryWindow'
+import { proactiveReplyMessageId, type ProactiveReplySuggestion } from '@/composables/useProactiveReplySuggestions'
 
 useI18n()
 
@@ -179,6 +195,7 @@ const saveLabels = { local: '本机副本 · 服务端未核实', saving: '正�
 const props = defineProps<{
   messages: ChatMessage[]
   sessionKey?: string
+  proactiveSuggestions?: ReadonlyMap<string, readonly ProactiveReplySuggestion[]>
   isLoading: boolean
   isStreamingReply: boolean
   loadingProgressText: string
@@ -202,7 +219,15 @@ const emit = defineEmits<{
   'approval-cancel': [cardId: string]
   'retry-save': [id: string]
   'approve-run': [runId: string]
+  'pick-proactive-suggestion': [item: ProactiveReplySuggestion]
 }>()
+
+function suggestionsFor(message: ChatMessage): readonly ProactiveReplySuggestion[] {
+  if (message.role !== 'ai' || message.streamingShell) return []
+  const messageId = proactiveReplyMessageId(message)
+  return (props.proactiveSuggestions?.get(messageId) || [])
+    .filter(item => item.scopeKey === (props.sessionKey || '') && item.messageId === messageId)
+}
 
 /** 运行停在待确认步骤且没有待处理的计划卡片时，保留对话内的「确认执行」入口（#2289）。 */
 function waitingRunId(message: ChatMessage): string {
@@ -222,8 +247,9 @@ function approveMessage(message: ChatMessage) {
 
 const messagesHostRef = ref<HTMLElement | null>(null)
 const copyLabels = ref(new Map<ChatMessage, string>())
-const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage } =
+const { start: windowStart, end: windowEnd, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing } =
   useChatHistoryWindow(() => props.messages, messagesHostRef, () => props.sessionKey)
+watch(() => props.proactiveSuggestions?.size, scrollToLatestIfFollowing, { flush: 'post' })
 type Presentation = { key: number; content: string; role: ChatMessage['role']; html?: string; preview?: string; canSpeak?: boolean }
 let presentations = new WeakMap<ChatMessage, Presentation>()
 let nextKey = 0
@@ -361,6 +387,36 @@ watch(
 </script>
 
 <style scoped>
+.proactive-suggestions {
+  padding-top: 8px;
+}
+.proactive-suggestions__hint {
+  color: var(--app-text-muted, #667085);
+  font-size: var(--app-font-size-caption, 12px);
+  margin-bottom: 6px;
+}
+.proactive-suggestions__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.proactive-suggestions__chip {
+  max-width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border, #d0d5dd);
+  background: var(--app-surface, #fff);
+  color: var(--app-text, #1d2939);
+  font-size: var(--app-font-size-caption, 12px);
+  line-height: 1.35;
+  cursor: pointer;
+}
+.proactive-suggestions__chip:hover,
+.proactive-suggestions__chip:focus-visible {
+  border-color: var(--xc-color-primary, #0d47a1);
+  color: var(--xc-color-primary, #0d47a1);
+}
 .chat-messages-shell {
   display: flex;
   flex-direction: column;

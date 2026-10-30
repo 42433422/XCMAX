@@ -20,6 +20,7 @@
  * 4. afterEach document title
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { flushPromises } from '@vue/test-utils'
 
 // ── 使用 vi.hoisted 提升在 mock 工厂中引用的 mock 函数 ────
 const {
@@ -164,6 +165,7 @@ vi.mock('@/utils/desktopShell', () => ({
 
 vi.mock('@/api/auth', () => ({
   authApi: {
+    validateSession: vi.fn().mockResolvedValue({ success: true, valid: true }),
     logout: vi.fn().mockResolvedValue({ success: true }),
   },
 }))
@@ -841,6 +843,49 @@ describe('router/index 覆盖率补齐', () => {
   // 12. beforeEach 守卫 - enterprise session
   // ═══════════════════════════════════════════════════════════
   describe('beforeEach 守卫 - enterprise session', () => {
+    it.each([
+      { dwell: 1_000, latency: 80, result: 'valid', expected: 0, target: 'settings' },
+      { dwell: 300_001, latency: 80, result: 'valid', expected: 80, target: 'settings' },
+      { dwell: 300_001, latency: 450, result: 'valid', expected: 450, target: 'settings' },
+      { dwell: 300_001, latency: 8_000, result: 'timeout', expected: 8_000, target: 'chat' },
+      { dwell: 300_001, latency: 80, result: 'invalid', expected: 80, target: 'login' },
+    ])('measures guarded navigation with a controlled session response: %j', async ({ dwell, latency, result, expected, target }) => {
+      const cache = await vi.importActual<typeof import('@/utils/authSessionCache')>('@/utils/authSessionCache')
+      const { authApi } = await import('@/api/auth')
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+      vi.setSystemTime(new Date('2026-10-30T00:00:00Z'))
+      const probe = vi.spyOn(authApi, 'validateSession').mockImplementation(() => new Promise((resolve, reject) => {
+        setTimeout(() => result === 'timeout'
+          ? reject(Object.assign(new Error('controlled timeout'), { name: 'AbortError' }))
+          : resolve({ success: true, valid: result === 'valid' }), latency)
+      }))
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockImplementation(cache.validateEnterpriseSessionCached)
+      cache.markEnterpriseSessionValid()
+      try {
+        await router.push('/')
+        vi.setSystemTime(Date.now() + dwell)
+        const started = Date.now()
+        const navigating = router.push('/settings')
+        await flushPromises()
+        if (expected) {
+          expect(probe).toHaveBeenCalledOnce()
+          expect(router.currentRoute.value.name).toBe('chat')
+          await vi.advanceTimersByTimeAsync(latency - 1)
+          expect(router.currentRoute.value.name).toBe('chat')
+          await vi.advanceTimersByTimeAsync(1)
+        }
+        await navigating
+        expect(Date.now() - started).toBe(expected)
+        expect(router.currentRoute.value.name).toBe(target)
+        expect(probe).toHaveBeenCalledTimes(expected ? 1 : 0)
+      } finally {
+        cache.invalidateEnterpriseSessionCache()
+        probe.mockRestore()
+        vi.useRealTimers()
+      }
+    })
+
     it('enterprise + 无效 session 时重定向到 login', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(false)

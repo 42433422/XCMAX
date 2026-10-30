@@ -62,5 +62,5 @@ export function useChatHistoryWindow(messages: () => ChatMessage[], host: Ref<HT
   })
   watch(host, () => { void nextTick().then(bottom) })
 
-  return { start, end, visibleMessages, moveWindow, showLatest, onScroll, revealMessage }
+  return { start, end, visibleMessages, moveWindow, showLatest, onScroll, revealMessage, scrollToLatestIfFollowing: bottom }
 }
