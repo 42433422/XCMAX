@@ -969,10 +969,10 @@ async def reviewed_excel_classification_analyze(
                             "phase": "paused",
                             "checkpoint": _checkpoint_view(checkpoint),
                         }
-                prepared: dict | list[dict] = await run_in_threadpool(
+                grouping_request: dict | list[dict] = await run_in_threadpool(
                     group_semantic_fragments, review, result, prepare_only=True
                 )
-                if not isinstance(prepared, dict):
+                if not isinstance(grouping_request, dict):
                     raise ReviewedExcelError("分组请求格式无效")
                 import os
 
@@ -981,7 +981,7 @@ async def reviewed_excel_classification_analyze(
 
                 request_sha = claim_request(
                     state,
-                    prepared,
+                    grouping_request,
                     source_sha256=run.file_sha256,
                     version=version,
                     classification_id=classification_id,
