@@ -33,15 +33,23 @@ def classification(body):
             {"sheet": "One", "range": "A5:B5", "dependencies": []},
             {"sheet": "Two", "range": "A1:A1", "dependencies": []},
         ],
-        "suggested_documents": [],
+        "suggested_documents": [
+            {"fragments": [{"sheet": "One", "range": "A1:B2"}]},
+            {"fragments": [{"sheet": "One", "range": "A5:B5"}]},
+            {"fragments": [{"sheet": "Two", "range": "A1:A1"}]},
+        ],
     }
 
 
-def test_ungrouped_regions_are_tentative_editable_and_preserve_formula_and_merge():
+def test_ungrouped_regions_block_and_model_groups_preserve_formula_and_merge():
     body = workbook()
+    uncertain = classification(body)
+    uncertain["suggested_documents"] = []
+    with pytest.raises(ReviewedExcelError, match="独立单据关系"):
+        derive_classified_documents(body, uncertain)
     result = derive_classified_documents(body, classification(body))
     assert len(result) == 3
-    assert all(item["basis"] == "ungrouped_region" and not item["confirmed"] for item in result)
+    assert all(item["basis"] == "model_group" and not item["confirmed"] for item in result)
     first = load_workbook(BytesIO(result[0]["workbook"]))
     assert first.sheetnames == ["One"]
     assert first["One"]["B2"].value == "=A2*2"
@@ -57,7 +65,8 @@ def test_model_group_is_not_claimed_user_confirmed():
     body = workbook()
     result = classification(body)
     result["suggested_documents"] = [
-        {"fragments": [{"sheet": "One", "range": "A1:B2"}, {"sheet": "One", "range": "A5:B5"}]}
+        {"fragments": [{"sheet": "One", "range": "A1:B2"}, {"sheet": "One", "range": "A5:B5"}]},
+        {"fragments": [{"sheet": "Two", "range": "A1:A1"}]},
     ]
     slices = derive_classified_documents(body, result)
     assert len(slices) == 2 and slices[0]["basis"] == "model_group" and not slices[0]["confirmed"]
@@ -84,12 +93,14 @@ def test_rejects_cross_sheet_model_group_and_cut_merged_cell():
     body = workbook()
     result = classification(body)
     result["suggested_documents"] = [
-        {"fragments": [{"sheet": "One", "range": "A1:B2"}, {"sheet": "Two", "range": "A1:A1"}]}
+        {"fragments": [{"sheet": "One", "range": "A1:B2"}, {"sheet": "Two", "range": "A1:A1"}]},
+        {"fragments": [{"sheet": "One", "range": "A5:B5"}]},
     ]
     with pytest.raises(ReviewedExcelError, match="跨工作表"):
         derive_classified_documents(body, result)
     result = classification(body)
     result["regions"][0]["range"] = "A1:A2"
+    result["suggested_documents"][0]["fragments"][0]["range"] = "A1:A2"
     with pytest.raises(ReviewedExcelError, match="合并单元格"):
         derive_classified_documents(body, result)
 
@@ -164,3 +175,41 @@ def test_second_stage_requires_complete_coverage_and_evidence_for_each_fragment(
     classification_result["coverage"][0]["unread"] = ["A2"]
     with pytest.raises(ReviewedExcelError, match="覆盖不完整"):
         prepare_grouping(review, classification_result)
+
+
+def test_classified_document_export_preserves_formula_support():
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "生产"
+    sheet["A1"] = "生产单"
+    sheet["A2"] = "=B2*C2"
+    sheet["B2"] = 3
+    sheet["C2"] = 5
+    sheet["D2"] = "无关信息"
+    stream = BytesIO()
+    book.save(stream)
+    body = stream.getvalue()
+    result = derive_classified_documents(
+        body,
+        {
+            "source_sha256": inspect_workbook(body)["sha256"],
+            "model_status": "returned",
+            "regions": [{"sheet": "生产", "range": "A1:B2", "dependencies": []}],
+            "suggested_documents": [{"fragments": [{"sheet": "生产", "range": "A1:B2"}]}],
+        },
+    )
+    saved = load_workbook(BytesIO(result[0]["workbook"]), data_only=False)
+    assert result[0]["filename"] == "生产单.xlsx"
+    assert saved.sheetnames == ["生产", "依赖支撑"]
+    assert saved["生产"]["A2"].value == "=B2*'依赖支撑'!C2"
+    assert saved["依赖支撑"]["C2"].value == 5
+    assert saved["依赖支撑"]["D2"].value is None
+
+
+def test_unresolved_open_fragment_cannot_be_exported_as_a_finished_document():
+    body = workbook()
+    result = classification(body)
+    result["regions"][0]["open_fragment"] = True
+    result["regions"][0]["model_original_range"] = "A1:B5"
+    with pytest.raises(ReviewedExcelError, match="未读边界"):
+        derive_classified_documents(body, result)

@@ -411,7 +411,12 @@ def value_extent(region: dict, cells: list[dict]) -> str | None:
     return f"{get_column_letter(min(c for c, _ in points))}{min(r for _, r in points)}:{get_column_letter(max(c for c, _ in points))}{max(r for _, r in points)}"
 
 
-def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None = None) -> dict:
+def candidate_fragment_links(
+    regions: list[dict],
+    sent_cells: list[dict] | None = None,
+    *,
+    model_pairs: set[tuple[str, str, str]] | None = None,
+) -> dict:
     """Suggest reviewable relations from shared dependencies or observed headers, never labels alone."""
     from openpyxl.utils.cell import (
         column_index_from_string,
@@ -467,7 +472,10 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
                 first_context.get("parent_range") == second["range"]
                 or second_context.get("parent_range") == first["range"]
             )
-            if not shared and not repeated:
+            model_suggested = (first["sheet"], first["range"], second["range"]) in (
+                model_pairs or set()
+            )
+            if not shared and not repeated and not model_suggested:
                 continue
             left_identity, right_identity = identity_cache[index], identity_cache[second_index]
             matches: list[dict] = []
@@ -490,6 +498,7 @@ def candidate_fragment_links(regions: list[dict], sent_cells: list[dict] | None 
                         ],
                         "dependencies_omitted": max(0, len(shared) - 20),
                         "repeated_header_observed": repeated,
+                        "model_group_suggested": model_suggested,
                         "identity_matches": matches,
                         "identity_conflicts": conflicts,
                         "status": "identity_conflict" if conflicts else "candidate",
@@ -645,7 +654,7 @@ def observe_fragment_relationships(review: dict, sheets: list[dict]) -> dict:
 
 
 def plan_semantic_batches(
-    review: dict, max_calls: int | None = None
+    review: dict, max_calls: int | None = None, *, neutral: bool = False
 ) -> tuple[list[list[dict]], int]:
     """Analyze bounded batches sequentially; fail closed on conflicting model regions."""
     import os
@@ -662,4 +671,35 @@ def plan_semantic_batches(
         raise ReviewedExcelError("分类模型调用预算无效") from None
     if not 1 <= max_calls <= 4:
         raise ReviewedExcelError("分类模型调用预算必须为 1 至 4")
+    if neutral:
+        from app.application.reviewed_excel_reference_ids import neutral_transport_batches
+
+        return neutral_transport_batches(review), max_calls
     return plan_complete_batches(review, classify_review_workbook(review)), max_calls
+
+
+def build_rule_hints(rules: list[dict], sent: dict) -> list[dict]:
+    rule_hints = []
+    for sheet in rules:
+        regions = []
+        for region in sheet["regions"]:
+            evidence = [ref for ref in region["evidence"] if (sheet["sheet"], ref["cell"]) in sent]
+            regions.append(
+                {
+                    "range": region["range"],
+                    "labels": [ref["label"] for ref in evidence] or ["unknown"],
+                    "evidence": evidence,
+                    "headers": [
+                        ref
+                        for ref in region["header_cells"]
+                        if (sheet["sheet"], ref["cell"]) in sent
+                    ],
+                    "possible_shared_context": [
+                        ref
+                        for ref in region["possible_shared_context"]
+                        if (sheet["sheet"], ref["cell"]) in sent
+                    ],
+                }
+            )
+        rule_hints.append({"sheet": sheet["sheet"], "regions": regions})
+    return rule_hints

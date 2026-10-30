@@ -368,6 +368,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         if self._is_minimax_token_plan():
             return await self._chat_minimax_token_plan(messages, max_tokens=max_tokens)
 
+        audit_response = kwargs.pop("_reviewed_excel_audit_response", None)
         base_url = self._normalize_base_url()
         url = f"{base_url}/chat/completions"
 
@@ -388,6 +389,11 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
 
         client = await self._get_client()
         response = await client.post(url, headers=headers, json=payload)
+        if audit_response is not None:
+            raw_body = response.content
+            if self._api_key and self._api_key.encode() in raw_body:
+                raise ValueError("模型响应包含敏感凭据，未归档")
+            audit_response(raw_body, response.status_code, response.headers.get("x-request-id"))
         response.raise_for_status()
 
         result = response.json()

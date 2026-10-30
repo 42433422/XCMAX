@@ -1,4 +1,4 @@
-"""Extract tentative documents from a previously validated classification result."""
+"""Extract model-grouped documents from a previously validated classification result."""
 
 import re
 
@@ -48,7 +48,7 @@ def _slice_filename(fragments: list[dict], cells: list[dict], used: set[str]) ->
 
 
 def derive_classified_documents(body: bytes, classification: dict) -> list[dict]:
-    """Use model groups where available; expose ungrouped regions as uncertain slices.
+    """Export only documents with explicit model grouping, without inferring missing groups.
 
     This internal function expects the output of classify_semantic_workbook, not
     arbitrary client data. It does not record user confirmation or modify the source.
@@ -63,6 +63,8 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
         raise ReviewedExcelError("没有可提取的模型区域")
     known = {}
     for region in regions:
+        if region.get("open_fragment"):
+            raise ReviewedExcelError("模型片段仍跨越未读边界，不能作为完整单据切片")
         key = (region["sheet"], region["range"])
         if key in known:
             raise ReviewedExcelError("模型区域重复")
@@ -83,11 +85,8 @@ def derive_classified_documents(body: bytes, classification: dict) -> list[dict]
             assigned.add(key)
             group.append(dict(fragment))
         groups.append((group, "model_group"))
-    groups.extend(
-        ([{"sheet": sheet, "range": area}], "ungrouped_region")
-        for sheet, area in known
-        if (sheet, area) not in assigned
-    )
+    if len(assigned) != len(known):
+        raise ReviewedExcelError("模型尚未确定所有区域的独立单据关系，不能自动切片")
     results = []
     used_names: set[str] = set()
     for fragments, basis in groups:

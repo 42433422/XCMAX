@@ -9,7 +9,7 @@ type Candidate = { id: string; label: string; explanation: string; clear: { shee
 type Proposal = { version: string; parent_version: string | null; candidates: Candidate[]; result_previews?: { candidate_id: string; sha256: string; layout: Layout[]; layout_truncated: boolean }[]; evidence: unknown[]; model: { status: string; cells_sent?: number; cells_total?: number; truncated?: boolean; values_truncated?: boolean; input_messages?: unknown[]; input_summary?: unknown } }
 type LayoutCell = { cell: string; value: string; formula: boolean; rowspan: number; colspan: number; bold: boolean; italic: boolean; font_size: number; font_color: string; fill: string; align: string }
 type Layout = { sheet: string; widths: number[]; rows: { height: number; cells: LayoutCell[] }[]; truncated: boolean }
-type Review = { review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
+type Review = { review_id: string; sha256: string; cells: Cell[]; sheets: string[]; model: string; proposal: Proposal; versions?: Proposal[]; layout?: Layout[]; layout_truncated?: boolean; selected_region?: { selection_basis?: string; print_area_mode?: string; source_print_areas?: { sheet: string; value: string }[]; derived_print_area?: string | null } | null }
 type ClassificationRegion = { splitDraft?: string; value_extent?: string | null; suggested_labels?: string[]; context_warning?: string; reason?: string; continuation_context?: { parent_range: string; parent_header_row: number; header_row: number; matched_columns: number[] } | null; range: string; original_range?: string; labels: string[]; label_source?: string; range_source?: string; modified?: boolean; checked_cells: number; parent_heading: string; dependency_status: string; needs_confirmation: boolean; header_cells: { cell: string; value: string }[]; merged_ranges: string[]; dependencies?: { sheet: string; cell: string }[]; possible_shared_context: { cell: string; kind: string }[]; evidence: { label: string; cell: string; matched: string }[] }
 type ClassificationSheet = { sheet: string; labels: string[]; checked_cells: number; evidence: { label: string; cell: string; matched: string }[]; regions: ClassificationRegion[] }
 type FragmentLinks = { items: { sheet: string; first: string; second: string; shared_dependencies: { sheet: string; cell: string }[]; repeated_header_observed: boolean; model_group_suggested?: boolean; status: string; selected?: boolean }[]; omitted: number }
@@ -449,6 +449,11 @@ async function analyzeClassifications() {
     if (index >= 0) selectFile(index)
   } finally { if (current()) busy.value = false }
 }
+async function previewAutoSlice(index: number, slice: AutoSlice) {
+  if (file.value !== files.value[index]) selectFile(index)
+  name.value = slice.filename.replace(/\.xlsx$/i, '')
+  await preview(slice)
+}
 async function downloadAutoSlice(item: Classification, slice: AutoSlice) {
   const current = captureFileOperation()
   if (!current()) return
@@ -524,10 +529,10 @@ async function restoreClassification(item: RecentClassification) {
   } catch (err) { if (!current()) return; error.value = err instanceof Error ? err.message : '恢复分类失败' }
   finally { if (current()) busy.value = false }
 }
-async function preview() {
+async function preview(slice?: AutoSlice) {
   const current = captureFileOperation()
   if (!current()) return
-  if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value) return
+  if (!file.value || (!slice && (!classificationConfirmed.value || !previewSelectionReady.value))) return
   busy.value = true
   error.value = ''
   try {
@@ -537,7 +542,12 @@ async function preview() {
     form.append('sample_authorized', String(sampleAuthorized.value))
     form.append('own_file_authorized', String(templateOwnFileAuthorized.value))
     const selectedFile = classifications.value[files.value.indexOf(file.value)]
-    if (selectedFile?.classification_id && selectedFile.version && selectedRegionCoordinates.value) {
+    if (slice) {
+      const available = selectedFile?.classification_id && selectedFile.version && autoSlices.value[selectedFile.classification_id]
+      if (!available || available.version !== selectedFile.version || !available.slices.some(item => item.index === slice.index && item.sha256 === slice.sha256)) throw new Error('裁切结果已变化，请重新选择')
+      form.append('classification_id', selectedFile.classification_id!); form.append('classification_version', selectedFile.version!)
+      form.append('auto_slice_index', String(slice.index))
+    } else if (selectedFile?.classification_id && selectedFile.version && selectedRegionCoordinates.value) {
       form.append('classification_id', selectedFile.classification_id); form.append('classification_version', selectedFile.version)
       form.append('region_sheet', selectedRegionCoordinates.value.sheet); form.append('region_range', selectedRegionCoordinates.value.range)
       form.append('print_area_mode', selectedPrintArea.value ? 'selected' : 'source')
@@ -555,7 +565,8 @@ async function preview() {
 async function save() {
   const current = captureFileOperation()
   if (!current()) return
-  if (!file.value || !classificationConfirmed.value || !previewSelectionReady.value || !review.value || !name.value.trim()) return
+  if (!file.value || !review.value || !name.value.trim()) return
+  if (review.value.selected_region?.selection_basis !== 'model_group' && (!classificationConfirmed.value || !previewSelectionReady.value)) return
   busy.value = true
   error.value = ''
   try {
@@ -721,6 +732,7 @@ async function downloadCandidate(index: number) {
             {{ slice.basis === 'ungrouped_region' ? '（模型未确定单据归组）' : '（模型建议同一单据）' }}
             {{ slice.filename }}
             <button type="button" :disabled="busy" @click="downloadAutoSlice(item, slice)">下载裁切 Excel</button>
+            <button type="button" :disabled="busy" @click="previewAutoSlice(i, slice)">用此单据生成模板</button>
           </p>
         </div>
         <div v-for="(sheet, j) in item.sheets" :key="j">
@@ -770,7 +782,7 @@ async function downloadCandidate(index: number) {
     <label><input v-model="initialModel" type="checkbox" :disabled="busy"> 首轮使用模型生成三个候选</label>
     <label><input v-model="sampleAuthorized" type="checkbox" :disabled="busy"> 确认此文件是获准发送的合成或公开样本，同意发送有界文本及结构概览</label>
     <label v-if="file"><input v-model="templateOwnFileAuthorized" type="checkbox" :disabled="busy"> 我有权授权当前文件 {{ file.name }} 的所选文档发送至 MiMo：最多 100 个非空单元格、每格最多 160 字，以及结构与反馈；可能包含敏感数据。</label>
-    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview">预览清理候选</button>
+    <button type="button" :disabled="!file || !classificationConfirmed || !previewSelectionReady || busy || (initialModel && sampleAuthorized === templateOwnFileAuthorized)" @click="preview()">预览清理候选</button>
     <p v-if="error" role="alert">{{ error }}</p>
     <div v-if="review">
       <p v-if="review.selected_region?.print_area_mode === 'selected'">已按您的选择设置派生打印范围：原范围 {{ review.selected_region.source_print_areas?.map((area) => area.value).join('；') || '未设置' }} → 派生范围 {{ review.selected_region.derived_print_area || '未设置' }}；原件不变。</p>

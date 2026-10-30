@@ -26,6 +26,10 @@ function returnToArchive() {
   }
 }
 
+function setStage(stage: string) {
+  currentStep.value = stage === 'archive' ? 'archive' : stage === 'template' || stage === 'cleaning' ? 'template' : 'classification'
+}
+
 function onTemplateSaved() {
   window.dispatchEvent(new CustomEvent('xcagi:templates-updated', { detail: { source: 'etl-center' } }))
 }

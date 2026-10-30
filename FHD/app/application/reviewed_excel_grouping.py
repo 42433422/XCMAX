@@ -49,7 +49,6 @@ def prepare_grouping(review: dict, classification: dict) -> dict:
             {
                 "sheet": sheet,
                 "range": area,
-                "labels": region["labels"],
                 "reason": region.get("reason", "")[:1000],
             }
         )
@@ -142,34 +141,42 @@ def validate_grouping(group_input: dict, data: dict) -> list[dict]:
 
 
 def group_semantic_fragments(
-    review: dict, classification: dict, *, prepare_only=False
-) -> list[dict]:
+    review: dict, classification: dict, *, prepare_only=False, expected_request_sha256=None
+) -> list[dict] | dict:
     """Ask the configured model to group only fully read, validated fragments."""
     import json
 
-    from app.application.reviewed_excel_template import _template_mimo_complete
+    from app.application.reviewed_excel_template import (
+        _template_mimo_complete,
+        _validate_template_schema,
+    )
 
     group_input = prepare_grouping(review, classification)
-    cell = {
-        "type": "object",
-        "required": ["sheet", "cell"],
-        "additionalProperties": False,
-        "properties": {"sheet": {"type": "string"}, "cell": {"type": "string"}},
-    }
-    part = {
-        "type": "object",
-        "required": ["sheet", "range"],
-        "additionalProperties": False,
-        "properties": {"sheet": {"type": "string"}, "range": {"type": "string"}},
+    fragments = {f"R{i:04d}": part for i, part in enumerate(group_input["fragments"], 1)}
+    cells = {f"E{i:04d}": cell for i, cell in enumerate(group_input["cells"], 1)}
+    shown = {
+        **group_input,
+        "fragments": [{**part, "region_id": key} for key, part in fragments.items()],
+        "cells": [{**cell, "evidence_id": key} for key, cell in cells.items()],
     }
     group = {
         "type": "object",
-        "required": ["document_id", "fragments", "evidence", "reason"],
+        "required": ["document_id", "fragment_ids", "evidence_ids", "reason"],
         "additionalProperties": False,
         "properties": {
             "document_id": {"type": "string"},
-            "fragments": {"type": "array", "minItems": 1, "maxItems": 20, "items": part},
-            "evidence": {"type": "array", "minItems": 1, "maxItems": 100, "items": cell},
+            "fragment_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "items": {"type": "string", "enum": list(fragments)},
+            },
+            "evidence_ids": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 100,
+                "items": {"type": "string", "enum": list(cells)},
+            },
             "reason": {"type": "string"},
         },
     }
@@ -179,24 +186,51 @@ def group_semantic_fragments(
         "additionalProperties": False,
         "properties": {"groups": {"type": "array", "maxItems": 100, "items": group}},
     }
+    from app.application.reviewed_excel_reference_ids import GROUP_PROMPT
+
     messages = [
-        {
-            "role": "system",
-            "content": "Group only fragments that belong to the same business document. "
-            "A standalone fragment can be one group. Do not group merely because fragments are adjacent, "
-            "have similar headers, or share a category. Leave uncertain fragments ungrouped. "
-            "For every grouped fragment cite at least one sent cell within it and explain the relationship "
-            "using sent values. Fragment boundaries are fixed; do not invent ranges or cells. "
-            "Return exactly one JSON object matching output_schema.",
-        },
+        {"role": "system", "content": GROUP_PROMPT},
         {
             "role": "user",
-            "content": json.dumps({"output_schema": schema, **group_input}, ensure_ascii=False),
+            "content": json.dumps({"output_schema": schema, **shown}, ensure_ascii=False),
         },
     ]
+    from app.application.reviewed_excel_reference_ids import verify_contract
+
+    verify_contract(messages[0]["content"], schema, "group")
     if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
         raise ReviewedExcelError("分组请求超过安全预算，未调用模型")
+    audit_request = {"messages": messages, "schema": schema, "max_tokens": 4000}
     if prepare_only:
-        return []
+        return audit_request
+    if expected_request_sha256 is not None:
+        from app.application.reviewed_excel_audit import verify_request
+
+        verify_request(audit_request, expected_request_sha256)
     response = _template_mimo_complete(messages, schema, 4000)
-    return validate_grouping(group_input, response.data)
+    if not _validate_template_schema(schema, response.data):
+        raise ReviewedExcelError("模型分组编号不在白名单")
+    normalized = {
+        "groups": [
+            {
+                "document_id": item["document_id"],
+                "fragments": [
+                    {"sheet": fragments[key]["sheet"], "range": fragments[key]["range"]}
+                    for key in item["fragment_ids"]
+                ],
+                "evidence": [
+                    {"sheet": cells[key]["sheet"], "cell": cells[key]["cell"]}
+                    for key in item["evidence_ids"]
+                ],
+                "reason": item["reason"],
+            }
+            for item in response.data["groups"]
+        ]
+    }
+    result = validate_grouping(group_input, normalized)
+    for item, raw in zip(result, response.data["groups"], strict=True):
+        item["reference_ids"] = {
+            "fragment_ids": raw["fragment_ids"],
+            "evidence_ids": raw["evidence_ids"],
+        }
+    return result

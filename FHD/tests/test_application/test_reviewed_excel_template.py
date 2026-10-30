@@ -2935,10 +2935,7 @@ def test_dense_sheet_tail_block_is_sampled_without_keyword_classification(monkey
     payload, output_tokens = captured[0]
     sent = {cell["cell"] for cell in payload["cells"]}
     assert set(tail) <= sent
-    assert {"A1:M40", "A41:M45"} == {
-        region["range"] for region in payload["structure_map"][0]["regions"]
-    }
-    assert payload["structure_map"][0]["regions_omitted"] == 0
+    assert "structure_map" not in payload and "rule_hints" not in payload
     assert "实际发送" not in payload["cells"][0]["value"]
     assert not result["coverage"][0]["unread"] and len(sent) == 442
     assert (
@@ -3201,24 +3198,11 @@ def test_relationship_payload_shows_observed_header_positions_without_guessing(
 
     monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
     result = classify_semantic_workbook(inspect_workbook(out.getvalue()))
-    context = captured[0]["relationship_context"]
-    assert context["kind"] == "structural_observations_only"
-    sheet = context["sheets"][0]
-    match = next(
-        item
-        for item in sheet["sent_row_matches"]
-        if item["first_row"] == 5 and item["second_row"] == 22
-    )
-    pairs = {
-        (item["first_cell"], item["second_cell"], item["same_column"]) for item in match["matches"]
-    }
-    assert ("C5", "C22", True) in pairs
-    assert (("B5", "D22", False) in pairs) == (shifted_value == "参数")
-    assert sheet["candidate_adjacencies"] and "H41:M43" in sheet["merged_ranges"]
-    assert any(
-        ref["cell"] == "H41" and ref["kind"] == "possible_shared_note"
-        for ref in sheet["possible_context_refs"]
-    )
+    assert "relationship_context" not in captured[0]
+    sent = {cell["cell"]: cell["value"] for cell in captured[0]["cells"]}
+    assert sent["C5"] == sent["C22"] == "数量"
+    assert sent["D22"] == shifted_value and sent["H41"] == "共享图例"
+    assert "H41:M43" in captured[0]["sheets"][0]["merged"]
     assert result["regions"][0]["labels"] == ["unknown"]
 
 
@@ -4600,8 +4584,14 @@ def test_document_derivation_preserves_coordinates_layout_and_rejects_external_r
     ws["C2"] = "=B8*2"
     changed = BytesIO()
     wb.save(changed)
-    with pytest.raises(ValueError, match="引用"):
-        derive_document_workbook(changed.getvalue(), [{"sheet": "混合", "range": "A1:C3"}])
+    supported = load_workbook(
+        BytesIO(
+            derive_document_workbook(changed.getvalue(), [{"sheet": "混合", "range": "A1:C3"}])
+        ),
+        data_only=False,
+    )
+    assert supported["混合"]["C2"].value == "='依赖支撑'!B8*2"
+    assert supported["依赖支撑"]["B8"].value == "不应出现"
 
 
 def test_document_derivation_blocks_uncertain_print_merge_and_dynamic_formula():
@@ -5097,7 +5087,9 @@ def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, m
                     "reason": "不确定类型",
                 }
             ],
-            "logical_documents": [],
+            "logical_documents": [
+                {"document_id": "fixture", "fragments": [{"sheet": "报价", "range": "A1:C4"}]}
+            ],
             "layout_references": [],
         }
         return LlmAssistResult(used_llm=True, data=data)
@@ -5113,9 +5105,7 @@ def test_auto_slice_api_without_confirmation_and_owner_isolation(review_store, m
     listing = client.get(route)
     assert listing.status_code == 200, listing.text
     result = listing.json()["slices"]
-    assert (
-        len(result) == 1 and result[0]["basis"] == "ungrouped_region" and not result[0]["confirmed"]
-    )
+    assert len(result) == 1 and result[0]["basis"] == "model_group" and not result[0]["confirmed"]
     download = client.get(route + "/0")
     assert download.status_code == 200
     assert result[0]["filename"].endswith(".xlsx")
@@ -5185,18 +5175,16 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
         payload = json.loads(messages[1]["content"])
         if "groups" in schema["properties"]:
             calls.append("group")
-            fragments = [
-                {"sheet": part["sheet"], "range": part["range"]} for part in payload["fragments"]
-            ]
-            evidence = [{"sheet": cell["sheet"], "cell": cell["cell"]} for cell in payload["cells"]]
+            fragments = [part["region_id"] for part in payload["fragments"]]
+            evidence = [cell["evidence_id"] for cell in payload["cells"]]
             return LlmAssistResult(
                 used_llm=True,
                 data={
                     "groups": [
                         {
                             "document_id": "d1",
-                            "fragments": fragments,
-                            "evidence": evidence,
+                            "fragment_ids": fragments,
+                            "evidence_ids": evidence,
                             "reason": "已读片段有相同文档标识",
                         }
                     ]
@@ -5213,9 +5201,9 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
                     {
                         "sheet": "报价",
                         "range": area,
-                        "labels": ["unknown"],
-                        "evidence": [],
-                        "dependencies": [],
+                        "evidence_ids": [],
+                        "dependency_ids": [],
+                        "primary_id": primary[0]["evidence_id"],
                         "reason": "合成",
                     }
                 ],
@@ -5244,6 +5232,10 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
     data = done.json()
     assert calls == ["batch", "batch", "group"]
     assert data["budget"]["grouping_calls"] == 1 and not data["confirmed"]
+    assert all(
+        summary["reference_response"] and summary["reference_index"]
+        for summary in data["input_summaries"]
+    )
     assert len(data["suggested_documents"]) == 1
     url = path + "/auto-slices/" + data["version"]
     listing = client.get(url)
@@ -5253,3 +5245,265 @@ def test_auto_group_resume_budget_and_download_multibatch(review_store, monkeypa
     assert download.status_code == 200
     book = load_workbook(BytesIO(download.content))
     assert book["报价"]["A601"].value is not None
+
+
+def test_audit_response_is_committed_before_parsing_and_is_owner_scoped(review_store, monkeypatch):
+    import base64
+
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    raw = b'{"usage":{"total_tokens":12},"choices":[]}'
+
+    def fake(messages, schema, tokens):
+        response_capture()(raw, 200, "synthetic-req")
+        return LlmAssistResult(
+            used_llm=True,
+            provider="openai",
+            model="synthetic-model",
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:C4",
+                        "labels": ["unknown"],
+                        "evidence": [],
+                        "dependencies": [],
+                        "reason": "fixture",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    result = client.post(
+        url + "/analyze", data={"version": item["version"], "sample_authorized": "true"}
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["actual_model_providers"] == ["openai"]
+    assert result.json()["input_summaries"][0]["model"] == "synthetic-model"
+    assert result.json()["structure_map_source"] == "program_observation_not_sent_to_model"
+    with review_store.engine.connect() as conn:
+        persisted = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+    record = json.loads(persisted)["model_audit"][0]
+    assert record["state"] == "response_received" and record["request_id"] == "synthetic-req"
+    assert base64.b64decode(record["response_base64"]) == raw
+    assert record["usage"] == {"total_tokens": 12}
+    assert record["classification_version"] == item["version"]
+    assert "Authorization" not in persisted
+    review_store.actor["tenant"] = 2
+    assert client.get(url).status_code == 404
+
+
+def test_audit_write_failure_blocks_replay(review_store, monkeypatch):
+    from fastapi import HTTPException
+
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", sample())},
+    ).json()["files"][0]
+    real_cas = routes._classification_cas
+
+    def fail_response(db, run, old, state):
+        if (
+            state.get("model_audit", [])
+            and state["model_audit"][-1]["state"] == "response_received"
+        ):
+            raise HTTPException(status_code=409, detail="synthetic write failure")
+        return real_cas(db, run, old, state)
+
+    monkeypatch.setattr(routes, "_classification_cas", fail_response)
+    calls = []
+
+    def fake(messages, schema, tokens):
+        calls.append(1)
+        response_capture()(b'{"choices":[]}', 200, "synthetic-req")
+        raise AssertionError("must stop on failed audit")
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    url = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}/analyze"
+    data = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(url, data=data).status_code == 409
+    assert client.post(url, data=data).status_code == 409
+    assert len(calls) == 1
+    with review_store.engine.connect() as conn:
+        persisted = conn.execute(
+            text("SELECT draft_json FROM etl_runs WHERE id=:id"), {"id": item["classification_id"]}
+        ).scalar_one()
+    assert json.loads(persisted)["model_audit"][-1]["state"] == "inflight"
+
+
+def test_completed_invalid_response_is_counted_and_requires_explicit_retry(
+    review_store, monkeypatch
+):
+    from app.application.etl.errors import ReviewedExcelError
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    monkeypatch.setenv("FHD_TEMPLATE_CLASSIFICATION_MAX_CALLS", "2")
+    client = review_store.client
+    item = client.post(
+        "/api/templates/reviewed-excel/classify",
+        data={"expected_actor": "1:7"},
+        files={"files": ("合成.xlsx", large_quotation())},
+    ).json()["files"][0]
+    calls = []
+
+    def fake(messages, schema, tokens):
+        calls.append(1)
+        response_capture()(b'{"choices":[],"usage":{"total_tokens":1}}', 200, "synthetic")
+        if len(calls) > 1:
+            raise ReviewedExcelError("synthetic incomplete")
+        return LlmAssistResult(
+            used_llm=True,
+            data={
+                "regions": [
+                    {
+                        "sheet": "报价",
+                        "range": "A1:A1",
+                        "labels": ["quotation"],
+                        "evidence": [{"sheet": "报价", "cell": "A1"}],
+                        "dependencies": [],
+                        "reason": "fixture",
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    base = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    form = {"version": item["version"], "sample_authorized": "true"}
+    assert client.post(base + "/analyze", data=form).status_code == 200
+    assert client.post(base + "/analyze", data=form).status_code == 400
+    checkpoint = client.get(base).json()["checkpoint"]
+    assert checkpoint["phase"] == "failed" and checkpoint["completed"] == 1
+    assert checkpoint["calls_in_round"] == 2
+    assert client.post(base + "/analyze", data=form).status_code == 409
+    assert (
+        client.post(base + "/analyze", data={**form, "retry_authorized": "true"}).status_code == 409
+    )
+    assert len(calls) == 2
+    retry = client.post(
+        base + "/analyze", data={**form, "retry_authorized": "true", "continue_authorized": "true"}
+    )
+    assert retry.status_code == 400 and len(calls) == 3
+    resumed = client.get(base).json()["checkpoint"]
+    assert resumed["phase"] == "failed" and resumed["completed"] == 1
+    assert resumed["calls_in_round"] == 1
+
+
+def test_archived_model_slice_can_be_selected_for_template_without_coordinate_confirmation(
+    review_store, monkeypatch
+):
+    from app.application.etl.llm_assist_runtime import LlmAssistResult
+    from app.application.reviewed_excel_audit import response_capture
+
+    monkeypatch.setenv("FHD_TEMPLATE_LLM_PROVIDER", "mimo")
+    with review_store.engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO etl_archive_quotas (tenant_id, limit_bytes, reserved_bytes) VALUES (1, 1000000, 0)"
+            )
+        )
+    body = sample()
+    client = review_store.client
+    archived = client.post(
+        "/api/templates/reviewed-excel/archive-classify",
+        data={"expected_actor": "1:7", "request_key": "synthetic-auto-flow"},
+        files={"file": ("合成.xlsx", body)},
+    )
+    assert archived.status_code == 200, archived.text
+    item = archived.json()
+
+    def fake(messages, schema, tokens):
+        primary = schema["properties"]["physical_regions"]["items"]["properties"]["primary_id"][
+            "enum"
+        ][0]
+        data = {
+            "physical_regions": [
+                {
+                    "sheet": "报价",
+                    "range": "A1:C4",
+                    "evidence_ids": [primary],
+                    "dependency_ids": [],
+                    "primary_id": primary,
+                    "reason": "synthetic",
+                }
+            ],
+            "logical_documents": [
+                {"document_id": "fixture", "fragments": [{"sheet": "报价", "range": "A1:C4"}]}
+            ],
+            "layout_references": [],
+        }
+        response_capture()(
+            json.dumps({"choices": [], "usage": {}}, ensure_ascii=False).encode(), 200, "synthetic"
+        )
+        return LlmAssistResult(used_llm=True, model="synthetic", provider="synthetic", data=data)
+
+    monkeypatch.setattr("app.application.reviewed_excel_template._template_mimo_complete", fake)
+    path = f"/api/templates/reviewed-excel/classifications/{item['classification_id']}"
+    analyzed = client.post(
+        path + "/analyze",
+        data={"version": item["version"], "sample_authorized": "true", "auto_group": "true"},
+    )
+    assert analyzed.status_code == 200, analyzed.text
+    latest = analyzed.json()
+    assert not latest["confirmed"]
+    slices = client.get(path + "/auto-slices/" + latest["version"])
+    assert slices.status_code == 200 and len(slices.json()["slices"]) == 1
+    params = {
+        "expected_actor": "1:7",
+        "classification_id": item["classification_id"],
+        "classification_version": latest["version"],
+        "auto_slice_index": "0",
+    }
+    preview = client.post(
+        "/api/templates/reviewed-excel/preview", data=params, files={"file": ("合成.xlsx", body)}
+    )
+    assert preview.status_code == 200, preview.text
+    review = preview.json()
+    assert review["selected_region"]["selection_basis"] == "model_group"
+    assert review["selected_region"]["archive_version_id"]
+    candidate = review["proposal"]["candidates"][0]
+    saved = client.post(
+        "/api/templates/reviewed-excel/save",
+        data={
+            "review_id": review["review_id"],
+            "proposal_version": review["proposal"]["version"],
+            "candidate_id": candidate["id"],
+            "selections": json.dumps(candidate["clear"]),
+            "name": "合成模板",
+            "publish_to_tenant": "true",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    template_id = saved.json()["template_id"].split(":")[-1]
+    output = client.get("/api/templates/reviewed-excel/" + template_id + "/download")
+    assert output.status_code == 200
+    assert load_workbook(BytesIO(output.content)).sheetnames == ["报价"]
+    assert client.get(path).json()["versions"][-1]["confirmed"] is False
+    review_store.actor["tenant"] = 2
+    assert (
+        client.post(
+            "/api/templates/reviewed-excel/preview",
+            data={**params, "expected_actor": "2:7"},
+            files={"file": ("合成.xlsx", body)},
+        ).status_code
+        == 404
+    )

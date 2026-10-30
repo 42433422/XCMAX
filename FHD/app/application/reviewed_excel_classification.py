@@ -177,7 +177,13 @@ def classify_review_workbook(review: dict) -> list[dict]:
     return results
 
 
-def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dict:
+def _classify_semantic_batch(
+    review: dict,
+    *,
+    prepare_only: bool = False,
+    reference_ids: bool = False,
+    expected_request_sha256: str | None = None,
+) -> dict:
     """Request bounded semantic regions; validate every reference before adoption."""
     import json
     import os
@@ -199,6 +205,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         MAX_VALUE_CHARS,
         _model_cell_cost,
         build_relationship_context,
+        build_rule_hints,
         build_structure_map,
     )
 
@@ -239,29 +246,7 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
                 "hidden_columns_omitted": max(0, len(sheet.get("hidden_column_ranges", [])) - 100),
             }
         )
-    rule_hints = []
-    for sheet in rules:
-        regions = []
-        for region in sheet["regions"]:
-            evidence = [ref for ref in region["evidence"] if (sheet["sheet"], ref["cell"]) in sent]
-            regions.append(
-                {
-                    "range": region["range"],
-                    "labels": [ref["label"] for ref in evidence] or ["unknown"],
-                    "evidence": evidence,
-                    "headers": [
-                        ref
-                        for ref in region["header_cells"]
-                        if (sheet["sheet"], ref["cell"]) in sent
-                    ],
-                    "possible_shared_context": [
-                        ref
-                        for ref in region["possible_shared_context"]
-                        if (sheet["sheet"], ref["cell"]) in sent
-                    ],
-                }
-            )
-        rule_hints.append({"sheet": sheet["sheet"], "regions": regions})
+    rule_hints = build_rule_hints(rules, sent)
     cell_schema = {
         "type": "object",
         "required": ["sheet", "cell"],
@@ -420,14 +405,39 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
     ]
     from app.application.reviewed_excel_template import _template_mimo_complete
 
+    provider_schema = schema
+    references: dict = {}
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import prepare_reference_messages
+
+        references, provider_schema = prepare_reference_messages(messages, schema)
+    else:
+        from app.application.reviewed_excel_reference_ids import neutralize_messages
+
+        neutralize_messages(messages)
+
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import verify_contract
+
+        verify_contract(messages[0]["content"], provider_schema, "identify")
     if sum(len(message["content"].encode("utf-8")) for message in messages) > 180_000:
         raise ReviewedExcelError("本批结构与证据超过模型输入安全预算，未调用模型")
+    audit_request = {"messages": messages, "schema": provider_schema, "max_tokens": 4000}
     if prepare_only:
-        return {"preflight_ok": True}
-    expected_regions = sum(len(sheet["regions"]) for sheet in structure_regions)
-    max_output_tokens = min(4000, 3000 + 125 * min(expected_regions, 8))
-    response = _template_mimo_complete(messages, schema, max_output_tokens)
+        return audit_request
+    if expected_request_sha256 is not None:
+        from app.application.reviewed_excel_audit import verify_request
+
+        verify_request(audit_request, expected_request_sha256)
+    max_output_tokens = 4000
+    response = _template_mimo_complete(messages, provider_schema, max_output_tokens)
     data = response.data
+    raw_reference_response = None
+    if reference_ids:
+        from app.application.reviewed_excel_reference_ids import normalize_reference_ids
+
+        raw_reference_response = data
+        data = normalize_reference_ids(data, references, provider_schema, schema)
     if not isinstance(data, dict):
         raise ReviewedExcelError("模型区域结构无效，原分类未改变")
     # Legacy in-process replays contain only regions; the live provider receives
@@ -602,10 +612,14 @@ def _classify_semantic_batch(review: dict, *, prepare_only: bool = False) -> dic
         messages,
         chosen,
         source_sha256=review["sha256"],
-        provider="mimo",
+        provider=getattr(response, "provider", "") or "unreported",
         model=response.model,
         max_output_tokens=max_output_tokens,
     )
+    if raw_reference_response is not None:
+        from app.application.reviewed_excel_reference_ids import add_reference_trace
+
+        add_reference_trace(input_summary, raw_reference_response, references)
     # Final coverage is computed from the source and all accepted batches by the combiner.
     coverage = [{"sheet": item["sheet"], "merged_sent": len(item["merged"])} for item in overview]
     return {
@@ -767,17 +781,11 @@ def combine_semantic_batches(
                 if key in existing:
                     continue
                 pair = [dict(by_ref[(ref["sheet"], ref["range"])]) for ref in (first, second)]
-                refs = [
-                    {(ref["sheet"], ref["cell"]) for ref in region.get("dependencies", [])}
-                    for region in pair
-                ]
-                for region in pair:
-                    region["dependencies"] = [{"sheet": first["sheet"], "cell": "A1"}]
-                item = candidate_fragment_links(pair, sent_cells)["items"][0]
-                item["shared_dependencies"] = [
-                    {"sheet": sheet, "cell": cell} for sheet, cell in sorted(refs[0] & refs[1])[:20]
-                ]
-                item["model_group_suggested"] = True
+                item = candidate_fragment_links(
+                    pair,
+                    sent_cells,
+                    model_pairs={(first["sheet"], first["range"], second["range"])},
+                )["items"][0]
                 existing.add(key)
                 if len(links["items"]) < 200:
                     links["items"].append(item)
@@ -797,6 +805,7 @@ def combine_semantic_batches(
         "coverage": coverage,
         "input_summaries": input_summaries,
         "structure_map": build_structure_map(review, rules),
+        "structure_map_source": "program_observation_not_sent_to_model",
         "budget": {
             "calls": len(batches),
             "max_calls": max_calls,
@@ -808,7 +817,7 @@ def combine_semantic_batches(
 
 def classify_semantic_workbook(review: dict) -> dict:
     """Run the bounded standalone path, used by isolated replay and tests."""
-    batches, max_calls = plan_semantic_batches(review)
+    batches, max_calls = plan_semantic_batches(review, neutral=True)
     from app.application.reviewed_excel_evidence import build_structure_map
 
     full_structure_map = build_structure_map(review, classify_review_workbook(review))

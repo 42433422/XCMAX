@@ -3,7 +3,7 @@
     <div>
       <span class="etl-eyebrow">企业资料整理</span>
       <h1>数据对接中心</h1>
-      <p>上传即归档原件，识别单据并确认片段和续表关系，再逐片清理、选择并保存模板。</p>
+      <p>先归档原件，再识别并裁切单据，最后选择成品生成并保存模板。</p>
     </div>
     <div class="etl-hero__limits">
       <span>XLSX 工作簿</span><span>单文件 20 MB</span><span>整批 50 MB</span><span>最多 200 个文件</span>
@@ -21,7 +21,7 @@
       <li v-for="(step, index) in steps" :key="step.id" :aria-current="currentStep === step.id ? 'step' : undefined" :class="{ active: currentStep === step.id }"><span>{{ index + 1 }}</span>{{ step.label }}</li>
     </ol>
     <p class="etl-history-note">工艺、原料、检验说明等内容按原件和文档片段核对，不会自动转换为客户或产品记录。原件和已有数据继续保留。</p>
-    <ReviewedExcelTemplate archive-on-select @stage="currentStep = $event" @saved="onTemplateSaved" />
+    <ReviewedExcelTemplate archive-on-select @stage="setStage" @saved="onTemplateSaved" />
   </section>
   <EtlRunHistory v-if="workspace === 'history'" />
 </main>

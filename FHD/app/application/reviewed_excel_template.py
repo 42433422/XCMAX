@@ -136,12 +136,21 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
     if not adapter.is_configured:
         raise ReviewedExcelError("模板 MiMo 凭据未配置；未调用模型")
     provider = XiaomiMimoProvider(adapter)
+    from app.application.reviewed_excel_audit import response_capture
+
+    audit_callback = response_capture()
 
     async def call():
         try:
             return await asyncio.wait_for(
                 provider.chat_completion(
-                    messages, temperature=0.0, max_tokens=max_tokens, thinking={"type": "disabled"}
+                    messages,
+                    temperature=0.0,
+                    max_tokens=max_tokens,
+                    thinking={"type": "disabled"},
+                    **(
+                        {"_reviewed_excel_audit_response": audit_callback} if audit_callback else {}
+                    ),
                 ),
                 timeout=llm_assist.etl_llm_timeout_seconds(),
             )
@@ -160,7 +169,7 @@ def _template_mimo_complete(messages: list[dict], schema: dict, max_tokens: int)
         # Never log the provider exception, request, response or credential.
         logging.getLogger(__name__).info("template MiMo call failed: %s", type(exc).__name__)
         raise ReviewedExcelError("模型调用失败或结果不完整，可能已产生费用；未自动重试") from None
-    return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data)
+    return llm_assist.LlmAssistResult(used_llm=True, model=model, data=data, provider="mimo")
 
 
 def _read_only_print_area_warnings(body: bytes, found: list) -> list[dict]:
@@ -517,6 +526,11 @@ def derive_document_workbook(
         c1, r1, c2, r2 = bounds
         return any(c1 <= x2 and x1 <= c2 and r1 <= y2 and y1 <= r2 for x1, y1, x2, y2 in rectangles)
 
+    from app.application.reviewed_excel_formula_support import (
+        install_formula_support,
+        plan_formula_support,
+    )
+
     with warnings.catch_warnings(record=True) as found:
         warnings.simplefilter("always")
         wb = load_workbook(BytesIO(body), data_only=False, keep_links=True, rich_text=True)
@@ -571,14 +585,14 @@ def derive_document_workbook(
                 raise ReviewedExcelError("所选范围切断合并单元格")
             if not intersects(bounds):
                 ws.unmerge_cells(str(merge))
+        formula_plan = plan_formula_support(body, fragments)
+        clear_cells = []
         for row in ws.iter_rows():
             for cell in row:
                 if isinstance(cell, MergedCell):
                     continue
                 if not contained((cell.column, cell.row, cell.column, cell.row)):
-                    cell.value = None
-                    cell.comment = None
-                    cell.hyperlink = None
+                    clear_cells.append(cell)
                     continue
                 if cell.hyperlink:
                     raise ReviewedExcelError("文档包含未核验的链接，暂不能提取")
@@ -612,10 +626,26 @@ def derive_document_workbook(
                                 r"\$?[A-Za-z]{1,3}\$?\d+(?::\$?[A-Za-z]{1,3}\$?\d+)?", token.value
                             ):
                                 raise ReviewedExcelError("公式含外部或名称引用，暂不能提取")
-                            if not contained(bounded_range(token.value.replace("$", ""))):
-                                raise ReviewedExcelError("公式引用跨越所选文档，暂不能提取")
+        support_sheet = install_formula_support(wb, formula_plan)
+        support_values = (
+            {
+                address: wb[support_sheet][address].value
+                for address in formula_plan["support_cells"] + formula_plan["proxy_cells"]
+            }
+            if support_sheet
+            else {}
+        )
+        formula_values = {
+            address: ws[address].value
+            for address in formula_plan["formula_references"]
+            if contained((ws[address].column, ws[address].row, ws[address].column, ws[address].row))
+        }
+        for cell in clear_cells:
+            cell.value = None
+            cell.comment = None
+            cell.hyperlink = None
         for name in list(wb.sheetnames):
-            if name != sheet_name:
+            if name not in {sheet_name, support_sheet}:
                 del wb[name]
         wb.active = 0
         output = BytesIO()
@@ -630,6 +660,15 @@ def derive_document_workbook(
             saved_sheet = checked[sheet_name]
             if not isinstance(saved_sheet, Worksheet):
                 raise ReviewedExcelError("派生对象不是工作表")
+            if any(
+                saved_sheet[address].value != value for address, value in formula_values.items()
+            ):
+                raise ReviewedExcelError("派生公式写出后核验失败")
+            if support_sheet and any(
+                checked[support_sheet][address].value != value
+                for address, value in support_values.items()
+            ):
+                raise ReviewedExcelError("支撑数据写出后核验失败")
             if headers != {
                 name: str(getattr(saved_sheet, name)) for name in header_names
             } or print_settings != (
